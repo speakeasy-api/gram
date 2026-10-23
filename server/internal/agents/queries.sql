@@ -39,6 +39,16 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 LIMIT 1;
 
+-- name: LockAgentIncludingDeleted :one
+-- Locks an agent whatever its lifecycle, for cleanup that must still run
+-- after the agent is deleted.
+SELECT *
+FROM agents
+WHERE organization_id = @organization_id
+  AND id = @id
+LIMIT 1
+FOR UPDATE;
+
 -- name: GetAgentByIDForUpdate :one
 SELECT *
 FROM agents
@@ -317,3 +327,123 @@ SET deleted_at = COALESCE(s.deleted_at, clock_timestamp())
 FROM target
 WHERE s.id = target.id
 RETURNING s.id, s.project_id, s.user_session_issuer_id, s.jti, s.deleted_at, target.issuer_project_id, target.deleted AS already_revoked;
+
+-- name: HasOwnedPersonalConnection :one
+-- Whether the user holds a live connection through the upstream OAuth client
+-- that belongs to this organization, and the organization uses that client for
+-- personal connections. The client and its issuer must be live and reach the
+-- organization, and the consent must have come through a sign-in of this
+-- organization, so another organization's connection through a shared
+-- registration never counts.
+SELECT (EXISTS (
+  SELECT 1
+  FROM remote_sessions s
+  JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
+  JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+  -- A deleted sign-in still names the organization the consent was made in.
+  JOIN user_session_issuers u ON u.id = s.user_session_issuer_id
+  LEFT JOIN projects up ON up.id = u.project_id
+  LEFT JOIN projects cp ON cp.id = c.project_id
+  LEFT JOIN projects ip ON ip.id = i.project_id
+  JOIN organization_metadata org ON org.id = @organization_id::text AND org.disabled_at IS NULL
+  JOIN users person ON person.id = @user_id::text AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
+  JOIN organization_user_relationships membership ON membership.organization_id = org.id AND membership.user_id = person.id AND NOT membership.deleted
+  WHERE s.subject_urn = concat('user:', @user_id::text)
+    AND s.remote_session_client_id = @remote_session_client_id
+    AND NOT s.deleted
+    AND (
+      (c.project_id IS NOT NULL AND cp.organization_id = org.id AND NOT cp.deleted)
+      OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = org.id))
+    )
+    AND (
+      (i.project_id IS NOT NULL AND ip.organization_id = org.id AND NOT ip.deleted)
+      OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = org.id))
+    )
+    AND (up.organization_id = org.id OR (u.project_id IS NULL AND u.organization_id = org.id))
+) AND EXISTS (
+  SELECT 1
+  FROM mcp_auth_clients ac
+  WHERE ac.organization_id = @organization_id::text
+    AND ac.remote_session_client_id = @remote_session_client_id
+    AND ac.client_type = 'remote_session'
+    AND ac.deleted IS FALSE
+))::boolean AS owned;
+
+-- name: CreateConnectionBlockGrant :one
+-- Writes the block's grant. Inserted is false when an identical grant
+-- already existed.
+WITH inserted AS (
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+  VALUES (@organization_id, concat('agent:', @agent_id::uuid), 'mcp:blocked_auth', @selectors)
+  ON CONFLICT DO NOTHING
+  RETURNING id
+)
+SELECT EXISTS (SELECT 1 FROM inserted)::boolean AS inserted;
+
+-- name: RecordConnectionBlock :one
+INSERT INTO agent_connection_blocks (organization_id, agent_id, owner_user_id, remote_session_client_id, taken_over_at)
+VALUES (
+  @organization_id,
+  @agent_id,
+  @owner_user_id,
+  @remote_session_client_id,
+  CASE WHEN @grant_existed::boolean THEN clock_timestamp() END
+)
+ON CONFLICT (organization_id, agent_id, owner_user_id, remote_session_client_id) DO NOTHING
+RETURNING *;
+
+-- name: GetConnectionBlock :one
+SELECT *
+FROM agent_connection_blocks
+WHERE organization_id = @organization_id
+  AND agent_id = @agent_id
+  AND owner_user_id = @owner_user_id
+  AND remote_session_client_id = @remote_session_client_id;
+
+-- name: ListConnectionBlocks :many
+SELECT *
+FROM agent_connection_blocks
+WHERE organization_id = @organization_id
+  AND owner_user_id = @owner_user_id
+  AND (sqlc.narg('cursor')::uuid IS NULL OR id > sqlc.narg('cursor')::uuid)
+ORDER BY id
+LIMIT @limit_value;
+
+-- name: GetOwnedConnectionBlock :one
+SELECT *
+FROM agent_connection_blocks
+WHERE organization_id = @organization_id
+  AND owner_user_id = @owner_user_id
+  AND id = @id;
+
+-- name: DeleteConnectionBlock :one
+DELETE FROM agent_connection_blocks
+WHERE organization_id = @organization_id
+  AND owner_user_id = @owner_user_id
+  AND id = @id
+RETURNING *;
+
+-- name: DeleteConnectionBlockGrant :exec
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = concat('agent:', @agent_id::uuid)
+  AND scope = 'mcp:blocked_auth'
+  AND selectors = @selectors;
+
+-- name: IsConnectionOwnerBlock :one
+-- Whether a connection owner recorded the agent grant, which only that owner
+-- may then remove.
+SELECT EXISTS (
+  SELECT 1
+  FROM agent_connection_blocks r
+  WHERE r.organization_id = @organization_id
+    AND r.agent_id = @agent_id
+    AND @scope::text = 'mcp:blocked_auth'
+    AND @selectors::jsonb = jsonb_build_object(
+      'resource_kind', 'mcp_auth_client',
+      'resource_id', '*',
+      'client_type', 'remote_session',
+      'upstream_client', r.remote_session_client_id::text,
+      'connection_owner', r.owner_user_id
+    )
+);

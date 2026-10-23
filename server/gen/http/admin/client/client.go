@@ -396,6 +396,14 @@ type Client struct {
 	// the runUpstreamOAuthMigration endpoint.
 	RunUpstreamOAuthMigrationDoer goahttp.Doer
 
+	// EnableUpstreamAuthEnforcement Doer is the HTTP client used to make requests
+	// to the enableUpstreamAuthEnforcement endpoint.
+	EnableUpstreamAuthEnforcementDoer goahttp.Doer
+
+	// DisableUpstreamAuthEnforcement Doer is the HTTP client used to make requests
+	// to the disableUpstreamAuthEnforcement endpoint.
+	DisableUpstreamAuthEnforcementDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -511,6 +519,8 @@ func NewClient(
 		ListUpstreamOAuthMigrationOrganizationsDoer: doer,
 		GetUpstreamOAuthMigrationStatusDoer:         doer,
 		RunUpstreamOAuthMigrationDoer:               doer,
+		EnableUpstreamAuthEnforcementDoer:           doer,
+		DisableUpstreamAuthEnforcementDoer:          doer,
 		RestoreResponseBody:                         restoreBody,
 		scheme:                                      scheme,
 		host:                                        host,
@@ -2799,6 +2809,54 @@ func (c *Client) RunUpstreamOAuthMigration() goa.Endpoint {
 		resp, err := c.RunUpstreamOAuthMigrationDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "runUpstreamOAuthMigration", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EnableUpstreamAuthEnforcement returns an endpoint that makes HTTP requests
+// to the admin service enableUpstreamAuthEnforcement server.
+func (c *Client) EnableUpstreamAuthEnforcement() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEnableUpstreamAuthEnforcementRequest(c.encoder)
+		decodeResponse = DecodeEnableUpstreamAuthEnforcementResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEnableUpstreamAuthEnforcementRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EnableUpstreamAuthEnforcementDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "enableUpstreamAuthEnforcement", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DisableUpstreamAuthEnforcement returns an endpoint that makes HTTP requests
+// to the admin service disableUpstreamAuthEnforcement server.
+func (c *Client) DisableUpstreamAuthEnforcement() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDisableUpstreamAuthEnforcementRequest(c.encoder)
+		decodeResponse = DecodeDisableUpstreamAuthEnforcementResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDisableUpstreamAuthEnforcementRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DisableUpstreamAuthEnforcementDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "disableUpstreamAuthEnforcement", err)
 		}
 		return decodeResponse(resp)
 	}

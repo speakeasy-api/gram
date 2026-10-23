@@ -10273,6 +10273,100 @@ ON upstream_client_selections (auth_client_id);
 CREATE INDEX IF NOT EXISTS upstream_client_selections_project_id_idx
 ON upstream_client_selections (project_id);
 
+-- The auth client choices an assistant's turns use for each MCP server it
+-- reaches, kept per assistant, root trigger and execution context: a turn run
+-- for a user it identified (user_backed) or as its trigger's workload with no
+-- user (userless), validated in application code. A turn credential binds the
+-- profile's latest version; the version's choices are upstream_client_selections
+-- rows whose credential is the version (credential_kind
+-- execution_profile_version).
+-- The profile grants nothing: the turn credential is admitted on its own path
+-- before a choice is read.
+CREATE TABLE IF NOT EXISTS execution_selection_profiles (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  assistant_id uuid NOT NULL,
+  trigger_instance_id uuid NOT NULL,
+  execution_context TEXT NOT NULL CHECK (execution_context <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT execution_selection_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT execution_selection_profiles_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT execution_selection_profiles_assistant_fkey FOREIGN KEY (organization_id, project_id, assistant_id) REFERENCES assistants (organization_id, project_id, id) ON DELETE CASCADE,
+  CONSTRAINT execution_selection_profiles_trigger_fkey FOREIGN KEY (organization_id, project_id, trigger_instance_id) REFERENCES trigger_instances (organization_id, project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN execution_selection_profiles.id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.organization_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.project_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.trigger_instance_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.execution_context IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.created_at IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.updated_at IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS execution_selection_profiles_assistant_trigger_context_key
+ON execution_selection_profiles (assistant_id, trigger_instance_id, execution_context)
+WHERE deleted IS FALSE;
+
+-- FK target for execution_selection_profile_versions.
+CREATE UNIQUE INDEX IF NOT EXISTS execution_selection_profiles_tenant_key
+ON execution_selection_profiles (id, organization_id, project_id);
+
+CREATE INDEX IF NOT EXISTS execution_selection_profiles_organization_id_idx
+ON execution_selection_profiles (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS execution_selection_profiles_project_id_idx
+ON execution_selection_profiles (project_id);
+
+CREATE INDEX IF NOT EXISTS execution_selection_profiles_trigger_idx
+ON execution_selection_profiles (organization_id, project_id, trigger_instance_id);
+
+-- One immutable set of an execution-selection profile's choices. A turn
+-- credential names the version it binds, so its choices never change under a
+-- running turn; a server added to the assistant later gets its choice in a new
+-- version that keeps every earlier choice.
+CREATE TABLE IF NOT EXISTS execution_selection_profile_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  profile_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  version BIGINT NOT NULL,
+  -- backfill or issuance; validated in application code.
+  source TEXT NOT NULL CHECK (source <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT execution_selection_profile_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT execution_selection_profile_versions_profile_fkey FOREIGN KEY (profile_id, organization_id, project_id) REFERENCES execution_selection_profiles (id, organization_id, project_id) ON DELETE CASCADE,
+  -- Binding treats a non-positive version as no version.
+  CONSTRAINT execution_selection_profile_versions_version_check CHECK (version > 0)
+);
+
+COMMENT ON COLUMN execution_selection_profile_versions.id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.profile_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.project_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.version IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.source IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.created_at IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS execution_selection_profile_versions_profile_version_key
+ON execution_selection_profile_versions (profile_id, version);
+
+CREATE INDEX IF NOT EXISTS execution_selection_profile_versions_project_id_idx
+ON execution_selection_profile_versions (project_id);
+
 -- Meta MCP servers expose an explicitly managed set of MCP servers through a
 -- dedicated runtime. This identity remains separate from mcp_servers so
 -- gateway-specific behavior can evolve without changing existing backends.

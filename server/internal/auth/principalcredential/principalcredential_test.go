@@ -72,6 +72,28 @@ func TestMintAndValidate(t *testing.T) {
 	}
 }
 
+func TestMintCarriesTheSelectionProfileVersion(t *testing.T) {
+	t.Parallel()
+	issuer := principalcredential.New(newSigner(t), nil)
+	c := agentCredential()
+	c.SelectionProfileVersionID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	raw, _, err := issuer.Mint(c)
+	require.NoError(t, err)
+	got, err := issuer.Validate(raw)
+	require.NoError(t, err)
+	require.Equal(t, c.SelectionProfileVersionID, got.Credential.SelectionProfileVersionID)
+
+	unbound, _, err := issuer.Mint(agentCredential())
+	require.NoError(t, err)
+	got, err = issuer.Validate(unbound)
+	require.NoError(t, err)
+	require.False(t, got.Credential.SelectionProfileVersionID.Valid)
+
+	c.SelectionProfileVersionID = uuid.NullUUID{UUID: uuid.Nil, Valid: true}
+	_, _, err = issuer.Mint(c)
+	require.ErrorIs(t, err, principalcredential.ErrInvalid)
+}
+
 func TestMintRejectsMalformedPrincipals(t *testing.T) {
 	t.Parallel()
 	issuer := principalcredential.New(newSigner(t), nil)

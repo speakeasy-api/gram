@@ -153,7 +153,7 @@ export function useMcpServerCandidates({
           if (!opensServerPage && (verb === "enable" || verb === "disable")) {
             return setVisibility(server, verb);
           }
-          routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
+          routes.mcp.details.overview.goTo(mcpServerRouteParam(server));
         },
       };
     });

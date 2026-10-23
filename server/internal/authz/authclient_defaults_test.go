@@ -30,9 +30,9 @@ func TestSeedPersonalAuthClientDefaultIsIdempotent(t *testing.T) {
 	require.Equal(t, PersonalAuthClientSelector(), grants[0].Selector)
 
 	user := GrantsToContext(enterpriseSessionCtxWithOrg(t, organizationID), grants)
-	own := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: "p", ConnectionOwner: sessionUserID})
-	foreign := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: "p", ConnectionOwner: "someone_else"})
-	shared := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: "p", ConnectionOwner: ""})
+	own := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: "p", ConnectionOwner: sessionUserID, UpstreamClient: "upstream_1"})
+	foreign := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: "p", ConnectionOwner: "someone_else", UpstreamClient: "upstream_1"})
+	shared := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: "p", ConnectionOwner: "", UpstreamClient: ""})
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	requireMandatory(t, engine, user, MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNone}, own)
 	requireMandatory(t, engine, user, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNotGranted}, foreign)

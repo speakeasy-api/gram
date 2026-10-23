@@ -553,6 +553,27 @@ type RunUpstreamOAuthMigrationRequestBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
+// EnableUpstreamAuthEnforcementRequestBody is the type of the "admin" service
+// "enableUpstreamAuthEnforcement" endpoint HTTP request body.
+type EnableUpstreamAuthEnforcementRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The caller checked the organization's mandatory authorization shadow
+	// (mcp.authz.mandatory_shadow) and found no unexplained new denial.
+	ShadowParityConfirmed *bool `form:"shadow_parity_confirmed,omitempty" json:"shadow_parity_confirmed,omitempty" xml:"shadow_parity_confirmed,omitempty"`
+	// The organization was told that valid credentials from another organization
+	// are refused on its public servers once enforcement is on, instead of being
+	// served anonymously.
+	CrossOrganizationDenialCommunicated *bool `form:"cross_organization_denial_communicated,omitempty" json:"cross_organization_denial_communicated,omitempty" xml:"cross_organization_denial_communicated,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementRequestBody is the type of the "admin" service
+// "disableUpstreamAuthEnforcement" endpoint HTTP request body.
+type DisableUpstreamAuthEnforcementRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -2404,6 +2425,12 @@ type GetUpstreamOAuthMigrationStatusResponseBody struct {
 	// migrated: it never gates the upstream OAuth cutover. Absent when its check
 	// failed.
 	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
 // RunUpstreamOAuthMigrationResponseBody is the type of the "admin" service
@@ -2423,6 +2450,10 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	// Servers marked as needing upstream authentication because they offer a
 	// backfilled auth client.
 	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
+	// Credential choices this run named a typed auth client on.
+	SelectionsMapped *int64 `form:"selections_mapped,omitempty" json:"selections_mapped,omitempty" xml:"selections_mapped,omitempty"`
+	// Execution-selection profile versions this run recorded.
+	ExecutionProfileVersionsWritten *int64 `form:"execution_profile_versions_written,omitempty" json:"execution_profile_versions_written,omitempty" xml:"execution_profile_versions_written,omitempty"`
 	// Default auth permissions this run granted across the organization: the
 	// personal default and shared client grants for every recorded client, and API
 	// key policies once every client is recorded. The auth-permission-defaults
@@ -2433,6 +2464,74 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	AuthClientsError *string `form:"auth_clients_error,omitempty" json:"auth_clients_error,omitempty" xml:"auth_clients_error,omitempty"`
 	// The organization's status after the run.
 	Status *AdminUpstreamOAuthMigrationStatusResponseBody `form:"status" json:"status" xml:"status"`
+}
+
+// EnableUpstreamAuthEnforcementResponseBody is the type of the "admin" service
+// "enableUpstreamAuthEnforcement" endpoint HTTP response body.
+type EnableUpstreamAuthEnforcementResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Whether the organization has nothing left to write and no server needing
+	// configuration.
+	Migrated bool `form:"migrated" json:"migrated" xml:"migrated"`
+	// MCP servers on a user session issuer that the association backfill decided.
+	Servers int64 `form:"servers" json:"servers" xml:"servers"`
+	// Server to client associations the configuration proves that are not yet
+	// recorded.
+	PendingAssociations int64 `form:"pending_associations" json:"pending_associations" xml:"pending_associations"`
+	// Servers whose upstream OAuth client must be associated by an administrator.
+	UnresolvedServers []*AdminUpstreamOAuthMigrationServerResponseBody `form:"unresolved_servers" json:"unresolved_servers" xml:"unresolved_servers"`
+	// Live user session credentials scanned.
+	Credentials int64 `form:"credentials" json:"credentials" xml:"credentials"`
+	// Credential choices the configuration decides that are not yet recorded.
+	PendingSelections int64 `form:"pending_selections" json:"pending_selections" xml:"pending_selections"`
+	// Credentials with at least one server they will be asked to reconnect to,
+	// because no single client is decided for them.
+	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
+}
+
+// DisableUpstreamAuthEnforcementResponseBody is the type of the "admin"
+// service "disableUpstreamAuthEnforcement" endpoint HTTP response body.
+type DisableUpstreamAuthEnforcementResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Whether the organization has nothing left to write and no server needing
+	// configuration.
+	Migrated bool `form:"migrated" json:"migrated" xml:"migrated"`
+	// MCP servers on a user session issuer that the association backfill decided.
+	Servers int64 `form:"servers" json:"servers" xml:"servers"`
+	// Server to client associations the configuration proves that are not yet
+	// recorded.
+	PendingAssociations int64 `form:"pending_associations" json:"pending_associations" xml:"pending_associations"`
+	// Servers whose upstream OAuth client must be associated by an administrator.
+	UnresolvedServers []*AdminUpstreamOAuthMigrationServerResponseBody `form:"unresolved_servers" json:"unresolved_servers" xml:"unresolved_servers"`
+	// Live user session credentials scanned.
+	Credentials int64 `form:"credentials" json:"credentials" xml:"credentials"`
+	// Credential choices the configuration decides that are not yet recorded.
+	PendingSelections int64 `form:"pending_selections" json:"pending_selections" xml:"pending_selections"`
+	// Credentials with at least one server they will be asked to reconnect to,
+	// because no single client is decided for them.
+	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`
+	// Where the organization stands in recording typed auth clients. Separate from
+	// migrated: it never gates the upstream OAuth cutover. Absent when its check
+	// failed.
+	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -20655,6 +20754,386 @@ type RunUpstreamOAuthMigrationGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// EnableUpstreamAuthEnforcementUnauthorizedResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unauthorized" error.
+type EnableUpstreamAuthEnforcementUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementForbiddenResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "forbidden" error.
+type EnableUpstreamAuthEnforcementForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementBadRequestResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "bad_request" error.
+type EnableUpstreamAuthEnforcementBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementNotFoundResponseBody is the type of the "admin"
+// service "enableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "not_found" error.
+type EnableUpstreamAuthEnforcementNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementConflictResponseBody is the type of the "admin"
+// service "enableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "conflict" error.
+type EnableUpstreamAuthEnforcementConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unsupported_media" error.
+type EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementInvalidResponseBody is the type of the "admin"
+// service "enableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "invalid" error.
+type EnableUpstreamAuthEnforcementInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementInvariantViolationResponseBody is the type of
+// the "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response
+// body for the "invariant_violation" error.
+type EnableUpstreamAuthEnforcementInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementUnexpectedResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unexpected" error.
+type EnableUpstreamAuthEnforcementUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableUpstreamAuthEnforcementGatewayErrorResponseBody is the type of the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "gateway_error" error.
+type EnableUpstreamAuthEnforcementGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementUnauthorizedResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unauthorized" error.
+type DisableUpstreamAuthEnforcementUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementForbiddenResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "forbidden" error.
+type DisableUpstreamAuthEnforcementForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementBadRequestResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "bad_request" error.
+type DisableUpstreamAuthEnforcementBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementNotFoundResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "not_found" error.
+type DisableUpstreamAuthEnforcementNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementConflictResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "conflict" error.
+type DisableUpstreamAuthEnforcementConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody is the type of
+// the "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response
+// body for the "unsupported_media" error.
+type DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementInvalidResponseBody is the type of the "admin"
+// service "disableUpstreamAuthEnforcement" endpoint HTTP response body for the
+// "invalid" error.
+type DisableUpstreamAuthEnforcementInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementInvariantViolationResponseBody is the type of
+// the "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response
+// body for the "invariant_violation" error.
+type DisableUpstreamAuthEnforcementInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementUnexpectedResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "unexpected" error.
+type DisableUpstreamAuthEnforcementUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableUpstreamAuthEnforcementGatewayErrorResponseBody is the type of the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint HTTP response body
+// for the "gateway_error" error.
+type DisableUpstreamAuthEnforcementGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -21839,9 +22318,25 @@ type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
 	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"warnings" json:"warnings" xml:"warnings"`
 	// The same counts for each kind of configured identity.
 	Kinds []*AdminUpstreamOAuthMigrationAuthClientKindResponseBody `form:"kinds" json:"kinds" xml:"kinds"`
-	// Phases whose check failed: oauth, headers, ema, reconcile or mark. The
-	// counts cover the other phases.
+	// Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile,
+	// mark, selections or grants. The counts cover the other phases.
 	FailedPhases []string `form:"failed_phases" json:"failed_phases" xml:"failed_phases"`
+	// Whether every live credential choice names a usable auth client or is an
+	// explicit no-auth choice, and the selections check did not fail.
+	SelectionsComplete *bool `form:"selections_complete,omitempty" json:"selections_complete,omitempty" xml:"selections_complete,omitempty"`
+	// Live credential choices with exactly one auth client to name, not yet named.
+	PendingSelectionMappings *int64 `form:"pending_selection_mappings,omitempty" json:"pending_selection_mappings,omitempty" xml:"pending_selection_mappings,omitempty"`
+	// Default auth permission grants (mcp:auth) the organization's roles, users,
+	// agents and API keys are missing, which a run adds. Enforcement needs them,
+	// so existing callers keep their access.
+	PendingGrants *int64 `form:"pending_grants,omitempty" json:"pending_grants,omitempty" xml:"pending_grants,omitempty"`
+	// Credential choice coverage for each credential class.
+	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClassResponseBody `form:"selection_classes,omitempty" json:"selection_classes,omitempty" xml:"selection_classes,omitempty"`
+	// The first live credential choices left without a usable auth client.
+	SelectionGaps []*AdminUpstreamOAuthMigrationSelectionGapResponseBody `form:"selection_gaps,omitempty" json:"selection_gaps,omitempty" xml:"selection_gaps,omitempty"`
+	// Every live credential choice left without a usable auth client, including
+	// those beyond selection_gaps.
+	SelectionGapCount *int64 `form:"selection_gap_count,omitempty" json:"selection_gap_count,omitempty" xml:"selection_gap_count,omitempty"`
 }
 
 // AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody is used to
@@ -21896,6 +22391,94 @@ type AdminUpstreamOAuthMigrationAuthClientKindResponseBody struct {
 	Unresolved int64 `form:"unresolved" json:"unresolved" xml:"unresolved"`
 }
 
+// AdminUpstreamOAuthMigrationSelectionClassResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationSelectionClassResponseBody struct {
+	// The class: interactive, id_jag, dashboard_mint, workload or agent.
+	CredentialClass string `form:"credential_class" json:"credential_class" xml:"credential_class"`
+	// Live credential choices of this class.
+	Selections int64 `form:"selections" json:"selections" xml:"selections"`
+	// Choices that already name a usable auth client.
+	Mapped int64 `form:"mapped" json:"mapped" xml:"mapped"`
+	// Choices with exactly one auth client to name, not yet named.
+	Pending int64 `form:"pending" json:"pending" xml:"pending"`
+	// Explicit no-auth choices on servers with no auth client.
+	NoAuth int64 `form:"no_auth" json:"no_auth" xml:"no_auth"`
+	// Choices several auth clients could serve. They are never guessed: configure
+	// the server or ask the credential to reconnect.
+	Ambiguous int64 `form:"ambiguous" json:"ambiguous" xml:"ambiguous"`
+	// Choices whose upstream OAuth client has no live, enabled auth client linked
+	// to the server.
+	NoClient int64 `form:"no_client" json:"no_client" xml:"no_client"`
+	// No-auth choices, and choices naming the server's headers, on servers that
+	// now offer an OAuth-backed client; the credential reconnects.
+	StaleNoAuth int64 `form:"stale_no_auth" json:"stale_no_auth" xml:"stale_no_auth"`
+	// Choices naming an auth client that is no longer usable for the server; the
+	// credential reconnects.
+	Unusable int64 `form:"unusable" json:"unusable" xml:"unusable"`
+}
+
+// AdminUpstreamOAuthMigrationSelectionGapResponseBody is used to define fields
+// on response body types.
+type AdminUpstreamOAuthMigrationSelectionGapResponseBody struct {
+	// The choice.
+	SelectionID string `form:"selection_id" json:"selection_id" xml:"selection_id"`
+	// The class of the credential the choice belongs to.
+	CredentialClass string `form:"credential_class" json:"credential_class" xml:"credential_class"`
+	// The credential.
+	CredentialID string `form:"credential_id" json:"credential_id" xml:"credential_id"`
+	// The server the choice is for.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The server's project.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Why the choice has no usable auth client: ambiguous, no_client,
+	// stale_no_auth, unusable or skipped_race.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+}
+
+// AdminUpstreamOAuthMigrationExecutionProfilesResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfilesResponseBody struct {
+	// Whether every profile is recorded and holds a choice for every server its
+	// assistant reaches.
+	Complete bool `form:"complete" json:"complete" xml:"complete"`
+	// Assistant and trigger pairs, each with a profile per execution context.
+	Targets int64 `form:"targets" json:"targets" xml:"targets"`
+	// Profile versions not yet recorded.
+	PendingVersions int64 `form:"pending_versions" json:"pending_versions" xml:"pending_versions"`
+	// Servers the profiles hold no choice for, by execution context and reason.
+	// They are never guessed: configure the server's auth clients.
+	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody `form:"gaps" json:"gaps" xml:"gaps"`
+}
+
+// AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
+	// user_backed for turns run for a user the event identified, userless for
+	// turns run as the trigger's workload.
+	ExecutionContext string `form:"execution_context" json:"execution_context" xml:"execution_context"`
+	// Why there is no choice: selection_required (several clients could serve it),
+	// personal_requires_user (only a personal client serves it, and the turn has
+	// no user), no_client (no live, enabled auth client carries its upstream OAuth
+	// client), setup_incomplete (it needs upstream authentication and offers no
+	// auth client) or upstream_auth_undecided (it offers no auth client and an
+	// administrator has not decided whether it needs upstream authentication).
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+	// Profile and server pairs with no choice for this reason.
+	Servers int64 `form:"servers" json:"servers" xml:"servers"`
+}
+
+// AdminUpstreamAuthEnforcementResponseBody is used to define fields on
+// response body types.
+type AdminUpstreamAuthEnforcementResponseBody struct {
+	// Whether enforcement is on.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether the coverage enforcement needs is in place, so it can be turned on.
+	Ready bool `form:"ready" json:"ready" xml:"ready"`
+	// What keeps enforcement from being turned on, empty when ready.
+	Blockers []string `form:"blockers" json:"blockers" xml:"blockers"`
+}
+
 // AdminUpstreamOAuthMigrationStatusResponseBody is used to define fields on
 // response body types.
 type AdminUpstreamOAuthMigrationStatusResponseBody struct {
@@ -21922,6 +22505,12 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	// migrated: it never gates the upstream OAuth cutover. Absent when its check
 	// failed.
 	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -24211,6 +24800,12 @@ func NewGetUpstreamOAuthMigrationStatusResponseBody(res *admin.AdminUpstreamOAut
 	if res.AuthClients != nil {
 		body.AuthClients = marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(res.AuthClients)
 	}
+	if res.ExecutionProfiles != nil {
+		body.ExecutionProfiles = marshalAdminAdminUpstreamOAuthMigrationExecutionProfilesToAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(res.ExecutionProfiles)
+	}
+	if res.Enforcement != nil {
+		body.Enforcement = marshalAdminAdminUpstreamAuthEnforcementToAdminUpstreamAuthEnforcementResponseBody(res.Enforcement)
+	}
 	return body
 }
 
@@ -24225,11 +24820,87 @@ func NewRunUpstreamOAuthMigrationResponseBody(res *admin.AdminUpstreamOAuthMigra
 		AuthClientsWritten:                 res.AuthClientsWritten,
 		AuthClientLinksWritten:             res.AuthClientLinksWritten,
 		ServersMarkedRequiringUpstreamAuth: res.ServersMarkedRequiringUpstreamAuth,
+		SelectionsMapped:                   res.SelectionsMapped,
+		ExecutionProfileVersionsWritten:    res.ExecutionProfileVersionsWritten,
 		AuthPermissionGrantsWritten:        res.AuthPermissionGrantsWritten,
 		AuthClientsError:                   res.AuthClientsError,
 	}
 	if res.Status != nil {
 		body.Status = marshalAdminAdminUpstreamOAuthMigrationStatusToAdminUpstreamOAuthMigrationStatusResponseBody(res.Status)
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementResponseBody builds the HTTP response body
+// from the result of the "enableUpstreamAuthEnforcement" endpoint of the
+// "admin" service.
+func NewEnableUpstreamAuthEnforcementResponseBody(res *admin.AdminUpstreamOAuthMigrationStatus) *EnableUpstreamAuthEnforcementResponseBody {
+	body := &EnableUpstreamAuthEnforcementResponseBody{
+		OrganizationID:       res.OrganizationID,
+		Migrated:             res.Migrated,
+		Servers:              res.Servers,
+		PendingAssociations:  res.PendingAssociations,
+		Credentials:          res.Credentials,
+		PendingSelections:    res.PendingSelections,
+		ReconnectCredentials: res.ReconnectCredentials,
+	}
+	if res.UnresolvedServers != nil {
+		body.UnresolvedServers = make([]*AdminUpstreamOAuthMigrationServerResponseBody, len(res.UnresolvedServers))
+		for i, val := range res.UnresolvedServers {
+			if val == nil {
+				body.UnresolvedServers[i] = nil
+				continue
+			}
+			body.UnresolvedServers[i] = marshalAdminAdminUpstreamOAuthMigrationServerToAdminUpstreamOAuthMigrationServerResponseBody(val)
+		}
+	} else {
+		body.UnresolvedServers = []*AdminUpstreamOAuthMigrationServerResponseBody{}
+	}
+	if res.AuthClients != nil {
+		body.AuthClients = marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(res.AuthClients)
+	}
+	if res.ExecutionProfiles != nil {
+		body.ExecutionProfiles = marshalAdminAdminUpstreamOAuthMigrationExecutionProfilesToAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(res.ExecutionProfiles)
+	}
+	if res.Enforcement != nil {
+		body.Enforcement = marshalAdminAdminUpstreamAuthEnforcementToAdminUpstreamAuthEnforcementResponseBody(res.Enforcement)
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementResponseBody builds the HTTP response body
+// from the result of the "disableUpstreamAuthEnforcement" endpoint of the
+// "admin" service.
+func NewDisableUpstreamAuthEnforcementResponseBody(res *admin.AdminUpstreamOAuthMigrationStatus) *DisableUpstreamAuthEnforcementResponseBody {
+	body := &DisableUpstreamAuthEnforcementResponseBody{
+		OrganizationID:       res.OrganizationID,
+		Migrated:             res.Migrated,
+		Servers:              res.Servers,
+		PendingAssociations:  res.PendingAssociations,
+		Credentials:          res.Credentials,
+		PendingSelections:    res.PendingSelections,
+		ReconnectCredentials: res.ReconnectCredentials,
+	}
+	if res.UnresolvedServers != nil {
+		body.UnresolvedServers = make([]*AdminUpstreamOAuthMigrationServerResponseBody, len(res.UnresolvedServers))
+		for i, val := range res.UnresolvedServers {
+			if val == nil {
+				body.UnresolvedServers[i] = nil
+				continue
+			}
+			body.UnresolvedServers[i] = marshalAdminAdminUpstreamOAuthMigrationServerToAdminUpstreamOAuthMigrationServerResponseBody(val)
+		}
+	} else {
+		body.UnresolvedServers = []*AdminUpstreamOAuthMigrationServerResponseBody{}
+	}
+	if res.AuthClients != nil {
+		body.AuthClients = marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(res.AuthClients)
+	}
+	if res.ExecutionProfiles != nil {
+		body.ExecutionProfiles = marshalAdminAdminUpstreamOAuthMigrationExecutionProfilesToAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(res.ExecutionProfiles)
+	}
+	if res.Enforcement != nil {
+		body.Enforcement = marshalAdminAdminUpstreamAuthEnforcementToAdminUpstreamAuthEnforcementResponseBody(res.Enforcement)
 	}
 	return body
 }
@@ -38515,6 +39186,306 @@ func NewRunUpstreamOAuthMigrationGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
+// NewEnableUpstreamAuthEnforcementUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementUnauthorizedResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementUnauthorizedResponseBody {
+	body := &EnableUpstreamAuthEnforcementUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementForbiddenResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementForbiddenResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementForbiddenResponseBody {
+	body := &EnableUpstreamAuthEnforcementForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementBadRequestResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementBadRequestResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementBadRequestResponseBody {
+	body := &EnableUpstreamAuthEnforcementBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementNotFoundResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementNotFoundResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementNotFoundResponseBody {
+	body := &EnableUpstreamAuthEnforcementNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementConflictResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementConflictResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementConflictResponseBody {
+	body := &EnableUpstreamAuthEnforcementConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementUnsupportedMediaResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody {
+	body := &EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementInvalidResponseBody builds the HTTP response
+// body from the result of the "enableUpstreamAuthEnforcement" endpoint of the
+// "admin" service.
+func NewEnableUpstreamAuthEnforcementInvalidResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementInvalidResponseBody {
+	body := &EnableUpstreamAuthEnforcementInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementInvariantViolationResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementInvariantViolationResponseBody {
+	body := &EnableUpstreamAuthEnforcementInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementUnexpectedResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementUnexpectedResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementUnexpectedResponseBody {
+	body := &EnableUpstreamAuthEnforcementUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableUpstreamAuthEnforcementGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "enableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewEnableUpstreamAuthEnforcementGatewayErrorResponseBody(res *goa.ServiceError) *EnableUpstreamAuthEnforcementGatewayErrorResponseBody {
+	body := &EnableUpstreamAuthEnforcementGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementUnauthorizedResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementUnauthorizedResponseBody {
+	body := &DisableUpstreamAuthEnforcementUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementForbiddenResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementForbiddenResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementForbiddenResponseBody {
+	body := &DisableUpstreamAuthEnforcementForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementBadRequestResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementBadRequestResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementBadRequestResponseBody {
+	body := &DisableUpstreamAuthEnforcementBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementNotFoundResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementNotFoundResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementNotFoundResponseBody {
+	body := &DisableUpstreamAuthEnforcementNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementConflictResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementConflictResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementConflictResponseBody {
+	body := &DisableUpstreamAuthEnforcementConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementUnsupportedMediaResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody {
+	body := &DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementInvalidResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementInvalidResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementInvalidResponseBody {
+	body := &DisableUpstreamAuthEnforcementInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementInvariantViolationResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementInvariantViolationResponseBody {
+	body := &DisableUpstreamAuthEnforcementInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementUnexpectedResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementUnexpectedResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementUnexpectedResponseBody {
+	body := &DisableUpstreamAuthEnforcementUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableUpstreamAuthEnforcementGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "disableUpstreamAuthEnforcement"
+// endpoint of the "admin" service.
+func NewDisableUpstreamAuthEnforcementGatewayErrorResponseBody(res *goa.ServiceError) *DisableUpstreamAuthEnforcementGatewayErrorResponseBody {
+	body := &DisableUpstreamAuthEnforcementGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -39778,6 +40749,30 @@ func NewRunUpstreamOAuthMigrationPayload(body *RunUpstreamOAuthMigrationRequestB
 	return v
 }
 
+// NewEnableUpstreamAuthEnforcementPayload builds a admin service
+// enableUpstreamAuthEnforcement endpoint payload.
+func NewEnableUpstreamAuthEnforcementPayload(body *EnableUpstreamAuthEnforcementRequestBody, adminSessionToken *string) *admin.EnableUpstreamAuthEnforcementPayload {
+	v := &admin.EnableUpstreamAuthEnforcementPayload{
+		OrganizationID:                      *body.OrganizationID,
+		ShadowParityConfirmed:               *body.ShadowParityConfirmed,
+		CrossOrganizationDenialCommunicated: *body.CrossOrganizationDenialCommunicated,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewDisableUpstreamAuthEnforcementPayload builds a admin service
+// disableUpstreamAuthEnforcement endpoint payload.
+func NewDisableUpstreamAuthEnforcementPayload(body *DisableUpstreamAuthEnforcementRequestBody, adminSessionToken *string) *admin.DisableUpstreamAuthEnforcementPayload {
+	v := &admin.DisableUpstreamAuthEnforcementPayload{
+		OrganizationID: *body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -40567,6 +41562,30 @@ func ValidateSetStripeSubscriptionRequestBody(body *SetStripeSubscriptionRequest
 // ValidateRunUpstreamOAuthMigrationRequestBody runs the validations defined on
 // RunUpstreamOAuthMigrationRequestBody
 func ValidateRunUpstreamOAuthMigrationRequestBody(body *RunUpstreamOAuthMigrationRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	return
+}
+
+// ValidateEnableUpstreamAuthEnforcementRequestBody runs the validations
+// defined on EnableUpstreamAuthEnforcementRequestBody
+func ValidateEnableUpstreamAuthEnforcementRequestBody(body *EnableUpstreamAuthEnforcementRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ShadowParityConfirmed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("shadow_parity_confirmed", "body"))
+	}
+	if body.CrossOrganizationDenialCommunicated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cross_organization_denial_communicated", "body"))
+	}
+	return
+}
+
+// ValidateDisableUpstreamAuthEnforcementRequestBody runs the validations
+// defined on DisableUpstreamAuthEnforcementRequestBody
+func ValidateDisableUpstreamAuthEnforcementRequestBody(body *DisableUpstreamAuthEnforcementRequestBody) (err error) {
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}

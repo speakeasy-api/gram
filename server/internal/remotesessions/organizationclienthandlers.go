@@ -824,6 +824,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		ActorDisplayName:         authCtx.Email,
 		ConfirmUpstreamRejection: false,
 		OrganizationID:           authCtx.ActiveOrganizationID,
+		RegistrationScope:        nil,
 	})
 	if err != nil {
 		if conflict, ok := errors.AsType[*oops.ShareableError](err); ok && conflict.Code == oops.CodeConflict {

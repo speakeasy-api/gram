@@ -27,10 +27,51 @@ const (
 	// GrantAPIKey is a legacy key's own policy: mcp:connect on every server
 	// in each project it reaches, and mcp:auth on their shared clients.
 	GrantAPIKey GrantKind = "api_key"
+
+	// GrantAttachment is mcp:auth for an agent on the one connection an
+	// attachment binds it to: that user's connection through that upstream
+	// OAuth client, whichever auth client uses it.
+	GrantAttachment GrantKind = "attachment"
 )
 
 // GrantKinds lists every grant kind in report order.
-var GrantKinds = []GrantKind{GrantPersonalDefault, GrantSharedClient, GrantAPIKey}
+var GrantKinds = []GrantKind{GrantPersonalDefault, GrantSharedClient, GrantAPIKey, GrantAttachment}
+
+// AttachmentRemediation reasons name why an attachment was not carried over.
+// Each needs its owner to reconnect or configure the agent; the backfill never
+// substitutes another user or a broader grant.
+const (
+	// AttachmentNotByUser is an attachment no user made.
+	AttachmentNotByUser = "not_attached_by_user"
+	// AttachmentOwnerChanged is an attachment made by someone who no longer
+	// owns the agent; the attachment runtime no longer serves it.
+	AttachmentOwnerChanged = "owner_changed"
+	// AttachmentForeignConnection is an attachment to a connection the
+	// attaching user does not own.
+	AttachmentForeignConnection = "foreign_connection"
+	// AttachmentConnectionGone is an attachment whose connection was removed
+	// or authorized again since.
+	AttachmentConnectionGone = "connection_gone"
+	// AttachmentAgentInactive is an attachment of an agent that is suspended,
+	// revoked or waiting for a new owner, or whose owner is no longer an
+	// active member.
+	AttachmentAgentInactive = "agent_inactive"
+	// AttachmentConfigurationGone is an attachment whose sign-in, project,
+	// upstream client or issuer was removed, or no longer reaches the
+	// attachment's project.
+	AttachmentConfigurationGone = "configuration_gone"
+	// AttachmentClientUnrecorded is an attachment whose upstream OAuth client
+	// no personal auth client in the organization uses yet.
+	AttachmentClientUnrecorded = "client_unrecorded"
+)
+
+// AttachmentRemediation is one attachment the grants phase could not carry
+// over, by id only.
+type AttachmentRemediation struct {
+	BindingID string `json:"binding_id"`
+	AgentID   string `json:"agent_id"`
+	Reason    string `json:"reason"`
+}
 
 // serverAccessScopes are the scopes that satisfy mcp:connect.
 var serverAccessScopes = []string{string(authz.ScopeMCPConnect), string(authz.ScopeMCPRead), string(authz.ScopeMCPWrite)}
@@ -144,6 +185,9 @@ func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report, wit
 		uses = nil
 	}
 	if err := planServerAccessGrants(ctx, q, opts, uses, plan); err != nil {
+		return err
+	}
+	if err := planAttachmentGrants(ctx, q, opts, plan, report); err != nil {
 		return err
 	}
 	// A key's policy is written once, so never from a run whose earlier
@@ -372,4 +416,177 @@ func planAPIKeyGrants(ctx context.Context, q *Queries, opts Options, uses []List
 		}
 	}
 	return nil
+}
+
+// planAttachmentGrants carries each attachment over to the grant that serves
+// the same access without it: the agent may use its authorizing user's
+// connection through the attached upstream OAuth client. The connection owner
+// is that user, concretely, so the grant never reaches another user's
+// connection. An attachment the runtime would no longer serve, or whose client
+// is not recorded, is reported for remediation instead.
+func planAttachmentGrants(ctx context.Context, q *Queries, opts Options, plan *grantPlan, report *Report) error {
+	rows, err := q.ListLiveAgentAttachments(ctx, ListLiveAgentAttachmentsParams{OrganizationID: opts.OrganizationID, BindingID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+	if err != nil {
+		return fmt.Errorf("list agent attachments: %w", err)
+	}
+	// Attachment grants name upstream_client, so they are planned only once
+	// the organization's write gate allows it. Until then they wait: nothing
+	// is written without the dimension, and the run reports them pending.
+	writable := authz.UpstreamSelectorWritesAllowed(ctx, opts.OrganizationID)
+	var candidates []ListLiveAgentAttachmentsRow
+	for _, row := range rows {
+		reason := attachmentRemediationReason(row)
+		if reason != "" {
+			report.AttachmentRemediations = append(report.AttachmentRemediations, AttachmentRemediation{BindingID: row.BindingID.String(), AgentID: row.AgentID.String(), Reason: reason})
+			continue
+		}
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, row.AgentID.String())
+		selector := authz.ConnectionAuthClientSelector(row.RemoteSessionClientID.String(), row.OwnerUserID)
+		if !writable {
+			// Only a grant still missing waits; one already held or once
+			// provisioned is done whatever the gate says now.
+			key, err := grantKey(principal.String(), authz.ScopeMCPAuth, selector)
+			if err != nil {
+				return err
+			}
+			if !plan.existing[key] {
+				plan.existing[key] = true
+				report.AttachmentsWaiting++
+			}
+			continue
+		}
+		key, err := grantKey(principal.String(), authz.ScopeMCPAuth, selector)
+		if err != nil {
+			return err
+		}
+		if plan.existing[key] {
+			continue
+		}
+		if !opts.Apply {
+			if err := plan.want(GrantAttachment, principal, authz.ScopeMCPAuth, selector); err != nil {
+				return err
+			}
+			continue
+		}
+		candidates = append(candidates, row)
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	// Owner and membership lifecycle writers (membership removal, user
+	// deprovisioning and disabling) lock the user or membership before the
+	// agents they latch, so every candidate's owner and membership is locked
+	// first, in a fixed order, before any attachment or agent: locks are held
+	// for the whole transaction, so taking them per attachment would put a
+	// later attachment's owner after an earlier attachment's agent.
+	owners := make([]string, 0, len(candidates))
+	locked := map[string]bool{}
+	for _, row := range candidates {
+		if !locked[row.OwnerUserID] {
+			locked[row.OwnerUserID] = true
+			owners = append(owners, row.OwnerUserID)
+		}
+	}
+	slices.Sort(owners)
+	if err := q.LockAttachmentOwners(ctx, owners); err != nil {
+		return fmt.Errorf("lock attachment owners: %w", err)
+	}
+	if err := q.LockAttachmentOwnerMemberships(ctx, LockAttachmentOwnerMembershipsParams{OrganizationID: opts.OrganizationID, UserIds: owners}); err != nil {
+		return fmt.Errorf("lock attachment owner memberships: %w", err)
+	}
+	for _, row := range candidates {
+		// Decide again from a read taken after locking what the decision
+		// reads, held until the grant commits.
+		fresh, live, err := lockAttachment(ctx, q, opts.OrganizationID, row.BindingID)
+		if err != nil {
+			return err
+		}
+		if !live {
+			// Revoked meanwhile: nothing is left to carry over.
+			continue
+		}
+		if reason := attachmentRemediationReason(fresh); reason != "" {
+			report.AttachmentRemediations = append(report.AttachmentRemediations, AttachmentRemediation{BindingID: fresh.BindingID.String(), AgentID: fresh.AgentID.String(), Reason: reason})
+			continue
+		}
+		if !locked[fresh.OwnerUserID] {
+			// The agent changed owner after the owners were locked, so its
+			// new owner is not held; a later run decides it.
+			continue
+		}
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, fresh.AgentID.String())
+		selector := authz.ConnectionAuthClientSelector(fresh.RemoteSessionClientID.String(), fresh.OwnerUserID)
+		if err := plan.want(GrantAttachment, principal, authz.ScopeMCPAuth, selector); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// lockAttachment locks every row that makes one attachment servable, in the
+// order lifecycle writers take them, and reads the attachment again after the
+// locks. live is false when the attachment is no longer unrevoked.
+func lockAttachment(ctx context.Context, q *Queries, organizationID string, bindingID uuid.UUID) (ListLiveAgentAttachmentsRow, bool, error) {
+	var none ListLiveAgentAttachmentsRow
+	locks := []struct {
+		name string
+		lock func(context.Context) error
+	}{
+		{"issuers", func(ctx context.Context) error {
+			return q.LockAttachmentIssuers(ctx, LockAttachmentIssuersParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+		{"binding", func(ctx context.Context) error {
+			return q.LockAttachmentBinding(ctx, LockAttachmentBindingParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+		{"connection", func(ctx context.Context) error {
+			return q.LockAttachmentSession(ctx, LockAttachmentSessionParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+		{"upstream issuer", func(ctx context.Context) error {
+			return q.LockAttachmentUpstreamIssuer(ctx, LockAttachmentUpstreamIssuerParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+		{"configuration", func(ctx context.Context) error {
+			return q.LockAttachmentConfiguration(ctx, LockAttachmentConfigurationParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+		{"auth clients", func(ctx context.Context) error {
+			return q.LockAttachmentAuthClients(ctx, LockAttachmentAuthClientsParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
+	}
+	for _, l := range locks {
+		if err := l.lock(ctx); err != nil {
+			return none, false, fmt.Errorf("lock attachment %s %s: %w", bindingID, l.name, err)
+		}
+	}
+	rows, err := q.ListLiveAgentAttachments(ctx, ListLiveAgentAttachmentsParams{OrganizationID: organizationID, BindingID: uuid.NullUUID{UUID: bindingID, Valid: true}})
+	if err != nil {
+		return none, false, fmt.Errorf("reread attachment %s: %w", bindingID, err)
+	}
+	if len(rows) == 0 {
+		return none, false, nil
+	}
+	return rows[0], true, nil
+}
+
+func attachmentRemediationReason(row ListLiveAgentAttachmentsRow) string {
+	attacher, err := urn.ParseSessionSubject(row.AttachedBySubjectID)
+	switch {
+	// An inactive agent needs an admin to resume it or give it a new owner
+	// before any other remediation can help, so it is reported first.
+	case !row.AgentActive:
+		return AttachmentAgentInactive
+	case err != nil || attacher.Kind != urn.SessionSubjectKindUser:
+		return AttachmentNotByUser
+	case attacher.ID != row.OwnerUserID:
+		return AttachmentOwnerChanged
+	case row.ConnectionSubject != row.AttachedBySubjectID:
+		return AttachmentForeignConnection
+	case !row.ConnectionLive:
+		return AttachmentConnectionGone
+	case !row.ConfigurationLive:
+		return AttachmentConfigurationGone
+	case !row.ClientRecorded:
+		return AttachmentClientUnrecorded
+	default:
+		return ""
+	}
 }

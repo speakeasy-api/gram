@@ -18,24 +18,27 @@ import (
 
 // Server lists the agents service endpoint HTTP handlers.
 type Server struct {
-	Mounts              []*MountPoint
-	ListSessions        http.Handler
-	RevokeSession       http.Handler
-	List                http.Handler
-	Create              http.Handler
-	Get                 http.Handler
-	Rename              http.Handler
-	ListDelegableGrants http.Handler
-	ListPolicyGrants    http.Handler
-	CreatePolicyGrant   http.Handler
-	UpdatePolicyGrant   http.Handler
-	DeletePolicyGrant   http.Handler
-	Transfer            http.Handler
-	Reassign            http.Handler
-	Suspend             http.Handler
-	Resume              http.Handler
-	Revoke              http.Handler
-	Delete              http.Handler
+	Mounts                 []*MountPoint
+	ListSessions           http.Handler
+	RevokeSession          http.Handler
+	List                   http.Handler
+	Create                 http.Handler
+	Get                    http.Handler
+	Rename                 http.Handler
+	ListDelegableGrants    http.Handler
+	ListPolicyGrants       http.Handler
+	CreatePolicyGrant      http.Handler
+	UpdatePolicyGrant      http.Handler
+	DeletePolicyGrant      http.Handler
+	ListConnectionBlocks   http.Handler
+	BlockAgentOnConnection http.Handler
+	RemoveConnectionBlock  http.Handler
+	Transfer               http.Handler
+	Reassign               http.Handler
+	Suspend                http.Handler
+	Resume                 http.Handler
+	Revoke                 http.Handler
+	Delete                 http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -76,6 +79,9 @@ func New(
 			{"CreatePolicyGrant", "POST", "/rpc/agents.createPolicyGrant"},
 			{"UpdatePolicyGrant", "POST", "/rpc/agents.updatePolicyGrant"},
 			{"DeletePolicyGrant", "POST", "/rpc/agents.deletePolicyGrant"},
+			{"ListConnectionBlocks", "GET", "/rpc/agents.listConnectionBlocks"},
+			{"BlockAgentOnConnection", "POST", "/rpc/agents.blockOnConnection"},
+			{"RemoveConnectionBlock", "POST", "/rpc/agents.removeConnectionBlock"},
 			{"Transfer", "POST", "/rpc/agents.transfer"},
 			{"Reassign", "POST", "/rpc/agents.reassign"},
 			{"Suspend", "POST", "/rpc/agents.suspend"},
@@ -83,23 +89,26 @@ func New(
 			{"Revoke", "POST", "/rpc/agents.revoke"},
 			{"Delete", "POST", "/rpc/agents.delete"},
 		},
-		ListSessions:        NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
-		RevokeSession:       NewRevokeSessionHandler(e.RevokeSession, mux, decoder, encoder, errhandler, formatter),
-		List:                NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
-		Create:              NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
-		Get:                 NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
-		Rename:              NewRenameHandler(e.Rename, mux, decoder, encoder, errhandler, formatter),
-		ListDelegableGrants: NewListDelegableGrantsHandler(e.ListDelegableGrants, mux, decoder, encoder, errhandler, formatter),
-		ListPolicyGrants:    NewListPolicyGrantsHandler(e.ListPolicyGrants, mux, decoder, encoder, errhandler, formatter),
-		CreatePolicyGrant:   NewCreatePolicyGrantHandler(e.CreatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
-		UpdatePolicyGrant:   NewUpdatePolicyGrantHandler(e.UpdatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
-		DeletePolicyGrant:   NewDeletePolicyGrantHandler(e.DeletePolicyGrant, mux, decoder, encoder, errhandler, formatter),
-		Transfer:            NewTransferHandler(e.Transfer, mux, decoder, encoder, errhandler, formatter),
-		Reassign:            NewReassignHandler(e.Reassign, mux, decoder, encoder, errhandler, formatter),
-		Suspend:             NewSuspendHandler(e.Suspend, mux, decoder, encoder, errhandler, formatter),
-		Resume:              NewResumeHandler(e.Resume, mux, decoder, encoder, errhandler, formatter),
-		Revoke:              NewRevokeHandler(e.Revoke, mux, decoder, encoder, errhandler, formatter),
-		Delete:              NewDeleteHandler(e.Delete, mux, decoder, encoder, errhandler, formatter),
+		ListSessions:           NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
+		RevokeSession:          NewRevokeSessionHandler(e.RevokeSession, mux, decoder, encoder, errhandler, formatter),
+		List:                   NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		Create:                 NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
+		Get:                    NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
+		Rename:                 NewRenameHandler(e.Rename, mux, decoder, encoder, errhandler, formatter),
+		ListDelegableGrants:    NewListDelegableGrantsHandler(e.ListDelegableGrants, mux, decoder, encoder, errhandler, formatter),
+		ListPolicyGrants:       NewListPolicyGrantsHandler(e.ListPolicyGrants, mux, decoder, encoder, errhandler, formatter),
+		CreatePolicyGrant:      NewCreatePolicyGrantHandler(e.CreatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
+		UpdatePolicyGrant:      NewUpdatePolicyGrantHandler(e.UpdatePolicyGrant, mux, decoder, encoder, errhandler, formatter),
+		DeletePolicyGrant:      NewDeletePolicyGrantHandler(e.DeletePolicyGrant, mux, decoder, encoder, errhandler, formatter),
+		ListConnectionBlocks:   NewListConnectionBlocksHandler(e.ListConnectionBlocks, mux, decoder, encoder, errhandler, formatter),
+		BlockAgentOnConnection: NewBlockAgentOnConnectionHandler(e.BlockAgentOnConnection, mux, decoder, encoder, errhandler, formatter),
+		RemoveConnectionBlock:  NewRemoveConnectionBlockHandler(e.RemoveConnectionBlock, mux, decoder, encoder, errhandler, formatter),
+		Transfer:               NewTransferHandler(e.Transfer, mux, decoder, encoder, errhandler, formatter),
+		Reassign:               NewReassignHandler(e.Reassign, mux, decoder, encoder, errhandler, formatter),
+		Suspend:                NewSuspendHandler(e.Suspend, mux, decoder, encoder, errhandler, formatter),
+		Resume:                 NewResumeHandler(e.Resume, mux, decoder, encoder, errhandler, formatter),
+		Revoke:                 NewRevokeHandler(e.Revoke, mux, decoder, encoder, errhandler, formatter),
+		Delete:                 NewDeleteHandler(e.Delete, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -119,6 +128,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreatePolicyGrant = m(s.CreatePolicyGrant)
 	s.UpdatePolicyGrant = m(s.UpdatePolicyGrant)
 	s.DeletePolicyGrant = m(s.DeletePolicyGrant)
+	s.ListConnectionBlocks = m(s.ListConnectionBlocks)
+	s.BlockAgentOnConnection = m(s.BlockAgentOnConnection)
+	s.RemoveConnectionBlock = m(s.RemoveConnectionBlock)
 	s.Transfer = m(s.Transfer)
 	s.Reassign = m(s.Reassign)
 	s.Suspend = m(s.Suspend)
@@ -143,6 +155,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreatePolicyGrantHandler(mux, h.CreatePolicyGrant)
 	MountUpdatePolicyGrantHandler(mux, h.UpdatePolicyGrant)
 	MountDeletePolicyGrantHandler(mux, h.DeletePolicyGrant)
+	MountListConnectionBlocksHandler(mux, h.ListConnectionBlocks)
+	MountBlockAgentOnConnectionHandler(mux, h.BlockAgentOnConnection)
+	MountRemoveConnectionBlockHandler(mux, h.RemoveConnectionBlock)
 	MountTransferHandler(mux, h.Transfer)
 	MountReassignHandler(mux, h.Reassign)
 	MountSuspendHandler(mux, h.Suspend)
@@ -716,6 +731,165 @@ func NewDeletePolicyGrantHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deletePolicyGrant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListConnectionBlocksHandler configures the mux to serve the "agents"
+// service "listConnectionBlocks" endpoint.
+func MountListConnectionBlocksHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agents.listConnectionBlocks", f)
+}
+
+// NewListConnectionBlocksHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "listConnectionBlocks" endpoint.
+func NewListConnectionBlocksHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListConnectionBlocksRequest(mux, decoder)
+		encodeResponse = EncodeListConnectionBlocksResponse(encoder)
+		encodeError    = EncodeListConnectionBlocksError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listConnectionBlocks")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountBlockAgentOnConnectionHandler configures the mux to serve the "agents"
+// service "blockAgentOnConnection" endpoint.
+func MountBlockAgentOnConnectionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agents.blockOnConnection", f)
+}
+
+// NewBlockAgentOnConnectionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "blockAgentOnConnection" endpoint.
+func NewBlockAgentOnConnectionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeBlockAgentOnConnectionRequest(mux, decoder)
+		encodeResponse = EncodeBlockAgentOnConnectionResponse(encoder)
+		encodeError    = EncodeBlockAgentOnConnectionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "blockAgentOnConnection")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRemoveConnectionBlockHandler configures the mux to serve the "agents"
+// service "removeConnectionBlock" endpoint.
+func MountRemoveConnectionBlockHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agents.removeConnectionBlock", f)
+}
+
+// NewRemoveConnectionBlockHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "removeConnectionBlock" endpoint.
+func NewRemoveConnectionBlockHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRemoveConnectionBlockRequest(mux, decoder)
+		encodeResponse = EncodeRemoveConnectionBlockResponse(encoder)
+		encodeError    = EncodeRemoveConnectionBlockError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "removeConnectionBlock")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
 		payload, err := decodeRequest(r)
 		if err != nil {
