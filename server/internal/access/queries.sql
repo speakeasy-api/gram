@@ -13,10 +13,21 @@ ORDER BY principal_urn, scope;
 -- name: GetPrincipalGrants :many
 -- Returns all grant rows matching a set of principal URNs within an org.
 -- Used by the access resolver to load grants for a user+role in a single query.
-SELECT principal_urn, scope, selectors
-FROM principal_grants
-WHERE organization_id = @organization_id
-  AND principal_urn = ANY(@principal_urns::text[]);
+-- inferred marks a grant the default auth permission backfill wrote that no
+-- explicit write has taken over, so it never outranks an inherited block.
+SELECT g.principal_urn, g.scope, g.selectors,
+  EXISTS (
+    SELECT 1
+    FROM auth_permission_provisions p
+    WHERE p.organization_id = g.organization_id
+      AND p.principal_urn = g.principal_urn
+      AND p.scope = g.scope
+      AND p.selectors = g.selectors
+      AND p.taken_over_at IS NULL
+  )::boolean AS inferred
+FROM principal_grants g
+WHERE g.organization_id = @organization_id
+  AND g.principal_urn = ANY(@principal_urns::text[]);
 
 -- name: ListPrincipalGrantsByResource :many
 -- Returns grant rows for a single resource selector.
@@ -56,6 +67,24 @@ ON CONFLICT (organization_id, principal_urn, scope, selectors)
 DO UPDATE SET
   updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at;
+
+-- name: MarkAuthPermissionTakenOver :exec
+-- An explicit grant write takes the grant over from the default auth
+-- permission backfill: a rollback leaves it, and a rerun still never writes it
+-- again. Run after the write, so a grant provisioned meanwhile is seen.
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND selectors = @selectors
+  AND taken_over_at IS NULL;
+
+-- name: RecordAuthPermissionDefault :exec
+-- Records a default grant written at organization creation.
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES (@organization_id, @principal_urn, @scope, @selectors, @kind)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
 
 -- name: InsertPrincipalGrantIfAbsent :execrows
 -- Creates a single grant row and leaves an existing identical row untouched.
@@ -1084,6 +1113,34 @@ SELECT project_id FROM (
     AND projects.deleted IS FALSE
 ) AS owning
 LIMIT 1;
+
+-- name: FindMCPResourceProjects :many
+-- FindMCPResourceProject for many resources at once; unknown ids are absent.
+SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (
+  SELECT toolsets.id AS resource_id, toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = @organization_id
+    AND toolsets.id = ANY(sqlc.arg(resource_ids)::uuid[])
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.id AS resource_id, mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND mcp_servers.id = ANY(sqlc.arg(resource_ids)::uuid[])
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.id AS resource_id, meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND meta_mcp_servers.id = ANY(sqlc.arg(resource_ids)::uuid[])
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning;
 
 -- name: FindMCPResourceVisibility :one
 -- Resolves who may connect to one MCP resource without an access rule, as the

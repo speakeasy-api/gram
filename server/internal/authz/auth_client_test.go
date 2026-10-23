@@ -264,7 +264,7 @@ func TestEngineRequiresRepresentedUserPolicyForAgents(t *testing.T) {
 	ownerPolicy := []Grant{markerGrant, connect}
 
 	ctxFor := func(authorizer RepresentedUserPolicy) context.Context {
-		return admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), authorizer, agentPolicy, agentPolicy, ownerPolicy)
+		return admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), authorizer, false, agentPolicy, agentPolicy, ownerPolicy)
 	}
 
 	permitted := ctxFor(RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{markerGrant}})
@@ -278,7 +278,7 @@ func TestEngineRequiresRepresentedUserPolicyForAgents(t *testing.T) {
 	ineligible := ctxFor(RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{}})
 	requireForbidden(t, engine.Require(ineligible, sharedClientCheck(authProjectP)))
 
-	workload := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "", Policy: nil}, agentPolicy, agentPolicy, ownerPolicy)
+	workload := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "", Policy: nil}, false, agentPolicy, agentPolicy, ownerPolicy)
 	requireForbidden(t, engine.Require(workload, personalClientCheck("user_u"))) // no represented user resolves no connection
 }
 
