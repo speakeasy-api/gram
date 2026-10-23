@@ -26,6 +26,13 @@ Start `agents/code-runner/target/debug/gram-code-runner` with
 `--monty-bin agents/code-runner/target/monty/bin/monty`. Supply a random bearer
 secret of at least 32 bytes in `GRAM_CODE_RUNNER_TOKEN`; it is never exposed to
 Python or process arguments. Linux startup disables parent process inspection.
+In the image, `GRAM_CODE_RUNNER_MONTY_BIN` points at `gram-code-worker`, which
+confines each worker before exec'ing the `monty` binary beside it: its own
+Landlock domain limited to reading and executing system libraries and its
+directory, and a seccomp filter denying cross-process syscalls. An escaped
+worker cannot read, trace or signal a sibling (`tests/worker_isolation.rs`,
+Linux only). Point `--monty-bin` straight at `monty` for local development on
+macOS, where the shim does not run.
 The default listen address is `127.0.0.1:8081`. The dedicated Docker image
 listens on port 8081 and runs as UID 65532. Build it from the repository root:
 `docker build -f agents/code-runner/Dockerfile -t gram-code-runner:dev .`.
@@ -79,7 +86,8 @@ be at least 35 seconds to cover execution, terminal-frame and connection drainin
 - 64 helper attempts and at most eight unresolved callbacks per execution.
 - 1 MiB per helper result; 8 MiB cumulative callback arguments and results.
 - 256 KiB final JSON; 16 KiB captured print output, truncated at a UTF-8 boundary.
-- Four executions by default, configurable from 1 to 16. Saturation refuses
+- Twelve executions by default (`GRAM_CODE_RUNNER_CAPACITY`), configurable
+  from 1 to 16; it must match the server's streams per pod. Saturation refuses
   admission. At most 32 connections, 16 streams and 4 MiB receive window per
   connection; five seconds to receive headers and the first execution frame.
   At most 16 streams buffer an unadmitted first frame at once; a stream that
