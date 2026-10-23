@@ -4,6 +4,9 @@ import (
 	"context"
 	"net/url"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
@@ -32,6 +35,33 @@ func platformBaseURL(ctx context.Context, fallback *url.URL) *url.URL {
 		return base
 	}
 	return fallback
+}
+
+// organizationBaseURLs returns the server and dashboard base URLs of links an
+// organization's members are given, such as MCP endpoint addresses. The
+// dashboard moves an organization's browsers onto the platform host stored as
+// its default host, so the addresses the dashboard shows use that host and
+// these links do too. Requests on a custom domain or a private network keep
+// the configured URLs, because their callers may not reach a platform host.
+// Without a resolver or a stored platform host, links follow the request's
+// platform origin and then the configured URLs.
+// The stored dashboard URL is nil when the stored host is the server host and
+// no dashboard URL is configured.
+func organizationBaseURLs(ctx context.Context, orgHosts *orghost.Resolver, defaultHost pgtype.Text, serverURL, dashboardURL *url.URL) (*url.URL, *url.URL) {
+	if orgHosts != nil && storedHostApplies(ctx) {
+		if storedServerURL, storedDashboardURL, ok := orgHosts.StoredPlatformBaseURLs(defaultHost); ok {
+			return storedServerURL, storedDashboardURL
+		}
+	}
+	return platformBaseURL(ctx, serverURL), requestDashboardURL(ctx, dashboardURL, serverURL)
+}
+
+// storedHostApplies reports whether links built for this request may use an
+// organization's stored default host: a platform request or one with no
+// origin. Custom-domain and private-network requests keep the configured URLs.
+func storedHostApplies(ctx context.Context) bool {
+	origin, ok := requestorigin.FromContext(ctx)
+	return !ok || origin.Surface == requestorigin.SurfacePlatform
 }
 
 // requestDashboardURL returns the dashboard URL on the extra platform host a

@@ -10079,6 +10079,10 @@ components:
           type: integer
           description: Typed auth clients recorded.
           format: int64
+        auth_permission_grants_written:
+          type: integer
+          description: 'Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.'
+          format: int64
         selections_written:
           type: integer
           description: Credential choices recorded.

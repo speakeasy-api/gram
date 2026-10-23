@@ -25,7 +25,7 @@ export type ChartType =
  * builder and the page around them speak one vocabulary.
  */
 export type WindowPreset = DateRangePreset;
-export type Grain = NonNullable<AnalyticsQueryPayload["grain"]>;
+export type Grain = "none" | "minute" | "hour" | "day" | "week" | "month";
 export type MeasureOp = AnalyticsMeasure["op"];
 export type FilterOperator = AnalyticsFilter["operator"];
 export type ResultRow = AnalyticsQueryResult["rows"][number];

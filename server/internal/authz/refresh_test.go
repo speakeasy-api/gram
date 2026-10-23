@@ -46,9 +46,9 @@ func TestAdmissionBoundarySurvivesGrantReplacement(t *testing.T) {
 	require.NoError(t, engine.Require(bounded, Check{Scope: ScopeProjectRead, ResourceID: "initial"}))
 	requireForbidden(t, engine.Require(bounded, Check{Scope: ScopeProjectRead, ResourceID: "new"}))
 	// Principal re-admission replaces live policy sets; the job boundary persists.
-	bounded = admittedPoliciesToContext(bounded, RepresentedUserPolicy{UserID: "", Policy: nil}, []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
+	bounded = admittedPoliciesToContext(bounded, RepresentedUserPolicy{UserID: "", Policy: nil}, false, []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 	requireForbidden(t, engine.Require(bounded, Check{Scope: ScopeProjectRead, ResourceID: "new"}))
-	bounded = admittedPoliciesToContext(bounded, RepresentedUserPolicy{UserID: "", Policy: nil}, []Grant{})
+	bounded = admittedPoliciesToContext(bounded, RepresentedUserPolicy{UserID: "", Policy: nil}, false, []Grant{})
 	requireForbidden(t, engine.Require(bounded, Check{Scope: ScopeProjectRead, ResourceID: "initial"}))
 }
 
@@ -57,15 +57,15 @@ func TestAdmissionBoundaryRetainsRepresentedUserPolicy(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	markerGrant := NewGrantWithSelector(ScopeMCPAuth, authSelector("*", map[string]string{SelectorKeyConnectionOwner: SelectorValueRepresentedUser}))
 	agentPolicy := []Grant{markerGrant}
-	admitted := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{}}, agentPolicy)
+	admitted := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{}}, false, agentPolicy)
 	boundary, err := engine.CaptureAdmissionBoundary(admitted)
 	require.NoError(t, err)
 	requireForbidden(t, engine.Require(admitted, personalClientCheck("user_u")))
 	// The represented user is granted mcp:auth after admission; the running
 	// job must not gain it.
-	refreshed := admittedPoliciesToContext(boundary.Apply(admitted), RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{markerGrant}}, agentPolicy)
+	refreshed := admittedPoliciesToContext(boundary.Apply(admitted), RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{markerGrant}}, false, agentPolicy)
 	requireForbidden(t, engine.Require(refreshed, personalClientCheck("user_u")))
-	require.NoError(t, engine.Require(admittedPoliciesToContext(admitted, RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{markerGrant}}, agentPolicy), personalClientCheck("user_u")))
+	require.NoError(t, engine.Require(admittedPoliciesToContext(admitted, RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{markerGrant}}, false, agentPolicy), personalClientCheck("user_u")))
 }
 
 func TestAdmissionBoundaryRequiresPreparedAuthorization(t *testing.T) {

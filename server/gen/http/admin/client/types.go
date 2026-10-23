@@ -2419,6 +2419,11 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	// Servers marked as needing upstream authentication because they offer a
 	// backfilled auth client.
 	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
+	// Default auth permissions this run granted across the organization: the
+	// personal default and shared client grants for every recorded client, and API
+	// key policies once every client is recorded. The auth-permission-defaults
+	// backfill grants the rest.
+	AuthPermissionGrantsWritten *int64 `form:"auth_permission_grants_written,omitempty" json:"auth_permission_grants_written,omitempty" xml:"auth_permission_grants_written,omitempty"`
 	// Why recording typed auth clients failed, when it did. The upstream OAuth
 	// migration itself is unaffected.
 	AuthClientsError *string `form:"auth_clients_error,omitempty" json:"auth_clients_error,omitempty" xml:"auth_clients_error,omitempty"`
@@ -39247,6 +39252,7 @@ func NewRunUpstreamOAuthMigrationAdminUpstreamOAuthMigrationRunOK(body *RunUpstr
 		AuthClientsWritten:                 body.AuthClientsWritten,
 		AuthClientLinksWritten:             body.AuthClientLinksWritten,
 		ServersMarkedRequiringUpstreamAuth: body.ServersMarkedRequiringUpstreamAuth,
+		AuthPermissionGrantsWritten:        body.AuthPermissionGrantsWritten,
 		AuthClientsError:                   body.AuthClientsError,
 	}
 	v.Status = unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamOAuthMigrationStatus(body.Status)
