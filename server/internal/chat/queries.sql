@@ -277,6 +277,8 @@ VALUES (
 -- Materialize resolved departments so repeated identities share one lookup.
 WITH messages AS MATERIALIZED (
   SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model, m.seq,
+    m.generation, m.original_message_id,
+    COALESCE(m.capture_kind, CASE WHEN m.generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind,
     COALESCE(m.user_id, '') AS actor_id, COALESCE(input.email, '') AS email
   FROM ROWS FROM (UNNEST(@ids::uuid[]), UNNEST(@observed_user_emails::text[])) AS input(id, email)
   JOIN chat_messages m ON m.id = input.id AND m.project_id = @project_id::uuid
@@ -317,7 +319,8 @@ WITH messages AS MATERIALIZED (
       AND (identity.actor_id = '' OR email_candidate.user_id IS NULL OR email_candidate.user_id = identity.actor_id)
   ) fallback ON TRUE
 )
-SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model, d.department
+SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model,
+  m.generation, m.seq, m.original_message_id, m.capture_kind, d.department
 FROM messages m
 JOIN departments d ON d.actor_id = m.actor_id AND d.email = m.email
 ORDER BY m.seq;
@@ -1682,12 +1685,21 @@ WHERE EXISTS (
 ORDER BY o.created_at ASC, o.seq ASC;
 
 -- name: ListChatMessagesForMatch :many
-SELECT id, role, content, tool_call_id, tool_calls
+SELECT id, role, content, tool_call_id, tool_calls, original_message_id,
+  COALESCE(capture_kind, CASE WHEN generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind
 FROM chat_messages
 WHERE chat_id = @chat_id
   AND project_id = @project_id::uuid
   AND generation = @generation
 ORDER BY created_at ASC, seq ASC;
+
+-- name: SetMessageCaptureLineage :exec
+UPDATE chat_messages m
+SET capture_kind = (@kinds::text[])[input.ordinality],
+    original_message_id = NULLIF((@original_ids::uuid[])[input.ordinality], '00000000-0000-0000-0000-000000000000'::uuid)
+FROM UNNEST(@ids::uuid[]) WITH ORDINALITY AS input(id, ordinality)
+WHERE m.project_id = @project_id::uuid AND m.id = input.id
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = m.project_id AND p.organization_id = @organization_id::text);
 
 -- name: UpdateChatTitle :exec
 -- Auto-generated title write. Guarded on title_manually_set so a manual rename

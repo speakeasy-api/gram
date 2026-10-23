@@ -17,6 +17,7 @@ export function useMcpSlugValidation(
   }
 
   useEffect(() => {
+    let stale = false;
     setSlugError(null);
 
     if (mcpSlug && mcpSlug !== currentSlug) {
@@ -28,11 +29,14 @@ export function useMcpSlugValidation(
       void client.toolsets
         .checkMCPSlugAvailability({ slug: mcpSlug })
         .then((res) => {
-          if (res) {
+          if (res && !stale) {
             setSlugError("This slug is already taken");
           }
         });
     }
+    return () => {
+      stale = true;
+    };
   }, [mcpSlug, currentSlug, client.toolsets]);
 
   return slugError;

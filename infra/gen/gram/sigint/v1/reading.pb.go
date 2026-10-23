@@ -1641,13 +1641,17 @@ func (*reading_Event_ToolCall) isReading_Event_Context() {}
 
 // Context supplied by the conversation adapter. Event.id is the message UUID.
 type Reading_ConversationMessage struct {
-	state                     protoimpl.MessageState           `protogen:"opaque.v1"`
-	xxx_hidden_ConversationId *string                          `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId"`
-	xxx_hidden_Role           Reading_ConversationMessage_Role `protobuf:"varint,2,opt,name=role,enum=gram.sigint.v1.Reading_ConversationMessage_Role"`
-	XXX_raceDetectHookData    protoimpl.RaceDetectHookData
-	XXX_presence              [1]uint32
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	state                        protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_ConversationId    *string                          `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId"`
+	xxx_hidden_Role              Reading_ConversationMessage_Role `protobuf:"varint,2,opt,name=role,enum=gram.sigint.v1.Reading_ConversationMessage_Role"`
+	xxx_hidden_Generation        int32                            `protobuf:"varint,3,opt,name=generation"`
+	xxx_hidden_Sequence          int64                            `protobuf:"varint,4,opt,name=sequence"`
+	xxx_hidden_CaptureKind       *string                          `protobuf:"bytes,5,opt,name=capture_kind,json=captureKind"`
+	xxx_hidden_OriginalMessageId *string                          `protobuf:"bytes,6,opt,name=original_message_id,json=originalMessageId"`
+	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
+	XXX_presence                 [1]uint32
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *Reading_ConversationMessage) Reset() {
@@ -1694,14 +1698,68 @@ func (x *Reading_ConversationMessage) GetRole() Reading_ConversationMessage_Role
 	return Reading_ConversationMessage_ROLE_UNSPECIFIED
 }
 
+func (x *Reading_ConversationMessage) GetGeneration() int32 {
+	if x != nil {
+		return x.xxx_hidden_Generation
+	}
+	return 0
+}
+
+func (x *Reading_ConversationMessage) GetSequence() int64 {
+	if x != nil {
+		return x.xxx_hidden_Sequence
+	}
+	return 0
+}
+
+func (x *Reading_ConversationMessage) GetCaptureKind() string {
+	if x != nil {
+		if x.xxx_hidden_CaptureKind != nil {
+			return *x.xxx_hidden_CaptureKind
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Reading_ConversationMessage) GetOriginalMessageId() string {
+	if x != nil {
+		if x.xxx_hidden_OriginalMessageId != nil {
+			return *x.xxx_hidden_OriginalMessageId
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *Reading_ConversationMessage) SetConversationId(v string) {
 	x.xxx_hidden_ConversationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 2)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 6)
 }
 
 func (x *Reading_ConversationMessage) SetRole(v Reading_ConversationMessage_Role) {
 	x.xxx_hidden_Role = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 2)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 6)
+}
+
+func (x *Reading_ConversationMessage) SetGeneration(v int32) {
+	x.xxx_hidden_Generation = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 6)
+}
+
+func (x *Reading_ConversationMessage) SetSequence(v int64) {
+	x.xxx_hidden_Sequence = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 6)
+}
+
+func (x *Reading_ConversationMessage) SetCaptureKind(v string) {
+	x.xxx_hidden_CaptureKind = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 6)
+}
+
+func (x *Reading_ConversationMessage) SetOriginalMessageId(v string) {
+	x.xxx_hidden_OriginalMessageId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 6)
 }
 
 func (x *Reading_ConversationMessage) HasConversationId() bool {
@@ -1718,6 +1776,34 @@ func (x *Reading_ConversationMessage) HasRole() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
 }
 
+func (x *Reading_ConversationMessage) HasGeneration() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *Reading_ConversationMessage) HasSequence() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
+func (x *Reading_ConversationMessage) HasCaptureKind() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *Reading_ConversationMessage) HasOriginalMessageId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
+}
+
 func (x *Reading_ConversationMessage) ClearConversationId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_ConversationId = nil
@@ -1728,13 +1814,37 @@ func (x *Reading_ConversationMessage) ClearRole() {
 	x.xxx_hidden_Role = Reading_ConversationMessage_ROLE_UNSPECIFIED
 }
 
+func (x *Reading_ConversationMessage) ClearGeneration() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_Generation = 0
+}
+
+func (x *Reading_ConversationMessage) ClearSequence() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_Sequence = 0
+}
+
+func (x *Reading_ConversationMessage) ClearCaptureKind() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_CaptureKind = nil
+}
+
+func (x *Reading_ConversationMessage) ClearOriginalMessageId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
+	x.xxx_hidden_OriginalMessageId = nil
+}
+
 type Reading_ConversationMessage_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
 	// Speakeasy conversation UUID, not the source system's session identifier.
 	ConversationId *string
 	// Independent of human attribution; only user/assistant messages are evaluated.
-	Role *Reading_ConversationMessage_Role
+	Role              *Reading_ConversationMessage_Role
+	Generation        *int32
+	Sequence          *int64
+	CaptureKind       *string
+	OriginalMessageId *string
 }
 
 func (b0 Reading_ConversationMessage_builder) Build() *Reading_ConversationMessage {
@@ -1742,12 +1852,28 @@ func (b0 Reading_ConversationMessage_builder) Build() *Reading_ConversationMessa
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.ConversationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 2)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 6)
 		x.xxx_hidden_ConversationId = b.ConversationId
 	}
 	if b.Role != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 2)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 6)
 		x.xxx_hidden_Role = *b.Role
+	}
+	if b.Generation != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 6)
+		x.xxx_hidden_Generation = *b.Generation
+	}
+	if b.Sequence != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 6)
+		x.xxx_hidden_Sequence = *b.Sequence
+	}
+	if b.CaptureKind != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 6)
+		x.xxx_hidden_CaptureKind = b.CaptureKind
+	}
+	if b.OriginalMessageId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 6)
+		x.xxx_hidden_OriginalMessageId = b.OriginalMessageId
 	}
 	return m0
 }
@@ -2577,7 +2703,7 @@ var File_gram_sigint_v1_reading_proto protoreflect.FileDescriptor
 
 const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xad\x15\n" +
+	"\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xbc\x16\n" +
 	"\aReading\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
 	"\x15evaluation_attempt_id\x18\x02 \x01(\tR\x13evaluationAttemptId\x12'\n" +
@@ -2628,10 +2754,16 @@ const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"occurredAt\x12`\n" +
 	"\x14conversation_message\x18\x04 \x01(\v2+.gram.sigint.v1.Reading.ConversationMessageH\x00R\x13conversationMessage\x12?\n" +
 	"\ttool_call\x18\x05 \x01(\v2 .gram.sigint.v1.Reading.ToolCallH\x00R\btoolCallB\t\n" +
-	"\acontext\x1a\xc5\x01\n" +
+	"\acontext\x1a\xd4\x02\n" +
 	"\x13ConversationMessage\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12D\n" +
-	"\x04role\x18\x02 \x01(\x0e20.gram.sigint.v1.Reading.ConversationMessage.RoleR\x04role\"?\n" +
+	"\x04role\x18\x02 \x01(\x0e20.gram.sigint.v1.Reading.ConversationMessage.RoleR\x04role\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x03 \x01(\x05R\n" +
+	"generation\x12\x1a\n" +
+	"\bsequence\x18\x04 \x01(\x03R\bsequence\x12!\n" +
+	"\fcapture_kind\x18\x05 \x01(\tR\vcaptureKind\x12.\n" +
+	"\x13original_message_id\x18\x06 \x01(\tR\x11originalMessageId\"?\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tROLE_USER\x10\x01\x12\x12\n" +

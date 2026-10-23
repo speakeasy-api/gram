@@ -19,6 +19,9 @@ type PrincipalCredentialAdmission struct {
 	// Authorizer is the user the credential acts for and that user's live
 	// policy. It binds $represented_user in every policy above.
 	Authorizer RepresentedUserPolicy
+	// LegacyAuthCeiling is set when Credential predates version 5 and its
+	// auth client ceiling was derived from server access.
+	LegacyAuthCeiling bool
 }
 
 // PrincipalCredentialAdmitter supplies application-owned credential admission
@@ -58,5 +61,5 @@ func applyPrincipalCredentialAdmission(ctx context.Context, admission PrincipalC
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
-	return admittedPoliciesToContext(ctx, admission.Authorizer, admission.Credential, admission.Agent, admission.Owner), nil
+	return admittedPoliciesToContext(ctx, admission.Authorizer, admission.LegacyAuthCeiling, admission.Credential, admission.Agent, admission.Owner), nil
 }

@@ -4215,6 +4215,11 @@ type GetToolUsageSummaryParams struct {
 	ShadowServerNames  []string
 	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
+	// AuthorizerUserIDs are the user ids behind the email user filters. An agent
+	// call made on one of these people's behalf matches the user filter too.
+	AuthorizerUserIDs []string
+	// AgentIDs narrows to calls made by these agents. ANDed with the user filter.
+	AgentIDs           []string
 	HookSources        []string
 	ClientKeys         []string          // Optional filter - lowercased MCP client names; "unattributed" selects calls with no reported client
 	AccountType        string            // Optional filter - filters by account_type (team|personal)
@@ -4249,6 +4254,11 @@ type ListToolUsageTracesParams struct {
 	ShadowServerNames  []string
 	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
+	// AuthorizerUserIDs are the user ids behind the email user filters. An agent
+	// call made on one of these people's behalf matches the user filter too.
+	AuthorizerUserIDs []string
+	// AgentIDs narrows to calls made by these agents. ANDed with the user filter.
+	AgentIDs []string
 	// CanonicalIdentityOrg, when set, folds the email user filter through the
 	// identity_map for that organization, so an identity produced by a folded
 	// list selects every linked address the person's calls are stored under.
@@ -4296,6 +4306,7 @@ type ToolUsageTraceSummary struct {
 	UserKey           string  `ch:"user_key"`
 	UserLabel         string  `ch:"user_label"`
 	UserKind          string  `ch:"user_kind"`
+	AuthorizerUserID  string  `ch:"authorizer_user_id"`
 	HookSource        *string `ch:"hook_source"`
 	EventSource       string  `ch:"event_source"`
 	HTTPStatusCode    *int32  `ch:"http_status_code"`
@@ -4324,7 +4335,10 @@ type ToolUsageFilterOptions struct {
 	ShadowServers []ToolUsageShadowServerFilterOptionRow
 	Gateways      []ToolUsageGatewayFilterOptionRow
 	Users         []ToolUsageUserFilterOptionRow
-	Clients       []ToolUsageClientFilterOptionRow
+	// Authorizers are the people agents acted for, by user id. The caller
+	// resolves them to emails, since the user options are keyed by email.
+	Authorizers []ToolUsageAuthorizerFilterOptionRow
+	Clients     []ToolUsageClientFilterOptionRow
 }
 
 // GetMcpServerActivityParams defines the parameters for per-MCP-server tool-call
@@ -4369,6 +4383,11 @@ type ToolUsageUserFilterOptionRow struct {
 	UserLabel  string `ch:"user_label"`
 	UserKind   string `ch:"user_kind"`
 	EventCount uint64 `ch:"event_count"`
+}
+
+type ToolUsageAuthorizerFilterOptionRow struct {
+	AuthorizerUserID string `ch:"authorizer_user_id"`
+	EventCount       uint64 `ch:"event_count"`
 }
 
 type ToolUsageClientFilterOptionRow struct {
@@ -4553,6 +4572,8 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
+		AuthorizerUserIDs:  nil,
+		AgentIDs:           nil,
 		HookSources:        nil,
 		ClientKeys:         nil,
 		AccountType:        "", // filter options enumerate all values, never scoped
@@ -4594,6 +4615,11 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	eg.Go(func() error {
 		var err error
 		options.Users, err = q.getToolUsageUserFilterOptions(egCtx, summaryArg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		options.Authorizers, err = q.getToolUsageAuthorizerFilterOptions(egCtx, summaryArg)
 		return err
 	})
 	eg.Go(func() error {
@@ -4686,7 +4712,23 @@ func toolUsageTraceUserFilter(arg ListToolUsageTracesParams) squirrel.Sqlizer {
 			key,
 		})
 	}
+	if len(arg.AuthorizerUserIDs) > 0 {
+		userFilters = append(userFilters, squirrel.Eq{"authorizer_user_id": arg.AuthorizerUserIDs})
+	}
 	return userFilters
+}
+
+// toolUsageAgentFilter narrows to the calls the given agents made. It is ANDed
+// with the user filter, so an agent and a person select that agent's calls on
+// the person's behalf.
+func toolUsageAgentFilter(agentIDs []string) squirrel.Sqlizer {
+	if len(agentIDs) == 0 {
+		return nil
+	}
+	return squirrel.And{
+		squirrel.Eq{"user_kind": toolUsageUserKindAgentID},
+		squirrel.Eq{"user_key": agentIDs},
+	}
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -4713,6 +4755,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		"user_key",
 		"user_label",
 		"user_kind",
+		"authorizer_user_id",
 		"hook_source",
 		"event_source",
 		"http_status_code",
@@ -4750,6 +4793,9 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 
 	if userFilter := toolUsageTraceUserFilter(arg); userFilter != nil {
 		sb = sb.Where(userFilter)
+	}
+	if agentFilter := toolUsageAgentFilter(arg.AgentIDs); agentFilter != nil {
+		sb = sb.Where(agentFilter)
 	}
 
 	// http.response.status_code filters are applied here, against the aggregated
@@ -4942,6 +4988,8 @@ func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActi
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
+		AuthorizerUserIDs:  nil,
+		AgentIDs:           nil,
 		ClientKeys:         nil,
 		HookSources:        nil,
 		AccountType:        "",
@@ -5579,6 +5627,44 @@ func (q *Queries) getToolUsageUserFilterOptions(ctx context.Context, arg GetTool
 	return result, nil
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) getToolUsageAuthorizerFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageAuthorizerFilterOptionRow, error) {
+	sb, err := toolUsageBaseSelect(arg,
+		"authorizer_user_id",
+		"count() AS event_count",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage authorizer filter options source: %w", err)
+	}
+	sb = sb.
+		Where(squirrel.NotEq{"authorizer_user_id": ""}).
+		GroupBy("authorizer_user_id")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage authorizer filter options query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []ToolUsageAuthorizerFilterOptionRow{}
+	for rows.Next() {
+		var row ToolUsageAuthorizerFilterOptionRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan tool usage authorizer filter option row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func toolUsageBaseSelect(arg GetToolUsageSummaryParams, columns ...string) (squirrel.SelectBuilder, error) {
 	cteSQL, cteArgs, err := toolUsageNormalizedEventsCTE(arg)
 	if err != nil {
@@ -5636,7 +5722,13 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 				squirrel.Eq{"user_key": filter.Key},
 			})
 		}
+		if len(arg.AuthorizerUserIDs) > 0 {
+			userFilters = append(userFilters, squirrel.Eq{"authorizer_user_id": arg.AuthorizerUserIDs})
+		}
 		sb = sb.Where(userFilters)
+	}
+	if agentFilter := toolUsageAgentFilter(arg.AgentIDs); agentFilter != nil {
+		sb = sb.Where(agentFilter)
 	}
 
 	// Direct hosted MCP calls have no hook source (empty string), so requiring a
@@ -5802,6 +5894,10 @@ func appendMetaMCPTargetBranch(typeArgs, kindArgs, idArgs, labelArgs *[]string, 
 // with trace_summaries_mv.agent_id. Client-supplied hook attributes are untrusted.
 const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
 
+// The person an agent call acted on behalf of, read under the same trust rule
+// as the agent itself. Keep in sync with trace_summaries_mv.authorizer_user_id.
+const toolUsageAuthorizerUserIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.authorizer_user_id), '')"
+
 // The gateway an event belongs to: the target itself, else the gateway that dispatched it.
 const toolUsageGatewayIDExpr = "if(target_type = '" + ToolUsageTargetTypeMetaMCP + "', target_id, meta_mcp_server_id)"
 
@@ -5864,6 +5960,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
 		"max(agent_id) AS g_agent_id",
+		"max(authorizer_user_id) AS g_authorizer_user_id",
 		"any(hook_source) AS g_hook_source",
 		"any(event_source) AS g_event_source",
 		"max(mcp_match) AS g_mcp_match",
@@ -6041,6 +6138,7 @@ SELECT
 	%s AS user_key,
 	%s AS user_label,
 	%s AS user_kind,
+	g_authorizer_user_id AS authorizer_user_id,
 	nullIf(g_hook_source, '') AS hook_source,
 	g_event_source AS event_source,
 	g_http_status_code AS http_status_code,
@@ -6134,6 +6232,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"external_user_id",
 		"user_id",
 		toolUsageAgentIDExpr+" AS agent_id",
+		toolUsageAuthorizerUserIDExpr+" AS authorizer_user_id",
 		"account_type",
 		"meta_mcp_server_id",
 		"mcp_client_name",
@@ -6241,6 +6340,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 	// Reuse the existing trace/log-group window so sparse actor attributes win
 	// before user identity enters GROUP BY, without another scan or join.
 	traceAgentID := "max(agent_id) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
+	traceAuthorizerUserID := "max(authorizer_user_id) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
 	userKind := chMultiIf(
 		traceAgentID+" != ''", "'"+toolUsageUserKindAgentID+"'",
 		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
@@ -6356,6 +6456,7 @@ SELECT
 	%s AS user_key,
 	%s AS user_label,
 	%s AS user_kind,
+	%s AS authorizer_user_id,
 	nullIf(hook_source, '') AS hook_source,
 	event_source,
 	toInt32OrNull(http_status_code_raw) AS http_status_code,
@@ -6367,7 +6468,7 @@ SELECT
 	mcp_client_name,
 	mcp_client_version,
 	row_mcp_server_id
-FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userLabel, userKind, sourceSQL)
+FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userLabel, userKind, traceAuthorizerUserID, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 7+len(sourceArgs))
 	if len(mcpSourceIDs) > 0 {
@@ -6418,6 +6519,7 @@ normalized_traces_base AS (
 		user_key,
 		user_label,
 		user_kind,
+		max(authorizer_user_id) AS authorizer_user_id,
 		any(hook_source) AS hook_source,
 		any(event_source) AS event_source,
 		max(http_status_code) AS http_status_code,
@@ -6467,6 +6569,8 @@ func toolUsageRawNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []a
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
+		AuthorizerUserIDs:  nil,
+		AgentIDs:           nil,
 		// The CTE this builds carries no user filter, so there is nothing to
 		// fold; the summary path applies its own identity handling.
 		CanonicalIdentityOrg: "",
@@ -6506,6 +6610,7 @@ SELECT
 	user_key,
 	user_label,
 	user_kind,
+	authorizer_user_id,
 	%s AS success,
 	%s AS failure,
 	%s AS blocked,
@@ -6575,6 +6680,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
 		"max(agent_id) AS g_agent_id",
+		"max(authorizer_user_id) AS g_authorizer_user_id",
 		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
 		"max(account_type) AS g_account_type",
 		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
@@ -6600,6 +6706,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
 		"max(agent_id) AS g_agent_id",
+		"max(authorizer_user_id) AS g_authorizer_user_id",
 		"any(skill_name) AS g_skill_name",
 		"max(mcp_match) AS g_mcp_match",
 		"max(mcp_server_url) AS g_mcp_server_url",
@@ -6687,6 +6794,7 @@ SELECT
 	%s AS user_key,
 	%s AS user_label,
 	%s AS user_kind,
+	g_authorizer_user_id AS authorizer_user_id,
 	toUInt8(g_http_status_code >= 200 AND g_http_status_code < 400) AS success,
 	toUInt8(g_http_status_code >= 400) AS failure,
 	toUInt8(0) AS blocked,
@@ -6823,6 +6931,7 @@ SELECT
 	%s AS user_key,
 	%s AS user_label,
 	%s AS user_kind,
+	g_authorizer_user_id AS authorizer_user_id,
 	toUInt8(g_has_block = 0 AND g_has_error = 0 AND g_has_result = 1) AS success,
 	toUInt8(g_has_block = 0 AND g_has_error = 1) AS failure,
 	toUInt8(g_has_block = 1) AS blocked,
@@ -7793,6 +7902,8 @@ func projectOverviewServerFilter(arg GetTopServersParams) GetToolUsageSummaryPar
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
+		AuthorizerUserIDs:  nil,
+		AgentIDs:           nil,
 		ClientKeys:         nil,
 		HookSources:        nil,
 		AccountType:        "",

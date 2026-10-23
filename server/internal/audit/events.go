@@ -18,6 +18,7 @@ const (
 	subjectTypeAssistant                   subjectType = "assistant"
 	subjectTypeAssistantMemory             subjectType = "assistant_memory"
 	subjectTypeAsset                       subjectType = "asset"
+	subjectTypeAuthClient                  subjectType = "auth_client"
 	subjectTypeAwsIamCredential            subjectType = "aws_iam_credential"
 	subjectTypeAwsKmsKey                   subjectType = "aws_kms_key"
 	subjectTypeBillingMetadata             subjectType = "billing_metadata"

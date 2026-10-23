@@ -42,6 +42,26 @@ const dataset: AnalyticsDataset = {
   ],
 };
 
+describe("UTC bucket labels", () => {
+  it("keeps a UTC month start in its calendar month", () => {
+    const label = bucketTick("2026-01-01T00:00:00Z", "month", "UTC");
+    expect(label).toContain("Jan");
+    expect(label).toContain("26");
+  });
+
+  it("keeps the hour on midnight hourly ticks", () => {
+    const label = bucketTick("2026-01-01T00:00:00Z", "hour", "UTC");
+    expect(label).toContain("Jan 1");
+    expect(label).toMatch(/00|24/);
+  });
+
+  it("includes the UTC date and year in daily titles", () => {
+    expect(bucketTitle("2026-01-01T00:00:00Z", "day", "UTC")).toContain(
+      "Jan 1, 2026",
+    );
+  });
+});
+
 describe("seriesFromRows", () => {
   it("pivots bucketed rows into one series per tuple, sorted buckets, gaps as null", () => {
     const set = seriesFromRows(

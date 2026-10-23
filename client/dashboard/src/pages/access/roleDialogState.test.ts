@@ -58,6 +58,12 @@ describe("visiblePermissionCount", () => {
     ).toBe(2);
   });
 
+  it("excludes provisioned auth client grants from role permission counts", () => {
+    expect(
+      visiblePermissionCount([{ scope: "mcp:connect" }, { scope: "mcp:auth" }]),
+    ).toBe(1);
+  });
+
   it("excludes grants without scopes from role permission counts", () => {
     expect(
       visiblePermissionCount([

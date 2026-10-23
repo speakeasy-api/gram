@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const createAuthClient = `-- name: CreateAuthClient :one
@@ -538,8 +539,8 @@ SELECT EXISTS (
   WHERE link.mcp_server_id = $1::uuid
     AND link.auth_client_id = $2::uuid
     AND link.organization_id = $3::text
-    AND link.source = 'backfill'
-    AND link.deleted IS FALSE
+    AND ((link.source = 'backfill' AND link.deleted IS FALSE)
+         OR (link.source = 'admin' AND link.deleted IS TRUE))
 )::boolean AS linked
 `
 
@@ -549,7 +550,8 @@ type IsServerLinkedParams struct {
 	OrganizationID string
 }
 
-// Whether a server already offers an auth client.
+// Whether a server already offers an auth client, or an administrator
+// detached it from the server so the backfill must not link it again.
 func (q *Queries) IsServerLinked(ctx context.Context, arg IsServerLinkedParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isServerLinked, arg.McpServerID, arg.AuthClientID, arg.OrganizationID)
 	var linked bool
@@ -596,6 +598,16 @@ WHERE a.id = $2::uuid
     WHERE link.mcp_server_id = a.mcp_server_id
       AND link.auth_client_id = ac.id
       AND link.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    -- An administrator detached this client from this server: the backfill
+    -- never links it again.
+    SELECT 1
+    FROM mcp_server_auth_clients AS detached
+    WHERE detached.mcp_server_id = a.mcp_server_id
+      AND detached.auth_client_id = ac.id
+      AND detached.source = 'admin'
+      AND detached.deleted IS TRUE
   )
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
 `
@@ -686,6 +698,16 @@ WHERE s.id = $3::uuid
             AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
       )
   )
+  AND NOT EXISTS (
+    -- An administrator detached this client from this server: the backfill
+    -- never links it again.
+    SELECT 1
+    FROM mcp_server_auth_clients AS detached
+    WHERE detached.mcp_server_id = s.id
+      AND detached.auth_client_id = ac.id
+      AND detached.source = 'admin'
+      AND detached.deleted IS TRUE
+  )
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
 `
 
@@ -749,6 +771,16 @@ WHERE s.id = $3::uuid
           AND ec.deleted IS FALSE
          WHERE el.mcp_server_id = s.id AND el.organization_id = p.organization_id AND el.deleted IS FALSE
        )))
+  AND NOT EXISTS (
+    -- An administrator detached this client from this server: the backfill
+    -- never links it again.
+    SELECT 1
+    FROM mcp_server_auth_clients AS detached
+    WHERE detached.mcp_server_id = s.id
+      AND detached.auth_client_id = ac.id
+      AND detached.source = 'admin'
+      AND detached.deleted IS TRUE
+  )
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
 `
 
@@ -781,6 +813,108 @@ func (q *Queries) LinkSourceServer(ctx context.Context, arg LinkSourceServerPara
 	return result.RowsAffected(), nil
 }
 
+const listAPIKeyGrantRows = `-- name: ListAPIKeyGrantRows :many
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND principal_type = 'api_key'
+ORDER BY principal_urn, scope, id
+`
+
+type ListAPIKeyGrantRowsRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Selectors    []byte
+}
+
+// Every key policy row, to tell provisioned policies from explicit ones.
+func (q *Queries) ListAPIKeyGrantRows(ctx context.Context, organizationID string) ([]ListAPIKeyGrantRowsRow, error) {
+	rows, err := q.db.Query(ctx, listAPIKeyGrantRows, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAPIKeyGrantRowsRow
+	for rows.Next() {
+		var i ListAPIKeyGrantRowsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveLegacyAPIKeys = `-- name: ListActiveLegacyAPIKeys :many
+SELECT id, project_id, scopes
+FROM api_keys
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND subject_urn IS NULL
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+ORDER BY id
+`
+
+type ListActiveLegacyAPIKeysRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+	Scopes    []string
+}
+
+// Live legacy keys, matching admission's active predicate.
+func (q *Queries) ListActiveLegacyAPIKeys(ctx context.Context, organizationID string) ([]ListActiveLegacyAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, listActiveLegacyAPIKeys, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveLegacyAPIKeysRow
+	for rows.Next() {
+		var i ListActiveLegacyAPIKeysRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.Scopes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentRolePrincipals = `-- name: ListAgentRolePrincipals :many
+SELECT DISTINCT ara.role_urn::text AS role_urn
+FROM agent_role_assignments AS ara
+JOIN agents ON agents.organization_id = ara.organization_id AND agents.id = ara.agent_id AND agents.deleted IS FALSE
+WHERE ara.organization_id = $1
+  AND ara.deleted_at IS NULL
+ORDER BY role_urn
+`
+
+// Roles live agents hold, whose policies include them.
+func (q *Queries) ListAgentRolePrincipals(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listAgentRolePrincipals, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var role_urn string
+		if err := rows.Scan(&role_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, role_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuthClientBackfillCandidates = `-- name: ListAuthClientBackfillCandidates :many
 SELECT a.id AS association_id,
        a.project_id,
@@ -800,7 +934,21 @@ SELECT a.id AS association_id,
            AND link.auth_client_id = existing.id
            AND link.organization_id = a.organization_id
            AND link.deleted IS FALSE
-       ))::boolean AS link_live
+       ))::boolean AS link_live,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS detached
+         JOIN mcp_auth_clients AS dac
+           ON dac.id = detached.auth_client_id
+          AND dac.organization_id = detached.organization_id
+          AND dac.remote_session_client_id = c.id
+          AND dac.client_type IN ('remote_session', 'service_account')
+          AND dac.source = 'backfill'
+         WHERE detached.mcp_server_id = a.mcp_server_id
+           AND detached.organization_id = a.organization_id
+           AND detached.source = 'admin'
+           AND detached.deleted IS TRUE
+       )::boolean AS link_detached
 FROM mcp_server_remote_session_clients AS a
 JOIN projects AS p
   ON p.id = a.project_id
@@ -857,6 +1005,7 @@ type ListAuthClientBackfillCandidatesRow struct {
 	AuthClientType        string
 	AuthClientProjectID   uuid.NullUUID
 	LinkLive              bool
+	LinkDetached          bool
 }
 
 // One row per live MCP server upstream OAuth client association after the
@@ -869,7 +1018,9 @@ type ListAuthClientBackfillCandidatesRow struct {
 // client in the association's organization, auth_client_type its type and
 // auth_client_project_id its project; the nil UUID and empty when none is.
 // Admin-created clients are never treated as existing. link_live reports that
-// the server already offers that auth client.
+// the server already offers that auth client; link_detached that an
+// administrator detached the client's backfilled auth client from the server,
+// so the backfill must not link it again.
 func (q *Queries) ListAuthClientBackfillCandidates(ctx context.Context, arg ListAuthClientBackfillCandidatesParams) ([]ListAuthClientBackfillCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listAuthClientBackfillCandidates, arg.Cursor, arg.OrganizationID, arg.PageSize)
 	if err != nil {
@@ -892,7 +1043,47 @@ func (q *Queries) ListAuthClientBackfillCandidates(ctx context.Context, arg List
 			&i.AuthClientType,
 			&i.AuthClientProjectID,
 			&i.LinkLive,
+			&i.LinkDetached,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthClientGrantRows = `-- name: ListAuthClientGrantRows :many
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND scope = ANY($2::text[])
+`
+
+type ListAuthClientGrantRowsParams struct {
+	OrganizationID string
+	Scopes         []string
+}
+
+type ListAuthClientGrantRowsRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Selectors    []byte
+}
+
+// Existing grants of the given scopes, to tell which defaults are missing.
+func (q *Queries) ListAuthClientGrantRows(ctx context.Context, arg ListAuthClientGrantRowsParams) ([]ListAuthClientGrantRowsRow, error) {
+	rows, err := q.db.Query(ctx, listAuthClientGrantRows, arg.OrganizationID, arg.Scopes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthClientGrantRowsRow
+	for rows.Next() {
+		var i ListAuthClientGrantRowsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1013,6 +1204,87 @@ func (q *Queries) ListAuthClientsFixture(ctx context.Context, organizationID str
 			&i.ProjectID,
 			&i.Name,
 			&i.RemoteSessionClientID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthPermissionProvisions = `-- name: ListAuthPermissionProvisions :many
+SELECT principal_urn, scope, selectors, (taken_over_at IS NOT NULL)::boolean AS taken_over
+FROM auth_permission_provisions
+WHERE organization_id = $1
+`
+
+type ListAuthPermissionProvisionsRow struct {
+	PrincipalUrn string
+	Scope        string
+	Selectors    []byte
+	TakenOver    bool
+}
+
+// Every grant the backfill provisioned in the organization, live or since
+// removed, and whether an admin since took it over.
+func (q *Queries) ListAuthPermissionProvisions(ctx context.Context, organizationID string) ([]ListAuthPermissionProvisionsRow, error) {
+	rows, err := q.db.Query(ctx, listAuthPermissionProvisions, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthPermissionProvisionsRow
+	for rows.Next() {
+		var i ListAuthPermissionProvisionsRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.TakenOver,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthPermissionProvisionsFixture = `-- name: ListAuthPermissionProvisionsFixture :many
+SELECT principal_urn, scope, selectors, kind, (taken_over_at IS NOT NULL)::boolean AS taken_over
+FROM auth_permission_provisions
+WHERE organization_id = $1
+ORDER BY principal_urn, scope
+`
+
+type ListAuthPermissionProvisionsFixtureRow struct {
+	PrincipalUrn string
+	Scope        string
+	Selectors    []byte
+	Kind         string
+	TakenOver    bool
+}
+
+func (q *Queries) ListAuthPermissionProvisionsFixture(ctx context.Context, organizationID string) ([]ListAuthPermissionProvisionsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listAuthPermissionProvisionsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthPermissionProvisionsFixtureRow
+	for rows.Next() {
+		var i ListAuthPermissionProvisionsFixtureRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.Kind,
+			&i.TakenOver,
 		); err != nil {
 			return nil, err
 		}
@@ -1556,6 +1828,34 @@ func (q *Queries) ListLiveLinkIDsFixture(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const listLiveProjects = `-- name: ListLiveProjects :many
+SELECT id
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+func (q *Queries) ListLiveProjects(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listLiveProjects, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOAuthClientSources = `-- name: ListOAuthClientSources :many
 WITH used AS (
   SELECT a.remote_session_client_id,
@@ -1662,6 +1962,33 @@ func (q *Queries) ListOAuthClientSources(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const listOrganizationIDsForGrants = `-- name: ListOrganizationIDsForGrants :many
+SELECT id
+FROM organization_metadata
+ORDER BY id
+`
+
+// Every organization, for the offline default auth permission backfill.
+func (q *Queries) ListOrganizationIDsForGrants(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listOrganizationIDsForGrants)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSourceServers = `-- name: ListRemoteSourceServers :many
 SELECT s.id AS mcp_server_id,
        s.project_id,
@@ -1710,6 +2037,48 @@ func (q *Queries) ListRemoteSourceServers(ctx context.Context, arg ListRemoteSou
 	for rows.Next() {
 		var i ListRemoteSourceServersRow
 		if err := rows.Scan(&i.McpServerID, &i.ProjectID, &i.HasOauth); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServerAccessGrants = `-- name: ListServerAccessGrants :many
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND scope = ANY($2::text[])
+  AND principal_type <> 'api_key'
+ORDER BY principal_urn, scope, id
+`
+
+type ListServerAccessGrantsParams struct {
+	OrganizationID string
+	Scopes         []string
+}
+
+type ListServerAccessGrantsRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Selectors    []byte
+}
+
+// Grants that can satisfy mcp:connect, held by anyone but API keys, whose
+// policies are provisioned separately. Like grant loading, effect is ignored.
+func (q *Queries) ListServerAccessGrants(ctx context.Context, arg ListServerAccessGrantsParams) ([]ListServerAccessGrantsRow, error) {
+	rows, err := q.db.Query(ctx, listServerAccessGrants, arg.OrganizationID, arg.Scopes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerAccessGrantsRow
+	for rows.Next() {
+		var i ListServerAccessGrantsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1825,6 +2194,54 @@ func (q *Queries) ListServerCredentialSources(ctx context.Context, arg ListServe
 			&i.HeaderIds,
 			&i.HasDuplicateNames,
 			&i.ForwardedSources,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSharedAuthClientServers = `-- name: ListSharedAuthClientServers :many
+SELECT DISTINCT l.auth_client_id, ac.client_type, l.project_id, s.id AS mcp_server_id, s.toolset_id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac ON ac.id = l.auth_client_id AND ac.organization_id = l.organization_id AND ac.deleted IS FALSE
+JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+JOIN projects AS p ON p.id = l.project_id AND p.organization_id = l.organization_id AND p.deleted IS FALSE
+WHERE l.organization_id = $1
+  AND l.deleted IS FALSE
+  AND ac.client_type <> 'remote_session'
+ORDER BY l.auth_client_id, l.project_id
+`
+
+type ListSharedAuthClientServersRow struct {
+	AuthClientID uuid.UUID
+	ClientType   string
+	ProjectID    uuid.UUID
+	McpServerID  uuid.UUID
+	ToolsetID    uuid.NullUUID
+}
+
+// Every live server link to a shared auth client, with both ids mcp:connect
+// can be checked on: the server, and its toolset when it has one.
+func (q *Queries) ListSharedAuthClientServers(ctx context.Context, organizationID string) ([]ListSharedAuthClientServersRow, error) {
+	rows, err := q.db.Query(ctx, listSharedAuthClientServers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSharedAuthClientServersRow
+	for rows.Next() {
+		var i ListSharedAuthClientServersRow
+		if err := rows.Scan(
+			&i.AuthClientID,
+			&i.ClientType,
+			&i.ProjectID,
+			&i.McpServerID,
+			&i.ToolsetID,
 		); err != nil {
 			return nil, err
 		}
@@ -2273,6 +2690,17 @@ func (q *Queries) MarkServersRequiringUpstreamAuth(ctx context.Context, arg Mark
 	return items, nil
 }
 
+const organizationExistsForGrants = `-- name: OrganizationExistsForGrants :one
+SELECT EXISTS (SELECT 1 FROM organization_metadata WHERE id = $1)::boolean
+`
+
+func (q *Queries) OrganizationExistsForGrants(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, organizationExistsForGrants, organizationID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const planClientHeaders = `-- name: PlanClientHeaders :many
 WITH desired AS (
   SELECT h.id AS src_id, 'remote'::text AS src_kind, h.name, lower(h.name) AS lname,
@@ -2362,6 +2790,32 @@ func (q *Queries) PlanClientHeaders(ctx context.Context, arg PlanClientHeadersPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordAuthPermissionProvision = `-- name: RecordAuthPermissionProvision :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+type RecordAuthPermissionProvisionParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records one grant the backfill wrote.
+func (q *Queries) RecordAuthPermissionProvision(ctx context.Context, arg RecordAuthPermissionProvisionParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionProvision,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
 }
 
 const restoreRemoteHeaderFixture = `-- name: RestoreRemoteHeaderFixture :exec
