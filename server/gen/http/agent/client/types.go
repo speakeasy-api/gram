@@ -2278,6 +2278,22 @@ type AgentPluginResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Short description of the plugin, when one is set.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// MCP servers the plugin contains, in display order, possibly none.
+	// Display-only: the agent installs the plugin, not these entries. Absent for
+	// the synthesized observability plugin, which carries hooks rather than
+	// servers.
+	Servers []*AgentPluginServerResponseBody `json:"servers,omitzero"`
+}
+
+// AgentPluginServerResponseBody is used to define fields on response body
+// types.
+type AgentPluginServerResponseBody struct {
+	// Display name of the server within its plugin.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Link to the server's page in the Speakeasy dashboard. Present only when the
+	// enrolled user holds mcp:read on the server; the agent tells the user that
+	// links need that scope when it is absent.
+	DashboardURL *string `form:"dashboard_url,omitempty" json:"dashboard_url,omitempty" xml:"dashboard_url,omitempty"`
 }
 
 // DeviceAgentConfigurationResponseBody is used to define fields on response
@@ -7273,6 +7289,25 @@ func ValidateAgentPluginResponseBody(body *AgentPluginResponseBody) (err error) 
 		if !(*body.InstallMode == "required" || *body.InstallMode == "default" || *body.InstallMode == "available") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.install_mode", *body.InstallMode, []any{"required", "default", "available"}))
 		}
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateAgentPluginServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAgentPluginServerResponseBody runs the validations defined on
+// AgentPluginServerResponseBody
+func ValidateAgentPluginServerResponseBody(body *AgentPluginServerResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.DashboardURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dashboard_url", *body.DashboardURL, goa.FormatURI))
 	}
 	return
 }

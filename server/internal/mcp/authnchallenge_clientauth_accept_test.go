@@ -68,7 +68,7 @@ func TestHandleRegister_PrivateKeyJWT(t *testing.T) {
 	// one.
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(row, code, verifier))
-	requireInvalidClient(t, tw)
+	requireInvalidClient(t, tw, http.StatusBadRequest)
 
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw = postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(row, code, verifier), signer.assertion(t, row.ClientID, advertisedIssuer)))
@@ -188,7 +188,7 @@ func TestOAuthCIMD_PrivateKeyJWTInlineKeys(t *testing.T) {
 
 	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(row, code, verifier))
-	requireInvalidClient(t, tw)
+	requireInvalidClient(t, tw, http.StatusBadRequest)
 
 	code, verifier = seedAuthorizationCode(t, ctx, ti, toolset, row)
 	tw = postForm(t, ti, toolset.McpSlug.String, "token", withAssertion(codeGrantForm(row, code, verifier), signer.assertion(t, row.ClientID, advertisedIssuer)))
@@ -272,7 +272,7 @@ func TestOAuthCIMD_AuthMethodDowngradeRefused(t *testing.T) {
 	})
 	lapseCIMDCache(t, ctx, ti, row)
 	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 
 	after, err := queries.GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{UserSessionIssuerID: toolset.UserSessionIssuerID.UUID, ClientID: ds.clientID})
 	require.NoError(t, err)

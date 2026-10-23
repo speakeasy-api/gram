@@ -16,21 +16,37 @@ func gatewayDiscoveryOptionsOffered(endpoint *ResolvedMcpEndpoint) bool {
 	return endpoint.MetaMcpServerID.Valid
 }
 
-func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, selectedAgentID, modeValue string, selection *toolfilter.SessionSelection) (*toolfilter.SessionPolicy, error) {
+// consentGatewayPolicy validates a gateway connection's discovery mode.
+// Browser approval attaches the captured catalog after publication.
+func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, selectedAgentID, modeValue string) (*toolfilter.SessionPolicy, error) {
 	if modeValue == "" {
 		return nil, nil
 	}
-	mode := metamcp.DiscoveryMode(modeValue)
-	if state.FirstParty || selectedAgentID != "" || !mode.Valid() || !gatewayDiscoveryOptionsOffered(endpoint) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "discovery mode is not available for this connection")
+	var discoveryMode *metamcp.DiscoveryMode
+	if modeValue != "" {
+		mode := metamcp.DiscoveryMode(modeValue)
+		if state.FirstParty || selectedAgentID != "" || !mode.Valid() || !gatewayDiscoveryOptionsOffered(endpoint) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "discovery mode is not available for this connection")
+		}
+		discoveryMode = &mode
 	}
 	policy := &toolfilter.SessionPolicy{
 		Resource:  endpointToolSelectionResource(endpoint),
-		Selection: selection,
-		Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
+		Selection: nil,
+		Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: discoveryMode},
+		Catalog:   nil,
 	}
 	if _, err := json.Marshal(policy); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid gateway connection options")
 	}
 	return policy, nil
+}
+
+// legacyToolSelection keeps a selection on the grant only when no gateway
+// policy carries it, so a code never holds two policies.
+func legacyToolSelection(selection *toolfilter.SessionSelection, policy *toolfilter.SessionPolicy) *toolfilter.SessionSelection {
+	if policy != nil {
+		return nil
+	}
+	return selection
 }

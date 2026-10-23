@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -132,6 +133,8 @@ type mintSessionParams struct {
 	// UpstreamClientPicks is the consent page's upstream client pick per MCP
 	// server, recorded as a new credential's choices.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID
+	// Catalog supplies the exact auth-client bindings approved by browser consent.
+	Catalog *connectionCatalog
 }
 
 type mintedSession struct {
@@ -304,6 +307,12 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
 	}
 
+	credentialError := oauthwire.ClientAuthenticationError(r)
+	if credentialError == oautherr.CodeInvalidRequest {
+		logOAuthClientCredentialEvent(ctx, endpoint.LogWith(s.logger), r, "oauth token request rejected", "", "", r.PostForm.Get(oauthwire.ParamGrantType), credentialError)
+		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, credentialError, "invalid client authentication request")
+	}
+
 	logger := endpoint.LogWith(s.logger)
 
 	grantType := r.PostForm.Get("grant_type")
@@ -318,6 +327,10 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 		clientID, _ := resolvePresentedClientID(creds)
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, creds.method, grantType, oautherr.CodeUnsupportedGrantType)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
+	}
+	if credentialError == oautherr.CodeInvalidClient {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", "", "", grantType, credentialError)
+		return writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 	}
 	return s.serveTokenGrant(ctx, w, r, endpoint, logger, grantType, creds, grant)
 }
@@ -342,19 +355,27 @@ func (s *Service) serveTokenGrant(
 	// derived from it.
 	baseURL := s.resourceBaseURL(r, endpoint)
 
+	var grantErr error
+	clientID := creds.clientID
 	switch {
 	case grant.clientAuth == tokenClientAuthRequired && grant.authenticated != nil:
 		clientRow, err := s.authenticateTokenClient(ctx, w, r, endpoint, logger, grantType, creds, grant.resolveMode, baseURL)
 		if clientRow == nil {
 			return err
 		}
-		return grant.authenticated(ctx, w, r, endpoint, clientRow, baseURL, creds.method, logger)
+		clientID = clientRow.ClientID
+		grantErr = grant.authenticated(ctx, w, r, endpoint, clientRow, baseURL, creds.method, logger)
 	case grant.clientAuth == tokenClientAuthNone && grant.clientless != nil:
-		return grant.clientless(ctx, w, r, endpoint, creds, baseURL, logger)
+		grantErr = grant.clientless(ctx, w, r, endpoint, creds, baseURL, logger)
 	default:
 		err := fmt.Errorf("token grant %q has client authentication %q without a matching handler", grantType, grant.clientAuth)
 		return oops.E(oops.CodeUnexpected, err, "dispatch token grant").LogError(ctx, logger)
 	}
+	if errors.Is(grantErr, errAuthorizationExpired) {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, creds.method, grantType, "authorization_expired")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "user authorization has expired")
+	}
+	return grantErr
 }
 
 // refuseClientlessTokenGrant answers a JWT bearer request that presents no
@@ -367,7 +388,7 @@ func refuseClientlessTokenGrant(
 	logger *slog.Logger,
 ) error {
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", creds.clientID, creds.method, r.PostForm.Get("grant_type"), "missing_client_id")
-	return writeTokenError(ctx, w, logger, http.StatusUnauthorized, oautherr.CodeInvalidClient, "client_id is required")
+	return writeInvalidClientError(ctx, w, r, logger, "client_id is required")
 }
 
 // authenticateTokenClient resolves and authenticates the client a token
@@ -389,7 +410,7 @@ func (s *Service) authenticateTokenClient(
 	clientID, reason := resolvePresentedClientID(creds)
 	if reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
-		return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
+		return nil, writeInvalidClientError(ctx, w, r, logger, "client_id is required")
 	}
 	// Only a grant that resolves CIMD would fetch a client_id naming this
 	// endpoint. Refused ahead of admission and the fetch, as at /authorize.
@@ -400,18 +421,18 @@ func (s *Service) authenticateTokenClient(
 		}
 		if namesEndpoint {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, clientIDNamesEndpointReason)
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, oautherr.CodeInvalidClient, clientIDNamesEndpointDescription)
+			return nil, writeInvalidClientError(ctx, w, r, logger, clientIDNamesEndpointDescription)
 		}
 	}
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_denied")
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", admissionErr.Description())
+			return nil, writeInvalidClientError(ctx, w, r, logger, admissionErr.Description())
 		}
 		if _, ok := errors.AsType[*oauthwire.Error](err); ok {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_metadata_invalid")
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+			return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 		}
 		if errors.Is(err, errCIMDFetchFailed) {
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
@@ -419,7 +440,7 @@ func (s *Service) authenticateTokenClient(
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "unknown_client_id")
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+			return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
@@ -451,7 +472,7 @@ func (s *Service) authenticateTokenClient(
 		}
 		if mode == admission.ModeDisabled {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_disabled")
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "this server does not accept client ID metadata documents")
+			return nil, writeInvalidClientError(ctx, w, r, logger, "this server does not accept client ID metadata documents")
 		}
 	}
 	// Authentication is decided by the method the row persisted, not by
@@ -463,7 +484,7 @@ func (s *Service) authenticateTokenClient(
 	}
 	if reason := s.authenticateOAuthClient(ctx, logger, endpoint.UserSessionIssuerID, urls, clientAssertionAtToken, clientRow, creds); reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
-		return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
+		return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authenticated", clientID, presentedAuthMethod, grantType, "")
 
@@ -486,7 +507,7 @@ func (s *Service) authenticateTokenClient(
 			if grantType == oauthwire.GrantTypeAuthorizationCode {
 				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageToken)
 			}
-			return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", blockedErr.Description())
+			return nil, writeInvalidClientError(ctx, w, r, logger, blockedErr.Description())
 		}
 		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
 			return nil, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
@@ -552,15 +573,17 @@ func (s *Service) handleTokenJWTBearerGrant(
 	authorizationCtx, err := s.contextForSessionSubject(ctx, endpoint, result.Subject, "id-jag:"+result.Claims.JTI, clientRow.ClientID)
 	if err == nil && endpoint.MetaMcpServerID.Valid {
 		var members []metaMember
-		authorizationCtx, members, err = s.resolveEndpointMemberSnapshot(authorizationCtx, logger, endpoint)
+		authorizationCtx, members, err = s.resolveEndpointMemberSnapshot(authorizationCtx, logger, mandatorySurfaceTokenIssuance, endpoint)
 		if err == nil && len(members) == 0 {
 			err = oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any meta MCP members")
 		}
 	} else if err == nil {
+		connect := authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String())
 		authorizationCtx, err = s.authz.PrepareContext(authorizationCtx)
 		if err == nil {
-			err = s.authz.Require(authorizationCtx, authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String()))
+			err = s.authz.Require(authorizationCtx, connect)
 		}
+		s.newMandatoryShadow(authorizationCtx, endpoint.OrganizationID).shadowRequire(authorizationCtx, mandatorySurfaceTokenIssuance, err, connect)
 	}
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
@@ -591,6 +614,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		Subject:                result.Subject,
 		ToolSelection:          nil,
 		UpstreamClientPicks:    nil,
+		Catalog:                nil,
 	}, logger)
 	if err != nil {
 		return err
@@ -821,12 +845,14 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	}
 	var toolSelection []byte
 	toolPolicy := toolfilter.PolicyForSelection(grant.ToolSelection)
+	catalogCode := strings.HasPrefix(req.Code, catalogAuthorizationCodePrefix)
+	gatewayCode := catalogCode || strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix)
 	if grant.GatewayPolicy != nil {
-		if toolPolicy != nil || !strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix) {
+		if toolPolicy != nil || !gatewayCode || catalogCode != (grant.GatewayPolicy.Catalog != nil) {
 			return rejectGrant("invalid gateway connection options; reauthorize")
 		}
 		toolPolicy = grant.GatewayPolicy
-	} else if strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix) {
+	} else if gatewayCode {
 		return rejectGrant("missing gateway connection options; reauthorize")
 	}
 	if toolPolicy != nil {
@@ -846,6 +872,17 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 			return oops.E(oops.CodeUnexpected, merr, "encode tool selection").LogError(ctx, logger)
 		}
 		toolSelection = encoded
+	}
+
+	var catalog *connectionCatalog
+	if toolPolicy != nil && toolPolicy.Catalog != nil {
+		catalog, err = s.loadConnectionCatalog(contextvalues.SetOAuthClientID(ctx, clientRow.ClientID), endpoint, subject, toolPolicy.Catalog, time.Now())
+		if errors.Is(err, errConnectionCatalogExpired) {
+			return rejectGrant("approved tools expired; give consent again")
+		}
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "could not load approved tools; try again later")
+		}
 	}
 
 	policy, audience, err := s.authorizationCodeIssuancePolicy(endpoint)
@@ -885,6 +922,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 		UpstreamClientPicks:    grant.UpstreamClientPicks,
+		Catalog:                catalog,
 	}, logger)
 	if err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
@@ -1341,6 +1379,7 @@ func (s *Service) rotateRefreshToken(
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 		UpstreamClientPicks:    nil,
+		Catalog:                nil,
 	}, logger)
 	if err != nil {
 		return true, err
@@ -1875,6 +1914,7 @@ func (s *Service) mintSession(
 		DesiredSessionDuration: params.DesiredSessionDuration,
 		Replayable:             params.Replayable,
 		UpstreamClientPicks:    params.UpstreamClientPicks,
+		Catalog:                params.Catalog,
 	}, logger)
 }
 
@@ -1949,6 +1989,8 @@ type sessionIssuance struct {
 	// UpstreamClientPicks is the consent page's upstream client pick per MCP
 	// server, recorded with a new credential's choices.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID
+	// Catalog supplies the exact auth-client bindings approved by browser consent.
+	Catalog *connectionCatalog
 }
 
 // issueSession mints the access token of an issuance and persists its session
@@ -1997,7 +2039,7 @@ func (s *Service) issueSession(
 	}
 	authorizationLifetime := issuance.AuthorizationExpiresAt.Sub(now)
 	if authorizationLifetime <= 0 {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "user authorization has expired").LogError(ctx, logger)
+		return nil, errAuthorizationExpired
 	}
 	accessExpiresAt := now.Add(accessTokenLifetime)
 	if issuance.AuthorizationExpiresAt.Before(accessExpiresAt) {
@@ -2074,9 +2116,20 @@ func (s *Service) issueSession(
 	if !issuance.CredentialID.Valid {
 		pickedServers := make([]uuid.UUID, 0, len(issuance.UpstreamClientPicks))
 		pickedClients := make([]uuid.UUID, 0, len(issuance.UpstreamClientPicks))
-		for serverID, clientID := range issuance.UpstreamClientPicks {
-			pickedServers = append(pickedServers, serverID)
-			pickedClients = append(pickedClients, clientID)
+		var pickedAuthClients []uuid.UUID
+		if issuance.Catalog != nil {
+			for _, member := range issuance.Catalog.Members {
+				if member.Auth != nil {
+					pickedServers = append(pickedServers, member.ServerID)
+					pickedClients = append(pickedClients, member.Auth.RegistrationID.UUID)
+					pickedAuthClients = append(pickedAuthClients, member.Auth.ClientID)
+				}
+			}
+		} else {
+			for serverID, clientID := range issuance.UpstreamClientPicks {
+				pickedServers = append(pickedServers, serverID)
+				pickedClients = append(pickedClients, clientID)
+			}
 		}
 		if _, err := queries.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
 			UserSessionIssuerID: issuance.UserSessionIssuerID,
@@ -2085,6 +2138,7 @@ func (s *Service) issueSession(
 			Source:              upstreamclients.SelectionSourceIssuance,
 			PickedMcpServerIds:  pickedServers,
 			PickedClientIds:     pickedClients,
+			PickedAuthClientIds: pickedAuthClients,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, logger)
 		}
@@ -2135,6 +2189,16 @@ func writeTokenOAuthError(ctx context.Context, w http.ResponseWriter, logger *sl
 		return writeTokenError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
 	}
 	return writeTokenError(ctx, w, logger, status, "invalid_request", err.Error())
+}
+
+// writeInvalidClientError applies the token and revocation endpoint response
+// policy to a classified client authentication failure.
+func writeInvalidClientError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, description string) error {
+	status, challenge := oauthwire.InvalidClientResponse(r.Header)
+	if challenge != "" {
+		w.Header().Set("WWW-Authenticate", challenge)
+	}
+	return writeTokenError(ctx, w, logger, status, oautherr.CodeInvalidClient, description)
 }
 
 // writeTokenError emits an RFC 6749 §5.2 token error response: 4xx with a
@@ -2205,6 +2269,9 @@ func grantSignInID(grant UserSessionGrant) uuid.NullUUID {
 }
 
 var errSignInRevoked = errors.New("sign-in revoked")
+
+// errAuthorizationExpired distinguishes an elapsed grant from issuance failures.
+var errAuthorizationExpired = errors.New("user authorization has expired")
 
 // signInUserID is the user a linked sign-in must belong to: the session's
 // own human subject. Other subjects never keep a link.

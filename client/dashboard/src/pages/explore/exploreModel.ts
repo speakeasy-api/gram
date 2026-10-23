@@ -514,6 +514,15 @@ export function specProblem(
 ): string {
   const dataset = findDataset(datasets, spec.dataset);
   if (!dataset) return `dataset "${spec.dataset}" does not exist`;
+  // A metric dataset answers in aggregate only. A measure still waiting for
+  // its field measures nothing yet, and a question with nothing measured
+  // would ask for rows.
+  if (
+    dataset.kind === "metric" &&
+    completeMeasures(spec.measures).length === 0
+  ) {
+    return `${spec.dataset} answers counts and other aggregates, never its rows`;
+  }
 
   const ops = opsForDataset(dataset);
   for (const measure of spec.measures) {

@@ -79,7 +79,7 @@ func CompileValues(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Valu
 
 	plan := &Plan{
 		Dataset: ds.Name,
-		Name:    ds.Name + ".agent_events",
+		Name:    ds.Name + "." + ds.Source.Table.planSuffix(),
 		SQL:     "",
 		Args:    nil,
 		Columns: []Column{{Name: "value", Kind: ColumnDimension}, {Name: "n", Kind: ColumnMeasure}},
@@ -115,6 +115,9 @@ func (p *Plan) RunValues(ctx context.Context, conn Querier) ([]DimensionValue, e
 func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionValuesPayload) (*gen.AnalyticsDimensionValuesResult, error) {
 	authCtx, err := s.authorize(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authorizeDataset(ctx, authCtx, payload.Dataset); err != nil {
 		return nil, err
 	}
 

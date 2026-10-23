@@ -349,6 +349,7 @@ func (s *Service) createPreparedAgentKey(ctx context.Context, tx pgx.Tx, human a
 		AgentCredential: &audit.AgentKeyCredentialMetadata{
 			SubjectURN: prepared.subjectURN, DelegatedGrants: prepared.policyJSON, DelegatedGrantsVersion: int32(prepared.version), ExpiresAt: expiresAt,
 		},
+		PolicyGrants: nil,
 	}); err != nil {
 		return repo.ApiKey{}, oops.E(oops.CodeUnexpected, err, "add agent API key creation audit log").LogError(ctx, s.logger)
 	}
@@ -370,6 +371,7 @@ func (s *Service) logAgentKeyRevoke(ctx context.Context, tx pgx.Tx, human agentm
 		KeyName:          key.Name,
 		Scopes:           []string{},
 		AgentCredential:  metadata,
+		PolicyGrants:     nil,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "add agent API key revocation audit log").LogError(ctx, s.logger)
 	}
@@ -395,7 +397,7 @@ func agentKeyModel(key repo.ApiKey, secret *string) (*gen.Key, error) {
 	}
 	return &gen.Key{
 		ID: key.ID.String(), OrganizationID: key.OrganizationID, ProjectID: nil, CreatedByUserID: key.CreatedByUserID, Name: key.Name, KeyPrefix: key.KeyPrefix, Key: secret, Scopes: []string{},
-		SubjectUrn: &subjectURN, DelegatedGrants: delegatedPolicyModel(policy), DelegatedGrantsVersion: &versionValue, ExpiresAt: &expiresAt,
+		SubjectUrn: &subjectURN, DelegatedGrants: delegatedPolicyModel(policy), DelegatedGrantsVersion: &versionValue, ExpiresAt: &expiresAt, PolicyGrants: nil,
 		CreatedAt: key.CreatedAt.Time.Format(time.RFC3339Nano), UpdatedAt: key.UpdatedAt.Time.Format(time.RFC3339Nano), LastAccessedAt: lastAccessedAt,
 	}, nil
 }

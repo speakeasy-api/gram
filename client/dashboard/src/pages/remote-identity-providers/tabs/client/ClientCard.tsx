@@ -43,10 +43,14 @@ export function ClientCard({
   client,
   issuer,
   issuerId,
+  onDirtyChange,
 }: {
   client: RemoteSessionClient;
   issuer: RemoteSessionIssuer | undefined;
   issuerId: string;
+  // Called with whether the card holds edits that Save has not stored, so a
+  // container can warn before discarding them.
+  onDirtyChange?: (dirty: boolean) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   // The organization update endpoint requires org:admin; readers get the same
@@ -170,6 +174,20 @@ export function ClientCard({
   const scopeChanged =
     scope.length !== savedScope.length ||
     scope.some((s, i) => s !== savedScope[i]);
+
+  const dirty =
+    canEdit &&
+    (authMethod !== persistedAuthMethod ||
+      scopeChanged ||
+      audience !== (client.audience ?? "") ||
+      clientSecret !== "" ||
+      (privateKeyJwtSelected &&
+        authAudienceFormat !== client.tokenEndpointAuthAudienceFormat) ||
+      (legacyCallbackMode !== undefined &&
+        legacyCallbackMode !== client.legacyCallbackUrl));
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   const handleSave = () => {
     if (!canEdit || (privateKeyJwtSelected && !supportsAudience)) return;
