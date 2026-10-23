@@ -18,6 +18,7 @@ const (
 	ActionAuthClientEnable          Action = "auth-client:enable"
 	ActionAuthClientDisable         Action = "auth-client:disable"
 	ActionAuthClientDetachMcpServer Action = "auth-client:detach-mcp-server"
+	ActionAuthClientAudienceUpdate  Action = "auth-client:update-audience"
 )
 
 type LogAuthClientUpdateEvent struct {
@@ -126,6 +127,59 @@ func (l *Logger) LogAuthClientDetachMcpServer(ctx context.Context, dbtx repo.DBT
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AuthClientV1})
+}
+
+type LogAuthClientAudienceUpdateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	AuthClientURN  urn.AuthClient
+	AuthClientName string
+
+	AudienceSnapshotBefore *types.AuthClientAudience
+	AudienceSnapshotAfter  *types.AuthClientAudience
+}
+
+// LogAuthClientAudienceUpdate records a change to who may use an auth client.
+func (l *Logger) LogAuthClientAudienceUpdate(ctx context.Context, dbtx repo.DBTX, event LogAuthClientAudienceUpdateEvent) error {
+	action := ActionAuthClientAudienceUpdate
+
+	beforeSnapshot, err := marshalAuditPayload(event.AudienceSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(event.AudienceSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.AuthClientURN.ID.String(),
+		SubjectType:        string(subjectTypeAuthClient),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.AuthClientName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       nil,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AuthClientV1})

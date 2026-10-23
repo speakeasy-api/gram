@@ -22,6 +22,8 @@ type Endpoints struct {
 	DetachAuthClientFromMcpServer       goa.Endpoint
 	GetMcpServerAuthentication          goa.Endpoint
 	SetMcpServerUpstreamAuthRequirement goa.Endpoint
+	GetAuthClientAudience               goa.Endpoint
+	SetAuthClientAudience               goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "authClients" service with endpoints.
@@ -35,6 +37,8 @@ func NewEndpoints(s Service) *Endpoints {
 		DetachAuthClientFromMcpServer:       NewDetachAuthClientFromMcpServerEndpoint(s, a.APIKeyAuth),
 		GetMcpServerAuthentication:          NewGetMcpServerAuthenticationEndpoint(s, a.APIKeyAuth),
 		SetMcpServerUpstreamAuthRequirement: NewSetMcpServerUpstreamAuthRequirementEndpoint(s, a.APIKeyAuth),
+		GetAuthClientAudience:               NewGetAuthClientAudienceEndpoint(s, a.APIKeyAuth),
+		SetAuthClientAudience:               NewSetAuthClientAudienceEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -46,6 +50,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DetachAuthClientFromMcpServer = m(e.DetachAuthClientFromMcpServer)
 	e.GetMcpServerAuthentication = m(e.GetMcpServerAuthentication)
 	e.SetMcpServerUpstreamAuthRequirement = m(e.SetMcpServerUpstreamAuthRequirement)
+	e.GetAuthClientAudience = m(e.GetAuthClientAudience)
+	e.SetAuthClientAudience = m(e.SetAuthClientAudience)
 }
 
 // NewListAuthClientsEndpoint returns an endpoint function that calls the
@@ -256,5 +262,75 @@ func NewSetMcpServerUpstreamAuthRequirementEndpoint(s Service, authAPIKeyFn secu
 			return nil, err
 		}
 		return s.SetMcpServerUpstreamAuthRequirement(ctx, p)
+	}
+}
+
+// NewGetAuthClientAudienceEndpoint returns an endpoint function that calls the
+// method "getAuthClientAudience" of service "authClients".
+func NewGetAuthClientAudienceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetAuthClientAudiencePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetAuthClientAudience(ctx, p)
+	}
+}
+
+// NewSetAuthClientAudienceEndpoint returns an endpoint function that calls the
+// method "setAuthClientAudience" of service "authClients".
+func NewSetAuthClientAudienceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetAuthClientAudiencePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetAuthClientAudience(ctx, p)
 	}
 }
