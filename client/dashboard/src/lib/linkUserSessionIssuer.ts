@@ -6,6 +6,9 @@ import { mcpServerUpdateForm } from "@/lib/mcpServerUpdateForm";
 
 type SdkClient = Pick<Gram, "mcpServers" | "toolsets">;
 
+const UNSUPPORTED_VISIBILITY =
+  "This server's visibility is not supported by this version of Speakeasy. Refresh the page before editing.";
+
 async function updateServerIssuer(
   client: SdkClient,
   latest: McpServer,
@@ -36,9 +39,7 @@ export async function linkMcpServerUserSessionIssuer(
   if (
     !(await updateServerIssuer(client, latest, userSessionIssuerId, options))
   ) {
-    throw new Error(
-      "This server's visibility is not supported by this version of Speakeasy. Refresh the page before editing.",
-    );
+    throw new Error(UNSUPPORTED_VISIBILITY);
   }
 }
 
@@ -65,10 +66,17 @@ export async function linkToolsetUserSessionIssuer(
     }
   }
 
-  if (
-    canonical &&
-    (await updateServerIssuer(client, canonical, userSessionIssuerId, options))
-  ) {
+  if (canonical) {
+    if (
+      !(await updateServerIssuer(
+        client,
+        canonical,
+        userSessionIssuerId,
+        options,
+      ))
+    ) {
+      throw new Error(UNSUPPORTED_VISIBILITY);
+    }
     return;
   }
 

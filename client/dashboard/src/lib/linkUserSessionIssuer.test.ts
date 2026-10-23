@@ -67,13 +67,15 @@ describe("linkToolsetUserSessionIssuer", () => {
     );
   });
 
-  it("falls back to the toolset call when the server visibility is unknown", async () => {
+  it("asks for a refresh when the canonical server visibility is unknown", async () => {
     get.mockResolvedValue({ ...canonical, visibility: unrecognized("future") });
 
-    await linkToolsetUserSessionIssuer(client, toolset, "issuer-1");
+    await expect(
+      linkToolsetUserSessionIssuer(client, toolset, "issuer-1"),
+    ).rejects.toThrow("Refresh the page");
 
     expect(update).not.toHaveBeenCalled();
-    expect(setUserSessionIssuer).toHaveBeenCalledTimes(1);
+    expect(setUserSessionIssuer).not.toHaveBeenCalled();
   });
 
   it("falls back to the toolset call when no canonical server exists", async () => {
