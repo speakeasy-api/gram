@@ -1,0 +1,29 @@
+server/internal/background/process_workos_org_events.go
+  h_9630b74bdac540 17-25,105-106,110-119,121-132
+  s_ef50383f245dc1::t_89f85708938a85 107-109,120
+server/internal/background/process_workos_org_events_test.go
+  h_9630b74bdac540 52-131
+.changeset/workos-org-sync-empty-page-retry.md
+  h_9630b74bdac540 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7ced3cfeeb578c7a609bab027a8debaf6f3603d9",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_ef50383f245dc1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ec18c90c-ccc1-4ca7-8ed5-7cd976e3f939",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
