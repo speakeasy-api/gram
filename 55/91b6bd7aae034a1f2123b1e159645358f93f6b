@@ -1,0 +1,19 @@
+.agents/skills/clickhouse/SKILL.md
+  s_7751fabeb2e065::t_390874915c5e4f 44-63,85-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5591b6bd7aae034a1f2123b1e159645358f93f6b",
+  "prompts": {},
+  "sessions": {
+    "s_7751fabeb2e065": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5f45dff9-6bac-43f4-80e3-3ca44a19c6de",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
