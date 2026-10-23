@@ -637,9 +637,9 @@ type PostflightIDMisassignedUpstreamClientChoicesParams struct {
 	OrgNoAuthServerIds []uuid.UUID
 }
 
-// Live choices that are not the intended ones: Linear through its main
-// client, Slack with no upstream authentication, and the organization gateway's
-// GitHub and tunneled inventory choices, each on a seeded session.
+// Count live choices outside the intended set: Linear through its main client,
+// Slack with no upstream authentication, and the organization gateway's GitHub
+// and tunneled inventory choices, each on a seeded session.
 func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Context, arg PostflightIDMisassignedUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDMisassignedUpstreamClientChoices,
 		arg.ProjectID,

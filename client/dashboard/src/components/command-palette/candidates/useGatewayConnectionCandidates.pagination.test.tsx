@@ -21,6 +21,9 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: "enabled" }),
+}));
 vi.mock("react-router", () => ({ useNavigate: () => state.navigate }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({

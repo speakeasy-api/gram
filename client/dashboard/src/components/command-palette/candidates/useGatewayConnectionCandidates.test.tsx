@@ -1,11 +1,12 @@
-import { renderHook } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { cleanup, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { isSendable } from "./types";
 
 const state = vi.hoisted(() => ({
   org: "org-one",
   project: "project-one",
   allowed: true,
+  gatewayFlag: "enabled",
   navigate: vi.fn(),
   routeOptions: [] as Array<{ projectSlug: string }>,
   fetchNextPage: vi.fn<() => Promise<unknown>>(),
@@ -24,6 +25,9 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => state.allowed }),
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: state.gatewayFlag }),
 }));
 vi.mock("react-router", () => ({ useNavigate: () => state.navigate }));
 vi.mock("@/routes", () => ({
@@ -103,10 +107,12 @@ vi.mock("@tanstack/react-query", () => ({
   },
 }));
 import { useGatewayConnectionCandidates } from "./useGatewayConnectionCandidates";
+afterEach(cleanup);
 beforeEach(() => {
   state.org = "org-one";
   state.project = "project-one";
   state.allowed = true;
+  state.gatewayFlag = "enabled";
   state.next = false;
   state.nextError = false;
   state.navigate.mockReset();
@@ -114,6 +120,26 @@ beforeEach(() => {
   state.queryCalls.length = 0;
   state.infiniteCalls.length = 0;
 });
+it.each(["loading", "disabled", "missing", "error"])(
+  "hides cached project gateways and stops pagination when the rollout flag is %s",
+  (status) => {
+    const { result, rerender } = renderHook(() =>
+      useGatewayConnectionCandidates({ enabled: true, inProject: true }),
+    );
+    expect(
+      result.current.some((candidate) => candidate.title === "Example gateway"),
+    ).toBe(true);
+    state.gatewayFlag = status;
+    state.next = true;
+    rerender();
+    expect(result.current.map((candidate) => candidate.title)).toEqual([
+      "Organization Gateway Connections",
+    ]);
+    expect(state.queryCalls.at(-1)?.enabled).toBe(false);
+    expect(state.infiniteCalls.at(-1)?.enabled).toBe(false);
+    expect(state.fetchNextPage).not.toHaveBeenCalled();
+  },
+);
 it("finds a cached registration and opens its canonical gateway with private matching", () => {
   const { result } = renderHook(() =>
     useGatewayConnectionCandidates({ enabled: true, inProject: true }),

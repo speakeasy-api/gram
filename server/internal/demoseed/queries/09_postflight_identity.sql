@@ -262,9 +262,9 @@ WHERE (SELECT count(*) FROM live) = 26
                    AND a.deleted IS FALSE))
   );
 
--- Live choices that are not the intended ones: Linear through its main
--- client, Slack with no upstream authentication, and the organization gateway's
--- GitHub and tunneled inventory choices, each on a seeded session.
+-- Count live choices outside the intended set: Linear through its main client,
+-- Slack with no upstream authentication, and the organization gateway's GitHub
+-- and tunneled inventory choices, each on a seeded session.
 -- name: PostflightIDMisassignedUpstreamClientChoices :one
 SELECT count(*)
 FROM upstream_client_selections u

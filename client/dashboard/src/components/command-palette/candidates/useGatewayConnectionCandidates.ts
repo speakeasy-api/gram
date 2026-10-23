@@ -1,6 +1,8 @@
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { buildMetaMcpServersQuery } from "@gram/client/react-query/metaMcpServers.js";
 import {
@@ -27,8 +29,12 @@ export function useGatewayConnectionCandidates({
   const routes = useRoutes({ projectSlug: gramProject });
   const navigate = useNavigate();
   const { hasScope } = useRBAC();
+  const gatewayFlag = useFeatureFlag(FEATURE_FLAGS.gatewayEndpoints);
   const canReadProject = inProject && hasScope("project:read", project.id);
-  const canReadGateways = canReadProject && hasScope("mcp:read", project.id);
+  const canReadGateways =
+    gatewayFlag.status === "enabled" &&
+    canReadProject &&
+    hasScope("mcp:read", project.id);
   const canReadOrg = hasScope("org:read", organization.id);
   const gatewaysQuery = buildMetaMcpServersQuery(sdk, { gramProject });
   const gateways = useQuery({

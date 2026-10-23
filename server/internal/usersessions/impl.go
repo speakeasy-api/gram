@@ -1,9 +1,8 @@
 // Package usersessions implements the management API services that surface
 // user_session_issuer / user_session_client / user_session_consent /
-// user_session resources. The six Goa services are authored under
-// server/design/usersession{issuers,clients,consents}/ and
-// server/design/usersessions/; a single Go package owns their shared
-// implementation, dependencies, and lifecycle.
+// user_session and gateway session resources. Their Goa designs live under
+// server/design; this package owns their shared implementation, dependencies,
+// and lifecycle.
 package usersessions
 
 import (
@@ -116,7 +115,7 @@ var (
 )
 
 // NewService constructs a Service ready to be Attached against each of the
-// six user_session* Goa services. chatSessionsManager is used by the
+// user session and gateway session Goa services. chatSessionsManager is used by the
 // userSessions and userSessionClients revoke handlers to push revoked jtis
 // into the revocation cache; it is held as a TokenRevoker so tests can
 // substitute a failing revoker.

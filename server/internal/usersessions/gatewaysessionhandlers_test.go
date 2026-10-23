@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	endpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metarepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -23,6 +24,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func seedSessionGateway(t *testing.T, ctx context.Context, ti *testInstance, issuer uuid.UUID) uuid.UUID {
@@ -250,5 +252,86 @@ func TestGatewaySessionsAlternatePlatformHosts(t *testing.T) {
 			}
 			require.ElementsMatch(t, expected, actual)
 		})
+	}
+}
+
+func TestGatewaySessionsHideOtherOrganizationClientMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	issuer := seedOrganizationTierIssuer(t, ctx, ti.conn, "client-metadata")
+	otherIssuer := seedOtherOrganizationIssuer(t, ctx, ti)
+	client, err := seedCimdUserSessionClient(t, ctx, ti.conn, otherIssuer, "https://client.example.test/metadata.json")
+	require.NoError(t, err)
+	session, err := seedUserSessionForClient(t, ctx, ti.conn, issuer, client.ID, urn.NewUserSubject("client-metadata-user"))
+	require.NoError(t, err)
+
+	result, err := ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	item := result.Items[0]
+	require.Equal(t, session.ID.String(), item.ID)
+	require.Nil(t, item.ClientName)
+	require.Nil(t, item.ClientIDMetadataURI)
+	require.Nil(t, item.ClientTokenEndpointAuthMethod)
+}
+
+func TestGatewaySessionsHideOtherOrganizationAPIKeyMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer := seedOrganizationTierIssuer(t, ctx, ti.conn, "key-metadata")
+	otherIssuer := seedOtherOrganizationIssuer(t, ctx, ti)
+	otherClient, err := seedUserSessionClient(t, ctx, ti.conn, otherIssuer, "other-client")
+	require.NoError(t, err)
+	key, err := keysrepo.New(ti.conn).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  otherClient.OrganizationID.String,
+		CreatedByUserID: auth.UserID,
+		Name:            "Other organization credential",
+		KeyPrefix:       "test", KeyHash: uuid.NewString(), Scopes: []string{},
+	})
+	require.NoError(t, err)
+	session, err := seedUserSession(t, ctx, ti.conn, issuer, urn.NewAPIKeySubject(key.ID))
+	require.NoError(t, err)
+
+	result, err := ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, session.ID.String(), result.Items[0].ID)
+	require.Nil(t, result.Items[0].SubjectDisplayName)
+	filtered, err := ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{Search: new(key.Name)})
+	require.NoError(t, err)
+	require.Empty(t, filtered.Items)
+}
+
+func TestGatewaySessionsHideDeletedUserMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	issuer := seedOrganizationTierIssuer(t, ctx, ti.conn, "deleted-user-metadata")
+	user, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID: "user-" + uuid.NewString(), Email: "deleted-user@example.test", DisplayName: "Deleted user label",
+		PhotoUrl: conv.ToPGText("https://profile.example.test/photo.png"),
+	})
+	require.NoError(t, err)
+	session, err := seedUserSession(t, ctx, ti.conn, issuer, urn.NewUserSubject(user.ID))
+	require.NoError(t, err)
+
+	before, err := ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{Search: new(user.Email)})
+	require.NoError(t, err)
+	require.Len(t, before.Items, 1)
+	require.Equal(t, new(user.DisplayName), before.Items[0].SubjectDisplayName)
+	require.Equal(t, new(user.PhotoUrl.String), before.Items[0].SubjectPhotoURL)
+	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteUser(ctx, user.ID))
+
+	result, err := ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, session.ID.String(), result.Items[0].ID)
+	require.Nil(t, result.Items[0].SubjectDisplayName)
+	require.Nil(t, result.Items[0].SubjectPhotoURL)
+	for _, search := range []string{user.DisplayName, user.Email} {
+		filtered, err := ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{Search: new(search)})
+		require.NoError(t, err)
+		require.Empty(t, filtered.Items)
 	}
 }
