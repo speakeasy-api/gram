@@ -28,6 +28,8 @@ func TestTruncatedReportsPayloadCaps(t *testing.T) {
 	require.False(t, New(message.User, "", strings.Repeat("x", maxPayloadBodyLen)).Truncated())
 	require.True(t, New(message.User, "", strings.Repeat("x", maxPayloadBodyLen+1)).Truncated())
 	require.True(t, NewForToolCalls([]ToolCall{NewToolCall("bash", strings.Repeat("x", maxPayloadBodyLen+1))}).Truncated())
+	require.True(t, New(message.ToolRequest, strings.Repeat("x", maxPayloadToolIdentityLen+1), "{}").Truncated())
+	require.True(t, NewForToolCalls([]ToolCall{NewToolCall(strings.Repeat("x", maxPayloadToolIdentityLen+1), "{}")}).Truncated())
 }
 
 func TestToolIdentityTruncationIsExplicit(t *testing.T) {

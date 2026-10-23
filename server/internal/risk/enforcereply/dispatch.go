@@ -154,7 +154,7 @@ type DispatcherConfig struct {
 	Flags feature.Provider
 }
 
-// ToolCall is one tool invocation carried to enforcement judge lanes.
+// ToolCall is one tool invocation carried to enforcement model lanes.
 type ToolCall struct {
 	// ID is the harness-assigned tool call id, or a synthetic one when the
 	// harness supplied none.

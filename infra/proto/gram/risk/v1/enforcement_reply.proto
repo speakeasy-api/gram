@@ -56,6 +56,7 @@ message EnforcementReply {
   string policy_id = 7; // Empty except for the judge lane.
   // True when the consumer scanned only a bounded prefix of the request.
   bool content_truncated = 8;
-  // True when the engine did not evaluate the full requested input.
+  // True when an attempted scanner execution did not produce a valid complete
+  // result. Deliberate content bounding is reported by content_truncated.
   bool incomplete = 9;
 }

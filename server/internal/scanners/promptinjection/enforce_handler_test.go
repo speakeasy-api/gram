@@ -178,11 +178,12 @@ func TestEnforceHandlerDropsRequestsOlderThanLaneWait(t *testing.T) {
 	t.Parallel()
 
 	scanner := &capturePromptInjectionScanner{}
+	writer := &captureEnforcementReply{}
 	handler, err := NewEnforceHandler(
 		testenv.NewLogger(t),
 		testenv.NewMeterProvider(t),
 		scanner,
-		&captureEnforcementReply{},
+		writer,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		EnforceHandlerConfig{},
 	)
@@ -199,6 +200,7 @@ func TestEnforceHandlerDropsRequestsOlderThanLaneWait(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	require.Empty(t, scanner.content)
+	require.Nil(t, writer.reply)
 }
 
 func TestNewEnforceHandlerRejectsNilMeterProvider(t *testing.T) {

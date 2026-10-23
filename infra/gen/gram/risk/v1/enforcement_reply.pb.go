@@ -967,7 +967,8 @@ type EnforcementReply_builder struct {
 	PolicyId      *string
 	// True when the consumer scanned only a bounded prefix of the request.
 	ContentTruncated *bool
-	// True when the engine did not evaluate the full requested input.
+	// True when an attempted scanner execution did not produce a valid complete
+	// result. Deliberate content bounding is reported by content_truncated.
 	Incomplete *bool
 }
 

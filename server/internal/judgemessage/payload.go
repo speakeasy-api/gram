@@ -97,14 +97,15 @@ func RenderPayload(m Message) Payload {
 	return renderPayload(m, true)
 }
 
-// Truncated reports whether the judge payload shortens any body or arguments.
+// Truncated reports whether the judge payload shortens any body, arguments, or
+// tool identity.
 func (m Message) Truncated() bool {
 	payload := renderPayload(m, false)
-	if payload.BodyTruncated || payload.ToolCallsTruncated {
+	if payload.BodyTruncated || payload.ToolCallsTruncated || payload.Tool != nil && payload.Tool.IdentityTruncated {
 		return true
 	}
 	for _, call := range payload.ToolCalls {
-		if call.ArgumentsTruncated {
+		if call.ArgumentsTruncated || call.Tool != nil && call.Tool.IdentityTruncated {
 			return true
 		}
 	}

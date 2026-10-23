@@ -627,15 +627,27 @@ async def test_handler_rejects_out_of_range_threshold_without_scanning(
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
 
 
-async def test_handler_rejects_oversized_entity_selection_without_scanning():
+async def test_handler_rejects_oversized_entity_selection_without_scanning(
+    monkeypatch: pytest.MonkeyPatch,
+):
     client = fakeredis.aioredis.FakeRedis()
     scanner = FakeScanner()
-    message = _message()
+    truncations: list[int] = []
+
+    class TruncationCounter:
+        def add(self, value: int, attributes: dict[str, str]) -> None:
+            truncations.append(value)
+
+    monkeypatch.setattr(
+        enforce_handler_mod, "_content_truncations", TruncationCounter()
+    )
+    message = _message(content="a" * (MAX_CONTENT_BYTES + 1))
     message.entities.extend(
         f"ENTITY_{n}" for n in range(enforce_handler_mod.MAX_REQUESTED_ENTITIES + 1)
     )
     await _handler(scanner, client).handle(message, _meta())
     assert scanner.calls == []
+    assert truncations == []
     reply = await _read_reply(client)
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
 

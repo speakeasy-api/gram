@@ -186,11 +186,10 @@ class PresidioEnforceHandler:
         scan_started_at: datetime | None = None
         scan_completed = False
         encoded_content = message.content.encode()
-        content_truncated = message.content_truncated
-        if len(encoded_content) > MAX_CONTENT_BYTES:
+        content_cut = len(encoded_content) > MAX_CONTENT_BYTES
+        content_truncated = message.content_truncated or content_cut
+        if content_cut:
             content = encoded_content[:MAX_CONTENT_BYTES].decode(errors="ignore")
-            content_truncated = True
-            _content_truncations.add(1, {"gram.risk.enforcement.scanner": "presidio"})
         else:
             content = message.content
         if len(message.entities) > MAX_REQUESTED_ENTITIES:
@@ -206,6 +205,10 @@ class PresidioEnforceHandler:
                 score_threshold = message.score_threshold
             else:
                 score_threshold = DEFAULT_SCORE_THRESHOLD
+            if content_cut:
+                _content_truncations.add(
+                    1, {"gram.risk.enforcement.scanner": "presidio"}
+                )
             try:
                 scan_started_at = datetime.now(UTC)
                 detections = await self._scanner.scan(

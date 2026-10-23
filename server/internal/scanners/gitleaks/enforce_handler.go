@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
-	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	enforce "github.com/speakeasy-api/gram/server/internal/scanners/enforcement"
@@ -28,7 +27,6 @@ const (
 	DefaultMaxRequestAge = 30 * time.Second
 	// DefaultEnforcementMaxContentBytes matches the published content budget.
 	DefaultEnforcementMaxContentBytes = 1 * 1024 * 1024
-	maxReplyReasonRunes               = 256
 )
 
 // FingerprintFinding returns a canonically encoded, tenant-scoped fingerprint.
@@ -108,28 +106,14 @@ func NewEnforceHandler(
 // Handle ACKs completed and stale scans. Malformed requests return an error so
 // the restricted forensic DLQ retains evidence that could not be interpreted.
 func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforcement, meta gcp.MessageMetadata) error {
-	createdAt, err := time.Parse(time.RFC3339Nano, m.GetCreatedAt())
+	replyURN := enforce.ReplyURN(meta.Attributes)
+	correlationID, stale, err := enforce.ValidateRequest(enforce.Request{
+		CreatedAt: m.GetCreatedAt(), OrganizationID: m.GetOrganizationId(), ProjectID: m.GetProjectId(), ReplyURN: replyURN, MaxRequestAge: h.maxRequestAge,
+	})
 	if err != nil {
-		return fmt.Errorf("parse enforcement created_at: %w", err)
+		return fmt.Errorf("validate gitleaks enforcement request: %w", err)
 	}
-	if m.GetOrganizationId() == "" {
-		return errors.New("enforcement organization id is required")
-	}
-	if m.GetProjectId() == "" {
-		return errors.New("enforcement project id is required")
-	}
-	replyURN := meta.Attributes[requestreply.ReplyURNAttribute]
-	if replyURN == "" {
-		return errors.New("enforcement reply urn attribute is required")
-	}
-	_, correlationID, err := enforcereply.ParseReplyURN(replyURN)
-	if err != nil {
-		return fmt.Errorf("parse enforcement reply urn: %w", err)
-	}
-	// Structural validation first: a stale AND malformed request belongs in the
-	// forensic DLQ, not in a silent drop. Symmetric window: a far-future stamp
-	// is as suspect as a stale one.
-	if age := time.Since(createdAt); age > h.maxRequestAge || age < -h.maxRequestAge {
+	if stale {
 		h.metrics.staleDropped.Add(ctx, 1)
 		return nil
 	}
@@ -184,7 +168,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 		CorrelationId: new(correlationID),
 		Scanner:       new(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS),
 		Status:        new(status),
-		Reason:        new(conv.TruncateString(reason, maxReplyReasonRunes)),
+		Reason:        new(conv.TruncateString(reason, enforce.MaxReplyReasonRunes)),
 		Findings:      replyFindings,
 		Diagnostics: riskv1.EnforcementDiagnostics_builder{
 			ScanDurationMs:  new(time.Since(started).Milliseconds()),

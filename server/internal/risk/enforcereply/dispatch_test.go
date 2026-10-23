@@ -801,18 +801,23 @@ func TestDispatchDoesNotSpendBudgetTwiceOnDuplicateBody(t *testing.T) {
 	te := setupInboxTest(t, "replica-dispatch-duplicate-body")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{
+		WaitTimeout:     time.Second,
+		LaneWaitTimeout: nil,
+		Flags:           contentLimitFlags(t, 100*1024),
+	})
 
 	text := strings.Repeat("x", 60*1024)
 	request := llmDispatchRequest([]Lane{llmLane}, testOrigins(llmLane))
 	request.Content = text
 	request.Body = text
 
-	_, err := dispatcher.Dispatch(t.Context(), request)
+	outcome, err := dispatcher.Dispatch(t.Context(), request)
 	require.NoError(t, err)
+	require.False(t, outcome.Truncated)
 	require.Len(t, llmPub.messages, 1)
-	require.NotEmpty(t, llmPub.messages[0].GetContent())
-	require.Equal(t, llmPub.messages[0].GetContent(), llmPub.messages[0].GetBody())
+	require.Equal(t, text, llmPub.messages[0].GetContent())
+	require.Equal(t, text, llmPub.messages[0].GetBody())
 }
 
 func TestDispatchDoesNotSpendBudgetTwiceOnDuplicateToolArguments(t *testing.T) {

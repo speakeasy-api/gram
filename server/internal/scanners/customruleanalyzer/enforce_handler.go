@@ -29,7 +29,7 @@ const (
 )
 
 type enforcementScanner interface {
-	Scan(context.Context, ScanRequest) (scanners.Result, error)
+	ScanForEnforcement(context.Context, ScanRequest) (result scanners.Result, evaluated bool, err error)
 }
 
 // EnforceHandlerConfig controls realtime custom-rule request bounds.
@@ -119,7 +119,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.CustomRulesEnforc
 	}
 
 	started := time.Now().UTC()
-	result, scanErr := h.scanner.Scan(ctx, ScanRequest{
+	result, evaluated, scanErr := h.scanner.ScanForEnforcement(ctx, ScanRequest{
 		ProjectID: projectID, CustomRuleIDs: m.GetCustomRuleIds(), Content: content, Kind: m.GetMessageType(), ToolCalls: toolCalls,
 	})
 	status := riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK
@@ -141,7 +141,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.CustomRulesEnforc
 		}.Build(),
 		PolicyId:         new(""),
 		ContentTruncated: new(truncated),
-		Incomplete:       new(scanErr != nil || !result.Completed),
+		Incomplete:       new(scanErr != nil || (evaluated && !result.Completed)),
 	}.Build()
 	if replyErr := h.writer.Reply(ctx, replyURN, reply); replyErr != nil {
 		h.logger.ErrorContext(ctx, "write custom rules enforcement reply; acknowledging request", attr.SlogError(replyErr))

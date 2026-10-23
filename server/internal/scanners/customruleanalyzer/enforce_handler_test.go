@@ -27,11 +27,15 @@ func (w *captureEnforcementReply) Reply(_ context.Context, _ string, reply *risk
 
 type captureCustomRulesScanner struct {
 	request ScanRequest
+	skip    bool
 }
 
-func (s *captureCustomRulesScanner) Scan(_ context.Context, request ScanRequest) (scanners.Result, error) {
+func (s *captureCustomRulesScanner) ScanForEnforcement(_ context.Context, request ScanRequest) (scanners.Result, bool, error) {
 	s.request = request
-	return scanners.Result{Completed: true}, nil
+	if s.skip {
+		return scanners.Result{}, false, nil
+	}
+	return scanners.Result{Completed: true}, true, nil
 }
 
 func TestEnforceHandlerSharesEngineBudgetAcrossContentAndArguments(t *testing.T) {
@@ -71,15 +75,45 @@ func TestEnforceHandlerSharesEngineBudgetAcrossContentAndArguments(t *testing.T)
 	require.False(t, writer.reply.GetIncomplete())
 }
 
-func TestEnforceHandlerDropsRequestsOlderThanLaneWait(t *testing.T) {
+func TestEnforceHandlerDoesNotReportSkippedRulesAsIncomplete(t *testing.T) {
 	t.Parallel()
 
-	scanner := &captureCustomRulesScanner{}
+	scanner := &captureCustomRulesScanner{skip: true}
+	writer := &captureEnforcementReply{}
 	handler, err := NewEnforceHandler(
 		testenv.NewLogger(t),
 		testenv.NewMeterProvider(t),
 		scanner,
-		&captureEnforcementReply{},
+		writer,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		EnforceHandlerConfig{},
+	)
+	require.NoError(t, err)
+
+	err = handler.Handle(t.Context(), riskv1.CustomRulesEnforcement_builder{
+		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
+		OrganizationId: new("org-test"),
+		ProjectId:      new("0198f1f4-0000-7000-8000-000000000001"),
+		Content:        new("nothing to evaluate"),
+		MessageType:    new("user"),
+	}.Build(), gcp.MessageMetadata{Attributes: map[string]string{
+		requestreply.ReplyURNAttribute: "urn:gram:risk:enforce:replica-test:0198f1f4-0000-7000-8000-000000000002",
+	}})
+	require.NoError(t, err)
+	require.NotNil(t, writer.reply)
+	require.False(t, writer.reply.GetIncomplete())
+}
+
+func TestEnforceHandlerDropsRequestsOlderThanLaneWait(t *testing.T) {
+	t.Parallel()
+
+	scanner := &captureCustomRulesScanner{}
+	writer := &captureEnforcementReply{}
+	handler, err := NewEnforceHandler(
+		testenv.NewLogger(t),
+		testenv.NewMeterProvider(t),
+		scanner,
+		writer,
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		EnforceHandlerConfig{},
 	)
@@ -96,4 +130,5 @@ func TestEnforceHandlerDropsRequestsOlderThanLaneWait(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	require.Zero(t, scanner.request)
+	require.Nil(t, writer.reply)
 }
