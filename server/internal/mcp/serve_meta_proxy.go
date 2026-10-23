@@ -150,10 +150,11 @@ type memberCredentialError struct{ *metaMemberError }
 func (e memberCredentialError) Unwrap() error { return e.metaMemberError }
 
 // memberUnansweredError is a member failure that leaves its tools unknown
-// because the upstream did not answer successfully: a timeout, transport
-// failure, failed HTTP status such as a rate limit, JSON-RPC error, or a
-// response the meta MCP cannot accept. It is distinct from a failure that
-// excludes the member, such as a missing or rejected credential.
+// because discovery or credential resolution failed: an upstream timeout,
+// transport failure, failed HTTP status such as a rate limit, JSON-RPC error,
+// or a response the meta MCP cannot accept, or credentials or connection
+// state that could not be loaded right now. It is distinct from a failure
+// that excludes the member, such as a missing or rejected credential.
 type memberUnansweredError struct{ *metaMemberError }
 
 func (e memberUnansweredError) Unwrap() error { return e.metaMemberError }
