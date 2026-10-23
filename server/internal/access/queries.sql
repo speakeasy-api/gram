@@ -1114,6 +1114,34 @@ SELECT project_id FROM (
 ) AS owning
 LIMIT 1;
 
+-- name: FindMCPResourceProjects :many
+-- FindMCPResourceProject for many resources at once; unknown ids are absent.
+SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (
+  SELECT toolsets.id AS resource_id, toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = @organization_id
+    AND toolsets.id = ANY(sqlc.arg(resource_ids)::uuid[])
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.id AS resource_id, mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND mcp_servers.id = ANY(sqlc.arg(resource_ids)::uuid[])
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.id AS resource_id, meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = @organization_id
+    AND meta_mcp_servers.id = ANY(sqlc.arg(resource_ids)::uuid[])
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning;
+
 -- name: FindMCPResourceVisibility :one
 -- Resolves who may connect to one MCP resource without an access rule, as the
 -- same three-valued visibility mcp_servers stores: 'public' endpoints skip the

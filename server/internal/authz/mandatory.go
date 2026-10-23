@@ -102,6 +102,10 @@ func (m MandatoryAuthorization) OrganizationID() string { return m.organizationI
 // enforcement uses. Callers that represent no user return "".
 func (m MandatoryAuthorization) RepresentedUserID() string { return m.authorization.representedUser }
 
+// LegacyAuthCeiling reports whether admission derived the caller's auth
+// client ceiling from server access in a pre-version-5 stored policy.
+func (m MandatoryAuthorization) LegacyAuthCeiling() bool { return m.authorization.legacyAuthCeiling }
+
 // AuthorizeMandatory evaluates server access and auth client checks for any
 // authenticated caller in its own organization, including those Require
 // skips, such as legacy API keys and sessionless callers. It never reads a
@@ -128,7 +132,7 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		principalID:     "",
 		source:          MandatoryPolicySourceNone,
 		decided:         nil,
-		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil},
+		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil, legacyAuthCeiling: false},
 		key:             nil,
 		narrowedProject: nil,
 	}

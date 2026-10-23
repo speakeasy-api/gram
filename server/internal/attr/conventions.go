@@ -71,6 +71,8 @@ const (
 	MandatoryAuthzPrincipalIDKey = attribute.Key("gram.authz.mandatory.principal_id")
 	// MandatoryAuthzLegacyAllowedKey is whether today's decision allowed the request.
 	MandatoryAuthzLegacyAllowedKey = attribute.Key("gram.authz.mandatory.legacy_allowed")
+	// MandatoryAuthzLegacyAuthCeilingKey is whether admission derived the caller's auth client ceiling from server access in a pre-version-5 stored policy.
+	MandatoryAuthzLegacyAuthCeilingKey = attribute.Key("gram.authz.mandatory.legacy_auth_ceiling")
 	// MandatoryAuthzOutcomeKey is the mandatory check's outcome: allow, deny, or error.
 	MandatoryAuthzOutcomeKey = attribute.Key("gram.authz.mandatory.outcome")
 	// MandatoryAuthzSourceKey is the policy the mandatory check evaluated.
@@ -1216,6 +1218,12 @@ func MandatoryAuthzLegacyAllowed(v bool) attribute.KeyValue {
 }
 func SlogMandatoryAuthzLegacyAllowed(v bool) slog.Attr {
 	return slog.Bool(string(MandatoryAuthzLegacyAllowedKey), v)
+}
+func MandatoryAuthzLegacyAuthCeiling(v bool) attribute.KeyValue {
+	return MandatoryAuthzLegacyAuthCeilingKey.Bool(v)
+}
+func SlogMandatoryAuthzLegacyAuthCeiling(v bool) slog.Attr {
+	return slog.Bool(string(MandatoryAuthzLegacyAuthCeilingKey), v)
 }
 func MandatoryAuthzOutcome(v string) attribute.KeyValue { return MandatoryAuthzOutcomeKey.String(v) }
 func SlogMandatoryAuthzOutcome(v string) slog.Attr {

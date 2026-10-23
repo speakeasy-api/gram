@@ -340,6 +340,65 @@ func (q *Queries) FindMCPResourceProject(ctx context.Context, arg FindMCPResourc
 	return project_id, err
 }
 
+const findMCPResourceProjects = `-- name: FindMCPResourceProjects :many
+SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (
+  SELECT toolsets.id AS resource_id, toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = $1
+    AND toolsets.id = ANY($2::uuid[])
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.id AS resource_id, mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = ANY($2::uuid[])
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.id AS resource_id, meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND meta_mcp_servers.id = ANY($2::uuid[])
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+`
+
+type FindMCPResourceProjectsParams struct {
+	OrganizationID string
+	ResourceIds    []uuid.UUID
+}
+
+type FindMCPResourceProjectsRow struct {
+	ResourceID uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// FindMCPResourceProject for many resources at once; unknown ids are absent.
+func (q *Queries) FindMCPResourceProjects(ctx context.Context, arg FindMCPResourceProjectsParams) ([]FindMCPResourceProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findMCPResourceProjects, arg.OrganizationID, arg.ResourceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindMCPResourceProjectsRow
+	for rows.Next() {
+		var i FindMCPResourceProjectsRow
+		if err := rows.Scan(&i.ResourceID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findMCPResourceVisibility = `-- name: FindMCPResourceVisibility :one
 SELECT resource_type, visibility FROM (
   SELECT
