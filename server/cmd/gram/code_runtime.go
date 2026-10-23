@@ -27,11 +27,14 @@ func newCodeExecutor(c *cli.Context, logger *slog.Logger, policy *guardian.Polic
 	case "", "disabled":
 		return codemode.Disabled{}, nil
 	case "local":
+		limits, err := codeRuntimeLimits(c)
+		if err != nil {
+			return nil, err
+		}
 		provider, err := newLocalCodeProvider(c, policy)
 		if err != nil {
 			return nil, err
 		}
-		limits := codeRuntimeLimits(c)
 		if limits.OrganizationExecutions == 0 {
 			// One local runner serves every organization.
 			limits.OrganizationExecutions = codemode.RunnerStreams
@@ -43,11 +46,14 @@ func newCodeExecutor(c *cli.Context, logger *slog.Logger, policy *guardian.Polic
 		}
 		return coordinator, nil
 	case "gke":
+		limits, err := codeRuntimeLimits(c)
+		if err != nil {
+			return nil, err
+		}
 		provider, err := newGKECodeProvider(c, logger, policy)
 		if err != nil {
 			return nil, err
 		}
-		limits := codeRuntimeLimits(c)
 		if limits.OrganizationExecutions == 0 {
 			// An organization can run as many executions as its pods hold.
 			limits.OrganizationExecutions = c.Int("code-runtime-max-organization-runners") * codemode.RunnerStreams
@@ -64,13 +70,21 @@ func newCodeExecutor(c *cli.Context, logger *slog.Logger, policy *guardian.Polic
 }
 
 // codeRuntimeLimits reads the per-replica execution limits; zero values use
-// the coordinator's defaults.
-func codeRuntimeLimits(c *cli.Context) codemode.Limits {
-	return codemode.Limits{
+// the coordinator's defaults. Admission counts toward the execution wall
+// time, so a wait that long would leave no time to run.
+func codeRuntimeLimits(c *cli.Context) (codemode.Limits, error) {
+	limits := codemode.Limits{
 		OrganizationExecutions: c.Int("code-runtime-max-organization-executions"),
 		CallerExecutions:       c.Int("code-runtime-max-caller-executions"),
 		AdmissionWait:          c.Duration("code-runtime-admission-wait"),
 	}
+	if limits.OrganizationExecutions < 0 || limits.CallerExecutions < 0 {
+		return codemode.Limits{}, fmt.Errorf("code runtime execution limits must not be negative")
+	}
+	if limits.AdmissionWait < 0 || limits.AdmissionWait >= codemode.MaxWallTime {
+		return codemode.Limits{}, fmt.Errorf("code runtime admission wait must be at least zero and shorter than %s", codemode.MaxWallTime)
+	}
+	return limits, nil
 }
 
 func newLocalCodeProvider(c *cli.Context, policy *guardian.Policy) (*codemode.StaticProvider, error) {

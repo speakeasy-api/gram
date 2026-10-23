@@ -6,6 +6,7 @@ import (
 	"flag"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/stretchr/testify/require"
@@ -40,6 +41,36 @@ func TestCodeRuntimePreviewTokenMustBeSeparate(t *testing.T) {
 			} else {
 				require.Equal(t, strings.Repeat("d", 32), token)
 			}
+		})
+	}
+}
+
+func TestCodeRuntimeLimitsRejectInvalidValues(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name         string
+		organization int
+		caller       int
+		wait         time.Duration
+		allowed      bool
+	}{
+		{"defaults", 0, 0, 0, true}, {"configured", 8, 2, time.Second, true},
+		{"negative-organization", -1, 0, 0, false}, {"negative-caller", 0, -1, 0, false},
+		{"negative-wait", 0, 0, -time.Second, false}, {"wait-covers-wall-time", 0, 0, codemode.MaxWallTime, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			flags := flag.NewFlagSet("code", flag.ContinueOnError)
+			flags.Int("code-runtime-max-organization-executions", tc.organization, "")
+			flags.Int("code-runtime-max-caller-executions", tc.caller, "")
+			flags.Duration("code-runtime-admission-wait", tc.wait, "")
+			limits, err := codeRuntimeLimits(cli.NewContext(cli.NewApp(), flags, nil))
+			if !tc.allowed {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, codemode.Limits{OrganizationExecutions: tc.organization, CallerExecutions: tc.caller, AdmissionWait: tc.wait}, limits)
 		})
 	}
 }
