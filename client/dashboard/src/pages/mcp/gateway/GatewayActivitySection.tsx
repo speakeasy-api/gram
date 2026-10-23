@@ -30,6 +30,7 @@ import {
 } from "./gatewayActivity";
 import type { MemberRow } from "./memberRows";
 import { MetaToolUsageChart } from "./MetaToolUsageChart";
+import { GatewayDiscoveryFailures } from "./GatewayDiscoveryFailures";
 
 function errorRate(summary: ObservabilitySummary): number {
   return summary.totalToolCalls > 0
@@ -258,6 +259,11 @@ export function GatewayActivitySection({
           </div>
         ) : (
           <div className="@container flex flex-col gap-6">
+            <GatewayDiscoveryFailures
+              metaMcpServerId={metaMcpServerId}
+              from={from}
+              to={to}
+            />
             {overviewFailed ? (
               <LoadError what="usage metrics" />
             ) : (

@@ -395,7 +395,7 @@ func (s *Service) describeMemberToolset(
 	if gate.authenticated && !toolset.McpIsPublic {
 		allowed, err := filterToolsByMCPConnect(ctx, logger, s.authz, toolset.ID.String(), toolset.ProjectID.String(), slices.Collect(maps.Values(catalog.byName)))
 		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug)}}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 		}
 		if err != nil {
 			return nil, err
