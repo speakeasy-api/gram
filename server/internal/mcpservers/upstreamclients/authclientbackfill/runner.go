@@ -909,7 +909,8 @@ func decideAndWrite(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, ro
 	}
 	result.AuthClientID = uuid.NullUUID{UUID: authClientID, Valid: true}
 
-	if row.LinkLive {
+	// An administrator's detach is durable: never relink the server.
+	if row.LinkLive || row.LinkDetached {
 		return result, nil
 	}
 	if result.Outcome == OutcomeExisting {

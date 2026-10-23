@@ -9,7 +9,9 @@
 -- client in the association's organization, auth_client_type its type and
 -- auth_client_project_id its project; the nil UUID and empty when none is.
 -- Admin-created clients are never treated as existing. link_live reports that
--- the server already offers that auth client.
+-- the server already offers that auth client; link_detached that an
+-- administrator detached the client's backfilled auth client from the server,
+-- so the backfill must not link it again.
 SELECT a.id AS association_id,
        a.project_id,
        a.organization_id,
@@ -28,7 +30,21 @@ SELECT a.id AS association_id,
            AND link.auth_client_id = existing.id
            AND link.organization_id = a.organization_id
            AND link.deleted IS FALSE
-       ))::boolean AS link_live
+       ))::boolean AS link_live,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS detached
+         JOIN mcp_auth_clients AS dac
+           ON dac.id = detached.auth_client_id
+          AND dac.organization_id = detached.organization_id
+          AND dac.remote_session_client_id = c.id
+          AND dac.client_type IN ('remote_session', 'service_account')
+          AND dac.source = 'backfill'
+         WHERE detached.mcp_server_id = a.mcp_server_id
+           AND detached.organization_id = a.organization_id
+           AND detached.source = 'admin'
+           AND detached.deleted IS TRUE
+       )::boolean AS link_detached
 FROM mcp_server_remote_session_clients AS a
 JOIN projects AS p
   ON p.id = a.project_id
@@ -160,6 +176,16 @@ WHERE a.id = @association_id::uuid
     WHERE link.mcp_server_id = a.mcp_server_id
       AND link.auth_client_id = ac.id
       AND link.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    -- An administrator detached this client from this server: the backfill
+    -- never links it again.
+    SELECT 1
+    FROM mcp_server_auth_clients AS detached
+    WHERE detached.mcp_server_id = a.mcp_server_id
+      AND detached.auth_client_id = ac.id
+      AND detached.source = 'admin'
+      AND detached.deleted IS TRUE
   )
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING;
 
@@ -776,6 +802,16 @@ WHERE s.id = @mcp_server_id::uuid
           AND ec.deleted IS FALSE
          WHERE el.mcp_server_id = s.id AND el.organization_id = p.organization_id AND el.deleted IS FALSE
        )))
+  AND NOT EXISTS (
+    -- An administrator detached this client from this server: the backfill
+    -- never links it again.
+    SELECT 1
+    FROM mcp_server_auth_clients AS detached
+    WHERE detached.mcp_server_id = s.id
+      AND detached.auth_client_id = ac.id
+      AND detached.source = 'admin'
+      AND detached.deleted IS TRUE
+  )
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: ListEMAClientLiveServers :many
@@ -1223,18 +1259,29 @@ WHERE s.id = @mcp_server_id::uuid
             AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
       )
   )
+  AND NOT EXISTS (
+    -- An administrator detached this client from this server: the backfill
+    -- never links it again.
+    SELECT 1
+    FROM mcp_server_auth_clients AS detached
+    WHERE detached.mcp_server_id = s.id
+      AND detached.auth_client_id = ac.id
+      AND detached.source = 'admin'
+      AND detached.deleted IS TRUE
+  )
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: IsServerLinked :one
--- Whether a server already offers an auth client.
+-- Whether a server already offers an auth client, or an administrator
+-- detached it from the server so the backfill must not link it again.
 SELECT EXISTS (
   SELECT 1
   FROM mcp_server_auth_clients AS link
   WHERE link.mcp_server_id = @mcp_server_id::uuid
     AND link.auth_client_id = @auth_client_id::uuid
     AND link.organization_id = @organization_id::text
-    AND link.source = 'backfill'
-    AND link.deleted IS FALSE
+    AND ((link.source = 'backfill' AND link.deleted IS FALSE)
+         OR (link.source = 'admin' AND link.deleted IS TRUE))
 )::boolean AS linked;
 
 -- name: ListBackfillClientsOfTypes :many

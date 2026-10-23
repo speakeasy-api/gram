@@ -15,7 +15,8 @@ import (
 const detachAuthClientFromServer = `-- name: DetachAuthClientFromServer :one
 UPDATE mcp_server_auth_clients msac
 SET deleted_at = clock_timestamp(),
-    updated_at = clock_timestamp()
+    updated_at = clock_timestamp(),
+    source = 'admin'
 FROM mcp_servers ms
 WHERE msac.auth_client_id = $1
   AND msac.mcp_server_id = $2
@@ -38,6 +39,12 @@ type DetachAuthClientFromServerRow struct {
 	McpServerName pgtype.Text
 }
 
+// Soft-deletes the live link and marks it administrator-owned (source
+// 'admin'). That deleted admin row is a durable detach: the backfill never
+// relinks the pair from the configuration it derived the link from, while its
+// own retirements stay source 'backfill' and are relinked if their evidence
+// returns. The upstream configuration and the client's other links are
+// untouched.
 func (q *Queries) DetachAuthClientFromServer(ctx context.Context, arg DetachAuthClientFromServerParams) (DetachAuthClientFromServerRow, error) {
 	row := q.db.QueryRow(ctx, detachAuthClientFromServer, arg.AuthClientID, arg.McpServerID, arg.OrganizationID)
 	var i DetachAuthClientFromServerRow
