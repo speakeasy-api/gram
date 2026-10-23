@@ -53,6 +53,27 @@ func (q *Queries) CountVisitorEMABindingsWithoutAttachment(ctx context.Context, 
 	return count, err
 }
 
+const detachBuiltinSlackSettings = `-- name: DetachBuiltinSlackSettings :execrows
+UPDATE builtin_mcp_settings
+SET project_id = NULL, user_session_issuer_id = NULL
+WHERE project_id = $1::uuid AND builtin_key = 'slack'
+  AND project_id IN (SELECT id FROM projects WHERE organization_id = $2::text)
+`
+
+type DetachBuiltinSlackSettingsParams struct {
+	ProjectID pgtype.UUID
+	OrgID     string
+}
+
+// Reproduce the SET NULL state left by deleting the owning project and issuer.
+func (q *Queries) DetachBuiltinSlackSettings(ctx context.Context, arg DetachBuiltinSlackSettingsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, detachBuiltinSlackSettings, arg.ProjectID, arg.OrgID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getVisitorEMAFixtureParents = `-- name: GetVisitorEMAFixtureParents :one
 SELECT c.id AS client_id, c.remote_session_issuer_id, u.id AS user_session_issuer_id
 FROM remote_session_clients c

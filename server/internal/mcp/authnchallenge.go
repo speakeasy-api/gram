@@ -1054,6 +1054,17 @@ func (s *Service) authenticateIssuerGate(
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
 ) (context.Context, *issuerGateAuthentication, *toolfilter.SessionPolicy, error) {
+	// The gram.mcp.url value for a rejection, rebuilt from the resolved
+	// endpoint rather than taken from the request. The post-authentication
+	// metrics use the raw request URL, query string included; here the caller
+	// is unauthenticated, and a query string any caller can vary freely would
+	// let them mint metric series. The two agree for every query-less request.
+	host := ""
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		host = requestContext.Host
+	}
+	mcpURL := host + "/" + endpoint.RouteBase.String() + "/" + endpoint.Slug
+
 	// Without an authorization server, existing machine credentials still work.
 	// Do not advertise OAuth or validate sessions against an invented issuer.
 	if endpoint.IsBuiltin() && endpoint.UserSessionIssuerID == uuid.Nil {
@@ -1069,8 +1080,11 @@ func (s *Service) authenticateIssuerGate(
 			err = oops.C(oops.CodeUnauthorized)
 		}
 		if err != nil {
-			root, _ := endpoint.RootURL(baseURL)
-			s.metrics.RecordMCPRequestRejected(ctx, issuerGateFailureReason(err), root, mcpmetrics.SurfacePlatform)
+			reason := issuerGateReasonNoCredentials
+			if authToken != "" {
+				reason = issuerGateFailureReason(err)
+			}
+			s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, mcpmetrics.SurfacePlatform)
 			return ctx, nil, nil, err
 		}
 		return next, &issuerGateAuthentication{endpoint: endpoint, protectedResourceURL: "", mcpURL: "", subject: *subject, surface: mcpmetrics.SurfacePlatform, refreshableUserSession: false, chosenClient: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, chosenNoAuth: false, authClient: nil}, nil, nil
@@ -1080,16 +1094,6 @@ func (s *Service) authenticateIssuerGate(
 		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
 	}
 
-	// The gram.mcp.url value for a rejection, rebuilt from the resolved
-	// endpoint rather than taken from the request. The post-authentication
-	// metrics use the raw request URL, query string included; here the caller
-	// is unauthenticated, and a query string any caller can vary freely would
-	// let them mint metric series. The two agree for every query-less request.
-	host := ""
-	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
-		host = requestContext.Host
-	}
-	mcpURL := host + "/" + endpoint.RouteBase.String() + "/" + endpoint.Slug
 	surface := mcpmetrics.SurfaceHosting
 	if endpoint.IsBuiltin() {
 		surface = mcpmetrics.SurfacePlatform

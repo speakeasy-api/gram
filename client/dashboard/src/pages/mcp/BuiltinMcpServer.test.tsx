@@ -38,7 +38,7 @@ vi.mock("@/components/mcp/useBuiltinMcpServers", () => ({
           description: "Send messages in your Slack workspace.",
           hidden: true,
           version: "4",
-          url: "https://api.example.test/mcp/builtin/acme/project-one/slack",
+          url: "https://edge.example.test/returned/slack-endpoint",
           tools: [
             {
               name: "slack_send_message",
@@ -253,7 +253,7 @@ it("leads with connecting an agent and with what is missing before it can work",
   // The address is handed over ready to paste, not as a bare line to retype.
   expect(
     screen.getByText(
-      /https:\/\/api\.example\.test\/mcp\/builtin\/acme\/project-one\/slack[\s\S]*Authorization: Bearer \$SPEAKEASY_AGENT_KEY/,
+      /https:\/\/edge\.example\.test\/returned\/slack-endpoint[\s\S]*Authorization: Bearer \$SPEAKEASY_AGENT_KEY/,
     ),
   ).toBeTruthy();
   // The one thing standing between the server and a working call, with a way
@@ -368,9 +368,11 @@ it("scopes the connect recipe to a direct connection and claims no stable addres
 it("serves the endpoint the API returned rather than composing one", () => {
   render(<BuiltinMcpServerPage />);
   const snippet = screen.getByText(
-    /https:\/\/api\.example\.test\/mcp\/builtin\/acme\/project-one\/slack/,
+    /https:\/\/edge\.example\.test\/returned\/slack-endpoint/,
   );
-  expect(snippet).toBeTruthy();
+  expect(snippet.textContent).toContain(
+    "https://edge.example.test/returned/slack-endpoint",
+  );
   // The synthetic id is internal; it never reaches a connection recipe.
   expect(screen.queryByText(/[0-9a-f]{8}-[0-9a-f]{4}-/i)).toBeNull();
 });

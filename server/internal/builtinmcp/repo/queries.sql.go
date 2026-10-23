@@ -179,6 +179,12 @@ SELECT issuer.id
 FROM user_session_issuers AS issuer
 LEFT JOIN projects AS project ON project.id = issuer.project_id
 WHERE issuer.id = $1 AND issuer.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM projects AS target_project
+    WHERE target_project.id = $2::uuid
+      AND target_project.organization_id = $3::text
+      AND target_project.deleted IS FALSE
+  )
   AND (issuer.project_id IS NULL OR issuer.project_id = $2::uuid)
   AND COALESCE(issuer.organization_id, project.organization_id) = $3::text
 FOR SHARE OF issuer

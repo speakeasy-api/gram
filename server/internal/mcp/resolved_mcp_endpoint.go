@@ -314,7 +314,7 @@ func (e *ResolvedMcpEndpoint) IDPCallbackURL(baseURL string) (string, error) {
 func (e *ResolvedMcpEndpoint) LogWith(logger *slog.Logger) *slog.Logger {
 	args := []any{attr.SlogProjectID(e.ProjectID.String())}
 	if e.BuiltinID.Valid {
-		args = append(args, attr.SlogMcpServerID(e.BuiltinID.UUID.String()))
+		args = append(args, attr.SlogBuiltinMcpServerID(e.BuiltinID.UUID.String()))
 	}
 	if e.ToolsetID.Valid {
 		args = append(args, attr.SlogToolsetID(e.ToolsetID.UUID.String()))

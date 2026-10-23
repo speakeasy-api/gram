@@ -387,6 +387,8 @@ Denying consent retires unadopted identity-provider credentials for the same iss
 
 ### Built-in Slack inbound authentication
 
+Verification: [Built-in Slack inbound authentication](verify.md#built-in-slack-inbound-authentication).
+
 `[~]` The built-in Slack settings have one project-scoped inbound user session
 issuer binding, referencing the existing project-owned `slack` issuer with
 `user_session_issuer_bound = true`. This is separate from the seeded remote Slack
@@ -395,4 +397,6 @@ credentials. Open the built-in Slack authentication settings and verify the
 inbound issuer is selected. Reseed twice and verify the selection remains; the
 postflight checks exactly one binding to the expected project/org issuer.
 Cleanup removes settings across the seeded organization's projects before
-issuers or projects are deleted, avoiding detached preferences on a rerun.
+issuers or projects are deleted. If a previous project deletion already detached
+the deterministic Slack preference, cleanup also recovers that specific
+Spec-derived row without deleting other tenants' detached preferences.

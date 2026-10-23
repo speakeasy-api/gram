@@ -642,3 +642,29 @@ In shared Explore Demo, verify the mapping dialog shows its read-only notice and
 ## Tunnel observability
 
 Open MCP Servers → Private inventory → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, and the current agent count is zero. The marketplace callout appears above the tunnel status, which reads "No connected tunnel agents" with a View tunnel agent setup action. The sidebar Readiness card does not call the server ready: its Tunnel agent item says no tunnel agent is connected and links to tunnel agent setup. Check 1 hour / 24 hours / 7 days, the Requests by client list, and the data table under About these numbers. The synthetic source must not initiate any network connection.
+
+## Built-in Slack inbound authentication
+
+1. In the writable local organization, run `mise run seed`. Open the seeded
+   project's **MCP Servers** list and choose the **built-in Slack** entry, not
+   the separate remote Slack fixture. Open **Authentication** (project-relative
+   route `/mcp/builtin/slack/authentication`).
+2. In **Inbound OAuth**, confirm **Bound authorization server: slack** and the
+   **OAuth authorization server** selector shows **slack (Project)**. It must
+   not show **Automatic**, **Current binding unavailable**, or a loading/error
+   warning. Do not save or connect to Slack: the seed contains no usable Slack
+   credentials, and upstream authentication is a separate setting.
+3. Reload the page and confirm the same bound issuer remains. Run
+   `mise run seed` again, reload, and confirm the same result. Both seed runs
+   must complete their binding postflight without a duplicate-key error.
+4. Check the browser console and requests for errors. Repeat the read-only
+   display checks in the demo organization after its scheduled/admin reseed;
+   do not mutate the shared demo binding. Mark the linked PAGES.md item `[x]`
+   only after these browser checks pass and record the verification evidence.
+
+For the detached-preference regression, run
+`mise run test:server -tags=demoseed_safety ./internal/demoseed/ -run '^TestBuiltinSlackSettingsReseedAfterProjectDetach$'`.
+It clears the seeded preference's project/issuer references, matching their
+`ON DELETE SET NULL` state, and reseeds twice for both default and local Specs.
+Each reseed must restore the binding while preserving another tenant's detached
+preference unchanged. This database check does not replace browser verification.

@@ -91,11 +91,19 @@ func (q *Queries) OrgDeleteAssistantMCPServers(ctx context.Context, orgID string
 const orgDeleteBuiltinMCPSettings = `-- name: OrgDeleteBuiltinMCPSettings :exec
 DELETE FROM builtin_mcp_settings
 WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
+   OR (project_id IS NULL AND id = $2::uuid)
 `
 
+type OrgDeleteBuiltinMCPSettingsParams struct {
+	OrgID           string
+	SlackSettingsID uuid.UUID
+}
+
 // Clear settings before issuer/project deletion can detach their ownership.
-func (q *Queries) OrgDeleteBuiltinMCPSettings(ctx context.Context, orgID string) error {
-	_, err := q.db.Exec(ctx, orgDeleteBuiltinMCPSettings, orgID)
+// Recover only this Spec's deterministic Slack row if a prior project deletion
+// detached it; never claim another project's row based on its ID alone.
+func (q *Queries) OrgDeleteBuiltinMCPSettings(ctx context.Context, arg OrgDeleteBuiltinMCPSettingsParams) error {
+	_, err := q.db.Exec(ctx, orgDeleteBuiltinMCPSettings, arg.OrgID, arg.SlackSettingsID)
 	return err
 }
 
