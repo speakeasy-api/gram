@@ -126,11 +126,11 @@ it("finds a later-page registration and opens its canonical gateway with private
   const registration = result.current[2]!;
   expect(registration.keywords).toContain("public-client");
   expect(isSendable(registration)).toBe(false);
-  registration.run("open");
+  void registration.run("open");
   expect(state.navigate).toHaveBeenCalledWith(
     "/gateway/gateway-one/sessions?registration=later-page",
   );
-  result.current[0]!.run("open");
+  void result.current[0]!.run("open");
   expect(state.navigate).toHaveBeenCalledWith("/org/gateway?tab=connections");
 });
 it("does not fetch or return cached resources while closed or unauthorized", () => {
