@@ -129,16 +129,24 @@ function freeName(base: string, taken: Set<string>): string {
  * is created rather than after.
  */
 function hooksOnlyBlockedReason({
+  platformName,
   serversLoading,
   serversFailed,
   checkingPermissions,
   canGrantHooks,
 }: {
+  /** The platform this flow was opened for, which signs in to reach servers. */
+  platformName: string | undefined;
   serversLoading: boolean;
   serversFailed: boolean;
   checkingPermissions: boolean;
   canGrantHooks: boolean;
 }): string | null {
+  // Hook events are signed with an API key, so an agent set up for a
+  // platform's own tokens has nothing to do without a server.
+  if (platformName !== undefined) {
+    return `Select at least one MCP server for ${platformName} to reach.`;
+  }
   // None is only a choice once the list it is chosen from is on screen: an
   // empty selection over a list that did not load is not a decision.
   if (serversLoading) return "Loading MCP servers…";
@@ -358,9 +366,17 @@ export function CredentialsWizard({
   // it saves to, so an agent that already has one opens with it on and the
   // list reads as what the policy actually allows.
   const [allServers, setAllServers] = useState(false);
-  // No server at all is a choice too: an agent that only reports what its
-  // coding agent does, through the observability plugin's hook events.
-  const hooksOnly = !allServers && selected.length === 0;
+  // No server at all is a choice too, for a new agent: one that only reports
+  // what its coding agent does, through the observability plugin's hook
+  // events. An agent that exists keeps the policy it has, and an empty
+  // selection there is an edit, not this. Once the new agent is created its
+  // policy is settled, so the choice it was created with is the one that
+  // holds even if the selection changes afterwards.
+  const [createdHooksOnly, setCreatedHooksOnly] = useState<boolean | null>(
+    null,
+  );
+  const hooksOnly =
+    !existing && (createdHooksOnly ?? (!allServers && selected.length === 0));
 
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
@@ -535,6 +551,7 @@ export function CredentialsWizard({
       },
     });
     setAgentID(created.id);
+    setCreatedHooksOnly(hooksOnly);
     void invalidateAgentPolicy(
       queryClient,
       organization.id,
@@ -805,11 +822,8 @@ export function CredentialsWizard({
     );
     const missing = missingHooksOnlyScopes(delegable);
     if (missing.length > 0) {
-      const subject = existing
-        ? "This key"
-        : "The agent was created, but a key for it";
       throw new Error(
-        `${subject} would lack ${missing.join(" and ")}. A key cannot give more access than the agent's owner has, so check the agent's permissions and that its owner still holds them.`,
+        `The agent was created, but a key for it would lack ${missing.join(" and ")}. A key cannot give more access than the agent's owner has, so check the agent's permissions and that its owner still holds them.`,
       );
     }
     return buildRequestedGrants(
@@ -922,16 +936,7 @@ export function CredentialsWizard({
   };
 
   const hooksOnlyGrants = `${HOOKS_INGEST_SCOPE}, ${DEVICE_AGENT_SYNC_SCOPE}`;
-  // While editing, the selection is empty until the agent's grants are read
-  // into it, which is not the same as an agent that reaches no server.
-  const grantsLabel =
-    hooksOnly && (!editing || reconciled) ? hooksOnlyGrants : "mcp:connect";
-  // The project the hook grant is bound to, named the way hook requests name
-  // it. An existing agent's own project, which may not be the one browsed.
-  const hooksProjectSlug =
-    (organization.projects ?? []).find(
-      (candidate) => candidate.id === scopedProjectID,
-    )?.slug ?? project.slug;
+  const grantsLabel = hooksOnly ? hooksOnlyGrants : "mcp:connect";
 
   const summary = (
     <WizardSummary
@@ -1117,7 +1122,9 @@ export function CredentialsWizard({
                 value="workload"
                 // Offered only to someone who could carry it out: it trusts a
                 // platform and admits a subject for the whole organization.
-                disabled={!canFederate}
+                // Not for an agent with no server: its hook events are
+                // signed with an API key.
+                disabled={!canFederate || hooksOnly}
                 className="p-3"
                 title="Workload identity"
               >
@@ -1131,6 +1138,11 @@ export function CredentialsWizard({
                 {!canFederate && (
                   <Text muted small className="mt-1 block">
                     Needs permission to manage workload identities.
+                  </Text>
+                )}
+                {canFederate && hooksOnly && (
+                  <Text muted small className="mt-1 block">
+                    An agent with no server sends hook events with an API key.
                   </Text>
                 )}
               </RadioCard>
@@ -1158,7 +1170,9 @@ export function CredentialsWizard({
           return (
             <StepHooksInstall
               secret={secret}
-              projectSlug={hooksProjectSlug}
+              // A new agent belongs to the project it is created in, which is
+              // the one its hook grant is bound to.
+              projectSlug={project.slug}
               onIssue={() => void provision()}
               issuing={provisioning}
             />
@@ -1199,6 +1213,10 @@ export function CredentialsWizard({
       : step === 1
         ? hooksOnly
           ? hooksOnlyBlockedReason({
+              platformName:
+                initialPlatformKey === undefined
+                  ? undefined
+                  : (preset?.displayName ?? "this platform"),
               serversLoading: inventory.isLoading,
               serversFailed: inventory.isError,
               checkingPermissions: rbacLoading,
@@ -1221,6 +1239,13 @@ export function CredentialsWizard({
   const serverCountNote = hooksOnly
     ? "No servers selected. This agent will only send hook events."
     : `${selected.length} of ${listedServers.length} servers selected.`;
+
+  const advance = () => {
+    // A credential chosen before every server was unticked may be workload
+    // identity, which an agent with no server cannot use.
+    if (step === 1 && hooksOnly) setCredential("api-key");
+    setStep(step + 1);
+  };
 
   const footer = () => {
     // Editing writes on the second step. Past it the flow is the ordinary
@@ -1404,7 +1429,7 @@ export function CredentialsWizard({
             }
             onBack={step > 0 ? () => setStep(step - 1) : undefined}
             primary={
-              <Button disabled={!!blocked} onClick={() => setStep(step + 1)}>
+              <Button disabled={!!blocked} onClick={advance}>
                 Continue
               </Button>
             }

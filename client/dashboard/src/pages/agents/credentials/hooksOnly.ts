@@ -17,7 +17,7 @@ export const HOOKS_INGEST_SCOPE = "org:hooks_ingest";
 /** Let the device agent sync the plugins assigned to this agent. */
 export const DEVICE_AGENT_SYNC_SCOPE = "org:device_agent_sync";
 
-export const HOOKS_ONLY_SCOPES: readonly string[] = [
+const HOOKS_ONLY_SCOPES: readonly string[] = [
   HOOKS_INGEST_SCOPE,
   DEVICE_AGENT_SYNC_SCOPE,
 ];

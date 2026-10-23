@@ -24,6 +24,14 @@ const HOOKS_SERVER_ENV = "SPEAKEASY_AI_HOOKS_SERVER_URL";
 
 const TITLE = "Connect the agent's hooks";
 
+/**
+ * A value as one POSIX shell word. The block is pasted into a shell, so a
+ * value is quoted whole rather than trusted to hold no shell syntax.
+ */
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
 export function StepHooksInstall({
   secret,
   projectSlug,
@@ -82,9 +90,9 @@ export function StepHooksInstall({
   }
 
   const environment = [
-    `export ${HOOKS_SERVER_ENV}="${serverURL}"`,
-    `export ${HOOKS_PROJECT_ENV}="${projectSlug}"`,
-    `export ${HOOKS_KEY_ENV}="${secret}"`,
+    `export ${HOOKS_SERVER_ENV}=${shellQuote(serverURL)}`,
+    `export ${HOOKS_PROJECT_ENV}=${shellQuote(projectSlug)}`,
+    `export ${HOOKS_KEY_ENV}=${shellQuote(secret)}`,
   ].join("\n");
 
   return (

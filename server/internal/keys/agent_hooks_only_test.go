@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -49,6 +50,22 @@ func TestKeysService_HooksOnlyAgentKey(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+
+	// The stored policy is exactly these two grants, selectors included.
+	stored, err := management.ListPolicyGrants(ctx, &agentgen.ListPolicyGrantsPayload{AgentID: agent.ID})
+	require.NoError(t, err)
+	type storedGrant struct {
+		scope, resourceKind, resourceID, projectID string
+	}
+	got := make([]storedGrant, 0, len(stored))
+	for _, grant := range stored {
+		require.Equal(t, "allow", grant.Effect)
+		got = append(got, storedGrant{scope: grant.Scope, resourceKind: grant.Selector.ResourceKind, resourceID: grant.Selector.ResourceID, projectID: conv.PtrValOr(grant.Selector.ProjectID, "")})
+	}
+	require.ElementsMatch(t, []storedGrant{
+		{scope: string(authz.ScopeOrgHooksIngest), resourceKind: authz.ResourceKindOrg, resourceID: orgID, projectID: projectID},
+		{scope: string(authz.ScopeOrgDeviceAgentSync), resourceKind: authz.ResourceKindOrg, resourceID: orgID, projectID: ""},
+	}, got)
 
 	// No server is named, because neither grant names one.
 	delegable, err := management.ListDelegableGrants(ctx, &agentgen.ListDelegableGrantsPayload{AgentID: agent.ID})

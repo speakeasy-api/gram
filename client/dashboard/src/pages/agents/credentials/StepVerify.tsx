@@ -16,6 +16,9 @@ import type { JSX } from "react";
 export type VerifyState = "waiting" | "connected" | "unknown";
 
 interface VerifyCopy {
+  /** What the page is waiting for, said while it waits. */
+  waiting: string;
+
   checks: { title: string; description: string }[];
   /** What a reader checks when nothing arrives, one cause per line. */
   causes: { code?: string; text: string }[];
@@ -28,16 +31,19 @@ interface VerifyCopy {
 function verifyCopy(gatewayURL: string, hooksOnly: boolean): VerifyCopy {
   if (hooksOnly) {
     return {
+      waiting:
+        "Keep this page open while the agent's runtime restarts with its key. This updates when the key is first used.",
       checks: [
         {
           title: "Credential accepted",
-          description:
-            "The API key was presented with a hook event and admitted.",
+          description: "The API key was presented to Speakeasy and admitted.",
         },
         {
-          title: "Hook events arriving",
+          // The key's last use is all this page can see, and a device-agent
+          // plugin sync uses the same key, so the check names both.
+          title: "Agent reporting",
           description:
-            "The observability plugin sent an event under this agent.",
+            "The observability plugin or the device agent called Speakeasy with this key.",
         },
       ],
       causes: [
@@ -56,6 +62,8 @@ function verifyCopy(gatewayURL: string, hooksOnly: boolean): VerifyCopy {
     };
   }
   return {
+    waiting:
+      "Keep this page open while the agent runs its setup. This updates as calls reach the gateway.",
     checks: [
       {
         title: "Credential accepted",
@@ -120,7 +128,7 @@ export function StepVerify({
           <Text muted small>
             {state === "connected"
               ? `First call ${firstCallAt ? dateTimeFormatters.full.format(firstCallAt) : "received"}. The agent is live.`
-              : "Keep this page open while the agent runs its setup. This updates as calls reach the gateway."}
+              : copy.waiting}
           </Text>
         </div>
       </div>

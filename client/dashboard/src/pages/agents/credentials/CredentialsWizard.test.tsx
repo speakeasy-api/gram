@@ -460,11 +460,11 @@ describe("Provisioning an agent with no server", () => {
     const environment = await screen.findByLabelText("Hooks environment");
     await waitFor(() =>
       expect(environment.textContent).toContain(
-        'SPEAKEASY_AI_HOOKS_API_KEY="gram_secret"',
+        "SPEAKEASY_AI_HOOKS_API_KEY='gram_secret'",
       ),
     );
     expect(environment.textContent).toContain(
-      'SPEAKEASY_AI_HOOKS_PROJECT_SLUG="project-one"',
+      "SPEAKEASY_AI_HOOKS_PROJECT_SLUG='project-one'",
     );
     expect(screen.queryByLabelText("setup command")).toBeNull();
     expect(screen.queryByText("One-line setup")).toBeNull();
@@ -472,14 +472,46 @@ describe("Provisioning an agent with no server", () => {
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
-  it("waits for a hook event rather than a gateway call", async () => {
+  it("waits for the key to be used rather than a gateway call", async () => {
     fireEvent.click(await reachHooksOnlyCredentialStep());
     fireEvent.click(
       await screen.findByRole("button", { name: "Continue to verification" }),
     );
 
-    expect(await screen.findByText("Hook events arriving")).toBeTruthy();
+    expect(await screen.findByText("Agent reporting")).toBeTruthy();
     expect(screen.queryByText("Gateway reachable")).toBeNull();
+  });
+
+  it("offers only an API key, which is what signs hook events", async () => {
+    await reachHooksOnlyCredentialStep();
+
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /Workload identity/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText(
+        "An agent with no server sends hook events with an API key.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("asks a platform's own setup for a server", async () => {
+    mocks.platforms.mockReturnValue([platform]);
+    setup(platform.key);
+
+    expect(
+      await screen.findByText(
+        "Select at least one MCP server for Claude Tag to reach.",
+      ),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it("issues no key that would lack plugin sync, and says which grant is missing", async () => {
@@ -798,6 +830,15 @@ describe("Editing an agent that already exists", () => {
     );
     return { ...view, onDone };
   }
+
+  it("keeps an agent with no server selected on its own policy", async () => {
+    editing({ grants: [] });
+
+    // An empty selection while editing is an edit, not an agent that only
+    // sends hook events: nothing claims the hook grants it was never given.
+    expect(await screen.findByText("mcp:connect")).toBeTruthy();
+    expect(screen.queryByText(/org:hooks_ingest/)).toBeNull();
+  });
 
   it("opens on the agent's own name, which it lets you change", () => {
     editing();
