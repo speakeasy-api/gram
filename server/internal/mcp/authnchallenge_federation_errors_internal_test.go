@@ -115,3 +115,38 @@ func TestFederatedFailureResponse(t *testing.T) {
 		}
 	}
 }
+
+func TestFederatedIdentityFailureInlineAndRedirect(t *testing.T) {
+	t.Parallel()
+
+	for _, firstParty := range []bool{false, true} {
+		t.Run(fmt.Sprintf("firstparty=%t", firstParty), func(t *testing.T) {
+			t.Parallel()
+			logger := testenv.NewLogger(t)
+			serverURL, err := url.Parse("https://mcp.example.test")
+			require.NoError(t, err)
+			s := &Service{serverURL: serverURL, logger: logger, metrics: mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), logger)}
+			endpoint := &ResolvedMcpEndpoint{RouteBase: "/mcp", Slug: "test-server"}
+			state := AuthnChallengeState{FirstParty: firstParty, RedirectURI: "http://127.0.0.1:8080/callback", State: "original-state"}
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "https://mcp.example.test/mcp/idp_callback", nil)
+			handler := oops.ErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+				return s.finishFederatedFailure(w, r, endpoint, state, mcpmetrics.OAuthFlowStageIDPCallback, oops.CodeUnauthorized, nil, "Invalid login response", false)
+			})
+			handler.ServeHTTP(response, request)
+			require.Empty(t, response.Header().Get("WWW-Authenticate"))
+			if firstParty {
+				require.Equal(t, http.StatusBadRequest, response.Code)
+				require.Contains(t, response.Body.String(), "Invalid login response")
+				require.Empty(t, response.Header().Get("Location"))
+			} else {
+				require.Equal(t, http.StatusFound, response.Code)
+				location, err := url.Parse(response.Header().Get("Location"))
+				require.NoError(t, err)
+				require.Equal(t, "access_denied", location.Query().Get("error"))
+				require.Equal(t, "Invalid login response", location.Query().Get("error_description"))
+				require.Equal(t, "original-state", location.Query().Get("state"))
+			}
+		})
+	}
+}

@@ -65,8 +65,11 @@ type LocalFixturesOptions struct {
 //   - the system roles and their grants, plus direct chat:read and log:read
 //     grants so Agent Sessions shows the seeded chats rather than only your
 //     own, and Tool Logs opens at all;
-//   - a fixed API key and default environment, both with well-known ids so
-//     mise.toml can hardcode them;
+//   - the personal auth client default, which provisioning only grants new
+//     organizations;
+//   - a fixed API key, with a policy reaching every server in the project, and
+//     a default environment, both with well-known ids so mise.toml can
+//     hardcode them;
 //   - the global MCP registry row, which is not tenant-scoped and so cannot
 //     live in the seed proper.
 //
@@ -87,6 +90,11 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	// duplicating the grant lists.
 	if err := authz.SeedSystemRoleGrants(ctx, db, spec.OrgID); err != nil {
 		return fmt.Errorf("seed system role grants: %w", err)
+	}
+	// Provisioning only grants this to new organizations; a reseeded local
+	// org already has its roles.
+	if err := authz.SeedPersonalAuthClientDefaultTx(ctx, db, spec.OrgID); err != nil {
+		return fmt.Errorf("seed personal auth client default: %w", err)
 	}
 
 	env := opts.Environment
@@ -138,6 +146,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"enable sso and directory sync", localIdentityFeaturesSQL, []any{spec.OrgID}},
 		{"verify developer email domain", localVerifiedDomainSQL, []any{spec.OrgID, emailDomain(dev.Email)}},
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
+		{"api key policy", localAPIKeyPolicySQL, []any{spec.OrgID, localAPIKeyID(), spec.ProjectID()}},
 		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
 		{"mcp registry", localMCPRegistrySQL, nil},
 		{"mcp app asset", localMCPAppAssetSQL, []any{
@@ -387,6 +396,15 @@ ON CONFLICT (id) DO UPDATE
       created_by_user_id = EXCLUDED.created_by_user_id, name = EXCLUDED.name,
       key_prefix = EXCLUDED.key_prefix, key_hash = EXCLUDED.key_hash,
       scopes = EXCLUDED.scopes, deleted_at = NULL, updated_at = clock_timestamp()
+`
+
+// localAPIKeyPolicySQL gives the fixed key what its scopes reach today, so the
+// mandatory server check allows it.
+const localAPIKeyPolicySQL = `
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, 'api_key:' || $2::text, 'mcp:connect',
+        jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*', 'project_id', $3::text))
+ON CONFLICT DO NOTHING
 `
 
 const localEnvironmentSQL = `

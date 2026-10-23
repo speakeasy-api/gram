@@ -144,6 +144,8 @@ trackedFiles:
   src/funcs/analyticsDescribe.ts: {}
   src/funcs/analyticsDimensionValues.ts: {}
   src/funcs/analyticsQuery.ts: {}
+  src/funcs/analyticsSignalDefinition.ts: {}
+  src/funcs/analyticsSignalFindings.ts: {}
   src/funcs/assetsCreateSignedChatAttachmentURL.ts: {}
   src/funcs/assetsFetchImageFromURL.ts: {}
   src/funcs/assetsFetchOpenAPIv3FromURL.ts: {}
@@ -418,6 +420,7 @@ trackedFiles:
   src/funcs/organizationRemoteSessionClientsCreateCimd.ts: {}
   src/funcs/organizationRemoteSessionClientsDelete.ts: {}
   src/funcs/organizationRemoteSessionClientsDetachKeySet.ts: {}
+  src/funcs/organizationRemoteSessionClientsDuplicate.ts: {}
   src/funcs/organizationRemoteSessionClientsGet.ts: {}
   src/funcs/organizationRemoteSessionClientsGetDelegationStatus.ts: {}
   src/funcs/organizationRemoteSessionClientsGetDeletePreflight.ts: {}
@@ -920,6 +923,19 @@ trackedFiles:
   src/models/components/analyticsorderby.ts: {}
   src/models/components/analyticsquerypayload.ts: {}
   src/models/components/analyticsqueryresult.ts: {}
+  src/models/components/analyticssignalcatalog.ts: {}
+  src/models/components/analyticssignalcomparison.ts: {}
+  src/models/components/analyticssignaldefinition.ts: {}
+  src/models/components/analyticssignaldimension.ts: {}
+  src/models/components/analyticssignalfilter.ts: {}
+  src/models/components/analyticssignalfindings.ts: {}
+  src/models/components/analyticssignalmetadata.ts: {}
+  src/models/components/analyticssignalname.ts: {}
+  src/models/components/analyticssignalquery.ts: {}
+  src/models/components/analyticssignalresult.ts: {}
+  src/models/components/analyticssignalscope.ts: {}
+  src/models/components/analyticssignalselection.ts: {}
+  src/models/components/analyticssignalsensor.ts: {}
   src/models/components/anthropicinferenceconfig.ts: {}
   src/models/components/apikeypolicygrant.ts: {}
   src/models/components/apikeypolicyselector.ts: {}
@@ -1124,6 +1140,7 @@ trackedFiles:
   src/models/components/domaindnsconfig.ts: {}
   src/models/components/duplicatebuiltindashboardrequestbody.ts: {}
   src/models/components/duplicatedashboardrequestbody.ts: {}
+  src/models/components/duplicateorganizationremotesessionclientform.ts: {}
   src/models/components/duplicatewidgetrequestbody.ts: {}
   src/models/components/emaprovider.ts: {}
   src/models/components/emaproviderinput.ts: {}
@@ -1824,6 +1841,7 @@ trackedFiles:
   src/models/components/shareskillrequestbody.ts: {}
   src/models/components/sigintsensor.ts: {}
   src/models/components/sigintsignal.ts: {}
+  src/models/components/signalfindingsrequestbody.ts: {}
   src/models/components/skill.ts: {}
   src/models/components/skilladoption.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
@@ -2121,6 +2139,8 @@ trackedFiles:
   src/models/operations/analyticsdescribe.ts: {}
   src/models/operations/analyticsdimensionvalues.ts: {}
   src/models/operations/analyticsquery.ts: {}
+  src/models/operations/analyticssignaldefinition.ts: {}
+  src/models/operations/analyticssignalfindings.ts: {}
   src/models/operations/applydirectoryrolesetup.ts: {}
   src/models/operations/approveallskillsuggestions.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
@@ -2299,6 +2319,7 @@ trackedFiles:
   src/models/operations/downloadpluginpackage.ts: {}
   src/models/operations/duplicatebuiltindashboard.ts: {}
   src/models/operations/duplicatedashboard.ts: {}
+  src/models/operations/duplicateorganizationremotesessionclient.ts: {}
   src/models/operations/duplicatewidget.ts: {}
   src/models/operations/enableadminopenrouterkey.ts: {}
   src/models/operations/enablewebhooks.ts: {}
@@ -2963,6 +2984,9 @@ trackedFiles:
   src/react-query/analyticsDimensionValues.ts: {}
   src/react-query/analyticsQuery.core.ts: {}
   src/react-query/analyticsQuery.ts: {}
+  src/react-query/analyticsSignalDefinition.core.ts: {}
+  src/react-query/analyticsSignalDefinition.ts: {}
+  src/react-query/analyticsSignalFindings.ts: {}
   src/react-query/anthropicInferenceConfig.core.ts: {}
   src/react-query/anthropicInferenceConfig.ts: {}
   src/react-query/applyDirectoryRoleSetup.ts: {}
@@ -3183,6 +3207,7 @@ trackedFiles:
   src/react-query/distributionPlugins.ts: {}
   src/react-query/duplicateBuiltInDashboard.ts: {}
   src/react-query/duplicateDashboard.ts: {}
+  src/react-query/duplicateOrganizationRemoteSessionClient.ts: {}
   src/react-query/duplicateWidget.ts: {}
   src/react-query/editKillswitch.ts: {}
   src/react-query/employeeAIDetections.core.ts: {}
@@ -4360,6 +4385,30 @@ examples:
       responses:
         "200":
           application/json: {"dataset": "<value>", "plan": "<value>", "rows": [{"key": "<value>", "key1": "<value>", "key2": "<value>"}, {"key": "<value>", "key1": "<value>", "key2": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  analyticsSignalDefinition:
+    speakeasy-default-analytics-signal-definition:
+      parameters:
+        query:
+          sensor_id: "37468269-d164-4db4-8e1b-367a3b1ced47"
+          definition_hash: "<value>"
+      responses:
+        "200":
+          application/json: {"captured_at": "2025-11-25T02:41:14.255Z", "definition": {"key": "<value>", "key1": "<value>"}, "definition_hash": "<value>", "sensor_id": "<id>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  analyticsSignalFindings:
+    speakeasy-default-analytics-signal-findings:
+      requestBody:
+        application/json: {"compare_previous": false, "evidence": false, "from": "2025-02-06T05:03:07.954Z", "signal_query": {"groups": 5, "points": 2000, "selection": {"sensor_id": "ffde47ba-de20-4670-83e4-04e0bc405fb1", "threshold": 1487.25}, "trigger": "stream"}, "to": "2026-05-03T21:24:19.853Z"}
+      responses:
+        "200":
+          application/json: {"concentration": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "cooccurrence": [], "evidence": [{"key": "<value>"}, {"key": "<value>", "key1": "<value>", "key2": "<value>"}, {}], "evidence_scope": "<value>", "measurement": {"groups": [{}, {}, {"key": "<value>"}], "metadata": {"coverage": "<value>", "exact": true, "filters": [{"dimension": {}, "operator": "<value>"}], "from": "2024-07-19T00:44:56.120Z", "group_by": [], "groups_truncated": true, "physical_resolution": "<value>", "point_budget": 849296, "population": "<value>", "queried_at": "2024-09-02T05:18:14.495Z", "selection": {"sensor_id": "ffde47ba-de20-4670-83e4-04e0bc405fb1", "threshold": 1487.25}, "series_complete": true, "snapshot": "<value>", "step": "<value>", "time_axis": "<value>", "to": "2024-08-15T09:20:19.502Z", "trigger": "<value>", "unit": "steradian"}, "summary": {}}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6580,6 +6629,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  duplicateOrganizationRemoteSessionClient:
+    speakeasy-default-duplicate-organization-remote-session-client:
+      requestBody:
+        application/json: {"id": "6644777f-6571-40f3-b122-f54110f4d72c"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "created_at": "2026-10-13T14:06:45.092Z", "credential_owner": "self", "grant_types": ["<value 1>", "<value 2>", "<value 3>"], "id": "07168843-efd1-4f6d-b79f-7bab5eda58d8", "legacy_callback_url": true, "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "b4e5f76d-a259-4e9e-b6d2-19caabc5ce69", "updated_at": "2026-04-25T23:40:42.757Z", "user_session_issuer_ids": ["72311aeb-7598-4342-af0b-c45d645378f3"]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   duplicateWidget:
     speakeasy-default-duplicate-widget:
       requestBody:

@@ -39,12 +39,13 @@ const (
 	// below the LLMEnforcer subscription's 30 s ack deadline.
 	DefaultLLMAnalyzerWaitTimeout = 20 * time.Second
 
-	// DefaultMaxContentBytes is the enforcement dispatch limit when callers do
-	// not provide one.
+	// DefaultMaxContentBytes is the combined budget for distinct enforcement
+	// payload values when callers do not provide one.
 	DefaultMaxContentBytes = 50 * 1024
 
-	// MaxContentBytes is the hard ceiling below Pub/Sub's transport limit.
-	// It applies independently to Content and to the LLM lane's Body.
+	// MaxContentBytes is the hard ceiling for distinct enforcement payload
+	// values. Equal Content, Body, and tool-call arguments consume the budget
+	// once so every lane receives the same prefix.
 	MaxContentBytes = 1 * 1024 * 1024
 
 	// contentLimitDistinctID keys the global content limit flag; the flag
@@ -112,11 +113,11 @@ type DispatchRequest struct {
 	// ProjectID identifies the project whose policy configuration applies.
 	ProjectID string
 
-	// Content is the raw text scanned by each lane.
+	// Content is raw scanner input and consumes the shared publish budget first.
 	Content string
 
-	// Body is the message text the LLM lane renders into its prompt. It is
-	// truncated to MaxContentBytes independently of Content.
+	// Body is judge prompt input and consumes the shared publish budget second,
+	// unless it duplicates an earlier field.
 	Body string
 
 	// ToolName is the tool the LLM lane attributes the message to. When empty,
@@ -127,7 +128,8 @@ type DispatchRequest struct {
 	// lane falls back to the origin's MessageType.
 	MessageType string
 
-	// ToolCalls are the tool invocations the LLM lane evaluates alongside Body.
+	// Tool-call arguments consume the remaining shared publish budget in order.
+	// Arguments that duplicate an earlier field reuse that field's budgeted value.
 	ToolCalls []ToolCall
 
 	// PresidioEntities is an optional scanner superset; empty requests all entities.
@@ -275,14 +277,25 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false, Truncated: false}, nil
 	}
 	limit := d.contentLimit(ctx)
+	remaining := limit
 	truncated := false
+	truncatedValues := make(map[string]string, 2+len(request.ToolCalls))
 	truncate := func(field string, value string) string {
-		if len(value) <= limit {
+		original := value
+		if cached, ok := truncatedValues[value]; ok {
+			return cached
+		}
+		if len(value) <= remaining {
+			remaining -= len(value)
+			truncatedValues[value] = value
 			return value
 		}
 		truncated = true
-		d.logger.WarnContext(ctx, "truncating oversized enforcement "+field, attr.SlogRiskScanTextSize(len(value)), attr.SlogRiskScanLimitBytes(limit))
-		return truncateAtRuneBoundary(value, limit)
+		d.logger.WarnContext(ctx, "truncating oversized enforcement "+field, attr.SlogRiskScanTextSize(len(value)), attr.SlogRiskScanLimitBytes(remaining))
+		value = truncateAtRuneBoundary(value, remaining)
+		remaining -= len(value)
+		truncatedValues[original] = value
+		return value
 	}
 	request.Content = truncate("content", request.Content)
 	request.Body = truncate("body", request.Body)

@@ -31,6 +31,10 @@ type WorkloadSessionAdmission struct {
 
 	// Owner is the current owner's live effective policy O.
 	Owner []Grant
+
+	// LegacyAuthCeiling is set when Ceiling predates version 5 and its auth
+	// client ceiling was derived from server access.
+	LegacyAuthCeiling bool
 }
 
 // WorkloadSessionAdmitter supplies application-owned workload admission without
@@ -66,7 +70,7 @@ func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, err
 	// one value instead of resolving the assignment again.
 	ctx = contextvalues.WithWorkloadAgent(ctx, principal)
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
-	return admittedPoliciesToContext(ctx, RepresentedUserPolicy{UserID: "", Policy: nil}, admission.Ceiling, admission.Agent, admission.Owner), nil
+	return admittedPoliciesToContext(ctx, RepresentedUserPolicy{UserID: "", Policy: nil}, admission.LegacyAuthCeiling, admission.Ceiling, admission.Agent, admission.Owner), nil
 }
 
 // AdmittedWorkloadAgent returns the agent resolved by live workload admission,

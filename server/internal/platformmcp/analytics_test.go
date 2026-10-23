@@ -32,6 +32,20 @@ type stubAnalyticsEngine struct {
 
 func (s *stubAnalyticsEngine) Catalog() *analytics.Catalog { return analytics.Default }
 
+func (s *stubAnalyticsEngine) DescribeSignals(context.Context, analytics.Tenant) (*analytics.SignalCatalog, error) {
+	return &analytics.SignalCatalog{Dataset: "signals"}, nil
+}
+
+func (s *stubAnalyticsEngine) ReadSignalDefinition(context.Context, analytics.Tenant, string, string) (*analytics.SignalDefinition, error) {
+	return nil, ErrUnavailable
+}
+
+func (s *stubAnalyticsEngine) SignalFindings(_ context.Context, tenant analytics.Tenant, _ analytics.Window, _ analytics.SignalFindingsRequest, _ analytics.ConversationAccess) (*analytics.SignalFindings, error) {
+	s.calls++
+	s.tenant = tenant
+	return &analytics.SignalFindings{Concentration: analytics.Row{"top_session_share": 0.5}}, s.err
+}
+
 func (s *stubAnalyticsEngine) Query(_ context.Context, tenant analytics.Tenant, req analytics.Request) (*analytics.QueryResult, error) {
 	s.calls++
 	s.tenant = tenant
@@ -69,6 +83,7 @@ func (s *stubAnalyticsProjects) ResolveProjectRead(_ context.Context, _ Principa
 }
 
 type analyticsTestHarness struct {
+	service  *AnalyticsService
 	reg      *Registrar
 	engine   *stubAnalyticsEngine
 	projects *stubAnalyticsProjects
@@ -93,12 +108,12 @@ func newAnalyticsTestHarness(t *testing.T, evaluation feature.Evaluation, budget
 	projects := &stubAnalyticsProjects{project: project, err: nil, inputs: nil}
 	flags := &riskMutationFlagProvider{evaluation: evaluation, err: nil, flag: "", groups: nil}
 	logs := &bytes.Buffer{}
-	service := NewAnalyticsService(slog.New(slog.NewJSONHandler(logs, nil)), engine, flags, riskMutationOrganizationResolver{slug: "org", err: nil}, projects, budget)
+	service := NewAnalyticsService(slog.New(slog.NewJSONHandler(logs, nil)), engine, flags, riskMutationOrganizationResolver{slug: "org", err: nil}, projects, budget, nil)
 	require.NotNil(t, service)
 
 	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerAnalyticsTools(reg, service)
-	return &analyticsTestHarness{reg: reg, engine: engine, projects: projects, flags: flags, project: project, logs: logs}
+	return &analyticsTestHarness{reg: reg, engine: engine, projects: projects, flags: flags, project: project, logs: logs, service: service}
 }
 
 func (h *analyticsTestHarness) invoke(t *testing.T, tool, arguments string) (any, error) {
@@ -205,7 +220,7 @@ func TestAnalyticsToolsDeclareTheirContract(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(descriptorByName(t, h.reg, runAnalyticsQueryToolName).InputSchema, &query))
 	require.Equal(t, []string{"project_id", "dataset", "from", "to"}, query.Required)
-	require.Equal(t, []string{"none", "hour", "day", "week", "month"}, query.Properties.Grain.Enum)
+	require.Empty(t, query.Properties.Grain.Enum, "API interval values are discovered and validated by the engine")
 	require.Equal(t, analytics.MaxDimensions, query.Properties.Dimensions.MaxItems)
 	require.Equal(t, analytics.MaxLimit, query.Properties.Limit.Maximum)
 	require.Equal(t, []string{"count", "count_distinct", "sum", "avg", "min", "max", "p50", "p95", "p99"}, query.Properties.Measures.Items.Properties.Op.Enum)
@@ -245,10 +260,10 @@ func TestAnalyticsToolsStubWithoutAService(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
-	require.Nil(t, NewAnalyticsService(nil, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget))
-	require.Nil(t, NewAnalyticsService(logger, nil, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget))
-	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, nil, &stubAnalyticsProjects{}, allowAnalyticsBudget))
-	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, nil, allowAnalyticsBudget))
+	require.Nil(t, NewAnalyticsService(nil, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget, nil))
+	require.Nil(t, NewAnalyticsService(logger, nil, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget, nil))
+	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, nil, &stubAnalyticsProjects{}, allowAnalyticsBudget, nil))
+	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, nil, allowAnalyticsBudget, nil))
 }
 
 func indexOfDescriptor(t *testing.T, reg *Registrar, name string) int {
@@ -272,7 +287,7 @@ func TestDescribeAnalyticsCatalogServesTheCatalog(t *testing.T) {
 	require.True(t, ok)
 
 	require.Equal(t, AnalyticsProject{ID: h.project.ID.String(), Name: "Project", Slug: "project"}, output.Project)
-	require.Equal(t, []string{"none", "hour", "day", "week", "month"}, output.Grains)
+	require.Equal(t, []string{"none", "minute", "hour", "day", "week", "month"}, output.Grains)
 	require.Equal(t, AnalyticsLimits{MaxDimensions: 3, MaxFilterValues: 100, DefaultLimit: 100, MaxLimit: 1000, MaxRowsLimit: 200, DefaultValuesLimit: 50, MaxValuesLimit: 200}, output.Limits)
 
 	// The harness loads no grants, so a dataset for org admins alone is not
@@ -331,7 +346,7 @@ func TestAnalyticsToolsRefuseWhenExploreIsOff(t *testing.T) {
 			refusal := requireAnalyticsRefusal(t, err)
 			require.Equal(t, analyticsNotEnabledCode, refusal.Code, name)
 			require.Equal(t, analyticsFeature, refusal.Feature, name)
-			require.Contains(t, refusal.Message, "not switched on", name)
+			require.Contains(t, refusal.Message, "not enabled", name)
 			require.Contains(t, refusal.Message, "Explore", name)
 		}
 		require.Equal(t, feature.FlagExplore, h.flags.flag)
@@ -529,7 +544,6 @@ func TestAnalyticsToolSchemasRejectWhatTheCompilerWouldRefuse(t *testing.T) {
 		"an op the catalog does not know":       {runAnalyticsQueryToolName, h.queryArguments(`,"measures":[{"op":"median","field":"duration_ms"}]`)},
 		"an operator the catalog does not know": {runAnalyticsQueryToolName, h.queryArguments(`,"filters":[{"field":"status","operator":"like","values":["ok"]}]`)},
 		"a filter with no values":               {runAnalyticsQueryToolName, h.queryArguments(`,"filters":[{"field":"status","operator":"in","values":[]}]`)},
-		"a grain the catalog does not know":     {runAnalyticsQueryToolName, h.queryArguments(`,"grain":"minute"`)},
 		"an argument the tool does not take":    {runAnalyticsQueryToolName, h.queryArguments(`,"sql":"select 1"`)},
 		"a values limit past the maximum":       {listAnalyticsDimensionValuesToolName, h.valuesArguments(`,"limit":201`)},
 		"a values call without a dimension":     {listAnalyticsDimensionValuesToolName, `{"project_id":"` + h.project.ID.String() + `","dataset":"tool_calls",` + analyticsTestWindow + `}`},

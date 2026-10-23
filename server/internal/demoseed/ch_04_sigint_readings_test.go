@@ -1,6 +1,7 @@
 package demoseed
 
 import (
+	"encoding/json"
 	"math"
 	"testing"
 	"time"
@@ -9,11 +10,49 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
 )
 
 func validProbability(p float64) bool {
 	return !math.IsNaN(p) && !math.IsInf(p, 0) && p >= 0 && p <= 1
+}
+
+func TestSeededSigintDefinitionsExplainReadings(t *testing.T) {
+	t.Parallel()
+	s := &seeder{spec: DefaultSpec()}
+	for _, sensor := range demoSigintSensors {
+		if !sensor.enabled {
+			continue
+		}
+		data, hash, err := s.sigintDemoDefinition(sensor)
+		require.NoError(t, err)
+		require.NotEmpty(t, hash)
+		var snapshot struct {
+			Synthetic  bool `json:"synthetic"`
+			Definition struct {
+				Signals []struct {
+					ID       string          `json:"id"`
+					Criteria json.RawMessage `json:"criteria"`
+				} `json:"signals"`
+				MatchingContract string `json:"matching_contract"`
+				MatchExpression  string `json:"match_expression"`
+			} `json:"definition"`
+		}
+		require.NoError(t, json.Unmarshal(data, &snapshot))
+		require.True(t, snapshot.Synthetic)
+		require.Equal(t, matching.Version, snapshot.Definition.MatchingContract)
+		require.Equal(t, matching.DefaultExpression, snapshot.Definition.MatchExpression)
+		require.Len(t, snapshot.Definition.Signals, sigintReadingMembers)
+		for _, member := range demoSigintMemberships {
+			if member.sensor == sensor.key {
+				signal := snapshot.Definition.Signals[member.order]
+				require.Equal(t, s.det("sigint-signal-"+member.signal).String(), signal.ID)
+				require.NotEmpty(t, signal.Criteria)
+				require.NotEqual(t, "null", string(signal.Criteria))
+			}
+		}
+	}
 }
 
 // The seeded readings skip the Pub/Sub writer's parser and the table has no
@@ -23,7 +62,7 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 	s := &seeder{spec: DefaultSpec(), q: nil, logger: nil, now: time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)}
 	rows, err := s.sigintReadingRows()
 	require.NoError(t, err)
-	require.Len(t, rows, (sigintReadingDays+sigintManualRuns*sigintManualMessages)*3)
+	require.Len(t, rows, (signalMessageCount+sigintManualRuns*sigintManualMessages)*3)
 
 	ids := make(map[uuid.UUID]struct{}, len(rows))
 	manualRuns := make(map[uuid.UUID]int)
@@ -35,10 +74,9 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 			require.NotEqual(t, uuid.Nil, id)
 		}
 		require.NotEmpty(t, row.OrganizationID)
-		require.Equal(t, chrepo.StatusAnswered, row.Status)
-		require.Empty(t, row.FailureReason)
-		require.NotEmpty(t, row.ResultType)
-		require.NotEmpty(t, row.Probabilities)
+		require.Equal(t, "conversation.message", row.EventKind)
+		require.NotNil(t, row.ConversationID)
+		require.Equal(t, "original", row.ConversationCaptureKind)
 		require.LessOrEqual(t, len(row.Attributes), chrepo.MaxAttributes)
 		for _, key := range []string{"model_name", "model_family", "inference_provider", "department"} {
 			value, present := row.Attributes[key]
@@ -63,6 +101,19 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 		} else {
 			streaming++
 		}
+		if row.Status != chrepo.StatusAnswered {
+			require.Empty(t, row.Probabilities)
+			require.Empty(t, row.ResultType)
+			require.Nil(t, row.SelectedSignalID)
+			require.Empty(t, row.SelectedSignalSlug)
+			require.Nil(t, row.ExpectedIndex)
+			require.Nil(t, row.Confidence)
+			if row.Status == chrepo.StatusFailed {
+				require.Regexp(t, `^[a-z][a-z0-9_]*$`, row.FailureReason)
+			}
+			continue
+		}
+		require.Empty(t, row.FailureReason)
 
 		signals := make(map[uuid.UUID]string, len(row.Probabilities))
 		for _, p := range row.Probabilities {
@@ -95,7 +146,7 @@ func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 		require.Contains(t, values, "", "%s must demonstrate unknown values", key)
 		require.GreaterOrEqual(t, len(values), 3, "%s must demonstrate breakdowns", key)
 	}
-	require.Equal(t, sigintReadingDays*3, streaming)
+	require.Equal(t, signalMessageCount*3, streaming)
 	require.Len(t, manualRuns, sigintManualRuns)
 	for _, count := range manualRuns {
 		require.Equal(t, sigintManualMessages*3, count)

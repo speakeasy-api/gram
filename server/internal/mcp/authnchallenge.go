@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -1309,7 +1310,7 @@ func oauthAuthorityError(err error) *oops.ShareableError {
 	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 		return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable")
 	}
-	return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server")
+	return oops.E(oops.CodeBadRequest, err, "authn challenge state does not match this MCP server")
 }
 
 // RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id
@@ -1409,4 +1410,13 @@ func generateOpaqueToken() (string, error) {
 		return "", fmt.Errorf("read random bytes: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// consentChallengeCacheError distinguishes expired consent state from a
+// dependency outage and logs each with its corresponding severity.
+func consentChallengeCacheError(ctx context.Context, logger *slog.Logger, err error) *oops.ShareableError {
+	if errors.Is(err, redisCache.ErrCacheMiss) {
+		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+	}
+	return oops.E(oops.CodeUnavailable, err, "authn challenge state is temporarily unavailable").LogError(ctx, logger)
 }

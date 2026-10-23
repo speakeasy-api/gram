@@ -479,6 +479,9 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 		if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, resolved.organizationID); err != nil {
 			return effects, fmt.Errorf("seed organization default entitlements for organization %q from workos event: %w", payload.ID, err)
 		}
+		if err := authz.SeedPersonalAuthClientDefaultTx(ctx, tx, resolved.organizationID); err != nil {
+			return effects, fmt.Errorf("seed auth client defaults for organization %q from workos event: %w", payload.ID, err)
+		}
 	default:
 		if err := updateOrganizationFromWorkOSEvent(ctx, repo, resolved.row, payload, event.ID); err != nil {
 			return effects, err

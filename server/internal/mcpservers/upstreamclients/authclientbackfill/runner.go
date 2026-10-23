@@ -11,14 +11,17 @@
 // no longer yields, so the records track it, and marks each server it links a
 // client to as needing upstream authentication where that is still
 // undecided. Admin-created records are never
-// read or retired here. Nothing reads these records yet: the existing
-// resolution stays authoritative.
+// read or retired here. Its last phase grants the default auth permissions
+// the mandatory auth client check needs (see grants.go); those grants are live
+// authorization data. The client records themselves are not read yet: the
+// existing resolution stays authoritative.
 package authclientbackfill
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -82,6 +85,7 @@ const (
 	PhaseEMAWarnings = "ema_warnings"
 	PhaseReconcile   = "reconcile"
 	PhaseMark        = "mark"
+	PhaseGrants      = "grants"
 )
 
 // Outcome classifies one decision.
@@ -345,6 +349,27 @@ type Report struct {
 	// ServersMarked counts servers marked as needing upstream authentication.
 	ServersMarked int `json:"servers_marked"`
 
+	// PendingGrants counts default grants the organization is missing, and
+	// PendingGrantsByKind splits them by default.
+	PendingGrants       int               `json:"pending_grants"`
+	PendingGrantsByKind map[GrantKind]int `json:"pending_grants_by_kind"`
+
+	// GrantsWritten counts default grants this run added.
+	GrantsWritten int `json:"grants_written"`
+
+	// APIKeysGranted lists the API keys this run added policy grants to, for
+	// the run's log.
+	APIKeysGranted []string `json:"api_keys_granted"`
+
+	// APIKeysWaiting means key policies were not planned because some auth
+	// clients are not recorded yet.
+	APIKeysWaiting bool `json:"api_keys_waiting"`
+
+	// SharedClientsWaiting means shared client grants were not planned
+	// because the recorded clients and links may not be current: a phase
+	// failed, or some await retirement.
+	SharedClientsWaiting bool `json:"shared_clients_waiting"`
+
 	// PhaseErrors names each phase that failed and why. A failed phase's
 	// writes are rolled back and its records are not retired; the other
 	// phases still run.
@@ -409,6 +434,12 @@ func newReport(apply bool) Report {
 		LinksRetired:          0,
 		PendingMarkedServers:  0,
 		ServersMarked:         0,
+		PendingGrants:         0,
+		PendingGrantsByKind:   map[GrantKind]int{},
+		GrantsWritten:         0,
+		APIKeysGranted:        []string{},
+		APIKeysWaiting:        false,
+		SharedClientsWaiting:  false,
 		PhaseErrors:           map[string]string{},
 		Results:               []Result{},
 	}
@@ -452,6 +483,14 @@ func (r *Report) merge(o Report) {
 	r.LinksRetired += o.LinksRetired
 	r.PendingMarkedServers += o.PendingMarkedServers
 	r.ServersMarked += o.ServersMarked
+	r.PendingGrants += o.PendingGrants
+	for kind, n := range o.PendingGrantsByKind {
+		r.PendingGrantsByKind[kind] += n
+	}
+	r.GrantsWritten += o.GrantsWritten
+	r.APIKeysGranted = append(r.APIKeysGranted, o.APIKeysGranted...)
+	r.APIKeysWaiting = r.APIKeysWaiting || o.APIKeysWaiting
+	r.SharedClientsWaiting = r.SharedClientsWaiting || o.SharedClientsWaiting
 	r.Results = append(r.Results, o.Results...)
 }
 
@@ -503,6 +542,14 @@ type phase struct {
 // What earlier phases committed stays, so an interrupted apply keeps its
 // progress. Run returns an error only when the run as a whole cannot proceed.
 func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
+	return withOrganizationLock(ctx, db, opts, func(conn *pgxpool.Conn, startedAt pgtype.Timestamptz) (Report, error) {
+		return runLocked(ctx, conn, opts, startedAt)
+	})
+}
+
+// withOrganizationLock runs fn holding the organization's backfill lock on one
+// connection, taken without waiting.
+func withOrganizationLock(ctx context.Context, db Acquirer, opts Options, fn func(conn *pgxpool.Conn, startedAt pgtype.Timestamptz) (Report, error)) (Report, error) {
 	if opts.OrganizationID == "" {
 		return Report{}, errors.New("organization id is required")
 	}
@@ -529,10 +576,90 @@ func Run(ctx context.Context, db Acquirer, opts Options) (Report, error) {
 	case !lock.Locked:
 		return Report{}, ErrRunInProgress
 	}
-	return runLocked(ctx, conn, opts, lock.StartedAt)
+	return fn(conn, lock.StartedAt)
+}
+
+// RunGrants runs only the grants phase, for organizations the rest of the
+// backfill does not apply to. An apply holds the same organization lock as
+// Run; a dry run writes nothing and takes no lock, so checking never blocks a
+// run.
+func RunGrants(ctx context.Context, db Acquirer, opts Options) (Report, error) {
+	if !opts.Apply {
+		if opts.OrganizationID == "" {
+			return Report{}, errors.New("organization id is required")
+		}
+		conn, err := db.Acquire(ctx)
+		if err != nil {
+			return Report{}, fmt.Errorf("acquire connection: %w", err)
+		}
+		defer conn.Release()
+		return runGrantsPhase(ctx, conn, opts)
+	}
+	return withOrganizationLock(ctx, db, opts, func(conn *pgxpool.Conn, _ pgtype.Timestamptz) (Report, error) {
+		return runGrantsPhase(ctx, conn, opts)
+	})
+}
+
+// runGrantsPhase runs the grants phase alone. Key policies are written once,
+// so they wait until the organization's auth clients are all recorded.
+func runGrantsPhase(ctx context.Context, conn *pgxpool.Conn, opts Options) (Report, error) {
+	report := newReport(opts.Apply)
+	local := newReport(opts.Apply)
+	probe, err := clientsRecorded(ctx, conn, opts.OrganizationID)
+	if err != nil {
+		return report, fmt.Errorf("check recorded auth clients: %w", err)
+	}
+	shared, ready := sharedReady(probe), keysReady(probe)
+	report.SharedClientsWaiting = !shared
+	report.APIKeysWaiting = !ready
+	// The probe's failures say why shared clients and keys wait.
+	maps.Copy(report.PhaseErrors, probe.PhaseErrors)
+	p := phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+		return runGrants(ctx, tx, opts, local, shared, ready)
+	}}
+	if err := runPhase(ctx, conn, opts, p, &local); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return report, fmt.Errorf("grants interrupted: %w", ctxErr)
+		}
+		report.PhaseErrors[PhaseGrants] = err.Error()
+		return report, nil
+	}
+	report.merge(local)
+	return report, nil
 }
 
 func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype.Timestamptz) (Report, error) {
+	return runPhases(ctx, db, opts, startedAt, true)
+}
+
+// clientsRecorded dry-runs every phase but grants, to tell whether key
+// policies written now would be complete.
+func clientsRecorded(ctx context.Context, db TxStarter, organizationID string) (Report, error) {
+	return runPhases(ctx, db, Options{OrganizationID: organizationID, Apply: false, PageSize: 0}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
+}
+
+// sharedReady reports whether the recorded auth clients and links are current
+// enough to grant against: no phase before grants failed, and a dry run has
+// nothing left to retire. A client or link awaiting retirement keeps its
+// stable id, so a grant written on it now would come back if it were revived.
+func sharedReady(r Report) bool {
+	if len(r.PhaseErrors) > 0 {
+		return false
+	}
+	return r.Mode == "apply" || (r.PendingRetiredClients == 0 && r.PendingRetiredLinks == 0)
+}
+
+// keysReady reports whether the phases before grants left every auth client,
+// link and header copy recorded and current: shared clients are ready, no
+// decision lacks its records, and a dry run has nothing left to write.
+func keysReady(r Report) bool {
+	if !sharedReady(r) || r.Gaps > 0 {
+		return false
+	}
+	return r.Mode == "apply" || (r.PendingClients == 0 && r.PendingLinks == 0 && r.PendingHeaders == 0)
+}
+
+func runPhases(ctx context.Context, db TxStarter, opts Options, startedAt pgtype.Timestamptz, withGrants bool) (Report, error) {
 	pageSize := opts.PageSize
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
@@ -576,9 +703,17 @@ func runLocked(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 			return reconcileDerived(ctx, New(tx), opts, local, want, failed, startedAt)
 		}},
 		{name: PhaseMark, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-			// Last, over every committed phase's servers.
 			return markRequiringUpstreamAuth(ctx, New(tx), opts, &report, local)
 		}},
+	}
+	if withGrants {
+		phases = append(phases, phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+			// Last, over every committed phase's auth clients.
+			shared, ready := sharedReady(report), keysReady(report)
+			local.SharedClientsWaiting = !shared
+			local.APIKeysWaiting = !ready
+			return runGrants(ctx, tx, opts, local, shared, ready)
+		}})
 	}
 	for _, p := range phases {
 		local := newReport(opts.Apply)

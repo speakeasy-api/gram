@@ -340,6 +340,65 @@ func (q *Queries) FindMCPResourceProject(ctx context.Context, arg FindMCPResourc
 	return project_id, err
 }
 
+const findMCPResourceProjects = `-- name: FindMCPResourceProjects :many
+SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (
+  SELECT toolsets.id AS resource_id, toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = $1
+    AND toolsets.id = ANY($2::uuid[])
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.id AS resource_id, mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = ANY($2::uuid[])
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.id AS resource_id, meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND meta_mcp_servers.id = ANY($2::uuid[])
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+`
+
+type FindMCPResourceProjectsParams struct {
+	OrganizationID string
+	ResourceIds    []uuid.UUID
+}
+
+type FindMCPResourceProjectsRow struct {
+	ResourceID uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// FindMCPResourceProject for many resources at once; unknown ids are absent.
+func (q *Queries) FindMCPResourceProjects(ctx context.Context, arg FindMCPResourceProjectsParams) ([]FindMCPResourceProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findMCPResourceProjects, arg.OrganizationID, arg.ResourceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindMCPResourceProjectsRow
+	for rows.Next() {
+		var i FindMCPResourceProjectsRow
+		if err := rows.Scan(&i.ResourceID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findMCPResourceVisibility = `-- name: FindMCPResourceVisibility :one
 SELECT resource_type, visibility FROM (
   SELECT
@@ -812,10 +871,19 @@ func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganiza
 }
 
 const getPrincipalGrants = `-- name: GetPrincipalGrants :many
-SELECT principal_urn, scope, selectors
-FROM principal_grants
-WHERE organization_id = $1
-  AND principal_urn = ANY($2::text[])
+SELECT g.principal_urn, g.scope, g.selectors,
+  EXISTS (
+    SELECT 1
+    FROM auth_permission_provisions p
+    WHERE p.organization_id = g.organization_id
+      AND p.principal_urn = g.principal_urn
+      AND p.scope = g.scope
+      AND p.selectors = g.selectors
+      AND p.taken_over_at IS NULL
+  )::boolean AS inferred
+FROM principal_grants g
+WHERE g.organization_id = $1
+  AND g.principal_urn = ANY($2::text[])
 `
 
 type GetPrincipalGrantsParams struct {
@@ -827,10 +895,13 @@ type GetPrincipalGrantsRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
 	Selectors    []byte
+	Inferred     bool
 }
 
 // Returns all grant rows matching a set of principal URNs within an org.
 // Used by the access resolver to load grants for a user+role in a single query.
+// inferred marks a grant the default auth permission backfill wrote that no
+// explicit write has taken over, so it never outranks an inherited block.
 func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrantsParams) ([]GetPrincipalGrantsRow, error) {
 	rows, err := q.db.Query(ctx, getPrincipalGrants, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -840,7 +911,12 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	var items []GetPrincipalGrantsRow
 	for rows.Next() {
 		var i GetPrincipalGrantsRow
-		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.Inferred,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3452,6 +3528,36 @@ func (q *Queries) LockResourceAudience(ctx context.Context, arg LockResourceAudi
 	return err
 }
 
+const markAuthPermissionTakenOver = `-- name: MarkAuthPermissionTakenOver :exec
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+  AND taken_over_at IS NULL
+`
+
+type MarkAuthPermissionTakenOverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+}
+
+// An explicit grant write takes the grant over from the default auth
+// permission backfill: a rollback leaves it, and a rerun still never writes it
+// again. Run after the write, so a grant provisioned meanwhile is seen.
+func (q *Queries) MarkAuthPermissionTakenOver(ctx context.Context, arg MarkAuthPermissionTakenOverParams) error {
+	_, err := q.db.Exec(ctx, markAuthPermissionTakenOver,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	return err
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,
@@ -3527,6 +3633,32 @@ func (q *Queries) MarkOrganizationRoleDeletedLocally(ctx context.Context, arg Ma
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const recordAuthPermissionDefault = `-- name: RecordAuthPermissionDefault :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+type RecordAuthPermissionDefaultParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records a default grant written at organization creation.
+func (q *Queries) RecordAuthPermissionDefault(ctx context.Context, arg RecordAuthPermissionDefaultParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionDefault,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
 }
 
 const repairOrganizationRoleAssignmentUserLink = `-- name: RepairOrganizationRoleAssignmentUserLink :execrows

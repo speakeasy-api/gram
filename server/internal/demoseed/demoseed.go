@@ -121,7 +121,7 @@ type txBeginner interface {
 // failed run leaves the previous data in place. It returns the seeder, whose
 // clock the ClickHouse seed reuses.
 func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, spec Spec) (*seeder, error) {
-	s := &seeder{spec: spec, q: nil, logger: logger, now: time.Time{}}
+	s := &seeder{spec: spec, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)
 		if err := s.runPostgres(ctx); err != nil {
