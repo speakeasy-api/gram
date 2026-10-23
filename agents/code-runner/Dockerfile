@@ -11,10 +11,12 @@ RUN cargo build --locked --release
 
 FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 COPY --from=build /src/target/release/gram-code-runner /usr/local/bin/gram-code-runner
+COPY --from=build /src/target/release/gram-code-worker /usr/local/bin/gram-code-worker
 COPY --from=monty-builder /monty/bin/monty /usr/local/bin/monty
 USER 65532:65532
 ENV GRAM_CODE_RUNNER_LISTEN=0.0.0.0:8081
 # Worker environments are cleared; never rely on PATH to find the interpreter.
-ENV GRAM_CODE_RUNNER_MONTY_BIN=/usr/local/bin/monty
+# The shim confines each worker before exec'ing the monty binary beside it.
+ENV GRAM_CODE_RUNNER_MONTY_BIN=/usr/local/bin/gram-code-worker
 EXPOSE 8081
 ENTRYPOINT ["/usr/local/bin/gram-code-runner"]

@@ -41,7 +41,7 @@ func configureCodeRunner(t *testing.T, ti *testInstance) *codemode.Coordinator {
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 	store, ok := ti.cacheAdapter.(codemode.OwnershipStore)
 	require.True(t, ok)
-	coordinator, err := codemode.NewCoordinator(&codemode.StaticProvider{Runner: client}, store)
+	coordinator, err := codemode.NewCoordinator(&codemode.StaticProvider{Runner: client}, store, codemode.Limits{})
 	require.NoError(t, err)
 	mcp.SetTestCodeExecutor(ti.service.Service, coordinator)
 	return coordinator
@@ -149,7 +149,7 @@ func TestCodeModeSessionlessCancellationThroughAnotherCoordinator(t *testing.T) 
 	// This coordinator shares only Redis. It has no local record or runtime for the active run.
 	store, ok := ti.cacheAdapter.(codemode.OwnershipStore)
 	require.True(t, ok)
-	other, err := codemode.NewCoordinator(&codemode.StaticProvider{}, store)
+	other, err := codemode.NewCoordinator(&codemode.StaticProvider{}, store, codemode.Limits{})
 	require.NoError(t, err)
 	mcp.SetTestCodeExecutor(ti.service.Service, other)
 	otherToken := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
@@ -189,9 +189,11 @@ func TestCodeModeEndToEndDiscoveryRemoteAndTunnel(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	configureCodeRunner(t, ti)
 	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
 	slug := "code-" + uuid.NewString()
-	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
 	setGatewayMode(t, ctx, ti, gateway.ID, "code_mode")
+	token := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
 	hosted := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 0, "public", "list")
 	remote := newRecordingUpstream(t, "ping")
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote tools", "remote", 1, remote.url)
@@ -200,7 +202,7 @@ func TestCodeModeEndToEndDiscoveryRemoteAndTunnel(t *testing.T) {
 	upstream := httptest.NewServer(tunnel)
 	t.Cleanup(upstream.Close)
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), upstream.URL, time.Hour))
-	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), token, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	var catalog struct {
@@ -222,7 +224,7 @@ paths = [item["path"] for item in page["items"]]
 description = await tools.describe("remote--ping")
 remote, tunnel = await asyncio.gather(tools.call("remote--ping", {}), tools.call("tunnel--ping", {}))
 {"paths": paths, "remote": remote["ok"], "tunnel": tunnel["ok"]}`
-	w, err = servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": code}}), "", map[string]string{"Mcp-Session-Id": uuid.NewString()})
+	w, err = servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": code}}), token, map[string]string{"Mcp-Session-Id": uuid.NewString()})
 	require.NoError(t, err)
 	var response struct {
 		Error  json.RawMessage `json:"error"`

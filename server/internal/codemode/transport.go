@@ -31,8 +31,15 @@ const (
 	connectTimeout = 5 * time.Second
 	// maxUpgradeHeaderBytes bounds an untrusted runner's HTTP response headers.
 	maxUpgradeHeaderBytes = 16 << 10
-	// maxRunnerStreams stays below the peer's 16-stream limit, including closing streams.
-	maxRunnerStreams = 4
+	// maxRunnerStreams is one runner pod's concurrent executions. Each runs in
+	// its own Monty worker that starts in about a millisecond and is capped at
+	// 64 MiB, so a pod is CPU-bound rather than startup-bound. It matches the
+	// runner's GRAM_CODE_RUNNER_CAPACITY default and stays below the peer's
+	// 16-stream limit, which counts closing streams too.
+	maxRunnerStreams = 12
+	// runnerSlotWait bounds how long an execution waits for a free stream on
+	// a runner that every caller shares, such as the local runner.
+	runnerSlotWait = DefaultAdmissionWait
 )
 
 // RunnerClient multiplexes executions over one authenticated runner connection.

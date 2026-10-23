@@ -32,10 +32,11 @@ Each callback uses that execution's context. Callbacks must not accept a caller,
 project, credential or destination supplied by a runner. The host API itself does
 not register a public MCP tool or provision a sandbox.
 
-Anonymous sessions share four runner identities per gateway. Each identity can
-hold four executions, so anonymous traffic on one gateway can consume all 16
-per-replica organization slots. It can delay authenticated callers in the same
-organization; separate organizations retain their own concurrency budgets.
+Code Mode is only for signed-in callers. The management API refuses Code Mode
+on a gateway without a user session issuer, so a Code Mode gateway always
+requires sign-in. Serving backs this up for rows written outside the API: an
+unauthenticated gate is served Progressive, and `execute` refuses an
+unauthenticated caller before any admission, ownership record or runner.
 
 ## Execution and cancellation
 
@@ -63,12 +64,10 @@ Expiry or refresh rotation of the original bearer ends its running execution at
 the next helper boundary. A replacement bearer cannot inherit or cancel that
 execution; use the original HTTP request lifetime to interrupt it. This preserves
 the admitted credential boundary even when a refreshed session gains permissions.
-Anonymous requests have independent execution identities; cancellation
-notifications cannot control them. Anonymous callers cancel through the HTTP
-request lifetime, and every execution has the same hard deadline.
 
-The Go client reuses an authenticated HTTP-upgraded yamux connection. Four local
-admission slots bound discovery and open/closing streams; refusals do not open
+The Go client reuses an authenticated HTTP-upgraded yamux connection. Twelve local
+admission slots bound discovery and open/closing streams; an execution waits up
+to three seconds for one, and refusals do not open
 another stream. Admission remains held until the peer's FIN. The runner's
 `admission_refused` response proves the program did not run. A missing `started`
 response does not prove that. Submitted programs are never automatically retried.
@@ -162,24 +161,35 @@ tag, see below), and
 `GRAM_CODE_RUNTIME_TOKEN`. The runner pod gets the same secret under
 `GRAM_CODE_RUNNER_TOKEN`; neither value reaches the Monty child.
 
-Each caller identity (user, external user, API key and credential) gets its own pod
-within a project, so a pod never runs code for two users, projects or
-organizations. The organization gateway has no project: it runs
-organization-wide (`Scope.OrganizationWide`, project `uuid.Nil`), with its own
-pod per caller kept apart from that caller's project pods and counted in the
-organization cap. Anonymous sessions share a bounded set of runtime identities
-per gateway, with fresh interpreter state and member sessions confined to each
-execution. An authenticated pod is reused only by its caller and is deleted after a minute idle, never returned to
-the warm pool. Each
-pod admits four concurrent executions. A replica holds at most 64 pods
-(`GRAM_CODE_RUNTIME_MAX_RUNNERS`), at most 16 per organization
-(`GRAM_CODE_RUNTIME_MAX_ORGANIZATION_RUNNERS`), and evicts its oldest idle pod
-when another caller needs capacity. Readiness polls start at 25 ms and back off
-to one second, so adopting a warm pod costs little more than the controller's
-bind. Claims
-expire after five minutes, refuse admission with less than 35 seconds remaining,
-and are deleted after a minute idle. A replacement can warm while the old pod
-drains. Warm-up has its own two-minute deadline; cancellation of one waiting
+Runner pods are pooled per organization and shared by every caller in it,
+including the organization gateway (`Scope.OrganizationWide`, project
+`uuid.Nil`); a pod never runs code for two organizations. Sharing is safe
+because every execution runs in a fresh Monty worker process that exits with
+it, user code has no filesystem, environment, network or subprocess access, the
+runner holds no credentials or tool destinations, and Speakeasy answers every
+tool callback with the execution's own scope. Each worker is started through
+`gram-code-worker`, which sets `no_new_privs` and a seccomp filter denying
+ptrace, `process_vm_readv`/`writev`, signals and pidfd calls, so an escaped
+worker cannot inspect or signal its siblings. A same-UID worker can still open
+`/proc/<pid>/mem` of a dumpable sibling after an interpreter escape; gVisor and
+the organization boundary bound that case.
+
+An execution goes to the organization's least busy pod. When every pod is full
+the provider warms another, up to four per organization
+(`GRAM_CODE_RUNTIME_MAX_ORGANIZATION_RUNNERS`) and 64 per replica
+(`GRAM_CODE_RUNTIME_MAX_RUNNERS`); a burst warms pods in parallel once the
+warming pods' streams are spoken for. At the organization cap an execution
+waits up to three seconds for a free stream and is then refused as retryable
+capacity. A full replica evicts another organization's oldest idle pod; busy
+pods are never evicted. Each pod admits twelve concurrent executions (the
+runner's `GRAM_CODE_RUNNER_CAPACITY` default); a worker starts in about a
+millisecond, so pods are CPU-bound and should request about 1 CPU and 1 to 1.5
+GiB. Readiness polls start at 25 ms and back off to one second, so adopting a
+warm pod costs little more than the controller's bind. Claims expire after five
+minutes; pods still in use renew their claim two minutes before expiry, so an
+active organization keeps its warm pods. A pod refuses admission with less than
+35 seconds remaining and is deleted after ten minutes idle. A replacement can
+warm while the old pod drains. Warm-up has its own two-minute deadline; cancellation of one waiting
 request does not cancel the shared cold start. Local housekeeping consumes zero Temporal
 actions. Claim deletion uses a UID precondition. Every admission, including one
 that reuses a live connection, checks current claim ownership and expiry, the
@@ -189,7 +199,17 @@ check before dialing. An unready pod refuses the admission without retiring it.
 The dedicated Kubernetes client is explicitly limited to 100 QPS with a
 200-request burst; each admission costs a claim read, a sandbox read and a pod
 list.
-A changed pod fails the execution; programs are never replayed.
+A pod that changed before submission is retired and the execution moves to
+another pod; programs are never replayed.
+
+The provider re-reads its SandboxTemplate every 15 seconds. While it is missing,
+as during a deploy that has not synced it yet, `Available` is false: gateways
+serve Progressive discovery, Settings and consent hide Code Mode, and no claim
+is created. A claim whose controller reports `TemplateNotFound` marks the
+runtime unavailable and is deleted at once. A starting replica reports
+`/healthz` not ready until it has read the template, for at most five minutes,
+so a rolling deploy keeps the previous replica serving; use this for readiness,
+not liveness.
 
 The provider requires the Agent Sandbox controller's
 [`spec.lifecycle.shutdownTime`](https://github.com/kubernetes-sigs/agent-sandbox/blob/v0.5.6/extensions/api/v1alpha1/sandboxclaim_types.go)
@@ -204,8 +224,8 @@ retaining the previous pool until its Speakeasy replicas and claims have drained
 infra chart derives the suffix from the image reference and supports one previous
 image. All server entrypoints release providers through MCP Service.Shutdown after
 HTTP draining. Transient Kubernetes errors refuse the individual admission without
-retiring a healthy pod. A runner connection failure still affects up to four
-executions on that caller's transport; dispatched writes retain unknown outcomes.
+retiring a healthy pod. A runner connection failure still affects up to twelve
+executions on that pod's transport; dispatched writes retain unknown outcomes.
 
 ### Images and previews
 
@@ -276,15 +296,24 @@ requires the ingress policy, separate preview namespace/secrets and independent
 secret rotation for development and production. Workload identity/claim RBAC is
 also environment-specific. No token reaches the Monty child.
 
-The coordinator permits at most 16 active executions per organization and four
-per caller/project on each replica, including cold-start and cleanup time. It
-refuses excess work before Redis or pod acquisition. Pods remain capped at 16
-per organization and 64 per replica. Limits are per replica, not a distributed
-fair scheduler; bursts can still evict another organization's idle pod and
-cause cold starts. There is no queue, retry or promised cross-tenant latency.
-Anonymous callers share four runner identities per gateway (fresh interpreters,
-execution-local member sessions); they share those per-caller limits. Keep the
-runtime default-off until isolation, network policy and capacity checks pass.
+The coordinator permits at most 48 active executions per organization
+(`GRAM_CODE_RUNTIME_MAX_ORGANIZATION_EXECUTIONS`, four pods of twelve streams)
+and four per caller (`GRAM_CODE_RUNTIME_MAX_CALLER_EXECUTIONS`) on each replica,
+including cold-start and cleanup time. A request over a limit waits first come
+first served for up to three seconds (`GRAM_CODE_RUNTIME_ADMISSION_WAIT`),
+always taking its caller slot before its organization slot, then gets a
+retryable refusal before Redis or pod acquisition. Limits are per replica, not a
+distributed fair scheduler; bursts can still evict another organization's idle
+pod and cause cold starts. Keep the runtime default-off until isolation, network
+policy and capacity checks pass.
+
+An execution refused before submission returns a tool error whose structured
+content is `{"error": {"code", "message", "retryable", "retry_after_ms"}}`, with
+codes `capacity_exceeded`, `runtime_unavailable`, `request_active`, `cancelled`
+and `not_admitted`. The message always says no program was submitted.
+
+Each tool call from an execution starts its own trace, linked to the
+execution's, so Tool Logs shows one correctly attributed row per member call.
 
 ## Selecting Code Mode
 
@@ -302,10 +331,12 @@ never use Code Mode.
 New choices require a configured code runtime. Gateway responses expose
 `code_mode_enabled` to authorized project readers.
 
-A disabled runtime prevents new explicit choices. Existing Code Mode
+A disabled or unavailable runtime, or a gateway without sign-in, prevents new
+explicit choices. Existing Code Mode
 connections use Progressive discovery with their original consent catalogue;
 the stored default and issued policy are unchanged. A configured runtime that
-cannot admit a run returns an execution refusal without submitting a program. Deploy compatible readers
+cannot admit a run returns a structured execution refusal without submitting a
+program. Deploy compatible readers
 and infrastructure before enabling issuance. The separate infra chart is
 disabled by default.
 

@@ -13,14 +13,22 @@ import (
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"golang.org/x/sync/semaphore"
 )
 
 const (
-	// maxOrganizationExecutions reserves replica capacity for other tenants
-	// independently of how many caller identities an organization creates.
-	maxOrganizationExecutions = 16
-	// maxCallerExecutions matches the runner's four concurrent streams.
-	maxCallerExecutions = 4
+	// DefaultOrganizationExecutions is how many executions one organization
+	// may run at once on a replica: four shared runner pods at twelve streams
+	// each. It reserves the rest of the replica for other tenants however
+	// many caller identities an organization creates.
+	DefaultOrganizationExecutions = 4 * maxRunnerStreams
+	// DefaultCallerExecutions bounds one caller's concurrent executions, so
+	// one agent fanning out cannot take its whole organization's share.
+	DefaultCallerExecutions = 4
+	// DefaultAdmissionWait is how long a request waits, first come first
+	// served, for a caller, organization or runner slot before it is refused
+	// as retryable. Short enough that a client's own timeout never fires first.
+	DefaultAdmissionWait = 3 * time.Second
 	// executionLeaseTTL outlives the hard execution deadline and cleanup.
 	executionLeaseTTL = MaxWallTime + 15*time.Second
 	// cancellationPoll bounds cross-replica cancellation latency without replayable jobs.
@@ -56,6 +64,9 @@ type Scope struct {
 type Executor interface {
 	// Enabled reports whether a runtime is configured on this replica.
 	Enabled() bool
+	// Available reports whether the configured runtime can start runners
+	// now. Serving falls back to Progressive discovery while it is false.
+	Available() bool
 	// Execute admits and executes a program once.
 	Execute(context.Context, Scope, string, HostFactory) (*ExecutionResult, error)
 	// Cancel targets only the exact admitted caller, session and request.
@@ -86,26 +97,67 @@ type OwnershipStore interface {
 	cache.CompareAndSwapCache
 }
 
+// Limits bounds concurrent executions per replica. Zero values use the defaults.
+type Limits struct {
+	// OrganizationExecutions caps one organization's concurrent executions.
+	OrganizationExecutions int
+
+	// CallerExecutions caps one caller identity's concurrent executions.
+	CallerExecutions int
+
+	// AdmissionWait bounds how long a request queues for a free slot.
+	AdmissionWait time.Duration
+}
+
 // Coordinator uses short Redis ownership records so cancellation works across replicas.
-// Polling is bounded by the 30-second execution lifetime; no execution is queued or replayed.
+// Admission waits briefly, first come first served, for a free slot; an
+// execution is never replayed.
 type Coordinator struct {
 	provider      Provider
 	owners        OwnershipStore
-	mu            sync.Mutex
-	organizations map[string]int
-	callers       map[runnerScope]int
+	wait          time.Duration
+	organizations *keyedLimiter
+	callers       *keyedLimiter
 }
 
 // NewCoordinator requires distributed ownership even for a locally hosted runner.
-func NewCoordinator(provider Provider, owners OwnershipStore) (*Coordinator, error) {
+func NewCoordinator(provider Provider, owners OwnershipStore, limits Limits) (*Coordinator, error) {
 	if provider == nil || owners == nil {
 		return nil, fmt.Errorf("code mode requires a runtime provider and ownership store")
 	}
-	return &Coordinator{provider: provider, owners: owners, mu: sync.Mutex{}, organizations: map[string]int{}, callers: map[runnerScope]int{}}, nil
+	if limits.OrganizationExecutions <= 0 {
+		limits.OrganizationExecutions = DefaultOrganizationExecutions
+	}
+	if limits.CallerExecutions <= 0 {
+		limits.CallerExecutions = DefaultCallerExecutions
+	}
+	if limits.AdmissionWait <= 0 {
+		limits.AdmissionWait = DefaultAdmissionWait
+	}
+	return &Coordinator{provider: provider, owners: owners, wait: limits.AdmissionWait, organizations: newKeyedLimiter(limits.OrganizationExecutions), callers: newKeyedLimiter(limits.CallerExecutions)}, nil
 }
 
 // Enabled implements Executor.
 func (c *Coordinator) Enabled() bool { return true }
+
+// Available implements Executor. A provider without an availability check
+// is always able to run.
+func (c *Coordinator) Available() bool {
+	if provider, ok := c.provider.(interface{ Available() bool }); ok {
+		return provider.Available()
+	}
+	return true
+}
+
+// Ready reports whether the provider has finished its startup checks, so a
+// rolling deploy keeps the previous replica serving until this one can run
+// code. A provider without startup checks is always ready.
+func (c *Coordinator) Ready() bool {
+	if provider, ok := c.provider.(interface{ Ready() bool }); ok {
+		return provider.Ready()
+	}
+	return true
+}
 
 func scopeKey(scope Scope) (string, error) {
 	if scope.Organization == "" || (scope.Project == uuid.Nil) != scope.OrganizationWide || scope.Gateway == uuid.Nil || scope.Session == "" || len(scope.Request) == 0 || !json.Valid(scope.Request) || string(scope.Request) == "null" {
@@ -128,7 +180,7 @@ func (c *Coordinator) Execute(ctx context.Context, scope Scope, code string, fac
 	if len(code) == 0 || len(code) > MaxSourceBytes {
 		return nil, fmt.Errorf("program exceeds source limit")
 	}
-	release, err := c.admit(scope)
+	release, err := c.admit(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -138,8 +190,11 @@ func (c *Coordinator) Execute(ctx context.Context, scope Scope, code string, fac
 	id := uuid.New()
 	owner := id.String()
 	acquired, err := c.owners.SetIfAbsent(ctx, key, owner, executionLeaseTTL)
-	if err != nil || !acquired {
-		return nil, fmt.Errorf("execution admission unavailable or request already active")
+	if err != nil {
+		return nil, fmt.Errorf("%w: record execution ownership: %w", ErrRuntimeUnavailable, err)
+	}
+	if !acquired {
+		return nil, ErrAlreadyActive
 	}
 	defer func() {
 		cleanup, stop := context.WithTimeout(context.WithoutCancel(ctx), ownershipTimeout)
@@ -162,7 +217,7 @@ func (c *Coordinator) Execute(ctx context.Context, scope Scope, code string, fac
 	err = c.owners.Get(check, key, &current)
 	stop()
 	if err != nil || current != owner {
-		return nil, fmt.Errorf("execution cancelled before submission")
+		return nil, ErrCancelledBeforeSubmit
 	}
 	monitorDone := make(chan struct{})
 	go func() {
@@ -172,37 +227,111 @@ func (c *Coordinator) Execute(ctx context.Context, scope Scope, code string, fac
 	}()
 	defer func() { cancel(); <-monitorDone }()
 	if ctx.Err() != nil {
-		return nil, fmt.Errorf("execution cancelled before submission")
+		return nil, ErrCancelledBeforeSubmit
 	}
 	return lease.Client().Run(ctx, id, code, factory), nil
 }
 
-// admit refuses excess work before Redis, cold starts or eviction. Counters
-// cover the whole admitted lifetime, including provider acquisition and cleanup.
-func (c *Coordinator) admit(scope Scope) (func(), error) {
-	key, err := newRunnerScope(scope)
+// admit waits up to the admission bound for a caller slot and then an
+// organization slot, always in that order so two requests cannot hold each
+// other's next slot. Slots cover the whole admitted lifetime, including
+// provider acquisition and cleanup.
+func (c *Coordinator) admit(ctx context.Context, scope Scope) (func(), error) {
+	caller, err := callerKey(scope)
 	if err != nil {
 		return nil, err
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.organizations[key.organization] >= maxOrganizationExecutions || c.callers[key] >= maxCallerExecutions {
-		return nil, fmt.Errorf("code runtime concurrency limit reached")
+	wait, stop := context.WithTimeout(ctx, c.wait)
+	defer stop()
+	releaseCaller, err := c.callers.acquire(wait, caller)
+	if err != nil {
+		return nil, admissionError(ctx, "caller", err)
 	}
-	c.organizations[key.organization]++
-	c.callers[key]++
+	releaseOrganization, err := c.organizations.acquire(wait, scope.Organization)
+	if err != nil {
+		releaseCaller()
+		return nil, admissionError(ctx, "organization", err)
+	}
 	return func() {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		c.organizations[key.organization]--
-		if c.organizations[key.organization] == 0 {
-			delete(c.organizations, key.organization)
-		}
-		c.callers[key]--
-		if c.callers[key] == 0 {
-			delete(c.callers, key)
-		}
+		releaseOrganization()
+		releaseCaller()
 	}, nil
+}
+
+// admissionError keeps a caller's own cancellation distinct from a full limit.
+func admissionError(ctx context.Context, limit string, err error) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("wait for %s execution slot: %w", limit, ctx.Err())
+	}
+	return fmt.Errorf("%w: %s concurrency limit reached: %w", ErrCapacity, limit, err)
+}
+
+// callerKey binds a caller's limit to its organization and every identity
+// dimension, without ambiguous concatenation.
+func callerKey(scope Scope) (string, error) {
+	if scope.Organization == "" || (scope.Project == uuid.Nil) != scope.OrganizationWide || len(scope.Caller) == 0 {
+		return "", fmt.Errorf("code runtime requires project ownership and a caller")
+	}
+	encoded, err := json.Marshal([]any{scope.Organization, scope.Caller})
+	if err != nil {
+		return "", fmt.Errorf("encode code runtime caller: %w", err)
+	}
+	digest := sha256.Sum256(encoded)
+	return hex.EncodeToString(digest[:]), nil
+}
+
+// keyedLimiter holds one first-come-first-served semaphore per key and
+// forgets a key once nothing holds or waits on it.
+type keyedLimiter struct {
+	size int64
+	mu   sync.Mutex
+	keys map[string]*keyedSlot
+}
+
+type keyedSlot struct {
+	sem   *semaphore.Weighted
+	users int
+}
+
+func newKeyedLimiter(size int) *keyedLimiter {
+	return &keyedLimiter{size: int64(size), mu: sync.Mutex{}, keys: map[string]*keyedSlot{}}
+}
+
+func (l *keyedLimiter) acquire(ctx context.Context, key string) (func(), error) {
+	l.mu.Lock()
+	slot := l.keys[key]
+	if slot == nil {
+		slot = &keyedSlot{sem: semaphore.NewWeighted(l.size), users: 0}
+		l.keys[key] = slot
+	}
+	slot.users++
+	l.mu.Unlock()
+	if err := slot.sem.Acquire(ctx, 1); err != nil {
+		l.forget(key, slot)
+		return nil, fmt.Errorf("acquire execution slot: %w", err)
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			slot.sem.Release(1)
+			l.forget(key, slot)
+		})
+	}, nil
+}
+
+func (l *keyedLimiter) forget(key string, slot *keyedSlot) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	slot.users--
+	if slot.users == 0 {
+		delete(l.keys, key)
+	}
+}
+
+func (l *keyedLimiter) len() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.keys)
 }
 
 // watchOwnership returns once the execution is cancelled, another owner
@@ -272,7 +401,7 @@ func (p *StaticProvider) Acquire(ctx context.Context, _ Scope) (Lease, error) {
 		return nil, fmt.Errorf("acquire local runner: %w", err)
 	}
 	if p.Runner == nil {
-		return nil, fmt.Errorf("local code runner unavailable")
+		return nil, fmt.Errorf("%w: local code runner is not configured", ErrRuntimeUnavailable)
 	}
 	return &staticLease{runner: p.Runner}, nil
 }
@@ -288,9 +417,12 @@ type Disabled struct{}
 // Enabled implements Executor.
 func (Disabled) Enabled() bool { return false }
 
+// Available implements Executor.
+func (Disabled) Available() bool { return false }
+
 // Execute implements Executor.
 func (Disabled) Execute(context.Context, Scope, string, HostFactory) (*ExecutionResult, error) {
-	return nil, fmt.Errorf("code mode is unavailable")
+	return nil, ErrRuntimeUnavailable
 }
 
 // Cancel implements Executor.

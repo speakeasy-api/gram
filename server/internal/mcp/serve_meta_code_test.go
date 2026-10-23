@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -82,6 +83,8 @@ type recordingCodeExecutor struct {
 
 func (e *recordingCodeExecutor) Enabled() bool { return true }
 
+func (e *recordingCodeExecutor) Available() bool { return true }
+
 func (e *recordingCodeExecutor) Execute(ctx context.Context, scope codemode.Scope, code string, factory codemode.HostFactory) (*codemode.ExecutionResult, error) {
 	e.mu.Lock()
 	e.scopes = append(e.scopes, scope)
@@ -156,11 +159,11 @@ func TestCodeModeOrganizationGatewayHidesUnconnectableToolsets(t *testing.T) {
 	require.NotContains(t, w.Body.String(), closed.slug+"--")
 }
 
-// TestCodeModeAnonymousCallersNeedSessionAndShareBoundedRunners pins the
-// anonymous admission rules: a caller without an MCP session is refused
-// before any runner is requested, and any number of anonymous sessions maps
-// onto a bounded set of runner identities per gateway.
-func TestCodeModeAnonymousCallersNeedSessionAndShareBoundedRunners(t *testing.T) {
+// TestCodeModeNeverServesAnonymousCallers pins the serving backstop for a
+// Code Mode row written outside the API on a gateway without sign-in: it
+// lists Progressive tools, refuses execute, and never reaches the runtime,
+// whatever bearer or session an anonymous caller sends.
+func TestCodeModeNeverServesAnonymousCallers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
@@ -169,50 +172,64 @@ func TestCodeModeAnonymousCallersNeedSessionAndShareBoundedRunners(t *testing.T)
 	setGatewayMode(t, ctx, ti, gateway.ID, "code_mode")
 	executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil}
 	mcp.SetTestCodeExecutor(ti.service.Service, executor)
-	execute := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}})
 
-	w, err := servePublicHTTP(t, t.Context(), ti, slug, execute, "", nil)
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
 	require.NoError(t, err)
-	require.Contains(t, w.Body.String(), "Mcp-Session-Id")
-	require.Empty(t, executor.callers(), "a sessionless anonymous caller must not reach the runtime")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), `"name":"execute_tool"`)
+	require.NotContains(t, w.Body.String(), `"name":"execute"`)
 
-	for range 32 {
-		_, err := servePublicHTTP(t, t.Context(), ti, slug, execute, "", map[string]string{"Mcp-Session-Id": uuid.NewString()})
+	execute := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}})
+	for _, bearer := range []string{"", uuid.NewString()} {
+		_, err := servePublicHTTP(t, t.Context(), ti, slug, execute, bearer, map[string]string{"Mcp-Session-Id": uuid.NewString()})
 		require.NoError(t, err)
 	}
-	callers := executor.callers()
-	require.NotEmpty(t, callers)
-	require.LessOrEqual(t, len(callers), 4, "anonymous sessions share a bounded set of runners")
+	require.Empty(t, executor.callers(), "an anonymous caller never reaches the code runtime")
 }
 
-// TestCodeModeUnverifiedBearerStaysAnonymous pins that an ungated gateway,
-// which never checks the Authorization header, applies the anonymous rules
-// to a caller that sends one: no session is refused, and a fresh bearer per
-// request cannot claim a fresh runner.
-func TestCodeModeUnverifiedBearerStaysAnonymous(t *testing.T) {
+// TestCodeModeRefusalIsStructured pins that an execution refused before
+// submission reports a typed, retryable error instead of an opaque message.
+func TestCodeModeRefusalIsStructured(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
-	auth, _ := contextvalues.GetAuthContext(ctx)
-	slug := "code-" + uuid.NewString()
-	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
-	setGatewayMode(t, ctx, ti, gateway.ID, "code_mode")
-	executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil}
-	mcp.SetTestCodeExecutor(ti.service.Service, executor)
-	execute := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}})
+	fx := seedOrganizationGateway(t, ctx, ti)
+	mcp.SetTestCodeExecutor(ti.service.Service, &refusingCodeExecutor{err: fmt.Errorf("admit: %w", codemode.ErrCapacity)})
+	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
 
-	w, err := servePublicHTTP(t, t.Context(), ti, slug, execute, uuid.NewString(), nil)
+	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
 	require.NoError(t, err)
-	require.Contains(t, w.Body.String(), "Mcp-Session-Id")
-	require.Empty(t, executor.callers(), "an unverified bearer must not stand in for an MCP session")
-
-	for range 32 {
-		_, err := servePublicHTTP(t, t.Context(), ti, slug, execute, uuid.NewString(), map[string]string{"Mcp-Session-Id": uuid.NewString()})
-		require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var response struct {
+		Result struct {
+			IsError           bool `json:"isError"`
+			StructuredContent struct {
+				Error struct {
+					Code         string `json:"code"`
+					Message      string `json:"message"`
+					Retryable    bool   `json:"retryable"`
+					RetryAfterMS int    `json:"retry_after_ms"`
+				} `json:"error"`
+			} `json:"structuredContent"`
+		} `json:"result"`
 	}
-	callers := executor.callers()
-	require.NotEmpty(t, callers)
-	require.LessOrEqual(t, len(callers), 4, "unverified bearers share the anonymous runners")
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.True(t, response.Result.IsError)
+	refusal := response.Result.StructuredContent.Error
+	require.Equal(t, "capacity_exceeded", refusal.Code)
+	require.True(t, refusal.Retryable)
+	require.Positive(t, refusal.RetryAfterMS)
+	require.Contains(t, refusal.Message, "No program was submitted.")
 }
+
+// refusingCodeExecutor refuses every execution before submission.
+type refusingCodeExecutor struct{ err error }
+
+func (*refusingCodeExecutor) Enabled() bool   { return true }
+func (*refusingCodeExecutor) Available() bool { return true }
+func (e *refusingCodeExecutor) Execute(context.Context, codemode.Scope, string, codemode.HostFactory) (*codemode.ExecutionResult, error) {
+	return nil, e.err
+}
+func (*refusingCodeExecutor) Cancel(context.Context, codemode.Scope) error { return nil }
 
 func TestCodeModeDescriptionOmitsMembersWithNoPermittedTools(t *testing.T) {
 	t.Parallel()

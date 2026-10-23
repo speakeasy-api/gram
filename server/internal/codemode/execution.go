@@ -126,8 +126,11 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	ctx, cancelCause := context.WithCancelCause(ctx)
 	cancel := func() { cancelCause(context.Canceled) }
 	defer cancel()
-	if !c.slots.TryAcquire(1) {
-		fail("admission_refused", "code runtime capacity is full; program was not submitted")
+	slotCtx, stopSlotWait := context.WithTimeout(ctx, runnerSlotWait)
+	err := c.slots.Acquire(slotCtx, 1)
+	stopSlotWait()
+	if err != nil {
+		fail("capacity_exceeded", "code runtime capacity is full; program was not submitted; retry shortly")
 		return result
 	}
 	defer c.slots.Release(1)

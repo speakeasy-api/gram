@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
@@ -99,36 +100,74 @@ func TestOwnershipWatchToleratesTransientReadErrors(t *testing.T) {
 
 func TestCoordinatorLimitsCallerAndOrganizationConcurrency(t *testing.T) {
 	t.Parallel()
-	coordinator, err := NewCoordinator(&StaticProvider{}, &scriptedOwners{})
+	const organizationLimit, callerLimit = 8, 4
+	coordinator, err := NewCoordinator(&StaticProvider{}, &scriptedOwners{}, Limits{OrganizationExecutions: organizationLimit, CallerExecutions: callerLimit, AdmissionWait: 20 * time.Millisecond})
 	require.NoError(t, err)
 	scope := Scope{Organization: "test-org", Project: uuid.New(), Caller: []string{"caller-0"}}
 	var releases []func()
-	for i := range maxOrganizationExecutions {
-		scope.Caller = []string{fmt.Sprintf("caller-%d", i/maxCallerExecutions)}
-		release, err := coordinator.admit(scope)
+	for i := range organizationLimit {
+		scope.Caller = []string{fmt.Sprintf("caller-%d", i/callerLimit)}
+		release, err := coordinator.admit(t.Context(), scope)
 		require.NoError(t, err)
 		releases = append(releases, release)
-		if i == maxCallerExecutions-1 {
-			_, err := coordinator.admit(scope)
-			require.ErrorContains(t, err, "concurrency limit")
+		if i == callerLimit-1 {
+			_, err := coordinator.admit(t.Context(), scope)
+			require.ErrorIs(t, err, ErrCapacity)
 		}
 	}
 	scope.Caller = []string{"another-caller"}
-	_, err = coordinator.admit(scope)
-	require.ErrorContains(t, err, "concurrency limit")
+	_, err = coordinator.admit(t.Context(), scope)
+	require.ErrorIs(t, err, ErrCapacity)
 	other := scope
 	other.Organization = "another-org"
-	release, err := coordinator.admit(other)
+	release, err := coordinator.admit(t.Context(), other)
 	require.NoError(t, err, "another tenant retains capacity")
 	release()
 	for _, release := range releases {
 		release()
 	}
-	release, err = coordinator.admit(scope)
+	release, err = coordinator.admit(t.Context(), scope)
 	require.NoError(t, err, "completed executions release capacity")
 	release()
-	require.Empty(t, coordinator.organizations)
-	require.Empty(t, coordinator.callers)
+	require.Zero(t, coordinator.organizations.len())
+	require.Zero(t, coordinator.callers.len())
+}
+
+func TestCoordinatorAdmissionWaitsForAFreeSlot(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		coordinator, err := NewCoordinator(&StaticProvider{}, &scriptedOwners{}, Limits{OrganizationExecutions: 1, CallerExecutions: 1, AdmissionWait: 3 * time.Second})
+		require.NoError(t, err)
+		scope := Scope{Organization: "test-org", Project: uuid.New(), Caller: []string{"caller"}}
+		release, err := coordinator.admit(t.Context(), scope)
+		require.NoError(t, err)
+		admitted := make(chan error, 1)
+		go func() {
+			next, err := coordinator.admit(t.Context(), scope)
+			if err == nil {
+				next()
+			}
+			admitted <- err
+		}()
+		synctest.Wait()
+		require.Empty(t, admitted, "a full limit queues the request")
+		release()
+		require.NoError(t, <-admitted, "the queued request runs once a slot frees")
+
+		release, err = coordinator.admit(t.Context(), scope)
+		require.NoError(t, err)
+		defer release()
+		started := time.Now()
+		_, err = coordinator.admit(t.Context(), scope)
+		require.ErrorIs(t, err, ErrCapacity, "past the wait the refusal is retryable capacity")
+		require.Equal(t, 3*time.Second, time.Since(started))
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err = coordinator.admit(ctx, scope)
+		require.ErrorIs(t, err, context.Canceled)
+		require.NotErrorIs(t, err, ErrCapacity, "a caller's own cancellation is not a capacity refusal")
+	})
 }
 
 type executionCleanupOwners struct {
@@ -168,10 +207,10 @@ func TestCoordinatorExecuteReleasesAdmissionOnErrorAndCancellation(t *testing.T)
 			t.Parallel()
 			owners := &executionCleanupOwners{}
 			provider := &executionFailureProvider{}
-			coordinator, err := NewCoordinator(provider, owners)
+			coordinator, err := NewCoordinator(provider, owners, Limits{})
 			require.NoError(t, err)
 			scope := Scope{Organization: "test-org", Project: uuid.New(), Gateway: uuid.New(), Caller: []string{"caller"}, Session: "session", Request: json.RawMessage(`1`)}
-			for range maxCallerExecutions + 1 {
+			for range DefaultCallerExecutions + 1 {
 				ctx, cancel := context.WithCancel(t.Context())
 				if cancelled {
 					provider.cancel = cancel
@@ -183,10 +222,10 @@ func TestCoordinatorExecuteReleasesAdmissionOnErrorAndCancellation(t *testing.T)
 				} else {
 					require.ErrorContains(t, err, "runtime unavailable")
 				}
-				require.Empty(t, coordinator.organizations)
-				require.Empty(t, coordinator.callers)
+				require.Zero(t, coordinator.organizations.len())
+				require.Zero(t, coordinator.callers.len())
 			}
-			require.Equal(t, 2*(maxCallerExecutions+1), owners.deleted, "cancellation still cleans distributed ownership")
+			require.Equal(t, 2*(DefaultCallerExecutions+1), owners.deleted, "cancellation still cleans distributed ownership")
 		})
 	}
 }

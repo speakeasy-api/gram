@@ -31,6 +31,8 @@ export function GatewayDiscoverySection({
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
   const [mode, setMode] = useState(metaMcpServer.discoveryMode);
+  // Code Mode is never offered to anonymous callers.
+  const requiresSignIn = !metaMcpServer.userSessionIssuerId;
   const supportsEditing = isKnownEnumValue(
     UpdateMetaMcpServerFormDiscoveryMode,
     metaMcpServer.discoveryMode,
@@ -92,12 +94,15 @@ export function GatewayDiscoverySection({
                 <SelectItem value="progressive">Progressive</SelectItem>
                 <SelectItem value="direct">Direct</SelectItem>
                 {(metaMcpServer.codeModeEnabled ||
+                  requiresSignIn ||
                   metaMcpServer.discoveryMode === "code_mode") && (
                   <SelectItem
                     value="code_mode"
                     disabled={!metaMcpServer.codeModeEnabled}
                   >
-                    Code Mode
+                    {requiresSignIn
+                      ? "Code Mode (requires sign-in)"
+                      : "Code Mode"}
                   </SelectItem>
                 )}
               </SelectContent>
@@ -105,8 +110,11 @@ export function GatewayDiscoverySection({
             {metaMcpServer.discoveryMode === "code_mode" &&
               !metaMcpServer.codeModeEnabled && (
                 <p className="text-muted-foreground text-sm">
-                  The code runtime is unavailable. Connections currently use
-                  Progressive discovery; the saved default remains Code Mode.
+                  {requiresSignIn
+                    ? "Code Mode requires sign-in, and this gateway allows anonymous callers."
+                    : "The code runtime is unavailable."}{" "}
+                  Connections currently use Progressive discovery; the saved
+                  default remains Code Mode.
                 </p>
               )}
             {update.isError && <FieldError>{update.error.message}</FieldError>}

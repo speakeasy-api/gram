@@ -23,7 +23,7 @@ func LaunchCodeRunner(t *testing.T) (endpoint, token string) {
 	require.NotEmpty(t, runner, "run mise run test:code-mode")
 	require.NotEmpty(t, monty, "run mise run test:code-mode")
 	token = uuid.NewString() + uuid.NewString()
-	cmd := exec.Command(runner, "--listen", "127.0.0.1:0", "--monty-bin", monty, "--capacity", "4") //nolint:gosec // Test binaries are supplied by the local build task.
+	cmd := exec.Command(runner, "--listen", "127.0.0.1:0", "--monty-bin", monty, "--capacity", "12") //nolint:gosec // Test binaries are supplied by the local build task.
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "GRAM_CODE_RUNNER_TOKEN=" + token}
 	stderr, err := cmd.StderrPipe()
 	require.NoError(t, err)

@@ -70,7 +70,6 @@ func NewTestMetaCodeBackend(t *testing.T, ctx context.Context, service *Service,
 // credential, whose member sessions outlive one execution.
 func NewTestSharedMetaCodeBackend(t *testing.T, ctx context.Context, service *Service, gatewayID uuid.UUID, credential string) codemode.Backend {
 	t.Helper()
-	ctx = context.WithValue(ctx, metaCodeCancellableKey{}, true)
 	ctx = context.WithValue(ctx, metaCodeCredentialKey{}, credential)
 	return NewTestMetaCodeBackend(t, ctx, service, gatewayID)
 }

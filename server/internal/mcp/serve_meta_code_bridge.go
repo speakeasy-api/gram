@@ -27,6 +27,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // metaCodeBackend retains admission identity; the runner cannot choose routing
@@ -58,8 +60,8 @@ func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateCon
 		admitted[member.slug] = codeMemberDestination(member)
 	}
 	var boundary authz.AdmissionBoundary
-	// Public gateway callers have no RBAC identity. Their authority is the
-	// public member snapshot and the unchanged anonymous gate, not user grants.
+	// A caller outside the organization has no RBAC grants here. Its authority
+	// is the public member snapshot and the unchanged gate, not user grants.
 	if auth, ok := contextvalues.GetAuthContext(ctx); ok && auth != nil {
 		var err error
 		boundary, err = service.authz.CaptureAdmissionBoundary(ctx)
@@ -82,11 +84,11 @@ func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateCon
 		}
 		return ctx, nil
 	}
-	// Only a caller the issuer gate verified may reuse sessions across
-	// executions, and only its own: the scope holds its identity, credential, consent
-	// and admitted grants. Anonymous callers keep sessions to one execution.
-	if cancellable, _ := ctx.Value(metaCodeCancellableKey{}).(bool); cancellable && gate.authenticated && service.codeSessions != nil {
-		credential, _ := ctx.Value(metaCodeCredentialKey{}).(string)
+	// Only a member of the gateway's organization holding a verified
+	// credential may reuse sessions across executions, and only its own: the
+	// scope holds its identity, credential, consent and admitted grants.
+	// Other callers keep sessions to one execution.
+	if credential, _ := ctx.Value(metaCodeCredentialKey{}).(string); credential != "" && gate.authenticated && service.codeSessions != nil {
 		grants, _ := authz.GrantsFromContext(ctx)
 		canonicalGrants := make([]string, 0, len(grants))
 		for _, grant := range grants {
@@ -105,7 +107,7 @@ func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateCon
 		backend.sessions = &codeSessionScope{pool: service.codeSessions, callerScope: &codeCallerScope{key: string(scope)}, affinity: "code:" + hex.EncodeToString(affinity[:]), recheck: recheck, owned: false}
 		return backend, nil
 	}
-	backend.sessions = &codeSessionScope{pool: newCodeMemberSessions(service.logger, 0, 0, 0, codeSessionMaxEntries), callerScope: &codeCallerScope{key: "anonymous:" + uuid.NewString()}, affinity: "code:" + uuid.NewString(), recheck: recheck, owned: true}
+	backend.sessions = &codeSessionScope{pool: newCodeMemberSessions(service.logger, 0, 0, 0, codeSessionMaxEntries), callerScope: &codeCallerScope{key: "execution:" + uuid.NewString()}, affinity: "code:" + uuid.NewString(), recheck: recheck, owned: true}
 	return backend, nil
 }
 
@@ -306,6 +308,22 @@ func (b *metaCodeBackend) Describe(ctx context.Context, path string) (*codemode.
 }
 
 func (b *metaCodeBackend) Call(ctx context.Context, path string, arguments json.RawMessage) (json.RawMessage, error) {
+	// Each member call gets its own trace, linked to the execution's, so
+	// Tool Logs shows one correctly attributed row per call, as it does for
+	// Progressive execute_tool, instead of folding an execution's calls to
+	// different members into one row.
+	ctx, span := b.service.tracer.Start(ctx, "gateway.code.tool_call", trace.WithNewRoot(), trace.WithLinks(trace.LinkFromContext(ctx)), trace.WithAttributes(attr.ToolName(path)))
+	defer span.End()
+	result, err := b.call(ctx, path, arguments)
+	if err != nil {
+		span.SetStatus(codes.Error, "code mode tool call failed")
+		return nil, err
+	}
+	span.SetStatus(codes.Ok, "")
+	return result, nil
+}
+
+func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.RawMessage) (json.RawMessage, error) {
 	ctx, gate, members, err := b.current(ctx, true)
 	if err != nil {
 		return nil, err

@@ -5,6 +5,10 @@ edition = "2024"
 rust-version = "1.96"
 publish = false
 
+[[bin]]
+name = "gram-code-worker"
+path = "src/worker.rs"
+
 [dependencies]
 anyhow = "1"
 bytes = "1"

@@ -33,7 +33,7 @@ type codeMemberSessionsKey struct{}
 
 // codeSessionScope is one execution's view of a member session pool: the
 // pod's shared pool under the verified caller's scope, or a pool of its own
-// for an anonymous caller.
+// for a caller outside the gateway's organization.
 type codeSessionScope struct {
 	pool        *codeMemberSessions
 	callerScope *codeCallerScope

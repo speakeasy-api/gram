@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/sandbox"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -35,7 +36,9 @@ func newCodeGKEFixture(t *testing.T, mutate func(*unstructured.Unstructured, *un
 
 func newCodeGKEFixtureWithImage(t *testing.T, image string, mutate func(*unstructured.Unstructured, *unstructured.Unstructured)) (*GKEProvider, *dynamicfake.FakeDynamicClient, Scope) {
 	t.Helper()
-	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{sandbox.Claims: "SandboxClaimList", sandbox.Sandboxes: "SandboxList", sandbox.Pods: "PodList"})
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{sandbox.Claims: "SandboxClaimList", sandbox.Sandboxes: "SandboxList", sandbox.Pods: "PodList", sandbox.Templates: "SandboxTemplateList"})
+	template := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "extensions.agents.x-k8s.io/v1alpha1", "kind": "SandboxTemplate", "metadata": map[string]any{"name": "code-v1", "namespace": "code"}}}
+	require.NoError(t, client.Tracker().Create(sandbox.Templates, template, "code"))
 	client.PrependReactor("create", "sandboxclaims", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		create, ok := action.(k8stesting.CreateAction)
 		require.True(t, ok)
@@ -72,6 +75,7 @@ func newCodeGKEFixtureWithImage(t *testing.T, image string, mutate func(*unstruc
 	allowTag := !strings.Contains(image, "@sha256:")
 	provider, err := NewGKEProvider(t.Context(), GKEConfig{Dynamic: client, Namespace: "code", Template: "code-v1", Image: image, AllowTaggedImage: allowTag, Port: 8081, Token: strings.Repeat("t", 32), Dialer: policy.Dialer(), CIDRs: []*net.IPNet{cidr}, Logger: testenv.NewLogger(t)})
 	require.NoError(t, err)
+	provider.capacityWait = 50 * time.Millisecond
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -130,26 +134,29 @@ func TestValidImageReference(t *testing.T) {
 	}
 }
 
-func TestCodeGKEPoolReusesOnlyWithinProject(t *testing.T) {
+func TestCodeGKEPoolSharesPodsWithinOrganization(t *testing.T) {
 	t.Parallel()
 	provider, _, scope := newCodeGKEFixture(t, nil)
 	one, err := provider.Acquire(t.Context(), scope)
 	require.NoError(t, err)
-	two, err := provider.Acquire(t.Context(), scope)
+	otherCaller := scope
+	otherCaller.Project = uuid.New()
+	otherCaller.Caller = []string{"user-2"}
+	two, err := provider.Acquire(t.Context(), otherCaller)
 	require.NoError(t, err)
-	require.Same(t, one.Client(), two.Client())
-	otherScope := scope
-	otherScope.Project = uuid.New()
-	other, err := provider.Acquire(t.Context(), otherScope)
+	require.Same(t, one.Client(), two.Client(), "callers and projects in one organization share its pods")
+	otherOrganization := scope
+	otherOrganization.Organization = "another-org"
+	other, err := provider.Acquire(t.Context(), otherOrganization)
 	require.NoError(t, err)
-	require.NotSame(t, one.Client(), other.Client())
+	require.NotSame(t, one.Client(), other.Client(), "organizations never share a pod")
 	require.NoError(t, one.Release(t.Context()))
 	require.NoError(t, one.Release(t.Context()), "release must be idempotent")
 	require.NoError(t, two.Release(t.Context()))
 	require.NoError(t, other.Release(t.Context()))
 }
 
-func TestCodeGKEOrganizationGatewayRunsOrganizationWide(t *testing.T) {
+func TestCodeGKEOrganizationGatewaySharesOrganizationPool(t *testing.T) {
 	t.Parallel()
 	provider, _, scope := newCodeGKEFixture(t, nil)
 	project, err := provider.Acquire(t.Context(), scope)
@@ -159,7 +166,7 @@ func TestCodeGKEOrganizationGatewayRunsOrganizationWide(t *testing.T) {
 	organizationWide.OrganizationWide = true
 	organization, err := provider.Acquire(t.Context(), organizationWide)
 	require.NoError(t, err)
-	require.NotSame(t, project.Client(), organization.Client(), "the organization gateway never shares a project's pod")
+	require.Same(t, project.Client(), organization.Client(), "the organization gateway uses its organization's pool")
 	missing := scope
 	missing.Project = uuid.Nil
 	_, err = provider.Acquire(t.Context(), missing)
@@ -186,9 +193,9 @@ func TestCodeGKERejectsUnsafeWarmPod(t *testing.T) {
 			labels[codePurposeLabel] = "assistant"
 			claim.SetLabels(labels)
 		}},
-		{"wrong-project", func(claim, _ *unstructured.Unstructured) {
+		{"wrong-organization", func(claim, _ *unstructured.Unstructured) {
 			labels := claim.GetLabels()
-			labels[codeProjectLabel] = uuid.NewString()
+			labels[codeOrganizationLabel] = organizationLabel("another-org")
 			claim.SetLabels(labels)
 		}},
 		{"wrong-image", func(_, pod *unstructured.Unstructured) {
@@ -244,9 +251,11 @@ func TestCodeGKERejectsReassignedPodIP(t *testing.T) {
 			require.NoError(t, unstructured.SetNestedField(pod.Object, tc.podIP, "status", "podIP"))
 			_, err = client.Resource(sandbox.Pods).Namespace("code").Update(t.Context(), pod, metav1.UpdateOptions{})
 			require.NoError(t, err)
-			_, err = provider.Acquire(t.Context(), scope)
-			require.ErrorContains(t, err, "identity changed")
+			replacement, err := provider.Acquire(t.Context(), scope)
+			require.NoError(t, err, "a changed pod is retired and the execution moves to a new one")
+			require.NotSame(t, lease.Client(), replacement.Client())
 			require.True(t, lease.Client().closed)
+			require.NoError(t, replacement.Release(t.Context()))
 		})
 	}
 }
@@ -288,8 +297,10 @@ func TestCodeGKEConnectedSessionRevalidatesPod(t *testing.T) {
 	require.False(t, closed, "an unready pod keeps its transport for when it recovers")
 
 	require.NoError(t, client.Resource(sandbox.Pods).Namespace("code").Delete(t.Context(), entry.name, metav1.DeleteOptions{}))
-	_, err = provider.Acquire(t.Context(), scope)
-	require.ErrorIs(t, err, errCodeSandboxMismatch, "a deleted pod retires its live connection")
+	replacement, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err, "a deleted pod retires its live connection and a new pod serves")
+	require.NotSame(t, lease.Client(), replacement.Client())
+	require.NoError(t, replacement.Release(t.Context()))
 	entry.client.mu.Lock()
 	closed = entry.client.closed
 	entry.client.mu.Unlock()
@@ -309,35 +320,80 @@ func TestCodeGKEReconnectRevalidatesOwnership(t *testing.T) {
 	claim, err := client.Resource(sandbox.Claims).Namespace("code").Get(t.Context(), entry.name, metav1.GetOptions{})
 	require.NoError(t, err)
 	labels := claim.GetLabels()
-	labels[codeProjectLabel] = uuid.NewString()
+	labels[codeOrganizationLabel] = organizationLabel("another-org")
 	claim.SetLabels(labels)
 	_, err = client.Resource(sandbox.Claims).Namespace("code").Update(t.Context(), claim, metav1.UpdateOptions{})
 	require.NoError(t, err)
 	require.ErrorContains(t, lease.Client().dialer.ControlContext(t.Context(), "tcp", "10.52.0.2:8081", nil), "ownership")
 }
 
-func TestCodeGKEConcurrentAdmissionIsBounded(t *testing.T) {
+func TestCodeGKEConcurrentAdmissionScalesToOrganizationCap(t *testing.T) {
 	t.Parallel()
 	provider, client, scope := newCodeGKEFixture(t, nil)
+	capacity := defaultMaxOrganizationRunners * maxRunnerStreams
 	var wg sync.WaitGroup
-	leases := make(chan Lease, 32)
-	for range 32 {
+	leases := make(chan Lease, capacity+8)
+	refused := make(chan error, capacity+8)
+	for range capacity + 8 {
 		wg.Go(func() {
 			lease, err := provider.Acquire(t.Context(), scope)
-			if err == nil {
-				leases <- lease
+			if err != nil {
+				refused <- err
+				return
 			}
+			leases <- lease
 		})
 	}
 	wg.Wait()
 	close(leases)
-	require.Len(t, leases, maxRunnerStreams)
+	close(refused)
+	require.Len(t, leases, capacity, "the organization's pods fill to their stream capacity")
+	for err := range refused {
+		require.ErrorIs(t, err, ErrCapacity)
+	}
+	clients := map[*RunnerClient]int{}
 	for lease := range leases {
+		clients[lease.Client()]++
 		require.NoError(t, lease.Release(t.Context()))
+	}
+	require.Len(t, clients, defaultMaxOrganizationRunners)
+	for _, streams := range clients {
+		require.Equal(t, maxRunnerStreams, streams)
 	}
 	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
-	require.Len(t, claims.Items, 1)
+	require.Len(t, claims.Items, defaultMaxOrganizationRunners)
+}
+
+func TestCodeGKEWaitsForAFreeStream(t *testing.T) {
+	t.Parallel()
+	provider, _, scope := newCodeGKEFixture(t, nil)
+	provider.capacityWait = 5 * time.Second
+	provider.config.MaxOrganizationRunners = 1
+	leases := make([]Lease, 0, maxRunnerStreams)
+	for range maxRunnerStreams {
+		lease, err := provider.Acquire(t.Context(), scope)
+		require.NoError(t, err)
+		leases = append(leases, lease)
+	}
+	done := make(chan Lease, 1)
+	go func() {
+		lease, err := provider.Acquire(t.Context(), scope)
+		assert.NoError(t, err)
+		done <- lease
+	}()
+	select {
+	case <-done:
+		t.Fatal("a full pod admitted another stream")
+	case <-time.After(50 * time.Millisecond):
+	}
+	require.NoError(t, leases[0].Release(t.Context()))
+	waited := <-done
+	require.Same(t, leases[1].Client(), waited.Client(), "the waiter takes the freed stream")
+	require.NoError(t, waited.Release(t.Context()))
+	for _, lease := range leases[1:] {
+		require.NoError(t, lease.Release(t.Context()))
+	}
 }
 
 func TestCodeGKEDrainsBeforeExpiryAndDeletesWithUID(t *testing.T) {
@@ -454,36 +510,105 @@ func TestCodeGKECancelledRequestDoesNotCancelWarmup(t *testing.T) {
 	require.Len(t, claims.Items, 1)
 }
 
-func TestCodeGKEIdleEvictionAndOrganizationCap(t *testing.T) {
+func TestCodeGKEIdleEvictionAcrossOrganizations(t *testing.T) {
 	t.Parallel()
 	provider, _, scope := newCodeGKEFixture(t, nil)
+	provider.config.MaxRunners = 2
 	first, err := provider.Acquire(t.Context(), scope)
 	require.NoError(t, err)
 	require.NoError(t, first.Release(t.Context()))
-	for range defaultMaxOrganizationRunners {
-		scope.Project = uuid.New()
-		lease, err := provider.Acquire(t.Context(), scope)
-		require.NoError(t, err)
-		require.NoError(t, lease.Release(t.Context()))
-	}
-	require.True(t, first.Client().closed, "oldest idle entry should be evicted")
-	leases := make([]Lease, 0, defaultMaxOrganizationRunners)
-	for range defaultMaxOrganizationRunners {
-		scope.Project = uuid.New()
-		lease, err := provider.Acquire(t.Context(), scope)
-		require.NoError(t, err)
-		leases = append(leases, lease)
-	}
-	scope.Project = uuid.New()
-	_, err = provider.Acquire(t.Context(), scope)
-	require.ErrorContains(t, err, "capacity")
-	scope.Organization = "another-org"
-	other, err := provider.Acquire(t.Context(), scope)
-	require.NoError(t, err, "one organization cannot exhaust the replica")
+	second := scope
+	second.Organization = "second-org"
+	lease, err := provider.Acquire(t.Context(), second)
+	require.NoError(t, err)
+	third := scope
+	third.Organization = "third-org"
+	other, err := provider.Acquire(t.Context(), third)
+	require.NoError(t, err, "a full replica evicts another organization's idle pod")
+	require.True(t, first.Client().closed, "the oldest idle pod is evicted")
+	fourth := scope
+	fourth.Organization = "fourth-org"
+	_, err = provider.Acquire(t.Context(), fourth)
+	require.ErrorIs(t, err, ErrCapacity, "busy pods are never evicted")
+	require.NoError(t, lease.Release(t.Context()))
 	require.NoError(t, other.Release(t.Context()))
-	for _, lease := range leases {
-		require.NoError(t, lease.Release(t.Context()))
-	}
+}
+
+func TestCodeGKEMissingTemplateIsUnavailable(t *testing.T) {
+	t.Parallel()
+	provider, client, scope := newCodeGKEFixture(t, nil)
+	require.True(t, provider.Available())
+	require.True(t, provider.Ready())
+	require.NoError(t, client.Tracker().Delete(sandbox.Templates, "code", "code-v1"))
+	provider.checkTemplate(t.Context())
+	require.False(t, provider.Available())
+	_, err := provider.Acquire(t.Context(), scope)
+	require.ErrorIs(t, err, ErrRuntimeUnavailable)
+	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.Empty(t, claims.Items, "no claim is made while the template is missing")
+	template := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "extensions.agents.x-k8s.io/v1alpha1", "kind": "SandboxTemplate", "metadata": map[string]any{"name": "code-v1", "namespace": "code"}}}
+	require.NoError(t, client.Tracker().Create(sandbox.Templates, template, "code"))
+	provider.checkTemplate(t.Context())
+	require.True(t, provider.Available(), "a late template enables Code Mode")
+	lease, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	require.NoError(t, lease.Release(t.Context()))
+}
+
+func TestCodeGKEStartupWithoutTemplateIsNotReady(t *testing.T) {
+	t.Parallel()
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{sandbox.Templates: "SandboxTemplateList"})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	_, cidr, err := net.ParseCIDR("10.52.0.0/16")
+	require.NoError(t, err)
+	provider, err := NewGKEProvider(t.Context(), GKEConfig{Dynamic: client, Namespace: "code", Template: "code-v1", Image: "registry.example.com/code@sha256:" + strings.Repeat("a", 64), Port: 8081, Token: strings.Repeat("t", 32), Dialer: policy.Dialer(), CIDRs: []*net.IPNet{cidr}, Logger: testenv.NewLogger(t)})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	require.False(t, provider.Available())
+	require.False(t, provider.Ready(), "a replica waits for its template before reporting ready")
+	provider.started = time.Now().Add(-codeReadyWait)
+	require.True(t, provider.Ready(), "the wait for a template is bounded")
+}
+
+func TestCodeGKETemplateNotFoundClaimIsUnavailable(t *testing.T) {
+	t.Parallel()
+	provider, client, scope := newCodeGKEFixture(t, func(claim, _ *unstructured.Unstructured) {
+		claim.Object["status"] = map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "False", "reason": codeTemplateNotFoundReason}}}
+	})
+	_, err := provider.Acquire(t.Context(), scope)
+	require.ErrorIs(t, err, ErrRuntimeUnavailable)
+	require.False(t, provider.Available())
+	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.Empty(t, claims.Items, "a claim that can never start is deleted")
+}
+
+func TestCodeGKERenewsClaimsInUse(t *testing.T) {
+	t.Parallel()
+	provider, client, scope := newCodeGKEFixture(t, nil)
+	lease, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	typed, ok := lease.(*gkeLease)
+	require.True(t, ok)
+	entry := typed.entry
+	initial := entry.expires
+	provider.now = func() time.Time { return initial.Add(-codeClaimRenewMargin + time.Second) }
+	provider.renew(t.Context())
+	provider.mu.Lock()
+	renewed := entry.expires
+	provider.mu.Unlock()
+	require.True(t, renewed.After(initial), "an active pod's claim is extended")
+	claim, err := client.Resource(sandbox.Claims).Namespace("code").Get(t.Context(), entry.name, metav1.GetOptions{})
+	require.NoError(t, err)
+	shutdown, _, _ := unstructured.NestedString(claim.Object, "spec", "lifecycle", "shutdownTime")
+	require.True(t, expiryMatches(shutdown, renewed))
+	require.NoError(t, lease.Release(t.Context()))
+	next, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	require.Same(t, lease.Client(), next.Client(), "the renewed pod keeps serving")
+	require.NoError(t, next.Release(t.Context()))
 }
 
 func TestCodeGKEAcceptsEquivalentExpiryTimestamp(t *testing.T) {
@@ -542,10 +667,8 @@ func TestCodeGKEEvictedPodRetiresPinnedRuntime(t *testing.T) {
 	typed, ok := lease.(*gkeLease)
 	require.True(t, ok)
 	require.NoError(t, client.Resource(sandbox.Pods).Namespace("code").Delete(t.Context(), typed.entry.name, metav1.DeleteOptions{}))
-	_, err = provider.Acquire(t.Context(), scope)
-	require.ErrorIs(t, err, errCodeSandboxMismatch)
 	replacement, err := provider.Acquire(t.Context(), scope)
-	require.NoError(t, err)
+	require.NoError(t, err, "an evicted pod is retired and replaced")
 	require.NotSame(t, lease.Client(), replacement.Client())
 	require.NoError(t, replacement.Release(t.Context()))
 }
@@ -590,7 +713,7 @@ func TestCodeGKEAmbiguousOrphansCountAgainstCapacity(t *testing.T) {
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	}
 	_, err := provider.Acquire(t.Context(), scope)
-	require.ErrorContains(t, err, "capacity")
+	require.ErrorIs(t, err, ErrCapacity)
 	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, claims.Items, defaultMaxOrganizationRunners)

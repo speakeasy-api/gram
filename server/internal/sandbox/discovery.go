@@ -17,6 +17,8 @@ const ClaimUIDLabel = "agents.x-k8s.io/claim-uid"
 var (
 	// Claims selects the managed GKE Agent Sandbox claim API.
 	Claims = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxclaims"}
+	// Templates selects the managed GKE Agent Sandbox template API.
+	Templates = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxtemplates"}
 	// Sandboxes selects the managed GKE sandbox API.
 	Sandboxes = schema.GroupVersionResource{Group: "agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxes"}
 	// Pods selects Kubernetes pods for claim ownership and image checks.

@@ -245,27 +245,15 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		}
 		ctx = context.WithValue(ctx, metaCodeRefreshKey{}, refresh)
 		ctx = context.WithValue(ctx, liveSessionPolicyKey{}, true)
-		// Only the issuer gate admits an identity; a bearer an ungated gateway
-		// never checked must not buy its own runner.
-		authCtx, _ := contextvalues.GetAuthContext(ctx)
-		anonymous := !metaServer.UserSessionIssuerID.Valid || authCtx == nil
-		callerKey := anonymousCodeCallerKey(gate.metaServerID, admission.clientSessionID)
-		if !anonymous {
-			credential := sha256.Sum256([]byte(admission.bearer))
-			callerKey = hex.EncodeToString(credential[:])
-		}
-		ctx = context.WithValue(ctx, metaCodeCredentialKey{}, callerKey)
-		ctx = context.WithValue(ctx, metaCodeSessionlessAnonymousKey{}, anonymous && admission.clientSessionID == "")
-		cancellable := !anonymous
-		sessionScope := "anonymous:" + uuid.NewString()
-		if cancellable {
-			sessionScope = "credential"
-			if admission.clientSessionID != "" {
-				sessionScope = "session:" + admission.clientSessionID
-			}
+		// admitMetaGate serves Code Mode only to callers the issuer gate
+		// signed in, so the credential identifies a verified caller.
+		credential := sha256.Sum256([]byte(admission.bearer))
+		ctx = context.WithValue(ctx, metaCodeCredentialKey{}, hex.EncodeToString(credential[:]))
+		sessionScope := "credential"
+		if admission.clientSessionID != "" {
+			sessionScope = "session:" + admission.clientSessionID
 		}
 		ctx = context.WithValue(ctx, metaCodeSessionKey{}, sessionScope)
-		ctx = context.WithValue(ctx, metaCodeCancellableKey{}, cancellable)
 	}
 
 	// Hand back the session the handshake was recorded under, as the hosted
@@ -780,10 +768,6 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 	if membership.agentID != uuid.Nil {
 		gate.discoveryMode = metamcp.DiscoveryModeProgressive
 	}
-	if gate.discoveryMode == metamcp.DiscoveryModeCode && !s.codeExecutor.Enabled() {
-		logger.WarnContext(ctx, "code mode runtime is unavailable, serving gateway in progressive mode")
-		gate.discoveryMode = metamcp.DiscoveryModeProgressive
-	}
 	// Identity comes from the issuer gate alone: this surface runs no
 	// identity-auth ladder, so ungated meta endpoints serve anonymously —
 	// private-toolset members stay invisible and gram environments never
@@ -814,6 +798,26 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 			}
 		}
 	}
+	if gate.discoveryMode == metamcp.DiscoveryModeCode {
+		switch {
+		case !codeModeSignedIn(ctx, metaServer):
+			// Code Mode costs a runner per execution, so only signed-in
+			// callers get it. The API refuses Code Mode on a gateway without
+			// sign-in; this covers rows written outside it.
+			logger.WarnContext(ctx, "code mode requires sign-in, serving gateway in progressive mode")
+			gate.discoveryMode = metamcp.DiscoveryModeProgressive
+		case !s.codeExecutor.Available():
+			logger.WarnContext(ctx, "code mode runtime is unavailable, serving gateway in progressive mode")
+			gate.discoveryMode = metamcp.DiscoveryModeProgressive
+		}
+	}
 
 	return ctx, gate, nil
+}
+
+// codeModeSignedIn reports whether the issuer gate signed this caller in.
+// Gateways without an issuer serve anonymous callers, who never get Code Mode.
+func codeModeSignedIn(ctx context.Context, metaServer *metamcprepo.MetaMcpServer) bool {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	return metaServer.UserSessionIssuerID.Valid && ok && authCtx != nil
 }

@@ -58,6 +58,7 @@ const gateway = {
   projectId: "project-test",
   name: "Gateway",
   discoveryMode: "progressive",
+  userSessionIssuerId: "issuer-test",
 } as MetaMcpServer;
 const show = () =>
   render(
@@ -247,4 +248,23 @@ it("explains Progressive fallback for a saved Code gateway", () => {
   expect(
     screen.getByText(/connections currently use Progressive discovery/i),
   ).toBeTruthy();
+});
+
+it("disables Code Mode for a gateway that allows anonymous callers", () => {
+  render(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{
+          ...gateway,
+          userSessionIssuerId: undefined,
+          codeModeEnabled: false,
+        }}
+      />
+    </TooltipProvider>,
+  );
+  fireEvent.click(screen.getByRole("combobox"));
+  const option = screen.getByRole("option", {
+    name: "Code Mode (requires sign-in)",
+  });
+  expect(option.getAttribute("aria-disabled")).toBe("true");
 });

@@ -140,6 +140,7 @@ var gatewayWriteRefusals = []struct {
 	{ErrMemberServerHasNoSlug, oops.CodeInvalid},
 	{ErrMemberServerUnproxied, oops.CodeInvalid},
 	{ErrMemberServerIsHostedToolset, oops.CodeInvalid},
+	{ErrCodeModeRequiresSignIn, oops.CodeInvalid},
 	{ErrMemberSharesBackend, oops.CodeConflict},
 	{ErrMemberAlreadyPresent, oops.CodeConflict},
 	{ErrMemberNeedsShadowApproval, oops.CodeConflict},
@@ -268,11 +269,8 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 	}
 
 	views := mv.BuildMetaMcpServerListView(rows)
-	if len(views) > 0 {
-		s.withGatewayCapabilities(views[0])
-		for _, view := range views[1:] {
-			view.CodeModeEnabled = views[0].CodeModeEnabled
-		}
+	for _, view := range views {
+		s.withGatewayCapabilities(view)
 	}
 	return &gen.ListMetaMcpServersResult{MetaMcpServers: views}, nil
 }
@@ -384,6 +382,16 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 
 	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
 		return nil, err
+	}
+
+	// Code Mode runs a runner per execution, so it is never offered to
+	// anonymous callers: a Code Mode gateway must keep requiring sign-in.
+	finalDiscovery := gatewaymcp.ResolveDiscoveryMode(existing.DiscoveryMode)
+	if payload.DiscoveryMode != nil {
+		finalDiscovery = gatewaymcp.DiscoveryMode(*payload.DiscoveryMode)
+	}
+	if finalDiscovery == gatewaymcp.DiscoveryModeCode && !issuerID.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "%s", ErrCodeModeRequiresSignIn.Error()).LogWarn(ctx, logger)
 	}
 
 	mode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, existing.NetworkAccessMode)

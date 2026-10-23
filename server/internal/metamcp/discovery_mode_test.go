@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,4 +78,32 @@ func TestGatewayCodeModeSelectionGatePreservesStoredMode(t *testing.T) {
 	update.DiscoveryMode = conv.PtrEmpty("direct")
 	_, err = ti.service.UpdateMetaMcpServer(ctx, update)
 	require.NoError(t, err, "an unavailable runtime must allow leaving code mode")
+}
+
+// TestGatewayCodeModeRequiresSignIn pins that Code Mode is never offered to a
+// gateway that allows anonymous callers: an issuer-less row reports Code Mode
+// unavailable, and selecting Code Mode leaves the gateway requiring sign-in.
+func TestGatewayCodeModeRequiresSignIn(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ti.codeModeEnabled.Store(true)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	// A gateway without an issuer can no longer be created through the API.
+	row, err := repo.New(ti.conn).CreateMetaMCPServer(ctx, repo.CreateMetaMCPServerParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, Name: "Anonymous gateway", UserSessionIssuerID: uuid.NullUUID{}, Visibility: "private", NetworkAccessMode: pgtype.Text{}})
+	require.NoError(t, err)
+	gateway := &gen.GetMetaMcpServerPayload{ID: row.ID.String()}
+	anonymous, err := ti.service.GetMetaMcpServer(ctx, gateway)
+	require.NoError(t, err)
+	require.Nil(t, anonymous.UserSessionIssuerID)
+	require.False(t, *anonymous.CodeModeEnabled, "a gateway without sign-in cannot select Code Mode")
+	listed, err := ti.service.ListMetaMcpServers(ctx, &gen.ListMetaMcpServersPayload{})
+	require.NoError(t, err)
+	require.Len(t, listed.MetaMcpServers, 1)
+	require.False(t, *listed.MetaMcpServers[0].CodeModeEnabled)
+
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{ID: gateway.ID, Name: anonymous.Name, DiscoveryMode: conv.PtrEmpty("code_mode")})
+	require.NoError(t, err)
+	require.Equal(t, "code_mode", updated.DiscoveryMode)
+	require.NotNil(t, updated.UserSessionIssuerID, "a Code Mode gateway always requires sign-in")
+	require.True(t, *updated.CodeModeEnabled)
 }

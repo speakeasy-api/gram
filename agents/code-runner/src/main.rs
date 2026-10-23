@@ -17,7 +17,7 @@ struct Args {
     listen: SocketAddr,
     #[arg(long, env = "GRAM_CODE_RUNNER_MONTY_BIN", default_value = "monty")]
     monty_bin: String,
-    #[arg(long, env = "GRAM_CODE_RUNNER_CAPACITY", default_value_t = 4)]
+    #[arg(long, env = "GRAM_CODE_RUNNER_CAPACITY", default_value_t = 12)]
     capacity: usize,
 }
 

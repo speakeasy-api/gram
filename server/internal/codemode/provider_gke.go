@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -26,10 +27,30 @@ import (
 )
 
 const (
-	// codeClaimTTL lets the cluster reap orphaned pods even after a Speakeasy crash.
+	// codeClaimTTL lets the cluster reap orphaned pods even after a Speakeasy
+	// crash. Live runners renew it, so a busy pod is not replaced every TTL.
 	codeClaimTTL = 5 * time.Minute
-	// codeIdleTTL releases a project pod after a minute without executions.
-	codeIdleTTL = time.Minute
+	// codeClaimRenewMargin renews a claim this long before it expires, which
+	// leaves several sweeps to retry a failed renewal before the drain margin.
+	codeClaimRenewMargin = 2 * time.Minute
+	// codeIdleTTL releases an organization's pod after ten minutes without
+	// executions, so an active organization does not cold-start between bursts.
+	codeIdleTTL = 10 * time.Minute
+	// codeTemplateRefresh is how often the sandbox template's presence is
+	// re-read, so a deploy that installs it late enables Code Mode promptly.
+	codeTemplateRefresh = 15 * time.Second
+	// codeTemplateCheckTimeout bounds one template read.
+	codeTemplateCheckTimeout = 3 * time.Second
+	// codeReadyWait bounds how long a starting replica reports not ready while
+	// its sandbox template is missing; after it, the replica serves with the
+	// Progressive fallback rather than blocking a rollout forever.
+	codeReadyWait = 5 * time.Minute
+	// codeCapacityWait bounds how long an execution waits for a stream when
+	// its organization's pods are all busy and at their cap.
+	codeCapacityWait = DefaultAdmissionWait
+	// codeTemplateNotFoundReason is the claim condition reason the sandbox
+	// controller reports when the referenced template does not exist.
+	codeTemplateNotFoundReason = "TemplateNotFound"
 	// codeDrainMargin reserves enough lifetime for execution and stream cleanup.
 	codeDrainMargin = MaxWallTime + 5*time.Second
 	// codePoolSweep bounds idle resource retention without durable background jobs.
@@ -42,8 +63,10 @@ const (
 	codeClaimPoll = time.Second
 	// codeColdStartTimeout allows a cold pod to become ready independently of one request.
 	codeColdStartTimeout = 2 * time.Minute
-	// defaultMaxOrganizationRunners keeps one organization from owning every replica slot.
-	defaultMaxOrganizationRunners = 16
+	// defaultMaxOrganizationRunners caps one organization's shared pods per
+	// replica: four pods at twelve streams each serve 48 concurrent
+	// executions, and keep one organization from owning every replica slot.
+	defaultMaxOrganizationRunners = 4
 	// codeCleanupTimeout bounds a best-effort Kubernetes deletion; expiry is the fallback.
 	codeCleanupTimeout = 3 * time.Second
 	// codeShutdownTimeout allows claim cleanup while reserving the shared
@@ -53,8 +76,10 @@ const (
 	defaultMaxRunners = 64
 	// codePurposeLabel separates the code pool from assistant workloads.
 	codePurposeLabel = "gram.ai/runtime-purpose"
-	// codeProjectLabel records the project whose caller owns a claimed runtime.
-	codeProjectLabel = "gram.ai/project-id"
+	// codeOrganizationLabel records a digest of the organization whose
+	// executions share a claimed runtime. Organization IDs are not always
+	// valid label values, so the label holds a fixed-length digest.
+	codeOrganizationLabel = "gram.ai/organization-digest"
 	// codeOwnerLabel prevents one Speakeasy replica adopting another replica's claim.
 	codeOwnerLabel = "gram.ai/runtime-owner"
 )
@@ -97,37 +122,48 @@ var errCodeSandboxMismatch = errors.New("code sandbox identity mismatch")
 // errCodeSandboxPending distinguishes cold-start polling from API failures.
 var errCodeSandboxPending = errors.New("code sandbox is not ready")
 
-// runnerScope gives each caller identity its own pod within a project, so no
-// pod ever runs code for two users, projects or organizations. The
-// organization gateway runs organization-wide under project uuid.Nil, which
-// keeps its pods apart from every project's.
+// runnerScope identifies one of an organization's shared runner pods. Pods
+// are shared by every caller in the organization, including the organization
+// gateway: Python state never outlives an execution, each execution runs in
+// its own Monty worker process, and the runner holds no credentials or tool
+// authority. Speakeasy answers every tool callback with the execution's own
+// scope, so sharing a pod shares CPU, never authority.
 type runnerScope struct {
 	organization string
-	project      uuid.UUID
-	caller       string
+	slot         int
 }
 
-func newRunnerScope(scope Scope) (runnerScope, error) {
+// runnerOrganization validates an execution scope and returns the
+// organization whose runner pool serves it.
+func runnerOrganization(scope Scope) (string, error) {
 	if scope.Organization == "" || (scope.Project == uuid.Nil) != scope.OrganizationWide || len(scope.Caller) == 0 {
-		return runnerScope{}, fmt.Errorf("code runtime requires project ownership and a caller")
+		return "", fmt.Errorf("code runtime requires project ownership and a caller")
 	}
-	caller, err := json.Marshal(scope.Caller)
-	if err != nil {
-		return runnerScope{}, fmt.Errorf("encode code runtime caller: %w", err)
-	}
-	digest := sha256.Sum256(caller)
-	return runnerScope{organization: scope.Organization, project: scope.Project, caller: hex.EncodeToString(digest[:])}, nil
+	return scope.Organization, nil
+}
+
+// organizationLabel is the label value that binds a claim to its organization.
+func organizationLabel(organization string) string {
+	digest := sha256.Sum256([]byte(organization))
+	return hex.EncodeToString(digest[:16])
 }
 
 type projectRunner struct {
-	key      runnerScope
-	name     string
-	uid      types.UID
-	podUID   types.UID
-	ip       string
-	expires  time.Time
-	idle     time.Time
-	refs     int
+	key  runnerScope
+	name string
+	uid  types.UID
+	// podUID and ip pin the pod admitted at creation.
+	podUID types.UID
+	ip     string
+	// expires is the claim's confirmed shutdown time.
+	expires time.Time
+	// renewal is a shutdown time being written to the claim; until the write
+	// is confirmed, either time is accepted.
+	renewal time.Time
+	idle    time.Time
+	refs    int
+	// waiting counts executions waiting for this pod to finish warming.
+	waiting  int
 	creating bool
 	retired  bool
 	cleaning bool
@@ -136,21 +172,32 @@ type projectRunner struct {
 	err      error
 }
 
-// GKEProvider keeps bounded, project-scoped transports. Python state never lives
-// in this pool: every stream starts a fresh worker process inside its pod.
+// GKEProvider keeps bounded pools of organization-scoped runner pods. Python
+// state never lives in this pool: every stream starts a fresh worker process
+// inside its pod.
 type GKEProvider struct {
-	config   GKEConfig
-	owner    string
-	now      func() time.Time
-	mu       sync.Mutex
-	entries  map[runnerScope]*projectRunner
-	closed   bool
-	ctx      context.Context //nolint:containedctx // Provider-owned lifetime for cold starts; never a request context.
-	cancel   context.CancelFunc
-	draining map[*projectRunner]struct{}
-	workers  sync.WaitGroup
-	leases   sync.WaitGroup
-	done     chan struct{}
+	config  GKEConfig
+	owner   string
+	now     func() time.Time
+	started time.Time
+	mu      sync.Mutex
+	entries map[runnerScope]*projectRunner
+	// changed is closed and replaced whenever a stream or pod slot frees, to
+	// wake executions waiting for capacity.
+	changed chan struct{}
+	// available is false once the sandbox template is known to be missing.
+	available atomic.Bool
+	// templateSeen is set once the template has been read successfully.
+	templateSeen atomic.Bool
+	// capacityWait bounds the wait for a stream at the organization's cap.
+	capacityWait time.Duration
+	closed       bool
+	ctx          context.Context //nolint:containedctx // Provider-owned lifetime for cold starts; never a request context.
+	cancel       context.CancelFunc
+	draining     map[*projectRunner]struct{}
+	workers      sync.WaitGroup
+	leases       sync.WaitGroup
+	done         chan struct{}
 }
 
 // NewGKEProvider starts only local resource housekeeping; execution is never queued.
@@ -177,95 +224,184 @@ func NewGKEProvider(ctx context.Context, config GKEConfig) (*GKEProvider, error)
 		config.MaxOrganizationRunners = defaultMaxOrganizationRunners
 	}
 	runCtx, cancel := context.WithCancel(ctx)
-	p := &GKEProvider{config: config, owner: uuid.NewString(), now: time.Now, mu: sync.Mutex{}, entries: make(map[runnerScope]*projectRunner), closed: false, ctx: runCtx, cancel: cancel, draining: make(map[*projectRunner]struct{}), workers: sync.WaitGroup{}, leases: sync.WaitGroup{}, done: make(chan struct{})}
+	p := &GKEProvider{config: config, owner: uuid.NewString(), now: time.Now, started: time.Now(), mu: sync.Mutex{}, entries: make(map[runnerScope]*projectRunner), changed: make(chan struct{}), available: atomic.Bool{}, templateSeen: atomic.Bool{}, capacityWait: codeCapacityWait, closed: false, ctx: runCtx, cancel: cancel, draining: make(map[*projectRunner]struct{}), workers: sync.WaitGroup{}, leases: sync.WaitGroup{}, done: make(chan struct{})}
+	// Until the template is read, assume it exists: an API brownout at startup
+	// must not disable Code Mode, and a missing template is caught here or by
+	// the first claim's TemplateNotFound condition.
+	p.available.Store(true)
+	p.checkTemplate(runCtx)
 	go p.housekeep(runCtx)
 	return p, nil
 }
 
-// Acquire reserves at most four concurrent runs on a caller's pod. Admission
+// Available reports whether the sandbox template is installed. While it is
+// missing, as during a deploy that has not synced it yet, serving falls back
+// to Progressive discovery instead of refusing every execution.
+func (p *GKEProvider) Available() bool { return p.available.Load() }
+
+// Ready reports whether the startup template check has passed, or the
+// bounded wait for it has elapsed.
+func (p *GKEProvider) Ready() bool {
+	return p.templateSeen.Load() || p.now().Sub(p.started) >= codeReadyWait
+}
+
+func (p *GKEProvider) checkTemplate(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, codeTemplateCheckTimeout)
+	defer cancel()
+	_, err := p.config.Dynamic.Resource(sandbox.Templates).Namespace(p.config.Namespace).Get(ctx, p.config.Template, metav1.GetOptions{})
+	switch {
+	case err == nil:
+		p.available.Store(true)
+		p.templateSeen.Store(true)
+	case k8serrors.IsNotFound(err):
+		if p.available.Swap(false) {
+			p.config.Logger.WarnContext(ctx, "code sandbox template is missing; serving Code Mode gateways progressively", attr.SlogError(err))
+		}
+	case k8serrors.IsForbidden(err):
+		// Without read access to templates the claim's condition is the only
+		// signal, so assume the template exists.
+		if !p.templateSeen.Swap(true) {
+			p.config.Logger.WarnContext(ctx, "code sandbox template is unreadable; relying on claim conditions", attr.SlogError(err))
+		}
+		p.available.Store(true)
+	default:
+		p.config.Logger.WarnContext(ctx, "read code sandbox template", attr.SlogError(err))
+	}
+}
+
+// notifyLocked wakes executions waiting for a free stream or pod slot.
+func (p *GKEProvider) notifyLocked() {
+	close(p.changed)
+	p.changed = make(chan struct{})
+}
+
+// Acquire places an execution on the least busy of its organization's pods,
+// warming another pod when every pod is full and the organization is under
+// its cap, and otherwise waiting briefly for a free stream. Admission
 // refreshes cluster ownership, image and pod identity before returning a lease.
 func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
-	key, err := newRunnerScope(scope)
+	organization, err := runnerOrganization(scope)
 	if err != nil {
 		return nil, err
 	}
+	var capacityTimer *time.Timer
+	defer func() {
+		if capacityTimer != nil {
+			capacityTimer.Stop()
+		}
+	}()
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("acquire code sandbox: %w", err)
 		}
+		if !p.Available() {
+			return nil, fmt.Errorf("%w: code sandbox template is not installed", ErrRuntimeUnavailable)
+		}
 		p.mu.Lock()
 		if p.closed || p.ctx.Err() != nil {
 			p.mu.Unlock()
-			return nil, fmt.Errorf("code runtime is stopping")
+			return nil, fmt.Errorf("%w: code runtime is stopping", ErrRuntimeUnavailable)
 		}
-		entry := p.entries[key]
-		if entry != nil && !entry.creating && (entry.retired || !p.now().Add(codeDrainMargin).Before(entry.expires)) {
-			idle := p.retireLocked(entry)
+		var best, warming, expiring *projectRunner
+		organizationRunners, warmingRunners, warmingDemand := 0, 0, 0
+		for _, entry := range p.entries {
+			if entry.key.organization != organization {
+				continue
+			}
+			organizationRunners++
+			switch {
+			case entry.creating:
+				warmingRunners++
+				warmingDemand += entry.waiting
+				if warming == nil || entry.waiting < warming.waiting {
+					warming = entry
+				}
+			case entry.retired || !p.now().Add(codeDrainMargin).Before(entry.expires):
+				expiring = entry
+			case entry.refs < maxRunnerStreams && (best == nil || entry.refs < best.refs):
+				best = entry
+			}
+		}
+		if expiring != nil {
+			idle := p.retireLocked(expiring)
 			p.mu.Unlock()
 			if idle {
-				p.destroy(ctx, entry)
+				p.destroy(ctx, expiring)
 			}
 			continue
 		}
-		if entry == nil {
-			orgCount := 0
-			for _, e := range p.entries {
-				if e.key.organization == key.organization {
-					orgCount++
-				}
+		for entry := range p.draining {
+			if entry.key.organization == organization {
+				organizationRunners++
 			}
-			for e := range p.draining {
-				if e.key.organization == key.organization {
-					orgCount++
-				}
-			}
-			if len(p.entries)+len(p.draining) >= p.config.MaxRunners || orgCount >= p.config.MaxOrganizationRunners {
-				var oldest *projectRunner
-				for _, candidate := range p.entries {
-					if candidate.creating || candidate.refs != 0 || (orgCount >= p.config.MaxOrganizationRunners && candidate.key.organization != key.organization) {
-						continue
-					}
-					if oldest == nil || candidate.idle.Before(oldest.idle) {
-						oldest = candidate
-					}
-				}
-				if oldest == nil {
-					p.mu.Unlock()
-					return nil, fmt.Errorf("code runtime pool is at capacity")
-				}
-				p.retireLocked(oldest)
-				p.mu.Unlock()
-				p.destroy(ctx, oldest)
-				p.mu.Lock()
-				_, pending := p.draining[oldest]
-				p.mu.Unlock()
-				if pending {
-					return nil, fmt.Errorf("code runtime cleanup is pending")
-				}
-				continue
-			}
-			entry = &projectRunner{key: key, name: "gram-code-" + uuid.NewString(), uid: "", podUID: "", ip: "", expires: p.now().UTC().Add(codeClaimTTL).Truncate(time.Second), idle: time.Time{}, refs: 0, creating: true, retired: false, cleaning: false, ready: make(chan struct{}), client: nil, err: nil}
-			p.entries[key] = entry
-			p.workers.Add(1)
-			go p.initialize(entry)
 		}
-		if entry.creating {
-			ready := entry.ready
+		// Warm another pod alongside those already warming once their
+		// streams are spoken for, so a burst does not warm pods one by one.
+		if best == nil && warming != nil && warmingDemand >= warmingRunners*maxRunnerStreams && organizationRunners < p.config.MaxOrganizationRunners && len(p.entries)+len(p.draining) < p.config.MaxRunners {
+			warming = nil
+		}
+		if best == nil && warming == nil {
+			if len(p.entries)+len(p.draining) >= p.config.MaxRunners || organizationRunners >= p.config.MaxOrganizationRunners {
+				var oldest *projectRunner
+				if organizationRunners < p.config.MaxOrganizationRunners {
+					for _, candidate := range p.entries {
+						if candidate.creating || candidate.refs != 0 {
+							continue
+						}
+						if oldest == nil || candidate.idle.Before(oldest.idle) {
+							oldest = candidate
+						}
+					}
+				}
+				if oldest != nil {
+					p.retireLocked(oldest)
+					p.mu.Unlock()
+					p.destroy(ctx, oldest)
+					continue
+				}
+				changed := p.changed
+				p.mu.Unlock()
+				if capacityTimer == nil {
+					capacityTimer = time.NewTimer(p.capacityWait)
+				}
+				select {
+				case <-changed:
+					continue
+				case <-capacityTimer.C:
+					return nil, fmt.Errorf("%w: code runtime pool is at capacity", ErrCapacity)
+				case <-ctx.Done():
+					return nil, fmt.Errorf("wait for code runtime capacity: %w", ctx.Err())
+				}
+			}
+			slot := 0
+			for p.entries[runnerScope{organization: organization, slot: slot}] != nil {
+				slot++
+			}
+			warming = &projectRunner{key: runnerScope{organization: organization, slot: slot}, name: "gram-code-" + uuid.NewString(), uid: "", podUID: "", ip: "", expires: p.now().UTC().Add(codeClaimTTL).Truncate(time.Second), renewal: time.Time{}, idle: time.Time{}, refs: 0, waiting: 0, creating: true, retired: false, cleaning: false, ready: make(chan struct{}), client: nil, err: nil}
+			p.entries[warming.key] = warming
+			p.workers.Add(1)
+			go p.initialize(warming)
+		}
+		if best == nil {
+			ready := warming.ready
+			warming.waiting++
 			p.mu.Unlock()
+			var waitErr error
 			select {
 			case <-ready:
-				if entry.err != nil {
-					return nil, entry.err
-				}
-				continue
+				waitErr = warming.err
 			case <-ctx.Done():
-				return nil, fmt.Errorf("wait for code sandbox: %w", ctx.Err())
+				waitErr = fmt.Errorf("wait for code sandbox: %w", ctx.Err())
 			}
-		}
-		if entry.refs >= maxRunnerStreams {
+			p.mu.Lock()
+			warming.waiting--
 			p.mu.Unlock()
-			return nil, fmt.Errorf("project code runtime is at capacity")
+			if waitErr != nil {
+				return nil, waitErr
+			}
+			continue
 		}
+		entry := best
 		entry.refs++
 		p.leases.Add(1)
 		p.mu.Unlock()
@@ -273,12 +409,17 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 		// checks the claim, sandbox and pod (deletion, readiness, UID, IP and
 		// image), whether it reuses that connection or dials a new one.
 		if err := p.inspect(ctx, entry, false); err != nil {
-			p.mu.Lock()
-			if errors.Is(err, errCodeSandboxMismatch) {
+			mismatch := errors.Is(err, errCodeSandboxMismatch)
+			if mismatch {
+				p.mu.Lock()
 				p.retireLocked(entry)
+				p.mu.Unlock()
 			}
-			p.mu.Unlock()
 			_ = p.release(ctx, entry, false)
+			if mismatch {
+				// The pod is retired; place the execution on another or a new one.
+				continue
+			}
 			return nil, fmt.Errorf("validate code sandbox admission: %w", err)
 		}
 		p.mu.Lock()
@@ -286,7 +427,7 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 		p.mu.Unlock()
 		if retired {
 			_ = p.release(ctx, entry, false)
-			return nil, fmt.Errorf("code runtime retired during admission")
+			continue
 		}
 		return &gkeLease{provider: p, entry: entry, once: sync.Once{}}, nil
 	}
@@ -316,6 +457,7 @@ func (p *GKEProvider) initialize(entry *projectRunner) {
 	if err != nil || p.closed {
 		destroy = p.retireLocked(entry)
 	}
+	p.notifyLocked()
 	p.mu.Unlock()
 	if destroy {
 		p.destroy(ctx, entry)
@@ -326,7 +468,7 @@ func (p *GKEProvider) initialize(entry *projectRunner) {
 func (p *GKEProvider) create(ctx context.Context, entry *projectRunner) error {
 	claim := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": sandbox.Claims.Group + "/" + sandbox.Claims.Version, "kind": "SandboxClaim",
-		"metadata": map[string]any{"name": entry.name, "namespace": p.config.Namespace, "labels": map[string]any{codePurposeLabel: "code", codeProjectLabel: entry.key.project.String(), codeOwnerLabel: p.owner}},
+		"metadata": map[string]any{"name": entry.name, "namespace": p.config.Namespace, "labels": map[string]any{codePurposeLabel: "code", codeOrganizationLabel: organizationLabel(entry.key.organization), codeOwnerLabel: p.owner}},
 		"spec":     map[string]any{"sandboxTemplateRef": map[string]any{"name": p.config.Template}, "lifecycle": map[string]any{"shutdownPolicy": "Delete", "shutdownTime": entry.expires.Format(time.RFC3339)}},
 	}}
 	created, err := p.config.Dynamic.Resource(sandbox.Claims).Namespace(p.config.Namespace).Create(ctx, claim, metav1.CreateOptions{})
@@ -356,8 +498,9 @@ func (p *GKEProvider) create(ctx context.Context, entry *projectRunner) error {
 			break
 		}
 		// API brownouts must not discard a warming pod. Only a confirmed identity
-		// mismatch aborts before the provider-owned cold-start deadline.
-		if errors.Is(err, errCodeSandboxMismatch) {
+		// mismatch or a missing template aborts before the provider-owned
+		// cold-start deadline.
+		if errors.Is(err, errCodeSandboxMismatch) || errors.Is(err, ErrRuntimeUnavailable) {
 			return err
 		}
 		poll.Reset(delay)
@@ -392,10 +535,14 @@ func (p *GKEProvider) checkClaim(claim *unstructured.Unstructured, entry *projec
 	template, _, _ := unstructured.NestedString(claim.Object, "spec", "sandboxTemplateRef", "name")
 	expires, _, _ := unstructured.NestedString(claim.Object, "spec", "lifecycle", "shutdownTime")
 	policy, _, _ := unstructured.NestedString(claim.Object, "spec", "lifecycle", "shutdownPolicy")
-	if claim.GetUID() != entry.uid || claim.GetDeletionTimestamp() != nil || labels[codePurposeLabel] != "code" || labels[codeProjectLabel] != entry.key.project.String() || labels[codeOwnerLabel] != p.owner || template != p.config.Template || !expiryMatches(expires, entry.expires) || policy != "Delete" {
+	p.mu.Lock()
+	confirmed, renewal := entry.expires, entry.renewal
+	p.mu.Unlock()
+	expiryOK := expiryMatches(expires, confirmed) || (!renewal.IsZero() && expiryMatches(expires, renewal))
+	if claim.GetUID() != entry.uid || claim.GetDeletionTimestamp() != nil || labels[codePurposeLabel] != "code" || labels[codeOrganizationLabel] != organizationLabel(entry.key.organization) || labels[codeOwnerLabel] != p.owner || template != p.config.Template || !expiryOK || policy != "Delete" {
 		return fmt.Errorf("%w: code sandbox claim ownership, purpose, template or expiry mismatch", errCodeSandboxMismatch)
 	}
-	if !p.now().Add(codeDrainMargin).Before(entry.expires) {
+	if !p.now().Add(codeDrainMargin).Before(confirmed) {
 		return fmt.Errorf("%w: code sandbox claim is expiring", errCodeSandboxMismatch)
 	}
 	return nil
@@ -411,6 +558,12 @@ func (p *GKEProvider) inspect(ctx context.Context, entry *projectRunner, initial
 	}
 	if err := p.checkClaim(claim, entry); err != nil {
 		return err
+	}
+	if initial && templateNotFound(claim) {
+		if p.available.Swap(false) {
+			p.config.Logger.WarnContext(ctx, "code sandbox claim reports a missing template; serving Code Mode gateways progressively")
+		}
+		return fmt.Errorf("%w: code sandbox template is not installed", ErrRuntimeUnavailable)
 	}
 	name := sandbox.AssignedName(claim)
 	if name == "" {
@@ -501,6 +654,7 @@ func (p *GKEProvider) release(ctx context.Context, entry *projectRunner, admitte
 	if destroy {
 		p.retireLocked(entry)
 	}
+	p.notifyLocked()
 	p.mu.Unlock()
 	if destroy {
 		p.destroy(ctx, entry)
@@ -524,6 +678,7 @@ func (p *GKEProvider) destroy(ctx context.Context, entry *projectRunner) {
 		entry.cleaning = false
 		if removed {
 			delete(p.draining, entry)
+			p.notifyLocked()
 		}
 		p.mu.Unlock()
 	}()
@@ -553,7 +708,7 @@ func (p *GKEProvider) destroy(ctx context.Context, entry *projectRunner) {
 		}
 	}
 	if err := claims.Delete(cleanup, entry.name, metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &entry.uid}}); err != nil && !k8serrors.IsNotFound(err) && !k8serrors.IsConflict(err) {
-		p.config.Logger.WarnContext(cleanup, "delete code sandbox claim", attr.SlogError(err), attr.SlogProjectID(entry.key.project.String()))
+		p.config.Logger.WarnContext(cleanup, "delete code sandbox claim", attr.SlogError(err), attr.SlogOrganizationID(entry.key.organization))
 		return
 	}
 	removed = true
@@ -563,6 +718,8 @@ func (p *GKEProvider) housekeep(ctx context.Context) {
 	defer close(p.done)
 	ticker := time.NewTicker(codePoolSweep)
 	defer ticker.Stop()
+	templates := time.NewTicker(codeTemplateRefresh)
+	defer templates.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -572,7 +729,57 @@ func (p *GKEProvider) housekeep(ctx context.Context) {
 			return
 		case <-ticker.C:
 			p.reap(ctx)
+			p.renew(ctx)
+		case <-templates.C:
+			p.checkTemplate(ctx)
 		}
+	}
+}
+
+// renew extends the claims of pods still in use before they expire, so an
+// active organization keeps its warm pods instead of replacing them every
+// claim TTL. A failed renewal is retried on the next sweep; if every attempt
+// fails, the pod drains and is replaced as before.
+func (p *GKEProvider) renew(ctx context.Context) {
+	type renewal struct {
+		entry *projectRunner
+		uid   types.UID
+		until time.Time
+	}
+	now := p.now()
+	var due []renewal
+	p.mu.Lock()
+	for _, entry := range p.entries {
+		if entry.creating || entry.retired || entry.uid == "" || entry.expires.Sub(now) > codeClaimRenewMargin {
+			continue
+		}
+		if entry.refs == 0 && now.Sub(entry.idle) >= codeIdleTTL {
+			continue
+		}
+		if entry.renewal.IsZero() {
+			entry.renewal = now.UTC().Add(codeClaimTTL).Truncate(time.Second)
+		}
+		due = append(due, renewal{entry: entry, uid: entry.uid, until: entry.renewal})
+	}
+	p.mu.Unlock()
+	claims := p.config.Dynamic.Resource(sandbox.Claims).Namespace(p.config.Namespace)
+	for _, item := range due {
+		patch, err := json.Marshal(map[string]any{"metadata": map[string]any{"uid": string(item.uid)}, "spec": map[string]any{"lifecycle": map[string]any{"shutdownTime": item.until.Format(time.RFC3339)}}})
+		if err != nil {
+			continue
+		}
+		write, stop := context.WithTimeout(ctx, codeCleanupTimeout)
+		_, err = claims.Patch(write, item.entry.name, types.MergePatchType, patch, metav1.PatchOptions{})
+		stop()
+		if err != nil {
+			p.config.Logger.WarnContext(ctx, "renew code sandbox claim", attr.SlogError(err), attr.SlogOrganizationID(item.entry.key.organization))
+			continue
+		}
+		p.mu.Lock()
+		if item.entry.renewal.Equal(item.until) {
+			item.entry.expires, item.entry.renewal = item.until, time.Time{}
+		}
+		p.mu.Unlock()
 	}
 }
 
@@ -672,6 +879,18 @@ func (l *gkeLease) Client() *RunnerClient { return l.entry.client }
 func (l *gkeLease) Release(ctx context.Context) error {
 	l.once.Do(func() { _ = l.provider.release(ctx, l.entry, true) })
 	return nil
+}
+
+// templateNotFound reports the controller's condition for a claim whose
+// template does not exist, which never resolves for that claim.
+func templateNotFound(claim *unstructured.Unstructured) bool {
+	conditions, _, _ := unstructured.NestedSlice(claim.Object, "status", "conditions")
+	for _, raw := range conditions {
+		if condition, ok := raw.(map[string]any); ok && condition["reason"] == codeTemplateNotFoundReason {
+			return true
+		}
+	}
+	return false
 }
 
 // A missing pod can be expected only before the first immutable identity is pinned.

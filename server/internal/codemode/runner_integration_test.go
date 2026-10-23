@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -162,14 +164,19 @@ func TestCodeRunnerBurstDoesNotInterruptOtherExecutions(t *testing.T) {
 	client.mu.Lock()
 	session := client.session
 	client.mu.Unlock()
+	var refusals sync.WaitGroup
 	for range 32 {
-		result := client.Run(t.Context(), uuid.New(), "42", func(context.Context) (Host, error) {
-			t.Error("saturated runtime must refuse before resolving tool scope")
-			return host, nil
+		refusals.Go(func() {
+			result := client.Run(t.Context(), uuid.New(), "42", func(context.Context) (Host, error) {
+				t.Error("saturated runtime must refuse before resolving tool scope")
+				return host, nil
+			})
+			if assert.NotNil(t, result.Error) {
+				assert.Equal(t, "capacity_exceeded", result.Error.Code, "a full runner refuses as retryable capacity after its wait")
+			}
 		})
-		require.NotNil(t, result.Error)
-		require.Equal(t, "admission_refused", result.Error.Code)
 	}
+	refusals.Wait()
 	require.False(t, session.IsClosed())
 	cancel()
 	for range maxRunnerStreams {

@@ -6,15 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/google/uuid"
-
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	endpointrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -59,25 +57,6 @@ var codeExecuteSchema = json.RawMessage(`{"type":"object","properties":{"code":{
 type metaCodeRefreshKey struct{}
 type metaCodeCredentialKey struct{}
 type metaCodeSessionKey struct{}
-type metaCodeCancellableKey struct{}
-type metaCodeSessionlessAnonymousKey struct{}
-
-// anonymousCodeRunnerBuckets caps the runner identities anonymous callers of
-// one gateway can occupy on a replica. Anonymous callers control their
-// session ids, so keying runners on the session alone would let them claim a
-// new runner per request against the gateway owner's quota.
-const anonymousCodeRunnerBuckets = 4
-
-// anonymousCodeCallerKey spreads a gateway's anonymous sessions across a
-// fixed set of runners. Each run starts with fresh interpreter state, and
-// anonymous callers share one public authority, so sessions in a bucket gain
-// nothing from one another.
-func anonymousCodeCallerKey(gatewayID uuid.UUID, sessionID string) string {
-	hash := fnv.New32a()
-	_, _ = hash.Write([]byte(sessionID))
-	return fmt.Sprintf("anonymous:%s:%d", gatewayID, hash.Sum32()%anonymousCodeRunnerBuckets)
-}
-
 type metaCodeSilentResponse struct{ header http.Header }
 
 func (w *metaCodeSilentResponse) Header() http.Header       { return w.header }
@@ -145,6 +124,10 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	if !s.codeExecutor.Enabled() || gate.discoveryMode != metamcp.DiscoveryModeCode {
 		return nil, oops.E(oops.CodeUnavailable, nil, "code mode is unavailable")
 	}
+	// Refuse before any admission, ownership record or runner is touched.
+	if !codeModeSignedIn(ctx, server) {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "code mode requires sign-in")
+	}
 	var args struct {
 		Code  string          `json:"code"`
 		Tools json.RawMessage `json:"tools"`
@@ -159,9 +142,6 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 		if bytes.Equal(bytes.TrimSpace(args.Tools), []byte("null")) || json.Unmarshal(args.Tools, &selected) != nil {
 			return nil, oops.E(oops.CodeInvalid, nil, "tools must be an array of exact qualified paths")
 		}
-	}
-	if sessionless, _ := ctx.Value(metaCodeSessionlessAnonymousKey{}).(bool); sessionless {
-		return marshalMetaToolError(ctx, logger, req.ID, "Code Mode needs an MCP session. Send the Mcp-Session-Id header returned by initialize on every request.")
 	}
 	scope, err := codeExecutionScope(ctx, gate, req.ID)
 	if err != nil {
@@ -178,7 +158,11 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	})
 	execution, err := s.codeExecutor.Execute(ctx, scope, args.Code, factory)
 	if err != nil {
-		return marshalMetaToolError(ctx, logger, req.ID, "Code execution was not admitted. No program was submitted.")
+		refusal := newCodeAdmissionRefusal(err)
+		if refusal.Error.Code == codeRefusalUnexpected {
+			logger.WarnContext(ctx, "code execution was not admitted", attr.SlogError(err))
+		}
+		return marshalCodeAdmissionRefusal(ctx, logger, req.ID, refusal)
 	}
 	structured, err := json.Marshal(execution)
 	if err != nil {
@@ -196,11 +180,6 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 }
 
 func (s *Service) cancelMetaCode(ctx context.Context, gate *metaGateContext, req *rawRequest) error {
-	// Anonymous HTTP requests have no trustworthy shared caller identity.
-	// They stop on disconnect/deadline; a guessed session header grants no control.
-	if cancellable, _ := ctx.Value(metaCodeCancellableKey{}).(bool); !cancellable {
-		return nil
-	}
 	var args struct {
 		RequestID mcpjsonrpc.ID `json:"requestId"`
 	}
