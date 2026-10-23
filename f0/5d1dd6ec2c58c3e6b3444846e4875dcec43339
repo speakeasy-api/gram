@@ -1,0 +1,29 @@
+server/internal/access/queries.sql
+  h_9630b74bdac540 82-86,91
+server/internal/access/updaterole_test.go
+  h_9630b74bdac540 242-244,247-248,252,255
+  s_a0e60dd5367d76::t_abe0daac01bb5d 249-251,253-254
+server/internal/access/repo/queries.sql.go
+  h_9630b74bdac540 273,283-287
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f05d1dd6ec2c58c3e6b3444846e4875dcec43339",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_a0e60dd5367d76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04a3a5f3-98ad-404b-b421-65749354007a",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
