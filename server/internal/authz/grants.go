@@ -47,6 +47,9 @@ func GrantsSatisfy(grants []Grant, check Check) bool {
 	if err := validateInput(check); err != nil {
 		return false
 	}
+	if personalCheckUnbound(check) {
+		return false
+	}
 	grant, _ := matchingGrant(grants, check.expand())
 	return grant != nil
 }
@@ -174,7 +177,27 @@ func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSl
 	}
 
 	q := repo.New(dbtx)
-	removeRows, err := flattenRoleGrants(removeGrants)
+	// An unrestricted removal deletes every wildcard row for the scope, not
+	// only the one this release would write: the editor shows any of them as
+	// "all", so removing "all" has to remove whichever one is stored.
+	var exactRemovals []*RoleGrant
+	for _, grant := range removeGrants {
+		if grant == nil {
+			continue
+		}
+		if grant.Selectors != nil {
+			exactRemovals = append(exactRemovals, grant)
+			continue
+		}
+		if _, err := q.DeletePrincipalWildcardGrants(ctx, repo.DeletePrincipalWildcardGrantsParams{
+			OrganizationID: orgID,
+			PrincipalUrn:   principal,
+			Scope:          grant.Scope,
+		}); err != nil {
+			return nil, fmt.Errorf("delete wildcard grant %q for %s: %w", grant.Scope, principal.Label(), err)
+		}
+	}
+	removeRows, err := flattenRoleGrants(exactRemovals)
 	if err != nil {
 		return nil, err
 	}
@@ -369,6 +392,9 @@ type grantCheckEvaluation struct {
 }
 
 func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, error) {
+	if personalCheckUnbound(check) {
+		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
+	}
 	grant, matchedCheck := matchingGrant(grants, check.expand())
 	if grant == nil {
 		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
@@ -419,7 +445,13 @@ func grantMatchingCheck(grant *Grant, checks []Check) *Check {
 			continue
 		}
 
-		if !check.matchesAllowSelector(grant.Selector) {
+		var matched bool
+		if isAPIKeyGrant(grant) {
+			matched = apiKeyGrantMatches(grant, check)
+		} else {
+			matched = check.matchesAllowSelector(grant.Selector)
+		}
+		if !matched {
 			continue
 		}
 		return check
@@ -434,7 +466,8 @@ func grantMatchingCheck(grant *Grant, checks []Check) *Check {
 func allScopeGrants() []Grant {
 	grants := make([]Grant, 0, len(scopeVisibilityByScope))
 	for s, visibility := range scopeVisibilityByScope {
-		if visibility != scopeVisibilityUserVisible {
+		// Administering an organization implies no use of its auth clients.
+		if visibility != scopeVisibilityUserVisible || s == ScopeMCPAuth {
 			continue
 		}
 		grants = append(grants, NewGrant(s, WildcardResource))

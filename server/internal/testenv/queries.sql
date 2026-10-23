@@ -1109,11 +1109,8 @@ WHERE key_hash = @key_hash;
 
 -- name: CountAssistantAttachments :one
 -- Count stored attachments, including those whose targets are soft-deleted.
-SELECT
-  (SELECT count(*) FROM assistant_toolsets at
-   WHERE at.project_id = @project_id AND at.assistant_id = @assistant_id) AS toolsets,
-  (SELECT count(*) FROM assistant_mcp_servers ams
-   WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id) AS mcp_servers;
+SELECT count(*) AS mcp_servers FROM assistant_mcp_servers ams
+WHERE ams.project_id = @project_id AND ams.assistant_id = @assistant_id;
 
 -- name: SetUserSessionIssuerUseAuthenticationHostFixture :execrows
 -- Project-scoped issuers carry no organization_id, so their tenancy is read
@@ -2026,7 +2023,7 @@ WHERE locktype = 'advisory' AND NOT granted
 SELECT count(*)
 FROM mcp_metadata
 WHERE project_id = @project_id
-  AND (toolset_id = @backend_id::uuid OR mcp_server_id = @backend_id::uuid);
+  AND mcp_server_id = @backend_id::uuid;
 
 -- name: SetMcpMetadataHeaderDisplayNamesFixture :execrows
 UPDATE mcp_metadata
@@ -2150,6 +2147,24 @@ VALUES (
 -- server, so a table-driven test can set each case's associations afresh.
 DELETE FROM mcp_server_remote_session_clients WHERE mcp_server_id = @mcp_server_id;
 
+-- name: CopyConsentEMACredentialToProjectFixture :exec
+-- TEST FIXTURE ONLY. A pending organization-issued consent in another member project.
+INSERT INTO remote_session_ema_credentials (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id,
+  remote_session_client_id, resource, subject_urn, client_selection,
+  remote_session_ema_binding_id, ema_binding_generation, ema_provider,
+  internal_session_issuer_id, internal_session_issuer_updated_at, internal_session_issuer_key_id, sign_in_id,
+  access_token_encrypted, access_expires_at
+)
+SELECT c.organization_id, p.id, c.user_session_issuer_id, c.remote_session_issuer_id,
+       c.remote_session_client_id, c.resource, c.subject_urn, c.client_selection,
+       c.remote_session_ema_binding_id, c.ema_binding_generation, c.ema_provider,
+       c.internal_session_issuer_id, c.internal_session_issuer_updated_at, c.internal_session_issuer_key_id, c.sign_in_id,
+       c.access_token_encrypted, c.access_expires_at
+FROM remote_session_ema_credentials AS c
+JOIN projects AS p ON p.id = @project_id AND p.organization_id = c.organization_id
+WHERE c.id = @id AND c.organization_id = @organization_id AND c.user_session_id IS NULL;
+
 -- name: ListUserSessionCredentialsForSubjectFixture :many
 -- Test-only fixture: every session row of one subject, oldest first, with the
 -- credential it belongs to, so a test can follow refresh rotation.
@@ -2176,19 +2191,21 @@ WHERE organization_id = @organization_id AND id IN (SELECT c.api_key_id FROM ass
 SELECT count(*) FROM outbox;
 
 
--- name: InsertToolsetKeyedMcpMetadataFixture :one
--- Plants a row under the toolset key, as pods from before the server-key writers wrote.
-INSERT INTO mcp_metadata (toolset_id, project_id, instructions, header_display_names, default_environment_id, external_documentation_url)
-VALUES (@toolset_id, @project_id, @instructions, COALESCE(sqlc.narg('header_display_names')::jsonb, '{}'::jsonb), @default_environment_id, sqlc.narg('external_documentation_url'))
-RETURNING id;
-
--- name: InsertToolsetKeyedPluginServerFixture :one
--- Plants a plugin entry under the toolset key, as pods from before the server-key writers wrote.
-INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order, deleted_at)
-VALUES (@plugin_id, @toolset_id, @display_name, @policy, @sort_order, sqlc.narg('deleted_at'))
-RETURNING *;
-
 -- name: CurrentDatabaseTime :one
 -- The database's clock, for tests that compare against timestamps the
 -- database wrote.
 SELECT clock_timestamp()::timestamptz AS now;
+
+-- name: SoftDeleteHTTPToolDefinitionFixture :exec
+UPDATE http_tool_definitions
+SET deleted_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND deployment_id = @deployment_id
+  AND tool_urn = @tool_urn;
+
+-- name: ExpireAPIKeyFixture :exec
+-- Test-only fixture: puts a key's expiry in the past.
+UPDATE api_keys
+SET expires_at = clock_timestamp() - interval '1 minute'
+WHERE id = @id
+  AND organization_id = @organization_id;

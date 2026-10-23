@@ -29,7 +29,7 @@
     "confbox": "^0.2.4",
     "get-port-please": "^3.2.0",
     "jsonc-parser": "^3.3.1",
-    "oxfmt": "^0.72.0",
+    "oxfmt": "^0.73.0",
     "tsx": "^4.23.5",
     "typescript": "catalog:",
     "zx": "^8.8.5"

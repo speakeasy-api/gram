@@ -162,10 +162,8 @@ SELECT
     )
   )::boolean AS mcp_slug_is_endpoint,
   EXISTS (SELECT 1 FROM toolset_prompts AS tp WHERE tp.toolset_id = t.id)::boolean AS has_prompts,
-  EXISTS (SELECT 1 FROM assistant_toolsets AS at WHERE at.toolset_id = t.id)::boolean AS has_assistants,
   EXISTS (SELECT 1 FROM slack_app_toolsets AS sat WHERE sat.toolset_id = t.id)::boolean AS has_slack_apps,
   EXISTS (SELECT 1 FROM user_oauth_tokens AS uot WHERE uot.toolset_id = t.id AND uot.deleted IS FALSE)::boolean AS has_user_oauth_tokens,
-  EXISTS (SELECT 1 FROM plugin_servers AS ps WHERE ps.toolset_id = t.id AND ps.deleted IS FALSE)::boolean AS has_toolset_plugin_entries,
   EXISTS (
     SELECT 1
     FROM meta_mcp_server_members AS m
@@ -327,18 +325,6 @@ UPDATE toolsets
 SET mcp_enabled = FALSE, updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
--- name: RekeyToolsetMetadata :execrows
--- Moves the toolset's metadata row onto the server it now describes, unless
--- the server already has one.
-UPDATE mcp_metadata AS md
-SET toolset_id = NULL, mcp_server_id = @mcp_server_id, updated_at = clock_timestamp()
-WHERE md.project_id = @project_id
-  AND md.toolset_id = @toolset_id
-  AND NOT EXISTS (
-    SELECT 1 FROM mcp_metadata AS existing
-    WHERE existing.project_id = @project_id AND existing.mcp_server_id = @mcp_server_id
-  );
-
 -- name: CountServerPluginEntries :one
 SELECT count(*)::bigint AS entries
 FROM plugin_servers AS ps
@@ -438,23 +424,14 @@ WITH plugin AS (
   VALUES (@organization_id, @project_id, @name, @name)
   RETURNING id
 )
-INSERT INTO plugin_servers (plugin_id, project_id, toolset_id, mcp_server_id, display_name)
-SELECT id, @project_id, sqlc.narg('toolset_id'), sqlc.narg('mcp_server_id'), @name FROM plugin
+INSERT INTO plugin_servers (plugin_id, project_id, mcp_server_id, display_name)
+SELECT id, @project_id, @mcp_server_id, @name FROM plugin
 RETURNING id;
 
 -- name: GetPluginServerFixture :one
-SELECT toolset_id, mcp_server_id, deleted
+SELECT mcp_server_id, deleted
 FROM plugin_servers
 WHERE id = @id;
-
--- name: SeedAssistantToolsetFixture :exec
-WITH assistant AS (
-  INSERT INTO assistants (organization_id, project_id, name, model, instructions, created_by_user_id)
-  VALUES (@organization_id, @project_id, 'fixture-assistant', 'fixture-model', 'fixture', 'fixture-user')
-  RETURNING id
-)
-INSERT INTO assistant_toolsets (assistant_id, toolset_id, project_id)
-SELECT id, @toolset_id, @project_id FROM assistant;
 
 -- name: SeedToolsetEnvironmentFixture :exec
 -- A toolset environment holding one plaintext entry.

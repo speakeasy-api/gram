@@ -34,7 +34,7 @@ agent:00000000-0000-0000-0000-000000000004
 
 Role principals use `role:<kind>:<role-uuid>`, where `kind` is `global` or `organization`. Role slugs such as `admin` remain display and lookup metadata; they are not principal identifiers.
 
-The current RBAC implementation supports `user`, `role`, and `agent` principals, but there is no hard limitation to those three. We can add other principal types as the model grows. For example, we expect to migrate the current API key system into RBAC eventually, which would introduce an `api_key` principal.
+The current RBAC implementation supports `user`, `role`, `agent`, and `api_key` principals. An `api_key:<api_keys.id>` principal is a legacy API key holding its own server and auth client policy; it is written only through `keys.create` and is not grantable anywhere else (see "API key policies and the mandatory check").
 
 Agent principals are grantable in two places in the RBAC administration surfaces: on a role, through the role editor, and on a single MCP server, through that server's access list. An agent's own direct grants are managed separately, through the agent policy API (`agents.createPolicyGrant` and friends), which is also what agent key issuance delegates from. Role membership for agents lives in `agent_role_assignments` rather than `organization_role_assignments`, because agents have no WorkOS identity and their membership is never reconciled outward.
 
@@ -824,6 +824,30 @@ Check:
 Result: denied.
 
 One nuance: if a grant has a key that the check does not include, matching skips that key. This allows a more specific grant to satisfy a broader connection-level check that does not yet constrain that dimension. Be aware of this when deciding whether a handler should use a plain resource check or a dimensional check.
+
+#### Auth client checks
+
+`mcp:auth` and `mcp:blocked_auth` protect the `mcp_auth_client` resource kind: the upstream identity Speakeasy presents to an MCP server. They have no server dimension, so a block on a shared client applies on every server that uses it. A caller will need `mcp:connect` on the server and `mcp:auth` on the selected client; neither implies the other. No request is checked against `mcp:auth` yet, and no system role holds it. Where the engine does not enforce RBAC, such as for legacy API keys, every auth-client check is denied.
+
+Auth client checks always match strictly, for allows and blocks: a grant key the check does not carry never matches. Build them with `authz.MCPAuthClientCheck`. Every check carries `client_type` and `project_id` (the project of the server using the client); `remote_session` checks also carry `connection_owner`, and no other type may. Evaluation rejects a check missing any of these.
+
+`connection_owner` accepts a user ID, `*`, or `$represented_user`. The engine binds `$represented_user` once per request from trusted context: the signed-in user, or the user an agent credential acts for, never the agent owner, and never an API key's or assistant token's owner. Embedded chat sessions bind no represented user, so they cannot use a `remote_session` connection. A `remote_session` check is denied unless its owner is that represented user, whatever grants match, so an allow never lets anyone use another user's connection. An agent acting for a user must also pass that user's own policy.
+
+Delegated policies keep `$represented_user` symbolic. Without a known represented user, containment accepts it only under a parent grant that is symbolic too or does not pin the owner, and intersecting it with a concrete owner yields no allow. When issuance knows the represented user, a grant pinned to that user's ID is the same owner: it contains the symbolic grant and intersects with it to `$represented_user`, while any other concrete owner yields no allow. A parent restriction pinned to a concrete owner is treated as overlapping a symbolic grant, so it must be carried, unless issuance knows the represented user and it is someone else. An inherited block that overlaps a direct grant on the represented user's connection is overridden rather than carried, as at runtime, once issuance knows the represented user; the principal's own block always remains restrictive. Without a known represented user, the block is carried, which can only narrow.
+
+The new scopes are safe from delegated policy version 5, but credentials are issued at version 4 (`IssuedDelegatedPolicyVersion`) until every server reads version 5, so no credential carries them yet.
+
+#### API key policies and the mandatory check
+
+A legacy API key is its own principal, `api_key:<api_keys.id>`. Its policy is `mcp:connect` and `mcp:auth` grants, and their blocks, written when the key is created (`keys.create` `policy_grants`, org admin only) and deleted when it is revoked. An `mcp:auth` grant must name its client, and a key represents no user, so it never uses a personal connection. API key grants always match strictly, and no key grant matches an MCP check that lacks a project. A project-bound key's grants must name its project, and a grant on every server must name a project. A key never inherits `user:all`, its creator's roles, or a direct-user override. Audience, assignment and policy APIs neither list nor accept `api_key` principals.
+
+`Engine.AuthorizeMandatory` evaluates `mcp:connect` and `mcp:auth` for any caller, including legacy keys and sessionless callers that `Require` skips. A legacy key is evaluated against its own live policy; every other caller against the policy its request already holds. A caller with no policy, an inactive credential, a key check without a project, or a check outside the key's own project or transport scopes is denied, and the decision says which policy it used and why it denied. `Engine.PrepareMandatory` admits the caller once and `Decide` then evaluates checks for a server's organization with no further I/O; a caller from another organization is denied with `organization_mismatch`.
+
+#### Shadowing the mandatory check
+
+For organizations with the `mandatory-authz-shadow` flag, MCP serving runs the mandatory check beside today's decision and records the comparison. It never changes a response. Covered: hosted and proxied server access (including denials before the RBAC check, such as a caller outside the organization), gateway members and hosted member toolsets, consent inventory, ID-JAG token issuance, and auth clients the typed resolver chose. An auth client used while the resolver is off is recorded as `skipped` with reason `resolver_off`, never as an allow. Not covered yet: user session minting, and auth clients on gateway members.
+
+The `mcp.authz.mandatory_shadow` counter is labelled by organization, `surface`, `caller` (`anonymous`, `represented`, `unrepresented`, `cross_org`), `principal` (`anonymous`, `user`, `agent`, `workload`, `api_key`, `assistant`, `chat_session`), today's decision, and the mandatory `outcome` (`allow`, `deny`, `error`, `skipped`), `source` and `reason`. Disagreements and errors are also logged with the principal, resource and project ids, once per distinct disagreement every ten minutes and at debug level otherwise. Until key policies are backfilled, every legacy key reads `api_key`/`no_policy`, and anonymous callers on public servers read `unauthenticated`; both are expected.
 
 ### `Require`
 

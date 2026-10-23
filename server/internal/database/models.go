@@ -910,23 +910,6 @@ type AssistantThreadEvent struct {
 	Deleted bool
 }
 
-type AssistantToolset struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	AssistantID uuid.UUID
-	// @access: confidential
-	ToolsetID uuid.UUID
-	// @access: confidential
-	EnvironmentID uuid.NullUUID
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-}
-
 type AuditLog struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -966,6 +949,34 @@ type AuditLog struct {
 	ActingClientID pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
+}
+
+// Default auth permission grants provisioned by the backfill or at organization creation, one row per grant, kept after the grant itself is deleted.
+type AuthPermissionProvision struct {
+	// @access: confidential
+	ID uuid.UUID
+	// The organization the grant belongs to.
+	// @access: confidential
+	OrganizationID string
+	// The principal the grant was written to, as in principal_grants.principal_urn.
+	// @access: confidential-pii
+	PrincipalUrn string
+	// The granted scope, mcp:auth or mcp:connect.
+	// @access: confidential
+	Scope string
+	// The grant's selector, as in principal_grants.selectors.
+	// @access: opaque-restricted
+	Selectors []byte
+	// Which default the grant belongs to: personal_default, shared_client or api_key from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
+	// @access: confidential
+	Kind string
+	// When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
+	// @access: confidential
+	TakenOverAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 // Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
@@ -3092,8 +3103,6 @@ type McpMetadatum struct {
 	// @access: confidential
 	ID uuid.UUID
 	// @access: confidential
-	ToolsetID uuid.NullUUID
-	// @access: confidential
 	McpServerID uuid.NullUUID
 	// @access: confidential
 	ProjectID uuid.UUID
@@ -4874,8 +4883,6 @@ type PluginServer struct {
 	// @access: confidential
 	ProjectID uuid.NullUUID
 	// @access: confidential
-	ToolsetID uuid.NullUUID
-	// @access: confidential
 	McpServerID uuid.NullUUID
 	// @access: confidential
 	MetaMcpServerID uuid.NullUUID
@@ -5346,6 +5353,8 @@ type RemoteSessionClient struct {
 	IdentityProviderConnectionID uuid.NullUUID
 	// @access: confidential
 	CredentialOwner string
+	// @access: opaque-confidential
+	DisplayName pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

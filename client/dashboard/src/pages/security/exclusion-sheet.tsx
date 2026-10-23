@@ -49,6 +49,7 @@ import {
   getRuleTitleFallback,
   isRationaleSource,
 } from "./risk-utils";
+import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import { useRBAC } from "@/hooks/useRBAC";
 import { invalidateExclusionSurfaces } from "./exclusion-invalidation";
 import type { DetectorMode } from "./policy-data";
@@ -264,21 +265,28 @@ function ExclusionForm({
   // operator who picks "any finding from this rule" should not leave an audit
   // entry for a value they never looked at.
   const { hasScope } = useRBAC();
+  const restricted = useRiskContentRestricted();
   // Entity-type exclusions only mean something to the Presidio engine; under
   // the LLM analyzer they are not applied, so the sheet stops offering them.
   const mode = useDetectorMode();
   const reveals = useUnmaskedMatch(single?.id ?? "");
-  const exact = exactCandidate(
-    single,
-    reveals.value,
-    hasScope(REVEAL_SCOPE, single?.chatId) &&
-      hasRevealableEvent(single?.matchRedacted),
-  );
+  const exact = restricted
+    ? undefined
+    : exactCandidate(
+        single,
+        reveals.value,
+        hasScope(REVEAL_SCOPE, single?.chatId) &&
+          hasRevealableEvent(single?.matchRedacted),
+      );
 
   // Ready-made rules for the selection. Always at least ["custom"], so an
   // edit or a no-finding create renders no picker and opens on the DSL box.
   // A pre-targeted rule is on offer even before any findings load.
-  const options = exclusionOptions(results, exact, presetRuleId, mode);
+  // The options helper also accepts plaintext already present on chat findings.
+  // Filter that fallback too, not only the audited-reveal candidate above.
+  const options = exclusionOptions(results, exact, presetRuleId, mode).filter(
+    (option) => !restricted || option.value !== "exact",
+  );
   const [choice, setChoice] = useState<ExclusionOption["value"]>(() => {
     // A pre-targeted create opens on the rule option: the flow began as "stop
     // flagging this signal", which is the whole rule cluster, not any one

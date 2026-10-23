@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
@@ -77,11 +78,18 @@ type metaGateContext struct {
 	// connect page a signed-in person opens to connect it. Empty when nobody
 	// signs in to the gateway in a browser: ungated and agent gateways.
 	connectRoot string
-	// chainUpstream acquires a member's upstream token by identity chaining
-	// when routing finds none. Set only on the tools/call dispatch copy, so
-	// describe and consent probes never exchange; nil otherwise.
-	chainUpstream   func(ctx context.Context, upstreamResource string) (string, error)
-	toolSelection   *toolfilter.SessionSelection
+	// chainUpstream acquires a member credential at consent or live dispatch.
+	// Cached discovery leaves it unset.
+	chainUpstream func(ctx context.Context, member metaMember, upstreamResource string) (string, error)
+	// catalog is the immutable consent record; nil for connections without materialized approval.
+	catalog *connectionCatalog
+	// catalogMode selects stored definitions or live discovery of approved members.
+	catalogMode toolfilter.CatalogMode
+	// unapprovedMembers are current members the catalog did not approve. They
+	// are reported by connection_status only, never discovered or executed.
+	unapprovedMembers []metaMember
+	// execute permits live credential resolution for a cached tool call.
+	execute         bool
 	discoveryMode   metamcp.DiscoveryMode
 	authenticated   bool
 	sessionID       string
@@ -189,6 +197,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	var gateProjectTokens *projectTokenCache
 	var gateMemberChoices *memberChoices
 	var gatePolicy *toolfilter.SessionPolicy
+	var gateAuthentication *issuerGateAuthentication
 	switch {
 	case !metaServer.UserSessionIssuerID.Valid:
 	case membership.organization:
@@ -200,12 +209,13 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		}
 		ctx = newCtx
 		r = r.WithContext(ctx)
-		gateProjectTokens = s.newOrganizationGatewayTokens(authentication)
+		gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject)
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
 		}
 		gatePolicy = toolSelection
+		gateAuthentication = authentication
 	default:
 		if resolvedEndpoint == nil {
 			built, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, mcproute.MCP)
@@ -224,11 +234,11 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
 		}
-		if gateMemberChoices != nil {
+		if gateMemberChoices != nil || (toolSelection != nil && toolSelection.Catalog != nil) {
 			// Proxied members resolve only their chosen clients, so the
 			// issuer's other clients resolve lazily, for hosted members that
 			// need them, and an unrelated broken one blocks nothing else.
-			gateProjectTokens = s.newOrganizationGatewayTokens(authentication)
+			gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject)
 		} else {
 			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
 			if err != nil {
@@ -237,6 +247,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 			gateTokens = tokens
 		}
 		gatePolicy = toolSelection
+		gateAuthentication = authentication
 	}
 	if prepared.empty() {
 		return nil
@@ -271,7 +282,10 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,
-		toolSelection:       nil,
+		catalog:             nil,
+		catalogMode:         "",
+		unapprovedMembers:   nil,
+		execute:             false,
 		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,
 		sessionID:           parseMcpSessionID(r.Header),
@@ -285,7 +299,6 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		connectURL:      connectURL,
 	}
 	if gatePolicy != nil {
-		gate.toolSelection = gatePolicy.Selection
 		if gatePolicy.Gateway != nil && gatePolicy.Gateway.DiscoveryMode != nil {
 			gate.discoveryMode = *gatePolicy.Gateway.DiscoveryMode
 		}
@@ -294,6 +307,17 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	// organization gateway follows the connection's choice.
 	if membership.agentID != uuid.Nil {
 		gate.discoveryMode = metamcp.DiscoveryModeProgressive
+	}
+	if gatePolicy != nil && gatePolicy.Catalog != nil && (req.Method == mcpversions.MethodToolsCall || (req.Method == mcpversions.MethodToolsList && gate.discoveryMode == metamcp.DiscoveryModeDirect)) {
+		catalog, err := s.loadConnectionCatalog(ctx, resolvedEndpoint, gateAuthentication.subject, gatePolicy.Catalog, time.Now())
+		if errors.Is(err, errConnectionCatalogExpired) {
+			return WriteAuthenticateChallenge(w, gateAuthentication.protectedResourceURL, err.Error())
+		}
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "could not load approved tools; retry shortly").LogError(ctx, logger)
+		}
+		gate.catalog = catalog
+		gate.catalogMode = gatePolicy.Catalog.Mode
 	}
 	// Identity comes from the issuer gate alone: this surface runs no
 	// identity-auth ladder, so ungated meta endpoints serve anonymously —
@@ -334,6 +358,9 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		w.Header().Set("Mcp-Session-Id", gate.sessionID)
 	}
 
+	// Every member and toolset check this request shadows shares one
+	// admission of its caller.
+	ctx = withMandatoryAdmission(ctx)
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, gate, &req, r.Header.Get(mcpversions.HTTPHeader))
 
 	switch {
@@ -518,6 +545,17 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 			Annotations: nil,
 			Meta:        nil,
 		})
+		// Only inspection tools are read-only; execute_tool can dispatch writes.
+		switch tool.Name {
+		case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolConnectionStatus:
+			tools[len(tools)-1].Annotations = &externalmcp.ToolAnnotations{
+				Title:           "",
+				ReadOnlyHint:    new(true),
+				DestructiveHint: nil,
+				IdempotentHint:  nil,
+				OpenWorldHint:   nil,
+			}
+		}
 		if tool.Name == metamcp.ToolConnectionStatus {
 			tools[len(tools)-1].Meta = map[string]any{
 				"ui":             map[string]any{"resourceUri": metamcp.ConnectionStatusResourceURI},
@@ -565,6 +603,7 @@ func (s *Service) callMetaServerTool(
 
 	}
 	start := time.Now()
+	gate.execute = gate.discoveryMode == metamcp.DiscoveryModeDirect || params.Name == metamcp.ToolExecuteTool
 
 	// One snapshot per request: every meta MCP tool answers from the same
 	// member set, so a membership mutation lands between requests, never
@@ -585,9 +624,9 @@ func (s *Service) callMetaServerTool(
 	var body json.RawMessage
 	switch params.Name {
 	case metamcp.ToolListServers:
-		body, err = s.handleMetaListServersCall(ctx, logger, members, req)
+		body, err = s.handleMetaListServersCall(ctx, logger, catalogSelectedMembers(gate, members), req)
 	case metamcp.ToolDescribeServer:
-		body, err = s.handleMetaDescribeServerCall(ctx, logger, gate, members, req, params.Arguments)
+		body, err = s.handleMetaDescribeServerCall(ctx, logger, gate, catalogSelectedMembers(gate, members), req, params.Arguments)
 	case metamcp.ToolDescribeTools:
 		body, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
 	case metamcp.ToolConnectionStatus:
@@ -643,6 +682,22 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 		UserInfo:   tm.UserInfoByID(gate.userID),
 		Attributes: logAttrs,
 	})
+}
+
+// catalogSelectedMembers keeps the members with at least one stored approved
+// tool, so Progressive discovery lists the same servers that Direct listing
+// exposes. Live connections discover approved members' tools as they change.
+func catalogSelectedMembers(gate *metaGateContext, members []metaMember) []metaMember {
+	if gate.catalog == nil || gate.catalogMode != toolfilter.CatalogModeCached {
+		return members
+	}
+	selected := make(map[string]bool)
+	for _, tool := range gate.catalog.Tools {
+		if slug, _, err := metamcp.SplitQualifiedName(tool.Name); err == nil {
+			selected[slug] = true
+		}
+	}
+	return slices.DeleteFunc(slices.Clone(members), func(member metaMember) bool { return !selected[member.slug] })
 }
 
 func (s *Service) handleMetaListServersCall(

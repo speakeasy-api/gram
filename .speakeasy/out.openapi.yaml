@@ -37796,6 +37796,102 @@ paths:
       x-speakeasy-name-override: detachKeySet
       x-speakeasy-react-hook:
         name: DetachOrganizationRemoteSessionClientKeySet
+  /rpc/organizationRemoteSessionClients.duplicate:
+    post:
+      description: Create a new standalone remote_session_client with a copy of an existing client's configuration in the caller's organization. The copy keeps the source's issuer, project, credential owner, authentication settings, key set, scopes, audience, and callback, and by default reuses its client_id and stored secret, so no secret is re-entered. A client metadata document (CIMD) client gets a new hosted document and client_id. To give the copy its own upstream registration instead, register one through /oauth/proxy-register and pass the returned credentials; this is refused for credential_owner self clients. A private_key_jwt client that is not a CIMD client cannot be duplicated, because the provider knows only the source's key set URL. The source is unchanged and the copy has no user_session_issuer attachments. Clients managed by an identity provider connection cannot be duplicated. Requires org:admin.
+      operationId: duplicateOrganizationRemoteSessionClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DuplicateOrganizationRemoteSessionClientForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: duplicateClient organizationRemoteSessionClients
+      tags:
+        - organizationRemoteSessionClients
+      x-speakeasy-name-override: duplicate
+      x-speakeasy-react-hook:
+        name: DuplicateOrganizationRemoteSessionClient
   /rpc/organizationRemoteSessionClients.get:
     get:
       description: Get a remote_session_client in the caller's organization by id. Requires org:read.
@@ -81800,6 +81896,51 @@ components:
         - state
         - decision
         - enforceable
+    APIKeyPolicyGrant:
+      type: object
+      properties:
+        scope:
+          type: string
+          description: 'mcp:connect, mcp:auth, or a block: mcp:blocked_connect, mcp:blocked_auth'
+          enum:
+            - mcp:connect
+            - mcp:blocked_connect
+            - mcp:auth
+            - mcp:blocked_auth
+        selector:
+          $ref: '#/components/schemas/APIKeyPolicySelector'
+      required:
+        - scope
+        - selector
+    APIKeyPolicySelector:
+      type: object
+      properties:
+        client_type:
+          type: string
+          description: Auth client type filter (mcp:auth only).
+          enum:
+            - service_account
+            - static_credential
+            - pass_through
+            - ema
+            - '*'
+        project_id:
+          type: string
+          description: The project the servers are in; required when resource_id is '*', and the key's own project when it is bound to one.
+          format: uuid
+        resource_id:
+          type: string
+          description: A server or auth client ID, or '*' for every server in project_id. mcp:auth grants must name their client.
+        resource_kind:
+          type: string
+          description: mcp for mcp:connect grants, mcp_auth_client for mcp:auth grants
+          enum:
+            - mcp
+            - mcp_auth_client
+      description: 'What an API key policy grant covers: servers (mcp) or auth clients (mcp_auth_client).'
+      required:
+        - resource_kind
+        - resource_id
     AccessMember:
       type: object
       properties:
@@ -82491,6 +82632,11 @@ components:
         name:
           type: string
           description: Display name of the plugin. Absent for the synthesized observability plugin.
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentPluginServer'
+          description: 'MCP servers the plugin contains, in display order, possibly none. Display-only: the agent installs the plugin, not these entries. Absent for the synthesized observability plugin, which carries hooks rather than servers.'
         slug:
           type: string
           description: Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.
@@ -82498,6 +82644,18 @@ components:
         - slug
         - marketplace_name
         - install_mode
+    AgentPluginServer:
+      type: object
+      properties:
+        dashboard_url:
+          type: string
+          description: Link to the server's page in the Speakeasy dashboard. Present only when the enrolled user holds mcp:read on the server; the agent tells the user that links need that scope when it is absent.
+          format: uri
+        name:
+          type: string
+          description: Display name of the server within its plugin.
+      required:
+        - name
     AgentPolicyGrant:
       type: object
       properties:
@@ -82560,6 +82718,19 @@ components:
     AgentPolicySelector:
       type: object
       properties:
+        client_type:
+          type: string
+          description: Auth client type filter (mcp:auth scopes only).
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+            - ema
+            - '*'
+        connection_owner:
+          type: string
+          description: 'Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, ''*'', or ''$represented_user''.'
         disposition:
           type: string
           description: Tool disposition filter (MCP scopes only).
@@ -82570,7 +82741,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP, environment, and assistant scopes).
+          description: Project filter (MCP, environment, assistant, and mcp:auth scopes).
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -82587,6 +82758,7 @@ components:
             - risk_policy
             - chat
             - agent
+            - mcp_auth_client
             - '*'
         server_identity:
           type: string
@@ -82884,6 +83056,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AnalyticsDataset'
+          description: The datasets the caller can read
+        restricted_datasets:
+          type: array
+          items:
+            type: string
+          description: Names of the datasets the caller cannot read, such as one only organization administrators can read, so a saved widget over one can say why it shows nothing rather than reading as broken
       required:
         - datasets
     AnalyticsDimensionValue:
@@ -86211,6 +86389,12 @@ components:
           type: string
           description: The name of the key
           maxLength: 255
+        policy_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIKeyPolicyGrant'
+          description: 'Optional policy for an ordinary key: mcp:connect and mcp:auth grants, and mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth client access is evaluated against. Not yet enforced. Requires org admin.'
+          maxItems: 100
         project_id:
           type: string
           description: Optional project binding. Omit for an organization-wide key; independent of permission scopes and the Gram-Project header.
@@ -89108,6 +89292,37 @@ components:
           type: string
           description: The dashboard to copy
           format: uuid
+      required:
+        - id
+    DuplicateOrganizationRemoteSessionClientForm:
+      type: object
+      properties:
+        client_id:
+          type: string
+          description: client_id of a fresh upstream registration, e.g. from /oauth/proxy-register. Omit to copy the source's client_id and secret.
+        client_id_issued_at:
+          type: string
+          description: When the issuer reported issuing the client_id (RFC 7591 client_id_issued_at). Omit to record the time of this call.
+          format: date-time
+        client_secret:
+          type: string
+          description: client_secret of the fresh registration. Only with client_id. Speakeasy encrypts before persisting; the plaintext is never returned.
+        client_secret_expires_at:
+          type: string
+          description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
+          format: date-time
+        id:
+          type: string
+          description: The remote_session_client id to duplicate.
+          format: uuid
+        token_endpoint_auth_method:
+          type: string
+          description: How the fresh registration authenticates at the issuer's token endpoint. Only with client_id; omit to keep the source's method.
+          enum:
+            - client_secret_basic
+            - client_secret_post
+            - none
+      description: Form for an org admin to duplicate a remote_session_client. Omit client_id to copy the source's client_id and stored secret; supply it, with the rest of a Dynamic Client Registration response, to give the copy its own upstream registration.
       required:
         - id
     DuplicateWidgetRequestBody:
@@ -93727,6 +93942,11 @@ components:
         organization_id:
           type: string
           description: The organization ID this key belongs to
+        policy_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIKeyPolicyGrant'
+          description: An ordinary key's own policy
         project_id:
           type: string
           description: The optional project ID this key is scoped to
@@ -95545,6 +95765,8 @@ components:
             - mcp:blocked_write
             - mcp:connect
             - mcp:blocked_connect
+            - mcp:auth
+            - mcp:blocked_auth
             - environment:read
             - environment:blocked_read
             - environment:write
@@ -95599,6 +95821,8 @@ components:
               - mcp:blocked_write
               - mcp:connect
               - mcp:blocked_connect
+              - mcp:auth
+              - mcp:blocked_auth
               - environment:read
               - environment:blocked_read
               - environment:write
@@ -97260,7 +97484,7 @@ components:
           description: The slug of the toolset
         tool_count:
           type: integer
-          description: The number of distinct configured tools in the latest toolset version, excluding external MCP proxy tools. Counts configured tool URNs, so it may differ from the number of tools that resolve against the active deployment.
+          description: 'Number of tools the toolset serves: deployment-backed tools (HTTP, function, external MCP) that resolve in the project''s latest completed deployment, plus its prompt templates and registered platform tools. External MCP proxy tools are excluded.'
           format: int64
         tool_selection_mode:
           type: string
@@ -104565,6 +104789,8 @@ components:
             - mcp:blocked_write
             - mcp:connect
             - mcp:blocked_connect
+            - mcp:auth
+            - mcp:blocked_auth
             - environment:read
             - environment:blocked_read
             - environment:write
@@ -104904,6 +105130,7 @@ components:
             - mcp:blocked_read
             - mcp:blocked_write
             - mcp:blocked_connect
+            - mcp:blocked_auth
             - environment:blocked_read
             - environment:blocked_write
             - skill:blocked_read
@@ -104928,6 +105155,7 @@ components:
             - chat
             - agent
             - workload
+            - mcp_auth_client
         slug:
           type: string
           description: Unique scope identifier.
@@ -104946,6 +105174,8 @@ components:
             - mcp:blocked_write
             - mcp:connect
             - mcp:blocked_connect
+            - mcp:auth
+            - mcp:blocked_auth
             - environment:read
             - environment:blocked_read
             - environment:write
@@ -105436,6 +105666,19 @@ components:
     Selector:
       type: object
       properties:
+        client_type:
+          type: string
+          description: Auth client type filter (mcp:auth and mcp:blocked_auth only).
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+            - ema
+            - '*'
+        connection_owner:
+          type: string
+          description: Personal connection owner filter (mcp:auth and mcp:blocked_auth on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.
         disposition:
           type: string
           description: Tool disposition filter (MCP scopes only).
@@ -105446,7 +105689,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.
+          description: Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -105464,6 +105707,7 @@ components:
             - chat
             - agent
             - workload
+            - mcp_auth_client
             - '*'
         server_url:
           type: string

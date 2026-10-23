@@ -429,7 +429,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 	if !ok {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry an agent session policy")))
 	}
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
+	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	delegatedGrants, err := encodeAgentSessionPolicy(*target, version)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode workload session policy").LogError(ctx, logger)
@@ -549,6 +549,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UpstreamClientPicks:    nil,
+		Catalog:                nil,
 	}
 }
 
