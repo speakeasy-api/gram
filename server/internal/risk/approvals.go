@@ -215,6 +215,12 @@ func (s *Service) DecideRiskPolicyApproval(ctx context.Context, payload *gen.Dec
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid approval request id")
 	}
+	// Resolve the viewer first: once the decision commits, a failure here would
+	// report an error for a decision that was saved.
+	viewer, err := s.approvalViewer(ctx, authCtx)
+	if err != nil {
+		return nil, err
+	}
 
 	decided, err := s.approvals.Decide(ctx, approval.DecideInput{
 		OrganizationID:     authCtx.ActiveOrganizationID,
@@ -237,11 +243,6 @@ func (s *Service) DecideRiskPolicyApproval(ctx context.Context, payload *gen.Dec
 		return nil, oops.E(oops.CodeConflict, err, "this approval request is no longer waiting for a decision")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "decide approval request").LogError(ctx, s.logger)
-	}
-
-	viewer, err := s.approvalViewer(ctx, authCtx)
-	if err != nil {
-		return nil, err
 	}
 	return s.riskPolicyApprovalView(viewer, decided), nil
 }
