@@ -44,7 +44,10 @@ function BuiltinMcpServerContent() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs
+          substitutions={{ slack: "Slack" }}
+          skipSegments={["builtin"]}
+        />
       </Page.Header>
       <Page.Body>
         {isLoading ? (
@@ -61,21 +64,27 @@ function BuiltinMcpServerContent() {
         ) : (
           <>
             <Page.Section>
-              <div className="flex items-center gap-3">
-                <Page.Section.Title>{server.name}</Page.Section.Title>
-                <Badge variant="neutral">Built-in</Badge>
-                {server.hidden && (
-                  <Badge variant="neutral">Hidden from discovery</Badge>
-                )}
-              </div>
+              <Page.Section.Title area="MCP Servers">
+                {server.name}
+              </Page.Section.Title>
+              <Page.Section.CTA>
+                <div className="flex items-center gap-3">
+                  <Badge variant="neutral">Built-in</Badge>
+                  {server.hidden && (
+                    <Badge variant="neutral">Hidden from discovery</Badge>
+                  )}
+                </div>
+              </Page.Section.CTA>
               <Page.Section.Description>
                 {server.description}
               </Page.Section.Description>
-              <Text small muted className="mt-3">
-                Available in every project. Administrators can configure this
-                server; human connections are blocked. Tool membership is
-                managed in code.
-              </Text>
+              <Page.Section.Body>
+                <Text small muted className="mt-3">
+                  Available in every project. Administrators can configure this
+                  server; human connections are blocked. Tool membership is
+                  managed in code.
+                </Text>
+              </Page.Section.Body>
             </Page.Section>
             <SettingsSection>
               <SettingsSection.Header>

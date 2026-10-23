@@ -197,7 +197,26 @@ func (s *Service) resolveMetaMemberSnapshot(
 		return ctx, nil, err
 	}
 	candidates = appendBuiltinCandidates(candidates, builtins)
-	return s.admitMetaMembers(ctx, logger, surface, organizationID, candidates)
+	ctx, members, err := s.admitMetaMembers(ctx, logger, surface, organizationID, candidates)
+	if err != nil {
+		return ctx, nil, err
+	}
+	eligible := make([]metaMember, 0, len(members))
+	for _, member := range members {
+		if member.backend == metaMemberBackendBuiltin {
+			// Match derived gateways: a built-in without server-owned
+			// credentials is unavailable, not an OAuth sign-in opportunity.
+			supported, _, err := s.builtinMemberAuth(ctx, member)
+			if err != nil {
+				return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)
+			}
+			if !supported {
+				continue
+			}
+		}
+		eligible = append(eligible, member)
+	}
+	return ctx, eligible, nil
 }
 
 // resolveEndpointMemberSnapshot resolves the members an OAuth flow for a

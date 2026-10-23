@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { ReactNode } from "react";
+import { Children, isValidElement, type ReactNode } from "react";
 
 const state = vi.hoisted(() => ({
   admin: true,
@@ -79,9 +79,24 @@ vi.mock("@/components/page-layout", () => {
   const Box = ({ children }: { children: ReactNode }) => <div>{children}</div>;
   return {
     Page: Object.assign(Box, {
-      Header: Object.assign(Box, { Breadcrumbs: () => null }),
+      Header: Object.assign(Box, {
+        Breadcrumbs: ({
+          substitutions,
+        }: {
+          substitutions: Record<string, string>;
+        }) => <nav aria-label="Breadcrumb">{substitutions.slack}</nav>,
+      }),
       Body: Box,
-      Section: Object.assign(Box, { Title: Box, Description: Box }),
+      Section: Object.assign(
+        ({ children }: { children: ReactNode }) => (
+          <div>
+            {Children.toArray(children).filter(
+              (child) => isValidElement(child) && child.type === Box,
+            )}
+          </div>
+        ),
+        { Title: Box, Description: Box, CTA: Box, Body: Box },
+      ),
     }),
   };
 });
@@ -107,6 +122,11 @@ beforeEach(() => {
 it("keeps hidden built-ins addressable to admins with a read-only tool inventory", () => {
   render(<BuiltinMcpServerPage />);
   expect(screen.getByText("Hidden from discovery")).toBeTruthy();
+  expect(
+    screen.getByRole("navigation", { name: "Breadcrumb" }).textContent,
+  ).toBe("Slack");
+  expect(screen.getAllByText("Slack")).toHaveLength(2);
+  expect(screen.getByText("Built-in")).toBeTruthy();
   expect(
     screen.getByText("https://api.example.test/mcp/builtin/project-one/slack"),
   ).toBeTruthy();

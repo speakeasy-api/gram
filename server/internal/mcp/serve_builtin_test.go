@@ -60,7 +60,7 @@ func seedBuiltinAgent(t *testing.T, ctx context.Context, ti *testInstance, expli
 	require.NoError(t, err)
 	token, hash, prefix, err := auth.GenerateAPIKeyMaterial(auth.APIKeyPrefix("test"))
 	require.NoError(t, err)
-	_, err = keysrepo.New(ti.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{OrganizationID: ac.ActiveOrganizationID, CreatedByUserID: ac.UserID, Name: "Built-in test key", KeyPrefix: prefix, KeyHash: hash, SubjectUrn: conv.ToPGText(urn.NewAgentSubject(agent.ID).String()), DelegatedGrants: delegated, DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true}, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}})
+	_, err = keysrepo.New(ti.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{OrganizationID: ac.ActiveOrganizationID, CreatedByUserID: ac.UserID, Name: "Built-in test key " + agent.ID.String(), KeyPrefix: prefix, KeyHash: hash, SubjectUrn: conv.ToPGText(urn.NewAgentSubject(agent.ID).String()), DelegatedGrants: delegated, DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true}, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}})
 	require.NoError(t, err)
 	return agent.ID, token
 }
