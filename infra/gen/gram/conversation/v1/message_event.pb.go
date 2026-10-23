@@ -137,22 +137,26 @@ func (x MessageEvent_Role) Number() protoreflect.EnumNumber {
 // historical database version. Content may have gained attachments since the
 // event was produced, and the message may no longer exist when it is consumed.
 type MessageEvent struct {
-	state                       protoimpl.MessageState         `protogen:"opaque.v1"`
-	xxx_hidden_Id               *string                        `protobuf:"bytes,1,opt,name=id"`
-	xxx_hidden_Type             MessageEvent_Type              `protobuf:"varint,2,opt,name=type,enum=gram.conversation.v1.MessageEvent_Type"`
-	xxx_hidden_OrganizationId   *string                        `protobuf:"bytes,3,opt,name=organization_id,json=organizationId"`
-	xxx_hidden_ProjectId        *string                        `protobuf:"bytes,4,opt,name=project_id,json=projectId"`
-	xxx_hidden_ConversationId   *string                        `protobuf:"bytes,5,opt,name=conversation_id,json=conversationId"`
-	xxx_hidden_MessageId        *string                        `protobuf:"bytes,6,opt,name=message_id,json=messageId"`
-	xxx_hidden_Role             MessageEvent_Role              `protobuf:"varint,7,opt,name=role,enum=gram.conversation.v1.MessageEvent_Role"`
-	xxx_hidden_OccurredAt       *string                        `protobuf:"bytes,8,opt,name=occurred_at,json=occurredAt"`
-	xxx_hidden_MessageCreatedAt *string                        `protobuf:"bytes,9,opt,name=message_created_at,json=messageCreatedAt"`
-	xxx_hidden_Ingestion        *MessageEvent_IngestionContext `protobuf:"bytes,10,opt,name=ingestion"`
-	xxx_hidden_AttachmentIds    []string                       `protobuf:"bytes,11,rep,name=attachment_ids,json=attachmentIds"`
-	XXX_raceDetectHookData      protoimpl.RaceDetectHookData
-	XXX_presence                [1]uint32
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	state                        protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_Id                *string                        `protobuf:"bytes,1,opt,name=id"`
+	xxx_hidden_Type              MessageEvent_Type              `protobuf:"varint,2,opt,name=type,enum=gram.conversation.v1.MessageEvent_Type"`
+	xxx_hidden_OrganizationId    *string                        `protobuf:"bytes,3,opt,name=organization_id,json=organizationId"`
+	xxx_hidden_ProjectId         *string                        `protobuf:"bytes,4,opt,name=project_id,json=projectId"`
+	xxx_hidden_ConversationId    *string                        `protobuf:"bytes,5,opt,name=conversation_id,json=conversationId"`
+	xxx_hidden_MessageId         *string                        `protobuf:"bytes,6,opt,name=message_id,json=messageId"`
+	xxx_hidden_Role              MessageEvent_Role              `protobuf:"varint,7,opt,name=role,enum=gram.conversation.v1.MessageEvent_Role"`
+	xxx_hidden_OccurredAt        *string                        `protobuf:"bytes,8,opt,name=occurred_at,json=occurredAt"`
+	xxx_hidden_MessageCreatedAt  *string                        `protobuf:"bytes,9,opt,name=message_created_at,json=messageCreatedAt"`
+	xxx_hidden_Ingestion         *MessageEvent_IngestionContext `protobuf:"bytes,10,opt,name=ingestion"`
+	xxx_hidden_AttachmentIds     []string                       `protobuf:"bytes,11,rep,name=attachment_ids,json=attachmentIds"`
+	xxx_hidden_Generation        int32                          `protobuf:"varint,12,opt,name=generation"`
+	xxx_hidden_Sequence          int64                          `protobuf:"varint,13,opt,name=sequence"`
+	xxx_hidden_CaptureKind       *string                        `protobuf:"bytes,14,opt,name=capture_kind,json=captureKind"`
+	xxx_hidden_OriginalMessageId *string                        `protobuf:"bytes,15,opt,name=original_message_id,json=originalMessageId"`
+	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
+	XXX_presence                 [1]uint32
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *MessageEvent) Reset() {
@@ -282,49 +286,83 @@ func (x *MessageEvent) GetAttachmentIds() []string {
 	return nil
 }
 
+func (x *MessageEvent) GetGeneration() int32 {
+	if x != nil {
+		return x.xxx_hidden_Generation
+	}
+	return 0
+}
+
+func (x *MessageEvent) GetSequence() int64 {
+	if x != nil {
+		return x.xxx_hidden_Sequence
+	}
+	return 0
+}
+
+func (x *MessageEvent) GetCaptureKind() string {
+	if x != nil {
+		if x.xxx_hidden_CaptureKind != nil {
+			return *x.xxx_hidden_CaptureKind
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *MessageEvent) GetOriginalMessageId() string {
+	if x != nil {
+		if x.xxx_hidden_OriginalMessageId != nil {
+			return *x.xxx_hidden_OriginalMessageId
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *MessageEvent) SetId(v string) {
 	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 15)
 }
 
 func (x *MessageEvent) SetType(v MessageEvent_Type) {
 	x.xxx_hidden_Type = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 15)
 }
 
 func (x *MessageEvent) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 15)
 }
 
 func (x *MessageEvent) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 15)
 }
 
 func (x *MessageEvent) SetConversationId(v string) {
 	x.xxx_hidden_ConversationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 15)
 }
 
 func (x *MessageEvent) SetMessageId(v string) {
 	x.xxx_hidden_MessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 15)
 }
 
 func (x *MessageEvent) SetRole(v MessageEvent_Role) {
 	x.xxx_hidden_Role = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 15)
 }
 
 func (x *MessageEvent) SetOccurredAt(v string) {
 	x.xxx_hidden_OccurredAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 15)
 }
 
 func (x *MessageEvent) SetMessageCreatedAt(v string) {
 	x.xxx_hidden_MessageCreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 15)
 }
 
 func (x *MessageEvent) SetIngestion(v *MessageEvent_IngestionContext) {
@@ -333,6 +371,26 @@ func (x *MessageEvent) SetIngestion(v *MessageEvent_IngestionContext) {
 
 func (x *MessageEvent) SetAttachmentIds(v []string) {
 	x.xxx_hidden_AttachmentIds = v
+}
+
+func (x *MessageEvent) SetGeneration(v int32) {
+	x.xxx_hidden_Generation = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 15)
+}
+
+func (x *MessageEvent) SetSequence(v int64) {
+	x.xxx_hidden_Sequence = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 15)
+}
+
+func (x *MessageEvent) SetCaptureKind(v string) {
+	x.xxx_hidden_CaptureKind = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 15)
+}
+
+func (x *MessageEvent) SetOriginalMessageId(v string) {
+	x.xxx_hidden_OriginalMessageId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 15)
 }
 
 func (x *MessageEvent) HasId() bool {
@@ -405,6 +463,34 @@ func (x *MessageEvent) HasIngestion() bool {
 	return x.xxx_hidden_Ingestion != nil
 }
 
+func (x *MessageEvent) HasGeneration() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
+}
+
+func (x *MessageEvent) HasSequence() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 12)
+}
+
+func (x *MessageEvent) HasCaptureKind() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 13)
+}
+
+func (x *MessageEvent) HasOriginalMessageId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 14)
+}
+
 func (x *MessageEvent) ClearId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Id = nil
@@ -454,6 +540,26 @@ func (x *MessageEvent) ClearIngestion() {
 	x.xxx_hidden_Ingestion = nil
 }
 
+func (x *MessageEvent) ClearGeneration() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	x.xxx_hidden_Generation = 0
+}
+
+func (x *MessageEvent) ClearSequence() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 12)
+	x.xxx_hidden_Sequence = 0
+}
+
+func (x *MessageEvent) ClearCaptureKind() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 13)
+	x.xxx_hidden_CaptureKind = nil
+}
+
+func (x *MessageEvent) ClearOriginalMessageId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 14)
+	x.xxx_hidden_OriginalMessageId = nil
+}
+
 type MessageEvent_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -482,6 +588,13 @@ type MessageEvent_builder struct {
 	// Consumers fetch these within project_id and message_id. Unparented
 	// attachments cannot emit a message event until associated with a message.
 	AttachmentIds []string
+	// Transcript position at capture, independent of later generations.
+	Generation *int32
+	Sequence   *int64
+	// original, reobserved, synthetic or unknown. Independent of historical imports.
+	CaptureKind *string
+	// Original persisted target when this row is an exact transcript copy.
+	OriginalMessageId *string
 }
 
 func (b0 MessageEvent_builder) Build() *MessageEvent {
@@ -489,43 +602,59 @@ func (b0 MessageEvent_builder) Build() *MessageEvent {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 15)
 		x.xxx_hidden_Id = b.Id
 	}
 	if b.Type != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 15)
 		x.xxx_hidden_Type = *b.Type
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 15)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 15)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.ConversationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 15)
 		x.xxx_hidden_ConversationId = b.ConversationId
 	}
 	if b.MessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 15)
 		x.xxx_hidden_MessageId = b.MessageId
 	}
 	if b.Role != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 15)
 		x.xxx_hidden_Role = *b.Role
 	}
 	if b.OccurredAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 15)
 		x.xxx_hidden_OccurredAt = b.OccurredAt
 	}
 	if b.MessageCreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 15)
 		x.xxx_hidden_MessageCreatedAt = b.MessageCreatedAt
 	}
 	x.xxx_hidden_Ingestion = b.Ingestion
 	x.xxx_hidden_AttachmentIds = b.AttachmentIds
+	if b.Generation != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 15)
+		x.xxx_hidden_Generation = *b.Generation
+	}
+	if b.Sequence != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 15)
+		x.xxx_hidden_Sequence = *b.Sequence
+	}
+	if b.CaptureKind != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 15)
+		x.xxx_hidden_CaptureKind = b.CaptureKind
+	}
+	if b.OriginalMessageId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 15)
+		x.xxx_hidden_OriginalMessageId = b.OriginalMessageId
+	}
 	return m0
 }
 
@@ -943,7 +1072,8 @@ var File_gram_conversation_v1_message_event_proto protoreflect.FileDescriptor
 
 const file_gram_conversation_v1_message_event_proto_rawDesc = "" +
 	"\n" +
-	"(gram/conversation/v1/message_event.proto\x12\x14gram.conversation.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xe3\t\n" +
+	"(gram/conversation/v1/message_event.proto\x12\x14gram.conversation.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf2\n" +
+	"\n" +
 	"\fMessageEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12;\n" +
 	"\x04type\x18\x02 \x01(\x0e2'.gram.conversation.v1.MessageEvent.TypeR\x04type\x12'\n" +
@@ -959,7 +1089,13 @@ const file_gram_conversation_v1_message_event_proto_rawDesc = "" +
 	"\x12message_created_at\x18\t \x01(\tR\x10messageCreatedAt\x12Q\n" +
 	"\tingestion\x18\n" +
 	" \x01(\v23.gram.conversation.v1.MessageEvent.IngestionContextR\tingestion\x12%\n" +
-	"\x0eattachment_ids\x18\v \x03(\tR\rattachmentIds\x1a\x84\x04\n" +
+	"\x0eattachment_ids\x18\v \x03(\tR\rattachmentIds\x12\x1e\n" +
+	"\n" +
+	"generation\x18\f \x01(\x05R\n" +
+	"generation\x12\x1a\n" +
+	"\bsequence\x18\r \x01(\x03R\bsequence\x12!\n" +
+	"\fcapture_kind\x18\x0e \x01(\tR\vcaptureKind\x12.\n" +
+	"\x13original_message_id\x18\x0f \x01(\tR\x11originalMessageId\x1a\x84\x04\n" +
 	"\x10IngestionContext\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12&\n" +
 	"\x0fbilling_user_id\x18\x02 \x01(\tR\rbillingUserId\x12!\n" +

@@ -1839,6 +1839,14 @@ function LogsToolsTraceRow({
               identityKey={trace.userKey}
               label={userLabel}
               agent={agent}
+              authorizer={
+                trace.authorizerUserId
+                  ? {
+                      userId: trace.authorizerUserId,
+                      label: trace.authorizerLabel,
+                    }
+                  : undefined
+              }
             />
           ) : (
             <>

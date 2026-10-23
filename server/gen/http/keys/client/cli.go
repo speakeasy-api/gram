@@ -224,6 +224,60 @@ func BuildRevokeKeyPayload(keysRevokeKeyID string, keysRevokeKeySessionToken str
 	return v, nil
 }
 
+// BuildUpdateKeyPolicyPayload builds the payload for the keys updateKeyPolicy
+// endpoint from CLI flags.
+func BuildUpdateKeyPolicyPayload(keysUpdateKeyPolicyBody string, keysUpdateKeyPolicySessionToken string) (*keys.UpdateKeyPolicyPayload, error) {
+	var err error
+	var body UpdateKeyPolicyRequestBody
+	{
+		err = json.Unmarshal([]byte(keysUpdateKeyPolicyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"policy_grants\": [\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         }\n      ]\n   }'")
+		}
+		if body.PolicyGrants == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("policy_grants", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if len(body.PolicyGrants) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.policy_grants", body.PolicyGrants, len(body.PolicyGrants), 100, false))
+		}
+		for _, e := range body.PolicyGrants {
+			if e != nil {
+				if err2 := ValidateAPIKeyPolicyGrantRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if keysUpdateKeyPolicySessionToken != "" {
+			sessionToken = &keysUpdateKeyPolicySessionToken
+		}
+	}
+	v := &keys.UpdateKeyPolicyPayload{
+		ID: body.ID,
+	}
+	if body.PolicyGrants != nil {
+		v.PolicyGrants = make([]*keys.APIKeyPolicyGrant, len(body.PolicyGrants))
+		for i, val := range body.PolicyGrants {
+			if val == nil {
+				v.PolicyGrants[i] = nil
+				continue
+			}
+			v.PolicyGrants[i] = marshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant(val)
+		}
+	} else {
+		v.PolicyGrants = []*keys.APIKeyPolicyGrant{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildVerifyKeyPayload builds the payload for the keys verifyKey endpoint
 // from CLI flags.
 func BuildVerifyKeyPayload(keysVerifyKeyApikeyToken string) (*keys.VerifyKeyPayload, error) {
