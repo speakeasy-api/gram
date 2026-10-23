@@ -801,7 +801,7 @@ func chfEmailClient(email string) string {
 // of its own: the member call below IS the row, stamped with the gateway id.
 func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error {
 	gateway := s.det("metamcp-1").String()
-	rows := make([]chfTelemetryRow, 0, 150)
+	rows := make([]chfTelemetryRow, 0, 154)
 	for n := range 150 {
 		i := n + 1
 		email := s.email(demoUsers[hash64("gwu", n)%6].handle)
@@ -834,6 +834,43 @@ func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error 
 			traceID: md5Hex(s.name("gwdisc-" + strconv.Itoa(i))),
 			attrs:   attrs,
 			urn:     "metamcp:" + gateway + ":" + tool,
+			service: "gram-mcp-gateway",
+			chatID:  nil,
+		})
+	}
+	// A few Direct tools/list calls left a remote member out. The runtime
+	// records one row per omitted member with the upstream's status and fixed
+	// text naming the member, which the gateway's Activity section lists.
+	omitted := []struct {
+		member string
+		status int
+		reason string
+		hours  int
+	}{
+		{member: "linear", status: 429, reason: "was rate limited", hours: 2},
+		{member: "linear", status: 429, reason: "was rate limited", hours: 7},
+		{member: "slack", status: 503, reason: "was unavailable", hours: 20},
+		{member: "slack", status: 502, reason: "could not be listed", hours: 46},
+	}
+	for n, o := range omitted {
+		email := s.email(demoUsers[hash64("gwomit", n)%6].handle)
+		attrs := `{"gram.event.source":"meta_discovery"` +
+			`,"gram.meta_mcp_server.id":"` + gateway + `"` +
+			`,"gram.tool.name":"tools/list"` +
+			`,"gram.tool.urn":"metamcp:` + gateway + `:tools/list"` +
+			`,"http.response.status_code":` + strconv.Itoa(o.status) +
+			`,"error.message":"server \"` + o.member + `\" ` + o.reason + ` and was left out of the tool listing"` +
+			`,"http.server.request.duration":` + chfRound3(0.8+float64(hash64("gwomitd", n)%20)/10) +
+			`,"gram.project.id":"` + s.projectID().String() + `"` +
+			`,"user.email":"` + email + `"` +
+			`,"gram.external_user.id":"` + email + `"` +
+			chfEmailClient(email) + `}`
+		rows = append(rows, chfTelemetryRow{
+			ts:      s.chfNoFuture(s.now.Add(-time.Duration(o.hours) * time.Hour)),
+			body:    "Gateway discovery: tools/list",
+			traceID: md5Hex(s.name("gwomit-" + strconv.Itoa(n))),
+			attrs:   attrs,
+			urn:     "metamcp:" + gateway + ":tools/list",
 			service: "gram-mcp-gateway",
 			chatID:  nil,
 		})
