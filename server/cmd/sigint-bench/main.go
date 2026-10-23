@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -58,6 +59,10 @@ type result struct {
 	Explain []string `json:"explain"`
 	// Refusal records an enforced cost limit rather than hiding a failed case.
 	Refusal string `json:"refusal,omitempty"`
+	// SelectedMarks records physical granules read across the measured request.
+	SelectedMarks uint64 `json:"selected_marks"`
+	// Estimate is the engine's pre-execution estimate, alongside actual read counters.
+	Estimate []analytics.Row `json:"estimate"`
 }
 
 type report struct {
@@ -79,6 +84,14 @@ type report struct {
 	EventTimeIndex bool `json:"event_time_index"`
 	// Results includes cold and warm canonical read evidence.
 	Results []result `json:"results"`
+	// Labels controls arbitrary attribute cardinality.
+	Labels int `json:"labels"`
+	// SessionSize is the generated message count per conversation.
+	SessionSize int `json:"messages_per_session"`
+	// Concurrency is the concurrent chart request count during duplicate ingestion.
+	Concurrency int `json:"concurrency"`
+	// Complete distinguishes a finished suite from diagnostics retained after a failure.
+	Complete bool `json:"complete"`
 }
 
 func main() {
@@ -95,10 +108,16 @@ func run(parent context.Context, logger *slog.Logger) error {
 	sensors := flag.Int("sensors", 3, "sensor count")
 	iterations := flag.Int("iterations", 5, "warm measurements per case")
 	eventTimeIndex := flag.Bool("event-time-index", false, "test source-time minmax pruning")
+	labels := flag.Int("labels", 5, "distinct department attribute values")
+	sessionSize := flag.Int("session-size", 100, "messages per conversation")
+	concurrency := flag.Int("concurrency", 4, "simultaneous chart requests during duplicate ingestion")
 	out := flag.String("out", "/tmp/opencode/sigint-benchmark.json", "report path")
 	flag.Parse()
 	if *perDay < 1 || *perDay > 100000 || *days < 1 || *days > 730 || *sensors < 1 || *sensors > 50 || *iterations < 1 || *iterations > 30 {
 		return fmt.Errorf("invalid workload bounds")
+	}
+	if *labels < 1 || *labels > 1000 || *sessionSize < 1 || *sessionSize > 10000 || *concurrency < 1 || *concurrency > 16 {
+		return fmt.Errorf("invalid label, session or concurrency bounds")
 	}
 	ctx, cancel := context.WithTimeout(parent, benchmarkTimeout)
 	defer cancel()
@@ -135,17 +154,18 @@ func run(parent context.Context, logger *slog.Logger) error {
 	for start := 0; start < total; start += insertBatch {
 		count := min(insertBatch, total-start)
 		err := conn.Exec(ctx, `INSERT INTO sigint_readings_v2
- (id, evaluation_attempt_id, organization_id, project_id, trigger_kind, run_id, sensor_id, sensor_slug, event_kind, event_id, event_occurred_at, evaluation_requested_at, evaluated_at, inserted_at, status, definition_hash, result_type, probabilities, conversation_id, conversation_capture_kind, attributes)
+ (id, evaluation_attempt_id, organization_id, project_id, trigger_kind, run_id, sensor_id, sensor_slug, event_kind, event_id, event_occurred_at, evaluation_requested_at, evaluated_at, inserted_at, status, definition_hash, result_type, probabilities, conversation_id, conversation_capture_kind, attributes, configured_model, models, provider, compiler_version, input_strategy)
  SELECT toUUID(concat('10000000-0000-4000-8000-', leftPad(toString(number + 1), 12, '0'))) AS id, id, ?, toUUID(?), 'stream', toUUID(?),
  toUUID(concat('00000000-0000-4000-8000-', leftPad(toString(number % ? + 1), 12, '0'))), 'synthetic', 'conversation.message', toString(intDiv(number, ?)),
  addSeconds(toDateTime64(?, 9, 'UTC'), intDiv(intDiv(number, ?) * 86400, ?)) AS event_time,
  if(intDiv(number, ?) % 20 = 0, toDateTime64(?, 9, 'UTC'), least(addHours(event_time, 1), toDateTime64(?, 9, 'UTC'))) AS requested,
  requested, toDateTime64(?, 9, 'UTC'), 'answered', 'synthetic-definition', 'multi_label',
  [(toUUID(?), 'target', if(intDiv(number, ?) % 4 = 0, 0.9, 0.1))],
- toUUID(concat('20000000-0000-4000-8000-', leftPad(toString(intDiv(intDiv(number, ?), 100) + 1), 12, '0'))), 'original',
- map('department', concat('team-', toString(intDiv(number, ?) % 5)), 'inference_provider', if(number % 2 = 0, 'openrouter', 'bedrock'))
+ toUUID(concat('20000000-0000-4000-8000-', leftPad(toString(intDiv(intDiv(number, ?), ?) + 1), 12, '0'))), 'original',
+ map('department', concat('team-', toString(intDiv(number, ?) % ?)), 'inference_provider', if(number % 2 = 0, 'openrouter', 'bedrock'), 'custom.cohort', concat('cohort-', toString(intDiv(number, ?) % 7))),
+ 'synthetic-classifier', ['synthetic-classifier'], 'synthetic-provider', 'synthetic-compiler', 'single_message'
  FROM numbers(?, ?)`, org, project.String(), uuid.Nil.String(), *sensors, *sensors,
-			from, *sensors, *perDay, *sensors, now, now, now, signal.String(), *sensors, *sensors, *sensors, start, count)
+			from, *sensors, *perDay, *sensors, now, now, now, signal.String(), *sensors, *sensors, *sessionSize, *sensors, *labels, *sensors, start, count)
 		if err != nil {
 			return fmt.Errorf("generate readings: %w", err)
 		}
@@ -165,7 +185,7 @@ func run(parent context.Context, logger *slog.Logger) error {
 			return fmt.Errorf("materialize benchmark time index: %w", err)
 		}
 	}
-	r := report{Version: "", LogicalReadings: total, ReadingsPerDay: *perDay, Days: *days, Sensors: *sensors, Iterations: *iterations, Parts: 0, Results: nil, EventTimeIndex: *eventTimeIndex}
+	r := report{Version: "", LogicalReadings: total, ReadingsPerDay: *perDay, Days: *days, Sensors: *sensors, Iterations: *iterations, Parts: 0, Results: nil, EventTimeIndex: *eventTimeIndex, Labels: *labels, SessionSize: *sessionSize, Concurrency: *concurrency, Complete: false}
 	if err := conn.QueryRow(ctx, "SELECT version()").Scan(&r.Version); err != nil {
 		return fmt.Errorf("read engine version: %w", err)
 	}
@@ -177,16 +197,20 @@ func run(parent context.Context, logger *slog.Logger) error {
 		span       time.Duration
 	}{
 		{name: "6h-minute", step: "minute", span: 6 * time.Hour}, {name: "7d-hour", step: "hour", span: 7 * 24 * time.Hour},
-		{name: "90d-day", step: "day", span: 90 * 24 * time.Hour}, {name: "24mo-month", step: "month", span: time.Duration(*days) * 24 * time.Hour},
+		{name: "90d-day", step: "day", span: 90 * 24 * time.Hour}, {name: "history-month", step: "month", span: time.Duration(*days) * 24 * time.Hour},
 	} {
 		start := now.Add(-c.span)
 		plan, err := signals.Compile(signals.Context{OrganizationID: org, ProjectID: project.String(), From: start, To: now, Now: now, Step: c.step, RequestedAt: nil}, signals.Request{Selection: signals.Selection{SensorID: sensor.String(), SignalID: signal.String(), Threshold: 0.5, MinimumLevel: nil}, Trigger: "stream", RunID: "", Filters: nil, GroupBy: []signals.Dimension{{Field: "", Attribute: "department"}}, Groups: 5, Points: 10000})
 		if err != nil {
 			return fmt.Errorf("compile benchmark case: %w", err)
 		}
-		measurement := result{Name: c.name, ColdMS: 0, P50MS: 0, P95MS: 0, ReadRows: 0, ReadBytes: 0, MemoryBytes: 0, OracleMatched: false, Explain: nil, Refusal: ""}
+		measurement := result{Name: c.name, ColdMS: 0, P50MS: 0, P95MS: 0, ReadRows: 0, ReadBytes: 0, MemoryBytes: 0, OracleMatched: false, Explain: nil, Refusal: "", SelectedMarks: 0, Estimate: nil}
 		query := plan.Groups
-		explain := query.SQL + ", use_query_condition_cache = 0, use_skip_indexes_on_data_read = 0"
+		measurement.Estimate, err = (&analytics.Plan{SQL: "EXPLAIN ESTIMATE " + diagnosticSQL(query.SQL), Args: query.Args, Dataset: signals.Dataset, Name: "estimate", Columns: nil}).Run(ctx, conn)
+		if err != nil {
+			return fmt.Errorf("estimate benchmark %s: %w", c.name, err)
+		}
+		explain := diagnosticSQL(query.SQL) + ", use_query_condition_cache = 0, use_skip_indexes_on_data_read = 0"
 		explained, err := conn.Query(ctx, "EXPLAIN indexes = 1 "+explain, query.Args...)
 		if err != nil {
 			return fmt.Errorf("explain %s: %w", c.name, err)
@@ -219,47 +243,62 @@ func run(parent context.Context, logger *slog.Logger) error {
 			rows, err := (&analytics.Plan{Dataset: signals.Dataset, Name: "signals.canonical", SQL: query.SQL, Args: query.Args, Columns: nil}).Run(clickhouse.Context(ctx, clickhouse.WithQueryID(queryID+"-groups")), conn)
 			if err != nil {
 				var exception *clickhouse.Exception
-				if !errors.As(err, &exception) || (exception.Code != 159 && exception.Code != 158 && exception.Code != 241) {
+				if !errors.As(err, &exception) || (exception.Code != 159 && exception.Code != 158 && exception.Code != 241 && exception.Code != 307 && exception.Code != 396) {
 					return fmt.Errorf("execute benchmark %s: %w", c.name, err)
 				}
 				measurement.Refusal = err.Error()
 				break
 			}
 			keys := make([]string, 0, len(rows)-1)
-			for _, row := range rows[1:] {
+			selectedLabels := map[string]bool{}
+			for _, row := range rows[1:min(len(rows), plan.Request.Groups+1)] {
 				key, ok := row["group_key"].(string)
 				if !ok {
 					return fmt.Errorf("benchmark group has no string key")
 				}
 				keys = append(keys, key)
+				var values [][]any
+				if err := json.Unmarshal([]byte(key), &values); err != nil {
+					return fmt.Errorf("decode selected group: %w", err)
+				}
+				selectedLabels[fmt.Sprint(values[0][1])] = true
 			}
-			series, err := plan.Series(keys)
-			if err != nil {
-				return fmt.Errorf("compile benchmark series: %w", err)
-			}
-			points, err := (&analytics.Plan{Dataset: signals.Dataset, Name: "signals.canonical", SQL: series.SQL, Args: series.Args, Columns: nil}).Run(clickhouse.Context(ctx, clickhouse.WithQueryID(queryID+"-series")), conn)
-			if err != nil {
-				return fmt.Errorf("read benchmark series: %w", err)
+			var points []analytics.Row
+			if len(keys) > 0 {
+				series, err := plan.Series(keys)
+				if err != nil {
+					return fmt.Errorf("compile benchmark series: %w", err)
+				}
+				points, err = (&analytics.Plan{Dataset: signals.Dataset, Name: "signals.canonical", SQL: series.SQL, Args: series.Args, Columns: nil}).Run(clickhouse.Context(ctx, clickhouse.WithQueryID(queryID+"-series")), conn)
+				if err != nil {
+					return fmt.Errorf("read benchmark series: %w", err)
+				}
 			}
 			elapsed := float64(time.Since(begin).Microseconds()) / 1000
-			var expectedAnswered, expectedMatches int64
+			var expectedAnswered, expectedMatches, expectedOutcomes int64
 			expectedPoints := make(map[string][2]int64)
-			for event := 0; event < *perDay**days; event++ {
+			first, last := eventRange(from, start, now, *perDay, *perDay**days)
+			for event := first; event < last; event++ {
 				at := from.Add(time.Duration(event*86400 / *perDay) * time.Second)
-				if at.Before(start) || !at.Before(now) || event%100 == 0 {
+				if at.Before(start) || !at.Before(now) {
 					continue
 				}
-				expectedAnswered++
-				key := fmt.Sprintf("team-%d|%s", event%5, signals.BucketStart(at, c.step).Format(time.RFC3339Nano))
+				expectedOutcomes++
+				key := fmt.Sprintf("team-%d|%s", event%*labels, signals.BucketStart(at, c.step).Format(time.RFC3339Nano))
 				point := expectedPoints[key]
-				point[0]++
-				if event%4 == 0 {
+				if event%100 != 0 {
+					expectedAnswered++
+					point[0]++
+				}
+				if event%4 == 0 && event%100 != 0 {
 					expectedMatches++
 					point[1]++
 				}
-				expectedPoints[key] = point
+				if selectedLabels[strings.SplitN(key, "|", 2)[0]] {
+					expectedPoints[key] = point
+				}
 			}
-			if len(rows) == 0 || rows[0]["answered"] != expectedAnswered || rows[0]["matched_messages"] != expectedMatches {
+			if len(rows) == 0 || rows[0]["answered"] != expectedAnswered || rows[0]["matched_messages"] != expectedMatches || rows[0]["observed_outcomes"] != expectedOutcomes {
 				return fmt.Errorf("%s disagrees with latest-attempt oracle: expected answered=%d matched=%d, summary=%v", c.name, expectedAnswered, expectedMatches, rows)
 			}
 			for _, point := range points {
@@ -297,21 +336,25 @@ func run(parent context.Context, logger *slog.Logger) error {
 			return fmt.Errorf("flush benchmark diagnostics: %w", err)
 		}
 		if measurement.Refusal == "" {
-			if err := conn.QueryRow(ctx, "SELECT sum(read_rows), sum(read_bytes), max(memory_usage) FROM system.query_log WHERE query_id IN (?, ?) AND type = 'QueryFinish'", queryID+"-groups", queryID+"-series").Scan(&measurement.ReadRows, &measurement.ReadBytes, &measurement.MemoryBytes); err != nil {
+			if err := conn.QueryRow(ctx, "SELECT sum(read_rows), sum(read_bytes), max(memory_usage), sum(ProfileEvents['SelectedMarks']) FROM system.query_log WHERE query_id IN (?, ?) AND type = 'QueryFinish'", queryID+"-groups", queryID+"-series").Scan(&measurement.ReadRows, &measurement.ReadBytes, &measurement.MemoryBytes, &measurement.SelectedMarks); err != nil {
 				return fmt.Errorf("read benchmark diagnostics: %w", err)
 			}
 		}
 		r.Results = append(r.Results, measurement)
+		if err := writeReport(ctx, *out, r); err != nil {
+			return err
+		}
 	}
-	data, err := json.MarshalIndent(r, "", "  ")
+	err = extendedBench(ctx, conn, benchFixture{tenant: analytics.Tenant{OrganizationID: org, ProjectID: project.String()}, sensor: sensor, signal: signal, from: from, now: now, perDay: *perDay, days: *days, sensors: *sensors, sessionSize: *sessionSize}, *iterations, *concurrency, func(completed result) error {
+		r.Results = append(r.Results, completed)
+		return writeReport(context.WithoutCancel(ctx), *out, r)
+	})
 	if err != nil {
-		return fmt.Errorf("encode benchmark report: %w", err)
+		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(*out), 0700); err != nil {
-		return fmt.Errorf("create benchmark report directory: %w", err)
-	}
-	if err := writeReportData(ctx, *out, append(data, '\n')); err != nil {
-		return fmt.Errorf("write benchmark report: %w", err)
+	r.Complete = true
+	if err := writeReport(ctx, *out, r); err != nil {
+		return err
 	}
 	fmt.Printf("ClickHouse %s: %d logical readings, report %s\n", r.Version, total, *out)
 	for _, measurement := range r.Results {
@@ -343,6 +386,27 @@ func writeReportData(ctx context.Context, path string, data []byte) error {
 	}
 	if err := os.Rename(file.Name(), path); err != nil {
 		return fmt.Errorf("replace report checkpoint: %w", err)
+	}
+	return nil
+}
+
+// EXPLAIN inspects index metadata without executing the data read. Disabling only
+// its scan caps lets it describe a plan that the actual bounded read will refuse.
+func diagnosticSQL(query string) string {
+	query = strings.ReplaceAll(query, "max_rows_to_read = 25000000", "max_rows_to_read = 0")
+	return strings.ReplaceAll(query, "max_bytes_to_read = 4000000000", "max_bytes_to_read = 0")
+}
+
+func writeReport(ctx context.Context, path string, r report) error {
+	data, err := json.MarshalIndent(r, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode benchmark report: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return fmt.Errorf("create benchmark report directory: %w", err)
+	}
+	if err := writeReportData(ctx, path, append(data, '\n')); err != nil {
+		return fmt.Errorf("write benchmark report: %w", err)
 	}
 	return nil
 }

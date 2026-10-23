@@ -97,6 +97,11 @@ physical rows/bytes, peak memory and cold/warm latency. Cold means ClickHouse
 mark/uncompressed/query caches were cleared; it does not claim a cold OS page
 cache. Small empirical percentile samples are diagnostic, not a statistical SLO.
 
+The [expanded benchmark guide](../../../../cmd/sigint-bench/README.md) records
+the 1k/10k/100k per-sensor/day matrix, 3/10/50-sensor cases, high-cardinality
+labels, long conversations, concurrent ingestion, session/evidence reads and
+the measured canonical scan-budget boundary.
+
 Reference local run (2026-10-18, 730 days, three sensors, five department labels):
 
 | Logical readings | Index              | Window / output   | Warm p95, full chart | Physical rows, both reads |
