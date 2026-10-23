@@ -31,11 +31,11 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations auth-permission-defaults \
 `mode=… environment=… organizations=N personal_default=N shared_client=N api_key=N written=N keys_waiting=N shared_waiting=N busy=N failed=N`
 
 - `keys_waiting`: organizations whose legacy API key policies were held back because some auth clients are not recorded yet. Run the upstream OAuth migration for them, then rerun.
-- `shared_waiting`: organizations whose shared client grants (and key policies) were held back because some recorded auth clients or links await retirement, or an earlier phase failed, so they may not be current. Run the upstream OAuth migration for them, then rerun.
+- `shared_waiting`: organizations whose shared client grants (and key policies) were held back because the recorded auth clients and links may not be current. If some await retirement, run the upstream OAuth migration for them, then rerun. If a phase the readiness check dry-runs before grants failed, investigate and fix that phase (this output reports only the count), then rerun. Either way the rest of the organization's grants phase still runs, and it is not counted as `failed`.
 - `failed`: organizations whose grants phase failed and rolled back. Rerun; a persistent failure needs investigation.
 - `busy`: organizations another run held, which were skipped. Rerun.
 
-The command exits non-zero when any organization failed or was busy.
+The command exits non-zero when any organization failed or was busy. Waiting counts (`keys_waiting`, `shared_waiting`) alone leave the exit status at zero, so check them after each run.
 
 After applying, a preview should report zero kind counts apart from organizations still waiting or busy.
 
