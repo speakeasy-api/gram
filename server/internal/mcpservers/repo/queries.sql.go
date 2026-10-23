@@ -858,9 +858,10 @@ type ListMCPServerConsentConfigurationsRow struct {
 // credentials, not credential values: a secret header contributes its name and
 // flags, like an environment contributes its ID and not its variables. Secret
 // values are stored as randomized ciphertext, so rotating or re-saving one
-// would otherwise change the hash without changing the route. Visibility and
-// network access are enforced live on every request and are left out. Tool
-// definitions are deliberately outside this boundary.
+// would otherwise change the hash without changing the route. Visibility is
+// checked on every request, and so is a member's network access on derived
+// gateways (a stored gateway serves members over its own mode), so both are
+// left out. Tool definitions are deliberately outside this boundary.
 func (q *Queries) ListMCPServerConsentConfigurations(ctx context.Context, arg ListMCPServerConsentConfigurationsParams) ([]ListMCPServerConsentConfigurationsRow, error) {
 	rows, err := q.db.Query(ctx, listMCPServerConsentConfigurations, arg.OrganizationID, arg.McpServerIds)
 	if err != nil {
