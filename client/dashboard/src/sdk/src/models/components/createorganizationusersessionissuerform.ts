@@ -19,6 +19,20 @@ export const AuthnChallengeMode = {
 export type AuthnChallengeMode = ClosedEnum<typeof AuthnChallengeMode>;
 
 /**
+ * Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+ */
+export const AuthorizationServerMode = {
+  Endpoint: "endpoint",
+  Shared: "shared",
+} as const;
+/**
+ * Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+ */
+export type AuthorizationServerMode = ClosedEnum<
+  typeof AuthorizationServerMode
+>;
+
+/**
  * Form for creating an organization-owned user_session_issuer.
  */
 export type CreateOrganizationUserSessionIssuerForm = {
@@ -26,6 +40,10 @@ export type CreateOrganizationUserSessionIssuerForm = {
    * How multi-remote authn challenges are presented: chain | interactive.
    */
   authnChallengeMode: AuthnChallengeMode;
+  /**
+   * Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+   */
+  authorizationServerMode?: AuthorizationServerMode | undefined;
   /**
    * Maximum issued user session lifetime, in hours.
    */
@@ -50,8 +68,14 @@ export const AuthnChallengeMode$outboundSchema: z.ZodMiniEnum<
 > = z.enum(AuthnChallengeMode);
 
 /** @internal */
+export const AuthorizationServerMode$outboundSchema: z.ZodMiniEnum<
+  typeof AuthorizationServerMode
+> = z.enum(AuthorizationServerMode);
+
+/** @internal */
 export type CreateOrganizationUserSessionIssuerForm$Outbound = {
   authn_challenge_mode: string;
+  authorization_server_mode: string;
   session_duration_hours: number;
   slug: string;
   trusted_remote_session_client_id?: string | undefined;
@@ -66,6 +90,10 @@ export const CreateOrganizationUserSessionIssuerForm$outboundSchema:
   > = z.pipe(
     z.object({
       authnChallengeMode: AuthnChallengeMode$outboundSchema,
+      authorizationServerMode: z._default(
+        AuthorizationServerMode$outboundSchema,
+        "endpoint",
+      ),
       sessionDurationHours: z.int(),
       slug: z.string(),
       trustedRemoteSessionClientId: z.optional(z.string()),
@@ -74,6 +102,7 @@ export const CreateOrganizationUserSessionIssuerForm$outboundSchema:
     z.transform((v) => {
       return remap$(v, {
         authnChallengeMode: "authn_challenge_mode",
+        authorizationServerMode: "authorization_server_mode",
         sessionDurationHours: "session_duration_hours",
         trustedRemoteSessionClientId: "trusted_remote_session_client_id",
         trustedRemoteSessionIssuerId: "trusted_remote_session_issuer_id",

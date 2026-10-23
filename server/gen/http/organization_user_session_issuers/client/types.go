@@ -22,6 +22,9 @@ type CreateIssuerRequestBody struct {
 	// Organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	// Authorization-server topology. Shared mode supports standalone workload
+	// token exchange without an MCP server.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
@@ -3803,9 +3806,16 @@ func NewCreateIssuerRequestBody(p *organizationusersessionissuers.CreateIssuerPa
 	body := &CreateIssuerRequestBody{
 		TrustedRemoteSessionIssuerID: p.TrustedRemoteSessionIssuerID,
 		TrustedRemoteSessionClientID: p.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:      p.AuthorizationServerMode,
 		Slug:                         p.Slug,
 		AuthnChallengeMode:           p.AuthnChallengeMode,
 		SessionDurationHours:         p.SessionDurationHours,
+	}
+	{
+		var zero string
+		if body.AuthorizationServerMode == zero {
+			body.AuthorizationServerMode = "endpoint"
+		}
 	}
 	return body
 }

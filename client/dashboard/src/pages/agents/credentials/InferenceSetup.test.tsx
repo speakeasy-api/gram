@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   register: vi.fn(),
   admit: vi.fn(),
   allowed: true,
+  emptyEndpoints: false,
   admin: false,
 }));
 vi.mock("@/contexts/Auth", () => ({
@@ -50,17 +51,20 @@ vi.mock("@gram/client/react-query/admitWorkloadSubject.js", () => ({
 vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
   useWorkloadTokenEndpoints: () => ({
     data: {
-      items: [
-        {
-          userSessionIssuerId: "usi_one",
-          userSessionIssuerSlug: "shared",
-          projectId: "",
-          projectName: "",
-          issuer: "https://auth.example.test/oauth/usi/usi_one",
-          tokenEndpoint: "https://auth.example.test/oauth/usi/usi_one/token",
-          mcpHost: "https://mcp.example.test",
-        },
-      ],
+      items: mocks.emptyEndpoints
+        ? []
+        : [
+            {
+              userSessionIssuerId: "usi_one",
+              userSessionIssuerSlug: "shared",
+              projectId: "",
+              projectName: "",
+              issuer: "https://auth.example.test/oauth/usi/usi_one",
+              tokenEndpoint:
+                "https://auth.example.test/oauth/usi/usi_one/token",
+              mcpHost: "https://mcp.example.test",
+            },
+          ],
     },
     isPending: false,
     isError: false,
@@ -99,6 +103,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.allowed = true;
+  mocks.emptyEndpoints = false;
   mocks.admin = false;
   mocks.create.mockResolvedValue({ id: "agent_one" });
   mocks.register.mockResolvedValue({});
@@ -218,5 +223,25 @@ it("links administrators without inference access to owner role configuration", 
   expect(screen.getByRole("alert").textContent).toContain(
     "assign the role to the agent owner",
   );
+  expect(mocks.create).not.toHaveBeenCalled();
+});
+
+it("requires an eligible exchange issuer before creating an inference identity", () => {
+  mocks.emptyEndpoints = true;
+  setup();
+  fill();
+  fireEvent.click(screen.getByRole("checkbox"));
+  expect(
+    screen.getByText(
+      "No shared Speakeasy authorization server is available for this project or organization.",
+    ),
+  ).toBeTruthy();
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Create inference identity",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
   expect(mocks.create).not.toHaveBeenCalled();
 });

@@ -25,7 +25,7 @@ import {
   type CatalogEntry,
   type VariableValues,
 } from "./workloadCatalog";
-import { useSetupValues } from "./workloadTokenEndpoints";
+import { useSetupValues, type SetupValues } from "./workloadTokenEndpoints";
 
 /**
  * The state behind a platform's guided setup, run for the agent this wizard
@@ -38,6 +38,7 @@ import { useSetupValues } from "./workloadTokenEndpoints";
  */
 
 export interface WorkloadSetup {
+  exchange: SetupValues;
   /** The platform's steps, each of which is a step of the wizard. */
   steps: SetupStep[];
   /**
@@ -73,9 +74,12 @@ export function useWorkloadSetup({
   connectedSubject,
   settled = false,
   setupOverride,
+  targetProjectId,
 }: {
   /** Reuses issuer registration and admission for non-MCP setup. */
   setupOverride?: PlatformSetup;
+  /** An inference exchange cannot use another project’s issuer. */
+  targetProjectId?: string;
   /** The catalog's policy for the platform, absent for a custom one. */
   entry: CatalogEntry | undefined;
   /** The chosen platform, which may be the custom one. Null until chosen. */
@@ -121,7 +125,7 @@ export function useWorkloadSetup({
   }, [initialValues, values]);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const setupValues = useSetupValues();
+  const setupValues = useSetupValues(targetProjectId);
 
   // The issuer this flow has already trusted, so a retry after a later failure
   // does not try to trust it a second time. The URL rather than a flag: a
@@ -263,6 +267,7 @@ export function useWorkloadSetup({
   };
 
   return {
+    exchange: setupValues,
     steps: setup?.steps ?? [],
     requirements: setup?.requirements ?? null,
     render: (step) => <div className="space-y-4">{step.body(context)}</div>,

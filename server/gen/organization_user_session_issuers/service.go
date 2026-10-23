@@ -130,6 +130,9 @@ type CreateIssuerPayload struct {
 	// Organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
 	TrustedRemoteSessionClientID *string
+	// Authorization-server topology. Shared mode supports standalone workload
+	// token exchange without an MCP server.
+	AuthorizationServerMode string
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug string

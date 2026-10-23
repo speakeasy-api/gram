@@ -14,7 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -92,7 +94,20 @@ func TestWorkloadInference_LiveOwnerAndSharedIssuer(t *testing.T) {
 			case "shared issuer disabled":
 				setIssuerMode(t, f.fixtureContext(t), f.ti, f.fx.target.UserSessionIssuerID, "endpoint", "")
 			case "shared issuer deleted":
-				_, err := usersessionsrepo.New(f.ti.conn).DeleteUserSessionIssuer(t.Context(), usersessionsrepo.DeleteUserSessionIssuerParams{ID: f.fx.target.UserSessionIssuerID, ProjectID: f.fx.target.ProjectID})
+				// Issuers can only be deleted after their live endpoint owners are removed.
+				servers := mcpserversrepo.New(f.ti.conn)
+				ids, err := servers.ListMCPServerIDsByUserSessionIssuerID(t.Context(), mcpserversrepo.ListMCPServerIDsByUserSessionIssuerIDParams{ProjectID: f.fx.target.ProjectID, UserSessionIssuerID: uuid.NullUUID{UUID: f.fx.target.UserSessionIssuerID, Valid: true}})
+				require.NoError(t, err)
+				for _, id := range ids {
+					_, err := servers.DeleteMCPServer(t.Context(), mcpserversrepo.DeleteMCPServerParams{ID: id, ProjectID: f.fx.target.ProjectID})
+					require.NoError(t, err)
+				}
+				_, err = toolsetsrepo.New(f.ti.conn).DeleteToolset(t.Context(), toolsetsrepo.DeleteToolsetParams{Slug: f.fx.toolset.Slug, ProjectID: f.fx.target.ProjectID})
+				require.NoError(t, err)
+				_, handled, err = f.ti.service.AuthorizeWorkloadInference(t.Context(), token)
+				require.NoError(t, err, "removing MCP endpoints must not revoke inference")
+				require.True(t, handled)
+				_, err = usersessionsrepo.New(f.ti.conn).DeleteUserSessionIssuer(t.Context(), usersessionsrepo.DeleteUserSessionIssuerParams{ID: f.fx.target.UserSessionIssuerID, ProjectID: f.fx.target.ProjectID})
 				require.NoError(t, err)
 			}
 			_, handled, err = f.ti.service.AuthorizeWorkloadInference(t.Context(), token)

@@ -523,6 +523,10 @@ var _ = Service("organizationUserSessionIssuers", func() {
 })
 
 var CreateUserSessionIssuerForm = Type("CreateUserSessionIssuerForm", func() {
+	Attribute("authorization_server_mode", String, "Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.", func() {
+		Enum("endpoint", "shared")
+		Default("endpoint")
+	})
 	Description("Form for creating a user_session_issuer.")
 
 	Attribute("slug", String, "Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.")

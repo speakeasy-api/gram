@@ -3,7 +3,7 @@ import { customSetupInstructions } from "./CustomSetupInstructions";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import type { PlatformSetup } from "./setupInstructions";
 
-export const INFERENCE_RESOURCE = "urn:gram:inference";
+const INFERENCE_RESOURCE = "urn:gram:inference";
 
 export function inferencePolicyGrants(
   projectId: string,
@@ -33,7 +33,7 @@ export function inferenceSetupInstructions(
         short: "Exchange",
         title: "Exchange a workload JWT for inference",
         phase: "connect",
-        body: ({ computed, issuerPicker }) => (
+        body: ({ computed }) => (
           <div className="space-y-4">
             <p className="text-sm">
               Your trusted external issuer signs the JWT. Its iss and sub must
@@ -68,7 +68,6 @@ export function inferenceSetupInstructions(
                 ]}
               />
             </ol>
-            {issuerPicker}
             <p className="text-sm">
               POST application/x-www-form-urlencoded to the token endpoint with
               these fields. Obtain the assertion from your own issuer; do not

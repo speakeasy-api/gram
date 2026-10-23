@@ -4,8 +4,9 @@ import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useOrgRoutes } from "@/routes";
 import { useRBAC } from "@/hooks/useRBAC";
+import { CreateInferenceExchangeIssuer } from "./CreateInferenceExchangeIssuer";
 import { Button } from "@/components/ui/Button";
-import { TextField } from "./SetupFields";
+import { ComputedStatus, TextField } from "./SetupFields";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
   inferencePolicyGrants,
@@ -34,6 +35,7 @@ export function InferenceSetup({
   const [name, setName] = useState("");
   const [consent, setConsent] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [creatingIssuer, setCreatingIssuer] = useState(false);
   const agentID = useRef<string | undefined>(undefined);
   const canConfigure =
     hasScope("workload:write") &&
@@ -43,6 +45,7 @@ export function InferenceSetup({
     getServerURL() || window.location.origin,
   ).toString();
   const setup = useWorkloadSetup({
+    targetProjectId: project.id,
     entry: undefined,
     platformKey: CUSTOM_PLATFORM_KEY,
     agentName: name,
@@ -75,9 +78,9 @@ export function InferenceSetup({
     onConnected: () => setConnected(true),
   });
   useEffect(() => {
-    onBusy?.(setup.connecting);
+    onBusy?.(setup.connecting || creatingIssuer);
     return () => onBusy?.(false);
-  }, [setup.connecting, onBusy]);
+  }, [setup.connecting, creatingIssuer, onBusy]);
   const configuration = setup.steps.filter((step) => step.phase !== "connect");
   return (
     <div className="max-w-3xl space-y-6">
@@ -107,6 +110,24 @@ export function InferenceSetup({
           )}
         </p>
       )}
+      <section className="space-y-3">
+        <h2 className="text-lg font-medium">
+          Speakeasy exchange authorization server
+        </h2>
+        <p className="text-sm">
+          Select a shared authorization server owned by this project or your
+          organization. This is separate from the external JWT issuer below and
+          requires no MCP server.
+        </p>
+        <ComputedStatus setupValues={setup.exchange} />
+        {!connected && (
+          <CreateInferenceExchangeIssuer
+            key={project.id}
+            onCreated={setup.exchange.refreshAndSelect}
+            onBusy={setCreatingIssuer}
+          />
+        )}
+      </section>
       <fieldset
         disabled={
           !canConfigure || setup.connecting || connected || !!agentID.current
@@ -155,6 +176,8 @@ export function InferenceSetup({
             !name.trim() ||
             !consent ||
             setup.connecting ||
+            creatingIssuer ||
+            !setup.exchange.values ||
             !setup.canConnect ||
             !configuration.every(setup.complete)
           }

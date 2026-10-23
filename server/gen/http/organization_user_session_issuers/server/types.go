@@ -22,6 +22,9 @@ type CreateIssuerRequestBody struct {
 	// Organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	// Authorization-server topology. Shared mode supports standalone workload
+	// token exchange without an MCP server.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
@@ -6546,6 +6549,12 @@ func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string)
 		AuthnChallengeMode:           *body.AuthnChallengeMode,
 		SessionDurationHours:         *body.SessionDurationHours,
 	}
+	if body.AuthorizationServerMode != nil {
+		v.AuthorizationServerMode = *body.AuthorizationServerMode
+	}
+	if body.AuthorizationServerMode == nil {
+		v.AuthorizationServerMode = "endpoint"
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -6743,6 +6752,11 @@ func ValidateCreateIssuerRequestBody(body *CreateIssuerRequestBody) (err error) 
 	}
 	if body.TrustedRemoteSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
 	}
 	if body.AuthnChallengeMode != nil {
 		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {

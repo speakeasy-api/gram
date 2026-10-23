@@ -5297,7 +5297,7 @@ examples:
   createOrganizationUserSessionIssuer:
     speakeasy-default-create-organization-user-session-issuer:
       requestBody:
-        application/json: {"authn_challenge_mode": "chain", "session_duration_hours": 499598, "slug": "<value>"}
+        application/json: {"authn_challenge_mode": "chain", "authorization_server_mode": "endpoint", "session_duration_hours": 499598, "slug": "<value>"}
       responses:
         "200":
           application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "endpoint", "client_id_metadata_admission_mode": "presets", "created_at": "2024-06-20T22:02:10.421Z", "id": "0c256f1c-5d81-493b-ba3e-4ab2399908f6", "issuer_url_pinned": true, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 357767, "slug": "<value>", "updated_at": "2025-01-11T19:31:48.102Z", "use_authentication_host": true}
@@ -5652,7 +5652,7 @@ examples:
   createUserSessionIssuer:
     speakeasy-default-create-user-session-issuer:
       requestBody:
-        application/json: {"authn_challenge_mode": "chain", "session_duration_hours": 781659, "slug": "<value>"}
+        application/json: {"authn_challenge_mode": "chain", "authorization_server_mode": "endpoint", "session_duration_hours": 781659, "slug": "<value>"}
       responses:
         "200":
           application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "endpoint", "client_id_metadata_admission_mode": "presets", "created_at": "2025-05-29T23:01:32.237Z", "id": "97212a9f-79fe-45b4-98c8-19febc817858", "issuer_url_pinned": false, "organization_id": "<id>", "project_id": "6111c8e2-ed9c-4ca7-8b34-30333d4acfad", "session_duration_hours": 80015, "slug": "<value>", "updated_at": "2024-11-04T03:29:29.080Z", "use_authentication_host": true}
