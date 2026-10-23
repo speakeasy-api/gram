@@ -104,15 +104,17 @@ export function useCatalogEntries(enabled = true): {
     enabled,
     throwOnError: false,
   });
+  // Disabled means the caller may not read the catalog, so nothing cached from
+  // before, entries or an error, is reported. A disabled query also stays
+  // pending forever without loading anything.
   const entries = useMemo(
-    () => (query.data?.platforms ?? []).map(toCatalogEntry),
-    [query.data],
+    () => (enabled ? (query.data?.platforms ?? []).map(toCatalogEntry) : []),
+    [enabled, query.data],
   );
   return {
     entries,
-    // A disabled query stays pending forever; it is not loading anything.
     isPending: enabled && query.isPending,
-    isError: query.isError,
+    isError: enabled && query.isError,
     refetch: () => void query.refetch(),
   };
 }
