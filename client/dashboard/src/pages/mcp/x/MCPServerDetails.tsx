@@ -64,6 +64,7 @@ import { SettingsTab } from "./tabs/settings/SettingsTab";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { GuardrailsTab } from "./tabs/guardrails/GuardrailsTab";
+import { RemoteSkillsTabRoute } from "./tabs/skills/RemoteSkillsTab";
 
 export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -198,6 +199,17 @@ export default function MCPServerDetails(): JSX.Element {
               mcpServer={mcpServer}
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
+            />
+          )
+        );
+      case "skills":
+        // The route decides the flag before the scope and redirects servers
+        // that are not remote-backed, which have no Skills tab.
+        return (
+          mcpServer && (
+            <RemoteSkillsTabRoute
+              mcpServer={mcpServer}
+              mcpServerSlug={idOrSlug}
             />
           )
         );

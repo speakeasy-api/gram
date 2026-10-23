@@ -4,6 +4,7 @@ import type { TabValue as ToolsetTabValue } from "../MCPDetailsRouting";
 const VALID_TABS = [
   "overview",
   "inspect",
+  "skills",
   "team-access",
   "guardrails",
   "sessions",
@@ -96,6 +97,8 @@ export function mcpServerTabHref(
       return routes.mcp.x.overview.href(mcpServerSlug);
     case "inspect":
       return routes.mcp.x.inspect.href(mcpServerSlug);
+    case "skills":
+      return routes.mcp.x.skills.href(mcpServerSlug);
     case "team-access":
       return routes.mcp.x.teamAccess.href(mcpServerSlug);
     case "guardrails":
@@ -126,6 +129,8 @@ export function toolsetTabForServerPath(
     case "inspect":
     case LEGACY_TOOLS_TAB:
       return "tools";
+    case "skills":
+      return "skills";
     case LEGACY_AUTHENTICATION_TAB:
       return "authentication";
     case "team-access":
