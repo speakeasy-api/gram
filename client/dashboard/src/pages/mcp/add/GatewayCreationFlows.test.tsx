@@ -48,8 +48,8 @@ vi.mock("@/routes", () => ({
       details: {
         overview: { goTo: state.navigate },
         settings: { href: () => "/mcp/server/settings" },
-        tools: { goTo: state.navigate },
       },
+      toolset: { tools: { goTo: state.navigate } },
     },
   }),
 }));

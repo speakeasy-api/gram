@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   activeTabFromPath,
-  initialTabFromHash,
   isCanonicalHostedWrapper,
   standsInForToolset,
   tabForServer,
@@ -117,20 +116,6 @@ describe("withoutMcpXSegment", () => {
     "/acme/projects/x/insights",
   ])("leaves %s alone", (path) => {
     expect(withoutMcpXSegment(path)).toBeUndefined();
-  });
-});
-
-describe("initialTabFromHash", () => {
-  it("maps the legacy authentication hash to settings", () => {
-    expect(initialTabFromHash("#authentication")).toBe("settings");
-  });
-
-  it("reads the tools hash as the tools tab", () => {
-    expect(initialTabFromHash("#tools")).toBe("tools");
-  });
-
-  it("supports team access", () => {
-    expect(initialTabFromHash("#team-access")).toBe("team-access");
   });
 });
 

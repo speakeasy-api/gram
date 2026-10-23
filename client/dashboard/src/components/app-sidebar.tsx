@@ -21,6 +21,7 @@ import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { Link } from "react-router";
 import { GatewaySidebarNav } from "./gateway-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
+import { useMcpServerRouteMissing } from "./mcp/useMcpServerRouteMissing";
 import { ProjectGuideSidebarCta } from "./project-guide-sidebar-cta";
 import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
@@ -108,6 +109,7 @@ export function AppSidebar({
   // labels org-level pages in the header but is not a sidebar group.
   const navArea = useNavArea();
   const activeGroup = navArea === "Organization" ? undefined : navArea;
+  const mcpServerMissing = useMcpServerRouteMissing(routes.mcp.details.active);
 
   // Find the specific active route title for the sliding highlight. Shared with
   // the command palette via useProjectNavRoutes so the two stay in sync.
@@ -167,7 +169,7 @@ export function AppSidebar({
         </SidebarMenuItem>
       </SidebarMenu>
     );
-  } else if (routes.mcp.details.active) {
+  } else if (routes.mcp.details.active && !mcpServerMissing) {
     sidebarContent = <McpServerXSidebarNav />;
   } else if (routes.mcp.gateway.active) {
     sidebarContent = <GatewaySidebarNav />;

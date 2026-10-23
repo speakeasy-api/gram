@@ -1,6 +1,6 @@
 import type { TabValue as ServerTabValue } from "./x/MCPServerDetailsRouting";
 
-/** Where a legacy toolset page tab (path segment or `#tab` hash) lives on the MCP server page. */
+/** Where a tab segment or `#tab` hash, current or retired, lives on the MCP server page. */
 export function serverTabForToolsetTab(
   segment: string | undefined,
   hash: string,
@@ -12,6 +12,8 @@ export function serverTabForToolsetTab(
     case "prompts":
     case "team-access":
     case "sessions":
+    case "inspect":
+    case "guardrails":
       return { tab, hash: "" };
     case "authentication":
       return { tab: "settings", hash: "#authentication" };

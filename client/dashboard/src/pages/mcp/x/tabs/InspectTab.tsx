@@ -1,3 +1,4 @@
+import { mcpServerRouteParam } from "@/lib/sources";
 import {
   platformEndpointSlug,
   useResolvedMcpServerUrl,
@@ -31,7 +32,7 @@ export function InspectTab({
   // Deep-link to the Authentication section under Settings so the tools view
   // can point users at auth setup when a server has none configured yet.
   const authSettingsHref = `${routes.mcp.details.settings.href(
-    mcpServer.slug ?? mcpServer.id,
+    mcpServerRouteParam(mcpServer),
   )}#${MCP_AUTHENTICATION_SECTION_ID}`;
 
   return (

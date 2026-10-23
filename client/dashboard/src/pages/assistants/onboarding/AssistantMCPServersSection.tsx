@@ -229,12 +229,12 @@ function AttachedServerRow({
 
   const link =
     serverRef.kind === "toolset" ? (
-      <routes.mcp.details.Link
+      <routes.mcp.toolset.Link
         params={[serverRef.slug]}
         className="min-w-0 hover:no-underline"
       >
         <code className="truncate text-xs">{serverRef.slug}</code>
-      </routes.mcp.details.Link>
+      </routes.mcp.toolset.Link>
     ) : (
       <routes.mcp.details.Link
         params={[serverRef.slug]}

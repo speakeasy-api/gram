@@ -76,7 +76,7 @@ export function resolveEntityLink(
     case "mcp_server":
       return newTab(`${proj}/mcp/${enc(rest)}`);
     case "toolset":
-      return newTab(`${proj}/mcp/${enc(rest)}`);
+      return newTab(`${proj}/mcp/toolset/${enc(rest)}`);
     case "deployment":
       return newTab(`${proj}/deployments/${enc(rest)}`);
     case "chat":

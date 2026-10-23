@@ -7,6 +7,8 @@ import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.j
 import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import { useUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 import { Navigate, useLocation, useParams } from "react-router";
+import { RESERVED_MCP_SEGMENTS } from "@/lib/sources";
+import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { withoutMcpXSegment } from "../x/MCPServerDetailsRouting";
 import {
   legacySourceKindLookups,
@@ -49,7 +51,7 @@ function legacySourceTargetHref(
     case "mcp-server":
       return routes.mcp.details.overview.href(target.routeParam);
     case "toolset":
-      return routes.mcp.details.href(target.slug);
+      return routes.mcp.toolset.href(target.slug);
     case "sources-list":
       return routes.mcp.sources.href();
     case "mcp-list":
@@ -184,19 +186,32 @@ export function RedirectToCatalogDetail(): JSX.Element {
   );
 }
 
-// `/mcp/x/<slug>/...` is the retired address of every server page. Dropping
-// the segment keeps the slug's encoding, the tab, the query and the hash.
-export function RedirectFromMcpXNamespace(): JSX.Element {
+// Retired `/mcp/x/<slug>/...`: drop the segment, keeping encoding, tab, query and hash.
+export function RedirectFromMcpXNamespace(): JSX.Element | null {
   const routes = useRoutes();
   const location = useLocation();
+  const { mcpServerSlug = "" } = useParams<{ mcpServerSlug: string }>();
+  // A static segment would claim `/mcp/<slug>`, so such a server moves to its id.
+  const reserved = RESERVED_MCP_SEGMENTS.has(mcpServerSlug);
+  const { data: server, isLoading } = useGetMcpServer(
+    { slug: mcpServerSlug },
+    undefined,
+    { enabled: reserved, throwOnError: false },
+  );
+
   const target = withoutMcpXSegment(location.pathname);
+  if (!target) return <Navigate to={routes.mcp.href()} replace />;
+  if (!reserved) {
+    return (
+      <Navigate to={`${target}${location.search}${location.hash}`} replace />
+    );
+  }
+  if (isLoading) return null;
+  if (!server) return <Navigate to={routes.mcp.href()} replace />;
+  const rest = location.pathname.split("/").filter(Boolean).slice(6);
   return (
     <Navigate
-      to={
-        target
-          ? `${target}${location.search}${location.hash}`
-          : routes.mcp.href()
-      }
+      to={`${[routes.mcp.details.href(server.id), ...rest].join("/")}${location.search}${location.hash}`}
       replace
     />
   );

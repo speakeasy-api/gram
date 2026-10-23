@@ -147,6 +147,12 @@ describe("MCPServerDetails path resolution", () => {
       "/acme/projects/default/mcp/my-server/settings?q=1#performance",
     ],
     ["/tools?q=1", "/acme/projects/default/mcp/my-server/inspect?q=1"],
+    // No tab: the hash picks one, as on the old toolset page.
+    [
+      "?q=1#performance",
+      "/acme/projects/default/mcp/my-server/settings?q=1#performance",
+    ],
+    ["#inspect", "/acme/projects/default/mcp/my-server/inspect"],
   ])("moves the retired %s tab to %s", (suffix, target) => {
     visit(`/acme/projects/default/mcp/my-server${suffix}`);
     expect(screen.getByTestId("landed").textContent).toBe(target);

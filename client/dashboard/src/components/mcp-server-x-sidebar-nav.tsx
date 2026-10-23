@@ -314,7 +314,6 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const { data: mcpServer } = useGetMcpServer(
     getMcpServerArgs(idOrSlug),
     undefined,
-    // A miss is a legacy toolset or `/mcp/x` path the page is redirecting.
     { enabled: idOrSlug !== "", throwOnError: isNotNotFound },
   );
   const mcpServerId = mcpServer?.id ?? "";

@@ -49,7 +49,6 @@ import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
   activeTabFromPath,
-  initialTabFromHash,
   mcpServerTabHref,
   MCP_SERVER_TAB_URLS,
   standsInForToolset,
@@ -69,7 +68,6 @@ import { useHostedVisibilityGuard } from "./hosted/useHostedVisibilityGuard";
 import { InspectTab } from "./tabs/InspectTab";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { MCP_AGENT_SETUP_SECTION_ID } from "./tabs/settings/sections/AgentSetupSection";
-import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
 import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./tabs/settings/sections/PublicAccessSection";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
@@ -127,9 +125,15 @@ export default function MCPServerDetails(): JSX.Element | null {
   if (!idOrSlug) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
-  // Server slugs win; anything else may be a legacy toolset or `/mcp/x` link.
+  // Not a server: maybe a legacy toolset slug or `/mcp/x` link.
   if (isNotFoundError(mcpServerError)) {
-    return <ToolsetRedirectPage toolsetSlug={idOrSlug} />;
+    return (
+      <ToolsetRedirectPage
+        toolsetSlug={idOrSlug}
+        tabSegment={tabSegment}
+        serverLookupMissed
+      />
+    );
   }
   if (isError || (!isLoading && !mcpServer)) {
     return <Navigate to={routes.mcp.href()} replace />;
@@ -167,15 +171,10 @@ export default function MCPServerDetails(): JSX.Element | null {
     );
   }
   if (!activeTab) {
-    const initialTab = tabForServer(initialTabFromHash(location.hash), hosted);
-    const hash =
-      location.hash === `#${MCP_AUTHENTICATION_SECTION_ID}`
-        ? `#${MCP_AUTHENTICATION_SECTION_ID}`
-        : "";
-
+    const target = serverTabForToolsetTab(undefined, location.hash);
     return (
       <Navigate
-        to={`${mcpServerTabHref(routes, idOrSlug, initialTab)}${hash}`}
+        to={`${mcpServerTabHref(routes, idOrSlug, tabForServer(target.tab, hosted))}${location.search}${target.hash}`}
         replace
       />
     );

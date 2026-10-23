@@ -106,7 +106,7 @@ export function useSourceCandidates({
           const carriers = toolsetsByExternalMcpSlug.get(asset.slug) ?? [];
           const [toolset] = carriers;
           if (toolset && carriers.length === 1) {
-            routes.mcp.details.goTo(toolset.slug);
+            routes.mcp.toolset.goTo(toolset.slug);
             return;
           }
           routes.mcp.sources.goTo();

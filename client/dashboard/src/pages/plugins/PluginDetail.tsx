@@ -1426,7 +1426,7 @@ function PluginServerCard({
       if (mcpServer)
         routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
     } else if (toolset) {
-      routes.mcp.details.goTo(toolset.slug);
+      routes.mcp.toolset.goTo(toolset.slug);
     }
   };
 

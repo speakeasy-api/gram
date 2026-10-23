@@ -11,7 +11,6 @@ const VALID_TABS = [
   "sessions",
   "settings",
 ] as const;
-const LEGACY_AUTHENTICATION_TAB = "authentication";
 // Hosted servers manage their toolset on these tabs; every other server inspects its live tools.
 const HOSTED_ONLY_TABS: readonly TabValue[] = ["tools", "resources", "prompts"];
 
@@ -33,9 +32,7 @@ function decodePathSegment(segment: string): string {
   }
 }
 
-// Project pages live at /:orgSlug/projects/:projectSlug/..., so the MCP
-// section is always the fourth segment. Reading by position, not by searching
-// for "mcp", keeps an org, project or server slugged "mcp" or "x" unambiguous.
+// Project pages sit under /:orgSlug/projects/:projectSlug, so `mcp` is segment 3.
 const MCP_SECTION_INDEX = 3;
 
 function pathSegments(pathname: string): string[] {
@@ -62,10 +59,19 @@ export function tabSegmentFromPath(
   return segments[MCP_SECTION_INDEX + 2];
 }
 
-/**
- * The same path without the retired `x` segment: `/mcp/x/<slug>/<tab>` becomes
- * `/mcp/<slug>/<tab>`. Undefined when the path has no `/mcp/x/` prefix.
- */
+/** The tab segment of `/mcp/toolset/<toolsetSlug>/<tab>`. */
+export function toolsetRouteTabSegment(pathname: string): string | undefined {
+  const segments = pathSegments(pathname).map(decodePathSegment);
+  if (
+    segments[MCP_SECTION_INDEX] !== "mcp" ||
+    segments[MCP_SECTION_INDEX + 1] !== "toolset"
+  ) {
+    return undefined;
+  }
+  return segments[MCP_SECTION_INDEX + 3];
+}
+
+/** `/mcp/x/<slug>/...` as `/mcp/<slug>/...`, or undefined for other paths. */
 export function withoutMcpXSegment(pathname: string): string | undefined {
   const segments = pathSegments(pathname);
   if (
@@ -85,13 +91,6 @@ export function activeTabFromPath(
 ): TabValue | undefined {
   const tabSegment = tabSegmentFromPath(pathname, mcpServerSlug);
   return tabSegment && isValidTab(tabSegment) ? tabSegment : undefined;
-}
-
-export function initialTabFromHash(hash: string): TabValue {
-  const hashValue = hash.replace("#", "");
-  if (hashValue === LEGACY_AUTHENTICATION_TAB) return "settings";
-  if (!isValidTab(hashValue)) return "overview";
-  return hashValue;
 }
 
 export function mcpServerTabHref(

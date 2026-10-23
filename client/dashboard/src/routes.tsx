@@ -55,6 +55,7 @@ import SourceDetailRoute from "./pages/mcp/sources/SourceDetail";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import OrganizationGatewayPage from "./pages/mcp/OrganizationGateway";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
+import { ToolsetSlugRedirectPage } from "./pages/mcp/ToolsetRedirect";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
 import {
@@ -540,10 +541,18 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
-      // Every MCP server's page, keyed by server slug (or id). A path that is
-      // no server's slug resolves as a legacy toolset slug, then as a legacy
-      // `/mcp/x/<tab>` link; see resolveMcpServerPath. `/mcp/x/<slug>/...`
-      // redirects here from App.tsx.
+      // In-app links that name a toolset; redirects to its hosting server.
+      toolset: {
+        title: "MCP Toolset",
+        url: "toolset/:toolsetSlug",
+        component: ToolsetSlugRedirectPage,
+        legacyRedirect: true,
+        subPages: {
+          overview: { title: "MCP Toolset Overview", url: "overview" },
+          tools: { title: "MCP Toolset Tools", url: "tools" },
+        },
+      },
+      // Every MCP server's page, by slug or id; ToolsetRedirectPage resolves misses.
       details: {
         title: "MCP Server Details",
         url: ":mcpServerSlug",
@@ -586,15 +595,16 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Settings",
             url: "settings",
           },
-          // Legacy: redirects to settings#authentication.
+          // Retired tabs: redirect to settings#authentication / #performance.
           authentication: {
             title: "MCP Server Authentication",
             url: "authentication",
+            legacyRedirect: true,
           },
-          // Legacy toolset tab: redirects to settings#performance.
           performance: {
             title: "MCP Server Performance",
             url: "performance",
+            legacyRedirect: true,
           },
         },
       },

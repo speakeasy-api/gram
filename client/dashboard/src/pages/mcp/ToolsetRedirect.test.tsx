@@ -67,7 +67,11 @@ vi.mock("@/routes", () => {
   };
 });
 
-import { ToolsetRedirectPage } from "./ToolsetRedirect";
+import {
+  ToolsetRedirectPage,
+  ToolsetSlugRedirectPage,
+} from "./ToolsetRedirect";
+import { tabSegmentFromPath } from "./x/MCPServerDetailsRouting";
 
 function Landed() {
   const location = useLocation();
@@ -80,13 +84,24 @@ function Landed() {
 
 function Fallback() {
   const { slug = "" } = useParams<{ slug: string }>();
-  return <ToolsetRedirectPage toolsetSlug={slug} />;
+  const location = useLocation();
+  return (
+    <ToolsetRedirectPage
+      toolsetSlug={slug}
+      tabSegment={tabSegmentFromPath(location.pathname, slug)}
+      serverLookupMissed
+    />
+  );
 }
 
 function visit(url: string) {
   render(
     <MemoryRouter initialEntries={[url]}>
       <Routes>
+        <Route
+          path="/acme/projects/default/mcp/toolset/:toolsetSlug/*"
+          element={<ToolsetSlugRedirectPage />}
+        />
         <Route
           path="/acme/projects/default/mcp/:slug/*"
           element={<Fallback />}
@@ -209,5 +224,45 @@ describe("ToolsetRedirectPage", () => {
     mocks.toolsetError = { statusCode: 404 };
     visit("/acme/projects/default/mcp/nothing/tools");
     expect(screen.getByText("MCP server not found")).toBeDefined();
+  });
+
+  it("treats an unreadable toolset as not found", () => {
+    mocks.toolset = undefined;
+    mocks.toolsetError = { statusCode: 403 };
+    visit("/acme/projects/default/mcp/my-tools");
+    expect(screen.getByText("MCP server not found")).toBeDefined();
+  });
+
+  it("drops the retired x segment when the toolset slugged x has no server", () => {
+    mocks.toolset = { ...TOOLSET, slug: "x" };
+    mocks.servers = [];
+    visit("/acme/projects/default/mcp/x/settings");
+    expect(screen.getByTestId("landed").textContent).toBe(
+      "/acme/projects/default/mcp/settings",
+    );
+  });
+
+  it.each([
+    ["", "/landed/my-server/overview"],
+    ["/tools?q=1", "/landed/my-server/tools?q=1"],
+    ["#performance", "/landed/my-server/settings#performance"],
+  ])("resolves the explicit toolset route %s", (suffix, target) => {
+    visit(`/acme/projects/default/mcp/toolset/my-tools${suffix}`);
+    expect(screen.getByTestId("landed").textContent).toBe(target);
+  });
+
+  it("follows the explicit toolset route even when the host shares its slug", () => {
+    mocks.servers = [
+      {
+        id: "toolset-1",
+        slug: "my-tools",
+        toolsetId: "toolset-1",
+        toolset: { hostingMcpServerId: "toolset-1" },
+      },
+    ];
+    visit("/acme/projects/default/mcp/toolset/my-tools/tools");
+    expect(screen.getByTestId("landed").textContent).toBe(
+      "/landed/my-tools/tools",
+    );
   });
 });

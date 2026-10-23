@@ -277,10 +277,8 @@ vi.mock("@/routes", () => ({
     },
     mcp: {
       goTo: vi.fn(),
-      details: {
-        goTo: mocks.goToToolsetDetails,
-        overview: { goTo: mocks.goToMcpServerOverview },
-      },
+      toolset: { goTo: mocks.goToToolsetDetails },
+      details: { overview: { goTo: mocks.goToMcpServerOverview } },
       catalog: { detail: { goTo: mocks.goToCatalogDetail } },
       sources: {
         goTo: mocks.goToSources,

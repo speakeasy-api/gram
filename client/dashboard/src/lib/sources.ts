@@ -160,10 +160,10 @@ export function mcpServerRouteParam(server: {
   return slug && !RESERVED_MCP_SEGMENTS.has(slug) ? slug : server.id;
 }
 
-// Static segments under /mcp that outrank `/mcp/:mcpServerSlug`, plus the
-// retired `x`. A server slugged like one of these is linked by id.
+// Static /mcp segments; servers slugged like one are linked by id. Mirrored in server/internal/mcpservers/slug.go.
 export const RESERVED_MCP_SEGMENTS: ReadonlySet<string> = new Set([
   "add",
+  "toolset",
   "catalog",
   "deployments",
   "sources",

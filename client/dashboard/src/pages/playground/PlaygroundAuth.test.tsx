@@ -41,7 +41,7 @@ vi.mock("@/hooks/useToolsetUrl", () => ({
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
-      details: {
+      toolset: {
         Link: ({
           children,
           params,
@@ -51,7 +51,9 @@ vi.mock("@/routes", () => ({
           params: [string];
           hash?: string;
         }) => (
-          <a href={`/mcp/${params[0]}${hash ? `#${hash}` : ""}`}>{children}</a>
+          <a href={`/mcp/toolset/${params[0]}${hash ? `#${hash}` : ""}`}>
+            {children}
+          </a>
         ),
       },
     },
@@ -189,7 +191,7 @@ describe("independent environment configuration", () => {
         screen
           .getByRole("link", { name: "Configure auth" })
           .getAttribute("href"),
-      ).toBe("/mcp/legacy-t#authentication");
+      ).toBe("/mcp/toolset/legacy-t#authentication");
       const save = screen.getByRole("button", {
         name: "Save",
       }) as HTMLButtonElement;
@@ -227,13 +229,13 @@ describe("independent environment configuration", () => {
     const { rerender } = render(<PlaygroundAuth toolset={toolset} />);
     expect(
       screen.getByRole("link", { name: "Configure auth" }).getAttribute("href"),
-    ).toBe("/mcp/legacy-t#authentication");
+    ).toBe("/mcp/toolset/legacy-t#authentication");
     rerender(
       <PlaygroundAuth toolset={{ ...toolset, slug: "another-toolset" }} />,
     );
     expect(
       screen.getByRole("link", { name: "Configure auth" }).getAttribute("href"),
-    ).toBe("/mcp/another-toolset#authentication");
+    ).toBe("/mcp/toolset/another-toolset#authentication");
   });
 
   it("keeps Save disabled while saving", () => {

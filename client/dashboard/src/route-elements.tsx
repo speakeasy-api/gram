@@ -42,9 +42,7 @@ export const legacyMcpRedirects = (
       <Route index element={<RedirectToCatalog />} />
       <Route path=":serverSpecifier" element={<RedirectToCatalogDetail />} />
     </Route>
-    {/* Server pages lived under /mcp/x until the toolset and server routes
-        merged. A server or toolset slugged "x" still owns /mcp/x and
-        /mcp/x/<tab>, which outrank this splat (see resolveMcpServerPath). */}
+    {/* Retired server URLs; /mcp/x/<tab> still outranks this for a server slugged x. */}
     <Route
       path="mcp/x/:mcpServerSlug/*"
       element={<RedirectFromMcpXNamespace />}

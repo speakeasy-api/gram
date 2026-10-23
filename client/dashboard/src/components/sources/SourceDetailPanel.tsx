@@ -94,12 +94,12 @@ function SourceServersPanel({
         <ul className="flex flex-col gap-1">
           {servers.map((toolset) => (
             <li key={toolset.id}>
-              <routes.mcp.details.Link
+              <routes.mcp.toolset.Link
                 params={[toolset.slug]}
                 className="text-sm"
               >
                 {toolset.name}
-              </routes.mcp.details.Link>
+              </routes.mcp.toolset.Link>
             </li>
           ))}
         </ul>
@@ -138,12 +138,12 @@ function SourceServersPanel({
                 className="flex items-center justify-between gap-4 px-6 py-3"
               >
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <routes.mcp.details.Link
+                  <routes.mcp.toolset.Link
                     params={[toolset.slug]}
                     className="truncate text-sm font-medium"
                   >
                     {toolset.name}
-                  </routes.mcp.details.Link>
+                  </routes.mcp.toolset.Link>
                   <Text muted className="truncate font-mono text-xs">
                     {toolset.slug}
                   </Text>

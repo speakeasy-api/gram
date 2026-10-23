@@ -13,6 +13,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
 }));
+vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
+  useGetMcpServer: ({ slug }: { slug?: string }) => ({
+    data: slug === "gateway" ? { id: "server-id" } : undefined,
+    isLoading: false,
+  }),
+}));
 vi.mock("./pages/mcp/x/MCPServerDetails", () => ({
   default: function ServerPageProbe() {
     const { mcpServerSlug } = useParams();
@@ -101,6 +107,11 @@ describe("MCP server routes", () => {
     ["/mcp/x/my%20server/settings", "my server /mcp/my%20server/settings"],
     // A retired link whose server slug is a tab name, followed by a tab.
     ["/mcp/x/overview/settings", "overview /mcp/overview/settings"],
+    // A slug a static segment would claim moves to the server's id.
+    [
+      "/mcp/x/gateway/settings?q=1#authentication",
+      "server-id /mcp/server-id/settings?q=1#authentication",
+    ],
   ])("redirects the retired %s", (path, landed) => {
     expect(visit(`${BASE}${path}`)).toBe(landed.replace(" /", ` ${BASE}/`));
   });
