@@ -671,6 +671,9 @@ func genSelectorToAuthz(s *gen.Selector) authz.Selector {
 	if s.ConnectionOwner != nil {
 		sel[authz.SelectorKeyConnectionOwner] = *s.ConnectionOwner
 	}
+	if s.UpstreamClient != nil {
+		sel[authz.SelectorKeyUpstreamClient] = *s.UpstreamClient
+	}
 	return sel
 }
 
@@ -684,6 +687,7 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 		ServerURL:       nil,
 		ClientType:      nil,
 		ConnectionOwner: nil,
+		UpstreamClient:  nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
@@ -702,6 +706,9 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	}
 	if v, ok := sel[authz.SelectorKeyConnectionOwner]; ok {
 		s.ConnectionOwner = &v
+	}
+	if v, ok := sel[authz.SelectorKeyUpstreamClient]; ok {
+		s.UpstreamClient = &v
 	}
 	return s
 }

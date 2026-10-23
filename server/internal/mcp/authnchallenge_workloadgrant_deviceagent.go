@@ -73,7 +73,11 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	if err := r.ParseForm(); err != nil {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "failed to parse form")
 	}
-	if grantType := r.PostForm.Get(oauthwire.ParamGrantType); grantType != oauthwire.GrantTypeJWTBearer {
+	grantType := r.PostForm.Get(oauthwire.ParamGrantType)
+	if grantType == "" {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
+	}
+	if grantType != oauthwire.GrantTypeJWTBearer {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "grant_type must be "+oauthwire.GrantTypeJWTBearer)
 	}
 	creds := extractClientCredentials(r)

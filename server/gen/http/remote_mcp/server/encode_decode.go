@@ -3800,6 +3800,7 @@ func marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(v 
 		ExternalMcpProxyOnly:  v.ExternalMcpProxyOnly,
 		ExternalOauthServerID: v.ExternalOauthServerID,
 		RegistrySpecifier:     v.RegistrySpecifier,
+		HostingMcpServerID:    v.HostingMcpServerID,
 	}
 	if v.ExternalMcpSlugs != nil {
 		res.ExternalMcpSlugs = make([]string, len(v.ExternalMcpSlugs))

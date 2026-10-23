@@ -643,7 +643,7 @@ func TestHandleIDPCallback_ARevokedSignInAfterTheFreshLoginEndsTheFlow(t *testin
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr, "the flow stops here rather than at invalid_grant")
-	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
 func TestHandleToken_HumanRefreshReplayRefusesARevokedSignIn(t *testing.T) {

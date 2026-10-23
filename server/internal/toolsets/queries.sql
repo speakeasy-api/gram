@@ -117,6 +117,15 @@ WHERE slug = @slug
   AND project_id = @project_id AND deleted IS FALSE
 RETURNING id, name, slug;
 
+-- name: ClearToolsetCustomDomain :one
+-- UpdateToolset COALESCEs custom_domain_id, so moving to the platform domain clears it here.
+UPDATE toolsets
+SET
+    custom_domain_id = NULL
+  , updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
 -- name: SetToolsetCustomDomain :exec
 -- Narrow setter used by test fixtures: UpdateToolset's COALESCE pattern can't
 -- set custom_domain_id without also supplying every non-nullable column.

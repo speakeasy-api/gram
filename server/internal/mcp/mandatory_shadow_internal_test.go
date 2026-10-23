@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -92,6 +94,7 @@ func shadowKey(surface, caller, principal string, legacy bool, outcome, source, 
 		attribute.String("gram.authz.mandatory.caller", caller),
 		attribute.String("gram.authz.mandatory.principal", principal),
 		attribute.Bool("gram.authz.mandatory.legacy_allowed", legacy),
+		attribute.Bool("gram.authz.mandatory.legacy_auth_ceiling", false),
 		attribute.String("gram.authz.mandatory.outcome", outcome),
 		attribute.String("gram.authz.mandatory.source", source),
 		attribute.String("gram.authz.mandatory.reason", reason),
@@ -164,6 +167,7 @@ func TestShadowMandatoryAuthClientChecksTheStoredOwner(t *testing.T) {
 
 	project := uuid.New()
 	client := uuid.New()
+	registration := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	shared := authz.NewGrantWithSelector(authz.ScopeMCPAuth, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: client.String()})
 	personal := authz.NewGrantWithSelector(authz.ScopeMCPAuth, authz.Selector{
 		authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: authz.WildcardResource,
@@ -172,7 +176,7 @@ func TestShadowMandatoryAuthClientChecksTheStoredOwner(t *testing.T) {
 
 	h := newShadowHarness(t, true)
 	record := func(ctx context.Context, clientType string, subject urn.SessionSubject) {
-		h.service.shadowMandatory(ctx, mandatorySurfaceAuthClient, shadowOrg, true, mandatoryAuthClientCheck(project, client, clientType, subject))
+		h.service.shadowMandatory(ctx, mandatorySurfaceAuthClient, shadowOrg, true, mandatoryAuthClientCheck(project, client, registration, clientType, subject))
 	}
 	record(sessionContext(t, shadowOrg, shared), authClientTypeServiceAccount, urn.NewUserSubject("user_1"))
 	record(sessionContext(t, shadowOrg, personal), authClientTypeRemoteSession, urn.NewUserSubject("user_1"))
@@ -300,8 +304,8 @@ func TestShadowAuthClientUseSkipsPersonalClientsWithoutAUser(t *testing.T) {
 
 	h := newShadowHarness(t, true)
 	project, client := uuid.New(), uuid.New()
-	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, true, project, client, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
-	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, false, project, client, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
+	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, true, project, client, uuid.NullUUID{}, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
+	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, false, project, client, uuid.NullUUID{}, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
 	require.Equal(t, map[attribute.Set]int64{
 		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "skipped", "none", mandatoryReasonNoConnectionOwner):  1,
 		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", false, "skipped", "none", mandatoryReasonNoConnectionOwner): 1,
@@ -327,4 +331,35 @@ func TestWithMandatoryAdmissionIsIdempotentForOneCaller(t *testing.T) {
 	require.Equal(t, ctx, withMandatoryAdmission(ctx), "the same caller keeps its one admission")
 	other := withMandatoryAdmission(sessionContext(t, shadowOrg))
 	require.NotSame(t, ctx.Value(mandatoryAdmissionKey{}), other.Value(mandatoryAdmissionKey{}))
+}
+
+func TestShadowMandatoryLabelsLegacyAuthCeilings(t *testing.T) {
+	t.Parallel()
+
+	for _, legacy := range []bool{true, false} {
+		h := newShadowHarness(t, true)
+		connect := authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)
+		h.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
+			AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+				return authz.PrincipalCredentialAdmission{
+					OwnerUserID: "user_owner", Credential: []authz.Grant{connect}, Agent: []authz.Grant{connect}, Owner: []authz.Grant{connect},
+					Authorizer: authz.RepresentedUserPolicy{UserID: "user_owner", Policy: []authz.Grant{connect}}, LegacyAuthCeiling: legacy,
+				}, nil
+			},
+		})
+		ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: shadowOrg},
+			urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()), contextvalues.PrincipalCredential{AuthorizerUserID: "user_owner"})
+		h.service.shadowMandatory(ctx, mandatorySurfaceProxiedConnect, shadowOrg, true, authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1"))
+
+		points := h.points(t)
+		require.Len(t, points, 1)
+		for set := range points {
+			value, ok := set.Value("gram.authz.mandatory.legacy_auth_ceiling")
+			require.True(t, ok)
+			require.Equal(t, legacy, value.AsBool())
+			principal, _ := set.Value("gram.authz.mandatory.principal")
+			require.Equal(t, "agent", principal.AsString())
+		}
+		require.Contains(t, h.logs.String(), fmt.Sprintf(`"gram.authz.mandatory.legacy_auth_ceiling":%t`, legacy))
+	}
 }

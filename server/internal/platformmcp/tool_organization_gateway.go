@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
@@ -57,12 +58,25 @@ type GetMyOrganizationGatewayOutput struct {
 type OrganizationGatewayService struct {
 	db        *pgxpool.Pool
 	serverURL *url.URL
+
+	// orgHosts resolves the platform host stored as an organization's default
+	// host. Nil URLs follow the request's platform origin.
+	orgHosts *orghost.Resolver
 }
 
 // NewOrganizationGatewayService returns a service that builds gateway URLs
 // under serverURL.
 func NewOrganizationGatewayService(db *pgxpool.Pool, serverURL *url.URL) *OrganizationGatewayService {
-	return &OrganizationGatewayService{db: db, serverURL: serverURL}
+	return &OrganizationGatewayService{db: db, serverURL: serverURL, orgHosts: nil}
+}
+
+// WithOrganizationHosts makes gateway URLs use the platform host stored as the
+// organization's default host, the host the dashboard serves it on.
+func (s *OrganizationGatewayService) WithOrganizationHosts(resolver *orghost.Resolver) *OrganizationGatewayService {
+	if s != nil {
+		s.orgHosts = resolver
+	}
+	return s
 }
 
 func (s *OrganizationGatewayService) valid() bool {
@@ -85,9 +99,10 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 	}
 	switch unavailable {
 	case orggateway.UnavailabilityNone:
+		baseURL, _ := organizationBaseURLs(ctx, s.orgHosts, organization.DefaultHost, s.serverURL, nil)
 		return GetMyOrganizationGatewayOutput{
 			Available:         true,
-			URL:               orggateway.URL(platformBaseURL(ctx, s.serverURL), organization.Slug),
+			URL:               orggateway.URL(baseURL, organization.Slug),
 			UnavailableReason: "",
 			NextAction:        "Add url to your MCP client as a remote server and sign in with your organization account when prompted. Then call list_servers through it.",
 		}, nil

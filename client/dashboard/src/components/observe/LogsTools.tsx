@@ -16,7 +16,7 @@ import {
 } from "@/components/observe/ObserveFilterBar";
 import {
   encodeGatewayServerFilter,
-  encodeHostedServerFilter,
+  hostedServerFilterValue,
   encodeShadowServerFilter,
   parseTargetFilter,
   isDefaultToolUsageTypeSelection,
@@ -305,14 +305,15 @@ export function LogsTools(): JSX.Element {
 
   const facetGroups = useMemo<FacetGroup[]>(() => {
     const serverValues: FacetValue[] = [
-      ...(filterOptionsData?.hostedServers ?? []).map((server) => ({
-        value: encodeHostedServerFilter(server.toolsetSlug),
-        label: server.toolsetName || server.toolsetSlug,
-        count: Number(server.eventCount),
-        selected: selectedServerValues.includes(
-          encodeHostedServerFilter(server.toolsetSlug),
-        ),
-      })),
+      ...(filterOptionsData?.hostedServers ?? []).map((server) => {
+        const value = hostedServerFilterValue(server, selectedServerValues);
+        return {
+          value,
+          label: server.toolsetName || server.toolsetSlug,
+          count: Number(server.eventCount),
+          selected: selectedServerValues.includes(value),
+        };
+      }),
       ...(filterOptionsData?.gateways ?? []).map((gateway) => ({
         value: encodeGatewayServerFilter(gateway.metaMcpServerId),
         label: gateway.name,
@@ -1839,6 +1840,14 @@ function LogsToolsTraceRow({
               identityKey={trace.userKey}
               label={userLabel}
               agent={agent}
+              authorizer={
+                trace.authorizerUserId
+                  ? {
+                      userId: trace.authorizerUserId,
+                      label: trace.authorizerLabel,
+                    }
+                  : undefined
+              }
             />
           ) : (
             <>

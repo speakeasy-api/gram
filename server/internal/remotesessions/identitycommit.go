@@ -713,19 +713,28 @@ func (c *IdentityCommit) registrationScope(policy RegistrationPolicy) []string {
 	if len(policy.Scope) > 0 {
 		return policy.Scope
 	}
-	resource := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: true}
+	resource := issuerLevelResource()
 	if policy.RegistrationResource != nil {
 		resource = *policy.RegistrationResource
 	}
-	login := Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
-		IssuerScopesSupported:   c.provider.ScopesSupported,
-		IssuerScopeOverride:     c.provider.ScopeOverride,
-		IssuerOmitScopeFallback: c.provider.OmitScopeFallback.Valid && c.provider.OmitScopeFallback.Bool,
-	}
 	if create := c.plan.Provider.create; create != nil {
-		login.IssuerScopesSupported = create.ScopesSupported
-		login.IssuerScopeOverride = create.ScopeOverride
-		login.IssuerOmitScopeFallback = create.OmitScopeFallback.Valid && create.OmitScopeFallback.Bool
+		return issuerRegistrationScope(create.ScopesSupported, create.ScopeOverride, create.OmitScopeFallback, resource)
+	}
+	return issuerRegistrationScope(c.provider.ScopesSupported, c.provider.ScopeOverride, c.provider.OmitScopeFallback, resource)
+}
+
+// issuerLevelResource is a login that names no resource.
+func issuerLevelResource() ResourceScopes {
+	return ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: true}
+}
+
+// issuerRegistrationScope is what a login with no client scope requests from
+// an issuer with these settings.
+func issuerRegistrationScope(supported, override []string, omitFallback pgtype.Bool, resource ResourceScopes) []string {
+	login := Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
+		IssuerScopesSupported:   supported,
+		IssuerScopeOverride:     override,
+		IssuerOmitScopeFallback: omitFallback.Valid && omitFallback.Bool,
 	}
 	return login.RequestedScopes(resource).Scopes
 }

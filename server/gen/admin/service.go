@@ -337,6 +337,22 @@ type Service interface {
 	// client choice. Idempotent, so it is safe to run again; a server the
 	// configuration does not prove is reported and never guessed.
 	RunUpstreamOAuthMigration(context.Context, *RunUpstreamOAuthMigrationPayload) (res *AdminUpstreamOAuthMigrationRun, err error)
+	// Enables upstream auth enforcement for one organization: its direct proxied
+	// servers and assistant turns are served by the typed auth client resolver,
+	// and using the chosen auth client requires mcp:auth. Refused unless the
+	// organization is migrated, its auth clients are recorded, its default auth
+	// permissions are granted, every credential choice that can name an auth
+	// client does, and its assistant profiles are recorded. Choices left ambiguous
+	// and profile gaps are not blocking: those credentials are asked to reconnect
+	// and those turns are refused with the reason. Shadow parity and the
+	// cross-organization denial notice are confirmed by the caller, since they are
+	// read from telemetry and communication outside the database. Enabled
+	// enforcement does not depend on the auth-client-resolver flags.
+	EnableUpstreamAuthEnforcement(context.Context, *EnableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
+	// Disables upstream auth enforcement for one organization. This is its
+	// rollback: requests return to the upstream client choice within a minute.
+	// Safe to call when enforcement is already off.
+	DisableUpstreamAuthEnforcement(context.Context, *DisableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -359,7 +375,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [95]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration"}
+var MethodNames = [97]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -1438,6 +1454,16 @@ type AdminStripeSubscriptionCandidate struct {
 	Status string
 }
 
+// One organization's upstream auth enforcement.
+type AdminUpstreamAuthEnforcement struct {
+	// Whether enforcement is on.
+	Enabled bool
+	// Whether the coverage enforcement needs is in place, so it can be turned on.
+	Ready bool
+	// What keeps enforcement from being turned on, empty when ready.
+	Blockers []string
+}
+
 // Where one kind of configured upstream identity stands.
 type AdminUpstreamOAuthMigrationAuthClientKind struct {
 	// The kind: oauth, header or ema.
@@ -1495,9 +1521,57 @@ type AdminUpstreamOAuthMigrationAuthClients struct {
 	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociation
 	// The same counts for each kind of configured identity.
 	Kinds []*AdminUpstreamOAuthMigrationAuthClientKind
-	// Phases whose check failed: oauth, headers, ema, reconcile or mark. The
-	// counts cover the other phases.
+	// Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile,
+	// mark, selections or grants. The counts cover the other phases.
 	FailedPhases []string
+	// Whether every live credential choice names a usable auth client or is an
+	// explicit no-auth choice, and the selections check did not fail.
+	SelectionsComplete *bool
+	// Live credential choices with exactly one auth client to name, not yet named.
+	PendingSelectionMappings *int64
+	// Default auth permission grants (mcp:auth) the organization's roles, users,
+	// agents and API keys are missing, which a run adds. Enforcement needs them,
+	// so existing callers keep their access.
+	PendingGrants *int64
+	// Credential choice coverage for each credential class.
+	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClass
+	// The first live credential choices left without a usable auth client.
+	SelectionGaps []*AdminUpstreamOAuthMigrationSelectionGap
+	// Every live credential choice left without a usable auth client, including
+	// those beyond selection_gaps.
+	SelectionGapCount *int64
+}
+
+// MCP servers execution-selection profiles hold no choice for, for one
+// execution context and reason.
+type AdminUpstreamOAuthMigrationExecutionProfileGap struct {
+	// user_backed for turns run for a user the event identified, userless for
+	// turns run as the trigger's workload.
+	ExecutionContext string
+	// Why there is no choice: selection_required (several clients could serve it),
+	// personal_requires_user (only a personal client serves it, and the turn has
+	// no user), no_client (no live, enabled auth client carries its upstream OAuth
+	// client), setup_incomplete (it needs upstream authentication and offers no
+	// auth client) or upstream_auth_undecided (it offers no auth client and an
+	// administrator has not decided whether it needs upstream authentication).
+	Reason string
+	// Profile and server pairs with no choice for this reason.
+	Servers int64
+}
+
+// Where one organization stands in recording, for each assistant, trigger and
+// execution context, the versioned auth client choices its turns use.
+type AdminUpstreamOAuthMigrationExecutionProfiles struct {
+	// Whether every profile is recorded and holds a choice for every server its
+	// assistant reaches.
+	Complete bool
+	// Assistant and trigger pairs, each with a profile per execution context.
+	Targets int64
+	// Profile versions not yet recorded.
+	PendingVersions int64
+	// Servers the profiles hold no choice for, by execution context and reason.
+	// They are never guessed: configure the server's auth clients.
+	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGap
 }
 
 // An organization the upstream OAuth migration applies to: it has a live MCP
@@ -1537,11 +1611,64 @@ type AdminUpstreamOAuthMigrationRun struct {
 	// Servers marked as needing upstream authentication because they offer a
 	// backfilled auth client.
 	ServersMarkedRequiringUpstreamAuth *int64
+	// Credential choices this run named a typed auth client on.
+	SelectionsMapped *int64
+	// Execution-selection profile versions this run recorded.
+	ExecutionProfileVersionsWritten *int64
+	// Default auth permissions this run granted across the organization: the
+	// personal default and shared client grants for every recorded client, and API
+	// key policies once every client is recorded. The auth-permission-defaults
+	// backfill grants the rest.
+	AuthPermissionGrantsWritten *int64
 	// Why recording typed auth clients failed, when it did. The upstream OAuth
 	// migration itself is unaffected.
 	AuthClientsError *string
 	// The organization's status after the run.
 	Status *AdminUpstreamOAuthMigrationStatus
+}
+
+// How the live credential choices of one credential class map onto typed auth
+// clients.
+type AdminUpstreamOAuthMigrationSelectionClass struct {
+	// The class: interactive, id_jag, dashboard_mint, workload or agent.
+	CredentialClass string
+	// Live credential choices of this class.
+	Selections int64
+	// Choices that already name a usable auth client.
+	Mapped int64
+	// Choices with exactly one auth client to name, not yet named.
+	Pending int64
+	// Explicit no-auth choices on servers with no auth client.
+	NoAuth int64
+	// Choices several auth clients could serve. They are never guessed: configure
+	// the server or ask the credential to reconnect.
+	Ambiguous int64
+	// Choices whose upstream OAuth client has no live, enabled auth client linked
+	// to the server.
+	NoClient int64
+	// No-auth choices, and choices naming the server's headers, on servers that
+	// now offer an OAuth-backed client; the credential reconnects.
+	StaleNoAuth int64
+	// Choices naming an auth client that is no longer usable for the server; the
+	// credential reconnects.
+	Unusable int64
+}
+
+// One live credential choice left without a usable typed auth client.
+type AdminUpstreamOAuthMigrationSelectionGap struct {
+	// The choice.
+	SelectionID string
+	// The class of the credential the choice belongs to.
+	CredentialClass string
+	// The credential.
+	CredentialID string
+	// The server the choice is for.
+	McpServerID string
+	// The server's project.
+	ProjectID string
+	// Why the choice has no usable auth client: ambiguous, no_client,
+	// stale_no_auth, unusable or skipped_race.
+	Outcome string
 }
 
 // An MCP server whose upstream OAuth client the existing configuration does
@@ -1580,6 +1707,12 @@ type AdminUpstreamOAuthMigrationStatus struct {
 	// migrated: it never gates the upstream OAuth cutover. Absent when its check
 	// failed.
 	AuthClients *AdminUpstreamOAuthMigrationAuthClients
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfiles
+	// Whether upstream auth enforcement is on for the organization, and whether it
+	// can be turned on.
+	Enforcement *AdminUpstreamAuthEnforcement
 }
 
 // Configuration the typed auth client backfill cannot record without a guess,
@@ -1948,12 +2081,35 @@ type DisableOrganizationPayload struct {
 	ID string
 }
 
+// DisableUpstreamAuthEnforcementPayload is the payload type of the admin
+// service disableUpstreamAuthEnforcement method.
+type DisableUpstreamAuthEnforcementPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+}
+
 // EnableOrganizationPayload is the payload type of the admin service
 // enableOrganization method.
 type EnableOrganizationPayload struct {
 	AdminSessionToken *string
 	// Organization ID.
 	ID string
+}
+
+// EnableUpstreamAuthEnforcementPayload is the payload type of the admin
+// service enableUpstreamAuthEnforcement method.
+type EnableUpstreamAuthEnforcementPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+	// The caller checked the organization's mandatory authorization shadow
+	// (mcp.authz.mandatory_shadow) and found no unexplained new denial.
+	ShadowParityConfirmed bool
+	// The organization was told that valid credentials from another organization
+	// are refused on its public servers once enforcement is on, instead of being
+	// served anonymously.
+	CrossOrganizationDenialCommunicated bool
 }
 
 // ExtendTrialPayload is the payload type of the admin service extendTrial

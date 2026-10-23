@@ -45,8 +45,11 @@ export function MCPOverviewTab({
   server,
   logsTarget,
   showPluginBanner = true,
+  pluginServer = server,
 }: {
   server: HostedServerRef;
+  /** The identity plugin membership is keyed by, when it differs from `server`. */
+  pluginServer?: HostedServerRef;
   logsTarget?: ParsedTargetFilter | null;
   /** Set false when the page already shows the marketplace banner above this. */
   showPluginBanner?: boolean;
@@ -137,7 +140,7 @@ export function MCPOverviewTab({
     // Container queries, not viewport ones: the side panel narrows this column
     // without narrowing the window, and `lg:`/`xl:` would not notice.
     <Stack gap={6} className="@container mb-4">
-      {showPluginBanner && <PluginStatusBanner server={server} />}
+      {showPluginBanner && <PluginStatusBanner server={pluginServer} />}
       {!isLoading && !isLogsDisabled && (
         <MemberWorkflowCTA
           workflow="mcp_diagnostics"
@@ -262,9 +265,7 @@ export function MCPOverviewTab({
             </div>
           </div>
 
-          {server.kind === "toolset" && (
-            <TopUsersTable toolsetSlug={server.slug} from={from} to={to} />
-          )}
+          <TopUsersTable server={server} from={from} to={to} />
         </>
       )}
     </Stack>

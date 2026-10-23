@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -467,6 +468,10 @@ const issuerGateReasonWorkloadSessionOutOfReach = "workload_session_out_of_reach
 // unusable — bad signature, expired, revoked, wrong audience, or its principal
 // is no longer admitted.
 const issuerGateReasonInvalidBearerToken = "invalid_bearer_token"
+
+// issuerGateReasonOrganizationMismatch: an organization that enforces upstream
+// auth refused a caller authenticated to another organization.
+const issuerGateReasonOrganizationMismatch = "organization_mismatch"
 
 // userSessionLastUsedCutoff coalesces the last_used_at stamp: a session records
 // at most one write per window regardless of request volume. Every other
@@ -1146,6 +1151,10 @@ func (s *Service) authenticateIssuerGate(
 		}
 		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, message)
 	}
+	if err := s.refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
+		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
+		return ctx, nil, nil, err
+	}
 
 	return newCtx, &issuerGateAuthentication{
 		endpoint:             endpoint,
@@ -1309,8 +1318,12 @@ func oauthAuthorityError(err error) *oops.ShareableError {
 	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 		return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable")
 	}
-	return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server")
+	return oops.E(oops.CodeBadRequest, err, "authn challenge state does not match this MCP server")
 }
+
+// errUserSessionIssuerRetired identifies a resolved endpoint whose issuer is
+// no longer live, independently of an unknown endpoint or an unserved host.
+var errUserSessionIssuerRetired = errors.New("user session issuer is no longer live")
 
 // RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id
 // FK still resolves to a live row, and stamps the issuer configuration the
@@ -1338,7 +1351,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+			return oops.E(oops.CodeNotFound, fmt.Errorf("%w: %w", errUserSessionIssuerRetired, err), "user_session_issuer not found")
 		}
 		return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").LogError(ctx, s.logger)
 	}
@@ -1409,4 +1422,13 @@ func generateOpaqueToken() (string, error) {
 		return "", fmt.Errorf("read random bytes: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// consentChallengeCacheError distinguishes expired consent state from a
+// dependency outage and logs each with its corresponding severity.
+func consentChallengeCacheError(ctx context.Context, logger *slog.Logger, err error) *oops.ShareableError {
+	if errors.Is(err, redisCache.ErrCacheMiss) {
+		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+	}
+	return oops.E(oops.CodeUnavailable, err, "authn challenge state is temporarily unavailable").LogError(ctx, logger)
 }

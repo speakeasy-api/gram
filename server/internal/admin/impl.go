@@ -505,6 +505,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListUpstreamOAuthMigrationOrganizations = service.preauthorizeAdmin(server.ListUpstreamOAuthMigrationOrganizations)
 	server.GetUpstreamOAuthMigrationStatus = service.preauthorizeAdmin(server.GetUpstreamOAuthMigrationStatus)
 	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
+	server.EnableUpstreamAuthEnforcement = service.strictAdminJSON(server.EnableUpstreamAuthEnforcement, func() any { return new(adminserver.EnableUpstreamAuthEnforcementRequestBody) })
+	server.DisableUpstreamAuthEnforcement = service.strictAdminJSON(server.DisableUpstreamAuthEnforcement, func() any { return new(adminserver.DisableUpstreamAuthEnforcementRequestBody) })
 	adminserver.Mount(mux, server)
 
 }
@@ -1610,6 +1612,9 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	if err := authz.SeedSystemRoleGrantsTx(ctx, tx, org.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision organization access defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
+	}
+	if err := authz.SeedPersonalAuthClientDefaultTx(ctx, tx, org.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision auth client defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {

@@ -73,7 +73,7 @@ func (s *Service) sharedAuthorizationServerRoutes() []sharedAuthorizationServerR
 // routes on mux.
 func attachSharedAuthorizationServers(mux goahttp.Muxer, service *Service) {
 	for _, route := range service.sharedAuthorizationServerRoutes() {
-		o11y.AttachHandler(mux, route.method, route.path, oops.ErrHandle(service.logger, route.handler).ServeHTTP)
+		o11y.AttachHandler(mux, route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, route.handler).ServeHTTP)
 	}
 }
 
@@ -135,7 +135,7 @@ func (s *Service) HandleSharedRevoke(w http.ResponseWriter, r *http.Request) err
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
 	if err != nil {
-		return err
+		return tokenEndpointResolutionError(err)
 	}
 	urls, err := issuer.authorizationServer.urls()
 	if err != nil {
@@ -168,9 +168,8 @@ func (s *Service) HandleSharedAuthorize(w http.ResponseWriter, r *http.Request) 
 
 // rejectSharedAuthorizeResource answers an authorization request whose
 // resource indicator was refused with invalid_target (RFC 8707 §2). It is
-// redirected to the client only when the client and its redirect_uri check out
-// against the issuer's registrations, the same condition the per-endpoint
-// authorization endpoint redirects under; otherwise it is rendered inline.
+// Eligible callbacks must match the issuer's registrations; automatic redirects
+// additionally require a loopback destination before authentication.
 func (s *Service) rejectSharedAuthorizeResource(w http.ResponseWriter, r *http.Request, issuer *sharedIssuer, rejection sharedResourceRejection) error {
 	ctx := r.Context()
 	logger := issuer.logger
@@ -196,8 +195,10 @@ func (s *Service) rejectSharedAuthorizeResource(w http.ResponseWriter, r *http.R
 	if !redirectURIMatches(&client, req.RedirectURI) {
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, description)
 	}
-	return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer.authorizationServer.issuer, req.RedirectURI, req.State, string(rejection),
-		&oauthwire.Error{Code: oautherr.CodeInvalidTarget, Description: description})
+	// The rejected resource names no server this issuer will identify, so the
+	// page names only the client.
+	return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer.authorizationServer.issuer, req.RedirectURI, req.State, string(rejection),
+		authorizationErrorPage(&client, req.ClientID, ""), &oauthwire.Error{Code: oautherr.CodeInvalidTarget, Description: description})
 }
 
 // sharedResourceDescription is the error_description for a refused resource
@@ -286,10 +287,10 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 	}
 	challenge, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, issuer.logger)
+		return nil, consentChallengeCacheError(ctx, issuer.logger, err)
 	}
 	if challenge.UserSessionIssuerID != issuer.authorizationServer.issuerID || !challenge.Endpoint.SharedAuthorizationServer {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this authorization server").LogError(ctx, issuer.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "authn challenge state does not match this authorization server").LogWarn(ctx, issuer.logger)
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challenge.Endpoint)
 	if errors.Is(err, errToolsetEndpointMismatch) {
@@ -309,7 +310,7 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
 	if err != nil {
-		return err
+		return tokenEndpointResolutionError(err)
 	}
 	logger := issuer.logger
 
@@ -318,8 +319,16 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "failed to parse form")
 	}
 
+	if code := oauthwire.ClientAuthenticationError(r); code == oautherr.CodeInvalidRequest {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", "", "", r.PostForm.Get(oauthwire.ParamGrantType), code)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "invalid client authentication request")
+	}
+
 	var endpoint *ResolvedMcpEndpoint
 	grantType := r.PostForm.Get(oauthwire.ParamGrantType)
+	if grantType == "" {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
+	}
 	switch grantType {
 	case oauthwire.GrantTypeAuthorizationCode:
 		endpoint, err = s.sharedAuthorizationCodeEndpoint(ctx, w, logger, issuer.authorizationServer.issuerID, r.PostForm.Get(oauthwire.ParamCode))

@@ -79,7 +79,7 @@ func ApplyPlatformCleanup(ctx context.Context, tx pgx.Tx, org string, projectID 
 		if err != nil {
 			return nil, fmt.Errorf("remove platform cleanup membership: %w", err)
 		}
-		if err := auditChange(ctx, tx, org, projectID, row.PluginID, memberRow(removed), false); err != nil {
+		if err := auditChange(ctx, tx, org, projectID, row.PluginID, removed, false); err != nil {
 			return nil, err
 		}
 		removedPlugins = append(removedPlugins, row.PluginID)

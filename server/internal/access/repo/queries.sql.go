@@ -265,6 +265,34 @@ func (q *Queries) DeletePrincipalGrantsByTarget(ctx context.Context, arg DeleteP
 	return result.RowsAffected(), nil
 }
 
+const deletePrincipalWildcardGrants = `-- name: DeletePrincipalWildcardGrants :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND COALESCE(selectors->>'resource_id', '*') = '*'
+  AND (selectors - 'resource_kind' - 'resource_id') = '{}'::jsonb
+`
+
+type DeletePrincipalWildcardGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+}
+
+// Removes a principal's unrestricted rows for one scope: a selector naming at
+// most a resource kind and the wildcard resource ID. Older writers stored the
+// kind as "*" or under another name, or left out resource_id (which the grant
+// matcher reads as "*"), so matching on the kind the scope implies today would
+// leave those rows granting access after an administrator removed them.
+func (q *Queries) DeletePrincipalWildcardGrants(ctx context.Context, arg DeletePrincipalWildcardGrantsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalWildcardGrants, arg.OrganizationID, arg.PrincipalUrn, arg.Scope)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const findMCPResourceProject = `-- name: FindMCPResourceProject :one
 SELECT project_id FROM (
   SELECT toolsets.project_id AS project_id
@@ -310,6 +338,65 @@ func (q *Queries) FindMCPResourceProject(ctx context.Context, arg FindMCPResourc
 	var project_id uuid.UUID
 	err := row.Scan(&project_id)
 	return project_id, err
+}
+
+const findMCPResourceProjects = `-- name: FindMCPResourceProjects :many
+SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (
+  SELECT toolsets.id AS resource_id, toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = $1
+    AND toolsets.id = ANY($2::uuid[])
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.id AS resource_id, mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = ANY($2::uuid[])
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.id AS resource_id, meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND meta_mcp_servers.id = ANY($2::uuid[])
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+`
+
+type FindMCPResourceProjectsParams struct {
+	OrganizationID string
+	ResourceIds    []uuid.UUID
+}
+
+type FindMCPResourceProjectsRow struct {
+	ResourceID uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// FindMCPResourceProject for many resources at once; unknown ids are absent.
+func (q *Queries) FindMCPResourceProjects(ctx context.Context, arg FindMCPResourceProjectsParams) ([]FindMCPResourceProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findMCPResourceProjects, arg.OrganizationID, arg.ResourceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindMCPResourceProjectsRow
+	for rows.Next() {
+		var i FindMCPResourceProjectsRow
+		if err := rows.Scan(&i.ResourceID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const findMCPResourceVisibility = `-- name: FindMCPResourceVisibility :one
@@ -784,10 +871,19 @@ func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganiza
 }
 
 const getPrincipalGrants = `-- name: GetPrincipalGrants :many
-SELECT principal_urn, scope, selectors
-FROM principal_grants
-WHERE organization_id = $1
-  AND principal_urn = ANY($2::text[])
+SELECT g.principal_urn, g.scope, g.selectors,
+  EXISTS (
+    SELECT 1
+    FROM auth_permission_provisions p
+    WHERE p.organization_id = g.organization_id
+      AND p.principal_urn = g.principal_urn
+      AND p.scope = g.scope
+      AND p.selectors = g.selectors
+      AND p.taken_over_at IS NULL
+  )::boolean AS inferred
+FROM principal_grants g
+WHERE g.organization_id = $1
+  AND g.principal_urn = ANY($2::text[])
 `
 
 type GetPrincipalGrantsParams struct {
@@ -799,10 +895,13 @@ type GetPrincipalGrantsRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
 	Selectors    []byte
+	Inferred     bool
 }
 
 // Returns all grant rows matching a set of principal URNs within an org.
 // Used by the access resolver to load grants for a user+role in a single query.
+// inferred marks a grant the default auth permission backfill wrote that no
+// explicit write has taken over, so it never outranks an inherited block.
 func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrantsParams) ([]GetPrincipalGrantsRow, error) {
 	rows, err := q.db.Query(ctx, getPrincipalGrants, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -812,7 +911,12 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	var items []GetPrincipalGrantsRow
 	for rows.Next() {
 		var i GetPrincipalGrantsRow
-		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.Inferred,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3275,6 +3379,17 @@ func (q *Queries) LockAgentRoleAssignments(ctx context.Context, arg LockAgentRol
 	return err
 }
 
+const lockAuthPermissionBackfill = `-- name: LockAuthPermissionBackfill :exec
+SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
+`
+
+// Takes the organization's auth client backfill lock for the transaction's
+// life; the key must match authclientbackfill's LockOrganizationBackfill.
+func (q *Queries) LockAuthPermissionBackfill(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockAuthPermissionBackfill, organizationID)
+	return err
+}
+
 const lockChallengeResolutions = `-- name: LockChallengeResolutions :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
   jsonb_build_array('access.challenge-resolution', $1::text)::text, 0
@@ -3424,6 +3539,36 @@ func (q *Queries) LockResourceAudience(ctx context.Context, arg LockResourceAudi
 	return err
 }
 
+const markAuthPermissionTakenOver = `-- name: MarkAuthPermissionTakenOver :exec
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+  AND taken_over_at IS NULL
+`
+
+type MarkAuthPermissionTakenOverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+}
+
+// An explicit grant write takes the grant over from the default auth
+// permission backfill: a rollback leaves it, and a rerun still never writes it
+// again. Run after the write, so a grant provisioned meanwhile is seen.
+func (q *Queries) MarkAuthPermissionTakenOver(ctx context.Context, arg MarkAuthPermissionTakenOverParams) error {
+	_, err := q.db.Exec(ctx, markAuthPermissionTakenOver,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	return err
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,
@@ -3499,6 +3644,82 @@ func (q *Queries) MarkOrganizationRoleDeletedLocally(ctx context.Context, arg Ma
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const markPrincipalAuthPermissionsTakenOver = `-- name: MarkPrincipalAuthPermissionsTakenOver :exec
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND taken_over_at IS NULL
+`
+
+type MarkPrincipalAuthPermissionsTakenOverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// An explicit write of a principal's whole policy takes every grant the
+// backfill provisioned for it over, including ones since removed.
+func (q *Queries) MarkPrincipalAuthPermissionsTakenOver(ctx context.Context, arg MarkPrincipalAuthPermissionsTakenOverParams) error {
+	_, err := q.db.Exec(ctx, markPrincipalAuthPermissionsTakenOver, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
+const recordAuthPermissionDefault = `-- name: RecordAuthPermissionDefault :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+type RecordAuthPermissionDefaultParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records a default grant written at organization creation.
+func (q *Queries) RecordAuthPermissionDefault(ctx context.Context, arg RecordAuthPermissionDefaultParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionDefault,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
+}
+
+const recordAuthPermissionPolicyTakeover = `-- name: RecordAuthPermissionPolicyTakeover :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind, taken_over_at)
+VALUES ($1, $2, $3, $4, $5, clock_timestamp())
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO UPDATE
+SET taken_over_at = COALESCE(auth_permission_provisions.taken_over_at, EXCLUDED.taken_over_at),
+    updated_at = clock_timestamp()
+`
+
+type RecordAuthPermissionPolicyTakeoverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records that an explicit write owns the principal's policy even when it
+// leaves no grant to mark, so the backfill never treats the principal as
+// untouched.
+func (q *Queries) RecordAuthPermissionPolicyTakeover(ctx context.Context, arg RecordAuthPermissionPolicyTakeoverParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionPolicyTakeover,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
 }
 
 const repairOrganizationRoleAssignmentUserLink = `-- name: RepairOrganizationRoleAssignmentUserLink :execrows

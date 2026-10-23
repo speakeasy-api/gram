@@ -44,6 +44,49 @@ func (q *Queries) CheckMCPSlugAvailability(ctx context.Context, mcpSlug pgtype.T
 	return column_1, err
 }
 
+const clearToolsetCustomDomain = `-- name: ClearToolsetCustomDomain :one
+UPDATE toolsets
+SET
+    custom_domain_id = NULL
+  , updated_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+`
+
+type ClearToolsetCustomDomainParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// UpdateToolset COALESCEs custom_domain_id, so moving to the platform domain clears it here.
+func (q *Queries) ClearToolsetCustomDomain(ctx context.Context, arg ClearToolsetCustomDomainParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, clearToolsetCustomDomain, arg.ID, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const clearToolsetOAuthServers = `-- name: ClearToolsetOAuthServers :one
 UPDATE toolsets
 SET

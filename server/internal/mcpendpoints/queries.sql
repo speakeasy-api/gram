@@ -319,7 +319,8 @@ RETURNING *;
 
 -- name: ListAddressableMCPEndpointsByMCPServerIDs :many
 -- Custom-domain endpoints count only on a verified, activated domain, the
--- same gate the custom-domain middleware applies before serving.
+-- same gate the custom-domain middleware applies before serving. Mirrored in
+-- assistants LoadAssistantMcpServers and ResolveMcpServersForWrite.
 SELECT sqlc.embed(e), cd.domain AS custom_domain
 FROM mcp_endpoints e
 JOIN projects p
