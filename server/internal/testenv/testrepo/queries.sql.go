@@ -6575,7 +6575,7 @@ const setToolsetMCPPublicBySlug = `-- name: SetToolsetMCPPublicBySlug :exec
 WITH toolset AS (
     UPDATE toolsets
     SET mcp_is_public = $1
-    WHERE toolsets.mcp_slug = $2
+    WHERE toolsets.mcp_slug = $2 AND toolsets.project_id = $3
     RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
 )
 UPDATE mcp_servers
@@ -6587,10 +6587,11 @@ WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mc
 type SetToolsetMCPPublicBySlugParams struct {
 	McpIsPublic bool
 	McpSlug     pgtype.Text
+	ProjectID   uuid.UUID
 }
 
 func (q *Queries) SetToolsetMCPPublicBySlug(ctx context.Context, arg SetToolsetMCPPublicBySlugParams) error {
-	_, err := q.db.Exec(ctx, setToolsetMCPPublicBySlug, arg.McpIsPublic, arg.McpSlug)
+	_, err := q.db.Exec(ctx, setToolsetMCPPublicBySlug, arg.McpIsPublic, arg.McpSlug, arg.ProjectID)
 	return err
 }
 

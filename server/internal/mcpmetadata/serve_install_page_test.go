@@ -1256,6 +1256,7 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicBySlug(ctx, testrepo.SetToolsetMCPPublicBySlugParams{
 		McpIsPublic: true,
 		McpSlug:     pgtype.Text{String: mcpSlug, Valid: true},
+		ProjectID:   *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
 

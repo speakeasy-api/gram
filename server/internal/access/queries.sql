@@ -1171,9 +1171,10 @@ SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (
 -- same three-valued visibility mcp_servers stores: 'public' endpoints skip the
 -- connect check, 'private' ones enforce it, and 'disabled' ones serve nobody.
 -- A gateway toolset is public when its MCP endpoint is, and serves nobody
--- while its MCP endpoint is switched off. A hosted wrapper can share its
--- toolset's id; when either row serves nobody, nobody can connect, so
--- 'disabled' wins, and otherwise the wrapper's own visibility does. A gateway
+-- while its MCP endpoint is switched off. A hosted toolset reads its
+-- canonical wrapper's visibility, or 'disabled' while the two rows disagree,
+-- as serving denies them; the wrapper row itself reports the same id, and
+-- 'disabled' wins between them. A gateway
 -- (meta server) is reported as such: it has no connect check of its own, each
 -- member server is checked instead. Resources are found by the same
 -- identifiers and tenancy rules as FindMCPResourceProject.
@@ -1181,7 +1182,12 @@ SELECT resource_type, visibility FROM (
   SELECT
     'toolset'::text AS resource_type,
     (CASE
-      WHEN cw.id IS NOT NULL THEN cw.visibility
+      WHEN cw.id IS NOT NULL AND cw.visibility = (CASE
+        WHEN NOT toolsets.mcp_enabled THEN 'disabled'
+        WHEN toolsets.mcp_is_public THEN 'public'
+        ELSE 'private'
+      END) THEN cw.visibility
+      WHEN cw.id IS NOT NULL THEN 'disabled'
       WHEN NOT toolsets.mcp_enabled THEN 'disabled'
       WHEN toolsets.mcp_is_public THEN 'public'
       ELSE 'private'

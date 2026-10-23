@@ -44,7 +44,8 @@ func InSync(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) boo
 }
 
 // LoadServerState loads toolset's canonical wrapper and applies WithServerState; wrapper is nil when there is none.
-// A server that kept the toolset's id but no longer serves it leaves the toolset disabled.
+// A server that kept the toolset's id but no longer serves it leaves the toolset disabled, and a drifted pair
+// (see InSync) reads as disabled and private, as serving denies it.
 func LoadServerState(ctx context.Context, db mcpserversrepo.DBTX, toolset toolsetsrepo.Toolset) (toolsetsrepo.Toolset, *mcpserversrepo.McpServer, error) {
 	wrapper, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	switch {
@@ -56,6 +57,10 @@ func LoadServerState(ctx context.Context, db mcpserversrepo.DBTX, toolset toolse
 	if !IsCanonical(&wrapper, toolset.ID) {
 		toolset.McpEnabled = false
 		return toolset, nil, nil
+	}
+	if !InSync(toolset, &wrapper) {
+		toolset.McpEnabled, toolset.McpIsPublic = false, false
+		return toolset, &wrapper, nil
 	}
 	return WithServerState(toolset, &wrapper), &wrapper, nil
 }

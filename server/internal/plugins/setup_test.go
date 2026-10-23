@@ -359,10 +359,6 @@ func setTestToolsetMCPPublic(ctx context.Context, conn *pgxpool.Pool, params tes
 	if err := testrepo.New(conn).SetToolsetMCPPublicByID(ctx, params); err != nil {
 		return fmt.Errorf("set toolset mcp public: %w", err)
 	}
-	//nolint:glint // notestingrawsql: mirrors hostedmcp.Sync without its audit and address checks.
-	if _, err := conn.Exec(ctx, `UPDATE mcp_servers SET visibility = CASE WHEN $1 THEN 'public' ELSE 'private' END WHERE id = $2 AND toolset_id = $2 AND visibility <> 'disabled'`, params.McpIsPublic, params.ID); err != nil {
-		return fmt.Errorf("sync canonical server visibility: %w", err)
-	}
 	return nil
 }
 
