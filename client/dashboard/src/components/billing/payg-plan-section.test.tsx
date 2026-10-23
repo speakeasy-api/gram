@@ -48,7 +48,8 @@ vi.mock("@/hooks/useProductTier", () => ({
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (scope: Scope) => mocks.hasAnyScope([scope]) as boolean,
+    hasScope: (scope: Scope) =>
+      scope === "org:read" || (mocks.hasAnyScope([scope]) as boolean),
     hasAnyScope: (scopes: Scope[]) => mocks.hasAnyScope(scopes) as boolean,
     hasAllScopes: (scopes: Scope[]) => mocks.hasAnyScope(scopes) as boolean,
     isLoading: false,
@@ -608,20 +609,20 @@ describe("PaygPlanSection", () => {
       expect(mocks.refetch).not.toHaveBeenCalled();
     });
 
-    it("shows a member the inactive state without setup instructions", () => {
+    it("hides unavailable billing setup from a member", () => {
       mocks.hasAnyScope.mockReturnValue(false);
       render(<PaygPlanSection />);
 
-      expect(screen.getByText(/no active billing subscription/i)).toBeTruthy();
+      expect(heading()).toBeNull();
       expect(screen.queryByText(/finish setting up billing/i)).toBeNull();
       expect(checkoutCta()).toBeNull();
     });
 
-    it("shows the inactive state when self-serve billing is disabled", () => {
+    it("hides unavailable billing setup when self-serve billing is disabled", () => {
       mocks.flagResult.mockReturnValue({ status: "disabled" });
       render(<PaygPlanSection />);
 
-      expect(screen.getByText(/no active billing subscription/i)).toBeTruthy();
+      expect(heading()).toBeNull();
       expect(screen.queryByText(/finish setting up billing/i)).toBeNull();
       expect(checkoutCta()).toBeNull();
     });
@@ -695,11 +696,23 @@ describe("PaygPlanSection", () => {
     beforeEach(() => {
       mocks.session.mockReturnValue({
         activeOrganizationId: "org-1",
+        rawGramAccountType: "payg",
         trial: {
           startedAt: new Date(Date.now() - 2 * DAY),
           endsAt: new Date(Date.now() + 12 * DAY),
         },
       });
+      queryState({ isError: true, error: notFound() });
+    });
+
+    it.each([
+      { isFetching: true },
+      { isError: true, error: new Error("unavailable") },
+    ])("withholds trial setup until absence is confirmed: %j", (state) => {
+      queryState(state);
+      render(<PaygPlanSection />);
+      expect(checkoutCta()).toBeNull();
+      expect(portalButton()).toBeNull();
     });
 
     it("preserves enterprise trials even with their subscription flag", () => {
@@ -726,12 +739,14 @@ describe("PaygPlanSection", () => {
       );
     });
 
-    it("offers the checkout CTA and asks Stripe for nothing", () => {
+    it("offers checkout only after confirming absence in Stripe", () => {
       render(<PaygPlanSection />);
 
       expect(heading()).not.toBeNull();
       expect(checkoutCta()).not.toBeNull();
-      expect(mocks.query).not.toHaveBeenCalled();
+      expect(mocks.query.mock.calls.at(-1)?.[2]).toMatchObject({
+        enabled: true,
+      });
     });
 
     // The description reflects the payment state: an invitation to attach a
@@ -756,7 +771,9 @@ describe("PaygPlanSection", () => {
       const { container } = render(<PaygPlanSection />);
 
       expect(container.innerHTML).toBe("");
-      expect(mocks.query).not.toHaveBeenCalled();
+      expect(mocks.query.mock.calls.at(-1)?.[2]).toMatchObject({
+        enabled: false,
+      });
     });
 
     it("never renders the no-subscription copy beside the CTA", () => {
@@ -778,7 +795,9 @@ describe("PaygPlanSection", () => {
       const { container } = render(<PaygPlanSection />);
 
       expect(container.innerHTML).toBe("");
-      expect(mocks.query).not.toHaveBeenCalled();
+      expect(mocks.query.mock.calls.at(-1)?.[2]).toMatchObject({
+        enabled: false,
+      });
     });
 
     // Once the trial is over the subscription view takes over from the CTA,
@@ -786,12 +805,14 @@ describe("PaygPlanSection", () => {
     it("takes over once the trial has ended", () => {
       mocks.session.mockReturnValue({
         activeOrganizationId: "org-1",
+        rawGramAccountType: "payg",
         trial: {
           startedAt: new Date(Date.now() - 20 * DAY),
           endsAt: new Date(Date.now() - 6 * DAY),
         },
       });
 
+      queryState({ data: subscription() });
       render(<PaygPlanSection />);
 
       expect(heading()).not.toBeNull();
@@ -799,6 +820,28 @@ describe("PaygPlanSection", () => {
       expect(screen.getByText("Pay as you go")).toBeTruthy();
     });
   });
+
+  it.each<StripeSubscription["status"]>([
+    "active",
+    "trialing",
+    "past_due",
+    "incomplete",
+  ])(
+    "suppresses trial setup when Stripe already has a %s subscription",
+    (status) => {
+      mocks.session.mockReturnValue({
+        ...mocks.session(),
+        trial: {
+          startedAt: new Date(Date.now() - 2 * DAY),
+          endsAt: new Date(Date.now() + 12 * DAY),
+        },
+      });
+      queryState({ data: subscription({ status }) });
+      render(<PaygPlanSection />);
+      expect(checkoutCta()).toBeNull();
+      expect(portalButton()).not.toBeNull();
+    },
+  );
 
   describe("unsubscribed Free/Base organizations", () => {
     beforeEach(() => {
@@ -866,7 +909,7 @@ describe("PaygPlanSection", () => {
       expect(checkoutCta()).toBeNull();
     });
 
-    it.each(["pro", "payg", "enterprise"])(
+    it.each(["pro", "enterprise"])(
       "does not offer the new prompt for raw tier %s",
       (tier) => {
         mocks.session.mockReturnValue({
@@ -875,7 +918,9 @@ describe("PaygPlanSection", () => {
         });
         render(<PaygPlanSection />);
         expect(checkoutCta()).toBeNull();
-        expect(mocks.query).not.toHaveBeenCalled();
+        expect(mocks.query.mock.calls.at(-1)?.[2]).toMatchObject({
+          enabled: false,
+        });
       },
     );
 
@@ -899,11 +944,18 @@ describe("PaygPlanSection", () => {
     "renders nothing on the %s view",
     (tier) => {
       mocks.productTier.mockReturnValue(tier);
+      mocks.session.mockReturnValue({
+        ...mocks.session(),
+        rawGramAccountType: tier,
+        hasActiveSubscription: true,
+      });
 
       const { container } = render(<PaygPlanSection />);
 
       expect(container.innerHTML).toBe("");
-      expect(mocks.query).not.toHaveBeenCalled();
+      expect(mocks.query.mock.calls.at(-1)?.[2]).toMatchObject({
+        enabled: false,
+      });
     },
   );
 });

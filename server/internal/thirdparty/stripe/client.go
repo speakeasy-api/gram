@@ -242,7 +242,7 @@ type CreateCheckoutSessionInput struct {
 	// EmbeddedBrandingDarkV1 applies the immutable dark preset, not the current UI tokens.
 	EmbeddedBrandingDarkV1 bool
 
-	// EmbeddedFormPrototype selects the uncommitted form feasibility preview.
+	// EmbeddedFormPrototype selects the adopted custom form checkout UI.
 	EmbeddedFormPrototype bool
 
 	// TrialEnd is the UTC-aligned financial trial end. Speakeasy retains the exact

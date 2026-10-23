@@ -1,8 +1,6 @@
-import { usePaymentMethodVisibility } from "@/components/billing/use-payment-method-visibility";
+import { useBillingState } from "./use-billing-state";
 import type { ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router";
-import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
-import { isNotFoundError } from "@/lib/route-errors";
+import { useNavigate } from "react-router";
 import { useSession } from "@/contexts/Auth";
 import {
   PageTabsList,
@@ -20,20 +18,12 @@ export function BillingTabs({
 }): JSX.Element {
   const { organization } = useSession();
   const navigate = useNavigate();
-  const showPaymentMethod = usePaymentMethodVisibility();
-  const location = useLocation();
-  const subscription = useStripeSubscription({
-    enabled: showPaymentMethod && value === "overview",
-  });
-  // Detail routes own their headings; overview follows the shared subscription read.
-  // A confirmed 404 outranks stale subscription data, just as on the billing page.
-  const managesPayment =
-    value === "overview"
-      ? !!subscription.data && !isNotFoundError(subscription.error)
-      : location.pathname.endsWith("/payment-method");
+  const billing = useBillingState();
+  const managesPayment = billing.status === "manage";
   const paymentPath = managesPayment ? "/payment-method" : "/setup";
   const paymentLabel = managesPayment ? "Payment method" : "Billing setup";
-  if (!showPaymentMethod) return <>{children}</>;
+  if (!managesPayment && billing.status !== "needs-setup")
+    return <>{children}</>;
   return (
     <Tabs
       value={value}

@@ -1,5 +1,5 @@
 import { useGetStripeCheckoutStatus } from "@gram/client/react-query/getStripeCheckoutStatus.js";
-import { usePaymentMethodVisibility } from "@/components/billing/use-payment-method-visibility";
+import { useBillingState } from "@/components/billing/use-billing-state";
 import { BillingTabs } from "@/components/billing/billing-tabs";
 import { PaygCheckoutSkeleton } from "@/components/billing/payg-checkout-skeleton";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -9,9 +9,7 @@ import { PaygCheckoutMount } from "@/components/billing/payg-checkout-mount";
 import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { PaygPlanSection } from "@/components/billing/payg-plan-section";
 import { BillingEmailSection } from "@/components/billing/billing-email-section";
-import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
 import { useStartPaygCheckout } from "@/components/billing/use-start-payg-checkout";
-import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
 import { SettingsPage } from "@/components/page-templates";
 import { Alert } from "@/components/ui/Alert";
 import { Stack } from "@/components/ui/Stack";
@@ -46,8 +44,10 @@ function BillingPage({
 export function BillingPaymentMethod(): JSX.Element {
   const { activeOrganizationId, organization } = useSession();
   const location = useLocation();
-  const showPaymentMethod = usePaymentMethodVisibility();
-  if (!showPaymentMethod)
+  const billing = useBillingState();
+  if (billing.status === "needs-setup")
+    return <Navigate to={`/${organization.slug}/billing/setup`} replace />;
+  if (billing.status === "unavailable")
     return <Navigate to={`/${organization.slug}/billing`} replace />;
   return (
     <BillingPage
@@ -64,7 +64,7 @@ export function BillingPaymentMethod(): JSX.Element {
       <div className="grid gap-8 pb-6 lg:grid-cols-2 lg:items-start lg:gap-10">
         <PaygPriceList />
         <div className="w-full max-w-lg lg:justify-self-end">
-          <PaygPlanSection paymentDetails />
+          <PaygPlanSection />
         </div>
       </div>
       <BillingEmailSection />
@@ -83,22 +83,8 @@ export function BillingSetup(): JSX.Element {
 }
 
 function BillingSetupInner() {
-  const {
-    activeOrganizationId,
-    organization,
-    rawGramAccountType,
-    whitelisted,
-    refetch,
-  } = useSession();
-  const { eligible, trialLifecycle } = usePaygCheckoutAccess(
-    !whitelisted
-      ? "gated"
-      : rawGramAccountType === "payg"
-        ? "unsubscribed-payg"
-        : rawGramAccountType === "free" || rawGramAccountType === "base"
-          ? "unsubscribed-base"
-          : "active-trial",
-  );
+  const { activeOrganizationId, organization, whitelisted, refetch } =
+    useSession();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -108,6 +94,14 @@ function BillingSetupInner() {
     "session_id",
   );
   const [confirming, setConfirming] = useState(returnedSessionId !== null);
+  const billing = useBillingState({ surface: "setup", confirming });
+  const {
+    checkoutEligible: eligible,
+    trialLifecycle,
+    subscription,
+    fresh,
+    checkoutConfirmed: confirmed,
+  } = billing;
   const returnedCheckout = useGetStripeCheckoutStatus(
     { sessionId: returnedSessionId ?? "" },
     undefined,
@@ -127,27 +121,12 @@ function BillingSetupInner() {
       !returnedCheckout.error &&
       returnedCheckout.data?.status === "complete" &&
       returnedCheckout.data.billingReady === true);
-  const subscription = useStripeSubscription({
-    enabled: eligible,
-    refetchOnMount: "always",
-    // The overview may have cached a 404 with no data. That error must be
-    // retried here before the fresh-read guard can permit checkout.
-    retryOnMount: true,
-    retry: false,
-    refetchInterval: confirming ? 2000 : false,
-  });
   const checkout = useStartPaygCheckout(activeOrganizationId);
   const { isPending: checkoutPending, startCheckout } = checkout;
   const started = useRef(false);
   const sessionRefetch = useRef(refetch);
   sessionRefetch.current = refetch;
   const destination = `/${organization.slug}/billing/payment-method`;
-  const fresh = subscription.isFetchedAfterMount && !subscription.isFetching;
-  const confirmed =
-    fresh &&
-    !subscription.error &&
-    (subscription.data?.status === "active" ||
-      subscription.data?.status === "trialing");
 
   useEffect(() => {
     if (
@@ -155,7 +134,7 @@ function BillingSetupInner() {
       confirming ||
       !fresh ||
       checkoutPending ||
-      !isNotFoundError(subscription.error) ||
+      billing.status !== "needs-setup" ||
       started.current
     )
       return;
@@ -167,7 +146,7 @@ function BillingSetupInner() {
     eligible,
     confirming,
     fresh,
-    subscription.error,
+    billing.status,
     checkoutPending,
     startCheckout,
   ]);
@@ -251,7 +230,7 @@ function BillingSetupInner() {
     eligible &&
     !confirming &&
     fresh &&
-    subscription.data &&
+    billing.status === "manage" &&
     !subscription.error
   )
     return <Navigate to={destination} replace />;
