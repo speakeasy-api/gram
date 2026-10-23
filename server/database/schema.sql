@@ -4838,6 +4838,12 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   client_id TEXT NOT NULL,
   client_secret_hash TEXT,
   client_name TEXT NOT NULL,
+  -- Immutable principal credential profile for registered agent clients.
+  -- Human and public OAuth clients leave this profile absent.
+  subject_urn TEXT,
+  authorizer_user_id TEXT,
+  delegated_grants JSONB,
+  delegated_grants_version INTEGER,
   redirect_uris TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
   client_id_issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4921,6 +4927,14 @@ COMMENT ON COLUMN user_session_clients.organization_id IS '@access: confidential
 COMMENT ON COLUMN user_session_clients.user_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN user_session_clients.client_id IS '@access: restricted';
 COMMENT ON COLUMN user_session_clients.client_secret_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN user_session_clients.subject_urn IS 'Canonical agent principal bound by authenticated registration.
+@access: confidential';
+COMMENT ON COLUMN user_session_clients.authorizer_user_id IS 'User authorizing the immutable agent credential profile.
+@access: confidential-pii';
+COMMENT ON COLUMN user_session_clients.delegated_grants IS 'Immutable delegated policy for an agent client.
+@access: opaque-restricted';
+COMMENT ON COLUMN user_session_clients.delegated_grants_version IS 'Delegated policy encoding version.
+@access: confidential';
 COMMENT ON COLUMN user_session_clients.client_name IS '@access: opaque-confidential';
 COMMENT ON COLUMN user_session_clients.redirect_uris IS '@access: opaque-restricted';
 COMMENT ON COLUMN user_session_clients.client_id_issued_at IS '@access: confidential';
