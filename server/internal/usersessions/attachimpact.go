@@ -106,6 +106,15 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantID.String(), projectID.String())); err != nil {
 			return none, err
 		}
+		if hostedmcp.IsCanonical(&server, server.ID) {
+			toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ID, ProjectID: projectID})
+			switch {
+			case err == nil:
+				return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, &server, toolset.CustomDomainID)
+			case !errors.Is(err, pgx.ErrNoRows):
+				return none, oops.E(oops.CodeUnexpected, err, "get toolset").LogError(ctx, logger)
+			}
+		}
 		customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, server.ID)
 		if err != nil {
 			return none, err
@@ -130,13 +139,7 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if wrapper == nil {
 			return attachTarget{issuerID: toolset.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
 		}
-		// The canonical wrapper owns the issuer; the legacy alias answers on its own host beside any live endpoints.
-		customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
-		if err != nil {
-			return none, err
-		}
-		onPlatformHost := !toolset.CustomDomainID.Valid || (len(customDomainIDs) > 0 && anyOnPlatformHost(customDomainIDs))
-		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: onPlatformHost}, nil
+		return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, wrapper, toolset.CustomDomainID)
 	default:
 		id, err := uuid.Parse(*payload.MetaMcpServerID)
 		if err != nil {
@@ -159,6 +162,17 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		}
 		return attachTarget{issuerID: server.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 	}
+}
+
+// canonicalAttachTarget previews a toolset's canonical wrapper, which owns the issuer; the toolset's legacy
+// alias answers on its own host beside any live endpoints.
+func (s *Service) canonicalAttachTarget(ctx context.Context, logger *slog.Logger, organizationID string, projectID uuid.UUID, wrapper *mcpserversrepo.McpServer, aliasDomainID uuid.NullUUID) (attachTarget, error) {
+	customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
+	if err != nil {
+		return attachTarget{issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, onPlatformHost: false}, err
+	}
+	onPlatformHost := !aliasDomainID.Valid || (len(customDomainIDs) > 0 && anyOnPlatformHost(customDomainIDs))
+	return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: onPlatformHost}, nil
 }
 
 // liveEndpointDomains lists the custom domain of each endpoint the server serves on.
