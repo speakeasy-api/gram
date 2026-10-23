@@ -99,7 +99,13 @@ func (e Entry) CheckFrontmatterName() error {
 
 // Digest returns the SEP-2640 digest of the served content, "sha256:<hex>".
 func (e Entry) Digest() string {
-	return digestPrefix + strings.ToLower(e.RawSHA256)
+	return Digest(e.RawSHA256)
+}
+
+// Digest renders a raw SHA-256 hex string in the SEP-2640 "sha256:<hex>" form
+// agents see when they load a skill.
+func Digest(rawSHA256 string) string {
+	return digestPrefix + strings.ToLower(rawSHA256)
 }
 
 // Size returns the byte length of the served content.
