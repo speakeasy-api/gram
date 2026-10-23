@@ -378,7 +378,7 @@ async function reachPlatformSetup() {
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-  fireEvent.click(await screen.findByRole("radio", { name: /Workload/ }));
+  // A preset sits beside the API key, so it is one choice, not two.
   fireEvent.click(await screen.findByRole("radio", { name: /Claude Tag/ }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   // The platform's own steps are steps of this wizard, so its first one is
@@ -446,8 +446,12 @@ describe("Federating a platform's own tokens", () => {
       expect(mocks.registerIssuer).not.toHaveBeenCalled();
       expect(mocks.admitSubject).not.toHaveBeenCalled();
 
-      // The independent custom flow remains an available recovery path.
-      fireEvent.click(screen.getByRole("radio", { name: /Anything else/ }));
+      // The independent custom flow remains an available recovery path,
+      // under the advanced options.
+      fireEvent.click(screen.getByText(/^Advanced:/));
+      fireEvent.click(
+        screen.getByRole("radio", { name: /Custom OIDC issuer/ }),
+      );
       expect(
         screen
           .getByRole("button", { name: "Continue" })
@@ -461,11 +465,17 @@ describe("Federating a platform's own tokens", () => {
     mocks.platforms.mockReturnValue([platform]);
     await reachCredentialStep();
 
-    // The choice is on screen but cannot be taken, so the platforms behind it
-    // are never offered either.
-    const workload = screen.getByRole("radio", { name: /Workload/ });
-    expect(workload.getAttribute("data-disabled")).not.toBeNull();
-    expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
+    // The presets and the custom issuer stay on screen, so the reader learns
+    // they exist, but none of them can be taken.
+    const preset = await screen.findByRole("radio", { name: /Claude Tag/ });
+    expect(preset.getAttribute("data-disabled")).not.toBeNull();
+    const custom = screen.getByRole("radio", { name: /Custom OIDC issuer/ });
+    expect(custom.getAttribute("data-disabled")).not.toBeNull();
+    const apiKey = screen.getByRole("radio", { name: /API key/ });
+    expect(apiKey.getAttribute("data-disabled")).toBeNull();
+    expect(
+      screen.getByText(/need permission to manage workload identities/),
+    ).toBeTruthy();
   });
 
   it("creates the agent, trusts the platform and admits the subject to it", async () => {
