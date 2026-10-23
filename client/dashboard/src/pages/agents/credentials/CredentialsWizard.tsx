@@ -380,9 +380,11 @@ export function CredentialsWizard({
       : scopedProjectID === undefined || server.projectId === scopedProjectID,
   );
   // The creator becomes the new agent's owner, and an agent uses only its
-  // owner's connections, so these are the creator's own. Editing changes
-  // reach, not credentials: the agent's page attaches accounts there.
-  const connections = useOwnerConnections(listedServers, !editing);
+  // owner's connections, so these are the creator's own. Only a new agent is
+  // set up this way: an existing one may belong to someone else, and its own
+  // page attaches accounts for the keys it issues.
+  const offersConnections = !editing && !existing;
+  const connections = useOwnerConnections(listedServers, offersConnections);
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
@@ -743,9 +745,9 @@ export function CredentialsWizard({
       // A server that signs in as a person is reached through the owner's own
       // connection, attached before the key is cut so the key works from its
       // first call. Attaching again on a retry keeps what is already there.
-      // Editing never attaches: it offers no connection to choose, and the
-      // agent's page connects accounts for the keys it issues.
-      if (!editing) {
+      // An existing agent is never attached to here: it offers no connection
+      // to choose, and the agent's page connects accounts for its keys.
+      if (offersConnections) {
         try {
           await attachOwnerConnections(
             sdk,
@@ -982,7 +984,7 @@ export function CredentialsWizard({
                 setHighlight(next ? "server:all" : null);
               }}
               selected={selected}
-              connections={editing ? undefined : connections}
+              connections={offersConnections ? connections : undefined}
               onChange={(next) => {
                 setSelected(next);
                 // The one just added, or the last one left when removing.

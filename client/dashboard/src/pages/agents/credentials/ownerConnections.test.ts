@@ -198,6 +198,30 @@ describe("attachOwnerConnections", () => {
     );
   });
 
+  it("replaces an attachment whose connection has ended", async () => {
+    const { fake, attachBinding, detachBinding } = api({
+      clients: [client("client_one")],
+      candidates: [session({ id: "session_new" })],
+      bindings: [
+        {
+          id: "binding_ended",
+          remoteSessionClientId: "client_one",
+          remoteSession: session({
+            id: "session_old",
+            accessExpiresAt: new Date(Date.now() - 60_000),
+          }),
+        },
+      ],
+    });
+    await attachOwnerConnections(fake, "agent_new", [server]);
+    expect(detachBinding.mock.calls[0]?.[0]).toMatchObject({
+      detachBindingRequestBody: { id: "binding_ended" },
+    });
+    expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
+      attachBindingRequestBody: { remoteSessionId: "session_new" },
+    });
+  });
+
   it("names the server whose connection is gone instead of attaching nothing", async () => {
     const { fake, attachBinding } = api({
       clients: [client("client_one")],

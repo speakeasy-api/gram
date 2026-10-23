@@ -92,8 +92,9 @@ export interface ConnectionApi {
  * Reads the authoritative candidates for the agent rather than trusting the
  * listing the picker showed, so a connection that changed in between is
  * reported instead of attached. An attachment already serving the agent is
- * kept; one whose connection was replaced or revoked is the owner's own, so it
- * is detached and the current connection attached in its place. Any failure
+ * kept; one whose connection was replaced, revoked or has ended is the
+ * owner's own, so it is detached and the current connection attached in its
+ * place. Any failure
  * throws, naming the server, and nothing after it is attempted.
  */
 export async function attachOwnerConnections(
@@ -129,7 +130,15 @@ export async function attachOwnerConnections(
       const current = bindings.items.filter(
         (binding) => binding.remoteSessionClientId === client.id,
       );
-      if (current.some((binding) => binding.remoteSession !== undefined))
+      // An attachment whose connection has ended serves no call, so it is
+      // replaced like one whose connection was revoked.
+      if (
+        current.some(
+          (binding) =>
+            binding.remoteSession !== undefined &&
+            connectionLifetime(binding.remoteSession).kind !== "ended",
+        )
+      )
         continue;
       const session = candidates.find(
         (candidate) =>

@@ -10,7 +10,7 @@ import {
   lifetimeEndingSoon,
   soonestLifetime,
 } from "@/components/sessions/connection-lifetime";
-import { cn, firstPartyConnectUrl, getServerURL } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
 import { ChevronRight, ExternalLink } from "lucide-react";
@@ -63,8 +63,8 @@ export function PersonServers({
     const refresh = () => {
       if (document.visibilityState === "visible") refetch.current?.();
     };
-    window.addEventListener("visibilitychange", refresh);
-    return () => window.removeEventListener("visibilitychange", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => document.removeEventListener("visibilitychange", refresh);
   }, [watching]);
   if (servers.length === 0) return null;
   const chosen = (id: string) =>
@@ -174,32 +174,29 @@ export function PersonServers({
   );
 }
 
-/** Where to sign in to a server, on the Speakeasy origin. */
-function signInUrl(server: InventoryServer): string | undefined {
-  return server.slug
-    ? firstPartyConnectUrl(`${getServerURL()}/mcp/${server.slug}`)
-    : undefined;
-}
-
+/**
+ * The server's Sessions tab, in a new tab: it builds the server's own connect
+ * link from its endpoints and knows when first-party connect is not offered,
+ * which a row here cannot tell from the inventory alone.
+ */
 function SignInLink({
   server,
   label,
 }: {
   server: InventoryServer;
   label: string;
-}): JSX.Element | null {
-  const href = signInUrl(server);
-  if (!href) return null;
+}): JSX.Element {
+  const routes = useRoutes();
   return (
-    <a
-      href={href}
+    <Link
+      to={routes.mcp.details.sessions.href(mcpServerRouteParam(server))}
       target="_blank"
-      rel="noopener noreferrer"
+      rel="noreferrer"
       className="text-primary inline-flex items-center gap-1 underline underline-offset-4"
     >
       {label}
       <ExternalLink aria-hidden="true" className="size-3" />
-    </a>
+    </Link>
   );
 }
 
@@ -243,14 +240,17 @@ function ConnectionLine({
       return (
         <Text as="span" muted small className={line}>
           You have no connection to it yet.{" "}
-          <SignInLink server={server} label="Sign in to connect" />
+          <SignInLink server={server} label="Connect on its Sessions tab" />
         </Text>
       );
     case "ended":
       return (
         <Text as="span" small warning className={line}>
           Your connection to it has ended.{" "}
-          <SignInLink server={server} label="Sign in again" />
+          <SignInLink
+            server={server}
+            label="Sign in again on its Sessions tab"
+          />
         </Text>
       );
     case "ready":

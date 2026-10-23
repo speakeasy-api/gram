@@ -76,7 +76,9 @@ vi.mock("@/contexts/Sdk", () => ({
       attachBinding: mocks.attach,
     },
     remoteSessionClients: {
-      list: async () => [{ result: { items: await mocks.sessionClients() } }],
+      list: async (request: object) => [
+        { result: { items: await mocks.sessionClients(request) } },
+      ],
     },
   }),
   // The server list links out to a server's settings, and routes read the
@@ -1137,6 +1139,19 @@ describe("Servers that sign in as a person", () => {
         },
       },
     ]);
+    // The issuer's sign-ins are read in the server's own project, before the
+    // agent exists and again while attaching.
+    expect(mocks.sessionClients).toHaveBeenCalledWith({
+      gramProject: "project-one",
+      userSessionIssuerId: "issuer_linear",
+    });
+    expect(
+      mocks.sessionClients.mock.calls.every(
+        ([request]) =>
+          request.gramProject === "project-one" &&
+          request.userSessionIssuerId === "issuer_linear",
+      ),
+    ).toBe(true);
     // Checked again as the new agent's candidates, then attached.
     expect(mocks.sessions).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1171,6 +1186,12 @@ describe("Servers that sign in as a person", () => {
       (screen.getByRole("checkbox", { name: "Linear" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+    // Connecting happens on the server's own page, which knows how.
+    expect(
+      screen
+        .getByRole("link", { name: "Connect on its Sessions tab" })
+        .getAttribute("href"),
+    ).toMatch(/\/mcp\/linear\/sessions$/);
   });
 
   it("names the step that failed when the connection cannot be attached", async () => {
