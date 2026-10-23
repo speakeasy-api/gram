@@ -150,7 +150,7 @@ func newDemoSeedCommand() *cli.Command {
 				}
 				slack.BotToken = token
 				slack.Encryption = encryptionClient
-				slack.Slack = slackapi.NewClient("", guardian.NewDefaultPolicy(otel.GetTracerProvider()).PooledClient())
+				slack.Slack = slackapi.NewClient("", guardian.NewDefaultPolicy(otel.GetTracerProvider()).Client())
 			}
 
 			if err := demoseed.RunLocalFixtures(ctx, logger, db, blob, redisClient, demoseed.LocalFixturesOptions{

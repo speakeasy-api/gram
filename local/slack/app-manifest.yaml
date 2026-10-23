@@ -25,7 +25,8 @@ features:
     always_online: false
 oauth_config:
   # Only the dashboard's "Connect Slack" flow uses this, and it also needs
-  # SLACK_CLIENT_ID and SLACK_CLIENT_SECRET. Use your GRAM_SERVER_URL.
+  # SLACK_CLIENT_ID and SLACK_CLIENT_SECRET. The URL assumes the default
+  # GRAM_SERVER_URL; replace the host and port if yours differs.
   redirect_urls:
     - https://localhost:8080/rpc/slackDirectoryConnections.callback
   scopes:

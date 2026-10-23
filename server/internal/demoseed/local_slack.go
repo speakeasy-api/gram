@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/slackscopes"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 )
 
@@ -103,6 +105,9 @@ func connectLocalSlack(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 		return fmt.Errorf("commit local Slack connection: %w", err)
 	}
 	logger.InfoContext(ctx, "local Slack workspace connected", attr.SlogSlackTeamID(workspace.teamID))
+	if !slices.Contains(workspace.scopes, slackscopes.ChatWrite) {
+		logger.WarnContext(ctx, "local Slack app cannot send approval DMs; add the chat:write scope and reinstall it", attr.SlogSlackTeamID(workspace.teamID))
+	}
 	return nil
 }
 

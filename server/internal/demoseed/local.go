@@ -173,13 +173,10 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 
 	logger.InfoContext(ctx, "local fixtures applied")
 
-	if err := connectLocalSlack(ctx, logger, db, spec.OrgID, dev, opts.Slack); err != nil {
-		return err
-	}
-
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
 	bustLocalCaches(ctx, logger, cache, spec.OrgID, dev.ID)
-	return nil
+
+	return connectLocalSlack(ctx, logger, db, spec.OrgID, dev, opts.Slack)
 }
 
 // warnOnStaleOverrides catches the one way this seed can leave a developer
