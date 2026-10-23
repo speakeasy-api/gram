@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/google/jsonschema-go/jsonschema"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -123,4 +125,43 @@ func TestGatewaySessionToolInvocationRefusals(t *testing.T) {
 	refusal, ok := errors.AsType[*ToolRefusalError](err)
 	require.True(t, ok)
 	require.Contains(t, refusal.Payload, `"code":"permission_denied"`)
+}
+
+func TestGatewaySessionInputBounds(t *testing.T) {
+	t.Parallel()
+	reg := newRegistrar(newTestMCPServer())
+	registerGatewaySessionTool(reg, nil)
+	var schema jsonschema.Schema
+	require.NoError(t, json.Unmarshal(descriptorByName(t, reg, listGatewaySessionsToolName).InputSchema, &schema))
+	require.Contains(t, schema.Properties["search"].Description, "200 Unicode characters")
+	require.Contains(t, schema.Properties["created_after"].Description, "inclusive")
+	require.Contains(t, schema.Properties["created_before"].Description, "exclusive")
+	require.Contains(t, schema.Properties["created_before"].Description, "RFC3339")
+	require.Contains(t, schema.Properties["cursor"].Description, "identical filters and ordering")
+	require.Contains(t, schema.Properties["limit"].Description, "default of 50")
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name   string
+		fields map[string]any
+		valid  bool
+	}{
+		{"defaults", map[string]any{}, true},
+		{"unicode at limit", map[string]any{"search": strings.Repeat("🙂", 200)}, true},
+		{"unicode over limit", map[string]any{"search": strings.Repeat("🙂", 201)}, false},
+		{"smallest page", map[string]any{"limit": float64(1)}, true},
+		{"largest page", map[string]any{"limit": float64(100)}, true},
+		{"zero page", map[string]any{"limit": float64(0)}, false},
+		{"oversized page", map[string]any{"limit": float64(101)}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tc.fields["scope"] = "organization"
+			if tc.valid {
+				require.NoError(t, resolved.Validate(tc.fields))
+			} else {
+				require.Error(t, resolved.Validate(tc.fields))
+			}
+		})
+	}
 }

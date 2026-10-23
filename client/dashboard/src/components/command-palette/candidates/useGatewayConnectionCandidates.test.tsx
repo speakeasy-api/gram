@@ -114,7 +114,7 @@ beforeEach(() => {
   state.queryCalls.length = 0;
   state.infiniteCalls.length = 0;
 });
-it("finds a later-page registration and opens its canonical gateway with private matching", () => {
+it("finds a cached registration and opens its canonical gateway with private matching", () => {
   const { result } = renderHook(() =>
     useGatewayConnectionCandidates({ enabled: true, inProject: true }),
   );

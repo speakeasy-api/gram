@@ -447,7 +447,10 @@ export interface TimeRangePickerProps {
   onPresetChange?: (preset: DateRangePreset) => void;
   /** Called when a custom range is selected */
   onCustomRangeChange?: (from: Date, to: Date, label?: string) => void;
-  /** Optional calendar-specific handler for consumers with inclusive day semantics. */
+  /**
+   * Replaces onCustomRangeChange for calendar picks when supplied.
+   * Both dates are local midnight; to is the final selected day, inclusive.
+   */
   onCalendarRangeChange?: (from: Date, to: Date) => void;
   /** Called to clear custom range */
   onClearCustomRange?: () => void;

@@ -80,7 +80,7 @@ Gateway and six across Linear, Slack, and Acme Agent Gateway. The project-scoped
 managed-agent session below is checked separately, not counted as a twelfth MCP
 connection.
 
-Command K opens **Organization Gateway Connections** and the manual gateway’s Connections view. Search **Claude Desktop** to open the seeded registration directly; registration names stay out of AI intent ranking. Session history is not indexed by the launcher.
+Command K opens **Organization Gateway Connections** and the manual gateway’s Connections view. From the seeded **Default** project, search **Claude Desktop** to open the seeded registration directly; registration names stay out of AI intent ranking. Session history is not indexed by the launcher.
 
 ### Gateway instructions
 

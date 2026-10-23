@@ -8,6 +8,7 @@ import {
   invalidateAllGatewaySessions,
 } from "@gram/client/react-query/gatewaySessions.js";
 import { useGatewaySessionFacets } from "@gram/client/react-query/gatewaySessionFacets.js";
+import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 import {
   Sort,
@@ -131,8 +132,17 @@ export function GatewayConnectionsTab({
     void invalidateAllUserSessionClients(queryClient, { refetchType: "all" });
     void invalidateAllUserSessions(queryClient, { refetchType: "all" });
   };
+  const [selectedClient, setSelectedClient] =
+    useState<UserSessionClient | null>(null);
   const registrationId =
     gatewayId && projectId ? params.get("registration") : null;
+  let registrationClient: UserSessionClient | undefined;
+  if (
+    selectedClient?.id === registrationId &&
+    selectedClient.userSessionIssuerId === issuerId
+  ) {
+    registrationClient = selectedClient;
+  }
   const setRegistrationId = (id: string | null) =>
     setParam("registration", id ?? "");
   const badges = useKillswitchUserBadges(
@@ -387,6 +397,10 @@ export function GatewayConnectionsTab({
       )}
       {gatewayId && issuerId && projectId && (
         <GatewayRegisteredClients
+          onViewRegistration={(client) => {
+            setSelectedClient(client);
+            setRegistrationId(client.id);
+          }}
           issuerId={issuerId}
           projectId={projectId}
           onRevoked={onRevoked}
@@ -395,6 +409,7 @@ export function GatewayConnectionsTab({
       {registrationId && (
         <ClientDetailSheet
           clientId={registrationId}
+          client={registrationClient}
           open
           onOpenChange={(open) => {
             if (!open) setRegistrationId(null);

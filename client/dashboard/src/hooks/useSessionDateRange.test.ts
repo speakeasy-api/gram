@@ -9,7 +9,10 @@ vi.mock("@/elements", () => ({
     to: new Date(),
   }),
 }));
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 it("keeps cursor bounds stable across renders and advances them on Refresh", () => {
   vi.useFakeTimers();
@@ -50,21 +53,28 @@ it("includes the selected final calendar day but preserves exact timestamp range
   expect(result.current.dates.to).toEqual(to);
 });
 
-it("preserves a shared calendar boundary through a daylight-saving transition", () => {
-  // A Chicago calendar selection ending Nov 1 crosses a 25-hour local day.
-  // The reader's timezone must not change its serialized exclusive instant.
-  const { result } = renderHook(() =>
-    useSessionDateRange({
-      preset: null,
-      customRange: {
-        from: new Date("2026-10-31T05:00:00Z"),
-        to: new Date("2026-11-01T05:00:00Z"),
-      },
-      customLabel: null,
-      calendarEnd: new Date("2026-11-02T06:00:00Z"),
-    }),
-  );
-  expect(result.current.dates.to?.toISOString()).toBe(
-    "2026-11-02T06:00:00.000Z",
-  );
-});
+it.each([
+  { month: 2, day: 8, expected: "2026-03-09T05:00:00.000Z", hours: 23 },
+  { month: 10, day: 1, expected: "2026-11-02T06:00:00.000Z", hours: 25 },
+])(
+  "computes and shares the $hours-hour Chicago calendar day",
+  ({ month, day, expected, hours }) => {
+    vi.stubEnv("TZ", "America/Chicago");
+    const from = new Date(2026, month, day - 1);
+    const to = new Date(2026, month, day);
+    const value = calendarDateRangeValue(from, to);
+    expect(value.calendarEnd?.toISOString()).toBe(expected);
+    expect((value.calendarEnd!.getTime() - to.getTime()) / 3_600_000).toBe(
+      hours,
+    );
+    const serializedEnd = value.calendarEnd!.toISOString();
+    vi.stubEnv("TZ", "Asia/Tokyo");
+    const { result } = renderHook(() =>
+      useSessionDateRange({
+        ...value,
+        calendarEnd: new Date(serializedEnd),
+      }),
+    );
+    expect(result.current.dates.to?.toISOString()).toBe(expected);
+  },
+);
