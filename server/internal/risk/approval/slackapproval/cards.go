@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -29,17 +30,23 @@ const (
 	// fields in a section; when there are more, the last one says how many.
 	maxArgumentFields = 10
 
-	// maxArgumentNameChars and maxArgumentValueChars bound one argument field.
-	// Slack caps a field at 2,000 characters, and escaping can grow a value
-	// fivefold.
+	// maxArgumentNameChars and maxArgumentValueChars bound one argument field
+	// after escaping, well inside Slack's 2,000-character field limit.
 	maxArgumentNameChars  = 100
 	maxArgumentValueChars = 300
 
-	// maxReasonChars bounds the agent's reason on a card. Request reasons are
-	// already capped on the way in; this keeps one card inside Slack's limits
-	// even if that cap grows.
+	// maxReasonChars bounds the agent's reason and an approver's note on a
+	// card after escaping and quoting. Both are capped on the way in too; this
+	// keeps one card inside Slack's limits however the text reads.
 	maxReasonChars = 1500
+
+	// maxNameChars bounds a tool, person, server or policy name on a card.
+	maxNameChars = 200
 )
+
+// emojiCode matches a Slack emoji code such as :tada:, which renders as an
+// emoji in mrkdwn.
+var emojiCode = regexp.MustCompile(`:[a-z0-9+'-]+:`)
 
 // block is the subset of a Slack Block Kit block the approval card uses.
 type block struct {
@@ -169,7 +176,7 @@ type cardInput struct {
 // pendingCard asks an approver to decide.
 func pendingCard(in cardInput) card {
 	blocks := []block{
-		mrkdwnSection(fmt.Sprintf(":raised_hand: *Approval needed* to call `%s`", escape(in.Approval.ToolName))),
+		mrkdwnSection(":raised_hand: *Approval needed* to call " + code(in.Approval.ToolName, maxNameChars)),
 		detailFields(in),
 	}
 	blocks = append(blocks, detailSections(in)...)
@@ -210,39 +217,39 @@ func decidedCard(in cardInput) card {
 }
 
 func decidedHeadline(in cardInput) (string, string) {
-	tool := escape(in.Approval.ToolName)
+	tool := code(in.Approval.ToolName, maxNameChars)
 	decider := ""
 	if in.DeciderName != "" {
-		decider = " by " + escape(in.DeciderName)
+		decider = " by " + fit(in.DeciderName, maxNameChars)
 	}
 	switch in.Status {
 	case approval.StatusApproved:
-		return fmt.Sprintf(":white_check_mark: *Approved*%s: one call to `%s`", decider, tool), fmt.Sprintf("Approved: one call to %s", in.Approval.ToolName)
+		return fmt.Sprintf(":white_check_mark: *Approved*%s: one call to %s", decider, tool), fmt.Sprintf("Approved: one call to %s", in.Approval.ToolName)
 	case approval.StatusConsumed:
-		return fmt.Sprintf(":white_check_mark: *Approved*%s: the call to `%s` ran", decider, tool), fmt.Sprintf("Approved: the call to %s ran", in.Approval.ToolName)
+		return fmt.Sprintf(":white_check_mark: *Approved*%s: the call to %s ran", decider, tool), fmt.Sprintf("Approved: the call to %s ran", in.Approval.ToolName)
 	case approval.StatusDenied:
-		return fmt.Sprintf(":no_entry: *Denied*%s: the call to `%s`", decider, tool), fmt.Sprintf("Denied: the call to %s", in.Approval.ToolName)
+		return fmt.Sprintf(":no_entry: *Denied*%s: the call to %s", decider, tool), fmt.Sprintf("Denied: the call to %s", in.Approval.ToolName)
 	case approval.StatusExpired:
-		return fmt.Sprintf(":hourglass: *Expired*: nobody decided on the call to `%s` in time", tool), fmt.Sprintf("Expired: the call to %s", in.Approval.ToolName)
+		return fmt.Sprintf(":hourglass: *Expired*: nobody decided on the call to %s in time", tool), fmt.Sprintf("Expired: the call to %s", in.Approval.ToolName)
 	case approval.StatusBlocked, approval.StatusPending:
-		return fmt.Sprintf(":raised_hand: *Waiting for a decision* on the call to `%s`", tool), fmt.Sprintf("Waiting for a decision on the call to %s", in.Approval.ToolName)
+		return fmt.Sprintf(":raised_hand: *Waiting for a decision* on the call to %s", tool), fmt.Sprintf("Waiting for a decision on the call to %s", in.Approval.ToolName)
 	}
-	return fmt.Sprintf("The call to `%s` is %s", tool, escape(string(in.Status))), fmt.Sprintf("The call to %s is %s", in.Approval.ToolName, in.Status)
+	return fmt.Sprintf("The call to %s is %s", tool, fit(string(in.Status), maxNameChars)), fmt.Sprintf("The call to %s is %s", in.Approval.ToolName, in.Status)
 }
 
 func detailFields(in cardInput) block {
 	fields := []textObject{
-		{Type: "mrkdwn", Text: "*Requester*\n" + escape(in.RequesterName)},
+		{Type: "mrkdwn", Text: "*Requester*\n" + fit(in.RequesterName, maxNameChars)},
 	}
 	if in.ServerName != "" {
-		fields = append(fields, textObject{Type: "mrkdwn", Text: "*Server*\n" + escape(in.ServerName)})
+		fields = append(fields, textObject{Type: "mrkdwn", Text: "*Server*\n" + fit(in.ServerName, maxNameChars)})
 	}
-	fields = append(fields, textObject{Type: "mrkdwn", Text: "*Policy*\n" + escape(in.PolicyName)})
+	fields = append(fields, textObject{Type: "mrkdwn", Text: "*Policy*\n" + fit(in.PolicyName, maxNameChars)})
 	if in.Approval.ExpiresAt.Valid {
 		fields = append(fields, textObject{Type: "mrkdwn", Text: "*Expires*\n" + slackDate(in.Approval.ExpiresAt.Time)})
 	}
 	if note := in.Approval.DecisionNote.String; in.Approval.DecisionNote.Valid && note != "" {
-		fields = append(fields, textObject{Type: "mrkdwn", Text: "*Note*\n" + escape(truncate(note, maxReasonChars))})
+		fields = append(fields, textObject{Type: "mrkdwn", Text: "*Note*\n" + fit(note, maxReasonChars)})
 	}
 	return block{Type: "section", BlockID: "", Text: nil, Fields: fields, Elements: nil}
 }
@@ -250,7 +257,7 @@ func detailFields(in cardInput) block {
 func detailSections(in cardInput) []block {
 	blocks := []block{}
 	if reason := in.Approval.Reason.String; in.Approval.Reason.Valid && reason != "" {
-		blocks = append(blocks, mrkdwnSection("*Reason, from the agent*\n"+quote(truncate(reason, maxReasonChars))))
+		blocks = append(blocks, mrkdwnSection("*Reason, from the agent*\n"+quote(reason, maxReasonChars)))
 	}
 	if args, ok := argumentsSection(in.Approval.ArgumentsPreview); ok {
 		blocks = append(blocks, args)
@@ -286,17 +293,23 @@ func argumentsSection(raw []byte) (block, bool) {
 			fields = append(fields, textObject{Type: "mrkdwn", Text: fmt.Sprintf("*More*\n%d more arguments, in Speakeasy", len(names)-i)})
 			break
 		}
-		fields = append(fields, textObject{Type: "mrkdwn", Text: "*" + escape(truncate(name, maxArgumentNameChars)) + "*\n" + argumentValue(arguments[name])})
+		fields = append(fields, textObject{Type: "mrkdwn", Text: "*" + fit(name, maxArgumentNameChars) + "*\n" + argumentValue(arguments[name])})
 	}
 	return block{Type: "section", BlockID: "", Text: &textObject{Type: "mrkdwn", Text: "*Arguments*"}, Fields: fields, Elements: nil}, true
 }
 
-// argumentValue renders one argument. Text reads as text; numbers, booleans,
-// null and nested values read as compact JSON in code, so the string "true"
-// and the boolean true look different.
+// argumentValue renders one argument. Plain text reads as text. Everything
+// else reads as compact JSON in code: numbers, booleans and null, so the
+// string "true" and the boolean true look different, and text that Slack
+// would format, so an argument cannot pass for the card's own wording. The
+// preview stores nested values as their JSON text, which reads as code as is.
 func argumentValue(value any) string {
-	if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
-		return escape(truncate(text, maxArgumentValueChars))
+	text, isText := value.(string)
+	if isText && nestedArgument(text) {
+		return code(text, maxArgumentValueChars)
+	}
+	if isText && plainArgument(text) {
+		return fit(text, maxArgumentValueChars)
 	}
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
@@ -304,9 +317,19 @@ func argumentValue(value any) string {
 	if err := encoder.Encode(value); err != nil {
 		return "_cannot show this value_"
 	}
-	// A backtick inside the value would end the code span early.
-	code := strings.ReplaceAll(strings.TrimSpace(buf.String()), "`", "'")
-	return "`" + escape(truncate(code, maxArgumentValueChars)) + "`"
+	return code(strings.TrimSpace(buf.String()), maxArgumentValueChars)
+}
+
+// plainArgument reports text that Slack shows as written: not blank, on one
+// line, with no formatting markers or emoji codes.
+func plainArgument(text string) bool {
+	return strings.TrimSpace(text) != "" && !strings.ContainsAny(text, "*_~`\r\n") && !emojiCode.MatchString(text)
+}
+
+// nestedArgument reports the JSON text the preview stores for a nested value.
+func nestedArgument(text string) bool {
+	trimmed := strings.TrimSpace(text)
+	return (strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")) && !strings.ContainsAny(text, "\r\n")
 }
 
 func mrkdwnSection(text string) block {
@@ -328,25 +351,54 @@ func slackDate(t time.Time) string {
 }
 
 // quote renders untrusted text as a block quote, so it cannot pass for the
-// card's own wording.
-func quote(text string) string {
-	lines := strings.Split(escape(text), "\n")
-	for i, line := range lines {
-		lines[i] = "> " + line
-	}
-	return strings.Join(lines, "\n")
+// card's own wording. Like fit, it bounds the result, quote markers included.
+func quote(text string, limit int) string {
+	return bounded(text, limit, "> ")
 }
 
-// escape makes text safe inside mrkdwn: Slack reads &, < and > as control
-// characters, so links, mentions and dates cannot be smuggled in.
-func escape(text string) string {
-	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(text)
+// code renders text as inline code, bounded like fit. A backtick would end the
+// span early, so it reads as a quote mark.
+func code(text string, limit int) string {
+	return "`" + fit(strings.ReplaceAll(text, "`", "'"), limit) + "`"
 }
 
-func truncate(text string, limit int) string {
-	if utf8.RuneCountInString(text) <= limit {
-		return text
+// fit makes text safe inside mrkdwn and cuts it to at most limit characters,
+// plus an ellipsis when cut. Slack reads &, < and > as control characters, so
+// they are escaped and links, mentions and dates cannot be smuggled in. The
+// bound applies to the escaped text, since escaping can grow a character
+// fivefold and Slack's limits apply to what is sent.
+func fit(text string, limit int) string {
+	return bounded(text, limit, "")
+}
+
+// bounded escapes text like fit, starts each line with linePrefix, and stops
+// before the result passes limit characters, ending in an ellipsis when it
+// does.
+func bounded(text string, limit int, linePrefix string) string {
+	var out strings.Builder
+	out.WriteString(linePrefix)
+	used := utf8.RuneCountInString(linePrefix)
+	for _, r := range text {
+		var piece string
+		switch r {
+		case '&':
+			piece = "&amp;"
+		case '<':
+			piece = "&lt;"
+		case '>':
+			piece = "&gt;"
+		case '\n':
+			piece = "\n" + linePrefix
+		default:
+			piece = string(r)
+		}
+		size := utf8.RuneCountInString(piece)
+		if used+size > limit {
+			out.WriteString("…")
+			return out.String()
+		}
+		out.WriteString(piece)
+		used += size
 	}
-	runes := []rune(text)
-	return string(runes[:limit]) + "…"
+	return out.String()
 }
