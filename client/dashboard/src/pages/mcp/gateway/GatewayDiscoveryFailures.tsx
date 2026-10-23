@@ -1,143 +1,165 @@
-import { InlineEmptyState } from "@/components/inline-empty-state";
+import { ChartCard } from "@/components/chart/ChartCard";
+import { ACCENT_RED } from "@/components/chart/palette";
+import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
-import { Button } from "@/components/ui/Button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/Collapsible";
-import { Icon } from "@/components/ui/Icon";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import { HumanizeDateTime } from "@/lib/dates";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
-
-function diagnosticMessage(attributes: unknown): string {
-  if (attributes && typeof attributes === "object") {
-    const attrs = attributes as Record<string, unknown>;
-    const error = attrs.error;
-    const nested =
-      error && typeof error === "object"
-        ? (error as Record<string, unknown>).message
-        : undefined;
-    const message = attrs["error.message"] ?? nested;
-    if (typeof message === "string" && message) return message;
-  }
-  return "A server could not be listed and its tools were omitted.";
-}
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import {
+  discoveryChartData,
+  diagnosticMessage,
+  tooltipLines,
+  type DiscoveryFailures,
+} from "./gatewayDiscoveryChart";
 
 export function GatewayDiscoveryFailures({
   metaMcpServerId,
   from,
   to,
+  failures,
+  loading,
+  error,
+  expandedChart,
+  onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
   metaMcpServerId: string;
   from: Date;
   to: Date;
+  failures: DiscoveryFailures | undefined;
+  loading: boolean;
+  error: boolean;
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
+  onRangeSelect: (from: Date, to: Date) => void;
+  isZoomed: boolean;
+  onResetZoom: () => void;
 }): JSX.Element | null {
   const client = useGramContext();
   const canRead = useCanViewToolLogs();
-  const [open, setOpen] = useState(false);
-  // Detailed discovery records are fetched only when opened, not on the
-  // activity overview's summary-backed first paint.
-  const query = useLogsEnabledErrorCheck(
-    useQuery({
-      queryKey: [
-        "gateway-discovery-failures",
-        metaMcpServerId,
-        from.toISOString(),
-        to.toISOString(),
-      ],
-      queryFn: () =>
-        unwrapAsync(
-          telemetrySearchLogs(client, {
-            searchLogsPayload: {
-              from,
-              to,
-              limit: 20,
-              sort: "desc",
-              filter: {
-                eventSource: "meta_discovery",
-                gramUrn: `metamcp:${metaMcpServerId}:tools/list`,
-              },
-            },
-          }),
-        ),
-      enabled: open && canRead,
-      placeholderData: keepPreviousData,
-      throwOnError: false,
-    }),
+  const [hovered, setHovered] = useState<{
+    index: number;
+    range: string;
+  } | null>(null);
+  const range = `${metaMcpServerId}/${from.toISOString()}/${to.toISOString()}`;
+  const data = useMemo(
+    () => discoveryChartData(failures, from, to),
+    [failures, from, to],
   );
+  const index = hovered?.range === range ? hovered.index : null;
+  const timestamp = index === null ? undefined : data.timestamps[index];
+  const count = index === null ? 0 : (data.counts[index] ?? 0);
+  const bucketFrom = timestamp ?? from.getTime();
+  // searchLogs uses an inclusive end and Date has millisecond precision.
+  // Stop before the next bucket; sub-millisecond tail events are not sampled.
+  const bucketTo = Math.min(
+    (timestamp ?? 0) + data.bucketMs - 1,
+    to.getTime() - 1,
+  );
+  const details = useQuery({
+    queryKey: [
+      "gateway-discovery-events",
+      metaMcpServerId,
+      bucketFrom,
+      bucketTo,
+    ],
+    queryFn: () =>
+      unwrapAsync(
+        telemetrySearchLogs(client, {
+          searchLogsPayload: {
+            from: new Date(bucketFrom),
+            to: new Date(bucketTo),
+            limit: 1,
+            sort: "desc",
+            filter: {
+              eventSource: "meta_discovery",
+              gramUrn: `metamcp:${metaMcpServerId}:tools/list`,
+            },
+          },
+        }),
+      ),
+    enabled: canRead && count > 0 && !loading && !error,
+    staleTime: 60_000,
+    throwOnError: false,
+  });
   if (!canRead) return null;
-
-  let content: ReactNode;
-  if (query.isLoading) {
-    content = <Skeleton className="h-24 w-full" />;
-  } else if (query.isLogsDisabled) {
+  const hasData = data.counts.some((value) => value > 0);
+  const datasets = [
+    {
+      label: "Omitted members",
+      data: data.counts,
+      backgroundColor: ACCENT_RED,
+      hoverBackgroundColor: ACCENT_RED,
+    },
+  ];
+  const eventLines = (dataIndex: number): string[] => {
+    if (dataIndex !== index || count === 0) return [];
+    if (details.isError)
+      return ["Could not load event details.", "Hover again to retry."];
+    if (!details.data) return ["Loading event details…"];
+    const log = details.data.logs[0];
+    if (!log) return ["Event details are no longer available."];
+    return [
+      "Latest event",
+      new Date(Number(log.timeUnixNano) / 1_000_000).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+      ...tooltipLines(diagnosticMessage(log.attributes)),
+    ];
+  };
+  let content = (
+    <WidgetEmptyState
+      message="No omitted servers were recorded in this time range"
+      className="h-[260px]"
+    />
+  );
+  if (hasData) {
     content = (
-      <Text muted>
-        Enable logs for this organization to record discovery diagnostics.
-      </Text>
-    );
-  } else if (query.isError) {
-    content = (
-      <InlineEmptyState
-        icon="triangle-alert"
-        heading="Could not load discovery diagnostics"
-        action={
-          <Button size="sm" onClick={() => void query.refetch()}>
-            Retry
-          </Button>
-        }
-      />
-    );
-  } else if (!query.data?.logs.length) {
-    content = (
-      <Text muted>No omitted servers were recorded in this time range.</Text>
-    );
-  } else {
-    content = (
-      <ul className="divide-y">
-        {query.data.logs.map((log) => (
-          <li key={log.id} className="flex flex-col gap-1 py-3">
-            <Text muted small>
-              <HumanizeDateTime
-                date={new Date(Number(log.timeUnixNano) / 1_000_000)}
-              />
-            </Text>
-            <Text className="break-words">
-              {diagnosticMessage(log.attributes)}
-            </Text>
-          </li>
-        ))}
-      </ul>
+      <>
+        <StackedTimeBarChart
+          {...data}
+          datasets={datasets}
+          height={expandedChart === "gateway-discovery-failures" ? 420 : 260}
+          expanded={expandedChart === "gateway-discovery-failures"}
+          onRangeSelect={onRangeSelect}
+          onBucketHover={(index) =>
+            setHovered((previous) => {
+              if (index === null) return null;
+              if (previous?.index === index && previous.range === range)
+                return previous;
+              return { index, range };
+            })
+          }
+          tooltipAfterBody={eventLines}
+        />
+        <Text muted small>
+          Hover or tap an interval to see its latest omission. Reconnect your
+          client after recovery to refresh its tools.
+        </Text>
+      </>
     );
   }
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="border">
-      <CollapsibleTrigger className="group hover:bg-muted/40 flex w-full items-center justify-between gap-3 p-4 text-left">
-        <Text>Discovery diagnostics</Text>
-        <Icon
-          name="chevron-down"
-          className="size-4 shrink-0 transition-transform group-data-[state=open]:rotate-180"
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent
-        className="space-y-3 border-t p-4"
-        aria-busy={query.isFetching}
-      >
-        <Text muted small>
-          Latest 20 omissions in this range. These records do not show current
-          server health. Reconnect your client after recovery to refresh its
-          tools.
-        </Text>
-        {content}
-      </CollapsibleContent>
-    </Collapsible>
+    <ChartCard
+      title="Discovery failures over time"
+      chartId="gateway-discovery-failures"
+      expandedChart={expandedChart}
+      onExpand={onExpand}
+      loading={loading}
+      error={error}
+      hasData={hasData}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
+    >
+      {content}
+    </ChartCard>
   );
 }

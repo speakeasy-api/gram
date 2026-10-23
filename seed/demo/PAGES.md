@@ -369,6 +369,8 @@ No Stripe subscription, promotion, or local billing settings are seeded for it.
 
 ### Gateway discovery
 
+Gateway Activity charts omitted members over the selected time range. Hover a nonzero bar in **Discovery failures over time** to see the latest omitted member, failure reason, and event time. The four seeded omissions cover rate-limited, unavailable, and unlistable members; zero-filled intervals show the gaps.
+
 Browser verification: [~] — follow check 30 in `seed/demo/verify.md`.
 
 The seeded gateway uses Progressive discovery. Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.
