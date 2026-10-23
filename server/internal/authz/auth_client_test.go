@@ -18,6 +18,7 @@ const (
 	authClientA   = "client_a"
 	authProjectP  = "proj_p"
 	authProjectQ  = "proj_q"
+	authUpstreamU = "upstream_u"
 	sessionUserID = "user_123"
 )
 
@@ -39,11 +40,11 @@ func authSelector(resourceID string, extra map[string]string) Selector {
 }
 
 func sharedClientCheck(projectID string) Check {
-	return MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: projectID, ConnectionOwner: ""})
+	return MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: projectID, ConnectionOwner: "", UpstreamClient: ""})
 }
 
 func personalClientCheck(owner string) Check {
-	return MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: authProjectP, ConnectionOwner: owner})
+	return MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: authProjectP, ConnectionOwner: owner, UpstreamClient: authUpstreamU})
 }
 
 func TestMCPAuthScopesUseAuthClientResourceKind(t *testing.T) {
@@ -105,21 +106,24 @@ func TestMCPAuthClientCheckRejectsMissingDimensions(t *testing.T) {
 
 	grants := []Grant{NewGrant(ScopeMCPAuth, WildcardResource)}
 	invalid := map[string]Check{
-		"missing client":            MCPAuthClientCheck("", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: ""}),
-		"wildcard client":           MCPAuthClientCheck("*", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: ""}),
-		"missing type":              MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: "", ProjectID: authProjectP, ConnectionOwner: ""}),
-		"unknown type":              MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: "hosted", ProjectID: authProjectP, ConnectionOwner: ""}),
-		"wildcard type":             MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: "*", ProjectID: authProjectP, ConnectionOwner: ""}),
-		"missing project":           sharedClientCheck(""),
-		"wildcard project":          sharedClientCheck("*"),
-		"personal without owner":    personalClientCheck(""),
-		"personal wildcard owner":   personalClientCheck("*"),
-		"personal marker owner":     personalClientCheck(SelectorValueRepresentedUser),
-		"shared client with owner":  MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeEMA, ProjectID: authProjectP, ConnectionOwner: sessionUserID}),
-		"extra dimension":           {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP, SelectorKeyTool: "x"}, selectorMatch: selectorMatchStrict, representedUser: ""},
-		"wrong resource kind":       {Scope: ScopeMCPAuth, ResourceKind: ResourceKindMCP, ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP}, selectorMatch: selectorMatchStrict, representedUser: ""},
-		"dimensionless auth scope":  {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""},
-		"dimensionless block scope": {Scope: ScopeMCPBlockedAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""},
+		"missing client":              MCPAuthClientCheck("", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""}),
+		"wildcard client":             MCPAuthClientCheck("*", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""}),
+		"missing type":                MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: "", ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""}),
+		"unknown type":                MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: "hosted", ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""}),
+		"wildcard type":               MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: "*", ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""}),
+		"missing project":             sharedClientCheck(""),
+		"wildcard project":            sharedClientCheck("*"),
+		"personal without owner":      personalClientCheck(""),
+		"personal wildcard owner":     personalClientCheck("*"),
+		"personal marker owner":       personalClientCheck(SelectorValueRepresentedUser),
+		"personal without upstream":   MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: authProjectP, ConnectionOwner: sessionUserID, UpstreamClient: ""}),
+		"personal wildcard upstream":  MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: authProjectP, ConnectionOwner: sessionUserID, UpstreamClient: "*"}),
+		"shared client with upstream": MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: authUpstreamU}),
+		"shared client with owner":    MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeEMA, ProjectID: authProjectP, ConnectionOwner: sessionUserID, UpstreamClient: ""}),
+		"extra dimension":             {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP, SelectorKeyTool: "x"}, selectorMatch: selectorMatchStrict, representedUser: ""},
+		"wrong resource kind":         {Scope: ScopeMCPAuth, ResourceKind: ResourceKindMCP, ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP}, selectorMatch: selectorMatchStrict, representedUser: ""},
+		"dimensionless auth scope":    {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""},
+		"dimensionless block scope":   {Scope: ScopeMCPBlockedAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""},
 	}
 	for name, check := range invalid {
 		_, err := GrantsAuthorize(grants, check)
@@ -264,7 +268,7 @@ func TestEngineRequiresRepresentedUserPolicyForAgents(t *testing.T) {
 	ownerPolicy := []Grant{markerGrant, connect}
 
 	ctxFor := func(authorizer RepresentedUserPolicy) context.Context {
-		return admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), authorizer, agentPolicy, agentPolicy, ownerPolicy)
+		return admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), authorizer, false, agentPolicy, agentPolicy, ownerPolicy)
 	}
 
 	permitted := ctxFor(RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{markerGrant}})
@@ -278,7 +282,7 @@ func TestEngineRequiresRepresentedUserPolicyForAgents(t *testing.T) {
 	ineligible := ctxFor(RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{}})
 	requireForbidden(t, engine.Require(ineligible, sharedClientCheck(authProjectP)))
 
-	workload := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "", Policy: nil}, agentPolicy, agentPolicy, ownerPolicy)
+	workload := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "", Policy: nil}, false, agentPolicy, agentPolicy, ownerPolicy)
 	requireForbidden(t, engine.Require(workload, personalClientCheck("user_u"))) // no represented user resolves no connection
 }
 
@@ -395,4 +399,43 @@ func TestContainmentBindsRepresentedUserOnEitherSide(t *testing.T) {
 	require.False(t, GrantsContainSelectorFor("user_x", concreteGrant, ScopeMCPAuth, symbolic))
 	require.False(t, GrantsContainSelector(concreteGrant, ScopeMCPAuth, symbolic))
 	require.False(t, GrantsContainSelector(symbolicGrant, ScopeMCPAuth, concrete))
+}
+
+func TestMCPBlockedAuthOnOneConnectionCoversEveryClientSharingItsUpstream(t *testing.T) {
+	t.Parallel()
+
+	allow := authClientGrant("agent:a", ScopeMCPAuth, authSelector(WildcardResource, map[string]string{
+		SelectorKeyClientType: AuthClientTypeRemoteSession, SelectorKeyConnectionOwner: SelectorValueRepresentedUser,
+	}))
+	block := authClientGrant("agent:a", ScopeMCPBlockedAuth, authSelector(WildcardResource, map[string]string{
+		SelectorKeyClientType: AuthClientTypeRemoteSession, SelectorKeyUpstreamClient: authUpstreamU, SelectorKeyConnectionOwner: sessionUserID,
+	}))
+	grants := []Grant{allow, block}
+	check := func(clientID, upstream, owner string) Check {
+		return MCPAuthClientCheck(clientID, MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: authProjectP, ConnectionOwner: owner, UpstreamClient: upstream}).withRepresentedUser(owner)
+	}
+
+	for name, tc := range map[string]struct {
+		check   Check
+		allowed bool
+	}{
+		"blocked client":                      {check("client_a", authUpstreamU, sessionUserID), false},
+		"another client on the same upstream": {check("client_b", authUpstreamU, sessionUserID), false},
+		"another upstream client":             {check("client_a", "upstream_v", sessionUserID), true},
+		"another owner's connection":          {check("client_a", authUpstreamU, "user_other"), true},
+	} {
+		allowed, err := GrantsAuthorize(grants, tc.check)
+		require.NoError(t, err, name)
+		require.Equal(t, tc.allowed, allowed, name)
+	}
+}
+
+func TestUpstreamClientSelectorNeedsPersonalClientType(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, ValidateSelector(ScopeMCPBlockedAuth, authSelector(WildcardResource, map[string]string{SelectorKeyClientType: AuthClientTypeRemoteSession, SelectorKeyUpstreamClient: authUpstreamU})))
+	require.NoError(t, ValidateSelector(ScopeMCPAuth, authSelector(WildcardResource, map[string]string{SelectorKeyUpstreamClient: authUpstreamU})))
+	require.Error(t, ValidateSelector(ScopeMCPAuth, authSelector(WildcardResource, map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyUpstreamClient: authUpstreamU})))
+	require.Error(t, ValidateSelector(ScopeMCPAuth, authSelector(WildcardResource, map[string]string{SelectorKeyUpstreamClient: SelectorValueRepresentedUser})))
+	require.Error(t, ValidateSelector(ScopeMCPConnect, Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: WildcardResource, SelectorKeyUpstreamClient: authUpstreamU}))
 }

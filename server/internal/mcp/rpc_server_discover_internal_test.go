@@ -137,7 +137,7 @@ func TestHostedServerDiscoverStoredInstructionsAndCachePrivacy(t *testing.T) {
 			})
 			require.NoError(t, err)
 			_, err = metadata.UpsertMetadataByMcpServerID(ctx, metadatarepo.UpsertMetadataByMcpServerIDParams{
-				McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: project.ID,
+				McpServerID: toolset.ID, ProjectID: project.ID,
 				Instructions: conv.ToPGText(instructions),
 			})
 			require.NoError(t, err)

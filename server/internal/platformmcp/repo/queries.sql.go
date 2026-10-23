@@ -5796,6 +5796,57 @@ func (q *Queries) ListPlatformMCPPluginAssignments(ctx context.Context, arg List
 	return items, nil
 }
 
+const listPlatformMCPPluginAssignmentsWithModes = `-- name: ListPlatformMCPPluginAssignmentsWithModes :many
+SELECT pa.principal_urn, pa.install_mode
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = $1
+  AND pa.organization_id = $2
+  AND p.project_id = $3
+ORDER BY pa.principal_urn
+`
+
+type ListPlatformMCPPluginAssignmentsWithModesParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListPlatformMCPPluginAssignmentsWithModesRow struct {
+	PrincipalUrn string
+	InstallMode  string
+}
+
+// The same exact-plugin assignment set as ListPlatformMCPPluginAssignments,
+// with each assignment's install mode, which the optimistic-concurrency version
+// also covers.
+func (q *Queries) ListPlatformMCPPluginAssignmentsWithModes(ctx context.Context, arg ListPlatformMCPPluginAssignmentsWithModesParams) ([]ListPlatformMCPPluginAssignmentsWithModesRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPPluginAssignmentsWithModes, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPPluginAssignmentsWithModesRow
+	for rows.Next() {
+		var i ListPlatformMCPPluginAssignmentsWithModesRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.InstallMode); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPPluginInventory = `-- name: ListPlatformMCPPluginInventory :many
 
 SELECT
@@ -5945,12 +5996,7 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    CASE
-      WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
-      WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
-      -- A live toolset-only row lands here until AIM-581 drops plugin_servers.toolset_id.
-      ELSE 'unresolved'
-    END::text AS target_kind,
+    CASE WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server' ELSE 'gateway' END::text AS target_kind,
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
@@ -6075,7 +6121,6 @@ SELECT
     ps.policy,
     ps.sort_order,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    (ps.mcp_server_id IS NULL AND ps.meta_mcp_server_id IS NULL)::boolean AS unresolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
     COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
@@ -6129,7 +6174,6 @@ type ListPlatformMCPPluginServersRow struct {
 	Policy        string
 	SortOrder     int32
 	GatewayBacked bool
-	Unresolved    bool
 	McpSlug       string
 	Enabled       bool
 }
@@ -6157,7 +6201,6 @@ func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlat
 			&i.Policy,
 			&i.SortOrder,
 			&i.GatewayBacked,
-			&i.Unresolved,
 			&i.McpSlug,
 			&i.Enabled,
 		); err != nil {
@@ -7432,14 +7475,14 @@ WITH anchor AS (
       AND cm.chat_id = $4 AND cm.project_id = $1
     ORDER BY cm.seq DESC LIMIT 1
 ), preceding AS (
-    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
+    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.capture_kind, cm.original_message_id, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
      WHERE cm.chat_id = $4 AND cm.project_id = $1 AND cm.seq < a.seq
      ORDER BY cm.seq DESC LIMIT $5::integer
 ), following AS (
-    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
+    SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.capture_kind, cm.original_message_id, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm, anchor a
      WHERE cm.chat_id = $4 AND cm.project_id = $1 AND cm.seq >= a.seq
      ORDER BY cm.seq ASC LIMIT $6::integer
-), neighbors AS (SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM preceding UNION ALL SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, replayed, created_at, risk_analyzed_at FROM following)
+), neighbors AS (SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at FROM preceding UNION ALL SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, tool_call_summaries, content_hash, generation, capture_kind, original_message_id, replayed, created_at, risk_analyzed_at FROM following)
 SELECT n.id, n.seq, n.created_at, n.role, n.generation,
        COALESCE(CASE WHEN octet_length(n.source) <= 512 THEN n.source END, '')::text AS source,
        COALESCE(CASE WHEN octet_length(n.user_id) <= 512 THEN n.user_id END, '')::text AS user_id,

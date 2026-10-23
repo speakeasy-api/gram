@@ -42,8 +42,7 @@ func (s *Service) resolveMCPAddress(ctx context.Context, dbtx pgx.Tx, logger *sl
 	toolsetDomainID := conv.FromNullableUUID(customDomainID)
 
 	slugChanged := requestedSlug != nil && *requestedSlug != ""
-	domainChanged := customDomainID.Valid &&
-		(!existing.CustomDomainID.Valid || existing.CustomDomainID.UUID != customDomainID.UUID)
+	domainChanged := customDomainID != existing.CustomDomainID
 	slug := existing.McpSlug.String
 	if slugChanged {
 		slug = conv.ToLower(*requestedSlug)

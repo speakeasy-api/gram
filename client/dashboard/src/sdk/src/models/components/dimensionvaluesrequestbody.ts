@@ -3,8 +3,18 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  AnalyticsSignalScope,
+  AnalyticsSignalScope$Outbound,
+  AnalyticsSignalScope$outboundSchema,
+} from "./analyticssignalscope.js";
 
 export type DimensionValuesRequestBody = {
+  /**
+   * With dimension=attribute, the exact signal attribute key. dimension=attribute_keys discovers keys.
+   */
+  attribute?: string | undefined;
   /**
    * Dataset to look in
    */
@@ -21,6 +31,7 @@ export type DimensionValuesRequestBody = {
    * Maximum values. Defaults to 50, at most 200.
    */
   limit?: number | undefined;
+  signalScope?: AnalyticsSignalScope | undefined;
   /**
    * End of the half-open window [from, to), ISO 8601
    */
@@ -29,10 +40,12 @@ export type DimensionValuesRequestBody = {
 
 /** @internal */
 export type DimensionValuesRequestBody$Outbound = {
+  attribute?: string | undefined;
   dataset: string;
   dimension: string;
   from: string;
   limit: number;
+  signal_scope?: AnalyticsSignalScope$Outbound | undefined;
   to: string;
 };
 
@@ -40,13 +53,22 @@ export type DimensionValuesRequestBody$Outbound = {
 export const DimensionValuesRequestBody$outboundSchema: z.ZodMiniType<
   DimensionValuesRequestBody$Outbound,
   DimensionValuesRequestBody
-> = z.object({
-  dataset: z.string(),
-  dimension: z.string(),
-  from: z.pipe(z.date(), z.transform(v => v.toISOString())),
-  limit: z._default(z.int(), 50),
-  to: z.pipe(z.date(), z.transform(v => v.toISOString())),
-});
+> = z.pipe(
+  z.object({
+    attribute: z.optional(z.string()),
+    dataset: z.string(),
+    dimension: z.string(),
+    from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    limit: z._default(z.int(), 50),
+    signalScope: z.optional(AnalyticsSignalScope$outboundSchema),
+    to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      signalScope: "signal_scope",
+    });
+  }),
+);
 
 export function dimensionValuesRequestBodyToJSON(
   dimensionValuesRequestBody: DimensionValuesRequestBody,

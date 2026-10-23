@@ -84,7 +84,7 @@ func (s *Service) CreatePolicyGrant(ctx context.Context, payload *gen.CreatePoli
 }
 
 func (s *Service) createPolicyGrant(ctx context.Context, tx pgx.Tx, human HumanContext, agent repo.Agent, scope authz.Scope, selectorRaw []byte) (*gen.AgentPolicyGrant, error) {
-	if err := requirePolicyContainment(ctx, tx, human, agent, scope, selectorRaw); err != nil {
+	if err := requirePolicyAuthority(ctx, tx, human, agent, scope, selectorRaw); err != nil {
 		return nil, err
 	}
 
@@ -96,6 +96,9 @@ func (s *Service) createPolicyGrant(ctx context.Context, tx pgx.Tx, human HumanC
 	})
 	if err != nil {
 		return nil, mapWriteError(err, "agent policy grant already exists")
+	}
+	if err := authz.MarkAuthPermissionTakenOverTx(ctx, tx, human.Auth.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), row.Scope, row.Selectors); err != nil {
+		return nil, err //nolint:wrapcheck // already wrapped
 	}
 	grantRow := policyGrantRow{ID: row.ID, Scope: row.Scope, Selectors: row.Selectors, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 	result, err := policyGrantView(grantRow)
@@ -139,8 +142,11 @@ func (s *Service) UpdatePolicyGrant(ctx context.Context, payload *gen.UpdatePoli
 			return fmt.Errorf("load agent policy grant: %w", err)
 		}
 		before := policyGrantRow{ID: beforeRow.ID, Scope: beforeRow.Scope, Selectors: beforeRow.Selectors, CreatedAt: beforeRow.CreatedAt.Time, UpdatedAt: beforeRow.UpdatedAt.Time}
+		if err := requireNotConnectionOwnerBlock(ctx, tx, human.Auth.ActiveOrganizationID, agent.ID, beforeRow.Scope, beforeRow.Selectors); err != nil {
+			return err
+		}
 
-		if err := requirePolicyContainment(ctx, tx, human, agent, scope, selectorRaw); err != nil {
+		if err := requirePolicyAuthority(ctx, tx, human, agent, scope, selectorRaw); err != nil {
 			return err
 		}
 
@@ -150,6 +156,9 @@ func (s *Service) UpdatePolicyGrant(ctx context.Context, payload *gen.UpdatePoli
 		})
 		if err != nil {
 			return mapWriteError(err, "agent policy grant already exists")
+		}
+		if err := authz.MarkAuthPermissionTakenOverTx(ctx, tx, human.Auth.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), row.Scope, row.Selectors); err != nil {
+			return err //nolint:wrapcheck // already wrapped
 		}
 		after := policyGrantRow{ID: row.ID, Scope: row.Scope, Selectors: row.Selectors, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 		result, err = policyGrantView(after)
@@ -179,7 +188,20 @@ func (s *Service) DeletePolicyGrant(ctx context.Context, payload *gen.DeletePoli
 		if err != nil {
 			return err
 		}
-		row, err := repo.New(tx).DeleteAgentPolicyGrant(ctx, repo.DeleteAgentPolicyGrantParams{
+		q := repo.New(tx)
+		existing, err := q.GetAgentPolicyGrantForUpdate(ctx, repo.GetAgentPolicyGrantForUpdateParams{
+			OrganizationID: human.Auth.ActiveOrganizationID, AgentID: agent.ID, GrantID: grantID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, nil, "agent policy grant not found")
+		}
+		if err != nil {
+			return fmt.Errorf("load agent policy grant: %w", err)
+		}
+		if err := requireNotConnectionOwnerBlock(ctx, tx, human.Auth.ActiveOrganizationID, agent.ID, existing.Scope, existing.Selectors); err != nil {
+			return err
+		}
+		row, err := q.DeleteAgentPolicyGrant(ctx, repo.DeleteAgentPolicyGrantParams{
 			OrganizationID: human.Auth.ActiveOrganizationID, AgentID: agent.ID, GrantID: grantID,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -195,6 +217,19 @@ func (s *Service) DeletePolicyGrant(ctx context.Context, payload *gen.DeletePoli
 		return s.serviceError(ctx, err, string(audit.ActionAgentPolicyGrantDelete))
 	}
 	return nil
+}
+
+// requirePolicyAuthority checks that the caller may write one grant. An
+// mcp:blocked_auth restriction only withdraws access, so writing one needs no
+// containment; every other grant must be contained.
+func requirePolicyAuthority(ctx context.Context, tx pgx.Tx, human HumanContext, agent repo.Agent, scope authz.Scope, selectorRaw []byte) error {
+	if err := authz.RequireUpstreamSelectorWritesRaw(ctx, human.Auth.ActiveOrganizationID, selectorRaw); err != nil {
+		return fmt.Errorf("check upstream_client write gate: %w", err)
+	}
+	if scope == authz.ScopeMCPBlockedAuth {
+		return nil
+	}
+	return requirePolicyContainment(ctx, tx, human, agent, scope, selectorRaw)
 }
 
 // requirePolicyContainment checks the complete authority of one allow grant,
@@ -243,8 +278,9 @@ func validatePolicyGrant(rawScope, effect string, input *gen.AgentPolicySelector
 		return "", nil, oops.E(oops.CodeBadRequest, nil, "agent policy grants must use allow effect")
 	}
 	scope := authz.Scope(rawScope)
-	// Agent restrictions are written through the resource audience surface.
-	if authz.IsBlocklistScope(scope) {
+	// Auth client restrictions are part of agent policy; other agent
+	// restrictions are written through the resource audience surface.
+	if authz.IsBlocklistScope(scope) && scope != authz.ScopeMCPBlockedAuth {
 		return "", nil, oops.E(oops.CodeBadRequest, nil, "agent policy grants cannot use blocklist scopes")
 	}
 	if err := runtimepolicy.ValidateRuntimeScope(runtimepolicy.CurrentRuntimeScopeRegistryVersion, scope); err != nil {
@@ -277,6 +313,7 @@ func policySelector(input *gen.AgentPolicySelector) authz.Selector {
 		authz.SelectorKeyServerIdentity:  input.ServerIdentity,
 		authz.SelectorKeyClientType:      input.ClientType,
 		authz.SelectorKeyConnectionOwner: input.ConnectionOwner,
+		authz.SelectorKeyUpstreamClient:  input.UpstreamClient,
 	} {
 		if value != nil {
 			selector[key] = *value
@@ -307,6 +344,7 @@ func policySelectorView(selector authz.Selector) *gen.AgentPolicySelector {
 		ServerIdentity:  nil,
 		ClientType:      nil,
 		ConnectionOwner: nil,
+		UpstreamClient:  nil,
 	}
 	for key, target := range map[string]**string{
 		authz.SelectorKeyDisposition:     &result.Disposition,
@@ -316,6 +354,7 @@ func policySelectorView(selector authz.Selector) *gen.AgentPolicySelector {
 		authz.SelectorKeyServerIdentity:  &result.ServerIdentity,
 		authz.SelectorKeyClientType:      &result.ClientType,
 		authz.SelectorKeyConnectionOwner: &result.ConnectionOwner,
+		authz.SelectorKeyUpstreamClient:  &result.UpstreamClient,
 	} {
 		if value, ok := selector[key]; ok {
 			value := value

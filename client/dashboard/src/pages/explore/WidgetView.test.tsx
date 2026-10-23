@@ -15,6 +15,8 @@ import {
 
 const testState = vi.hoisted(() => ({
   datasets: undefined as unknown[] | undefined,
+  /** Datasets describe says this viewer cannot read. */
+  restricted: [] as string[],
   describeError: false,
   /** Every body handed to the query hook; null is "nothing to run". */
   bodies: [] as (AnalyticsQueryPayload | null)[],
@@ -45,7 +47,10 @@ vi.mock("@gram/client/react-query/analyticsDescribe.js", () => ({
     data:
       testState.datasets === undefined
         ? undefined
-        : { datasets: testState.datasets },
+        : {
+            datasets: testState.datasets,
+            restrictedDatasets: testState.restricted,
+          },
   }),
 }));
 vi.mock("./useRunQuery", () => ({
@@ -127,6 +132,7 @@ function explored(): { widgetId: string | null; spec: ExploreSpec | null } {
 describe("WidgetView", () => {
   beforeEach(() => {
     testState.datasets = [sessions];
+    testState.restricted = [];
     testState.describeError = false;
     testState.bodies = [];
     testState.rows = undefined;
@@ -207,6 +213,42 @@ describe("WidgetView", () => {
       'This widget no longer works: field "user" is not a dimension',
     );
     expect(testState.bodies).toEqual([]);
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("says a widget over a dataset this viewer cannot read is for org admins, and runs nothing", () => {
+    // Describe leaves the dataset out for this viewer and names it instead.
+    testState.datasets = [];
+    testState.restricted = ["sessions"];
+    renderView(widget({}, { id: "widget-1" }));
+    expect(screen.getByText("Only org admins can see this.")).toBeTruthy();
+    expect(
+      screen.queryByRole("alert"),
+      "the widget works; it is not broken",
+    ).toBeNull();
+    expect(testState.bodies).toEqual([]);
+    // The builder could not read it either, so a saved widget offers no way in.
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("does not blame a restricted widget's dataset for the page's filters", () => {
+    testState.datasets = [];
+    testState.restricted = ["sessions"];
+    renderView(widget({}, { id: "widget-1" }), {
+      filters: { client: ["cursor"] },
+    });
+    expect(screen.getByText("Only org admins can see this.")).toBeTruthy();
+    expect(screen.queryByText(/Not filtered by/)).toBeNull();
+  });
+
+  it("says a restricted widget is for org admins even when its query no longer works", () => {
+    testState.datasets = [];
+    testState.restricted = ["sessions"];
+    renderView(
+      widget({}, { invalidReason: 'field "user" is not a dimension' }),
+    );
+    expect(screen.getByText("Only org admins can see this.")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
   });
 

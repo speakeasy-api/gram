@@ -111,6 +111,8 @@ var chPurgeOrgTables = []string{
 	// Target of authz_challenge_bucket_summaries_mv.
 	"authz_challenge_bucket_summaries",
 	"risk_findings",
+	// Target of risk_finding_states_mv.
+	"risk_finding_states",
 	"skill_session_versions",
 	"skill_efficacy_scores",
 	"billing_meter_daily_summaries",
@@ -415,10 +417,17 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 			// call that returns 500 must not also carry a success body.
 			failed := (toolName == "process_refund" && dayOff <= 2 && hash64("err", i, k)%2 == 0) ||
 				hash64("errbg", i, k)%30 == 0
+			// A tool error the upstream answered inside a 200 (isError): only
+			// gram.outcome marks it, as on real hosted and proxied rows.
+			toolError := !failed && hash64("toolerr", i, k)%25 == 0
 			// Short per-call ids so two calls to the same tool do not read as
 			// one request replayed.
 			ioID := md5Hex(s.name(fmt.Sprintf("toolio-%d-%d", i, k)))[:8]
 			ioMag := hash64("iomag", i, k) % 900
+			result := chToolResult(toolName, failed, ioID, ioMag)
+			if toolError {
+				result = `{\"isError\":true,\"error\":\"insufficient permissions for this resource\"}`
+			}
 
 			ts := nano + int64(k)*75000000000 + int64(hash64("gap", i, k)%45000000000)
 
@@ -440,15 +449,20 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
 				}
 			}
-			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"` +
-				`,"http.response.status_code":` + chIf(failed, "500", "200") +
+			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"`
+			// The serving wrapper's id; every seventh chat models calls recorded before stamping.
+			if i%7 != 0 {
+				attrs += `,"gram.mcp_server.id":"` + chIf(i%5 == 0, s.det("mcpserver-ops").String(), s.toolset1().String()) + `"`
+			}
+			attrs += `,"http.response.status_code":` + chIf(failed, "500", "200") +
+				`,"gram.outcome":"` + chIf(failed || toolError, "error", "ok") + `"` +
 				`,"http.server.request.duration":` + chRound(0.05+float64(hash64(i, k)%200)/100, 3) +
 				// The arguments and the result, as a real tool call records
 				// them. Without these the log detail sheet has nothing to show
 				// but the tool's name, and reports the payload as withheld by
 				// tool_io_logs.
 				`,"gen_ai.tool.call.arguments":"` + chToolArgs(toolName, ioID, ioMag) + `"` +
-				`,"gen_ai.tool.call.result":"` + chToolResult(toolName, failed, ioID, ioMag) + `"` +
+				`,"gen_ai.tool.call.result":"` + result + `"` +
 				`,"gen_ai.conversation.id":"` + chatID + `"` +
 				`,"gram.project.id":"` + s.projectID().String() + `"` +
 				`,"user.email":"` + email + `"` +

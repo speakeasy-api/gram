@@ -249,6 +249,30 @@ type Agent struct {
 	Deleted bool
 }
 
+// Agents blocked by a connection owner from that owner's connection to one upstream OAuth client, kept beside the mcp:blocked_auth grant that enforces it.
+type AgentConnectionBlock struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// The blocked agent.
+	// @access: confidential
+	AgentID uuid.UUID
+	// The connection owner who wrote the block; the grant names this user as connection_owner.
+	// @access: confidential-pii
+	OwnerUserID string
+	// The upstream OAuth client the connection uses; the block covers every auth client sharing it.
+	// @access: confidential
+	RemoteSessionClientID uuid.UUID
+	// When an agent manager wrote the same grant, making it theirs: removing the block then keeps the grant. NULL while only the owner holds it.
+	// @access: confidential
+	TakenOverAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type AgentExecution struct {
 	// @access: confidential
 	ID string
@@ -910,23 +934,6 @@ type AssistantThreadEvent struct {
 	Deleted bool
 }
 
-type AssistantToolset struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	AssistantID uuid.UUID
-	// @access: confidential
-	ToolsetID uuid.UUID
-	// @access: confidential
-	EnvironmentID uuid.NullUUID
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-}
-
 type AuditLog struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -966,6 +973,34 @@ type AuditLog struct {
 	ActingClientID pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
+}
+
+// Default auth permission grants provisioned by the backfill or at organization creation, one row per grant, kept after the grant itself is deleted.
+type AuthPermissionProvision struct {
+	// @access: confidential
+	ID uuid.UUID
+	// The organization the grant belongs to.
+	// @access: confidential
+	OrganizationID string
+	// The principal the grant was written to, as in principal_grants.principal_urn.
+	// @access: confidential-pii
+	PrincipalUrn string
+	// The granted scope, mcp:auth or mcp:connect.
+	// @access: confidential
+	Scope string
+	// The grant's selector, as in principal_grants.selectors.
+	// @access: opaque-restricted
+	Selectors []byte
+	// Which default the grant belongs to: personal_default, shared_client, api_key or attachment from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
+	// @access: confidential
+	Kind string
+	// When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
+	// @access: confidential
+	TakenOverAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 // Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
@@ -1330,6 +1365,12 @@ type ChatMessage struct {
 	ContentHash []byte
 	// @access: confidential
 	Generation int32
+	// Original utterance, exact transcript reobservation, synthetic summary, or unknown lineage.
+	// @access: confidential
+	CaptureKind pgtype.Text
+	// Original source-message identity for an exact transcript copy. A logical reference retained independently of source-row lifetime.
+	// @access: confidential
+	OriginalMessageID uuid.NullUUID
 	// @access: confidential
 	Replayed bool
 	// @access: confidential
@@ -2088,6 +2129,48 @@ type EnvironmentEntry struct {
 	IsSecret bool
 	// @access: confidential
 	EnvironmentID uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ExecutionSelectionProfile struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	AssistantID uuid.UUID
+	// @access: confidential
+	TriggerInstanceID uuid.UUID
+	// @access: confidential
+	ExecutionContext string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type ExecutionSelectionProfileVersion struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProfileID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Version int64
+	// @access: confidential
+	Source string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -3092,9 +3175,7 @@ type McpMetadatum struct {
 	// @access: confidential
 	ID uuid.UUID
 	// @access: confidential
-	ToolsetID uuid.NullUUID
-	// @access: confidential
-	McpServerID uuid.NullUUID
+	McpServerID uuid.UUID
 	// @access: confidential
 	ProjectID uuid.UUID
 	// @access: restricted
@@ -4874,8 +4955,6 @@ type PluginServer struct {
 	// @access: confidential
 	ProjectID uuid.NullUUID
 	// @access: confidential
-	ToolsetID uuid.NullUUID
-	// @access: confidential
 	McpServerID uuid.NullUUID
 	// @access: confidential
 	MetaMcpServerID uuid.NullUUID
@@ -5346,6 +5425,8 @@ type RemoteSessionClient struct {
 	IdentityProviderConnectionID uuid.NullUUID
 	// @access: confidential
 	CredentialOwner string
+	// @access: opaque-confidential
+	DisplayName pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -5978,6 +6059,23 @@ type SigintCustomSignal struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type SigintDefinitionSnapshot struct {
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Sensor identity retained after configuration deletion.
+	// @access: confidential
+	SensorID uuid.UUID
+	// @access: confidential
+	DefinitionHash string
+	// Immutable semantic definition whose digest is carried by evaluated readings.
+	// @access: opaque-restricted
+	Definition []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SigintSensor struct {

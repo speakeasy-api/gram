@@ -33,6 +33,15 @@ const (
 	// AuthClientBackfillWrittenKey counts records a typed auth client backfill wrote.
 	AuthClientBackfillWrittenKey = attribute.Key("gram.auth_client_backfill.written")
 
+	// ExecutionProfileVersionKey is the execution-selection profile version an assistant turn binds.
+	ExecutionProfileVersionKey = attribute.Key("gram.execution_profile.version")
+	// ExecutionProfileGapsKey counts MCP servers an execution-selection profile version has no choice for.
+	ExecutionProfileGapsKey = attribute.Key("gram.execution_profile.gaps")
+	// AuthClientBackfillPendingGrantsKey counts default auth permissions not yet granted.
+	AuthClientBackfillPendingGrantsKey = attribute.Key("gram.auth_client_backfill.pending_grants")
+	// AuthClientBackfillAPIKeysKey lists the API keys a run added policy grants to.
+	AuthClientBackfillAPIKeysKey = attribute.Key("gram.auth_client_backfill.api_keys")
+
 	// AuthClientBackfillRetiredKey counts records a typed auth client backfill retired.
 	AuthClientBackfillRetiredKey = attribute.Key("gram.auth_client_backfill.retired")
 
@@ -56,6 +65,25 @@ const (
 
 	// AuthClientParityAgreedKey reports whether a shadow comparison of the typed auth client resolver agreed with the legacy choice.
 	AuthClientParityAgreedKey = attribute.Key("gram.auth_client.parity_agreed")
+
+	// MandatoryAuthzSurfaceKey is where a shadowed mandatory check ran: hosted_connect, proxied_connect, gateway_member, auth_client, token_issuance, or consent.
+	MandatoryAuthzSurfaceKey = attribute.Key("gram.authz.mandatory.surface")
+	// MandatoryAuthzCallerKey classifies the caller: anonymous, unrepresented, represented, or cross_org.
+	MandatoryAuthzCallerKey = attribute.Key("gram.authz.mandatory.caller")
+	// MandatoryAuthzPrincipalKey is the kind of caller evaluated: anonymous, user, agent, workload, api_key, assistant, or chat_session.
+	MandatoryAuthzPrincipalKey = attribute.Key("gram.authz.mandatory.principal")
+	// MandatoryAuthzPrincipalIDKey identifies the evaluated caller: a user, API key, agent or workload id.
+	MandatoryAuthzPrincipalIDKey = attribute.Key("gram.authz.mandatory.principal_id")
+	// MandatoryAuthzLegacyAllowedKey is whether today's decision allowed the request.
+	MandatoryAuthzLegacyAllowedKey = attribute.Key("gram.authz.mandatory.legacy_allowed")
+	// MandatoryAuthzLegacyAuthCeilingKey is whether admission derived the caller's auth client ceiling from server access in a pre-version-5 stored policy.
+	MandatoryAuthzLegacyAuthCeilingKey = attribute.Key("gram.authz.mandatory.legacy_auth_ceiling")
+	// MandatoryAuthzOutcomeKey is the mandatory check's outcome: allow, deny, or error.
+	MandatoryAuthzOutcomeKey = attribute.Key("gram.authz.mandatory.outcome")
+	// MandatoryAuthzSourceKey is the policy the mandatory check evaluated.
+	MandatoryAuthzSourceKey = attribute.Key("gram.authz.mandatory.source")
+	// MandatoryAuthzReasonKey is why the mandatory check denied.
+	MandatoryAuthzReasonKey = attribute.Key("gram.authz.mandatory.reason")
 
 	// SigintRequestedWindowSizeKey records the configured message count including the target.
 	SigintRequestedWindowSizeKey = attribute.Key("gram.sigint.window.requested_size")
@@ -1122,9 +1150,29 @@ func SlogAuthClientBackfillDecided(v int) slog.Attr {
 	return slog.Int(string(AuthClientBackfillDecidedKey), v)
 }
 
+// SlogExecutionProfileVersion is the profile version a turn binds.
+func SlogExecutionProfileVersion(v int64) slog.Attr {
+	return slog.Int64(string(ExecutionProfileVersionKey), v)
+}
+
+// SlogExecutionProfileGaps counts servers a profile version has no choice for.
+func SlogExecutionProfileGaps(v int) slog.Attr {
+	return slog.Int(string(ExecutionProfileGapsKey), v)
+}
+
 // SlogAuthClientBackfillWritten counts records written.
 func SlogAuthClientBackfillWritten(v int) slog.Attr {
 	return slog.Int(string(AuthClientBackfillWrittenKey), v)
+}
+
+// SlogAuthClientBackfillPendingGrants counts default auth permissions not yet granted.
+func SlogAuthClientBackfillPendingGrants(v int) slog.Attr {
+	return slog.Int(string(AuthClientBackfillPendingGrantsKey), v)
+}
+
+// SlogAuthClientBackfillAPIKeys lists the API keys a run added policy grants to.
+func SlogAuthClientBackfillAPIKeys(v []string) slog.Attr {
+	return slog.Any(string(AuthClientBackfillAPIKeysKey), v)
 }
 
 // SlogAuthClientBackfillRetired counts records retired.
@@ -1162,6 +1210,48 @@ func AuthClientLegacyOutcome(v string) attribute.KeyValue {
 }
 
 func AuthClientParityAgreed(v bool) attribute.KeyValue { return AuthClientParityAgreedKey.Bool(v) }
+
+func MandatoryAuthzSurface(v string) attribute.KeyValue { return MandatoryAuthzSurfaceKey.String(v) }
+func SlogMandatoryAuthzSurface(v string) slog.Attr {
+	return slog.String(string(MandatoryAuthzSurfaceKey), v)
+}
+func MandatoryAuthzCaller(v string) attribute.KeyValue { return MandatoryAuthzCallerKey.String(v) }
+func SlogMandatoryAuthzCaller(v string) slog.Attr {
+	return slog.String(string(MandatoryAuthzCallerKey), v)
+}
+func MandatoryAuthzPrincipal(v string) attribute.KeyValue {
+	return MandatoryAuthzPrincipalKey.String(v)
+}
+func SlogMandatoryAuthzPrincipal(v string) slog.Attr {
+	return slog.String(string(MandatoryAuthzPrincipalKey), v)
+}
+func SlogMandatoryAuthzPrincipalID(v string) slog.Attr {
+	return slog.String(string(MandatoryAuthzPrincipalIDKey), v)
+}
+func MandatoryAuthzLegacyAllowed(v bool) attribute.KeyValue {
+	return MandatoryAuthzLegacyAllowedKey.Bool(v)
+}
+func SlogMandatoryAuthzLegacyAllowed(v bool) slog.Attr {
+	return slog.Bool(string(MandatoryAuthzLegacyAllowedKey), v)
+}
+func MandatoryAuthzLegacyAuthCeiling(v bool) attribute.KeyValue {
+	return MandatoryAuthzLegacyAuthCeilingKey.Bool(v)
+}
+func SlogMandatoryAuthzLegacyAuthCeiling(v bool) slog.Attr {
+	return slog.Bool(string(MandatoryAuthzLegacyAuthCeilingKey), v)
+}
+func MandatoryAuthzOutcome(v string) attribute.KeyValue { return MandatoryAuthzOutcomeKey.String(v) }
+func SlogMandatoryAuthzOutcome(v string) slog.Attr {
+	return slog.String(string(MandatoryAuthzOutcomeKey), v)
+}
+func MandatoryAuthzSource(v string) attribute.KeyValue { return MandatoryAuthzSourceKey.String(v) }
+func SlogMandatoryAuthzSource(v string) slog.Attr {
+	return slog.String(string(MandatoryAuthzSourceKey), v)
+}
+func MandatoryAuthzReason(v string) attribute.KeyValue { return MandatoryAuthzReasonKey.String(v) }
+func SlogMandatoryAuthzReason(v string) slog.Attr {
+	return slog.String(string(MandatoryAuthzReasonKey), v)
+}
 
 // SlogAuthClientLegacyOutcome is the outcome the legacy upstream client choice reached.
 func SlogAuthClientLegacyOutcome(v string) slog.Attr {

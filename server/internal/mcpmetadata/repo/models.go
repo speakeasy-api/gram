@@ -27,3 +27,30 @@ type McpEnvironmentConfig struct {
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
 }
+
+type McpMetadatum struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: restricted
+	ExternalDocumentationUrl pgtype.Text
+	// @access: opaque-restricted
+	ExternalDocumentationText pgtype.Text
+	// @access: confidential
+	LogoID uuid.NullUUID
+	// @access: opaque-restricted
+	Instructions pgtype.Text
+	// @access: opaque-restricted
+	HeaderDisplayNames []byte
+	// @access: confidential
+	DefaultEnvironmentID uuid.NullUUID
+	// @access: restricted
+	InstallationOverrideUrl pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}

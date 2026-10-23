@@ -129,7 +129,7 @@ func TestHandleIDPCallback_WorkOSRejectedOnPerClientPath(t *testing.T) {
 	require.Error(t, err)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
 	require.Empty(t, mock.calls, "no code exchange on a per-client path")
 	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+challengeID)
 	require.NoError(t, err, "a mismatched route does not consume the challenge")
@@ -167,7 +167,7 @@ func TestHandleIDPCallback_RetiredRouteBaseRejected(t *testing.T) {
 	require.Error(t, err)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
 	require.Empty(t, mock.calls, "no code exchange for a retired route")
 	require.Empty(t, w.Header().Get("Location"))
 }

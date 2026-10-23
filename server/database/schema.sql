@@ -3800,6 +3800,9 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- at creation: no update query sets this column.
   credential_owner TEXT NOT NULL DEFAULT 'subject',
 
+  -- Administrator-chosen label. NULL means unset, and readers show client_id.
+  display_name TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -3862,6 +3865,7 @@ COMMENT ON COLUMN remote_session_clients.organization_id IS '@access: confidenti
 COMMENT ON COLUMN remote_session_clients.attachment_scope IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.remote_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_id IS '@access: restricted';
+COMMENT ON COLUMN remote_session_clients.display_name IS '@access: opaque-confidential';
 COMMENT ON COLUMN remote_session_clients.client_secret_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN remote_session_clients.client_id_issued_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_secret_expires_at IS '@access: confidential';
@@ -6282,35 +6286,6 @@ COMMENT ON COLUMN assistant_dashboard_messages.created_at IS '@access: confident
 -- (chat_id, seq) is the stable cursor for incremental polling.
 CREATE INDEX IF NOT EXISTS assistant_dashboard_messages_chat_id_seq_idx ON assistant_dashboard_messages (chat_id, seq);
 
-CREATE TABLE IF NOT EXISTS assistant_toolsets (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  assistant_id uuid NOT NULL,
-  toolset_id uuid NOT NULL,
-  environment_id uuid,
-  project_id uuid NOT NULL,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT assistant_toolsets_pkey PRIMARY KEY (id),
-  CONSTRAINT assistant_toolsets_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE,
-  CONSTRAINT assistant_toolsets_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
-  CONSTRAINT assistant_toolsets_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
-  CONSTRAINT assistant_toolsets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT assistant_toolsets_assistant_id_toolset_id_key UNIQUE (assistant_id, toolset_id)
-);
-
-COMMENT ON COLUMN assistant_toolsets.id IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.assistant_id IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.toolset_id IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.environment_id IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.project_id IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.created_at IS '@access: confidential';
-COMMENT ON COLUMN assistant_toolsets.updated_at IS '@access: confidential';
-
-CREATE INDEX IF NOT EXISTS assistant_toolsets_assistant_id_idx ON assistant_toolsets (assistant_id);
-CREATE INDEX IF NOT EXISTS assistant_toolsets_toolset_id_idx ON assistant_toolsets (toolset_id);
-
 CREATE TABLE IF NOT EXISTS assistant_threads (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   assistant_id uuid NOT NULL,
@@ -6479,6 +6454,10 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- same logical conversation view share a generation.
   generation INTEGER NOT NULL DEFAULT 0,
 
+  -- Capture lineage is independent of historical import/spool replay.
+  capture_kind TEXT,
+  original_message_id uuid,
+
   -- True when the message arrived as a replay from a device's offline spool
   -- after control-plane downtime (X-Gram-Replayed on hooks.ingest), so
   -- downtime backlog — and findings produced by retroactively scanning it —
@@ -6541,6 +6520,10 @@ COMMENT ON COLUMN chat_messages.tool_outcome_notes IS '@access: opaque-restricte
 COMMENT ON COLUMN chat_messages.tool_call_summaries IS '@access: opaque-restricted';
 COMMENT ON COLUMN chat_messages.content_hash IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.generation IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.capture_kind IS 'Original utterance, exact transcript reobservation, synthetic summary, or unknown lineage.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.original_message_id IS 'Original source-message identity for an exact transcript copy. A logical reference retained independently of source-row lifetime.
+@access: confidential';
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
@@ -9376,6 +9359,95 @@ CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
 USING GIN (selectors);
 
+-- Grants the default auth permission backfill wrote, kept after the grant is
+-- deleted: a rerun never restores what an admin removed, and a rollback
+-- deletes exactly these, except those an admin since took over by writing the
+-- same grant.
+CREATE TABLE IF NOT EXISTS auth_permission_provisions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  principal_urn TEXT NOT NULL CHECK (principal_urn <> ''),
+  scope TEXT NOT NULL CHECK (scope <> ''),
+  selectors JSONB NOT NULL,
+  kind TEXT NOT NULL CHECK (kind <> ''),
+  taken_over_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT auth_permission_provisions_pkey PRIMARY KEY (id),
+  CONSTRAINT auth_permission_provisions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT auth_permission_provisions_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
+);
+
+COMMENT ON TABLE auth_permission_provisions IS 'Default auth permission grants provisioned by the backfill or at organization creation, one row per grant, kept after the grant itself is deleted.';
+COMMENT ON COLUMN auth_permission_provisions.id IS '@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.organization_id IS 'The organization the grant belongs to.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.principal_urn IS 'The principal the grant was written to, as in principal_grants.principal_urn.
+@access: confidential-pii';
+COMMENT ON COLUMN auth_permission_provisions.scope IS 'The granted scope, mcp:auth or mcp:connect.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.selectors IS 'The grant''s selector, as in principal_grants.selectors.
+@access: opaque-restricted';
+COMMENT ON COLUMN auth_permission_provisions.kind IS 'Which default the grant belongs to: personal_default, shared_client, api_key or attachment from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.taken_over_at IS 'When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.created_at IS '@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS auth_permission_provisions_org_principal_scope_selector_key
+ON auth_permission_provisions (organization_id, principal_urn, scope, selectors);
+
+-- Agents a connection owner blocked from their own connection: one row per
+-- agent, owner and upstream OAuth client, recording that the mcp:blocked_auth
+-- grant for it was written under the owner's authority. The owner can remove
+-- only blocks recorded here, and never one an agent manager has since written
+-- the same grant for.
+CREATE TABLE IF NOT EXISTS agent_connection_blocks (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  agent_id uuid NOT NULL,
+  owner_user_id TEXT NOT NULL CHECK (owner_user_id <> ''),
+  remote_session_client_id uuid NOT NULL,
+  taken_over_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT agent_connection_blocks_pkey PRIMARY KEY (id),
+  CONSTRAINT agent_connection_blocks_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT agent_connection_blocks_agent_tenant_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT agent_connection_blocks_owner_tenant_fkey FOREIGN KEY (organization_id, owner_user_id) REFERENCES organization_user_relationships (organization_id, user_id) ON DELETE RESTRICT,
+  CONSTRAINT agent_connection_blocks_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE agent_connection_blocks IS 'Agents blocked by a connection owner from that owner''s connection to one upstream OAuth client, kept beside the mcp:blocked_auth grant that enforces it.';
+COMMENT ON COLUMN agent_connection_blocks.id IS '@access: confidential';
+COMMENT ON COLUMN agent_connection_blocks.organization_id IS '@access: confidential';
+COMMENT ON COLUMN agent_connection_blocks.agent_id IS 'The blocked agent.
+@access: confidential';
+COMMENT ON COLUMN agent_connection_blocks.owner_user_id IS 'The connection owner who wrote the block; the grant names this user as connection_owner.
+@access: confidential-pii';
+COMMENT ON COLUMN agent_connection_blocks.remote_session_client_id IS 'The upstream OAuth client the connection uses; the block covers every auth client sharing it.
+@access: confidential';
+COMMENT ON COLUMN agent_connection_blocks.taken_over_at IS 'When an agent manager wrote the same grant, making it theirs: removing the block then keeps the grant. NULL while only the owner holds it.
+@access: confidential';
+COMMENT ON COLUMN agent_connection_blocks.created_at IS '@access: confidential';
+COMMENT ON COLUMN agent_connection_blocks.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS agent_connection_blocks_key
+ON agent_connection_blocks (organization_id, agent_id, owner_user_id, remote_session_client_id);
+
+-- Owner-scoped listing.
+CREATE INDEX IF NOT EXISTS agent_connection_blocks_owner_idx
+ON agent_connection_blocks (organization_id, owner_user_id);
+
+-- Foreign-key checks on client deletes.
+CREATE INDEX IF NOT EXISTS agent_connection_blocks_remote_session_client_id_idx
+ON agent_connection_blocks (remote_session_client_id);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   seq BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
@@ -10201,6 +10273,100 @@ ON upstream_client_selections (auth_client_id);
 CREATE INDEX IF NOT EXISTS upstream_client_selections_project_id_idx
 ON upstream_client_selections (project_id);
 
+-- The auth client choices an assistant's turns use for each MCP server it
+-- reaches, kept per assistant, root trigger and execution context: a turn run
+-- for a user it identified (user_backed) or as its trigger's workload with no
+-- user (userless), validated in application code. A turn credential binds the
+-- profile's latest version; the version's choices are upstream_client_selections
+-- rows whose credential is the version (credential_kind
+-- execution_profile_version).
+-- The profile grants nothing: the turn credential is admitted on its own path
+-- before a choice is read.
+CREATE TABLE IF NOT EXISTS execution_selection_profiles (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  assistant_id uuid NOT NULL,
+  trigger_instance_id uuid NOT NULL,
+  execution_context TEXT NOT NULL CHECK (execution_context <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT execution_selection_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT execution_selection_profiles_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT execution_selection_profiles_assistant_fkey FOREIGN KEY (organization_id, project_id, assistant_id) REFERENCES assistants (organization_id, project_id, id) ON DELETE CASCADE,
+  CONSTRAINT execution_selection_profiles_trigger_fkey FOREIGN KEY (organization_id, project_id, trigger_instance_id) REFERENCES trigger_instances (organization_id, project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN execution_selection_profiles.id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.organization_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.project_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.trigger_instance_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.execution_context IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.created_at IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.updated_at IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profiles.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS execution_selection_profiles_assistant_trigger_context_key
+ON execution_selection_profiles (assistant_id, trigger_instance_id, execution_context)
+WHERE deleted IS FALSE;
+
+-- FK target for execution_selection_profile_versions.
+CREATE UNIQUE INDEX IF NOT EXISTS execution_selection_profiles_tenant_key
+ON execution_selection_profiles (id, organization_id, project_id);
+
+CREATE INDEX IF NOT EXISTS execution_selection_profiles_organization_id_idx
+ON execution_selection_profiles (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS execution_selection_profiles_project_id_idx
+ON execution_selection_profiles (project_id);
+
+CREATE INDEX IF NOT EXISTS execution_selection_profiles_trigger_idx
+ON execution_selection_profiles (organization_id, project_id, trigger_instance_id);
+
+-- One immutable set of an execution-selection profile's choices. A turn
+-- credential names the version it binds, so its choices never change under a
+-- running turn; a server added to the assistant later gets its choice in a new
+-- version that keeps every earlier choice.
+CREATE TABLE IF NOT EXISTS execution_selection_profile_versions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  profile_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  version BIGINT NOT NULL,
+  -- backfill or issuance; validated in application code.
+  source TEXT NOT NULL CHECK (source <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT execution_selection_profile_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT execution_selection_profile_versions_profile_fkey FOREIGN KEY (profile_id, organization_id, project_id) REFERENCES execution_selection_profiles (id, organization_id, project_id) ON DELETE CASCADE,
+  -- Binding treats a non-positive version as no version.
+  CONSTRAINT execution_selection_profile_versions_version_check CHECK (version > 0)
+);
+
+COMMENT ON COLUMN execution_selection_profile_versions.id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.profile_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.project_id IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.version IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.source IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.created_at IS '@access: confidential';
+COMMENT ON COLUMN execution_selection_profile_versions.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS execution_selection_profile_versions_profile_version_key
+ON execution_selection_profile_versions (profile_id, version);
+
+CREATE INDEX IF NOT EXISTS execution_selection_profile_versions_project_id_idx
+ON execution_selection_profile_versions (project_id);
+
 -- Meta MCP servers expose an explicitly managed set of MCP servers through a
 -- dedicated runtime. This identity remains separate from mcp_servers so
 -- gateway-specific behavior can evolve without changing existing backends.
@@ -10340,8 +10506,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments
 
 CREATE TABLE IF NOT EXISTS mcp_metadata (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
-  toolset_id UUID,
-  mcp_server_id UUID,
+  mcp_server_id UUID NOT NULL,
   project_id UUID NOT NULL,
   external_documentation_url TEXT,
   external_documentation_text TEXT,
@@ -10356,16 +10521,12 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
 
   CONSTRAINT mcp_metadata_pkey PRIMARY KEY (id),
   CONSTRAINT mcp_metadata_logo_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_metadata_toolset_id FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
   CONSTRAINT mcp_metadata_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
   CONSTRAINT mcp_metadata_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_metadata_default_environment_id_fkey FOREIGN KEY (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL,
-  -- Exactly one backend must be set: either a toolset or an MCP server.
-  CONSTRAINT mcp_metadata_backend_exclusivity_check CHECK ((toolset_id IS NULL) != (mcp_server_id IS NULL))
+  CONSTRAINT mcp_metadata_default_environment_id_fkey FOREIGN KEY (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL
 );
 
 COMMENT ON COLUMN mcp_metadata.id IS '@access: confidential';
-COMMENT ON COLUMN mcp_metadata.toolset_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_metadata.mcp_server_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_metadata.project_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_metadata.external_documentation_url IS '@access: restricted';
@@ -10377,10 +10538,6 @@ COMMENT ON COLUMN mcp_metadata.default_environment_id IS '@access: confidential'
 COMMENT ON COLUMN mcp_metadata.installation_override_url IS '@access: restricted';
 COMMENT ON COLUMN mcp_metadata.created_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_metadata.updated_at IS '@access: confidential';
-
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_metadata_toolset_id_key
-ON mcp_metadata (toolset_id)
-WHERE toolset_id IS NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_metadata_mcp_server_id_key
 ON mcp_metadata (mcp_server_id)
@@ -10483,12 +10640,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_custom_domain_id_root_key
 ON mcp_endpoints (custom_domain_id)
 WHERE is_domain_root IS TRUE AND deleted IS FALSE;
 
--- MCP servers attached directly to an assistant. The legacy toolset
--- attachment path lives in assistant_toolsets; this table covers
--- mcp_servers-modelled backends (remote, tunnelled) that have no toolsets
--- row and so cannot be attached there. resolveAssistantMCPServers merges
--- both into the runtime MCP set. Replace-on-write like assistant_toolsets,
--- so no soft-delete column.
+-- MCP servers attached directly to an assistant. Replace-on-write, so no
+-- soft-delete column.
 CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   assistant_id uuid NOT NULL,
@@ -10663,13 +10816,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_server_tool_metadata_mcp_server_id_tool_na
 ON mcp_server_tool_metadata (mcp_server_id, tool_name)
 WHERE deleted IS FALSE;
 
--- Links a plugin to a toolset, MCP server, or gateway (exactly one live backend).
+-- Links a plugin to an MCP server or gateway (exactly one live backend).
 CREATE TABLE IF NOT EXISTS plugin_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   plugin_id uuid NOT NULL,
   -- Only gateway memberships set project_id, preserving legacy insert paths.
   project_id uuid,
-  toolset_id uuid,
   mcp_server_id uuid,
   meta_mcp_server_id uuid,
   display_name TEXT NOT NULL CHECK (display_name <> ''),
@@ -10685,13 +10837,8 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   CONSTRAINT plugin_servers_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,
   CONSTRAINT plugin_servers_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id) ON DELETE CASCADE,
   -- RESTRICT is intentional: CASCADE would silently destroy rows.
-  -- Toolsets use soft deletes so RESTRICT only blocks manual hard deletes.
-  -- If a hard-delete path is added later, it must purge soft-deleted
-  -- plugin_servers referencing the target first.
-  CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
-  -- RESTRICT mirrors the toolset_id FK above (not the CASCADE used by the
-  -- collections attachment table): mcp_servers soft-delete, so RESTRICT only
-  -- blocks manual hard deletes. A live plugin member cannot lose its backend.
+  -- mcp_servers soft-delete, so RESTRICT only blocks manual hard deletes.
+  -- A live plugin member cannot lose its backend.
   CONSTRAINT plugin_servers_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE RESTRICT,
   -- Gateways must be detached before deletion. A hard delete can clear the
   -- reference only after the plugin member has been soft-deleted.
@@ -10699,15 +10846,14 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   CONSTRAINT plugin_servers_gateway_project_check CHECK (meta_mcp_server_id IS NULL OR project_id IS NOT NULL),
   CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional')),
   CONSTRAINT plugin_servers_backend_exclusivity_check CHECK (
-    num_nonnulls(toolset_id, mcp_server_id, meta_mcp_server_id) = 1
-    OR (deleted_at IS NOT NULL AND num_nonnulls(toolset_id, mcp_server_id, meta_mcp_server_id) = 0)
+    num_nonnulls(mcp_server_id, meta_mcp_server_id) = 1
+    OR (deleted_at IS NOT NULL AND num_nonnulls(mcp_server_id, meta_mcp_server_id) = 0)
   )
 );
 
 COMMENT ON COLUMN plugin_servers.id IS '@access: confidential';
 COMMENT ON COLUMN plugin_servers.plugin_id IS '@access: confidential';
 COMMENT ON COLUMN plugin_servers.project_id IS '@access: confidential';
-COMMENT ON COLUMN plugin_servers.toolset_id IS '@access: confidential';
 COMMENT ON COLUMN plugin_servers.mcp_server_id IS '@access: confidential';
 COMMENT ON COLUMN plugin_servers.meta_mcp_server_id IS '@access: confidential';
 COMMENT ON COLUMN plugin_servers.display_name IS '@access: confidential';
@@ -10723,10 +10869,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_id_key
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_display_name_key
   ON plugin_servers (plugin_id, display_name)
-  WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_toolset_id_key
-  ON plugin_servers (plugin_id, toolset_id)
   WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_mcp_server_id_key
@@ -15599,6 +15741,26 @@ ON sigint_sensors (project_id, slug);
 
 CREATE INDEX IF NOT EXISTS sigint_sensors_project_id_id_idx
 ON sigint_sensors (project_id, id) WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS sigint_definition_snapshots (
+  project_id uuid NOT NULL,
+  sensor_id uuid NOT NULL,
+  definition_hash TEXT NOT NULL,
+  definition JSONB NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT sigint_definition_snapshots_pkey PRIMARY KEY (project_id, sensor_id, definition_hash),
+  CONSTRAINT sigint_definition_snapshots_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN sigint_definition_snapshots.project_id IS '@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.sensor_id IS 'Sensor identity retained after configuration deletion.
+@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.definition_hash IS '@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.definition IS 'Immutable semantic definition whose digest is carried by evaluated readings.
+@access: opaque-restricted';
+COMMENT ON COLUMN sigint_definition_snapshots.created_at IS '@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.updated_at IS '@access: confidential';
 
 CREATE TABLE IF NOT EXISTS sigint_sensor_signals (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

@@ -57,7 +57,7 @@ func authClientCredentialContext(t *testing.T, f credentialAdmissionFixture) con
 
 func connectionCheck(owner string) authz.Check {
 	return authz.MCPAuthClientCheck("client-a", authz.MCPAuthClientDimensions{
-		ClientType: authz.AuthClientTypeRemoteSession, ProjectID: "project-p", ConnectionOwner: owner,
+		ClientType: authz.AuthClientTypeRemoteSession, ProjectID: "project-p", ConnectionOwner: owner, UpstreamClient: "upstream-a",
 	})
 }
 

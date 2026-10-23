@@ -21,6 +21,8 @@ export const AUDIT_ACTIONS = [
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "agent:connection_block_create",
+  "agent:connection_block_delete",
   "agent:create",
   "agent:delete",
   "agent:owner_loss",
@@ -40,7 +42,13 @@ export const AUDIT_ACTIONS = [
   "ai_tool_decision:set",
   "api_key:create",
   "api_key:revoke",
+  "api_key:update_policy",
   "asset:create",
+  "auth-client:detach-mcp-server",
+  "auth-client:disable",
+  "auth-client:enable",
+  "auth-client:update",
+  "auth-client:update-audience",
   "assistant:identity_provision",
   "assistant:tool_call",
   "aws_iam_credential:create",
@@ -129,6 +137,7 @@ export const AUDIT_ACTIONS = [
   "mcp-server:update",
   "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
+  "mcp-server:update-upstream-auth-requirement",
   "mcp_approval_request:approve",
   "mcp_approval_request:create",
   "mcp_approval_request:deny",
@@ -224,6 +233,7 @@ export const AUDIT_ACTIONS = [
   "remote-session-client:detach-mcp-server",
   "remote-session-client:detach-user-session-issuer",
   "remote-session-client:disable-identity-chaining",
+  "remote-session-client:duplicate",
   "remote-session-client:enable-identity-chaining",
   "remote-session-client:revoke-sessions",
   "remote-session-client:update",
@@ -377,6 +387,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "access_role:delete":
       return "deleted access role";
 
+    case "agent:connection_block_create":
+      return "blocked connection access for agent";
+    case "agent:connection_block_delete":
+      return "unblocked connection access for agent";
     case "agent:create":
       return "created agent";
     case "agent:delete":
@@ -418,9 +432,22 @@ export function staticActionPhrase(action: AuditAction): string {
       return "created API key";
     case "api_key:revoke":
       return "revoked API key";
+    case "api_key:update_policy":
+      return "changed the access policy of API key";
 
     case "asset:create":
       return "uploaded asset";
+
+    case "auth-client:update":
+      return "renamed auth client";
+    case "auth-client:enable":
+      return "enabled auth client";
+    case "auth-client:disable":
+      return "disabled auth client";
+    case "auth-client:detach-mcp-server":
+      return "removed an MCP server from auth client";
+    case "auth-client:update-audience":
+      return "changed who can use auth client";
     case "assistant:identity_provision":
       return "gave a dedicated agent to assistant";
     case "assistant:tool_call":
@@ -634,6 +661,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated pinned scopes on MCP server";
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
+    case "mcp-server:update-upstream-auth-requirement":
+      return "changed whether the upstream needs authentication on MCP server";
 
     case "mcp_approval_request:approve":
       return "approved MCP access to";
@@ -818,6 +847,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "deleted remote session";
     case "remote-session-client:create":
       return "created remote session client";
+    case "remote-session-client:duplicate":
+      return "duplicated remote session client";
     case "remote-session-client:update":
       return "updated remote session client";
     case "remote-session-client:delete":

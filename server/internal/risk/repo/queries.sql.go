@@ -4021,6 +4021,54 @@ func (q *Queries) ListRiskPoliciesScopingMCPServerForUpdate(ctx context.Context,
 	return items, nil
 }
 
+const listRiskPolicyAnalyticsLabels = `-- name: ListRiskPolicyAnalyticsLabels :many
+SELECT id, name, score, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND organization_id = $2
+ORDER BY created_at DESC, id DESC
+`
+
+type ListRiskPolicyAnalyticsLabelsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type ListRiskPolicyAnalyticsLabelsRow struct {
+	ID      uuid.UUID
+	Name    string
+	Score   float64
+	Deleted bool
+}
+
+// Explore reads a finding's policy as its name and its severity band. Deleted
+// policies are included: their findings still count, as they do on the
+// Watchdog page, and read as the category's fallback severity.
+func (q *Queries) ListRiskPolicyAnalyticsLabels(ctx context.Context, arg ListRiskPolicyAnalyticsLabelsParams) ([]ListRiskPolicyAnalyticsLabelsRow, error) {
+	rows, err := q.db.Query(ctx, listRiskPolicyAnalyticsLabels, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskPolicyAnalyticsLabelsRow
+	for rows.Next() {
+		var i ListRiskPolicyAnalyticsLabelsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Score,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskPolicyBypassRequests = `-- name: ListRiskPolicyBypassRequests :many
 SELECT id, organization_id, project_id, risk_policy_id, target_kind, target_label, target_key, target_dimensions, requester_user_id, requester_email, note, status, decided_by, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_bypass_requests

@@ -27,6 +27,9 @@ type grantAuthorization struct {
 	// representedPolicy is the represented user's own live policy when that
 	// user is not the caller. Auth-client checks must also pass it.
 	representedPolicy []Grant
+	// legacyAuthCeiling marks a stored policy older than version 5, whose
+	// auth client ceiling admission derived from its server access.
+	legacyAuthCeiling bool
 }
 
 // RepresentedUserPolicy is the trusted represented-user binding of an admission.
@@ -46,11 +49,12 @@ func GrantsFromContext(ctx context.Context) ([]Grant, bool) {
 	return grants, ok
 }
 
-func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserPolicy, sets ...[]Grant) context.Context {
+func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserPolicy, legacyAuthCeiling bool, sets ...[]Grant) context.Context {
 	policies := grantAuthorization{
 		policies:          make([][]Grant, 0, len(sets)),
 		representedUser:   represented.UserID,
 		representedPolicy: nil,
+		legacyAuthCeiling: legacyAuthCeiling,
 	}
 	if represented.UserID != "" {
 		policies.representedPolicy = append([]Grant{}, represented.Policy...)
@@ -66,16 +70,16 @@ func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, boo
 		return policies, true
 	}
 	if _, principalCredential := contextvalues.PrincipalCredentialAuthorization(ctx); principalCredential {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil, legacyAuthCeiling: false}, false
 	}
 	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil, legacyAuthCeiling: false}, false
 	}
 	grants, ok := GrantsFromContext(ctx)
 	if !ok {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil, legacyAuthCeiling: false}, false
 	}
-	return grantAuthorization{policies: [][]Grant{grants}, representedUser: loadedGrantsUser(ctx), representedPolicy: nil}, true
+	return grantAuthorization{policies: [][]Grant{grants}, representedUser: loadedGrantsUser(ctx), representedPolicy: nil, legacyAuthCeiling: false}, true
 }
 
 // loadedGrantsUser is the user whose own grants PrepareContext loaded. API
@@ -93,7 +97,7 @@ func loadedGrantsUser(ctx context.Context) string {
 }
 
 func loadedGrantAuthorization(grants []Grant) grantAuthorization {
-	return grantAuthorization{policies: [][]Grant{grants}, representedUser: "", representedPolicy: nil}
+	return grantAuthorization{policies: [][]Grant{grants}, representedUser: "", representedPolicy: nil, legacyAuthCeiling: false}
 }
 
 // bind applies the trusted represented-user binding to an auth-client check,

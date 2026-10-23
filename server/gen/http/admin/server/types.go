@@ -2404,6 +2404,9 @@ type GetUpstreamOAuthMigrationStatusResponseBody struct {
 	// migrated: it never gates the upstream OAuth cutover. Absent when its check
 	// failed.
 	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
 }
 
 // RunUpstreamOAuthMigrationResponseBody is the type of the "admin" service
@@ -2423,6 +2426,15 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	// Servers marked as needing upstream authentication because they offer a
 	// backfilled auth client.
 	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
+	// Credential choices this run named a typed auth client on.
+	SelectionsMapped *int64 `form:"selections_mapped,omitempty" json:"selections_mapped,omitempty" xml:"selections_mapped,omitempty"`
+	// Execution-selection profile versions this run recorded.
+	ExecutionProfileVersionsWritten *int64 `form:"execution_profile_versions_written,omitempty" json:"execution_profile_versions_written,omitempty" xml:"execution_profile_versions_written,omitempty"`
+	// Default auth permissions this run granted across the organization: the
+	// personal default and shared client grants for every recorded client, and API
+	// key policies once every client is recorded. The auth-permission-defaults
+	// backfill grants the rest.
+	AuthPermissionGrantsWritten *int64 `form:"auth_permission_grants_written,omitempty" json:"auth_permission_grants_written,omitempty" xml:"auth_permission_grants_written,omitempty"`
 	// Why recording typed auth clients failed, when it did. The upstream OAuth
 	// migration itself is unaffected.
 	AuthClientsError *string `form:"auth_clients_error,omitempty" json:"auth_clients_error,omitempty" xml:"auth_clients_error,omitempty"`
@@ -21420,7 +21432,8 @@ type AdminMcpServerToolCallBucketResponseBody struct {
 	BucketStart string `form:"bucket_start" json:"bucket_start" xml:"bucket_start"`
 	// Tool calls in the bucket.
 	Total int64 `form:"total" json:"total" xml:"total"`
-	// Failed tool calls in the bucket.
+	// Tool calls in the bucket that failed with status 400 or above. Tool errors
+	// returned inside HTTP 200 (isError) are not counted here.
 	Failed int64 `form:"failed" json:"failed" xml:"failed"`
 }
 
@@ -21833,9 +21846,21 @@ type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
 	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody `form:"warnings" json:"warnings" xml:"warnings"`
 	// The same counts for each kind of configured identity.
 	Kinds []*AdminUpstreamOAuthMigrationAuthClientKindResponseBody `form:"kinds" json:"kinds" xml:"kinds"`
-	// Phases whose check failed: oauth, headers, ema, reconcile or mark. The
-	// counts cover the other phases.
+	// Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile,
+	// mark, selections or grants. The counts cover the other phases.
 	FailedPhases []string `form:"failed_phases" json:"failed_phases" xml:"failed_phases"`
+	// Whether every live credential choice names a usable auth client or is an
+	// explicit no-auth choice, and the selections check did not fail.
+	SelectionsComplete *bool `form:"selections_complete,omitempty" json:"selections_complete,omitempty" xml:"selections_complete,omitempty"`
+	// Live credential choices with exactly one auth client to name, not yet named.
+	PendingSelectionMappings *int64 `form:"pending_selection_mappings,omitempty" json:"pending_selection_mappings,omitempty" xml:"pending_selection_mappings,omitempty"`
+	// Credential choice coverage for each credential class.
+	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClassResponseBody `form:"selection_classes,omitempty" json:"selection_classes,omitempty" xml:"selection_classes,omitempty"`
+	// The first live credential choices left without a usable auth client.
+	SelectionGaps []*AdminUpstreamOAuthMigrationSelectionGapResponseBody `form:"selection_gaps,omitempty" json:"selection_gaps,omitempty" xml:"selection_gaps,omitempty"`
+	// Every live credential choice left without a usable auth client, including
+	// those beyond selection_gaps.
+	SelectionGapCount *int64 `form:"selection_gap_count,omitempty" json:"selection_gap_count,omitempty" xml:"selection_gap_count,omitempty"`
 }
 
 // AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody is used to
@@ -21890,6 +21915,83 @@ type AdminUpstreamOAuthMigrationAuthClientKindResponseBody struct {
 	Unresolved int64 `form:"unresolved" json:"unresolved" xml:"unresolved"`
 }
 
+// AdminUpstreamOAuthMigrationSelectionClassResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationSelectionClassResponseBody struct {
+	// The class: interactive, id_jag, dashboard_mint, workload or agent.
+	CredentialClass string `form:"credential_class" json:"credential_class" xml:"credential_class"`
+	// Live credential choices of this class.
+	Selections int64 `form:"selections" json:"selections" xml:"selections"`
+	// Choices that already name a usable auth client.
+	Mapped int64 `form:"mapped" json:"mapped" xml:"mapped"`
+	// Choices with exactly one auth client to name, not yet named.
+	Pending int64 `form:"pending" json:"pending" xml:"pending"`
+	// Explicit no-auth choices on servers with no auth client.
+	NoAuth int64 `form:"no_auth" json:"no_auth" xml:"no_auth"`
+	// Choices several auth clients could serve. They are never guessed: configure
+	// the server or ask the credential to reconnect.
+	Ambiguous int64 `form:"ambiguous" json:"ambiguous" xml:"ambiguous"`
+	// Choices whose upstream OAuth client has no live, enabled auth client linked
+	// to the server.
+	NoClient int64 `form:"no_client" json:"no_client" xml:"no_client"`
+	// No-auth choices, and choices naming the server's headers, on servers that
+	// now offer an OAuth-backed client; the credential reconnects.
+	StaleNoAuth int64 `form:"stale_no_auth" json:"stale_no_auth" xml:"stale_no_auth"`
+	// Choices naming an auth client that is no longer usable for the server; the
+	// credential reconnects.
+	Unusable int64 `form:"unusable" json:"unusable" xml:"unusable"`
+}
+
+// AdminUpstreamOAuthMigrationSelectionGapResponseBody is used to define fields
+// on response body types.
+type AdminUpstreamOAuthMigrationSelectionGapResponseBody struct {
+	// The choice.
+	SelectionID string `form:"selection_id" json:"selection_id" xml:"selection_id"`
+	// The class of the credential the choice belongs to.
+	CredentialClass string `form:"credential_class" json:"credential_class" xml:"credential_class"`
+	// The credential.
+	CredentialID string `form:"credential_id" json:"credential_id" xml:"credential_id"`
+	// The server the choice is for.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The server's project.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Why the choice has no usable auth client: ambiguous, no_client,
+	// stale_no_auth, unusable or skipped_race.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+}
+
+// AdminUpstreamOAuthMigrationExecutionProfilesResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfilesResponseBody struct {
+	// Whether every profile is recorded and holds a choice for every server its
+	// assistant reaches.
+	Complete bool `form:"complete" json:"complete" xml:"complete"`
+	// Assistant and trigger pairs, each with a profile per execution context.
+	Targets int64 `form:"targets" json:"targets" xml:"targets"`
+	// Profile versions not yet recorded.
+	PendingVersions int64 `form:"pending_versions" json:"pending_versions" xml:"pending_versions"`
+	// Servers the profiles hold no choice for, by execution context and reason.
+	// They are never guessed: configure the server's auth clients.
+	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody `form:"gaps" json:"gaps" xml:"gaps"`
+}
+
+// AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
+	// user_backed for turns run for a user the event identified, userless for
+	// turns run as the trigger's workload.
+	ExecutionContext string `form:"execution_context" json:"execution_context" xml:"execution_context"`
+	// Why there is no choice: selection_required (several clients could serve it),
+	// personal_requires_user (only a personal client serves it, and the turn has
+	// no user), no_client (no live, enabled auth client carries its upstream OAuth
+	// client), setup_incomplete (it needs upstream authentication and offers no
+	// auth client) or upstream_auth_undecided (it offers no auth client and an
+	// administrator has not decided whether it needs upstream authentication).
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+	// Profile and server pairs with no choice for this reason.
+	Servers int64 `form:"servers" json:"servers" xml:"servers"`
+}
+
 // AdminUpstreamOAuthMigrationStatusResponseBody is used to define fields on
 // response body types.
 type AdminUpstreamOAuthMigrationStatusResponseBody struct {
@@ -21916,6 +22018,9 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	// migrated: it never gates the upstream OAuth cutover. Absent when its check
 	// failed.
 	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -24205,6 +24310,9 @@ func NewGetUpstreamOAuthMigrationStatusResponseBody(res *admin.AdminUpstreamOAut
 	if res.AuthClients != nil {
 		body.AuthClients = marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(res.AuthClients)
 	}
+	if res.ExecutionProfiles != nil {
+		body.ExecutionProfiles = marshalAdminAdminUpstreamOAuthMigrationExecutionProfilesToAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(res.ExecutionProfiles)
+	}
 	return body
 }
 
@@ -24219,6 +24327,9 @@ func NewRunUpstreamOAuthMigrationResponseBody(res *admin.AdminUpstreamOAuthMigra
 		AuthClientsWritten:                 res.AuthClientsWritten,
 		AuthClientLinksWritten:             res.AuthClientLinksWritten,
 		ServersMarkedRequiringUpstreamAuth: res.ServersMarkedRequiringUpstreamAuth,
+		SelectionsMapped:                   res.SelectionsMapped,
+		ExecutionProfileVersionsWritten:    res.ExecutionProfileVersionsWritten,
+		AuthPermissionGrantsWritten:        res.AuthPermissionGrantsWritten,
 		AuthClientsError:                   res.AuthClientsError,
 	}
 	if res.Status != nil {

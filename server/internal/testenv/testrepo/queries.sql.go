@@ -49,6 +49,32 @@ func (q *Queries) AgePreparationFixtureClaim(ctx context.Context, arg AgePrepara
 	return err
 }
 
+const associateAuthClientFixture = `-- name: AssociateAuthClientFixture :exec
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+VALUES (
+    $1, $2, $3, $4,
+    (SELECT ac.attachment_scope FROM mcp_auth_clients ac WHERE ac.id = $4),
+    'backfill'
+)
+`
+
+type AssociateAuthClientFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+}
+
+func (q *Queries) AssociateAuthClientFixture(ctx context.Context, arg AssociateAuthClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, associateAuthClientFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.AuthClientID,
+	)
+	return err
+}
+
 const attachPreparationFixtureInteractiveClient = `-- name: AttachPreparationFixtureInteractiveClient :execrows
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id,user_session_issuer_id)
 SELECT c.id, u.id FROM remote_session_clients c
@@ -151,6 +177,36 @@ func (q *Queries) ClearRemoteSessionClientKeySetFixture(ctx context.Context, jso
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const copyConsentEMACredentialToProjectFixture = `-- name: CopyConsentEMACredentialToProjectFixture :exec
+INSERT INTO remote_session_ema_credentials (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id,
+  remote_session_client_id, resource, subject_urn, client_selection,
+  remote_session_ema_binding_id, ema_binding_generation, ema_provider,
+  internal_session_issuer_id, internal_session_issuer_updated_at, internal_session_issuer_key_id, sign_in_id,
+  access_token_encrypted, access_expires_at
+)
+SELECT c.organization_id, p.id, c.user_session_issuer_id, c.remote_session_issuer_id,
+       c.remote_session_client_id, c.resource, c.subject_urn, c.client_selection,
+       c.remote_session_ema_binding_id, c.ema_binding_generation, c.ema_provider,
+       c.internal_session_issuer_id, c.internal_session_issuer_updated_at, c.internal_session_issuer_key_id, c.sign_in_id,
+       c.access_token_encrypted, c.access_expires_at
+FROM remote_session_ema_credentials AS c
+JOIN projects AS p ON p.id = $1 AND p.organization_id = c.organization_id
+WHERE c.id = $2 AND c.organization_id = $3 AND c.user_session_id IS NULL
+`
+
+type CopyConsentEMACredentialToProjectFixtureParams struct {
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// TEST FIXTURE ONLY. A pending organization-issued consent in another member project.
+func (q *Queries) CopyConsentEMACredentialToProjectFixture(ctx context.Context, arg CopyConsentEMACredentialToProjectFixtureParams) error {
+	_, err := q.db.Exec(ctx, copyConsentEMACredentialToProjectFixture, arg.ProjectID, arg.ID, arg.OrganizationID)
+	return err
 }
 
 const corruptDeviceIntegrationCredentialsFixture = `-- name: CorruptDeviceIntegrationCredentialsFixture :exec
@@ -715,6 +771,55 @@ func (q *Queries) CreateAttachmentUpstreamAgentFixture(ctx context.Context, arg 
 	return result.RowsAffected(), nil
 }
 
+const createAuthClientFixture = `-- name: CreateAuthClientFixture :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
+VALUES ($1, $2, $3, 'backfill', $4)
+RETURNING id
+`
+
+type CreateAuthClientFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ClientType     string
+	Name           string
+}
+
+func (q *Queries) CreateAuthClientFixture(ctx context.Context, arg CreateAuthClientFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createAuthClientFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ClientType,
+		arg.Name,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createAuthClientHeaderFixture = `-- name: CreateAuthClientHeaderFixture :exec
+INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, is_secret, value)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type CreateAuthClientHeaderFixtureParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+	Name           string
+	IsSecret       bool
+	Value          pgtype.Text
+}
+
+func (q *Queries) CreateAuthClientHeaderFixture(ctx context.Context, arg CreateAuthClientHeaderFixtureParams) error {
+	_, err := q.db.Exec(ctx, createAuthClientHeaderFixture,
+		arg.AuthClientID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.IsSecret,
+		arg.Value,
+	)
+	return err
+}
+
 const createMCPGatewayFixture = `-- name: CreateMCPGatewayFixture :one
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
 VALUES ($1, $2, $3, $4)
@@ -890,6 +995,46 @@ func (q *Queries) CreateProjectFixture(ctx context.Context, arg CreateProjectFix
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const createRemoteBackedMCPServerFixture = `-- name: CreateRemoteBackedMCPServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, slug, name, remote_mcp_server_id, visibility)
+VALUES ($1, $2, $3, $3, $4, $5)
+`
+
+type CreateRemoteBackedMCPServerFixtureParams struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	Slug              pgtype.Text
+	RemoteMcpServerID uuid.NullUUID
+	Visibility        string
+}
+
+func (q *Queries) CreateRemoteBackedMCPServerFixture(ctx context.Context, arg CreateRemoteBackedMCPServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, createRemoteBackedMCPServerFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.Slug,
+		arg.RemoteMcpServerID,
+		arg.Visibility,
+	)
+	return err
+}
+
+const createRemoteMCPBackendFixture = `-- name: CreateRemoteMCPBackendFixture :exec
+INSERT INTO remote_mcp_servers (id, project_id, transport_type, url)
+VALUES ($1, $2, 'streamable-http', $3)
+`
+
+type CreateRemoteMCPBackendFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Url       string
+}
+
+func (q *Queries) CreateRemoteMCPBackendFixture(ctx context.Context, arg CreateRemoteMCPBackendFixtureParams) error {
+	_, err := q.db.Exec(ctx, createRemoteMCPBackendFixture, arg.ID, arg.ProjectID, arg.Url)
+	return err
 }
 
 const createRemoteMCPServerFixture = `-- name: CreateRemoteMCPServerFixture :one
@@ -1360,6 +1505,24 @@ type EnablePreparationFixtureCIMDParams struct {
 
 func (q *Queries) EnablePreparationFixtureCIMD(ctx context.Context, arg EnablePreparationFixtureCIMDParams) error {
 	_, err := q.db.Exec(ctx, enablePreparationFixtureCIMD, arg.ID, arg.ProjectID)
+	return err
+}
+
+const expireAPIKeyFixture = `-- name: ExpireAPIKeyFixture :exec
+UPDATE api_keys
+SET expires_at = clock_timestamp() - interval '1 minute'
+WHERE id = $1
+  AND organization_id = $2
+`
+
+type ExpireAPIKeyFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Test-only fixture: puts a key's expiry in the past.
+func (q *Queries) ExpireAPIKeyFixture(ctx context.Context, arg ExpireAPIKeyFixtureParams) error {
+	_, err := q.db.Exec(ctx, expireAPIKeyFixture, arg.ID, arg.OrganizationID)
 	return err
 }
 

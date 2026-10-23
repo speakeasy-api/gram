@@ -73,7 +73,7 @@ func (s *Service) sharedAuthorizationServerRoutes() []sharedAuthorizationServerR
 // routes on mux.
 func attachSharedAuthorizationServers(mux goahttp.Muxer, service *Service) {
 	for _, route := range service.sharedAuthorizationServerRoutes() {
-		o11y.AttachHandler(mux, route.method, route.path, oops.ErrHandle(service.logger, route.handler).ServeHTTP)
+		o11y.AttachHandler(mux, route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, route.handler).ServeHTTP)
 	}
 }
 
@@ -135,7 +135,7 @@ func (s *Service) HandleSharedRevoke(w http.ResponseWriter, r *http.Request) err
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
 	if err != nil {
-		return err
+		return tokenEndpointResolutionError(err)
 	}
 	urls, err := issuer.authorizationServer.urls()
 	if err != nil {
@@ -286,10 +286,10 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 	}
 	challenge, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, issuer.logger)
+		return nil, consentChallengeCacheError(ctx, issuer.logger, err)
 	}
 	if challenge.UserSessionIssuerID != issuer.authorizationServer.issuerID || !challenge.Endpoint.SharedAuthorizationServer {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this authorization server").LogError(ctx, issuer.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "authn challenge state does not match this authorization server").LogWarn(ctx, issuer.logger)
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challenge.Endpoint)
 	if errors.Is(err, errToolsetEndpointMismatch) {
@@ -309,7 +309,7 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
 	if err != nil {
-		return err
+		return tokenEndpointResolutionError(err)
 	}
 	logger := issuer.logger
 
@@ -318,8 +318,16 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "failed to parse form")
 	}
 
+	if code := oauthwire.ClientAuthenticationError(r); code == oautherr.CodeInvalidRequest {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", "", "", r.PostForm.Get(oauthwire.ParamGrantType), code)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "invalid client authentication request")
+	}
+
 	var endpoint *ResolvedMcpEndpoint
 	grantType := r.PostForm.Get(oauthwire.ParamGrantType)
+	if grantType == "" {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
+	}
 	switch grantType {
 	case oauthwire.GrantTypeAuthorizationCode:
 		endpoint, err = s.sharedAuthorizationCodeEndpoint(ctx, w, logger, issuer.authorizationServer.issuerID, r.PostForm.Get(oauthwire.ParamCode))

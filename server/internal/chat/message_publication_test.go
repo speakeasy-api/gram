@@ -368,3 +368,23 @@ func TestConversationEventSnapshotSurvivesDirectoryChangeAndConflict(t *testing.
 		"model_family": "anthropic", "inference_provider": "bedrock", "model_name": "anthropic/claude-opus-5", "department": "engineering",
 	}, events[0].GetIngestion().GetAttributes())
 }
+
+func TestCaptureLineageMutationRequiresOrganization(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	chatID := seedChat(t, ctx, ti, "owner", "", "Lineage scope")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
+	t.Cleanup(func() { require.NoError(t, shutdown(context.WithoutCancel(t.Context()))) })
+	params := minimalChatMessageParams(chatID, ti.projectID)
+	_, err := writer.Write(ctx, ti.projectID, []chat.MessageWrite{{Params: params}})
+	require.NoError(t, err)
+	before := listAllMessages(t, ctx, ti.conn, chatID, ti.projectID)
+	require.Len(t, before, 1)
+	require.NoError(t, repo.New(ti.conn).SetMessageCaptureLineage(ctx, repo.SetMessageCaptureLineageParams{
+		OrganizationID: "another-org", ProjectID: ti.projectID, Ids: []uuid.UUID{before[0].ID}, Kinds: []string{chat.CaptureSynthetic}, OriginalIds: []uuid.UUID{uuid.New()},
+	}))
+	after := listAllMessages(t, ctx, ti.conn, chatID, ti.projectID)
+	require.Equal(t, before[0].CaptureKind, after[0].CaptureKind)
+	require.Equal(t, before[0].OriginalMessageID, after[0].OriginalMessageID)
+}

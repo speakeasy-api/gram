@@ -1,5 +1,29 @@
 # server
 
+## 2.28.0
+
+### Minor Changes
+
+- cea85db: Add the `mcp:auth` and `mcp:blocked_auth` permissions for upstream auth clients. Grants can name a client, a client type, a project, or the owner of a personal connection, including `$represented_user` for the user a request acts for. Checks match strictly, never let anyone use another user's connection, and require an agent's authorizing user to hold the permission too. Agent policies can hold the new scopes, and delegated policy version 5 can encode them; credentials keep being issued at version 4 until every server reads version 5. No request is checked against the new scopes yet, and where access control is skipped, such as for legacy API keys, using an auth client is always denied.
+- 17dbb78: API keys can be created with their own policy through `policy_grants`: `mcp:connect` and `mcp:auth` grants and their blocks. A project-bound key's grants must stay in its project, and a server grant covering every server must name a project. Setting a policy requires org admin and a consumer, producer or chat scope; `keys.list` returns it, the creation and revocation audit entries record it, and revoking the key removes it. The policy is not enforced yet.
+- 461497b: `agent.getPlugins` now lists the MCP servers inside each plugin, so the Speakeasy Agent menu bar can show a server count on each plugin row and expand it to list the servers. A server includes a link to its dashboard page only when the enrolled user holds `mcp:read` on it. A plugin with no servers sends an empty list; the observability plugin, which carries hooks rather than servers, sends none.
+
+### Patch Changes
+
+- 414c2d2: MCP tool calls that answer HTTP 200 with a result carrying `isError: true` now count as `failed` in MCP server health, Platform MCP diagnostics and drill-down, and per-user error flags. Before this change they counted as successes. `failed` is the same class hook-observed tool errors already use.
+  
+  Remote MCP proxy and playground tool-call rows now record the tool's verdict, and the proxy logs in-band tool errors at warn level, without the result body. When a server's only failures are tool errors, fault attribution reports `tool_error_dominant`; tool errors no longer dilute status-based majorities.
+  
+  Hosted calls are reclassified back to 2026-10-15, when their rows began recording the verdict. Older hosted rows, and remote rows from before this deploy, still count as successes. The dashboard charts, project overview, tool usage summaries and tool-call search still classify by HTTP status only.
+- f3a3544: Drop the toolset-keyed hosted MCP dependents: `plugin_servers.toolset_id`, `mcp_metadata.toolset_id` and the `assistant_toolsets` table. Plugin members must now point at an MCP server or a gateway, and MCP metadata must point at an MCP server.
+- fabdfdd: API keys are recognized as their own access principal, `api_key:<id>`, holding only grants written to them, which always match strictly and never include the key creator's access. Server access settings neither list nor replace a key's grants. A new check evaluates server and auth client access for every caller, including API keys and callers without a session, and denies when there is no policy or the request falls outside the key's project or scopes. Nothing calls it yet.
+- f59a907: Behind the per-organization `mandatory-authz-shadow` flag, MCP access decisions are also checked by the mandatory policy check and the result is recorded beside today's decision, without changing any response.
+- cc04b93: Stop reading and writing toolset-keyed hosted MCP dependents. Plugin membership, MCP metadata and assistant attachments use only the MCP server key, so `plugin_servers.toolset_id`, `mcp_metadata.toolset_id` and `assistant_toolsets` can be dropped. The hosted MCP wrappers migration tool keeps only its wrapper backfill; its `-move-dependents`, `-cleanup-orphans` and `-rekey-removal-records` modes are removed. Role delivery no longer adds a hosted server whose toolset has been deleted.
+- 848d449: The tool count on each hosted MCP server in the MCP servers list now counts only tools the server still serves from the project's latest deployment, matching the toolset page. Tools from removed sources or renamed operations no longer inflate it.
+- e4e4413: Add opt-in GKE provisioning for new Kit assistants with issuer-bound workload MCP bootstrap, canonical transcript reuse, and UID-fenced runtime authority. Existing conversations are not migrated. Rootfs-only checkpoints restore into fresh processes with renewed credentials and preserve canonical session bindings. Unsupported snapshot scopes and missing restore evidence fail closed.
+- a911e9e: The platform hosts now answer `/.well-known/mcp-registry-auth` with the proof record set in `GRAM_MCP_REGISTRY_AUTH`, so the Speakeasy Platform MCP can be published to the official MCP registry as `com.speakeasy.ai/platform`. Without the record, these hosts return not found. Custom domains never serve it.
+- f7b5687: Changing a role's grants or an MCP server's audience now republishes the affected role plugins within seconds. Previously these changes only queued a durable publication request, so plugins could wait for the hourly republish sweep before devices saw the new servers.
+
 ## 2.27.0
 
 ### Minor Changes

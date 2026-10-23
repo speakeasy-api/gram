@@ -130,6 +130,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 			Resource:  "meta_mcp_server:" + target.resourceID,
 			Selection: nil,
 			Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
+			Catalog:   nil,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "encode gateway connection options").LogError(ctx, s.logger)
@@ -225,8 +226,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		CredentialID:        session.ID,
 		Source:              upstreamclients.SelectionSourceIssuance,
 		// A dashboard mint has no consent page, so it picks nothing.
-		PickedMcpServerIds: []uuid.UUID{},
-		PickedClientIds:    []uuid.UUID{},
+		PickedMcpServerIds:  []uuid.UUID{},
+		PickedClientIds:     []uuid.UUID{},
+		PickedAuthClientIds: nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
 	}
