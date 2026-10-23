@@ -50,18 +50,18 @@ var AuthClientServer = Type("AuthClientServer", func() {
 
 var AuthClient = Type("AuthClient", func() {
 	Meta("struct:pkg:path", "types")
-	Description("A configured way for Speakeasy to authenticate to an upstream MCP server. Who may use it is controlled by mcp:auth grants on the client, never by who configured it.")
+	Description("A configured way for Speakeasy to authenticate to an upstream MCP server. Who may use it is controlled by mcp:auth grants on the client, never by who configured it. Auth clients are typed auth configuration: they take effect where Speakeasy resolves typed auth clients, which is being rolled out in stages. Until then, an MCP server's existing upstream configuration may keep serving requests.")
 
 	Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
 	Attribute("project_id", String, "The project the client belongs to. Omitted for a client shared across the organization's projects.", func() { Format(FormatUUID) })
 	Attribute("client_type", String, "How the client authenticates upstream.", clientTypeEnum)
 	Attribute("source", AuthClientSource, "backfill when the client was created from existing configuration, admin when an administrator created it.")
 	Attribute("name", String, "The client's name.")
-	Attribute("enabled", Boolean, "Whether the client can be used. A disabled client is never selected or resolved.")
+	Attribute("enabled", Boolean, "Whether the client is enabled. Where typed auth clients are resolved, a disabled client is never selected or resolved. Disabling revokes no upstream credentials, and until typed resolution is rolled out an MCP server's existing upstream configuration may keep serving.")
 	Attribute("remote_session_client_id", String, "The OAuth registration behind remote_session, service_account and ema clients.", func() { Format(FormatUUID) })
 	Attribute("personal", Boolean, "Whether each caller uses their own connection through the client. A grant on a personal client never lets one user use another user's connection.")
 	Attribute("headers", ArrayOf(AuthClientHeader), "The headers the client sends upstream.")
-	Attribute("servers", ArrayOf(AuthClientServer), "The MCP servers that offer the client. Changing or disabling the client changes upstream behavior on every one of them.")
+	Attribute("servers", ArrayOf(AuthClientServer), "The MCP servers that offer the client. Where typed auth clients are resolved, changing or disabling the client changes upstream behavior on every one of them.")
 	Attribute("created_at", String, "When the client was created.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the client was last updated.", func() { Format(FormatDateTime) })
 
@@ -83,7 +83,7 @@ var McpServerAuthentication = Type("McpServerAuthentication", func() {
 })
 
 var _ = Service("authClients", func() {
-	Description("Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned.")
+	Description("Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect where Speakeasy resolves typed auth clients, which is being rolled out in stages; they revoke no upstream credentials and remove no existing upstream OAuth associations, so existing upstream configuration may keep serving until then.")
 	Security(security.Session)
 	Security(security.ByKey, func() {
 		Scope("producer")
@@ -155,12 +155,12 @@ var _ = Service("authClients", func() {
 	})
 
 	Method("updateAuthClient", func() {
-		Description("Rename, enable or disable an auth client. The change applies on every MCP server that offers the client. Requires org:admin.")
+		Description("Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect where typed auth clients are resolved. It revokes no upstream credentials, and until typed resolution is rolled out an MCP server's existing upstream configuration may keep serving. Requires org:admin.")
 
 		Payload(func() {
 			Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
 			Attribute("name", String, "The new name.", func() { MinLength(1) })
-			Attribute("enabled", Boolean, "Whether the client can be used.")
+			Attribute("enabled", Boolean, "Whether the client is enabled where typed auth clients are resolved.")
 			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -181,7 +181,7 @@ var _ = Service("authClients", func() {
 	})
 
 	Method("detachAuthClientFromMcpServer", func() {
-		Description("Stop an MCP server offering an auth client. The client and its other servers are unchanged. Requires org:admin.")
+		Description("Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect where typed auth clients are resolved. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which may keep serving until typed resolution is rolled out. Requires org:admin.")
 
 		Payload(func() {
 			Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
@@ -231,7 +231,7 @@ var _ = Service("authClients", func() {
 	})
 
 	Method("setMcpServerUpstreamAuthRequirement", func() {
-		Description("Declare whether an MCP server's upstream needs authentication. A server that needs none is served without upstream credentials; a server that needs it and offers no enabled client is unavailable until setup is complete. Not available for hosted toolsets. Requires org:admin.")
+		Description("Declare whether an MCP server's upstream needs authentication. Where typed auth clients are resolved, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; until typed resolution is rolled out, the server's existing upstream configuration may keep serving. Not available for hosted toolsets. Requires org:admin.")
 
 		Payload(func() {
 			Attribute("mcp_server_id", String, "The MCP server id.", func() { Format(FormatUUID) })

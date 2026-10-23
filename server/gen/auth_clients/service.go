@@ -17,24 +17,36 @@ import (
 
 // Manage the auth clients Speakeasy uses to authenticate to upstream MCP
 // servers, and which servers offer them. Managing a client never grants
-// permission to use it. Stored header values are never returned.
+// permission to use it. Stored header values are never returned. Changes are
+// to typed auth configuration and take effect where Speakeasy resolves typed
+// auth clients, which is being rolled out in stages; they revoke no upstream
+// credentials and remove no existing upstream OAuth associations, so existing
+// upstream configuration may keep serving until then.
 type Service interface {
 	// List the auth clients in the caller's organization. Requires org:read.
 	ListAuthClients(context.Context, *ListAuthClientsPayload) (res *ListAuthClientsResult, err error)
 	// Get an auth client in the caller's organization. Requires org:read.
 	GetAuthClient(context.Context, *GetAuthClientPayload) (res *types.AuthClient, err error)
-	// Rename, enable or disable an auth client. The change applies on every MCP
-	// server that offers the client. Requires org:admin.
+	// Rename, enable or disable an auth client. The change applies to the typed
+	// auth configuration of every MCP server that offers the client and takes
+	// effect where typed auth clients are resolved. It revokes no upstream
+	// credentials, and until typed resolution is rolled out an MCP server's
+	// existing upstream configuration may keep serving. Requires org:admin.
 	UpdateAuthClient(context.Context, *UpdateAuthClientPayload) (res *types.AuthClient, err error)
-	// Stop an MCP server offering an auth client. The client and its other servers
-	// are unchanged. Requires org:admin.
+	// Stop an MCP server offering an auth client in its typed auth configuration.
+	// The client and its other servers are unchanged. Takes effect where typed
+	// auth clients are resolved. It revokes no upstream credentials and does not
+	// remove the server's existing upstream OAuth association, which may keep
+	// serving until typed resolution is rolled out. Requires org:admin.
 	DetachAuthClientFromMcpServer(context.Context, *DetachAuthClientFromMcpServerPayload) (res *types.AuthClient, err error)
 	// Get how an MCP server authenticates to its upstream: whether authentication
 	// is required and which auth clients it offers. Requires org:read.
 	GetMcpServerAuthentication(context.Context, *GetMcpServerAuthenticationPayload) (res *types.McpServerAuthentication, err error)
-	// Declare whether an MCP server's upstream needs authentication. A server that
-	// needs none is served without upstream credentials; a server that needs it
-	// and offers no enabled client is unavailable until setup is complete. Not
+	// Declare whether an MCP server's upstream needs authentication. Where typed
+	// auth clients are resolved, a server that needs none is served without
+	// upstream credentials and a server that needs it and offers no enabled client
+	// is unavailable until setup is complete; until typed resolution is rolled
+	// out, the server's existing upstream configuration may keep serving. Not
 	// available for hosted toolsets. Requires org:admin.
 	SetMcpServerUpstreamAuthRequirement(context.Context, *SetMcpServerUpstreamAuthRequirementPayload) (res *types.McpServerAuthentication, err error)
 }
@@ -130,7 +142,7 @@ type UpdateAuthClientPayload struct {
 	ID string
 	// The new name.
 	Name *string
-	// Whether the client can be used.
+	// Whether the client is enabled where typed auth clients are resolved.
 	Enabled      *bool
 	SessionToken *string
 	ApikeyToken  *string

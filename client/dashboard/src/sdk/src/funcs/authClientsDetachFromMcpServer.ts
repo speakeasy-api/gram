@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * detachAuthClientFromMcpServer authClients
  *
  * @remarks
- * Stop an MCP server offering an auth client. The client and its other servers are unchanged. Requires org:admin.
+ * Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect where typed auth clients are resolved. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which may keep serving until typed resolution is rolled out. Requires org:admin.
  */
 export function authClientsDetachFromMcpServer(
   client: GramCore,

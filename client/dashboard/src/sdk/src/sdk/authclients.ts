@@ -44,7 +44,7 @@ export class AuthClients extends ClientSDK {
    * detachAuthClientFromMcpServer authClients
    *
    * @remarks
-   * Stop an MCP server offering an auth client. The client and its other servers are unchanged. Requires org:admin.
+   * Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect where typed auth clients are resolved. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which may keep serving until typed resolution is rolled out. Requires org:admin.
    */
   async detachFromMcpServer(
     request: DetachAuthClientFromMcpServerRequest,
@@ -120,7 +120,7 @@ export class AuthClients extends ClientSDK {
    * setMcpServerUpstreamAuthRequirement authClients
    *
    * @remarks
-   * Declare whether an MCP server's upstream needs authentication. A server that needs none is served without upstream credentials; a server that needs it and offers no enabled client is unavailable until setup is complete. Not available for hosted toolsets. Requires org:admin.
+   * Declare whether an MCP server's upstream needs authentication. Where typed auth clients are resolved, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; until typed resolution is rolled out, the server's existing upstream configuration may keep serving. Not available for hosted toolsets. Requires org:admin.
    */
   async setMcpServerUpstreamAuthRequirement(
     request: SetMcpServerUpstreamAuthRequirementRequest,
@@ -139,7 +139,7 @@ export class AuthClients extends ClientSDK {
    * updateAuthClient authClients
    *
    * @remarks
-   * Rename, enable or disable an auth client. The change applies on every MCP server that offers the client. Requires org:admin.
+   * Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect where typed auth clients are resolved. It revokes no upstream credentials, and until typed resolution is rolled out an MCP server's existing upstream configuration may keep serving. Requires org:admin.
    */
   async update(
     request: UpdateAuthClientRequest,

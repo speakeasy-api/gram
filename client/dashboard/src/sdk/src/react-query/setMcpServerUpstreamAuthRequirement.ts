@@ -55,7 +55,7 @@ export type SetMcpServerUpstreamAuthRequirementMutationError =
  * setMcpServerUpstreamAuthRequirement authClients
  *
  * @remarks
- * Declare whether an MCP server's upstream needs authentication. A server that needs none is served without upstream credentials; a server that needs it and offers no enabled client is unavailable until setup is complete. Not available for hosted toolsets. Requires org:admin.
+ * Declare whether an MCP server's upstream needs authentication. Where typed auth clients are resolved, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; until typed resolution is rolled out, the server's existing upstream configuration may keep serving. Not available for hosted toolsets. Requires org:admin.
  */
 export function useSetMcpServerUpstreamAuthRequirementMutation(
   options?: MutationHookOptions<

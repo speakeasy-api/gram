@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * updateAuthClient authClients
  *
  * @remarks
- * Rename, enable or disable an auth client. The change applies on every MCP server that offers the client. Requires org:admin.
+ * Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect where typed auth clients are resolved. It revokes no upstream credentials, and until typed resolution is rolled out an MCP server's existing upstream configuration may keep serving. Requires org:admin.
  */
 export function authClientsUpdate(
   client: GramCore,

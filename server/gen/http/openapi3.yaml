@@ -22588,7 +22588,7 @@ paths:
                 disabled: true
     /rpc/authClients.detachFromMcpServer:
         post:
-            description: Stop an MCP server offering an auth client. The client and its other servers are unchanged. Requires org:admin.
+            description: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect where typed auth clients are resolved. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which may keep serving until typed resolution is rolled out. Requires org:admin.
             operationId: detachAuthClientFromMcpServer
             parameters:
                 - allowEmptyValue: true
@@ -23015,7 +23015,7 @@ paths:
                 name: AuthClients
     /rpc/authClients.setMcpServerUpstreamAuthRequirement:
         post:
-            description: Declare whether an MCP server's upstream needs authentication. A server that needs none is served without upstream credentials; a server that needs it and offers no enabled client is unavailable until setup is complete. Not available for hosted toolsets. Requires org:admin.
+            description: Declare whether an MCP server's upstream needs authentication. Where typed auth clients are resolved, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; until typed resolution is rolled out, the server's existing upstream configuration may keep serving. Not available for hosted toolsets. Requires org:admin.
             operationId: setMcpServerUpstreamAuthRequirement
             parameters:
                 - allowEmptyValue: true
@@ -23110,7 +23110,7 @@ paths:
                 name: SetMcpServerUpstreamAuthRequirement
     /rpc/authClients.update:
         post:
-            description: Rename, enable or disable an auth client. The change applies on every MCP server that offers the client. Requires org:admin.
+            description: Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect where typed auth clients are resolved. It revokes no upstream credentials, and until typed resolution is rolled out an MCP server's existing upstream configuration may keep serving. Requires org:admin.
             operationId: updateAuthClient
             parameters:
                 - allowEmptyValue: true
@@ -94364,7 +94364,7 @@ components:
                     format: date-time
                 enabled:
                     type: boolean
-                    description: Whether the client can be used. A disabled client is never selected or resolved.
+                    description: Whether the client is enabled. Where typed auth clients are resolved, a disabled client is never selected or resolved. Disabling revokes no upstream credentials, and until typed resolution is rolled out an MCP server's existing upstream configuration may keep serving.
                 headers:
                     type: array
                     items:
@@ -94392,7 +94392,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AuthClientServer'
-                    description: The MCP servers that offer the client. Changing or disabling the client changes upstream behavior on every one of them.
+                    description: The MCP servers that offer the client. Where typed auth clients are resolved, changing or disabling the client changes upstream behavior on every one of them.
                 source:
                     enum:
                         - backfill
@@ -94403,7 +94403,7 @@ components:
                     type: string
                     description: When the client was last updated.
                     format: date-time
-            description: A configured way for Speakeasy to authenticate to an upstream MCP server. Who may use it is controlled by mcp:auth grants on the client, never by who configured it.
+            description: 'A configured way for Speakeasy to authenticate to an upstream MCP server. Who may use it is controlled by mcp:auth grants on the client, never by who configured it. Auth clients are typed auth configuration: they take effect where Speakeasy resolves typed auth clients, which is being rolled out in stages. Until then, an MCP server''s existing upstream configuration may keep serving requests.'
             required:
                 - id
                 - client_type
@@ -124466,7 +124466,7 @@ components:
             properties:
                 enabled:
                     type: boolean
-                    description: Whether the client can be used.
+                    description: Whether the client is enabled where typed auth clients are resolved.
                 id:
                     type: string
                     description: The auth client id.
@@ -128391,7 +128391,7 @@ tags:
     - name: auth
       description: Managed auth for gram producers and dashboard.
     - name: authClients
-      description: Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned.
+      description: Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect where Speakeasy resolves typed auth clients, which is being rolled out in stages; they revoke no upstream credentials and remove no existing upstream OAuth associations, so existing upstream configuration may keep serving until then.
     - name: businessMemories
       description: Inspect and semantically search business memories.
     - name: chat
