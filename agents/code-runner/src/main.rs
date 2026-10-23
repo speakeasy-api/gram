@@ -40,14 +40,14 @@ async fn main() -> Result<()> {
     );
     let shutdown = CancellationToken::new();
     let signal = shutdown.clone();
+    // Install the SIGTERM handler before serving, so a failure stops startup
+    // instead of leaving a runner that cannot drain.
+    #[cfg(unix)]
+    let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .context("install SIGTERM handler")?;
     tokio::spawn(async move {
         #[cfg(unix)]
-        {
-            let mut term =
-                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                    .expect("install SIGTERM handler");
-            tokio::select! { _ = tokio::signal::ctrl_c() => {}, _ = term.recv() => {} }
-        }
+        tokio::select! { _ = tokio::signal::ctrl_c() => {}, _ = term.recv() => {} }
         #[cfg(not(unix))]
         let _ = tokio::signal::ctrl_c().await;
         signal.cancel();

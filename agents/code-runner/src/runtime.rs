@@ -96,11 +96,14 @@ pub async fn execute(
     let mut pending = HashSet::new();
     let mut issued = HashSet::new();
     let mut callbacks = 0;
-    let mut turns = 0;
+    let mut suspensions = 0;
     let mut cumulative = 0;
     loop {
-        turns += 1;
-        ensure!(turns <= 256, "suspension limit exceeded");
+        // The final Complete event is not a suspension.
+        if !matches!(event, TurnEvent::Complete(_)) {
+            suspensions += 1;
+            ensure!(suspensions <= 256, "suspension limit exceeded");
+        }
         event = match event {
             TurnEvent::Complete(value) => {
                 ensure!(

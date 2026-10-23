@@ -19,8 +19,8 @@ Build locally with `mise run build:monty` and `mise run build:code-runner`.
 Run `mise run test:code-runner` and `mise run lint:code-runner`. Tests require a
 real Monty executable; `--monty-bin` can point to an existing build of the
 pinned revision. `cargo test` does not silently skip runtime tests when it is absent.
-Rust 1.96.1 is pinned for development; the image uses the repository's pinned
-Rust 1.97 build base. The existing assistant crate retains its own toolchain.
+Rust 1.96.1 is pinned for development and in both image build stages. The
+existing assistant crate retains its own toolchain.
 
 Start `agents/code-runner/target/debug/gram-code-runner` with
 `--monty-bin agents/code-runner/target/monty/bin/monty`. Supply a random bearer
@@ -96,7 +96,8 @@ be at least 35 seconds to cover execution, terminal-frame and connection drainin
   `capacity_exceeded`. At most 32 connections, 16 streams and 4 MiB receive window per
   connection; five seconds to receive headers and the first execution frame.
   At most 16 streams buffer an unadmitted first frame at once; a stream that
-  cannot start reading within those five seconds is refused admission.
+  cannot start reading, or does not deliver its `start` frame, within those
+  five seconds is refused admission.
 
 JSON conversion rejects cyclic/deep values, non-string dictionary keys,
 non-finite numbers, integers larger than 4096 bits and unsupported Python objects.

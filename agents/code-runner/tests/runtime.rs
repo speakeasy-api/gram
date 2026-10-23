@@ -206,6 +206,23 @@ async fn filesystem_environment_and_unknown_external_functions_are_denied() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_program_may_use_every_suspension() {
+    let state = state(1).await;
+    // Each failed name lookup suspends to the host once.
+    let program = |count: usize| {
+        format!(
+            "n = 0\nfor i in range({count}):\n    try:\n        undefined_name\n    except NameError:\n        n += 1\nn"
+        )
+    };
+    assert!(
+        matches!(run(state.clone(), &program(256)).await, ServerFrame::Complete { value, .. } if value == json!(256))
+    );
+    assert!(
+        matches!(run(state, &program(257)).await, ServerFrame::Error { message, .. } if message.contains("suspension limit"))
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn output_is_bounded_without_corrupting_utf8() {
     let result = run(state(1).await, "print('🌍' * 10000)\n7").await;
     let ServerFrame::Complete {
@@ -240,12 +257,14 @@ async fn non_json_and_cyclic_outputs_are_rejected() {
 #[tokio::test(flavor = "multi_thread")]
 async fn memory_and_active_execution_limits_are_enforced() {
     let state = state(1).await;
-    for code in ["'x' * (80 * 1024 * 1024)", "while True:\n    pass"] {
-        assert!(matches!(
-            run(state.clone(), code).await,
-            ServerFrame::Error { .. }
-        ));
-    }
+    // A small result, so only the allocator can reject the allocation.
+    assert!(
+        matches!(run(state.clone(), "len('x' * (80 * 1024 * 1024))").await, ServerFrame::Error { message, .. } if message.contains("MemoryError"))
+    );
+    assert!(matches!(
+        run(state.clone(), "while True:\n    pass").await,
+        ServerFrame::Error { .. }
+    ));
     assert!(
         matches!(run(state, "42").await, ServerFrame::Complete { value, .. } if value == json!(42))
     );
@@ -471,6 +490,54 @@ async fn unadmitted_first_frames_buffer_within_a_bounded_permit_pool() {
         drop(client);
         assert!(task.await.unwrap().is_err());
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_start_frame_that_never_arrives_is_refused_admission() {
+    let (mut client, server) = tokio::io::duplex(64);
+    let task = tokio::spawn(serve_stream(
+        server,
+        state(1).await,
+        CancellationToken::new(),
+    ));
+    // Declare a frame but stall before its body.
+    client.write_u32(64).await.unwrap();
+    let (frame, _) = tokio::time::timeout(Duration::from_secs(8), read_frame(&mut client))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(frame, ServerFrame::Error { code, .. } if code == "admission_refused"),
+        "a first-frame timeout proves the code never ran"
+    );
+    task.await.unwrap().unwrap();
+}
+
+#[test]
+fn callback_results_round_trip_without_a_value() {
+    let error = ClientFrame::CallbackResult {
+        id: 1,
+        value: None,
+        error: Some("denied".into()),
+    };
+    let encoded = serde_json::to_value(&error).unwrap();
+    assert!(encoded.get("value").is_none(), "{encoded}");
+    let ClientFrame::CallbackResult { value, error, .. } = serde_json::from_value(encoded).unwrap()
+    else {
+        panic!("expected callback result")
+    };
+    assert_eq!((value, error.as_deref()), (None, Some("denied")));
+    let null = ClientFrame::CallbackResult {
+        id: 1,
+        value: Some(Value::Null),
+        error: None,
+    };
+    let ClientFrame::CallbackResult { value, .. } =
+        serde_json::from_value(serde_json::to_value(&null).unwrap()).unwrap()
+    else {
+        panic!("expected callback result")
+    };
+    assert_eq!(value, Some(Value::Null), "an explicit null stays a value");
 }
 
 #[tokio::test]

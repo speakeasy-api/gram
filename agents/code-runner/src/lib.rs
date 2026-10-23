@@ -284,8 +284,20 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
         return Ok(());
     };
     let reading = reading?;
-    let (start, _) =
-        tokio::time::timeout_at(deadline, read_frame::<_, ClientFrame>(&mut stream)).await??;
+    let Ok(start) =
+        tokio::time::timeout_at(deadline, read_frame::<_, ClientFrame>(&mut stream)).await
+    else {
+        finish_stream(
+            &mut stream,
+            &ServerFrame::Error {
+                code: "admission_refused".into(),
+                message: "start frame not received in time".into(),
+            },
+        )
+        .await?;
+        return Ok(());
+    };
+    let (start, _) = start?;
     drop(reading);
     let ClientFrame::Start {
         version,

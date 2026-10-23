@@ -20,7 +20,11 @@ pub enum ClientFrame {
     },
     CallbackResult {
         id: u32,
-        #[serde(default, deserialize_with = "present")]
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
         value: Option<Value>,
         #[serde(default)]
         error: Option<String>,
