@@ -232,3 +232,38 @@ it("resolves authorized agent names", async () => {
   );
   expect(await screen.findByText("Example agent")).toBeTruthy();
 });
+
+it("opens a bookmarked registration without selecting a session first", async () => {
+  setup(
+    () => json({ items: [] }),
+    "gateway",
+    "/?registration=bookmarked&q=Ada&sort=expiry",
+  );
+  expect(await screen.findByText("Registration bookmarked")).toBeTruthy();
+  expect(screen.getByPlaceholderText("Search identities…")).toHaveProperty(
+    "value",
+    "Ada",
+  );
+});
+
+it("converts a bookmarked calendar selection to an exclusive next-day bound", async () => {
+  const from = new Date(2026, 2, 7);
+  const to = new Date(2026, 2, 8);
+  const params = new URLSearchParams({
+    from: from.toISOString(),
+    to: to.toISOString(),
+    calendarEnd: new Date(2026, 2, 9).toISOString(),
+  });
+  const { requests } = setup(
+    () => json({ items: [session("calendar")] }),
+    "gateway",
+    `/?${params}`,
+  );
+  await screen.findByText("Person calendar");
+  const request = requests.find((r) =>
+    new URL(r.url).pathname.endsWith(".list"),
+  )!;
+  expect(new URL(request.url).searchParams.get("created_before")).toBe(
+    new Date(2026, 2, 9).toISOString(),
+  );
+});

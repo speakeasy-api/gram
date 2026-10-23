@@ -5,7 +5,7 @@ import {
   useFilterState,
   type FilterValue,
 } from "@/components/filters";
-import { getPresetRange } from "@/elements";
+import { useSessionDateRange } from "@/hooks/useSessionDateRange";
 import type { ListOrganizationRemoteSessionClientSessionsRequest } from "@gram/client/models/operations/listorganizationremotesessionclientsessions.js";
 import { IdentityLink } from "@/components/identity-link";
 import { RequireScope } from "@/components/require-scope";
@@ -70,11 +70,7 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
       },
       { replace: true },
     );
-  const dates = useMemo(() => {
-    if (values.date.customRange) return values.date.customRange;
-    if (values.date.preset) return getPresetRange(values.date.preset);
-    return { from: undefined, to: undefined };
-  }, [values.date]);
+  const { dates, refreshDates } = useSessionDateRange(values.date);
   const sessions = useOrganizationRemoteSessionClientSessionsInfinite({
     clientId,
     search: search || undefined,
@@ -320,7 +316,9 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
           options={SORT_OPTIONS}
         />
         <Page.Toolbar.Refresh
-          onRefresh={() => void sessions.refetch()}
+          onRefresh={() => {
+            if (!refreshDates()) void sessions.refetch();
+          }}
           isRefreshing={sessions.isFetching}
         />
       </Page.Toolbar>

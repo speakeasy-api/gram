@@ -715,10 +715,11 @@ VALUES (@id::uuid, NULL, @org_id::text, @issuer_id::uuid,
 
 -- name: ServersInsertOrganizationGatewaySession :exec
 -- Inert authorizations remain visible while the gateway is disabled.
+-- Access tokens expired one hour ago; refresh authorization has its own deadline.
 INSERT INTO user_sessions
  (id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn,
  jti, refresh_token_hash, refresh_expires_at, expires_at, last_used_at, created_at)
 VALUES (@id::uuid, @org_id::text, @issuer_id::uuid, @client_id::uuid, 'user:' || @user_id::text,
  @jti::text, @refresh_token_hash::text,
- now() + (@expires_in::text)::interval,
+ now() + (@refresh_expires_in::text)::interval,
  now() - interval '1 hour', now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);

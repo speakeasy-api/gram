@@ -47,8 +47,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
 
-// Service implements all four Goa services. The split into four design
-// packages keeps the management-API surface logically grouped while a single
+// Service implements the user-session and gateway-session Goa services. Separate design
+// packages keep the management-API surface logically grouped while a single
 // Service struct lets handlers share dependencies.
 type Service struct {
 	tracer       trace.Tracer
@@ -151,7 +151,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 // Attach wires every Goa service this package backs onto the shared mux:
 // userSessionIssuers, organizationUserSessionIssuers,
 // userSessionIssuersCimdClients, userSessionClients,
-// userSessionConsents, userSessions.
+// userSessionConsents, userSessions, gatewaySessions.
 func Attach(mux goahttp.Muxer, service *Service) {
 	mw := []func(goa.Endpoint) goa.Endpoint{
 		middleware.MapErrors(),

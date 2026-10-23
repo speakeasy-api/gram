@@ -7,7 +7,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useSearchParams } from "react-router";
 import type { ReactNode } from "react";
 
 function render(ui: ReactNode, entry = "/") {
@@ -27,7 +27,14 @@ const state = vi.hoisted(() => ({
   on: false as boolean | undefined,
 }));
 vi.mock("@/components/connections/GatewayConnectionsTab", () => ({
-  GatewayConnectionsTab: () => <div>Shared gateway connections</div>,
+  GatewayConnectionsTab: () => {
+    const [params] = useSearchParams();
+    return (
+      <div>
+        Shared gateway connections<output>{params.toString()}</output>
+      </div>
+    );
+  },
 }));
 vi.mock("@/components/page-templates", () => ({
   SettingsPage: ({
@@ -289,6 +296,9 @@ it("offers shared connection history to non-admins while the gateway is off", as
 
 it("restores a shared Connections URL while the gateway is disabled", () => {
   render(<OrganizationGateway />, "/?tab=connections&q=example&sort=expiry");
+  expect(screen.getByRole("status").textContent).toBe(
+    "tab=connections&q=example&sort=expiry",
+  );
   expect(screen.getByText("Shared gateway connections")).toBeTruthy();
   expect(
     screen

@@ -9,7 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/organization_remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func TestListClientSessionsFiltersAndStableOrdering(t *testing.T) {
 	var ids []string
 	for i, subject := range []string{"refreshable", "terminal-expired", "no-deadline"} {
 		row := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(subject), userIssuer.String(), clientID)
-		params := repo.SetRemoteSessionListFixtureParams{
+		params := testrepo.SetRemoteSessionListFixtureParams{
 			ID: row.ID, OrganizationID: conv.ToPGText(activeOrganizationID(t, ctx)),
 			CreatedAt: pgtype.Timestamptz{Time: now, Valid: true},
 		}
@@ -36,7 +36,7 @@ func TestListClientSessionsFiltersAndStableOrdering(t *testing.T) {
 		if i == 1 {
 			params.AuthorizationExpiresAt = pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true}
 		}
-		require.NoError(t, repo.New(ti.conn).SetRemoteSessionListFixture(ctx, params))
+		require.NoError(t, testrepo.New(ti.conn).SetRemoteSessionListFixture(ctx, params))
 		ids = append(ids, row.ID.String())
 	}
 	result, err := ti.service.ListClientSessions(ctx, &gen.ListClientSessionsPayload{ClientID: clientID, Status: new("active"), Sort: new("expiry")})
