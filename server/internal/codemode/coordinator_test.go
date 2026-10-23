@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -226,6 +228,77 @@ func TestCoordinatorExecuteReleasesAdmissionOnErrorAndCancellation(t *testing.T)
 				require.Zero(t, coordinator.callers.len())
 			}
 			require.Equal(t, 2*(DefaultCallerExecutions+1), owners.deleted, "cancellation still cleans distributed ownership")
+		})
+	}
+}
+
+type deadlineProvider struct {
+	deadline chan time.Time
+}
+
+func (p deadlineProvider) Acquire(ctx context.Context, _ Scope) (Lease, error) {
+	deadline, _ := ctx.Deadline()
+	p.deadline <- deadline
+	return nil, fmt.Errorf("runtime unavailable")
+}
+
+func TestCoordinatorWallTimeIncludesAdmission(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		provider := deadlineProvider{deadline: make(chan time.Time, 1)}
+		coordinator, err := NewCoordinator(provider, &executionCleanupOwners{}, Limits{OrganizationExecutions: 1, CallerExecutions: 1, AdmissionWait: 3 * time.Second})
+		require.NoError(t, err)
+		scope := Scope{Organization: "test-org", Project: uuid.New(), Gateway: uuid.New(), Caller: []string{"caller"}, Session: "session", Request: json.RawMessage(`1`)}
+		release, err := coordinator.admit(t.Context(), scope)
+		require.NoError(t, err)
+		started := time.Now()
+		done := make(chan error, 1)
+		go func() {
+			_, err := coordinator.Execute(t.Context(), scope, "1", nil)
+			done <- err
+		}()
+		time.Sleep(2 * time.Second)
+		release()
+		require.ErrorContains(t, <-done, "runtime unavailable")
+		require.Equal(t, started.Add(MaxWallTime), <-provider.deadline, "time spent queued for admission counts toward the wall time")
+	})
+}
+
+type ownershipCheckOwners struct {
+	*scriptedOwners
+}
+
+func (ownershipCheckOwners) SetIfAbsent(context.Context, string, any, time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (ownershipCheckOwners) CompareAndDelete(context.Context, string, any) (bool, error) {
+	return true, nil
+}
+
+func TestCoordinatorOwnershipReadErrorIsNotCancellation(t *testing.T) {
+	t.Parallel()
+	runner, err := NewRunnerClient("http://127.0.0.1:1", strings.Repeat("t", 32), &net.Dialer{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = runner.Close() })
+	scope := Scope{Organization: "test-org", Project: uuid.New(), Gateway: uuid.New(), Caller: []string{"caller"}, Session: "session", Request: json.RawMessage(`1`)}
+	for name, tc := range map[string]struct {
+		read      ownerRead
+		want      error
+		notWanted error
+	}{
+		"read error":    {read: ownerRead{owner: "", err: errors.New("i/o timeout")}, want: ErrRuntimeUnavailable, notWanted: ErrCancelledBeforeSubmit},
+		"missing owner": {read: ownerRead{owner: "", err: redisCache.ErrCacheMiss}, want: ErrCancelledBeforeSubmit, notWanted: ErrRuntimeUnavailable},
+		"cancelled":     {read: ownerRead{owner: "cancel:other", err: nil}, want: ErrCancelledBeforeSubmit, notWanted: ErrRuntimeUnavailable},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			owners := ownershipCheckOwners{scriptedOwners: &scriptedOwners{OwnershipStore: nil, mu: sync.Mutex{}, script: []ownerRead{tc.read}, reads: 0}}
+			coordinator, err := NewCoordinator(&StaticProvider{Runner: runner}, owners, Limits{})
+			require.NoError(t, err)
+			_, err = coordinator.Execute(t.Context(), scope, "1", nil)
+			require.ErrorIs(t, err, tc.want)
+			require.NotErrorIs(t, err, tc.notWanted)
 		})
 	}
 }

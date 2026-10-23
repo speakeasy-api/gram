@@ -171,13 +171,15 @@ func (c *Coordinator) Execute(ctx context.Context, scope Scope, code string, fac
 		return nil, fmt.Errorf("program exceeds source limit")
 	}
 	started := time.Now()
+	// The wall time covers admission too, so a queued request cannot hold
+	// its slots past MaxWallTime.
+	ctx, cancel := context.WithTimeout(ctx, MaxWallTime)
+	defer cancel()
 	release, err := c.admit(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
-	ctx, cancel := context.WithTimeout(ctx, MaxWallTime)
-	defer cancel()
 	id := uuid.New()
 	owner := id.String()
 	acquired, err := c.owners.SetIfAbsent(ctx, key, owner, executionLeaseTTL)
@@ -207,8 +209,12 @@ func (c *Coordinator) Execute(ctx context.Context, scope Scope, code string, fac
 	var current string
 	err = c.owners.Get(check, key, &current)
 	stop()
-	if err != nil || current != owner {
+	switch {
+	case err == nil && current == owner:
+	case err == nil, errors.Is(err, redisCache.ErrCacheMiss):
 		return nil, ErrCancelledBeforeSubmit
+	default:
+		return nil, fmt.Errorf("%w: read execution ownership: %w", ErrRuntimeUnavailable, err)
 	}
 	monitorDone := make(chan struct{})
 	go func() {
