@@ -73,7 +73,7 @@ func (s *Service) sharedAuthorizationServerRoutes() []sharedAuthorizationServerR
 // routes on mux.
 func attachSharedAuthorizationServers(mux goahttp.Muxer, service *Service) {
 	for _, route := range service.sharedAuthorizationServerRoutes() {
-		o11y.AttachHandler(mux, route.method, route.path, oops.ErrHandle(service.logger, route.handler).ServeHTTP)
+		o11y.AttachHandler(mux, route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, route.handler).ServeHTTP)
 	}
 }
 
@@ -135,7 +135,7 @@ func (s *Service) HandleSharedRevoke(w http.ResponseWriter, r *http.Request) err
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
 	if err != nil {
-		return err
+		return tokenEndpointResolutionError(err)
 	}
 	urls, err := issuer.authorizationServer.urls()
 	if err != nil {
@@ -309,7 +309,7 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
 	if err != nil {
-		return err
+		return tokenEndpointResolutionError(err)
 	}
 	logger := issuer.logger
 
@@ -325,6 +325,9 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 
 	var endpoint *ResolvedMcpEndpoint
 	grantType := r.PostForm.Get(oauthwire.ParamGrantType)
+	if grantType == "" {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
+	}
 	switch grantType {
 	case oauthwire.GrantTypeAuthorizationCode:
 		endpoint, err = s.sharedAuthorizationCodeEndpoint(ctx, w, logger, issuer.authorizationServer.issuerID, r.PostForm.Get(oauthwire.ParamCode))

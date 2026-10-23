@@ -654,7 +654,7 @@ func TestCIMDAdmission_TokenRejectsWhenDisabled(t *testing.T) {
 
 	w := doCIMDToken(t, ti, mcpSlug, ds.clientID)
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	requireTokenOAuthError(t, w, "invalid_client")
+	requireTokenOAuthError(t, w, "unauthorized_client")
 	requireAuthorizeErrorDescription(t, w, "does not accept client ID metadata documents")
 }
 
@@ -706,4 +706,23 @@ func fetchASMetadata(t *testing.T, ti *testInstance, mcpSlug string) map[string]
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
 	return metadata
+}
+
+func TestCIMDAdmission_RefreshRejectsWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, ds, toolset := newTestCIMDService(t)
+	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeOpen)
+
+	// Establish the CIMD client row while the issuer still admits it.
+	mcpSlug := toolset.McpSlug.String
+	require.Equal(t, http.StatusFound, doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t))).Code)
+
+	// Now flip the off switch. The row still exists and is still public.
+	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeDisabled)
+
+	w := postForm(t, ti, mcpSlug, "token", url.Values{"grant_type": {"refresh_token"}, "client_id": {ds.clientID}, "refresh_token": {"unused-refresh-token"}})
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	requireTokenOAuthError(t, w, "invalid_grant")
+	requireAuthorizeErrorDescription(t, w, "does not accept client ID metadata documents")
 }
