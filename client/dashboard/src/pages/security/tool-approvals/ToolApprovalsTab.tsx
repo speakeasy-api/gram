@@ -173,6 +173,19 @@ export function ToolApprovalsTab(): JSX.Element {
           ]}
         />
       </div>
+      {selectedID !== null && open === null && openQuery.isError ? (
+        <Alert variant="error">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              This approval request could not be opened. It may be in another
+              project or no longer exist.
+            </span>
+            <Button variant="secondary" size="sm" onClick={closeRequest}>
+              <Button.Text>Dismiss</Button.Text>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {approvalsQuery.isError ? (
         <Alert variant="error">
           <AlertDescription className="flex flex-wrap items-center justify-between gap-3">

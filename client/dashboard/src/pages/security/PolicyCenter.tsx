@@ -1411,6 +1411,7 @@ export function SpecificUsersAudienceSection({
   selectedAudiencePrincipalUrns,
   onTogglePrincipal,
   emptyHint = "Select at least one user to save a targeted policy.",
+  idPrefix = "audience",
 }: {
   members: AccessMember[];
   userSearch: string;
@@ -1419,6 +1420,8 @@ export function SpecificUsersAudienceSection({
   onTogglePrincipal: (principalUrn: string, checked: boolean) => void;
   /** Shown while no user is selected; null shows nothing. */
   emptyHint?: string | null;
+  /** Keeps checkbox ids unique when two user pickers share a page. */
+  idPrefix?: string;
 }): JSX.Element {
   const memberByPrincipalUrn = useMemo(
     () => new Map(members.map((member) => [member.principalUrn, member])),
@@ -1482,7 +1485,7 @@ export function SpecificUsersAudienceSection({
               {selectedUserOptions.map((option) => (
                 <AudiencePrincipalRow
                   key={option.principalUrn}
-                  id={`audience-selected-${option.principalUrn}`}
+                  id={`${idPrefix}-selected-${option.principalUrn}`}
                   checked
                   title={option.title}
                   subtitle={option.subtitle}
@@ -1508,6 +1511,7 @@ export function SpecificUsersAudienceSection({
           results={visibleSearchResults}
           selectedAudiencePrincipalUrns={selectedAudiencePrincipalUrns}
           onTogglePrincipal={onTogglePrincipal}
+          idPrefix={idPrefix}
         />
       </div>
 
@@ -1526,12 +1530,14 @@ function UserSearchResults({
   results,
   selectedAudiencePrincipalUrns,
   onTogglePrincipal,
+  idPrefix,
 }: {
   hasSearch: boolean;
   hiddenResultCount: number;
   results: AccessMember[];
   selectedAudiencePrincipalUrns: Set<string>;
   onTogglePrincipal: (principalUrn: string, checked: boolean) => void;
+  idPrefix: string;
 }) {
   if (!hasSearch) {
     return (
@@ -1558,7 +1564,7 @@ function UserSearchResults({
           return (
             <AudiencePrincipalRow
               key={principalUrn}
-              id={`audience-result-${principalUrn}`}
+              id={`${idPrefix}-result-${principalUrn}`}
               checked={selectedAudiencePrincipalUrns.has(principalUrn)}
               title={memberDisplayName(member)}
               subtitle={member.email}

@@ -1,6 +1,7 @@
 import type { BadgeProps } from "@/components/ui/Badge";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { RiskPolicyApproval } from "@gram/client/models/components/riskpolicyapproval.js";
+import { memberDisplayName } from "../audience-principals";
 
 export type ApprovalStatus = RiskPolicyApproval["status"];
 
@@ -25,7 +26,7 @@ export function requesterLabel(
   const member = members.find(
     (candidate) => candidate.principalUrn === requesterUrn,
   );
-  if (member) return member.name || member.email;
+  if (member) return memberDisplayName(member);
   const [kind, id] = requesterUrn.split(":", 2);
   if (kind === "agent" && id) return `Agent ${id.slice(0, 8)}`;
   return requesterUrn;

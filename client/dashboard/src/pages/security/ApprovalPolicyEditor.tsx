@@ -124,9 +124,10 @@ function ApproversPicker({
     const next = new Set(approvers);
     if (checked) {
       next.add(principalUrn);
-    } else {
-      next.delete(principalUrn);
+      setApprovers(next);
+      return;
     }
+    next.delete(principalUrn);
     setApprovers(next);
   };
 
@@ -146,6 +147,7 @@ function ApproversPicker({
         selectedAudiencePrincipalUrns={approvers}
         onTogglePrincipal={toggle}
         emptyHint={null}
+        idPrefix="approver"
       />
       <div className="border-border border">
         <AudiencePrincipalSection title="Roles">

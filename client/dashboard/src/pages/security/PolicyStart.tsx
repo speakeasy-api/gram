@@ -482,7 +482,8 @@ function UseCaseTable({
           );
         })
       )}
-      {approvalsEnabled && !isLoading && !isError ? (
+      {/* Needs no preset, so it stays when the presets fail to load. */}
+      {approvalsEnabled && !isLoading ? (
         <ApprovalUseCaseRow onPick={() => onScratch("approval")} />
       ) : null}
       <div className="bg-muted/30 flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">

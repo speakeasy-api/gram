@@ -237,6 +237,7 @@ export function PolicyHeader({
     label: kindLabel,
     placeholder,
     createHint,
+    inactiveNote,
   } = POLICY_EDITOR_KIND_META[kind];
   const isCreate = policy === null;
   const routes = useRoutes();
@@ -310,9 +311,7 @@ export function PolicyHeader({
         {policy ? (
           <Text small muted>
             Version {policy.version} · {kindLabel}
-            {policy.enabled
-              ? null
-              : " · Inactive — new messages are not scanned"}
+            {policy.enabled ? null : ` · Inactive: ${inactiveNote}`}
           </Text>
         ) : (
           <Text small muted>

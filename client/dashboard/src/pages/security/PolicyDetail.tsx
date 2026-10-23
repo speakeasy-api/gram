@@ -392,6 +392,7 @@ function NewPolicyFrame({ children }: { children: ReactNode }): JSX.Element {
 
 function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
+  const toolApprovals = useFeatureFlag(FEATURE_FLAGS.toolApprovals).status;
   const [category] = useQueryState("category");
   const location = useLocation();
   const draft = readPolicyDraft(location.state);
@@ -429,7 +430,11 @@ function PolicyNewContent(): JSX.Element {
       </NewPolicyFrame>
     );
   }
-  if (kind === "approval") {
+  // With the flag off, a stale link to the approval editor opens the chooser.
+  if (
+    kind === "approval" &&
+    (toolApprovals === "enabled" || toolApprovals === "loading")
+  ) {
     return (
       <NewPolicyFrame>
         <ApprovalPolicyEditor policy={null} />
