@@ -1405,7 +1405,7 @@ function PluginServerCard({
 }) {
   const routes = useRoutes();
 
-  // Hosted rows resolve to their toolset under either key; anything else is remote.
+  // Hosted rows resolve to their toolset; other MCP server rows are remote.
   const isRemote =
     !!server.mcpServerId &&
     !toolset &&
@@ -1475,6 +1475,10 @@ function PluginServerCard({
                 ? "Unproxied MCP · Not proxied"
                 : "Remote MCP"}
             </Badge>
+          ) : server.metaMcpServerId ? (
+            <Badge variant="neutral" className="text-xs">
+              Gateway
+            </Badge>
           ) : metadataUnavailable ? (
             <Badge variant="neutral" className="text-xs">
               Server metadata unavailable
@@ -1483,11 +1487,7 @@ function PluginServerCard({
             <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
           ) : isLoading ? (
             <Skeleton className="h-5 w-16" />
-          ) : (
-            <Badge variant="destructive" className="text-xs">
-              Toolset missing
-            </Badge>
-          )}
+          ) : null}
         </div>
       </div>
 

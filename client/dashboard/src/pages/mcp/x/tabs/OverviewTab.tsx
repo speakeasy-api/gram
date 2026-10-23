@@ -9,7 +9,14 @@ import { serializeFilters } from "@/pages/logs/log-filter-url";
 import { Operator } from "@gram/client/models/components/logfilter";
 import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 import { Stack } from "@/components/ui/Stack";
-import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
+import {
+  type HostedServerRef,
+  MCPOverviewTab,
+} from "@/pages/mcp/overview/MCPOverviewTab";
+import {
+  isCanonicalHostedWrapper,
+  standsInForToolset,
+} from "@/pages/mcp/x/MCPServerDetailsRouting";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { TunneledMcpConnectionsPanel } from "./TunneledMcpConnectionsPanel";
 import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
@@ -20,9 +27,12 @@ import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
 export function OverviewTab({
   mcpServer,
   agentSetupHref,
+  hostedToolset: loadedToolset,
 }: {
   mcpServer: McpServer;
   agentSetupHref: string;
+  /** The hosted toolset when loaded, for when the read's summary is missing. */
+  hostedToolset?: { id: string; slug: string; name: string };
 }): JSX.Element | null {
   const routes = useRoutes();
   const client = useGramContext();
@@ -63,16 +73,42 @@ export function OverviewTab({
       />
     );
   }
-  const server = {
-    kind: "mcp-server" as const,
-    id: mcpServer.id,
-    slug: mcpServer.slug ?? "",
-    name: mcpServer.name ?? "MCP Server",
-  };
+  const hosted = standsInForToolset(mcpServer);
+  const hostedToolset = hosted
+    ? (mcpServer.toolset ?? loadedToolset)
+    : undefined;
+  // Without the toolset slug a hosted server's traffic can't be shown at all.
+  if (hosted && !hostedToolset) return null;
+  // Hosted traffic is only attributed by toolset slug, so a hosted server keeps the toolset page's overview.
+  const server: HostedServerRef = hostedToolset
+    ? {
+        kind: "toolset",
+        id: hostedToolset.id,
+        slug: hostedToolset.slug,
+        name: hostedToolset.name,
+      }
+    : {
+        kind: "mcp-server",
+        id: mcpServer.id,
+        slug: mcpServer.slug ?? "",
+        name: mcpServer.name ?? "MCP Server",
+      };
   const tunneled = !!mcpServer.tunneledMcpServerId;
   // The usage dashboard is keyed by slug; a tunneled server without one still
   // gets its tunnel status.
-  const usage = mcpServer.slug ? (
+  // Plugin entries name a non-canonical host by its own id; only the canonical wrapper shares the toolset's.
+  const pluginServer: HostedServerRef =
+    hostedToolset && !isCanonicalHostedWrapper(mcpServer)
+      ? {
+          kind: "mcp-server",
+          id: mcpServer.id,
+          slug: mcpServer.slug ?? "",
+          name: mcpServer.name ?? "MCP Server",
+        }
+      : server;
+  const usage = hostedToolset ? (
+    <MCPOverviewTab server={server} pluginServer={pluginServer} />
+  ) : mcpServer.slug ? (
     <MCPOverviewTab
       server={server}
       // For tunneled servers the marketplace banner sits above the tunnel

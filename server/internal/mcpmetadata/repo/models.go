@@ -32,7 +32,7 @@ type McpMetadatum struct {
 	// @access: confidential
 	ID uuid.UUID
 	// @access: confidential
-	McpServerID uuid.NullUUID
+	McpServerID uuid.UUID
 	// @access: confidential
 	ProjectID uuid.UUID
 	// @access: restricted

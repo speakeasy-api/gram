@@ -20,7 +20,6 @@ import { Icon } from "@/components/ui/Icon";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { Link } from "react-router";
 import { BuiltinMcpSidebarNav } from "./mcp/builtin-mcp-sidebar-nav";
-import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { GatewaySidebarNav } from "./gateway-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
 import { ProjectGuideSidebarCta } from "./project-guide-sidebar-cta";
@@ -171,8 +170,6 @@ export function AppSidebar({
     );
   } else if (routes.mcp.builtin.active) {
     sidebarContent = <BuiltinMcpSidebarNav />;
-  } else if (routes.mcp.details.active) {
-    sidebarContent = <McpDetailSidebarNav />;
   } else if (routes.mcp.x.active) {
     sidebarContent = <McpServerXSidebarNav />;
   } else if (routes.mcp.gateway.active) {

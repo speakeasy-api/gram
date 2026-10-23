@@ -1,6 +1,6 @@
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { ListedMcpServer } from "@/components/mcp/mcp-server-kind";
-import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import {
   defineFilters,
   type FilterOption,
@@ -111,10 +111,10 @@ export function mcpServerFacets(
         ? "catalog"
         : "custom"
       : kind;
-  // Older plugin entries name the toolset itself, which its canonical wrapper stands for.
+  // Older plugin entries name the toolset itself, which its hosting server stands for.
   const pluginIds = new Set(membership.byMcpServerId.get(server.id) ?? []);
-  if (kind === "hosted" && isCanonicalHostedWrapper(server)) {
-    for (const id of membership.byToolsetId.get(server.id) ?? [])
+  if (kind === "hosted" && server.toolsetId && standsInForToolset(server)) {
+    for (const id of membership.byToolsetId.get(server.toolsetId) ?? [])
       pluginIds.add(id);
   }
   return {
