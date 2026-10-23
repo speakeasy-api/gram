@@ -5,13 +5,19 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Child, Command},
-    sync::Mutex,
+    sync::{Mutex, MutexGuard, PoisonError},
 };
 
 /// Serialises writing fake executables with spawning them. A child forked
 /// while another test holds a script open for writing inherits that handle
 /// until it execs, so exec'ing the script meanwhile fails with `ETXTBSY`.
 static EXECUTABLES: Mutex<()> = Mutex::new(());
+
+/// Holds `EXECUTABLES`, ignoring poisoning: it guards no data, and a panic in
+/// one test must not surface as a `PoisonError` in the others.
+fn executables() -> MutexGuard<'static, ()> {
+    EXECUTABLES.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 /// A directory holding the worker shim beside a fake `monty` script, which
 /// the shim confines and runs in place of the interpreter.
@@ -21,7 +27,7 @@ struct Worker {
 
 impl Worker {
     fn new(script: &str) -> Self {
-        let _executables = EXECUTABLES.lock().unwrap();
+        let _executables = executables();
         let dir = std::env::temp_dir().join(format!("gram-code-worker-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         fs::copy(
@@ -45,7 +51,7 @@ impl Worker {
 
     fn run(&self, confined: bool, args: &[String]) -> String {
         let child = {
-            let _executables = EXECUTABLES.lock().unwrap();
+            let _executables = executables();
             Command::new(self.program(confined))
                 .args(args)
                 .stdout(std::process::Stdio::piped())
@@ -57,7 +63,7 @@ impl Worker {
     }
 
     fn spawn(&self, confined: bool, secret: &str) -> Child {
-        let _executables = EXECUTABLES.lock().unwrap();
+        let _executables = executables();
         Command::new(self.program(confined))
             .env("WORKER_SECRET", secret)
             .spawn()
@@ -73,7 +79,8 @@ impl Drop for Worker {
 
 /// Runs a probe against a sibling worker that holds a secret. Probe scripts
 /// leave stderr alone: a confined worker cannot open `/dev/null` for writing,
-/// so redirecting there would make every probe report a refusal.
+/// so redirecting there would make every probe report a refusal. They also
+/// start no subprocess or pipeline, which a confined worker cannot fork.
 fn probe(script: &str, confined: bool) -> String {
     let secret = format!("in-flight-{}", uuid::Uuid::new_v4());
     let sibling = Worker::new("exec sleep 30");
@@ -89,17 +96,18 @@ fn probe(script: &str, confined: bool) -> String {
         }
         started
     });
-    // A dead sibling would make every refusal below pass vacuously.
-    assert!(ready, "the sibling did not exec sleep");
-    let reader = Worker::new(&script.replace("SECRET", &secret));
-    let result = reader.run(confined, &[target.id().to_string()]);
-    assert!(
-        target.try_wait().unwrap().is_none(),
-        "the sibling was still running when probed"
-    );
-    target.kill().unwrap();
+    let result = ready.then(|| {
+        let reader = Worker::new(&script.replace("SECRET", &secret));
+        reader.run(confined, &[target.id().to_string()])
+    });
+    let alive = target.try_wait().unwrap().is_none();
+    // Stop the sibling before asserting, so a failure does not leak it.
+    let _ = target.kill();
     target.wait().unwrap();
-    result
+    // A dead sibling would make every refusal pass vacuously.
+    assert!(ready, "the sibling did not exec sleep");
+    assert!(alive, "the sibling was still running when probed");
+    result.unwrap()
 }
 
 #[test]
@@ -204,9 +212,8 @@ fn worker_cannot_truncate_a_file() {
     }
     // truncate(2) by path needs only TRUNCATE, which Landlock leaves
     // unrestricted unless the ruleset handles it.
-    let worker = Worker::new(
-        r#"if perl -e 'truncate($ARGV[0], 0) or exit 1' "$1"; then echo reached; else echo refused; fi"#,
-    );
+    let worker =
+        Worker::new(r#"exec perl -e 'print truncate($ARGV[0], 0) ? "reached" : "refused"' "$1""#);
     let victim = worker.dir.join("victim");
     for (confined, expected) in [(true, "refused"), (false, "reached")] {
         fs::write(&victim, "kept").unwrap();
@@ -223,10 +230,9 @@ fn worker_cannot_truncate_a_file() {
 
 #[test]
 fn worker_cannot_read_another_workers_memory() {
-    // environ uses the same ptrace access check as mem but is readable
-    // without attaching, so it proves a sibling's memory is out of reach
-    // even where Yama would stop an attach.
-    let script = r#"if tr '\0' '\n' < /proc/"$1"/environ | grep -q SECRET; then echo reached; else echo refused; fi"#;
+    // Unconfined, the same user reads a sibling's environ, so the refusal
+    // comes from Landlock denying the confined worker all of /proc.
+    let script = r#"exec perl -e 'open(my $f, "<", "/proc/$ARGV[0]/environ") or do { print "refused"; exit }; local $/; print((<$f> =~ /SECRET/) ? "reached" : "refused")' "$1""#;
     assert_eq!(
         probe(script, false),
         "reached",
@@ -237,7 +243,7 @@ fn worker_cannot_read_another_workers_memory() {
         "refused",
         "a confined worker cannot read a sibling's memory"
     );
-    let mem = r#"if dd if=/proc/"$1"/mem bs=1 count=1 skip=4194304 2>&1 | grep -q 'No such file\|Permission denied\|Operation not permitted'; then echo refused; else echo reached; fi"#;
+    let mem = r#"exec perl -e 'print open(my $f, "<", "/proc/$ARGV[0]/mem") ? "reached" : "refused"' "$1""#;
     assert_eq!(
         probe(mem, true),
         "refused",
@@ -260,5 +266,34 @@ fn worker_cpu_time_is_capped() {
     assert!(
         started.elapsed() < std::time::Duration::from_secs(10),
         "the budget is seconds of CPU, not an unbounded run"
+    );
+}
+
+#[test]
+fn worker_cannot_start_a_child_process() {
+    // A child would get a CPU budget of its own, so a worker could multiply
+    // its share of the pod.
+    let worker = Worker::new(
+        r#"exec perl -e '$p = fork; if (!defined $p) { print "refused" } elsif ($p == 0) { exit 0 } else { waitpid($p, 0); print "reached" }'"#,
+    );
+    assert_eq!(
+        worker.run(false, &[]),
+        "reached",
+        "the probe works unconfined"
+    );
+    assert_eq!(
+        worker.run(true, &[]),
+        "refused",
+        "a confined worker cannot fork"
+    );
+    // clone3 hides its flags from the filter, so it reports ENOSYS and the C
+    // library falls back to clone, where threads stay allowed.
+    let clone3 = Worker::new(
+        r#"exec perl -e '$r = syscall($ARGV[0] + 0, 0, 0); print $r == -1 ? $! + 0 : "ok"' "$1""#,
+    );
+    assert_eq!(
+        clone3.run(true, &[libc::SYS_clone3.to_string()]),
+        libc::ENOSYS.to_string(),
+        "a confined worker cannot call clone3"
     );
 }

@@ -40,11 +40,16 @@ export function GatewayDiscoverySection({
     { throwOnError: false },
   );
   // Code Mode is rolled out per organization by Speakeasy. Organizations
-  // without it still see it, disabled, so they know to ask for it.
-  const entitled = features.data?.codeModeEnabled === true;
-  const notEnabled = features.data !== undefined && !entitled;
+  // without it still see it, disabled, so they know to ask for it. Only a
+  // successful read says the organization is not enabled; while the read is
+  // loading or failed (members without org:read), the gateway's own
+  // availability decides.
+  const entitlementKnown = features.data !== undefined;
+  const notEnabled = features.data?.codeModeEnabled === false;
   // Code Mode is never offered to anonymous callers.
   const requiresSignIn = !metaMcpServer.userSessionIssuerId;
+  const codeModeSelectable =
+    metaMcpServer.codeModeEnabled === true && !notEnabled;
   const supportsEditing = isKnownEnumValue(
     UpdateMetaMcpServerFormDiscoveryMode,
     metaMcpServer.discoveryMode,
@@ -93,7 +98,11 @@ export function GatewayDiscoverySection({
                   canWrite &&
                   supportsEditing &&
                   !update.isPending &&
-                  isKnownEnumValue(UpdateMetaMcpServerFormDiscoveryMode, value)
+                  isKnownEnumValue(
+                    UpdateMetaMcpServerFormDiscoveryMode,
+                    value,
+                  ) &&
+                  (value !== "code_mode" || codeModeSelectable)
                 )
                   setMode(value);
               }}
@@ -105,15 +114,14 @@ export function GatewayDiscoverySection({
               <SelectContent>
                 <SelectItem value="progressive">Progressive</SelectItem>
                 <SelectItem value="direct">Direct</SelectItem>
-                <SelectItem
-                  value="code_mode"
-                  disabled={!metaMcpServer.codeModeEnabled}
-                >
+                <SelectItem value="code_mode" disabled={!codeModeSelectable}>
                   {notEnabled
                     ? "Code Mode (not enabled)"
                     : requiresSignIn
                       ? "Code Mode (requires sign-in)"
-                      : "Code Mode"}
+                      : codeModeSelectable
+                        ? "Code Mode"
+                        : "Code Mode (unavailable)"}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -124,13 +132,15 @@ export function GatewayDiscoverySection({
               </p>
             )}
             {metaMcpServer.discoveryMode === "code_mode" &&
-              !metaMcpServer.codeModeEnabled && (
+              !codeModeSelectable && (
                 <p className="text-muted-foreground text-sm">
                   {notEnabled
                     ? "Code Mode is not enabled for your organization; contact Speakeasy to turn it on."
                     : requiresSignIn
                       ? "Code Mode requires sign-in, and this gateway allows anonymous callers."
-                      : "The code runtime is unavailable."}{" "}
+                      : entitlementKnown
+                        ? "The code runtime is unavailable."
+                        : "Code Mode is unavailable for this gateway."}{" "}
                   Connections currently use Progressive discovery; the saved
                   default remains Code Mode.
                 </p>
@@ -158,7 +168,7 @@ export function GatewayDiscoverySection({
                   !knownDraft ||
                   mode === metaMcpServer.discoveryMode ||
                   update.isPending ||
-                  (mode === "code_mode" && !metaMcpServer.codeModeEnabled)
+                  (mode === "code_mode" && !codeModeSelectable)
                 }
                 onClick={() => {
                   if (
@@ -168,7 +178,8 @@ export function GatewayDiscoverySection({
                     !isKnownEnumValue(
                       UpdateMetaMcpServerFormDiscoveryMode,
                       mode,
-                    )
+                    ) ||
+                    (mode === "code_mode" && !codeModeSelectable)
                   )
                     return;
                   update.mutate({

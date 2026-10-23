@@ -74,8 +74,9 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 			RemoteSessionAutoRefreshEnabled:      features.RemoteSessionAutoRefreshEnabled,
 			RemoteSessionAutoRefreshEnforced:     features.RemoteSessionAutoRefreshEnforcedEnabled,
 			SessionPortabilityEnabled:            features.SessionPortabilityEnabled,
-			NetworkIngressEnabled:                features.NetworkIngressEnabled, OrganizationGatewayDisabled: features.OrganizationGatewayDisabled,
-			CodeModeEnabled: features.CodeModeEnabled,
+			NetworkIngressEnabled:                features.NetworkIngressEnabled,
+			OrganizationGatewayDisabled:          features.OrganizationGatewayDisabled,
+			CodeModeEnabled:                      features.CodeModeEnabled,
 		}, nil
 	})
 

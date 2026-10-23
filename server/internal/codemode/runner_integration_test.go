@@ -199,7 +199,7 @@ func TestCodeRunnerScopeResolutionUsesExecutionDeadline(t *testing.T) {
 	defer cancel()
 	result := client.Run(ctx, uuid.New(), "42", func(ctx context.Context) (Host, error) { <-ctx.Done(); return nil, ctx.Err() })
 	require.NotNil(t, result.Error)
-	require.Equal(t, "admission_refused", result.Error.Code)
+	require.Equal(t, "deadline_exceeded", result.Error.Code)
 	require.Nil(t, client.session, "scope resolution must finish before submitting code")
 }
 

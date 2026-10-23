@@ -13,7 +13,7 @@ import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
 
 const state = vi.hoisted(() => ({
   codeEnabled: false,
-  entitled: true,
+  entitled: true as boolean | undefined,
   canWrite: true,
   pending: false,
   mutate: vi.fn(),
@@ -38,7 +38,13 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-test" }),
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({ data: { codeModeEnabled: state.entitled } }),
+  // An undefined entitlement models a loading or failed feature read.
+  useProductFeatures: () => ({
+    data:
+      state.entitled === undefined
+        ? undefined
+        : { codeModeEnabled: state.entitled },
+  }),
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: state.invalidate }),
@@ -225,7 +231,7 @@ it("only lets Code Mode be chosen when it is available", async () => {
   fireEvent.click(screen.getByRole("combobox"));
   expect(
     screen
-      .getByRole("option", { name: "Code Mode" })
+      .getByRole("option", { name: "Code Mode (unavailable)" })
       .getAttribute("aria-disabled"),
   ).toBe("true");
   view.unmount();
@@ -317,4 +323,59 @@ it("explains a saved Code gateway in an organization without Code Mode", () => {
   expect(
     screen.getByText(/Code Mode is not enabled for your organization/i),
   ).toBeTruthy();
+});
+
+it("does not claim the organization is not enabled while the feature read is unknown", async () => {
+  state.entitled = undefined;
+  state.codeEnabled = true;
+  const view = show();
+  expect(screen.queryByText(/not enabled for your organization/i)).toBeNull();
+  fireEvent.click(screen.getByRole("combobox"));
+  fireEvent.click(await screen.findByRole("option", { name: "Code Mode" }));
+  fireEvent.click(screen.getByRole("button", { name: /save/i }));
+  expect(state.mutate).toHaveBeenCalledTimes(1);
+  view.unmount();
+  state.codeEnabled = false;
+  render(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{
+          ...gateway,
+          discoveryMode: "code_mode",
+          codeModeEnabled: false,
+        }}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.queryByText(/not enabled for your organization/i)).toBeNull();
+  expect(
+    screen.getByText(/Code Mode is unavailable for this gateway/i),
+  ).toBeTruthy();
+});
+
+it("blocks a Code Mode draft when the organization's entitlement turns off", async () => {
+  state.codeEnabled = true;
+  const view = show();
+  fireEvent.click(screen.getByRole("combobox"));
+  fireEvent.click(await screen.findByRole("option", { name: "Code Mode" }));
+  state.entitled = false;
+  view.rerender(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{ ...gateway, codeModeEnabled: true }}
+      />
+    </TooltipProvider>,
+  );
+  const save = screen.getByRole("button", {
+    name: /save/i,
+  }) as HTMLButtonElement;
+  expect(save.disabled).toBe(true);
+  fireEvent.click(save);
+  expect(state.mutate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("combobox"));
+  expect(
+    screen
+      .getByRole("option", { name: "Code Mode (not enabled)" })
+      .getAttribute("aria-disabled"),
+  ).toBe("true");
 });

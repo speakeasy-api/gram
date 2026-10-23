@@ -9,12 +9,14 @@
 //!   cannot open a sibling's `mem`, `environ` or `maps`, and a separate
 //!   domain per worker also denies ptrace between siblings;
 //! - installs a seccomp filter that fails ptrace, `process_vm_readv`/`writev`,
-//!   signals, pidfd and similar cross-process calls with `EPERM`;
-//! - caps the worker's CPU time. Each worker serves one execution, so this is
-//!   a per-execution budget that neighbours cannot spend: a busy pod slows a
-//!   program down instead of failing it, as a wall-clock limit would.
+//!   signals, pidfd and similar cross-process calls with `EPERM`, and denies
+//!   creating child processes while still allowing threads;
+//! - caps the worker's CPU time. Each worker serves one execution and cannot
+//!   start another process, so this is a per-execution budget shared by all of
+//!   its threads that neighbours cannot spend: a busy pod slows a program down
+//!   instead of failing it, as a wall-clock limit would.
 //!
-//! All of these survive exec and bind every process the worker could start.
+//! All of these survive exec.
 //! Landlock is skipped on a kernel without it, such as gVisor, whose sandbox
 //! then bounds the worker.
 
@@ -57,15 +59,18 @@ mod linux {
     // linux/seccomp.h.
     const BPF_LD_W_ABS: u16 = 0x20;
     const BPF_JEQ_K: u16 = 0x15;
+    const BPF_JSET_K: u16 = 0x45;
     #[cfg(target_arch = "x86_64")]
     const BPF_JGE_K: u16 = 0x35;
     const BPF_RET_K: u16 = 0x06;
     const SECCOMP_RET_ALLOW: u32 = 0x7fff_0000;
     const SECCOMP_RET_KILL_PROCESS: u32 = 0x8000_0000;
     const SECCOMP_RET_ERRNO: u32 = 0x0005_0000;
-    // Offsets of `nr` and `arch` in struct seccomp_data.
+    // Offsets of `nr`, `arch` and the low word of `args[0]` (little endian)
+    // in struct seccomp_data.
     const SECCOMP_DATA_NR: u32 = 0;
     const SECCOMP_DATA_ARCH: u32 = 4;
+    const SECCOMP_DATA_ARG0_LOW: u32 = 16;
 
     #[cfg(target_arch = "x86_64")]
     const AUDIT_ARCH: u32 = 0xc000_003e;
@@ -93,6 +98,13 @@ mod linux {
         libc::SYS_prlimit64,
         libc::SYS_kcmp,
     ];
+
+    /// Syscalls that only start a new process. `clone` is checked separately
+    /// because it also creates threads; aarch64 has neither of these.
+    #[cfg(target_arch = "x86_64")]
+    const NEW_PROCESS: [libc::c_long; 2] = [libc::SYS_fork, libc::SYS_vfork];
+    #[cfg(target_arch = "aarch64")]
+    const NEW_PROCESS: [libc::c_long; 0] = [];
 
     // Landlock ABI from linux/landlock.h.
     const LANDLOCK_CREATE_RULESET_VERSION: libc::c_uint = 1;
@@ -234,8 +246,9 @@ mod linux {
             return Err(Error::last_os_error());
         }
         confine_filesystem(binary_dir)?;
-        // The hard limit kills a worker that raised its soft limit to it; the
-        // seccomp filter below already denies prlimit64 on other processes.
+        // The hard limit kills a worker that raised its soft limit to it.
+        // Raising the hard limit needs CAP_SYS_RESOURCE, and the seccomp
+        // filter below denies prlimit64 for every target, this one included.
         let cpu = libc::rlimit {
             rlim_cur: CPU_SECONDS,
             rlim_max: CPU_SECONDS + 1,
@@ -251,17 +264,34 @@ mod linux {
             stmt(BPF_RET_K, SECCOMP_RET_KILL_PROCESS),
             stmt(BPF_LD_W_ABS, SECCOMP_DATA_NR),
         ];
-        let mut checks: Vec<(u16, u32)> = Vec::with_capacity(DENIED.len() + 1);
+        let mut checks: Vec<(u16, u32)> = Vec::with_capacity(DENIED.len() + NEW_PROCESS.len() + 1);
         #[cfg(target_arch = "x86_64")]
         checks.push((BPF_JGE_K, X32_SYSCALL_BIT));
-        checks.extend(DENIED.iter().map(|syscall| (BPF_JEQ_K, *syscall as u32)));
+        checks.extend(
+            DENIED
+                .iter()
+                .chain(NEW_PROCESS.iter())
+                .map(|syscall| (BPF_JEQ_K, *syscall as u32)),
+        );
+        // Instructions between the last check and the deny: the clone3 and
+        // clone checks, the allow, and the three-instruction clone flag test.
+        const AFTER_CHECKS: u8 = 6;
         for (index, (code, k)) in checks.iter().enumerate() {
             let remaining = (checks.len() - index - 1) as u8;
-            // Match: jump past the remaining checks and the allow to the deny.
-            program.push(jump(*code, *k, remaining + 1, 0));
+            program.push(jump(*code, *k, remaining + AFTER_CHECKS, 0));
         }
+        // clone3 passes its flags in memory a filter cannot read, so it fails
+        // with ENOSYS and the C library falls back to clone.
+        program.push(jump(BPF_JEQ_K, libc::SYS_clone3 as u32, 6, 0));
+        program.push(jump(BPF_JEQ_K, libc::SYS_clone as u32, 1, 0));
+        program.push(stmt(BPF_RET_K, SECCOMP_RET_ALLOW));
+        // clone creates a thread only with CLONE_THREAD, which also requires
+        // a shared address space; anything else is a new process.
+        program.push(stmt(BPF_LD_W_ABS, SECCOMP_DATA_ARG0_LOW));
+        program.push(jump(BPF_JSET_K, libc::CLONE_THREAD as u32, 0, 1));
         program.push(stmt(BPF_RET_K, SECCOMP_RET_ALLOW));
         program.push(stmt(BPF_RET_K, SECCOMP_RET_ERRNO | libc::EPERM as u32));
+        program.push(stmt(BPF_RET_K, SECCOMP_RET_ERRNO | libc::ENOSYS as u32));
         let filter = libc::sock_fprog {
             len: program.len() as u16,
             filter: program.as_mut_ptr(),

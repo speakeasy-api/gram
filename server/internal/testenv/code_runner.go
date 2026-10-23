@@ -31,9 +31,13 @@ func LaunchCodeRunner(t *testing.T) (endpoint, token string) {
 	cmd := exec.Command(runner, "--listen", "127.0.0.1:0", "--monty-bin", monty, "--capacity", "12") //nolint:gosec // Test binaries are supplied by the local build task.
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "GRAM_CODE_RUNNER_TOKEN=" + token}
 	// Monty workers join the runner's process group, so a forced stop reaches
-	// them too and no orphan keeps the stderr pipe open.
+	// them too and no orphan keeps the stderr pipe open. The group is not the
+	// terminal's, so an interrupt that kills the test binary before cleanup
+	// would not reach it; guardParentDeath stops the runner then where the
+	// platform supports it (Linux), and only a local macOS run can leak it.
 	cmd.SysProcAttr = new(syscall.SysProcAttr)
 	cmd.SysProcAttr.Setpgid = true
+	guardParentDeath(cmd.SysProcAttr)
 	stderr, err := cmd.StderrPipe()
 	require.NoError(t, err)
 	ready := make(chan string, 1)

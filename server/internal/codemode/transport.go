@@ -57,9 +57,12 @@ type RunnerClient struct {
 	closed   bool
 	slots    *semaphore.Weighted
 	// capacity is the runner's reported concurrency, capped at RunnerStreams;
-	// zero until the first connection. Slots above it are reserved once, so
-	// executions wait here instead of being refused by a smaller runner.
+	// zero until the first connection.
 	capacity int
+	// streams admits one open stream per unit of the runner's capacity. It is
+	// created with the first connection, so no stream opens before the
+	// capacity is known and executions above it wait instead of being refused.
+	streams *semaphore.Weighted
 	// connecting is closed when the in-flight connection attempt finishes, so
 	// other callers wait on it, or their own context, instead of the mutex.
 	connecting chan struct{}
@@ -74,7 +77,7 @@ func NewRunnerClient(endpoint, token string, dialer *net.Dialer) (*RunnerClient,
 	if len(token) < 32 || strings.ContainsAny(token, "\r\n") || dialer == nil {
 		return nil, fmt.Errorf("code runner requires a guarded dialer and a token of at least 32 bytes")
 	}
-	return &RunnerClient{mu: sync.Mutex{}, endpoint: u, token: token, dialer: dialer, session: nil, closed: false, slots: semaphore.NewWeighted(RunnerStreams), capacity: 0, connecting: nil}, nil
+	return &RunnerClient{mu: sync.Mutex{}, endpoint: u, token: token, dialer: dialer, session: nil, closed: false, slots: semaphore.NewWeighted(RunnerStreams), capacity: 0, streams: nil, connecting: nil}, nil
 }
 
 // Close terminates the transport and all active executions during provider release.
@@ -94,11 +97,26 @@ func (c *RunnerClient) Close() error {
 // open never holds the mutex across network I/O: a cancelled caller stops
 // waiting at once instead of queueing behind another caller's connection
 // attempt or a slow stream open.
-func (c *RunnerClient) open(ctx context.Context) (*runnerStream, error) {
+// A stream waits until waitUntil for one of the runner's admission slots and
+// then fails with errRunnerFull.
+func (c *RunnerClient) open(ctx context.Context, waitUntil time.Time) (*runnerStream, error) {
 	session, err := c.currentSession(ctx)
 	if err != nil {
 		return nil, err
 	}
+	c.mu.Lock()
+	streams := c.streams
+	c.mu.Unlock()
+	wait, stopWait := context.WithDeadline(ctx, waitUntil)
+	err = streams.Acquire(wait, 1)
+	stopWait()
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("wait for code stream: %w", ctx.Err())
+		}
+		return nil, errRunnerFull
+	}
+	release := sync.OnceFunc(func() { streams.Release(1) })
 	type opened struct {
 		stream *yamux.Stream
 		err    error
@@ -111,13 +129,16 @@ func (c *RunnerClient) open(ctx context.Context) (*runnerStream, error) {
 	select {
 	case r := <-result:
 		if r.err != nil {
+			release()
 			return nil, fmt.Errorf("open code runner stream: %w", r.err)
 		}
-		return &runnerStream{Stream: r.stream, session: session}, nil
+		return &runnerStream{Stream: r.stream, session: session, release: release}, nil
 	case <-ctx.Done():
 		go func() {
 			if r := <-result; r.stream != nil {
-				_ = r.stream.Close()
+				(&runnerStream{Stream: r.stream, session: session, release: release}).finish()
+			} else {
+				release()
 			}
 		}()
 		return nil, fmt.Errorf("open code stream: %w", ctx.Err())
@@ -161,20 +182,14 @@ func (c *RunnerClient) currentSession(ctx context.Context) (*yamux.Session, erro
 			_ = session.Close()
 			return nil, fmt.Errorf("code runner connection released")
 		}
-		reserve := 0
 		if err == nil {
 			c.session = session
-			if c.capacity == 0 {
+			if c.streams == nil {
 				c.capacity = capacity
-				reserve = RunnerStreams - capacity
+				c.streams = semaphore.NewWeighted(int64(capacity))
 			}
 		}
 		c.mu.Unlock()
-		if reserve > 0 {
-			// Executions already holding slots finish within their wall time,
-			// so the reservation completes without blocking this connection.
-			go func() { _ = c.slots.Acquire(context.WithoutCancel(ctx), int64(reserve)) }()
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -344,6 +359,8 @@ func decodeStrict(data []byte, value any) error {
 type runnerStream struct {
 	*yamux.Stream
 	session *yamux.Session
+	// release returns the stream's runner admission slot.
+	release func()
 }
 
 func (s *runnerStream) finish() {
@@ -355,4 +372,5 @@ func (s *runnerStream) finish() {
 	if !errors.Is(err, io.EOF) {
 		_ = s.session.Close()
 	}
+	s.release()
 }

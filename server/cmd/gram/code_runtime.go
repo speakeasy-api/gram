@@ -55,8 +55,10 @@ func newCodeExecutor(c *cli.Context, logger *slog.Logger, policy *guardian.Polic
 			return nil, err
 		}
 		if limits.OrganizationExecutions == 0 {
-			// An organization can run as many executions as its pods hold.
-			limits.OrganizationExecutions = c.Int("code-runtime-max-organization-runners") * codemode.RunnerStreams
+			// An organization can run as many executions as the pods it can
+			// hold, which the replica-wide pod cap may lower.
+			pods := min(c.Int("code-runtime-max-organization-runners"), c.Int("code-runtime-max-runners"))
+			limits.OrganizationExecutions = pods * codemode.RunnerStreams
 		}
 		coordinator, err := codemode.NewCoordinator(provider, ownership, limits)
 		if err != nil {
@@ -78,11 +80,14 @@ func codeRuntimeLimits(c *cli.Context) (codemode.Limits, error) {
 		CallerExecutions:       c.Int("code-runtime-max-caller-executions"),
 		AdmissionWait:          c.Duration("code-runtime-admission-wait"),
 	}
-	if limits.OrganizationExecutions < 0 || limits.CallerExecutions < 0 {
-		return codemode.Limits{}, fmt.Errorf("code runtime execution limits must not be negative")
+	if limits.OrganizationExecutions < 0 {
+		return codemode.Limits{}, fmt.Errorf("code-runtime-max-organization-executions must not be negative")
+	}
+	if limits.CallerExecutions < 0 {
+		return codemode.Limits{}, fmt.Errorf("code-runtime-max-caller-executions must not be negative")
 	}
 	if limits.AdmissionWait < 0 || limits.AdmissionWait >= codemode.MaxWallTime {
-		return codemode.Limits{}, fmt.Errorf("code runtime admission wait must be at least zero and shorter than %s", codemode.MaxWallTime)
+		return codemode.Limits{}, fmt.Errorf("code-runtime-admission-wait must be at least zero and shorter than %s", codemode.MaxWallTime)
 	}
 	return limits, nil
 }
@@ -189,7 +194,7 @@ func codeRuntimeFlags() []cli.Flag {
 		&cli.StringSliceFlag{Name: "code-runtime-gke-runner-cidr", Usage: "Permitted code sandbox pod CIDRs", EnvVars: []string{"GRAM_CODE_RUNTIME_GKE_RUNNER_CIDR"}},
 		&cli.IntFlag{Name: "code-runtime-max-runners", Usage: "Most code runner pods one replica claims across organizations", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_RUNNERS"}, Value: 64},
 		&cli.IntFlag{Name: "code-runtime-max-organization-runners", Usage: "Most shared code runner pods one organization holds on a replica", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_ORGANIZATION_RUNNERS"}, Value: 4},
-		&cli.IntFlag{Name: "code-runtime-max-organization-executions", Usage: "Most concurrent code executions one organization runs on a replica (0 derives it from the organization's pod cap)", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_ORGANIZATION_EXECUTIONS"}, Value: 0},
+		&cli.IntFlag{Name: "code-runtime-max-organization-executions", Usage: "Most concurrent code executions one organization runs on a replica (0 allows as many as the runner pods available to one organization hold: one pod locally, the smaller pod cap on GKE)", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_ORGANIZATION_EXECUTIONS"}, Value: 0},
 		&cli.IntFlag{Name: "code-runtime-max-caller-executions", Usage: "Most concurrent code executions one caller runs on a replica (0 uses the default)", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_CALLER_EXECUTIONS"}, Value: 0},
 		&cli.DurationFlag{Name: "code-runtime-admission-wait", Usage: "How long a code execution waits for a free slot before a retryable refusal (0 uses the default)", EnvVars: []string{"GRAM_CODE_RUNTIME_ADMISSION_WAIT"}, Value: 0},
 	}

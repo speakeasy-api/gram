@@ -12,15 +12,22 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+fn monty_binary() -> String {
+    std::env::var("GRAM_MONTY_TEST_BIN")
+        .unwrap_or_else(|_| format!("{}/target/monty/bin/monty", env!("CARGO_MANIFEST_DIR")))
+}
+
 async fn state(capacity: usize) -> Arc<State> {
-    let binary = std::env::var("GRAM_MONTY_TEST_BIN")
-        .unwrap_or_else(|_| format!("{}/target/monty/bin/monty", env!("CARGO_MANIFEST_DIR")));
+    state_for(&monty_binary(), capacity).await
+}
+
+async fn state_for(binary: &str, capacity: usize) -> Arc<State> {
     assert!(
         std::path::Path::new(&binary).exists(),
         "build OSS Monty with mise run build:monty or set GRAM_MONTY_TEST_BIN"
     );
     State::new(
-        &binary,
+        binary,
         "local-fixture-token-with-at-least-32-bytes".into(),
         capacity,
     )
@@ -270,16 +277,50 @@ async fn memory_and_active_execution_limits_are_enforced() {
     );
 }
 
+/// A directory holding the worker shim beside a copy of Monty, as the image
+/// lays them out, removed on drop. The copy keeps Monty inside the directory
+/// the shim's Landlock domain allows.
+#[cfg(target_os = "linux")]
+struct WorkerShim(std::path::PathBuf);
+
+#[cfg(target_os = "linux")]
+impl WorkerShim {
+    fn new() -> Self {
+        let dir = std::env::temp_dir().join(format!("gram-code-worker-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // GRAM_MONTY_TEST_BIN may already name a shim with Monty beside it.
+        let mut monty = std::path::PathBuf::from(monty_binary());
+        if monty.ends_with("gram-code-worker") {
+            monty.set_file_name("monty");
+        }
+        std::fs::copy(monty, dir.join("monty")).unwrap();
+        std::fs::copy(
+            env!("CARGO_BIN_EXE_gram-code-worker"),
+            dir.join("gram-code-worker"),
+        )
+        .unwrap();
+        Self(dir)
+    }
+
+    fn binary(&self) -> String {
+        self.0.join("gram-code-worker").to_str().unwrap().to_owned()
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for WorkerShim {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+// Only the Linux worker shim applies the CPU budget.
+#[cfg(target_os = "linux")]
 #[tokio::test(flavor = "multi_thread")]
 async fn the_worker_cpu_budget_ends_a_busy_program() {
-    // Only the Linux worker shim applies the CPU budget.
-    if !std::env::var("GRAM_MONTY_TEST_BIN")
-        .is_ok_and(|binary| binary.ends_with("gram-code-worker"))
-    {
-        return;
-    }
+    let shim = WorkerShim::new();
     let mut busy = Run::new(
-        state(1).await,
+        state_for(&shim.binary(), 1).await,
         Uuid::new_v4().to_string(),
         "while True:\n    pass",
         20_000,
@@ -468,6 +509,9 @@ async fn unadmitted_first_frames_buffer_within_a_bounded_permit_pool() {
         client.write_u32(MAX_FRAME as u32).await.unwrap();
         stallers.push((client, task));
     }
+    // Spawned stallers take their read permits asynchronously; without this
+    // the waiting stream can win a permit first and start straight away.
+    tokio::time::sleep(Duration::from_millis(200)).await;
     let mut waiting = Run::new(state, Uuid::new_v4().to_string(), "1", 5000).await;
     assert!(
         tokio::time::timeout(

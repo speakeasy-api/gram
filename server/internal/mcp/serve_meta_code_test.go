@@ -156,8 +156,17 @@ func TestCodeModeRequiresOrganizationEntitlement(t *testing.T) { //nolint:parall
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Contains(t, w.Body.String(), `"name":"list_servers"`)
 	require.NotContains(t, w.Body.String(), `"name":"execute"`)
-	_, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
+	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var refused struct {
+		Error struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &refused))
+	require.Equal(t, `unknown tool "execute"`, refused.Error.Message, "a Progressive gateway does not offer execute")
 	require.Empty(t, executor.callers(), "an organization without Code Mode never reaches the runtime")
 
 	enableCodeMode(t, ctx, ti)
@@ -288,7 +297,7 @@ func TestCodeModeReportsServerTiming(t *testing.T) {
 	var response struct {
 		Result struct {
 			Meta map[string]struct {
-				ServerMS    int64  `json:"server_ms"`
+				ServerMS    *int64 `json:"server_ms"`
 				AdmissionMS *int64 `json:"admission_ms"`
 				RunMS       *int64 `json:"run_ms"`
 			} `json:"_meta"`
@@ -301,27 +310,60 @@ func TestCodeModeReportsServerTiming(t *testing.T) {
 	require.NotNil(t, timing.RunMS)
 	require.Equal(t, int64(3), *timing.AdmissionMS)
 	require.Equal(t, int64(12), *timing.RunMS)
-	require.GreaterOrEqual(t, timing.ServerMS, int64(0))
+	require.NotNil(t, timing.ServerMS, "server_ms is always reported")
+	require.GreaterOrEqual(t, *timing.ServerMS, int64(0))
 }
 
 // TestCodeModeRunnerRefusalIsStructured pins that a runner refusing a
-// program before it starts reports the same structured shape as admission.
+// program before it starts reports the same structured, retryable shape as
+// admission, for every code the runner uses for such a refusal.
 func TestCodeModeRunnerRefusalIsStructured(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPService(t)
-	fx := seedOrganizationGateway(t, ctx, ti)
-	executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil, run: func(context.Context, string, codemode.Host) (*codemode.ExecutionResult, error) {
-		return &codemode.ExecutionResult{Value: json.RawMessage("null"), ToolCalls: []codemode.CallOutcome{}, Error: &codemode.ExecutionError{Code: "capacity_exceeded", Message: "full"}}, nil
-	}}
-	mcp.SetTestCodeExecutor(ti.service.Service, executor)
-	enableCodeMode(t, ctx, ti)
-	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
+	for _, tc := range []struct {
+		runnerCode   string
+		code         string
+		retryAfterMS int
+	}{
+		{runnerCode: "capacity_exceeded", code: "capacity_exceeded", retryAfterMS: 1000},
+		{runnerCode: "runtime_unavailable", code: "runtime_unavailable", retryAfterMS: 15000},
+		{runnerCode: "admission_refused", code: "not_admitted", retryAfterMS: 1000},
+	} {
+		t.Run(tc.runnerCode, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			fx := seedOrganizationGateway(t, ctx, ti)
+			executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil, run: func(context.Context, string, codemode.Host) (*codemode.ExecutionResult, error) {
+				return &codemode.ExecutionResult{Value: json.RawMessage("null"), ToolCalls: []codemode.CallOutcome{}, Error: &codemode.ExecutionError{Code: tc.runnerCode, Message: "refused"}}, nil
+			}}
+			mcp.SetTestCodeExecutor(ti.service.Service, executor)
+			enableCodeMode(t, ctx, ti)
+			bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
 
-	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
-	require.NoError(t, err)
-	require.Contains(t, w.Body.String(), `"code":"capacity_exceeded"`)
-	require.Contains(t, w.Body.String(), `"retryable":true`)
-	require.Contains(t, w.Body.String(), `"retry_after_ms":1000`)
+			w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			var response struct {
+				Result struct {
+					IsError           bool `json:"isError"`
+					StructuredContent struct {
+						Error struct {
+							Code         string `json:"code"`
+							Message      string `json:"message"`
+							Retryable    bool   `json:"retryable"`
+							RetryAfterMS int    `json:"retry_after_ms"`
+						} `json:"error"`
+					} `json:"structuredContent"`
+				} `json:"result"`
+			}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+			require.True(t, response.Result.IsError)
+			refusal := response.Result.StructuredContent.Error
+			require.Equal(t, tc.code, refusal.Code)
+			require.True(t, refusal.Retryable)
+			require.Equal(t, tc.retryAfterMS, refusal.RetryAfterMS)
+			require.Contains(t, refusal.Message, "No program was submitted.")
+		})
+	}
 }
 
 // refusingCodeExecutor refuses every execution before submission.

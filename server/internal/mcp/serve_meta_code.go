@@ -169,7 +169,7 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	// The runner refused before the program started: report it in the same
 	// structured, retryable shape as a coordinator refusal.
 	if execution.Error != nil && len(execution.ToolCalls) == 0 {
-		if refused, ok := runnerRefusal(execution.Error.Code); ok {
+		if refused := runnerRefusal(execution.Error.Code); refused != nil {
 			return marshalCodeAdmissionRefusal(ctx, logger, req.ID, newCodeAdmissionRefusal(refused), newCodeExecutionTiming(started, execution))
 		}
 	}

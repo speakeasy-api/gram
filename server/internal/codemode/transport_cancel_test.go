@@ -81,7 +81,7 @@ func TestCancelledRunReleasesSlotDuringConnect(t *testing.T) {
 		select {
 		case result := <-results:
 			require.NotNil(t, result.Error)
-			require.Equal(t, "admission_refused", result.Error.Code)
+			require.Equal(t, "cancelled", result.Error.Code)
 		case <-time.After(time.Second):
 			t.Fatal("a cancelled run kept waiting on the runner connection")
 		}

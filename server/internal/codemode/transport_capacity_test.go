@@ -2,13 +2,18 @@ package codemode
 
 import (
 	"bufio"
+	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
 	"github.com/stretchr/testify/require"
 )
@@ -79,17 +84,53 @@ func TestRunnerClientLearnsReportedCapacity(t *testing.T) {
 	_, err = client.currentSession(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, 4, client.knownCapacity())
-	require.Eventually(t, func() bool {
-		if !client.slots.TryAcquire(4) {
-			return false
+	require.True(t, client.streams.TryAcquire(4))
+	defer client.streams.Release(4)
+	require.False(t, client.streams.TryAcquire(1), "streams beyond the runner's capacity wait for a slot instead of being refused")
+}
+
+func TestRunnerClientNeverOpensMoreStreamsThanTheRunnerAdmits(t *testing.T) {
+	t.Parallel()
+	const capacity = 2
+	var open, refused atomic.Int32
+	endpoint := scriptedRunner(t, fmt.Sprint(capacity), nil, func(stream net.Conn) {
+		defer func() { _ = stream.Close() }()
+		frame, err := readRunnerFrame(stream)
+		if err != nil {
+			return
 		}
-		defer client.slots.Release(4)
-		if client.slots.TryAcquire(1) {
-			client.slots.Release(1)
-			return false
+		var start runnerStart
+		if json.Unmarshal(frame, &start) != nil {
+			return
 		}
-		return true
-	}, time.Second, 10*time.Millisecond, "executions beyond the runner's capacity wait for a slot instead of being refused")
+		// Deferred after the close above, so the count drops before the
+		// client can see the stream end.
+		defer open.Add(-1)
+		if open.Add(1) > capacity {
+			refused.Add(1)
+			_ = writeRunnerFrame(stream, runnerMessage{Type: "error", Code: "capacity_exceeded", Message: "full"})
+			return
+		}
+		if writeRunnerFrame(stream, runnerMessage{Type: "started", ExecutionID: start.ExecutionID}) != nil {
+			return
+		}
+		<-time.After(20 * time.Millisecond)
+		_ = writeRunnerFrame(stream, runnerMessage{Type: "complete", Value: json.RawMessage(`1`)})
+		_, _ = readRunnerFrame(stream)
+	})
+	client, err := NewRunnerClient(endpoint, strings.Repeat("t", 32), &net.Dialer{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+	// The burst starts before the client has learned the runner's capacity.
+	var wg sync.WaitGroup
+	for range RunnerStreams {
+		wg.Go(func() {
+			result := client.Run(t.Context(), uuid.New(), "1", func(context.Context) (Host, error) { return idleHost{}, nil })
+			require.Nil(t, result.Error)
+		})
+	}
+	wg.Wait()
+	require.Zero(t, refused.Load(), "the client opened more streams than the runner admits")
 }
 
 func TestRunnerClientCapsReportedCapacity(t *testing.T) {
@@ -110,5 +151,45 @@ func TestRunnerClientRequiresReportedCapacity(t *testing.T) {
 		_, err = client.currentSession(t.Context())
 		require.ErrorContains(t, err, "did not report its capacity", "header %q", header)
 		_ = client.Close()
+	}
+}
+
+func TestRunnerStreamWaitIsNotRunTime(t *testing.T) {
+	t.Parallel()
+	const hold = 200 * time.Millisecond
+	endpoint := scriptedRunner(t, "1", nil, func(stream net.Conn) {
+		defer func() { _ = stream.Close() }()
+		frame, err := readRunnerFrame(stream)
+		if err != nil {
+			return
+		}
+		var start runnerStart
+		if json.Unmarshal(frame, &start) != nil {
+			return
+		}
+		if writeRunnerFrame(stream, runnerMessage{Type: "started", ExecutionID: start.ExecutionID}) != nil {
+			return
+		}
+		<-time.After(hold)
+		_ = writeRunnerFrame(stream, runnerMessage{Type: "complete", Value: json.RawMessage(`1`)})
+		_, _ = readRunnerFrame(stream)
+	})
+	client, err := NewRunnerClient(endpoint, strings.Repeat("t", 32), &net.Dialer{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+	results := make([]*ExecutionResult, 2)
+	var wg sync.WaitGroup
+	for i := range results {
+		wg.Go(func() {
+			results[i] = client.Run(t.Context(), uuid.New(), "1", func(context.Context) (Host, error) { return idleHost{}, nil })
+		})
+	}
+	wg.Wait()
+	for _, result := range results {
+		require.Nil(t, result.Error)
+		require.GreaterOrEqual(t, result.Timing.Run, hold)
+		// One execution waited a whole hold for the single stream; that wait
+		// is admission, not run time.
+		require.Less(t, result.Timing.Run, hold+hold*3/4)
 	}
 }

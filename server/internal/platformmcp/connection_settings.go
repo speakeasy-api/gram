@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
@@ -59,7 +60,8 @@ type MCPConnectionSettings struct {
 
 	// EffectiveDiscoveryMode is the mode a gateway serves now: a stored
 	// code_mode serves progressive while Code Mode is unavailable to the
-	// organization or the gateway does not require sign-in.
+	// organization or the gateway does not require sign-in, and a mode this
+	// build does not support serves progressive.
 	EffectiveDiscoveryMode string `json:"effective_discovery_mode,omitempty"`
 
 	// CodeModeAvailable reports, for a gateway, whether the code runtime is
@@ -188,10 +190,11 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, queries *platfor
 	if input.TargetKind == MCPConnectionSettingsGateway {
 		available := s.codeModeAvailable != nil && s.codeModeAvailable(ctx, principal.OrganizationID)
 		settings.CodeModeAvailable = &available
-		settings.EffectiveDiscoveryMode = row.DiscoveryMode
-		if row.DiscoveryMode == "code_mode" && (!available || !row.GatewayRequiresSignIn) {
-			settings.EffectiveDiscoveryMode = "progressive"
+		effective := metamcp.ResolveDiscoveryMode(row.DiscoveryMode)
+		if effective == metamcp.DiscoveryModeCode && (!available || !row.GatewayRequiresSignIn) {
+			effective = metamcp.DiscoveryModeProgressive
 		}
+		settings.EffectiveDiscoveryMode = string(effective)
 	}
 	version := connectionAddressVersion{ProjectID: settings.ProjectID, TargetKind: settings.TargetKind, TargetID: settings.TargetID, NetworkMode: settings.NetworkMode, Endpoints: nil}
 	for _, endpoint := range endpoints {

@@ -67,13 +67,17 @@ the admitted credential boundary even when a refreshed session gains permissions
 
 The Go client reuses an authenticated HTTP-upgraded yamux connection. The runner
 reports its concurrency in the upgrade's `Gram-Code-Capacity` header, and the
-client refuses a runner that omits it. Local admission slots, twelve or the
-runner's smaller capacity, bound discovery and open/closing streams; an
-execution waits up to three seconds for one, and refusals do not open
-another stream. Admission remains held until the peer's FIN. The runner's
-`admission_refused` and `capacity_exceeded` responses prove the program did not
-run. A missing `started`
-response does not prove that. Submitted programs are never automatically retried.
+client refuses a runner that omits it. Twelve local admission slots bound
+discovery, and a second semaphore, created with the first connection at the
+runner's reported capacity, bounds open/closing streams, so no stream opens
+before the capacity is known and a burst never exceeds it. An execution waits up
+to three seconds in total for both, and refusals do not open another stream.
+Admission remains held until the peer's FIN. The runner's `admission_refused`
+and `capacity_exceeded` responses prove the program did not run; the client
+reports its own pre-submission failures as `cancelled`, `deadline_exceeded`,
+`tool_scope_unavailable` or `runtime_unavailable`. A missing `started`
+response does not prove the program did not run. Submitted programs are never
+automatically retried.
 
 Host construction, including an optional exact tool allowlist, runs after
 admission under the 30-second execution context. Each helper reruns issuer
@@ -117,10 +121,12 @@ local provider accepts literal loopback addresses only and refuses non-local
 environments.
 The default provider is disabled. When no runtime is configured, stored
 Code Mode gateways and connections use Progressive discovery. New explicit
-Code Mode choices require a configured runtime and the normal settings
-permissions. Configuring the runtime enables new Code Mode choices for every
-organization on that deployment; there is no organization entitlement or rollout
-flag. Never commit the runtime token or local configuration.
+Code Mode choices require a configured runtime, the organization's `code_mode`
+entitlement, which Speakeasy staff manage per organization, and the normal
+settings permissions. The local seed enables that entitlement for the local
+development organization only, so a configured local runtime works without a
+staff toggle. Never commit
+the runtime token or local configuration.
 
 ## Results and compatibility
 
@@ -194,9 +200,14 @@ runner's `GRAM_CODE_RUNNER_CAPACITY` default), or the smaller capacity its
 runner reports, so a pod from an older template is never sent more than it
 admits; a worker starts in about a
 millisecond, so pods are CPU-bound. Each execution's two CPU-second budget
-keeps contention fair, so a pod can request 500m (bursting to 2 CPU) and 1 to
-1.5 GiB; cold starts are dominated by node scale-up, so packing more runners per
-node keeps them warm. Readiness polls start at 25 ms and back off to one second, so adopting a
+keeps contention fair, so a pod requests 500m (bursting to 2 CPU) and 1 to 1.5
+GiB; cold starts are dominated by node scale-up, so packing more runners per
+node keeps them warm. The request is sized for typical load, not the worst case:
+twelve executions that each spend their whole budget need 24 CPU-seconds, which
+fit in the 30-second wall time only while the pod can burst above about 0.8
+CPU. On a node where every runner is saturated at once, a pod gets only its
+500m share and some of those executions exceed the wall time instead of
+slowing down. Readiness polls start at 25 ms and back off to one second, so adopting a
 warm pod costs little more than the controller's bind. Claims expire after five
 minutes; pods still in use renew their claim two minutes before expiry, so an
 active organization keeps its warm pods. A pod refuses admission with less than

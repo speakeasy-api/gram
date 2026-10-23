@@ -367,8 +367,9 @@ func TestConnectionCatalogCachedDiscoveryNeverContactsUpstream(t *testing.T) {
 				selected = []string{memberSlug + "--tool_000"}
 			}
 			if tc.discovery == metamcp.DiscoveryModeCode {
+				// Consent approval checks the entitlement, so grant it first.
+				enableCodeMode(t, ctx, ti)
 				mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(ctx context.Context, code string, host codemode.Host) (*codemode.ExecutionResult, error) {
-					enableCodeMode(t, ctx, ti)
 					if code == "discover" {
 						servers, err := host.Servers(ctx, codemode.PageArgs{})
 						require.NoError(t, err)

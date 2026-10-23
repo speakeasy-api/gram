@@ -226,9 +226,10 @@ func (c *Coordinator) Execute(ctx context.Context, scope Scope, code string, fac
 	if ctx.Err() != nil {
 		return nil, ErrCancelledBeforeSubmit
 	}
-	admitted := time.Now()
 	result := lease.Client().Run(ctx, id, code, factory)
-	result.Timing = ExecutionTiming{Admission: admitted.Sub(started), Run: time.Since(admitted)}
+	// Run reports only the time after submission, so waits for the runner's
+	// own capacity count as admission.
+	result.Timing.Admission = time.Since(started) - result.Timing.Run
 	return result, nil
 }
 

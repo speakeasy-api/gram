@@ -169,4 +169,11 @@ func TestGatewayConnectionSettingsReportsStoredDiscoveryMode(t *testing.T) {
 	anonymous, err := entitled.Get(ctx, principal, input)
 	require.NoError(t, err)
 	require.Equal(t, "progressive", anonymous.EffectiveDiscoveryMode, "a gateway without sign-in never serves Code Mode")
+
+	_, err = q.UpdateMetaMCPServer(ctx, metarepo.UpdateMetaMCPServerParams{ID: gateway.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: gateway.Name, UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}, Instructions: gateway.Instructions, DiscoveryMode: conv.ToPGText("future_mode")})
+	require.NoError(t, err)
+	unsupported, err := entitled.Get(ctx, principal, input)
+	require.NoError(t, err)
+	require.Equal(t, "future_mode", unsupported.DiscoveryMode)
+	require.Equal(t, "progressive", unsupported.EffectiveDiscoveryMode, "a mode this build does not support is served as Progressive")
 }

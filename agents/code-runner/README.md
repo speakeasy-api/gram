@@ -27,15 +27,26 @@ Start `agents/code-runner/target/debug/gram-code-runner` with
 secret of at least 32 bytes in `GRAM_CODE_RUNNER_TOKEN`; it is never exposed to
 Python or process arguments. Linux startup disables parent process inspection.
 In the image, `GRAM_CODE_RUNNER_MONTY_BIN` points at `gram-code-worker`, which
-confines each worker before exec'ing the `monty` binary beside it: its own
-Landlock domain limited to reading and executing system libraries and its
-directory, a seccomp filter denying cross-process syscalls, and a two-second
-CPU-time limit (`RLIMIT_CPU`). An escaped worker cannot read, trace or signal a
-sibling (`tests/worker_isolation.rs`, Linux only). Each worker serves one
-execution, so the CPU limit is a per-execution budget: a program that uses it
-fails with `Python CPU time limit exceeded`, while CPU contention on a busy pod
-only slows programs down. Point `--monty-bin` straight at `monty` for local development on
-macOS, where the shim does not run.
+confines each worker before exec'ing the `monty` binary beside it:
+
+- its own Landlock domain allowing only reading and executing beneath `/usr`,
+  `/lib`, `/lib64`, `/bin`, `/etc`, `/dev` and the shim's directory, so `/proc`,
+  `/sys` and `/tmp` are out of reach. A kernel without Landlock (`ENOSYS` or
+  `EOPNOTSUPP`), such as gVisor, skips this layer, and the sandbox then bounds
+  the worker;
+- a seccomp filter denying cross-process syscalls and the creation of child
+  processes, while still allowing threads;
+- a two-second CPU-time limit (`RLIMIT_CPU`).
+
+An escaped worker cannot read, trace or signal a sibling, or start a process
+(`tests/worker_isolation.rs`, Linux only). Each worker serves one execution and
+its threads share the CPU limit, so it is a per-execution budget: a program
+that uses it fails with `Python CPU time limit exceeded`, while CPU contention
+on a busy pod only slows programs down. Pointing `--monty-bin` straight at
+`monty`, as above and on macOS, where the shim does not run, applies none of
+these: no worker isolation and no CPU budget, only Monty's own limits. To
+apply them locally on Linux, point `--monty-bin` at
+`target/debug/gram-code-worker` with a copy of `monty` beside it.
 The default listen address is `127.0.0.1:8081`. The dedicated Docker image
 listens on port 8081 and runs as UID 65532. Build it from the repository root:
 `docker build -f agents/code-runner/Dockerfile -t gram-code-runner:dev .`.
@@ -59,7 +70,8 @@ Each frame is a four-byte big-endian length followed by UTF-8 JSON, limited to
    callers must mint a new ID for each deliberate user execution and never
    retry a snippet automatically, including after that window expires.
    A lost connection after sending `start` is indeterminate even if `started`
-   was not received. Only `admission_refused` proves code did not run.
+   was not received. Only `admission_refused` and `capacity_exceeded` prove
+   code did not run; both are sent before the execution is admitted.
 2. The runner emits `callback` with a unique integer `id`, `method` and JSON
    `arguments`. Methods are `search`, `describe`, `call`, and `servers`.
 3. Speakeasy answers once with `callback_result`, the same `id`, and exactly one of

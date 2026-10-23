@@ -72,17 +72,19 @@ func newCodeAdmissionRefusal(err error) codeAdmissionRefusal {
 }
 
 // runnerRefusal maps a runner result code that proves the program was never
-// submitted to its admission refusal.
-func runnerRefusal(code string) (error, bool) {
+// submitted to its admission refusal, or returns nil for any other code. The
+// client reports its own pre-submission failures with other codes, so
+// admission_refused here is always the runner's.
+func runnerRefusal(code string) error {
 	switch code {
 	case "capacity_exceeded":
-		return codemode.ErrCapacity, true
+		return codemode.ErrCapacity
 	case "runtime_unavailable":
-		return codemode.ErrRuntimeUnavailable, true
+		return codemode.ErrRuntimeUnavailable
 	case "admission_refused":
-		return errors.New("runner refused admission"), true
+		return errors.New("runner refused admission")
 	default:
-		return nil, false
+		return nil
 	}
 }
 

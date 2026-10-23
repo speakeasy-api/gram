@@ -33,6 +33,10 @@ const (
 var errCallbackBudget = errors.New("callback result budget exceeded")
 var errRunnerTransport = errors.New("runner transport disconnected")
 
+// errRunnerFull reports that every stream the runner admits stayed busy for
+// the whole slot wait.
+var errRunnerFull = errors.New("code runner capacity is full")
+
 // ExecutionResult preserves tool outcomes even if Python or its transport fails.
 type ExecutionResult struct {
 	// Value is the final JSON-compatible expression, or null on failure.
@@ -140,7 +144,9 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	ctx, cancelCause := context.WithCancelCause(ctx)
 	cancel := func() { cancelCause(context.Canceled) }
 	defer cancel()
-	slotCtx, stopSlotWait := context.WithTimeout(ctx, runnerSlotWait)
+	// One wait bounds both the local slot and the runner's stream admission.
+	slotDeadline := time.Now().Add(runnerSlotWait)
+	slotCtx, stopSlotWait := context.WithDeadline(ctx, slotDeadline)
 	err := c.slots.Acquire(slotCtx, 1)
 	stopSlotWait()
 	if err != nil {
@@ -148,9 +154,22 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 		return result
 	}
 	defer c.slots.Release(1)
+	// Failures before the start frame are reported with client-side codes;
+	// admission_refused is reserved for the runner's own refusal.
+	failBeforeSubmit := func() {
+		if errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
+			fail("deadline_exceeded", "execution deadline elapsed before submission; program was not submitted")
+		} else {
+			fail("cancelled", "execution cancelled before submission; program was not submitted")
+		}
+	}
 	host, err := factory(ctx)
-	if err != nil || host == nil || ctx.Err() != nil {
-		fail("admission_refused", "tool scope was unavailable before submission")
+	if ctx.Err() != nil {
+		failBeforeSubmit()
+		return result
+	}
+	if err != nil || host == nil {
+		fail("tool_scope_unavailable", "tool scope could not be built; program was not submitted")
 		return result
 	}
 	failCancelled := func() {
@@ -167,10 +186,12 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 			fail("cancelled", "execution cancelled; dispatched tool outcomes may be unknown")
 		}
 	}
-	stream, err := c.open(ctx)
+	stream, err := c.open(ctx, slotDeadline)
 	if err != nil {
-		if ctx.Err() != nil {
-			fail("admission_refused", "execution ended before submission")
+		if errors.Is(err, errRunnerFull) {
+			fail("capacity_exceeded", "code runtime capacity is full; program was not submitted; retry shortly")
+		} else if ctx.Err() != nil {
+			failBeforeSubmit()
 		} else {
 			fail("runtime_unavailable", "code runtime unavailable; program was not submitted")
 		}
@@ -179,7 +200,7 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	defer stream.finish()
 	deadline, _ := ctx.Deadline()
 	if err := stream.SetDeadline(deadline); err != nil {
-		fail("admission_refused", "code stream could not be bounded")
+		fail("runtime_unavailable", "code stream could not be bounded; program was not submitted")
 		return result
 	}
 	interruptDone := make(chan struct{})
@@ -205,9 +226,13 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	}()
 	remaining := time.Until(deadline).Milliseconds()
 	if remaining < 1 {
-		fail("admission_refused", "execution deadline elapsed before submission")
+		fail("deadline_exceeded", "execution deadline elapsed before submission; program was not submitted")
 		return result
 	}
+	// Everything before the start frame is admission; the coordinator reports
+	// the rest as the run.
+	submitted := time.Now()
+	defer func() { result.Timing.Run = time.Since(submitted) }()
 	err = writeRunnerFrame(stream, runnerStart{Type: "start", Version: ProtocolVersion, ExecutionID: executionID.String(), Code: code, WallMS: remaining})
 	if err != nil {
 		fail("outcome_unknown", "submission response lost; do not replay this program automatically")
