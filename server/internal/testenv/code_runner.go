@@ -15,6 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// codeRunnerStopGrace is how long cleanup waits for the runner to drain after
+// SIGTERM. Tests close their clients first, so a healthy runner exits at once;
+// one still running then is stuck and is killed with its workers.
+const codeRunnerStopGrace = 5 * time.Second
+
 // LaunchCodeRunner starts a real pinned Rust runner and Monty binary on an ephemeral port.
 // The dedicated integration task supplies both binaries; missing binaries fail the test.
 func LaunchCodeRunner(t *testing.T) (endpoint, token string) {
@@ -25,6 +30,10 @@ func LaunchCodeRunner(t *testing.T) (endpoint, token string) {
 	token = uuid.NewString() + uuid.NewString()
 	cmd := exec.Command(runner, "--listen", "127.0.0.1:0", "--monty-bin", monty, "--capacity", "12") //nolint:gosec // Test binaries are supplied by the local build task.
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "GRAM_CODE_RUNNER_TOKEN=" + token}
+	// Monty workers join the runner's process group, so a forced stop reaches
+	// them too and no orphan keeps the stderr pipe open.
+	cmd.SysProcAttr = new(syscall.SysProcAttr)
+	cmd.SysProcAttr.Setpgid = true
 	stderr, err := cmd.StderrPipe()
 	require.NoError(t, err)
 	ready := make(chan string, 1)
@@ -43,8 +52,8 @@ func LaunchCodeRunner(t *testing.T) (endpoint, token string) {
 		_ = cmd.Process.Signal(syscall.SIGTERM)
 		select {
 		case <-done:
-		case <-time.After(5 * time.Second):
-			_ = cmd.Process.Kill()
+		case <-time.After(codeRunnerStopGrace):
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			<-done
 		}
 	})
