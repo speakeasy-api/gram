@@ -2,8 +2,6 @@ package mcp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,7 +24,7 @@ const maxConcurrentMemberDescribes = 6
 
 // memberDescribeBudget bounds a whole inventory, in member call timeouts, so a
 // large gateway with many slow members cannot hold a request for one timeout
-// per batch. Members not described in time count as unreachable.
+// per batch. Members not described in time count as unanswered.
 const memberDescribeBudget = 2
 
 type memberDescribeResult struct {
@@ -58,7 +56,7 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 				if err := requestCtx.Err(); err != nil {
 					results[i] = memberDescribeResult{catalog: nil, err: err}
 				} else {
-					results[i] = memberDescribeResult{catalog: nil, err: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}}
+					results[i] = memberDescribeResult{catalog: nil, err: memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}}}
 				}
 			}
 			return nil
@@ -83,9 +81,10 @@ type gatewayTool struct {
 
 // collectGatewayTools describes members' permission-filtered catalogs under
 // gateway-qualified names. Members the caller cannot see are skipped, as are
-// members it cannot reach or has not connected, as Progressive does. Any
-// other member failure fails the whole inventory, unless unavailable is
-// non-nil: then a member that cannot be listed right now is skipped and
+// members it has not connected or that answer with a failure excluding them.
+// A member that did not answer, or any unclassified failure, fails the whole
+// inventory rather than listing it without that member, unless unavailable
+// is non-nil: then a member that cannot be listed right now is skipped and
 // appended there with its failure.
 func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, unavailable *[]unavailableMember, captured map[string]*memberCatalog) ([]gatewayTool, error) {
 	tools := make([]gatewayTool, 0)
@@ -100,6 +99,11 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 					*unavailable = append(*unavailable, unavailableMember{member: member, err: err})
 				}
 				continue
+			}
+			if unavailable == nil {
+				if unanswered, ok := errors.AsType[memberUnansweredError](err); ok {
+					return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete because %s; try again", unanswered.message).LogWarn(ctx, logger)
+				}
 			}
 			if _, memberErr := errors.AsType[*metaMemberError](err); memberErr || unavailable != nil {
 				logger.WarnContext(ctx, "gateway member tools unavailable", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
@@ -137,7 +141,9 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 }
 
 // listDirectGatewayTools exposes qualified member tools through the same
-// permission-filtered catalogs used by Progressive discovery.
+// permission-filtered catalogs used by Progressive discovery. The inventory is
+// already bounded, so it is returned whole: a cursor would have to name a
+// listing that live members can change between pages.
 func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logger, endpoint *mcpendpointsrepo.McpEndpoint, server *metamcprepo.MetaMcpServer, gate *metaGateContext, req *rawRequest) (json.RawMessage, error) {
 	var params struct {
 		Cursor string `json:"cursor"`
@@ -147,8 +153,10 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 			return nil, oops.E(oops.CodeInvalid, err, "invalid tools/list parameters")
 		}
 	}
-	if len(params.Cursor) > 512 {
-		return nil, oops.E(oops.CodeInvalid, nil, "invalid tool listing cursor")
+	// No page carries a cursor, so one can only come from an earlier paginated
+	// listing; the client restarts rather than appending a whole inventory.
+	if params.Cursor != "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "gateway inventory changed or cursor is invalid; restart tools/list")
 	}
 	ctx, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, server.ID, endpoint.ProjectID)
 	if err != nil {
@@ -163,51 +171,20 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 		tools = append(tools, tool.entry)
 	}
 	slices.SortFunc(tools, func(a, b *toolListEntry) int { return strings.Compare(a.Name, b.Name) })
-	catalogBytes, err := json.Marshal(tools)
-	if err != nil {
-		return nil, fmt.Errorf("encode gateway inventory: %w", err)
-	}
-	if len(catalogBytes) > 16<<20 {
-		return nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 16 MiB")
-	}
-	fingerprint := fmt.Sprintf("%x", sha256.Sum256(catalogBytes))
-	if gate.catalog != nil {
-		fingerprint = gate.catalog.ID.String() + ":" + fingerprint
-	}
-	type cursor struct {
-		Offset      int    `json:"offset"`
-		Fingerprint string `json:"fingerprint"`
-	}
-	offset := 0
-	if params.Cursor != "" {
-		raw, err := base64.RawURLEncoding.DecodeString(params.Cursor)
-		var decoded cursor
-		if err != nil || json.Unmarshal(raw, &decoded) != nil || decoded.Fingerprint != fingerprint || decoded.Offset <= 0 || decoded.Offset >= len(tools) {
-			return nil, oops.E(oops.CodeInvalid, nil, "gateway inventory changed or cursor is invalid; restart tools/list")
-		}
-		offset = decoded.Offset
-	}
-	end := min(offset+100, len(tools))
-	nextCursor := ""
-	if end < len(tools) {
-		raw, err := json.Marshal(cursor{Offset: end, Fingerprint: fingerprint})
-		if err != nil {
-			return nil, fmt.Errorf("encode gateway cursor: %w", err)
-		}
-		nextCursor = base64.RawURLEncoding.EncodeToString(raw)
-	}
 	type page struct {
-		Tools      []*toolListEntry `json:"tools"`
-		NextCursor string           `json:"nextCursor,omitempty"`
+		Tools []*toolListEntry `json:"tools"`
 	}
 	encoded, err := json.Marshal(&result[page]{
 		ID:             req.ID,
-		Result:         page{Tools: tools[offset:end], NextCursor: nextCursor},
+		Result:         page{Tools: tools},
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     cacheHintsCallerVarying,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode Direct gateway catalog: %w", err)
+	}
+	if len(encoded) > 16<<20 {
+		return nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 16 MiB")
 	}
 	return encoded, nil
 }
