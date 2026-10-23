@@ -206,9 +206,8 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	unavailableMembers := []unavailableMember{}
 	captured := map[string]*memberCatalog{}
-	inventory, err := s.collectGatewayTools(ctx, logger, gate, members, &unavailableMembers, captured)
+	inventory, unavailableMembers, err := s.collectGatewayTools(ctx, logger, gate, members, true, captured)
 	if err != nil {
 		return nil, nil, nil, err
 	}
