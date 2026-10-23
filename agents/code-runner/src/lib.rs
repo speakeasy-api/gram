@@ -66,6 +66,13 @@ impl State {
         }))
     }
 
+    /// Read permits not held by a stream waiting for its first frame, so
+    /// tests can tell when stalled streams have taken theirs.
+    #[doc(hidden)]
+    pub fn idle_start_reads(&self) -> usize {
+        self.start_reads.available_permits()
+    }
+
     fn admit(&self, id: &str) -> Result<()> {
         let parsed = Uuid::parse_str(id)?;
         ensure!(

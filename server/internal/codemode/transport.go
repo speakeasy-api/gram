@@ -96,27 +96,36 @@ func (c *RunnerClient) Close() error {
 
 // open never holds the mutex across network I/O: a cancelled caller stops
 // waiting at once instead of queueing behind another caller's connection
-// attempt or a slow stream open.
-// A stream waits until waitUntil for one of the runner's admission slots and
-// then fails with errRunnerFull.
+// attempt or a slow stream open. waitUntil bounds the whole admission path,
+// connecting included; when it passes first, open fails with errRunnerFull.
 func (c *RunnerClient) open(ctx context.Context, waitUntil time.Time) (*runnerStream, error) {
-	session, err := c.currentSession(ctx)
-	if err != nil {
-		return nil, err
+	admission, stopAdmission := context.WithDeadline(ctx, waitUntil)
+	defer stopAdmission()
+	admissionErr := func(err error) error {
+		// A handshake bounded by the same deadline can time out a moment
+		// before the context reports it.
+		if ctx.Err() == nil && (admission.Err() != nil || !time.Now().Before(waitUntil)) {
+			return errRunnerFull
+		}
+		return err
+	}
+	if _, err := c.currentSession(admission); err != nil {
+		return nil, admissionErr(err)
 	}
 	c.mu.Lock()
 	streams := c.streams
 	c.mu.Unlock()
-	wait, stopWait := context.WithDeadline(ctx, waitUntil)
-	err = streams.Acquire(wait, 1)
-	stopWait()
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("wait for code stream: %w", ctx.Err())
-		}
-		return nil, errRunnerFull
+	if err := streams.Acquire(admission, 1); err != nil {
+		return nil, admissionErr(fmt.Errorf("wait for code stream: %w", err))
 	}
 	release := sync.OnceFunc(func() { streams.Release(1) })
+	// The session may have closed while this execution waited for a stream;
+	// take the current one, reconnecting if needed, before opening.
+	session, err := c.currentSession(admission)
+	if err != nil {
+		release()
+		return nil, admissionErr(err)
+	}
 	type opened struct {
 		stream *yamux.Stream
 		err    error
@@ -133,7 +142,7 @@ func (c *RunnerClient) open(ctx context.Context, waitUntil time.Time) (*runnerSt
 			return nil, fmt.Errorf("open code runner stream: %w", r.err)
 		}
 		return &runnerStream{Stream: r.stream, session: session, release: release}, nil
-	case <-ctx.Done():
+	case <-admission.Done():
 		go func() {
 			if r := <-result; r.stream != nil {
 				(&runnerStream{Stream: r.stream, session: session, release: release}).finish()
@@ -141,7 +150,7 @@ func (c *RunnerClient) open(ctx context.Context, waitUntil time.Time) (*runnerSt
 				release()
 			}
 		}()
-		return nil, fmt.Errorf("open code stream: %w", ctx.Err())
+		return nil, admissionErr(fmt.Errorf("open code stream: %w", admission.Err()))
 	}
 }
 

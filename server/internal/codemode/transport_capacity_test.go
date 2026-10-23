@@ -193,3 +193,79 @@ func TestRunnerStreamWaitIsNotRunTime(t *testing.T) {
 		require.Less(t, result.Timing.Run, hold+hold*3/4)
 	}
 }
+
+// completingRunner answers every execution with the value 1.
+func completingRunner(t *testing.T, capacityHeader string) string {
+	t.Helper()
+	return scriptedRunner(t, capacityHeader, nil, func(stream net.Conn) {
+		defer func() { _ = stream.Close() }()
+		frame, err := readRunnerFrame(stream)
+		if err != nil {
+			return
+		}
+		var start runnerStart
+		if json.Unmarshal(frame, &start) != nil {
+			return
+		}
+		if writeRunnerFrame(stream, runnerMessage{Type: "started", ExecutionID: start.ExecutionID}) != nil {
+			return
+		}
+		_ = writeRunnerFrame(stream, runnerMessage{Type: "complete", Value: json.RawMessage(`1`)})
+		_, _ = readRunnerFrame(stream)
+	})
+}
+
+func TestRunnerStreamWaitReconnectsAClosedSession(t *testing.T) {
+	t.Parallel()
+	client, err := NewRunnerClient(completingRunner(t, "1"), strings.Repeat("t", 32), &net.Dialer{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+	first, err := client.currentSession(t.Context())
+	require.NoError(t, err)
+	require.True(t, client.streams.TryAcquire(1), "hold the runner's only stream")
+	done := make(chan *ExecutionResult, 1)
+	go func() {
+		done <- client.Run(t.Context(), uuid.New(), "1", func(context.Context) (Host, error) { return idleHost{}, nil })
+	}()
+	require.Never(t, func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, 50*time.Millisecond, 10*time.Millisecond, "the execution waits while the stream is held")
+	_ = first.Close()
+	client.streams.Release(1)
+	result := <-done
+	require.Nil(t, result.Error, "%+v", result.Error)
+}
+
+func TestRunnerAdmissionWaitBoundsConnecting(t *testing.T) {
+	t.Parallel()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		// Accept and never answer the upgrade.
+		var held []net.Conn
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				for _, c := range held {
+					_ = c.Close()
+				}
+				return
+			}
+			held = append(held, conn)
+		}
+	}()
+	client, err := NewRunnerClient("http://"+listener.Addr().String(), strings.Repeat("t", 32), &net.Dialer{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+	started := time.Now()
+	result := client.Run(t.Context(), uuid.New(), "1", func(context.Context) (Host, error) { return idleHost{}, nil })
+	require.NotNil(t, result.Error)
+	require.Equal(t, "capacity_exceeded", result.Error.Code)
+	require.Less(t, time.Since(started), connectTimeout, "the admission wait, not the connect timeout, bounds a hung handshake")
+}

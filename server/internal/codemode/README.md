@@ -71,7 +71,10 @@ client refuses a runner that omits it. Twelve local admission slots bound
 discovery, and a second semaphore, created with the first connection at the
 runner's reported capacity, bounds open/closing streams, so no stream opens
 before the capacity is known and a burst never exceeds it. An execution waits up
-to three seconds in total for both, and refusals do not open another stream.
+to three seconds in total for both, including connecting and opening its
+stream, and is then refused as retryable capacity; refusals do not open another
+stream. A session that closed during the wait is replaced before the stream
+opens.
 Admission remains held until the peer's FIN. The runner's `admission_refused`
 and `capacity_exceeded` responses prove the program did not run; the client
 reports its own pre-submission failures as `cancelled`, `deadline_exceeded`,

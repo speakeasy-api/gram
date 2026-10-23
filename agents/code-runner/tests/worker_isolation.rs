@@ -243,9 +243,30 @@ fn worker_cannot_read_another_workers_memory() {
         "refused",
         "a confined worker cannot read a sibling's memory"
     );
-    let mem = r#"exec perl -e 'print open(my $f, "<", "/proc/$ARGV[0]/mem") ? "reached" : "refused"' "$1""#;
+    // Opening mem needs an attach-mode ptrace check, which Yama can refuse
+    // even unconfined. maps needs only a read-mode check, which Yama leaves
+    // alone, so its unconfined baseline is always reachable.
+    let opens = |file: &str| {
+        format!(
+            r#"exec perl -e 'print open(my $f, "<", "/proc/$ARGV[0]/{file}") ? "reached" : "refused"' "$1""#
+        )
+    };
     assert_eq!(
-        probe(mem, true),
+        probe(&opens("maps"), false),
+        "reached",
+        "the maps probe works unconfined"
+    );
+    assert_eq!(
+        probe(&opens("maps"), true),
+        "refused",
+        "a confined worker cannot open a sibling's maps"
+    );
+    let mem = opens("mem");
+    if probe(&mem, false) != "reached" {
+        eprintln!("mem is refused outside the worker too, so maps alone shows Landlock refusing");
+    }
+    assert_eq!(
+        probe(&mem, true),
         "refused",
         "a confined worker cannot open a sibling's mem"
     );

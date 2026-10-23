@@ -509,9 +509,15 @@ async fn unadmitted_first_frames_buffer_within_a_bounded_permit_pool() {
         client.write_u32(MAX_FRAME as u32).await.unwrap();
         stallers.push((client, task));
     }
-    // Spawned stallers take their read permits asynchronously; without this
-    // the waiting stream can win a permit first and start straight away.
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    // Spawned stallers take their read permits asynchronously; until they all
+    // hold one, the waiting stream could win a permit and start straight away.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while state.idle_start_reads() > 0 {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("every staller takes a read permit");
     let mut waiting = Run::new(state, Uuid::new_v4().to_string(), "1", 5000).await;
     assert!(
         tokio::time::timeout(
