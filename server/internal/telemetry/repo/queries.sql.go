@@ -4329,7 +4329,10 @@ type ToolUsageFilterOptions struct {
 	ShadowServers []ToolUsageShadowServerFilterOptionRow
 	Gateways      []ToolUsageGatewayFilterOptionRow
 	Users         []ToolUsageUserFilterOptionRow
-	Clients       []ToolUsageClientFilterOptionRow
+	// Authorizers are the people agents acted for, by user id. The caller
+	// resolves them to emails, since the user options are keyed by email.
+	Authorizers []ToolUsageAuthorizerFilterOptionRow
+	Clients     []ToolUsageClientFilterOptionRow
 }
 
 // GetMcpServerActivityParams defines the parameters for per-MCP-server tool-call
@@ -4373,6 +4376,11 @@ type ToolUsageUserFilterOptionRow struct {
 	UserLabel  string `ch:"user_label"`
 	UserKind   string `ch:"user_kind"`
 	EventCount uint64 `ch:"event_count"`
+}
+
+type ToolUsageAuthorizerFilterOptionRow struct {
+	AuthorizerUserID string `ch:"authorizer_user_id"`
+	EventCount       uint64 `ch:"event_count"`
 }
 
 type ToolUsageClientFilterOptionRow struct {
@@ -4598,6 +4606,11 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	eg.Go(func() error {
 		var err error
 		options.Users, err = q.getToolUsageUserFilterOptions(egCtx, summaryArg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		options.Authorizers, err = q.getToolUsageAuthorizerFilterOptions(egCtx, summaryArg)
 		return err
 	})
 	eg.Go(func() error {
@@ -5589,6 +5602,44 @@ func (q *Queries) getToolUsageUserFilterOptions(ctx context.Context, arg GetTool
 		var row ToolUsageUserFilterOptionRow
 		if err = rows.ScanStruct(&row); err != nil {
 			return nil, fmt.Errorf("scan tool usage user filter option row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) getToolUsageAuthorizerFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageAuthorizerFilterOptionRow, error) {
+	sb, err := toolUsageBaseSelect(arg,
+		"authorizer_user_id",
+		"count() AS event_count",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage authorizer filter options source: %w", err)
+	}
+	sb = sb.
+		Where(squirrel.NotEq{"authorizer_user_id": ""}).
+		GroupBy("authorizer_user_id")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage authorizer filter options query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []ToolUsageAuthorizerFilterOptionRow{}
+	for rows.Next() {
+		var row ToolUsageAuthorizerFilterOptionRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan tool usage authorizer filter option row: %w", err)
 		}
 		result = append(result, row)
 	}

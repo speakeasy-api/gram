@@ -2,6 +2,8 @@ package telemetry_test
 
 import (
 	"encoding/json"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -146,7 +148,7 @@ func TestListToolUsageTraces_AuthorizerFoldsIntoUserFilter(t *testing.T) {
 					From: from, To: to, Limit: 10,
 					UserFilters: tt.users, AgentIds: tt.agents, Query: query,
 				})
-				require.ElementsMatch(t, tt.wantTrace, keys(got))
+				require.ElementsMatch(t, tt.wantTrace, slices.Collect(maps.Keys(got)))
 				requireAuthorizers(t, got)
 			})
 		}
@@ -158,6 +160,30 @@ func TestListToolUsageTraces_AuthorizerFoldsIntoUserFilter(t *testing.T) {
 		require.Len(t, got, 5)
 		require.Equal(t, gen.ToolUsageUserKind("agent_id"), got[delegatedTraceID].UserKind)
 		requireAuthorizers(t, got)
+	})
+
+	t.Run("it offers the people agents acted for as user options", func(t *testing.T) {
+		t.Parallel()
+		res, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
+			From: from, To: to, OptionTypes: []gen.ToolUsageFilterOptionType{"users"},
+		})
+		require.NoError(t, err)
+		counts := make(map[string]int64, len(res.Users))
+		for _, user := range res.Users {
+			if user.UserKind != "email" {
+				continue
+			}
+			_, dup := counts[user.UserKey]
+			require.False(t, dup, user.UserKey)
+			counts[user.UserKey] = user.EventCount
+		}
+		require.Equal(t, map[string]int64{
+			// A direct call and a call made on their behalf, in one option.
+			email: 2,
+			// Only ever called through an agent.
+			sharerEmail:         1,
+			"other@example.com": 1,
+		}, counts)
 	})
 
 	t.Run("it counts the delegated calls in the totals", func(t *testing.T) {
@@ -174,12 +200,4 @@ func TestListToolUsageTraces_AuthorizerFoldsIntoUserFilter(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 1, res.Totals.EventCount)
 	})
-}
-
-func keys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }

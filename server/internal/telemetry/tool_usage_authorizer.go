@@ -1,7 +1,9 @@
 package telemetry
 
 import (
+	"cmp"
 	"context"
+	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -45,15 +47,69 @@ func (s *Service) authorizerUserIDsForUserFilters(ctx context.Context, orgID str
 	return conv.DedupeNonEmpty(ids)
 }
 
-// authorizerLabels names the people the listed agent calls acted for. Scoped to
-// the organization, so an id recorded on a row never resolves against another
-// tenant's directory. A failed lookup leaves the rows unlabelled rather than
-// failing the page: the id still identifies the person.
+// authorizerLabels names the people the listed agent calls acted for.
 func (s *Service) authorizerLabels(ctx context.Context, orgID string, rows []repo.ToolUsageTraceSummary) map[string]string {
 	ids := make([]string, 0, len(rows))
 	for _, row := range rows {
 		ids = append(ids, row.AuthorizerUserID)
 	}
+	return s.authorizerEmails(ctx, orgID, ids)
+}
+
+// authorizerUserOptions adds the people agents acted for to the User filter
+// options, so someone whose only calls in the window were made on their behalf
+// can still be picked. They are offered by email, the key the other user
+// options and the user filter already use, and fold into a person's direct
+// option when they have one. The count then covers both, as picking the
+// person selects both.
+func (s *Service) authorizerUserOptions(ctx context.Context, orgID string, users []repo.ToolUsageUserFilterOptionRow, authorizers []repo.ToolUsageAuthorizerFilterOptionRow) []repo.ToolUsageUserFilterOptionRow {
+	ids := make([]string, 0, len(authorizers))
+	for _, row := range authorizers {
+		ids = append(ids, row.AuthorizerUserID)
+	}
+	emails := s.authorizerEmails(ctx, orgID, ids)
+	if len(emails) == 0 {
+		return users
+	}
+
+	byEmail := make(map[string]int, len(users))
+	for i, user := range users {
+		if user.UserKind == "email" {
+			byEmail[conv.NormalizeEmail(user.UserKey)] = i
+		}
+	}
+	for _, row := range authorizers {
+		email, ok := emails[row.AuthorizerUserID]
+		if !ok {
+			continue
+		}
+		key := conv.NormalizeEmail(email)
+		if i, ok := byEmail[key]; ok {
+			users[i].EventCount += row.EventCount
+			continue
+		}
+		byEmail[key] = len(users)
+		users = append(users, repo.ToolUsageUserFilterOptionRow{
+			UserKey:    email,
+			UserLabel:  email,
+			UserKind:   "email",
+			EventCount: row.EventCount,
+		})
+	}
+
+	// The merge changes counts, so restore the user options query's order:
+	// most active first, then by name.
+	slices.SortFunc(users, func(a, b repo.ToolUsageUserFilterOptionRow) int {
+		return cmp.Or(cmp.Compare(b.EventCount, a.EventCount), cmp.Compare(a.UserLabel, b.UserLabel))
+	})
+	return users
+}
+
+// authorizerEmails resolves the user ids agents recorded as their authorizer
+// to emails. Scoped to the organization, so an id recorded on a row never
+// resolves against another tenant's directory. A failed lookup resolves
+// nobody rather than failing the page: the id still identifies the person.
+func (s *Service) authorizerEmails(ctx context.Context, orgID string, ids []string) map[string]string {
 	ids = conv.DedupeNonEmpty(ids)
 	if len(ids) == 0 || orgID == "" {
 		return nil
