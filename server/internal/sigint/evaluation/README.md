@@ -305,6 +305,13 @@ acknowledgment.
 
 ### Outcomes
 
+The definition repository preserves each complete semantic definition before
+returning it for evaluation. Snapshots are immutable and keyed by project, sensor
+and the existing definition hash; repeated evaluation uses the same row. Sensor
+creation, update and deletion audit snapshots retain enabled state and mutation
+times for future activation accounting. History before capture began remains
+unknown; a full eligible-message census is still required for true coverage.
+
 Coverage needs every eligible sensor decision, not only answers. Each loaded
 sensor that does not produce a reading publishes one `gram.sigint.v1.Outcome`,
 awaited before acknowledgment like readings:

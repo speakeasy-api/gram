@@ -1,6 +1,7 @@
 package demoseed
 
 import (
+	"encoding/json"
 	"math"
 	"testing"
 	"time"
@@ -9,11 +10,49 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
 )
 
 func validProbability(p float64) bool {
 	return !math.IsNaN(p) && !math.IsInf(p, 0) && p >= 0 && p <= 1
+}
+
+func TestSeededSigintDefinitionsExplainReadings(t *testing.T) {
+	t.Parallel()
+	s := &seeder{spec: DefaultSpec()}
+	for _, sensor := range demoSigintSensors {
+		if !sensor.enabled {
+			continue
+		}
+		data, hash, err := s.sigintDemoDefinition(sensor)
+		require.NoError(t, err)
+		require.NotEmpty(t, hash)
+		var snapshot struct {
+			Synthetic  bool `json:"synthetic"`
+			Definition struct {
+				Signals []struct {
+					ID       string          `json:"id"`
+					Criteria json.RawMessage `json:"criteria"`
+				} `json:"signals"`
+				MatchingContract string `json:"matching_contract"`
+				MatchExpression  string `json:"match_expression"`
+			} `json:"definition"`
+		}
+		require.NoError(t, json.Unmarshal(data, &snapshot))
+		require.True(t, snapshot.Synthetic)
+		require.Equal(t, matching.Version, snapshot.Definition.MatchingContract)
+		require.Equal(t, matching.DefaultExpression, snapshot.Definition.MatchExpression)
+		require.Len(t, snapshot.Definition.Signals, sigintReadingMembers)
+		for _, member := range demoSigintMemberships {
+			if member.sensor == sensor.key {
+				signal := snapshot.Definition.Signals[member.order]
+				require.Equal(t, s.det("sigint-signal-"+member.signal).String(), signal.ID)
+				require.NotEmpty(t, signal.Criteria)
+				require.NotEqual(t, "null", string(signal.Criteria))
+			}
+		}
+	}
 }
 
 // The seeded readings skip the Pub/Sub writer's parser and the table has no

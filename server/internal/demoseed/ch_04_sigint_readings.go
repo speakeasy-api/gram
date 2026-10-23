@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"slices"
@@ -14,9 +15,11 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
+	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
 )
 
@@ -89,8 +92,12 @@ func (s *seeder) sigintReadingRows() ([]chrepo.ReadingRow, error) {
 		if err := evaluation.ValidateInputConfiguration(sensor.inputStrategy, int(sensor.windowSize)); err != nil {
 			return nil, fmt.Errorf("demo sigint sensor %s: %w", sensor.key, err)
 		}
+		_, definitionHash, err := s.sigintDemoDefinition(sensor)
+		if err != nil {
+			return nil, err
+		}
 		for n := range sigintReadingDays {
-			rows = append(rows, s.sigintReading(sensor, members, n))
+			rows = append(rows, s.sigintReading(sensor, members, definitionHash, n))
 		}
 		for run := range sigintManualRuns {
 			request := readings.Context{
@@ -99,7 +106,7 @@ func (s *seeder) sigintReadingRows() ([]chrepo.ReadingRow, error) {
 				RequestedAt: s.now.UTC().Add(-time.Duration(sigintManualRuns-run) * time.Hour),
 			}
 			for target := range sigintManualMessages {
-				row := s.sigintReading(sensor, members, sigintReadingDays-sigintManualMessages+target)
+				row := s.sigintReading(sensor, members, definitionHash, sigintReadingDays-sigintManualMessages+target)
 				row.TriggerKind, row.RunID, row.EvaluationRequestedAt = string(request.TriggerKind), request.RunID, request.RequestedAt
 				row.ID = request.ReadingID(row.OrganizationID, row.ProjectID.String(), row.EventKind, row.EventID, row.SensorID.String())
 				row.EvaluationAttemptID = s.det("sigint-manual-attempt-" + strconv.Itoa(run) + "-" + strconv.Itoa(target))
@@ -111,7 +118,7 @@ func (s *seeder) sigintReadingRows() ([]chrepo.ReadingRow, error) {
 	return rows, nil
 }
 
-func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMembership, n int) chrepo.ReadingRow {
+func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMembership, definitionHash string, n int) chrepo.ReadingRow {
 	day := float64(n)
 	probability := 0.5 + 0.3*math.Sin(day*2*math.Pi/365) + 0.1*math.Sin(day*2*math.Pi/7)
 	remainderShare := 0.5 + 0.3*math.Sin(day*2*math.Pi/7+1)
@@ -167,7 +174,6 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		confidence = new(0.6 + 0.3*math.Cos(day*2*math.Pi/17))
 	}
 
-	definition := sha256.Sum256([]byte(s.name("sigint-definition-" + sensor.key)))
 	departments := [2]string{"engineering", "marketing"}
 	regions := [2]string{"us-east", "eu-west"}
 	attributes := map[string]string{"region": regions[n%2], "environment": "production"}
@@ -212,7 +218,7 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		InsertedAt:                    s.now.UTC(),
 		Status:                        chrepo.StatusAnswered,
 		FailureReason:                 "",
-		DefinitionHash:                hex.EncodeToString(definition[:]),
+		DefinitionHash:                definitionHash,
 		ConfiguredModel:               "demo-classifier",
 		Models:                        nil,
 		CompilerVersion:               "demo-compiler-v1",
@@ -249,4 +255,42 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		ExpectedIndex:                 expectedIndex,
 		Confidence:                    confidence,
 	}
+}
+
+// sigintDemoDefinition explicitly labels simulated readings and keeps their
+// inspectable definition stable across the PostgreSQL and ClickHouse seeds.
+func (s *seeder) sigintDemoDefinition(sensor demoSigintSensor) ([]byte, string, error) {
+	config := evaluation.Sensor{
+		ID: s.det("sigint-sensor-" + sensor.key).String(), Slug: sensor.slug, Mode: sensor.mode,
+		Instructions: new(sensor.instructions), InputStrategy: sensor.inputStrategy, WindowSize: int(sensor.windowSize),
+		MatchExpression: matching.DefaultExpression, Signals: nil, SignalSlugs: make(map[classifier.OptionKey]string),
+	}
+	var members []demoSigintMembership
+	for _, member := range demoSigintMemberships {
+		if member.sensor == sensor.key {
+			members = append(members, member)
+		}
+	}
+	slices.SortFunc(members, func(a, b demoSigintMembership) int { return cmp.Compare(a.order, b.order) })
+	for _, member := range members {
+		for _, signal := range demoSigintSignals {
+			if signal.key == member.signal {
+				key := classifier.OptionKey(s.det("sigint-signal-" + signal.key).String())
+				config.Signals = append(config.Signals, classifier.NewOption(key, classifier.Text(signal.criteria)))
+				config.SignalSlugs[key] = signal.key
+				break
+			}
+		}
+	}
+	snapshot, ready := evaluation.Snapshot(config)
+	if !ready || len(config.Signals) != len(members) {
+		return nil, "", fmt.Errorf("incomplete demo sigint definition %s", sensor.key)
+	}
+	data, _ := json.Marshal(struct {
+		Synthetic  bool            `json:"synthetic"`
+		Sensor     string          `json:"sensor_id"`
+		Definition json.RawMessage `json:"definition"`
+	}{Synthetic: true, Sensor: config.ID, Definition: snapshot.Definition})
+	hash := sha256.Sum256(data)
+	return data, hex.EncodeToString(hash[:]), nil
 }
