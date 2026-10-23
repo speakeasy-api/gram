@@ -15974,15 +15974,15 @@ func authTransferInUsage() {
 // authClientsUsage displays the usage of the auth-clients command and its
 // subcommands.
 func authClientsUsage() {
-	fmt.Fprintln(os.Stderr, `Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect where Speakeasy resolves typed auth clients, which is being rolled out in stages; they revoke no upstream credentials and remove no existing upstream OAuth associations, so existing upstream configuration may keep serving until then.`)
+	fmt.Fprintln(os.Stderr, `Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect only where typed auth client resolution is enforced, which is being rolled out in stages. They revoke no upstream credentials and remove no existing upstream OAuth associations; elsewhere, including in shadow mode, existing upstream configuration keeps serving.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] auth-clients COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-auth-clients: List the auth clients in the caller's organization. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-auth-client: Get an auth client in the caller's organization. Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    update-auth-client: Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect where typed auth clients are resolved. It revokes no upstream credentials, and until typed resolution is rolled out an MCP server's existing upstream configuration may keep serving. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    detach-auth-client-from-mcp-server: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect where typed auth clients are resolved. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which may keep serving until typed resolution is rolled out. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-auth-client: Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials; elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    detach-auth-client-from-mcp-server: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-authentication: Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    set-mcp-server-upstream-auth-requirement: Declare whether an MCP server's upstream needs authentication. Where typed auth clients are resolved, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; until typed resolution is rolled out, the server's existing upstream configuration may keep serving. Not available for hosted toolsets. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    set-mcp-server-upstream-auth-requirement: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s auth-clients COMMAND --help\n", os.Args[0])
@@ -16047,7 +16047,7 @@ func authClientsUpdateAuthClientUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect where typed auth clients are resolved. It revokes no upstream credentials, and until typed resolution is rolled out an MCP server's existing upstream configuration may keep serving. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials; elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -16069,7 +16069,7 @@ func authClientsDetachAuthClientFromMcpServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect where typed auth clients are resolved. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which may keep serving until typed resolution is rolled out. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -16113,7 +16113,7 @@ func authClientsSetMcpServerUpstreamAuthRequirementUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Declare whether an MCP server's upstream needs authentication. Where typed auth clients are resolved, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; until typed resolution is rolled out, the server's existing upstream configuration may keep serving. Not available for hosted toolsets. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

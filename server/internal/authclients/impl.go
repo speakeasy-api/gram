@@ -398,12 +398,17 @@ func (s *Service) SetMcpServerUpstreamAuthRequirement(ctx context.Context, paylo
 	}
 
 	if !server.RequiresUpstreamAuth.Valid || server.RequiresUpstreamAuth.Bool != required {
-		if err := queries.SetMCPServerRequiresUpstreamAuth(ctx, repo.SetMCPServerRequiresUpstreamAuthParams{
+		updated, err := queries.SetMCPServerRequiresUpstreamAuth(ctx, repo.SetMCPServerRequiresUpstreamAuthParams{
 			RequiresUpstreamAuth: pgtype.Bool{Bool: required, Valid: true},
 			ID:                   server.ID,
 			ProjectID:            server.ProjectID,
-		}); err != nil {
+			OrganizationID:       authCtx.ActiveOrganizationID,
+		})
+		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "set mcp server upstream auth requirement").LogError(ctx, logger)
+		}
+		if updated == 0 {
+			return nil, oops.E(oops.CodeNotFound, nil, "mcp server not found").LogError(ctx, logger)
 		}
 
 		if err := s.audit.LogMcpServerUpstreamAuthRequirementUpdate(ctx, dbtx, audit.LogMcpServerUpstreamAuthRequirementUpdateEvent{
@@ -442,10 +447,12 @@ func (s *Service) require(ctx context.Context, scope authz.Scope) (*contextvalue
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	// Legacy API keys skip RBAC, and auth clients and their server links are
-	// organization-wide, so a key bound to one project cannot be confined to it.
-	if mode, byKey := contextvalues.APIKeyAuthorization(ctx); byKey && mode != contextvalues.APIKeyAuthorizationModePrincipal && authCtx.ProjectID != nil {
-		return nil, nil, oops.E(oops.CodeForbidden, nil, "project-scoped API keys cannot manage the organization's auth clients").LogError(ctx, logger)
+	// Legacy API keys skip RBAC, so neither org:read nor org:admin would be
+	// checked for them, and a project-bound one could not be confined to its
+	// project. Only principal API keys, which carry grants, may manage auth
+	// clients.
+	if mode, byKey := contextvalues.APIKeyAuthorization(ctx); byKey && mode != contextvalues.APIKeyAuthorizationModePrincipal {
+		return nil, nil, oops.E(oops.CodeForbidden, nil, "legacy API keys cannot manage the organization's auth clients").LogError(ctx, logger)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {

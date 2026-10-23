@@ -58,6 +58,13 @@ FROM mcp_auth_clients ac
 WHERE ac.id = $1
   AND ac.organization_id = $2
   AND ac.deleted IS FALSE
+  AND (ac.project_id IS NULL OR EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = ac.project_id
+      AND p.organization_id = ac.organization_id
+      AND p.deleted IS FALSE
+  ))
 `
 
 type GetAuthClientParams struct {
@@ -65,6 +72,7 @@ type GetAuthClientParams struct {
 	OrganizationID string
 }
 
+// A project client of a deleted project is gone with its project.
 func (q *Queries) GetAuthClient(ctx context.Context, arg GetAuthClientParams) (McpAuthClient, error) {
 	row := q.db.QueryRow(ctx, getAuthClient, arg.ID, arg.OrganizationID)
 	var i McpAuthClient
@@ -264,6 +272,13 @@ SELECT ac.id, ac.organization_id, ac.project_id, ac.attachment_scope, ac.client_
 FROM mcp_auth_clients ac
 WHERE ac.organization_id = $1
   AND ac.deleted IS FALSE
+  AND (ac.project_id IS NULL OR EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = ac.project_id
+      AND p.organization_id = ac.organization_id
+      AND p.deleted IS FALSE
+  ))
   AND ($2::text IS NULL OR ac.client_type = $2::text)
   AND (
     $3::uuid IS NULL
@@ -393,7 +408,14 @@ FROM mcp_auth_clients ac
 WHERE ac.id = $1
   AND ac.organization_id = $2
   AND ac.deleted IS FALSE
-FOR UPDATE
+  AND (ac.project_id IS NULL OR EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = ac.project_id
+      AND p.organization_id = ac.organization_id
+      AND p.deleted IS FALSE
+  ))
+FOR UPDATE OF ac
 `
 
 type LockAuthClientParams struct {
@@ -523,24 +545,37 @@ func (q *Queries) LockOrganizationMCPServer(ctx context.Context, arg LockOrganiz
 	return i, err
 }
 
-const setMCPServerRequiresUpstreamAuth = `-- name: SetMCPServerRequiresUpstreamAuth :exec
-UPDATE mcp_servers
+const setMCPServerRequiresUpstreamAuth = `-- name: SetMCPServerRequiresUpstreamAuth :execrows
+UPDATE mcp_servers ms
 SET requires_upstream_auth = $1,
     updated_at = clock_timestamp()
-WHERE id = $2
-  AND project_id = $3
-  AND deleted IS FALSE
+FROM projects p
+WHERE ms.id = $2
+  AND ms.project_id = $3
+  AND ms.deleted IS FALSE
+  AND p.id = ms.project_id
+  AND p.organization_id = $4
+  AND p.deleted IS FALSE
 `
 
 type SetMCPServerRequiresUpstreamAuthParams struct {
 	RequiresUpstreamAuth pgtype.Bool
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
+	OrganizationID       string
 }
 
-func (q *Queries) SetMCPServerRequiresUpstreamAuth(ctx context.Context, arg SetMCPServerRequiresUpstreamAuthParams) error {
-	_, err := q.db.Exec(ctx, setMCPServerRequiresUpstreamAuth, arg.RequiresUpstreamAuth, arg.ID, arg.ProjectID)
-	return err
+func (q *Queries) SetMCPServerRequiresUpstreamAuth(ctx context.Context, arg SetMCPServerRequiresUpstreamAuthParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMCPServerRequiresUpstreamAuth,
+		arg.RequiresUpstreamAuth,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateAuthClient = `-- name: UpdateAuthClient :one

@@ -875,20 +875,31 @@ func decideAndWrite(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, ro
 	case authClientID != uuid.Nil:
 		// Recorded before this run.
 	default:
+		// A server an administrator detached the client from gets no link,
+		// so a dry run counts none either.
+		linkOutcome := OutcomeAssociated
+		if row.LinkDetached {
+			linkOutcome = OutcomeExisting
+		}
+		pendingLink := func() {
+			if !row.LinkDetached {
+				report.pendingLink(KindOAuth)
+			}
+		}
 		id, seen := decided[key]
 		switch {
 		case seen && id == uuid.Nil:
 			// Decided earlier in this dry run; only the link is new.
-			report.pendingLink(KindOAuth)
-			result.Outcome = OutcomeAssociated
+			pendingLink()
+			result.Outcome = linkOutcome
 			return result, nil
 		case seen:
 			authClientID = id
-			result.Outcome = OutcomeAssociated
-			report.pendingLink(KindOAuth)
+			result.Outcome = linkOutcome
+			pendingLink()
 		default:
 			report.pendingClient(KindOAuth)
-			report.pendingLink(KindOAuth)
+			pendingLink()
 			result.Outcome = OutcomeCreated
 			if !opts.Apply {
 				decided[key] = uuid.Nil

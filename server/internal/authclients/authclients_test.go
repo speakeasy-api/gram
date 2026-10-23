@@ -210,24 +210,46 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	require.Equal(t, code, shareable.Code)
 }
 
-func TestProjectBoundLegacyKeysCannotManageAuthClients(t *testing.T) {
+// Legacy API keys skip RBAC, so whether bound to a project or not they could
+// otherwise read and manage auth clients without org:read or org:admin.
+func TestLegacyKeysCannotManageAuthClients(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Credential")
+	for name, projectBound := range map[string]bool{"project-bound": true, "organization-wide": false} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	keyCtx := *authCtx
-	keyCtx.APIKeyID = uuid.NewString()
-	keyCtx.ProjectID = new(ti.projectID)
-	ctx = contextvalues.WithLegacyAPIKeyAuthorization(ctx, &keyCtx)
+			ctx, ti := newTestService(t)
+			clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Credential")
+			server := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
+			associate(t, ctx, ti.conn, ti.organizationID, server, clientID)
 
-	_, err := ti.service.ListAuthClients(ctx, &gen.ListAuthClientsPayload{Limit: 50})
-	requireOopsCode(t, err, oops.CodeForbidden)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			keyCtx := *authCtx
+			keyCtx.APIKeyID = uuid.NewString()
+			keyCtx.ProjectID = nil
+			if projectBound {
+				keyCtx.ProjectID = new(ti.projectID)
+			}
+			ctx = contextvalues.WithLegacyAPIKeyAuthorization(ctx, &keyCtx)
 
-	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: clientID.String(), Enabled: new(false)})
-	requireOopsCode(t, err, oops.CodeForbidden)
+			_, err := ti.service.ListAuthClients(ctx, &gen.ListAuthClientsPayload{Limit: 50})
+			requireOopsCode(t, err, oops.CodeForbidden)
+
+			_, err = ti.service.GetAuthClient(ctx, &gen.GetAuthClientPayload{ID: clientID.String()})
+			requireOopsCode(t, err, oops.CodeForbidden)
+
+			_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: clientID.String(), Enabled: new(false)})
+			requireOopsCode(t, err, oops.CodeForbidden)
+
+			_, err = ti.service.DetachAuthClientFromMcpServer(ctx, &gen.DetachAuthClientFromMcpServerPayload{ID: clientID.String(), McpServerID: server.id.String()})
+			requireOopsCode(t, err, oops.CodeForbidden)
+
+			_, err = ti.service.SetMcpServerUpstreamAuthRequirement(ctx, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: server.id.String(), RequiresUpstreamAuth: false})
+			requireOopsCode(t, err, oops.CodeForbidden)
+		})
+	}
 }
 
 func TestEnablingAuthClientRespectsServersWithoutUpstreamAuth(t *testing.T) {

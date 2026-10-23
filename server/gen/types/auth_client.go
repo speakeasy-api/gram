@@ -22,10 +22,10 @@ type AuthClient struct {
 	Source AuthClientSource
 	// The client's name.
 	Name string
-	// Whether the client is enabled. Where typed auth clients are resolved, a
-	// disabled client is never selected or resolved. Disabling revokes no upstream
-	// credentials, and until typed resolution is rolled out an MCP server's
-	// existing upstream configuration may keep serving.
+	// Whether the client is enabled. Where typed auth client resolution is
+	// enforced, a disabled client is never selected or resolved. Disabling revokes
+	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
+	// server's existing upstream configuration keeps serving.
 	Enabled bool
 	// The OAuth registration behind remote_session, service_account and ema
 	// clients.
@@ -35,8 +35,8 @@ type AuthClient struct {
 	Personal bool
 	// The headers the client sends upstream.
 	Headers []*AuthClientHeader
-	// The MCP servers that offer the client. Where typed auth clients are
-	// resolved, changing or disabling the client changes upstream behavior on
+	// The MCP servers that offer the client. Where typed auth client resolution is
+	// enforced, changing or disabling the client changes upstream behavior on
 	// every one of them.
 	Servers []*AuthClientServer
 	// When the client was created.

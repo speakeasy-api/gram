@@ -3,6 +3,13 @@ SELECT ac.*
 FROM mcp_auth_clients ac
 WHERE ac.organization_id = @organization_id
   AND ac.deleted IS FALSE
+  AND (ac.project_id IS NULL OR EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = ac.project_id
+      AND p.organization_id = ac.organization_id
+      AND p.deleted IS FALSE
+  ))
   AND (sqlc.narg(client_type)::text IS NULL OR ac.client_type = sqlc.narg(client_type)::text)
   AND (
     sqlc.narg(mcp_server_id)::uuid IS NULL
@@ -20,11 +27,19 @@ ORDER BY ac.id
 LIMIT @limit_value;
 
 -- name: GetAuthClient :one
+-- A project client of a deleted project is gone with its project.
 SELECT ac.*
 FROM mcp_auth_clients ac
 WHERE ac.id = @id
   AND ac.organization_id = @organization_id
-  AND ac.deleted IS FALSE;
+  AND ac.deleted IS FALSE
+  AND (ac.project_id IS NULL OR EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = ac.project_id
+      AND p.organization_id = ac.organization_id
+      AND p.deleted IS FALSE
+  ));
 
 -- name: LockAuthClient :one
 SELECT ac.*
@@ -32,7 +47,14 @@ FROM mcp_auth_clients ac
 WHERE ac.id = @id
   AND ac.organization_id = @organization_id
   AND ac.deleted IS FALSE
-FOR UPDATE;
+  AND (ac.project_id IS NULL OR EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = ac.project_id
+      AND p.organization_id = ac.organization_id
+      AND p.deleted IS FALSE
+  ))
+FOR UPDATE OF ac;
 
 -- name: UpdateAuthClient :one
 UPDATE mcp_auth_clients
@@ -155,13 +177,17 @@ WHERE ms.id = @id
   AND ms.deleted IS FALSE
 FOR UPDATE OF ms;
 
--- name: SetMCPServerRequiresUpstreamAuth :exec
-UPDATE mcp_servers
+-- name: SetMCPServerRequiresUpstreamAuth :execrows
+UPDATE mcp_servers ms
 SET requires_upstream_auth = @requires_upstream_auth,
     updated_at = clock_timestamp()
-WHERE id = @id
-  AND project_id = @project_id
-  AND deleted IS FALSE;
+FROM projects p
+WHERE ms.id = @id
+  AND ms.project_id = @project_id
+  AND ms.deleted IS FALSE
+  AND p.id = ms.project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE;
 
 -- name: ListServerAuthClients :many
 SELECT ac.*

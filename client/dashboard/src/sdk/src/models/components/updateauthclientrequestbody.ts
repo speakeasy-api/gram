@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 
 export type UpdateAuthClientRequestBody = {
   /**
-   * Whether the client is enabled where typed auth clients are resolved.
+   * Whether the client is enabled where typed auth client resolution is enforced.
    */
   enabled?: boolean | undefined;
   /**

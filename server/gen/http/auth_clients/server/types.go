@@ -22,7 +22,7 @@ type UpdateAuthClientRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The new name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Whether the client is enabled where typed auth clients are resolved.
+	// Whether the client is enabled where typed auth client resolution is enforced.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
@@ -67,10 +67,10 @@ type GetAuthClientResponseBody struct {
 	Source string `form:"source" json:"source" xml:"source"`
 	// The client's name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Whether the client is enabled. Where typed auth clients are resolved, a
-	// disabled client is never selected or resolved. Disabling revokes no upstream
-	// credentials, and until typed resolution is rolled out an MCP server's
-	// existing upstream configuration may keep serving.
+	// Whether the client is enabled. Where typed auth client resolution is
+	// enforced, a disabled client is never selected or resolved. Disabling revokes
+	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
+	// server's existing upstream configuration keeps serving.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// The OAuth registration behind remote_session, service_account and ema
 	// clients.
@@ -80,8 +80,8 @@ type GetAuthClientResponseBody struct {
 	Personal bool `form:"personal" json:"personal" xml:"personal"`
 	// The headers the client sends upstream.
 	Headers []*AuthClientHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
-	// The MCP servers that offer the client. Where typed auth clients are
-	// resolved, changing or disabling the client changes upstream behavior on
+	// The MCP servers that offer the client. Where typed auth client resolution is
+	// enforced, changing or disabling the client changes upstream behavior on
 	// every one of them.
 	Servers []*AuthClientServerResponseBody `form:"servers" json:"servers" xml:"servers"`
 	// When the client was created.
@@ -105,10 +105,10 @@ type UpdateAuthClientResponseBody struct {
 	Source string `form:"source" json:"source" xml:"source"`
 	// The client's name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Whether the client is enabled. Where typed auth clients are resolved, a
-	// disabled client is never selected or resolved. Disabling revokes no upstream
-	// credentials, and until typed resolution is rolled out an MCP server's
-	// existing upstream configuration may keep serving.
+	// Whether the client is enabled. Where typed auth client resolution is
+	// enforced, a disabled client is never selected or resolved. Disabling revokes
+	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
+	// server's existing upstream configuration keeps serving.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// The OAuth registration behind remote_session, service_account and ema
 	// clients.
@@ -118,8 +118,8 @@ type UpdateAuthClientResponseBody struct {
 	Personal bool `form:"personal" json:"personal" xml:"personal"`
 	// The headers the client sends upstream.
 	Headers []*AuthClientHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
-	// The MCP servers that offer the client. Where typed auth clients are
-	// resolved, changing or disabling the client changes upstream behavior on
+	// The MCP servers that offer the client. Where typed auth client resolution is
+	// enforced, changing or disabling the client changes upstream behavior on
 	// every one of them.
 	Servers []*AuthClientServerResponseBody `form:"servers" json:"servers" xml:"servers"`
 	// When the client was created.
@@ -143,10 +143,10 @@ type DetachAuthClientFromMcpServerResponseBody struct {
 	Source string `form:"source" json:"source" xml:"source"`
 	// The client's name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Whether the client is enabled. Where typed auth clients are resolved, a
-	// disabled client is never selected or resolved. Disabling revokes no upstream
-	// credentials, and until typed resolution is rolled out an MCP server's
-	// existing upstream configuration may keep serving.
+	// Whether the client is enabled. Where typed auth client resolution is
+	// enforced, a disabled client is never selected or resolved. Disabling revokes
+	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
+	// server's existing upstream configuration keeps serving.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// The OAuth registration behind remote_session, service_account and ema
 	// clients.
@@ -156,8 +156,8 @@ type DetachAuthClientFromMcpServerResponseBody struct {
 	Personal bool `form:"personal" json:"personal" xml:"personal"`
 	// The headers the client sends upstream.
 	Headers []*AuthClientHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
-	// The MCP servers that offer the client. Where typed auth clients are
-	// resolved, changing or disabling the client changes upstream behavior on
+	// The MCP servers that offer the client. Where typed auth client resolution is
+	// enforced, changing or disabling the client changes upstream behavior on
 	// every one of them.
 	Servers []*AuthClientServerResponseBody `form:"servers" json:"servers" xml:"servers"`
 	// When the client was created.
@@ -1351,10 +1351,10 @@ type AuthClientResponseBody struct {
 	Source string `form:"source" json:"source" xml:"source"`
 	// The client's name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Whether the client is enabled. Where typed auth clients are resolved, a
-	// disabled client is never selected or resolved. Disabling revokes no upstream
-	// credentials, and until typed resolution is rolled out an MCP server's
-	// existing upstream configuration may keep serving.
+	// Whether the client is enabled. Where typed auth client resolution is
+	// enforced, a disabled client is never selected or resolved. Disabling revokes
+	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
+	// server's existing upstream configuration keeps serving.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// The OAuth registration behind remote_session, service_account and ema
 	// clients.
@@ -1364,8 +1364,8 @@ type AuthClientResponseBody struct {
 	Personal bool `form:"personal" json:"personal" xml:"personal"`
 	// The headers the client sends upstream.
 	Headers []*AuthClientHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
-	// The MCP servers that offer the client. Where typed auth clients are
-	// resolved, changing or disabling the client changes upstream behavior on
+	// The MCP servers that offer the client. Where typed auth client resolution is
+	// enforced, changing or disabling the client changes upstream behavior on
 	// every one of them.
 	Servers []*AuthClientServerResponseBody `form:"servers" json:"servers" xml:"servers"`
 	// When the client was created.

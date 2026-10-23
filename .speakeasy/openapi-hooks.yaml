@@ -778,7 +778,7 @@ tags:
   - name: auth
     description: Managed auth for gram producers and dashboard.
   - name: authClients
-    description: Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect where Speakeasy resolves typed auth clients, which is being rolled out in stages; they revoke no upstream credentials and remove no existing upstream OAuth associations, so existing upstream configuration may keep serving until then.
+    description: Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect only where typed auth client resolution is enforced, which is being rolled out in stages. They revoke no upstream credentials and remove no existing upstream OAuth associations; elsewhere, including in shadow mode, existing upstream configuration keeps serving.
   - name: businessMemories
     description: Inspect and semantically search business memories.
   - name: chat

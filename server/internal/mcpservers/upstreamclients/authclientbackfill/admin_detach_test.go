@@ -115,3 +115,34 @@ func TestRun_AdminDetachedEMALinkStaysDetached(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, n, "the write repeats the detach check")
 }
+
+// A dry run over an administrator-detached server whose backfilled client was
+// retired counts the client it would revive but no link, as apply writes.
+func TestRun_DryRunMatchesApplyForADetachedServerOfARetiredClient(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	clientID := f.client("subject")
+	server := f.server()
+	association := f.associate(server, clientID)
+	f.run(true)
+	authClients := f.liveAuthClients()
+	require.Len(t, authClients, 1)
+
+	f.adminDetach(server, authClients[0])
+	require.NoError(t, f.q.SoftDeleteAssociationFixture(t.Context(), association))
+	require.Equal(t, 1, f.run(true).ClientsRetired)
+	f.associate(server, clientID)
+
+	dry := f.run(false)
+	require.Equal(t, 1, dry.PendingClients)
+	require.Zero(t, dry.PendingLinks, "a detached server gets no link")
+
+	applied := f.run(true)
+	require.Equal(t, dry.PendingClients, applied.PendingClients, "dry run matches apply")
+	require.Equal(t, dry.PendingLinks, applied.PendingLinks, "dry run matches apply")
+	require.Equal(t, dry.Outcomes, applied.Outcomes, "dry run matches apply")
+	require.Equal(t, 1, applied.ClientsWritten)
+	require.Zero(t, applied.LinksWritten)
+	require.Empty(t, f.links(server))
+	require.Zero(t, applied.Gaps)
+}

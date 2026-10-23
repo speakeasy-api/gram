@@ -40,7 +40,7 @@ export const AuthClientSource = {
 export type AuthClientSource = OpenEnum<typeof AuthClientSource>;
 
 /**
- * A configured way for Speakeasy to authenticate to an upstream MCP server. Who may use it is controlled by mcp:auth grants on the client, never by who configured it. Auth clients are typed auth configuration: they take effect where Speakeasy resolves typed auth clients, which is being rolled out in stages. Until then, an MCP server's existing upstream configuration may keep serving requests.
+ * A configured way for Speakeasy to authenticate to an upstream MCP server. Who may use it is controlled by mcp:auth grants on the client, never by who configured it. Auth clients are typed auth configuration: they take effect only where typed auth client resolution is enforced, which is being rolled out in stages. Elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving requests.
  */
 export type AuthClient = {
   /**
@@ -52,7 +52,7 @@ export type AuthClient = {
    */
   createdAt: Date;
   /**
-   * Whether the client is enabled. Where typed auth clients are resolved, a disabled client is never selected or resolved. Disabling revokes no upstream credentials, and until typed resolution is rolled out an MCP server's existing upstream configuration may keep serving.
+   * Whether the client is enabled. Where typed auth client resolution is enforced, a disabled client is never selected or resolved. Disabling revokes no upstream credentials, and elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving.
    */
   enabled: boolean;
   /**
@@ -80,7 +80,7 @@ export type AuthClient = {
    */
   remoteSessionClientId?: string | undefined;
   /**
-   * The MCP servers that offer the client. Where typed auth clients are resolved, changing or disabling the client changes upstream behavior on every one of them.
+   * The MCP servers that offer the client. Where typed auth client resolution is enforced, changing or disabling the client changes upstream behavior on every one of them.
    */
   servers: Array<AuthClientServer>;
   authClientSource: AuthClientSource;

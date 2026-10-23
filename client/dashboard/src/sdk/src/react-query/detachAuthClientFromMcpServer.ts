@@ -54,7 +54,7 @@ export type DetachAuthClientFromMcpServerMutationError =
  * detachAuthClientFromMcpServer authClients
  *
  * @remarks
- * Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect where typed auth clients are resolved. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which may keep serving until typed resolution is rolled out. Requires org:admin.
+ * Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.
  */
 export function useDetachAuthClientFromMcpServerMutation(
   options?: MutationHookOptions<
