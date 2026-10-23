@@ -22011,7 +22011,10 @@ type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
 	ExecutionContext *string `form:"execution_context,omitempty" json:"execution_context,omitempty" xml:"execution_context,omitempty"`
 	// Why there is no choice: selection_required (several clients could serve it),
 	// personal_requires_user (only a personal client serves it, and the turn has
-	// no user), no_client or setup_incomplete.
+	// no user), no_client (no live, enabled auth client carries its upstream OAuth
+	// client), setup_incomplete (it needs upstream authentication and offers no
+	// auth client) or upstream_auth_undecided (it offers no auth client and an
+	// administrator has not decided whether it needs upstream authentication).
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 	// Profile and server pairs with no choice for this reason.
 	Servers *int64 `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`

@@ -185,6 +185,53 @@ func TestBindTreatsEMAAsPersonal(t *testing.T) {
 
 }
 
+func TestBindTreatsAnEMAAndAPersonalClientAsAmbiguous(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server := f.server(undecided)
+	registration := f.registration(server)
+	f.authClient(server, typeRemoteSession, registration)
+	f.authClient(server, typeEMA, registration)
+
+	userBacked := f.bind(ContextUserBacked)
+	require.Empty(t, f.choices(userBacked.VersionID))
+	require.Equal(t, []Gap{{MCPServerID: server, Reason: GapSelectionRequired}}, userBacked.Gaps)
+
+	userless := f.bind(ContextUserless)
+	require.Equal(t, []Gap{{MCPServerID: server, Reason: GapPersonalRequiresUser}}, userless.Gaps)
+}
+
+func TestBindConcurrentTurnsDecideOneVersion(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	first := f.server(undecided)
+	f.authClient(first, typeServiceAccount, f.registration(first))
+	v1 := f.bind(ContextUserBacked)
+	second := f.server(undecided)
+	f.authClient(second, typeServiceAccount, f.registration(second))
+
+	const turns = 4
+	results := make(chan Binding, turns)
+	errs := make(chan error, turns)
+	for range turns {
+		go func() {
+			binding, err := Bind(t.Context(), f.pool, Target{OrganizationID: f.orgID, ProjectID: f.projectID, AssistantID: f.assistant, TriggerID: f.trigger, Context: ContextUserBacked}, SourceIssuance)
+			results <- binding
+			errs <- err
+		}()
+	}
+	written := 0
+	for range turns {
+		require.NoError(t, <-errs)
+		binding := <-results
+		require.Equal(t, v1.Version+1, binding.Version, "every turn binds the one new version")
+		if binding.Written {
+			written++
+		}
+	}
+	require.Equal(t, 1, written, "exactly one turn records it")
+}
+
 func TestBackfillDryRunWritesNothing(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

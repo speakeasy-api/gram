@@ -51,7 +51,7 @@ var AdminUpstreamOAuthMigrationExecutionProfileGap = Type("AdminUpstreamOAuthMig
 	Required("execution_context", "reason", "servers")
 
 	Attribute("execution_context", String, "user_backed for turns run for a user the event identified, userless for turns run as the trigger's workload.")
-	Attribute("reason", String, "Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client or setup_incomplete.")
+	Attribute("reason", String, "Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client), setup_incomplete (it needs upstream authentication and offers no auth client) or upstream_auth_undecided (it offers no auth client and an administrator has not decided whether it needs upstream authentication).")
 	Attribute("servers", Int64, "Profile and server pairs with no choice for this reason.")
 })
 

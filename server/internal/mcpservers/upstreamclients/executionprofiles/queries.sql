@@ -7,20 +7,12 @@ VALUES (@organization_id, @project_id, @assistant_id, @trigger_instance_id, @exe
 ON CONFLICT (assistant_id, trigger_instance_id, execution_context) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: LockProfile :one
--- The live profile for an assistant, root trigger and execution context,
--- locked so one turn at a time decides its next version, with its latest
--- version when it has one: version 0 and the nil id when it has none.
-SELECT p.id,
-       COALESCE(v.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS version_id,
-       COALESCE(v.version, 0)::bigint AS version
+-- Locks the live profile for an assistant, root trigger and execution context
+-- so one turn at a time decides its next version. Its latest version is read
+-- by GetProfile after the lock is held, in a statement whose snapshot sees
+-- the version a turn that held the lock before it committed.
+SELECT p.id
 FROM execution_selection_profiles AS p
-LEFT JOIN LATERAL (
-  SELECT pv.id, pv.version
-  FROM execution_selection_profile_versions AS pv
-  WHERE pv.profile_id = p.id
-  ORDER BY pv.version DESC
-  LIMIT 1
-) AS v ON TRUE
 WHERE p.organization_id = @organization_id
   AND p.project_id = @project_id
   AND p.assistant_id = @assistant_id
@@ -32,7 +24,8 @@ FOR UPDATE OF p;
 -- name: GetProfile :one
 -- The live profile for an assistant, root trigger and execution context, read
 -- without a lock, with its latest version: version 0 and the nil id when it
--- has none. A dry run reads it so it never holds a profile a turn binds.
+-- has none. A bind reads it once it holds LockProfile; a dry run reads it
+-- alone, so it never holds a profile a turn binds.
 SELECT p.id,
        COALESCE(v.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS version_id,
        COALESCE(v.version, 0)::bigint AS version

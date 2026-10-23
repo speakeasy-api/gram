@@ -187,6 +187,8 @@ type Target struct {
 type Binding struct {
 	VersionID uuid.UUID
 	Version   int64
+	// Written reports that this bind recorded the version.
+	Written bool
 	// Gaps lists the assistant's servers the version has no choice for.
 	Gaps []Gap
 }
@@ -292,7 +294,16 @@ func bindTx(ctx context.Context, q *Queries, target Target, source string) (Bind
 	}); err != nil {
 		return zero, fmt.Errorf("ensure execution profile: %w", err)
 	}
-	profile, err := q.LockProfile(ctx, LockProfileParams{
+	if _, err := q.LockProfile(ctx, LockProfileParams{
+		OrganizationID:    target.OrganizationID,
+		ProjectID:         target.ProjectID,
+		AssistantID:       target.AssistantID,
+		TriggerInstanceID: target.TriggerID,
+		ExecutionContext:  string(target.Context),
+	}); err != nil {
+		return zero, fmt.Errorf("lock execution profile: %w", err)
+	}
+	profile, err := q.GetProfile(ctx, GetProfileParams{
 		OrganizationID:    target.OrganizationID,
 		ProjectID:         target.ProjectID,
 		AssistantID:       target.AssistantID,
@@ -300,7 +311,7 @@ func bindTx(ctx context.Context, q *Queries, target Target, source string) (Bind
 		ExecutionContext:  string(target.Context),
 	})
 	if err != nil {
-		return zero, fmt.Errorf("lock execution profile: %w", err)
+		return zero, fmt.Errorf("read execution profile: %w", err)
 	}
 	p, err := planTx(ctx, q, target, profile.ID, profile.VersionID, profile.Version)
 	if err != nil {
@@ -308,7 +319,7 @@ func bindTx(ctx context.Context, q *Queries, target Target, source string) (Bind
 	}
 	gaps := p.gaps
 	if !p.writes() {
-		return Binding{VersionID: profile.VersionID, Version: profile.Version, Gaps: gaps}, nil
+		return Binding{VersionID: profile.VersionID, Version: profile.Version, Written: false, Gaps: gaps}, nil
 	}
 	next := profile.Version + 1
 	versionID, err := q.CreateProfileVersion(ctx, CreateProfileVersionParams{
@@ -347,5 +358,5 @@ func bindTx(ctx context.Context, q *Queries, target Target, source string) (Bind
 			gaps = append(gaps, Gap{MCPServerID: d.serverID, Reason: GapNoClient})
 		}
 	}
-	return Binding{VersionID: versionID, Version: next, Gaps: gaps}, nil
+	return Binding{VersionID: versionID, Version: next, Written: true, Gaps: gaps}, nil
 }

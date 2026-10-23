@@ -132,7 +132,8 @@ type GetProfileRow struct {
 
 // The live profile for an assistant, root trigger and execution context, read
 // without a lock, with its latest version: version 0 and the nil id when it
-// has none. A dry run reads it so it never holds a profile a turn binds.
+// has none. A bind reads it once it holds LockProfile; a dry run reads it
+// alone, so it never holds a profile a turn binds.
 func (q *Queries) GetProfile(ctx context.Context, arg GetProfileParams) (GetProfileRow, error) {
 	row := q.db.QueryRow(ctx, getProfile,
 		arg.OrganizationID,
@@ -391,17 +392,8 @@ func (q *Queries) ListVersionChoicesFixture(ctx context.Context, versionID uuid.
 }
 
 const lockProfile = `-- name: LockProfile :one
-SELECT p.id,
-       COALESCE(v.id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS version_id,
-       COALESCE(v.version, 0)::bigint AS version
+SELECT p.id
 FROM execution_selection_profiles AS p
-LEFT JOIN LATERAL (
-  SELECT pv.id, pv.version
-  FROM execution_selection_profile_versions AS pv
-  WHERE pv.profile_id = p.id
-  ORDER BY pv.version DESC
-  LIMIT 1
-) AS v ON TRUE
 WHERE p.organization_id = $1
   AND p.project_id = $2
   AND p.assistant_id = $3
@@ -419,16 +411,11 @@ type LockProfileParams struct {
 	ExecutionContext  string
 }
 
-type LockProfileRow struct {
-	ID        uuid.UUID
-	VersionID uuid.UUID
-	Version   int64
-}
-
-// The live profile for an assistant, root trigger and execution context,
-// locked so one turn at a time decides its next version, with its latest
-// version when it has one: version 0 and the nil id when it has none.
-func (q *Queries) LockProfile(ctx context.Context, arg LockProfileParams) (LockProfileRow, error) {
+// Locks the live profile for an assistant, root trigger and execution context
+// so one turn at a time decides its next version. Its latest version is read
+// by GetProfile after the lock is held, in a statement whose snapshot sees
+// the version a turn that held the lock before it committed.
+func (q *Queries) LockProfile(ctx context.Context, arg LockProfileParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockProfile,
 		arg.OrganizationID,
 		arg.ProjectID,
@@ -436,9 +423,9 @@ func (q *Queries) LockProfile(ctx context.Context, arg LockProfileParams) (LockP
 		arg.TriggerInstanceID,
 		arg.ExecutionContext,
 	)
-	var i LockProfileRow
-	err := row.Scan(&i.ID, &i.VersionID, &i.Version)
-	return i, err
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const recordProfileChoice = `-- name: RecordProfileChoice :execrows

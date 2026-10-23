@@ -35,15 +35,9 @@ func Backfill(ctx context.Context, db TxStarter, organizationID string, apply bo
 	if apply {
 		report.Mode = "apply"
 	}
-	tx, err := db.Begin(ctx)
+	targets, err := listTargets(ctx, db, organizationID)
 	if err != nil {
-		return report, fmt.Errorf("begin execution profile backfill: %w", err)
-	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	q := New(tx)
-	targets, err := q.ListProfileTargets(ctx, organizationID)
-	if err != nil {
-		return report, fmt.Errorf("list execution profile targets: %w", err)
+		return report, err
 	}
 	for _, t := range targets {
 		report.Targets++
@@ -55,29 +49,23 @@ func Backfill(ctx context.Context, db TxStarter, organizationID string, apply bo
 				TriggerID:      t.TriggerID.UUID,
 				Context:        execCtx,
 			}
+			var written bool
 			var gaps []Gap
 			if apply {
-				before, err := preview(ctx, q, target)
-				if err != nil {
-					return report, err
-				}
 				binding, err := Bind(ctx, db, target, SourceBackfill)
 				if err != nil {
 					return report, err
 				}
-				if binding.Version != before.version {
-					report.VersionsWritten++
-				}
-				gaps = binding.Gaps
+				written, gaps = binding.Written, binding.Gaps
 			} else {
-				p, err := preview(ctx, q, target)
+				p, err := previewTarget(ctx, db, target)
 				if err != nil {
 					return report, err
 				}
-				if p.writes() {
-					report.VersionsWritten++
-				}
-				gaps = p.gaps
+				written, gaps = p.writes(), p.gaps
+			}
+			if written {
+				report.VersionsWritten++
 			}
 			for _, gap := range gaps {
 				if report.Gaps[execCtx] == nil {
@@ -88,4 +76,30 @@ func Backfill(ctx context.Context, db TxStarter, organizationID string, apply bo
 		}
 	}
 	return report, nil
+}
+
+// listTargets reads the organization's targets in a transaction it closes
+// before any target is bound, so a run never holds two connections.
+func listTargets(ctx context.Context, db TxStarter, organizationID string) ([]ListProfileTargetsRow, error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin execution profile target list: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	targets, err := New(tx).ListProfileTargets(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list execution profile targets: %w", err)
+	}
+	return targets, nil
+}
+
+// previewTarget decides what a bind under target would record, in a
+// transaction of its own that writes nothing.
+func previewTarget(ctx context.Context, db TxStarter, target Target) (plan, error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return plan{}, fmt.Errorf("begin execution profile preview: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	return preview(ctx, New(tx), target)
 }
