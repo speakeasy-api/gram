@@ -100,9 +100,11 @@ mod linux {
     const LANDLOCK_ACCESS_FS_EXECUTE: u64 = 1 << 0;
     const LANDLOCK_ACCESS_FS_READ_FILE: u64 = 1 << 2;
     const LANDLOCK_ACCESS_FS_READ_DIR: u64 = 1 << 3;
-    /// Every filesystem right of Landlock ABI 1, so anything not granted
-    /// below is denied.
-    const LANDLOCK_HANDLED_FS: u64 = (1 << 13) - 1;
+    // Filesystem rights added after ABI 1, which has bits 0-12: ABI 2 adds
+    // REFER, ABI 3 TRUNCATE and ABI 5 IOCTL_DEV. ABI 4 and 6 add none.
+    const LANDLOCK_ACCESS_FS_REFER: u64 = 1 << 13;
+    const LANDLOCK_ACCESS_FS_TRUNCATE: u64 = 1 << 14;
+    const LANDLOCK_ACCESS_FS_IOCTL_DEV: u64 = 1 << 15;
     const LANDLOCK_READ_EXECUTE: u64 =
         LANDLOCK_ACCESS_FS_EXECUTE | LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR;
     /// System paths a dynamically linked worker reads. `/proc`, `/sys`,
@@ -118,6 +120,18 @@ mod linux {
     struct PathBeneathAttr {
         allowed_access: u64,
         parent_fd: i32,
+    }
+
+    /// Every filesystem right the kernel's Landlock ABI supports, so anything
+    /// not granted below is denied.
+    fn handled_fs(abi: libc::c_long) -> u64 {
+        let highest = match abi {
+            1 => LANDLOCK_ACCESS_FS_REFER >> 1,
+            2 => LANDLOCK_ACCESS_FS_REFER,
+            3 | 4 => LANDLOCK_ACCESS_FS_TRUNCATE,
+            _ => LANDLOCK_ACCESS_FS_IOCTL_DEV,
+        };
+        (highest << 1) - 1
     }
 
     /// Confines the filesystem to read and execute beneath the system paths
@@ -141,7 +155,7 @@ mod linux {
             };
         }
         let attr = RulesetAttr {
-            handled_access_fs: LANDLOCK_HANDLED_FS,
+            handled_access_fs: handled_fs(abi),
         };
         // SAFETY: attr is a valid ruleset attribute of the given size.
         let ruleset = unsafe {
