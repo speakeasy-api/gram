@@ -300,7 +300,7 @@ func parseRolePrincipalURN(rolePrincipalURN string) (urn.Principal, error) {
 
 func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, principal urn.Principal, rows []roleGrantRow) error {
 	for _, row := range rows {
-		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		if err := upsertGrant(ctx, q, repo.UpsertPrincipalGrantParams{
 			OrganizationID: orgID,
 			PrincipalUrn:   principal,
 			Scope:          string(row.Scope),

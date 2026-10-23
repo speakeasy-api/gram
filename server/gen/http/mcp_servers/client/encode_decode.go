@@ -3109,6 +3109,7 @@ func unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(
 		ExternalMcpProxyOnly:  *v.ExternalMcpProxyOnly,
 		ExternalOauthServerID: v.ExternalOauthServerID,
 		RegistrySpecifier:     v.RegistrySpecifier,
+		HostingMcpServerID:    v.HostingMcpServerID,
 	}
 	res.ExternalMcpSlugs = make([]string, len(v.ExternalMcpSlugs))
 	for i, val := range v.ExternalMcpSlugs {

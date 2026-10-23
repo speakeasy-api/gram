@@ -110,6 +110,12 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 				attr.SlogAuthClientBackfillUnresolved(counts.Unresolved),
 			)
 		}
+		if _, failed := authClients.PhaseErrors[authclientbackfill.PhaseGrants]; !failed {
+			logger.InfoContext(detached, "default auth permissions granted",
+				attr.SlogAuthClientBackfillWritten(authClients.GrantsWritten),
+				attr.SlogAuthClientBackfillAPIKeys(authClients.APIKeysGranted),
+			)
+		}
 	}
 	// The writes above are committed even if the caller has gone, so the
 	// audit line and the status read do not depend on the request.
@@ -132,6 +138,7 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 		AuthClientsWritten:                 new(int64(authClients.ClientsWritten)),
 		AuthClientLinksWritten:             new(int64(authClients.LinksWritten)),
 		ServersMarkedRequiringUpstreamAuth: new(int64(authClients.ServersMarked)),
+		AuthPermissionGrantsWritten:        new(int64(authClients.GrantsWritten)),
 		AuthClientsError:                   authClientsError,
 		Status:                             status,
 	}, nil
@@ -284,7 +291,7 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 // failedPhases names the phases a run reports failed, in run order.
 func failedPhases(report authclientbackfill.Report) []string {
 	phases := []string{}
-	for _, phase := range []string{authclientbackfill.PhaseOAuth, authclientbackfill.PhaseHeaders, authclientbackfill.PhaseEMA, authclientbackfill.PhaseReconcile, authclientbackfill.PhaseMark} {
+	for _, phase := range []string{authclientbackfill.PhaseOAuth, authclientbackfill.PhaseHeaders, authclientbackfill.PhaseEMA, authclientbackfill.PhaseEMAWarnings, authclientbackfill.PhaseReconcile, authclientbackfill.PhaseMark, authclientbackfill.PhaseGrants} {
 		if _, failed := report.PhaseErrors[phase]; failed {
 			phases = append(phases, phase)
 		}

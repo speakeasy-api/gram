@@ -7,7 +7,19 @@ import {
   ServerUrlSection,
 } from "./sections/ServerUrlSection";
 
+import { RequireScope } from "@/components/require-scope";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import type { Toolset } from "@/lib/toolTypes";
+import {
+  MCPAuthenticationTab,
+  ToolsetOAuthSection,
+} from "@/pages/mcp/MCPEnvironmentSettings";
+import { MCPPerformanceTab } from "@/pages/mcp/MCPPerformanceTab";
+import { PageSection } from "@/pages/mcp/PageSection";
+import { ExportJsonSection } from "@/pages/mcp/x/hosted/ExportJsonSection";
+import { HostedAddressSections } from "@/pages/mcp/x/hosted/HostedAddressSections";
+import { ServerInstructionsSection } from "@/pages/mcp/x/hosted/ServerInstructionsSection";
+import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -50,8 +62,13 @@ import {
 
 // Every section that can be deep-linked from elsewhere in the dashboard
 // (readiness bar, visibility picker, rate-limit hint, connections panel).
+const MCP_PERFORMANCE_SECTION_ID = "performance";
+const MCP_ENVIRONMENT_SECTION_ID = "environment";
+
 const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_SERVER_URL_SECTION_ID,
+  MCP_PERFORMANCE_SECTION_ID,
+  MCP_ENVIRONMENT_SECTION_ID,
   MCP_AUTHENTICATION_SECTION_ID,
   MCP_RESOURCE_IDENTIFIER_SECTION_ID,
   MCP_PUBLIC_ACCESS_SECTION_ID,
@@ -87,10 +104,13 @@ export function SettingsTab({
   mcpServer,
   endpoints,
   isLoadingEndpoints,
+  hostedToolset,
 }: {
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
+  /** The toolset a hosted server serves; it adds the hosted-only sections. */
+  hostedToolset?: Toolset;
 }): JSX.Element {
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
   // Only remote and tunneled sources add sections to the page; the unproxied
@@ -138,6 +158,71 @@ export function SettingsTab({
     deleteTarget = { kind: "tunneled", source: tunneledMcpServer };
   } else if (unproxiedMcpServer) {
     deleteTarget = { kind: "unproxied", source: unproxiedMcpServer };
+  }
+
+  if (hostedToolset) {
+    // Toolset columns sync onto the canonical server only.
+    const canonical = isCanonicalHostedWrapper(mcpServer);
+    return (
+      <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
+        <GeneralSection mcpServer={mcpServer} />
+        {canonical ? (
+          <RequireScope
+            scope="mcp:write"
+            resourceId={hostedToolset.id}
+            level="section"
+          >
+            <HostedAddressSections toolset={hostedToolset} />
+            <NetworkAccessSection toolset={hostedToolset} />
+            <div id={MCP_AUTHENTICATION_SECTION_ID}>
+              <ToolsetOAuthSection toolset={hostedToolset} />
+            </div>
+            <div id={MCP_ENVIRONMENT_SECTION_ID}>
+              <MCPAuthenticationTab toolset={hostedToolset} showOAuth={false} />
+            </div>
+          </RequireScope>
+        ) : (
+          <>
+            <ServerUrlSection
+              backend={{ mcpServerId: mcpServer.id }}
+              endpoints={endpoints}
+              isLoadingEndpoints={isLoadingEndpoints}
+              mcpServer={mcpServer}
+            />
+            <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
+            <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+          </>
+        )}
+        <RequireScope
+          scope="mcp:write"
+          resourceId={hostedToolset.id}
+          level="section"
+        >
+          <div id={MCP_PERFORMANCE_SECTION_ID}>
+            <MCPPerformanceTab toolset={hostedToolset} />
+          </div>
+        </RequireScope>
+        <PageSection
+          heading="Server Instructions"
+          description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."
+        >
+          <ServerInstructionsSection
+            mcpServerId={mcpServer.id}
+            writeResourceId={hostedToolset.id}
+            name={mcpServer.name || hostedToolset.name}
+            tools={hostedToolset.tools}
+          />
+        </PageSection>
+        <ToolFilteringSection mcpServer={mcpServer} />
+        {/* Export reads the toolset's canonical server only. */}
+        {canonical && <ExportJsonSection mcpServer={mcpServer} />}
+        <DangerZoneSection
+          mcpServer={mcpServer}
+          endpoints={endpoints}
+          hostedToolset={canonical ? hostedToolset : undefined}
+        />
+      </div>
+    );
   }
 
   if (remoteMcpServerId) {

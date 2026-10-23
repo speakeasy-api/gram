@@ -45,7 +45,7 @@ func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID
 		return nil, fmt.Errorf("project %s does not belong to organization %s", projectID, organizationID)
 	}
 
-	allInfos, err := s.resolvePluginInfos(ctx, projectID)
+	allInfos, serverURL, err := s.resolvePluginInfos(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID
 	if err != nil {
 		return nil, fmt.Errorf("read observability plugin setting: %w", err)
 	}
-	cfg := s.generateConfig(ctx, project.ID, project.Slug, project.ProjectSlug, projectID, conn.PublishedHooksConfig)
+	cfg := s.generateConfig(ctx, project.ID, project.Slug, project.ProjectSlug, projectID, serverURL, conn.PublishedHooksConfig)
 	fingerprints, err := MCPFingerprints(allInfos, cfg, observabilityEnabled)
 	if err != nil {
 		return nil, fmt.Errorf("compute publication fingerprints: %w", err)

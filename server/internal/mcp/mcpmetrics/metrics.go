@@ -499,9 +499,12 @@ type MandatoryAuthzShadow struct {
 	Caller         string
 	Principal      string
 	LegacyAllowed  bool
-	Outcome        string
-	Source         string
-	Reason         string
+	// LegacyAuthCeiling separates coverage resting on a pre-version-5
+	// credential's derived auth client ceiling from explicit grants.
+	LegacyAuthCeiling bool
+	Outcome           string
+	Source            string
+	Reason            string
 }
 
 // RecordMandatoryAuthzShadow counts one shadowed mandatory check.
@@ -515,6 +518,7 @@ func (m *Metrics) RecordMandatoryAuthzShadow(ctx context.Context, shadow Mandato
 		attr.MandatoryAuthzCaller(shadow.Caller),
 		attr.MandatoryAuthzPrincipal(shadow.Principal),
 		attr.MandatoryAuthzLegacyAllowed(shadow.LegacyAllowed),
+		attr.MandatoryAuthzLegacyAuthCeiling(shadow.LegacyAuthCeiling),
 		attr.MandatoryAuthzOutcome(shadow.Outcome),
 		attr.MandatoryAuthzSource(shadow.Source),
 		attr.MandatoryAuthzReason(shadow.Reason),

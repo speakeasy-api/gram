@@ -10027,6 +10027,8 @@ func unmarshalToolUsageTraceSummaryResponseBodyToTelemetryToolUsageTraceSummary(
 		UserKey:              *v.UserKey,
 		UserLabel:            *v.UserLabel,
 		UserKind:             telemetry.ToolUsageUserKind(*v.UserKind),
+		AuthorizerUserID:     v.AuthorizerUserID,
+		AuthorizerLabel:      v.AuthorizerLabel,
 		HookSource:           v.HookSource,
 		EventSource:          *v.EventSource,
 		HTTPStatusCode:       v.HTTPStatusCode,

@@ -215,10 +215,10 @@ func TestAuthorizeMandatoryKeepsAgentKeyAdmission(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	connect := MCPCheck(ScopeMCPConnect, "toolset_1", "p")
 	allow := []Grant{NewGrant(ScopeMCPConnect, WildcardResource)}
-	ctx := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "user_u", Policy: allow}, allow, allow, allow)
+	ctx := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "user_u", Policy: allow}, false, allow, allow, allow)
 	requireMandatory(t, engine, ctx, MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNone}, connect)
 
-	restricted := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "user_u", Policy: allow}, allow, nil, allow)
+	restricted := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "user_u", Policy: allow}, false, allow, nil, allow)
 	requireMandatory(t, engine, restricted, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNotGranted}, connect)
 }
 

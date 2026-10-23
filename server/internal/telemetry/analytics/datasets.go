@@ -359,4 +359,4 @@ var Lookups = []*Lookup{
 }
 
 // Default is the catalog: the agent session datasets and the risk findings.
-var Default = MustCatalog(Lookups, ToolCalls, Skills, RiskFindings)
+var Default = MustCatalog(Lookups, ToolCalls, Skills, RiskFindings).WithSignalMetrics()

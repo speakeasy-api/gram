@@ -249,6 +249,30 @@ type Agent struct {
 	Deleted bool
 }
 
+// Agents blocked by a connection owner from that owner's connection to one upstream OAuth client, kept beside the mcp:blocked_auth grant that enforces it.
+type AgentConnectionBlock struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// The blocked agent.
+	// @access: confidential
+	AgentID uuid.UUID
+	// The connection owner who wrote the block; the grant names this user as connection_owner.
+	// @access: confidential-pii
+	OwnerUserID string
+	// The upstream OAuth client the connection uses; the block covers every auth client sharing it.
+	// @access: confidential
+	RemoteSessionClientID uuid.UUID
+	// When an agent manager wrote the same grant, making it theirs: removing the block then keeps the grant. NULL while only the owner holds it.
+	// @access: confidential
+	TakenOverAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type AgentExecution struct {
 	// @access: confidential
 	ID string
@@ -967,7 +991,7 @@ type AuthPermissionProvision struct {
 	// The grant's selector, as in principal_grants.selectors.
 	// @access: opaque-restricted
 	Selectors []byte
-	// Which default the grant belongs to: personal_default, shared_client or api_key from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
+	// Which default the grant belongs to: personal_default, shared_client, api_key or attachment from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
 	// @access: confidential
 	Kind string
 	// When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
@@ -1341,6 +1365,12 @@ type ChatMessage struct {
 	ContentHash []byte
 	// @access: confidential
 	Generation int32
+	// Original utterance, exact transcript reobservation, synthetic summary, or unknown lineage.
+	// @access: confidential
+	CaptureKind pgtype.Text
+	// Original source-message identity for an exact transcript copy. A logical reference retained independently of source-row lifetime.
+	// @access: confidential
+	OriginalMessageID uuid.NullUUID
 	// @access: confidential
 	Replayed bool
 	// @access: confidential
@@ -5987,6 +6017,23 @@ type SigintCustomSignal struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type SigintDefinitionSnapshot struct {
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Sensor identity retained after configuration deletion.
+	// @access: confidential
+	SensorID uuid.UUID
+	// @access: confidential
+	DefinitionHash string
+	// Immutable semantic definition whose digest is carried by evaluated readings.
+	// @access: opaque-restricted
+	Definition []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SigintSensor struct {
