@@ -7787,6 +7787,18 @@ type UserSessionClient struct {
 	ClientSecretHash pgtype.Text
 	// @access: opaque-confidential
 	ClientName string
+	// Canonical agent principal bound by authenticated registration.
+	// @access: confidential
+	SubjectUrn pgtype.Text
+	// User authorizing the immutable agent credential profile.
+	// @access: confidential-pii
+	AuthorizerUserID pgtype.Text
+	// Immutable delegated policy for an agent client.
+	// @access: opaque-restricted
+	DelegatedGrants []byte
+	// Delegated policy encoding version.
+	// @access: confidential
+	DelegatedGrantsVersion pgtype.Int4
 	// @access: opaque-restricted
 	RedirectUris []string
 	// @access: confidential
