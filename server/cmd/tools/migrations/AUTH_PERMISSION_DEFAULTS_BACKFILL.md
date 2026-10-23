@@ -36,15 +36,27 @@ Before it, one line per agent attachment that was not carried over in an organiz
 
 - `attachment`: grants that let an attached agent keep using its owner's connection without the attachment: `mcp:auth` on that owner's connection through the attached upstream OAuth client.
 - `attachments_to_remediate`: attachments the backfill did not carry over. The owner must reconnect or configure the agent, except for `agent_inactive`, where an admin must resume the agent or give it a new owner first; the backfill never substitutes another user or a broader grant. Reasons: `not_attached_by_user` (no user made the attachment), `owner_changed` (the attacher no longer owns the agent), `foreign_connection` (the connection is not the attacher's), `agent_inactive` (the agent is suspended, revoked or waiting for a new owner, or its owner is no longer an active member), `connection_gone` (the connection was removed or authorized again), `configuration_gone` (the attachment's sign-in, project, upstream client or issuer was removed), `client_unrecorded` (run the upstream OAuth migration for the organization, then rerun).
-- `attachments_waiting`: attachments the backfill can carry over but held back because the organization's `auth-client-upstream-selector-writes` flag is off, unavailable or failed to evaluate. Attachment grants name `upstream_client`, which replicas older than this release ignore, so they are written only once every replica runs it and the flag is on for the organization. The standalone command has no flag provider, so it always reports them waiting; carry them over through the staff migration once the flag is on.
+- `attachments_waiting`: attachments whose grant is still missing and was held back by the organization's `auth-client-upstream-selector-writes` flag. This command never writes them; see "Agent attachments" below.
 - `keys_waiting`: organizations whose legacy API key policies were held back because some auth clients are not recorded yet. Run the upstream OAuth migration for them, then rerun.
 - `shared_waiting`: organizations whose shared client grants (and key policies) were held back because the recorded auth clients and links may not be current. If some await retirement, run the upstream OAuth migration for them, then rerun. If a phase the readiness check dry-runs before grants failed, investigate and fix that phase (this output reports only the count), then rerun. Either way the rest of the organization's grants phase still runs, and it is not counted as `failed`.
 - `failed`: organizations whose grants phase failed and rolled back. Rerun; a persistent failure needs investigation.
 - `busy`: organizations another run held, which were skipped. Rerun.
 
-The command exits non-zero when any organization failed or was busy, or any attachment waits for the write gate. Waiting counts (`keys_waiting`, `shared_waiting`) alone leave the exit status at zero, so check them after each run.
+The command exits non-zero when any organization failed or was busy, or any attachment is still waiting for its grant. Waiting counts (`keys_waiting`, `shared_waiting`) alone leave the exit status at zero, so check them after each run.
 
 After applying, a preview should report zero kind counts apart from organizations still waiting or busy.
+
+## Agent attachments
+
+Attachment grants name `upstream_client`, which replicas older than this release ignore, so they are written only where the organization's `auth-client-upstream-selector-writes` flag is on. This command has no flag provider, so it never writes an attachment grant: it reports every attachment still missing its grant as `attachments_waiting` and exits non-zero while any remains. Rerunning it does not change that; it is not a completion path for attachments.
+
+To carry an organization's attachments over:
+
+1. Wait until every replica runs a release that reads `upstream_client`. That release becomes the rollback floor once the grants exist.
+2. Turn the flag on for the organization.
+3. Run the staff upstream OAuth migration for it (`POST /admin/upstreamOAuthMigration.run`). Its grants phase runs in the server, which evaluates the flag, and writes the attachment grants.
+
+Afterwards this command reports nothing waiting for that organization, and its other grants are unaffected throughout: everything else it provisions is written whatever the flag says.
 
 ## Rollback
 

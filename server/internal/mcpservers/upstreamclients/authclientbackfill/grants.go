@@ -439,12 +439,22 @@ func planAttachmentGrants(ctx context.Context, q *Queries, opts Options, plan *g
 			report.AttachmentRemediations = append(report.AttachmentRemediations, AttachmentRemediation{BindingID: row.BindingID.String(), AgentID: row.AgentID.String(), Reason: reason})
 			continue
 		}
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, row.AgentID.String())
+		selector := authz.ConnectionAuthClientSelector(row.RemoteSessionClientID.String(), row.OwnerUserID)
 		if !writable {
-			report.AttachmentsWaiting++
+			// Only a grant still missing waits; one already held or once
+			// provisioned is done whatever the gate says now.
+			key, err := grantKey(principal.String(), authz.ScopeMCPAuth, selector)
+			if err != nil {
+				return err
+			}
+			if !plan.existing[key] {
+				plan.existing[key] = true
+				report.AttachmentsWaiting++
+			}
 			continue
 		}
-		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, row.AgentID.String())
-		if err := plan.want(GrantAttachment, principal, authz.ScopeMCPAuth, authz.ConnectionAuthClientSelector(row.RemoteSessionClientID.String(), row.OwnerUserID)); err != nil {
+		if err := plan.want(GrantAttachment, principal, authz.ScopeMCPAuth, selector); err != nil {
 			return err
 		}
 	}

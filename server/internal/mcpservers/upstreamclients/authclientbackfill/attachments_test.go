@@ -192,4 +192,10 @@ func TestRun_AttachmentsWaitForTheUpstreamSelectorWriteGate(t *testing.T) {
 		PrincipalUrn: agent.String(), Scope: authz.ScopeMCPAuth,
 		Selector: authz.ConnectionAuthClientSelector(registration.String(), owner), Inferred: true,
 	})
+
+	// Once carried over, a run without the gate, such as the standalone
+	// command, has nothing left waiting for it.
+	after, err := Run(authz.WithUpstreamSelectorWriteGate(t.Context(), nil), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Zero(t, after.AttachmentsWaiting)
 }
