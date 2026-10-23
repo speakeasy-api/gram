@@ -26,9 +26,9 @@ const (
 	// DefaultEnforcementMaxRequestAge matches the dispatcher's lane wait so
 	// requests cannot be scanned after the caller stops waiting.
 	DefaultEnforcementMaxRequestAge = 15 * time.Second
-	// DefaultEnforcementMaxContentBytes bounds model input while preserving
-	// enough context for long tool results and prompts.
-	DefaultEnforcementMaxContentBytes = 64 * 1024
+	// DefaultEnforcementMaxContentBytes matches the published content budget;
+	// only Presidio keeps a smaller engine limit.
+	DefaultEnforcementMaxContentBytes = 1 * 1024 * 1024
 )
 
 type enforcementScanner interface {

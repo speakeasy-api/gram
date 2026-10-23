@@ -24,8 +24,8 @@ const (
 	// DefaultEnforcementMaxRequestAge matches the dispatcher's lane wait so
 	// requests cannot be scanned after the caller stops waiting.
 	DefaultEnforcementMaxRequestAge = 5 * time.Second
-	// DefaultEnforcementMaxContentBytes matches the maximum published content
-	// budget and protects direct-to-topic requests from unbounded evaluation.
+	// DefaultEnforcementMaxContentBytes matches the published content budget;
+	// only Presidio keeps a smaller engine limit.
 	DefaultEnforcementMaxContentBytes = 1 * 1024 * 1024
 )
 
