@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -447,7 +448,7 @@ func handleToolsCall(
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		logAttrs[attr.ToolCallIDKey] = call.id
-		logAttrs[attr.OutcomeKey] = toolCallOutcome(rw.statusCode, rw.resultIsError)
+		logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(rw.statusCode, rw.resultIsError)
 		logAttrs[attr.ToolCallDurationKey] = time.Since(call.start).Seconds()
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
@@ -572,7 +573,7 @@ func handleToolsCall(
 			return nil, failure
 		}
 		// The call's records follow the upstream's own isError verdict.
-		rw.resultIsError = mcpResultIsError(rw.body.Bytes())
+		rw.resultIsError = dialect.MCPResultIsError(rw.body.Bytes())
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),

@@ -555,6 +555,98 @@ func (q *Queries) ListAIScanTargets(ctx context.Context, organizationID string) 
 	return items, nil
 }
 
+const listAgentPluginServers = `-- name: ListAgentPluginServers :many
+SELECT
+  ps.plugin_id,
+  ps.display_name,
+  om.slug AS organization_slug,
+  om.default_host AS organization_default_host,
+  pr.id AS project_id,
+  pr.slug AS project_slug,
+  m.id AS mcp_server_id,
+  m.slug AS mcp_server_slug,
+  m.toolset_id AS mcp_server_toolset_id,
+  g.id AS gateway_id
+FROM plugin_servers ps
+JOIN plugins p
+  ON p.id = ps.plugin_id
+  AND p.deleted IS FALSE
+JOIN projects pr
+  ON pr.id = p.project_id
+  AND pr.deleted IS FALSE
+JOIN organization_metadata om
+  ON om.id = p.organization_id
+LEFT JOIN mcp_servers m
+  ON m.id = ps.mcp_server_id
+  AND m.project_id = p.project_id
+  AND m.deleted IS FALSE
+  AND m.visibility <> 'disabled'
+LEFT JOIN meta_mcp_servers g
+  ON g.id = ps.meta_mcp_server_id
+  AND g.project_id = p.project_id
+  AND g.deleted IS FALSE
+  AND g.visibility <> 'disabled'
+WHERE p.organization_id = $1
+  AND ps.plugin_id = ANY($2::uuid[])
+  AND ps.deleted IS FALSE
+  AND (m.id IS NOT NULL OR g.id IS NOT NULL)
+ORDER BY ps.plugin_id, ps.sort_order ASC, ps.created_at ASC, ps.id ASC
+`
+
+type ListAgentPluginServersParams struct {
+	OrganizationID string
+	PluginIds      []uuid.UUID
+}
+
+type ListAgentPluginServersRow struct {
+	PluginID                uuid.UUID
+	DisplayName             string
+	OrganizationSlug        string
+	OrganizationDefaultHost pgtype.Text
+	ProjectID               uuid.UUID
+	ProjectSlug             string
+	McpServerID             uuid.NullUUID
+	McpServerSlug           pgtype.Text
+	McpServerToolsetID      uuid.NullUUID
+	GatewayID               uuid.NullUUID
+}
+
+// Lists the live MCP servers inside the given plugins for the device agent's
+// menu bar, in each plugin's display order. A membership whose backend is
+// deleted or turned off is skipped, since the plugin no longer delivers it.
+// Exactly one of mcp_server_id and gateway_id is non-null per row; the handler builds the
+// dashboard link and the mcp:read check from whichever it is.
+func (q *Queries) ListAgentPluginServers(ctx context.Context, arg ListAgentPluginServersParams) ([]ListAgentPluginServersRow, error) {
+	rows, err := q.db.Query(ctx, listAgentPluginServers, arg.OrganizationID, arg.PluginIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentPluginServersRow
+	for rows.Next() {
+		var i ListAgentPluginServersRow
+		if err := rows.Scan(
+			&i.PluginID,
+			&i.DisplayName,
+			&i.OrganizationSlug,
+			&i.OrganizationDefaultHost,
+			&i.ProjectID,
+			&i.ProjectSlug,
+			&i.McpServerID,
+			&i.McpServerSlug,
+			&i.McpServerToolsetID,
+			&i.GatewayID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBlockedAITargetIDs = `-- name: ListBlockedAITargetIDs :many
 
 SELECT id

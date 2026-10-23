@@ -1,5 +1,6 @@
 -- Queries for managing principal grants (RBAC).
 -- principal_grants is org-scoped (no project_id); every query is scoped to organization_id.
+-- Audience reads and replacements skip api_key rows: a key's policy is owned by the keys service.
 
 -- name: ListPrincipalGrantsByOrg :many
 -- Returns all grant rows for an organization, optionally filtered by principal URN.
@@ -27,6 +28,7 @@ WHERE organization_id = @organization_id
     'resource_kind', sqlc.arg(resource_kind)::text,
     'resource_id', sqlc.arg(resource_id)::text
   )
+  AND principal_type <> 'api_key'
 ORDER BY principal_urn;
 
 -- name: ListPrincipalGrantsByResourceIDs :many
@@ -42,6 +44,7 @@ WHERE organization_id = @organization_id
     'resource_kind', sqlc.arg(resource_kind)::text
   )
   AND selectors->>'resource_id' = ANY(@resource_ids::text[])
+  AND principal_type <> 'api_key'
 ORDER BY principal_urn;
 
 -- name: UpsertPrincipalGrant :one
@@ -75,13 +78,27 @@ WHERE organization_id = @organization_id
   AND scope = @scope
   AND selectors = @selectors;
 
+-- name: DeletePrincipalWildcardGrants :execrows
+-- Removes a principal's unrestricted rows for one scope: a selector naming at
+-- most a resource kind and the wildcard resource ID. Older writers stored the
+-- kind as "*" or under another name, or left out resource_id (which the grant
+-- matcher reads as "*"), so matching on the kind the scope implies today would
+-- leave those rows granting access after an administrator removed them.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND COALESCE(selectors->>'resource_id', '*') = '*'
+  AND (selectors - 'resource_kind' - 'resource_id') = '{}'::jsonb;
+
 -- name: DeletePrincipalGrantsByTarget :execrows
 -- Removes every principal row for one exact grant target. Used by audience
 -- replacement writes where the caller supplies the full desired principal set.
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = @scope
-  AND selectors = @selectors;
+  AND selectors = @selectors
+  AND principal_type <> 'api_key';
 
 -- name: DeletePrincipalGrantsByResource :execrows
 -- Removes grant rows for a single resource selector.
@@ -91,7 +108,8 @@ WHERE organization_id = @organization_id
   AND selectors @> jsonb_build_object(
     'resource_kind', sqlc.arg(resource_kind)::text,
     'resource_id', sqlc.arg(resource_id)::text
-  );
+  )
+  AND principal_type <> 'api_key';
 
 -- name: DeletePrincipalGrantsByPrincipal :execrows
 -- Removes all grants for a specific principal within an org.

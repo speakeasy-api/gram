@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -12,16 +13,31 @@ import {
 } from "./analyticsdataset.js";
 
 export type AnalyticsDescribeResult = {
+  /**
+   * The datasets the caller can read
+   */
   datasets: Array<AnalyticsDataset>;
+  /**
+   * Names of the datasets the caller cannot read, such as one only organization administrators can read, so a saved widget over one can say why it shows nothing rather than reading as broken
+   */
+  restrictedDatasets?: Array<string> | undefined;
 };
 
 /** @internal */
 export const AnalyticsDescribeResult$inboundSchema: z.ZodMiniType<
   AnalyticsDescribeResult,
   unknown
-> = z.object({
-  datasets: z.array(AnalyticsDataset$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    datasets: z.array(AnalyticsDataset$inboundSchema),
+    restricted_datasets: z.optional(z.array(z.string())),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "restricted_datasets": "restrictedDatasets",
+    });
+  }),
+);
 
 export function analyticsDescribeResultFromJSON(
   jsonString: string,

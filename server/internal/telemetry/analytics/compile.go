@@ -23,6 +23,9 @@ const (
 	ErrLimitExceeded          ErrorCode = "limit_exceeded"
 	ErrTooManyDimensions      ErrorCode = "too_many_dimensions"
 	ErrUnsatisfiable          ErrorCode = "unsatisfiable"
+	// ErrAggregatesOnly is an ungrouped query against a metric dataset, which
+	// answers aggregates alone.
+	ErrAggregatesOnly ErrorCode = "aggregates_only"
 )
 
 // Error is a request the compiler rejected. Field is the position in the
@@ -165,6 +168,9 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 	if !slices.Contains(timeGrains, grain) {
 		return nil, newError(ErrUnsupportedGrain, name, "grain", string(grain), fmt.Sprintf("grain %q is not one of none, hour, day, week, month", grain))
 	}
+	if req.Ungrouped && ds.Kind == KindMetric {
+		return nil, newError(ErrAggregatesOnly, name, "ungrouped", "true", fmt.Sprintf("dataset %s answers counts and other aggregates, never its rows; group by dimensions instead", name))
+	}
 	if req.Ungrouped && grain != TimeGrainNone {
 		return nil, newError(ErrUnsatisfiable, name, "grain", string(grain), "an ungrouped query has no time buckets")
 	}
@@ -234,7 +240,7 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 
 	plan := &Plan{
 		Dataset: name,
-		Name:    name + ".agent_events",
+		Name:    name + "." + ds.Source.Table.planSuffix(),
 		SQL:     "",
 		Args:    nil,
 		Columns: nil,

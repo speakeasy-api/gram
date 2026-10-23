@@ -491,6 +491,36 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 	return i, err
 }
 
+const getActiveLegacyAPIKeyForAdmission = `-- name: GetActiveLegacyAPIKeyForAdmission :one
+SELECT id, project_id, scopes
+FROM api_keys
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+  AND subject_urn IS NULL
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+`
+
+type GetActiveLegacyAPIKeyForAdmissionParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetActiveLegacyAPIKeyForAdmissionRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+	Scopes    []string
+}
+
+// A legacy key is admitted as its own principal only while its live row is in
+// the tenant, unrevoked and unexpired; agent keys keep their own admission.
+func (q *Queries) GetActiveLegacyAPIKeyForAdmission(ctx context.Context, arg GetActiveLegacyAPIKeyForAdmissionParams) (GetActiveLegacyAPIKeyForAdmissionRow, error) {
+	row := q.db.QueryRow(ctx, getActiveLegacyAPIKeyForAdmission, arg.ID, arg.OrganizationID)
+	var i GetActiveLegacyAPIKeyForAdmissionRow
+	err := row.Scan(&i.ID, &i.ProjectID, &i.Scopes)
+	return i, err
+}
+
 const getActivePrincipalAPIKeyForAdmission = `-- name: GetActivePrincipalAPIKeyForAdmission :one
 SELECT id
 FROM api_keys
