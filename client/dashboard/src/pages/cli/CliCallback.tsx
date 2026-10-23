@@ -77,6 +77,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     if (!session) return;
     if (!session.activeOrganizationId) return;
     if (hasCreatedKey.current) return;
+    if (error) return;
 
     if (!validCallback) {
       setError(errInvalidCallback);
@@ -86,13 +87,12 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     // The requesting plugin was generated for a specific organization; a key
     // minted in whichever org this browser session happens to have active
     // would silently route that machine's telemetry and policy checks to the
-    // wrong org. A member of the requested org is switched to it once, and the
-    // refetched session continues the flow.
+    // wrong org. A member of the requested org is switched to it once; the
+    // refetched session then re-runs this effect and continues the flow.
     if (organizationId && session.activeOrganizationId !== organizationId) {
-      const isMember = session.organizations.some(
-        (org) => org.id === organizationId,
-      );
-      if (!isMember || hasSwitchedOrganization.current) {
+      // Renders while the switch is in flight still carry the old session.
+      if (hasSwitchedOrganization.current) return;
+      if (!session.organizations.some((org) => org.id === organizationId)) {
         setError(errWrongOrganization);
         return;
       }
@@ -105,12 +105,13 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
           recordOrganizationSwitch(organizationId);
           return session.refetch();
         })
+        .then((refetched) => {
+          if (refetched.activeOrganizationId !== organizationId) {
+            setError(errSwitchFailed);
+          }
+        })
         .catch((err) => {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Failed to switch organization",
-          );
+          setError(err instanceof Error ? err.message : errSwitchFailed);
         });
       return;
     }
@@ -171,6 +172,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     projectSlug,
     organizationId,
     session,
+    error,
     validCallback,
     isPkceFlow,
     codeChallenge,
@@ -226,6 +228,8 @@ const errInvalidCallback =
   "Callback URL must use HTTP or HTTPS on localhost or 127.0.0.1";
 const errWrongOrganization =
   "This connection link belongs to an organization this account is not a member of. Sign in with an account in that organization, then retry the connection.";
+const errSwitchFailed =
+  "Could not switch to the organization this connection link belongs to. Switch to it in the dashboard, then retry the connection.";
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
 function isCallbackLocal(callbackUrl: string): boolean {

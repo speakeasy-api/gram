@@ -112,8 +112,14 @@ describe("CliCallback", () => {
     organizationId: "<ORG_B>",
   } as const;
 
-  /** Renders the <ORG_B> link while <ORG_A> is active and waits for the switch. */
-  async function renderAndAwaitSwitch() {
+  /**
+   * Renders the <ORG_B> link while <ORG_A> is active. The session refetch after
+   * the switch reports refetchedOrganizationId as active.
+   */
+  async function renderAndAwaitSwitch(refetchedOrganizationId: string) {
+    mocks.refetch.mockResolvedValue({
+      activeOrganizationId: refetchedOrganizationId,
+    });
     mockMemberSession("<ORG_A>");
     const view = render(<CliCallback {...linkForOrgB} />);
     await waitFor(() => {
@@ -123,7 +129,7 @@ describe("CliCallback", () => {
   }
 
   it("switches a member to the requested organization and continues", async () => {
-    const { rerender } = await renderAndAwaitSwitch();
+    const { rerender } = await renderAndAwaitSwitch("<ORG_B>");
     expect(mocks.switchScopes).toHaveBeenCalledWith({
       request: { organizationId: "<ORG_B>", gramSession: "<SESSION>" },
     });
@@ -141,6 +147,32 @@ describe("CliCallback", () => {
     expect(screen.queryByText("Error")).toBeNull();
   });
 
+  it("waits for an in-flight switch instead of failing", async () => {
+    let finishSwitch = (): void => {};
+    mocks.switchScopes.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishSwitch = resolve;
+      }),
+    );
+    mocks.refetch.mockResolvedValue({ activeOrganizationId: "<ORG_B>" });
+    mockMemberSession("<ORG_A>");
+    const { rerender } = render(<CliCallback {...linkForOrgB} />);
+    await waitFor(() => {
+      expect(mocks.switchScopes).toHaveBeenCalled();
+    });
+
+    // A render while the switch is pending still carries the old session.
+    mockMemberSession("<ORG_A>");
+    rerender(<CliCallback {...linkForOrgB} />);
+    finishSwitch();
+    await waitFor(() => {
+      expect(mocks.refetch).toHaveBeenCalled();
+    });
+
+    expect(screen.queryByText("Error")).toBeNull();
+    expect(mocks.switchScopes).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses an organization the account is not a member of", async () => {
     mockMemberSession("<ORG_A>");
     render(<CliCallback {...linkForOrgB} organizationId="<ORG_C>" />);
@@ -151,12 +183,9 @@ describe("CliCallback", () => {
   });
 
   it("stops if the switch does not take effect", async () => {
-    const { rerender } = await renderAndAwaitSwitch();
-    // The refetched session still has <ORG_A> active.
-    mockMemberSession("<ORG_A>");
-    rerender(<CliCallback {...linkForOrgB} />);
+    await renderAndAwaitSwitch("<ORG_A>");
 
-    expect(await screen.findByText(/not a member of/)).toBeTruthy();
+    expect(await screen.findByText(/Could not switch/)).toBeTruthy();
     expect(mocks.switchScopes).toHaveBeenCalledTimes(1);
     expect(mocks.createKey).not.toHaveBeenCalled();
   });
