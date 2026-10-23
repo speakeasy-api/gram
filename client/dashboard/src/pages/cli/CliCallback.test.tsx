@@ -24,15 +24,19 @@ vi.mock("@gram/client/react-query/switchScopes", () => ({
   useSwitchScopesMutation: () => ({ mutateAsync: mocks.switchScopes }),
 }));
 
-function sessionFor(activeOrganizationId: string) {
-  return {
-    session: "<SESSION>",
-    activeOrganizationId,
-    organizations: [{ id: "<ORG_A>" }, { id: "<ORG_B>" }],
-    organization: { projects: [] },
-    user: { email: "" },
-    refetch: mocks.refetch,
-  };
+/** Signs in a member of <ORG_A> and <ORG_B> with activeOrganizationId active. */
+function mockMemberSession(activeOrganizationId: string) {
+  mocks.useSessionData.mockReturnValue({
+    status: "success",
+    session: {
+      session: "<SESSION>",
+      activeOrganizationId,
+      organizations: [{ id: "<ORG_A>" }, { id: "<ORG_B>" }],
+      organization: { projects: [] },
+      user: { email: "" },
+      refetch: mocks.refetch,
+    },
+  });
 }
 
 let originalLocation: Location | undefined;
@@ -101,41 +105,32 @@ describe("CliCallback", () => {
     expect(mocks.authorizeCode).not.toHaveBeenCalled();
   });
 
-  it("switches a member to the requested organization and continues", async () => {
-    mocks.useSessionData.mockReturnValue({
-      status: "success",
-      session: sessionFor("<ORG_A>"),
-    });
+  const linkForOrgB = {
+    localCallbackUrl: "http://localhost:3000/callback",
+    callbackMethod: "get",
+    keyScope: "hooks",
+    organizationId: "<ORG_B>",
+  } as const;
 
-    const { rerender } = render(
-      <CliCallback
-        localCallbackUrl="http://localhost:3000/callback"
-        callbackMethod="get"
-        keyScope="hooks"
-        organizationId="<ORG_B>"
-      />,
-    );
-
+  /** Renders the <ORG_B> link while <ORG_A> is active and waits for the switch. */
+  async function renderAndAwaitSwitch() {
+    mockMemberSession("<ORG_A>");
+    const view = render(<CliCallback {...linkForOrgB} />);
     await waitFor(() => {
       expect(mocks.refetch).toHaveBeenCalled();
     });
+    return view;
+  }
+
+  it("switches a member to the requested organization and continues", async () => {
+    const { rerender } = await renderAndAwaitSwitch();
     expect(mocks.switchScopes).toHaveBeenCalledWith({
       request: { organizationId: "<ORG_B>", gramSession: "<SESSION>" },
     });
     expect(mocks.createKey).not.toHaveBeenCalled();
 
-    mocks.useSessionData.mockReturnValue({
-      status: "success",
-      session: sessionFor("<ORG_B>"),
-    });
-    rerender(
-      <CliCallback
-        localCallbackUrl="http://localhost:3000/callback"
-        callbackMethod="get"
-        keyScope="hooks"
-        organizationId="<ORG_B>"
-      />,
-    );
+    mockMemberSession("<ORG_B>");
+    rerender(<CliCallback {...linkForOrgB} />);
 
     await waitFor(() => {
       expect(mocks.locationReplace).toHaveBeenCalledWith(
@@ -147,18 +142,8 @@ describe("CliCallback", () => {
   });
 
   it("refuses an organization the account is not a member of", async () => {
-    mocks.useSessionData.mockReturnValue({
-      status: "success",
-      session: sessionFor("<ORG_A>"),
-    });
-
-    render(
-      <CliCallback
-        localCallbackUrl="http://localhost:3000/callback"
-        callbackMethod="get"
-        organizationId="<ORG_C>"
-      />,
-    );
+    mockMemberSession("<ORG_A>");
+    render(<CliCallback {...linkForOrgB} organizationId="<ORG_C>" />);
 
     expect(await screen.findByText(/not a member of/)).toBeTruthy();
     expect(mocks.switchScopes).not.toHaveBeenCalled();
@@ -166,33 +151,10 @@ describe("CliCallback", () => {
   });
 
   it("stops if the switch does not take effect", async () => {
-    mocks.useSessionData.mockReturnValue({
-      status: "success",
-      session: sessionFor("<ORG_A>"),
-    });
-
-    const { rerender } = render(
-      <CliCallback
-        localCallbackUrl="http://localhost:3000/callback"
-        callbackMethod="get"
-        organizationId="<ORG_B>"
-      />,
-    );
-
-    await waitFor(() => {
-      expect(mocks.refetch).toHaveBeenCalled();
-    });
-    mocks.useSessionData.mockReturnValue({
-      status: "success",
-      session: sessionFor("<ORG_A>"),
-    });
-    rerender(
-      <CliCallback
-        localCallbackUrl="http://localhost:3000/callback"
-        callbackMethod="get"
-        organizationId="<ORG_B>"
-      />,
-    );
+    const { rerender } = await renderAndAwaitSwitch();
+    // The refetched session still has <ORG_A> active.
+    mockMemberSession("<ORG_A>");
+    rerender(<CliCallback {...linkForOrgB} />);
 
     expect(await screen.findByText(/not a member of/)).toBeTruthy();
     expect(mocks.switchScopes).toHaveBeenCalledTimes(1);
