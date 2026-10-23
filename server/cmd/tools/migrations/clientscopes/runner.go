@@ -42,12 +42,12 @@ const (
 	OutcomeRestored     Outcome = "restored"
 	OutcomeWouldRestore Outcome = "would_restore"
 
-	OutcomeSkipExcluded         Outcome = "skip_excluded"
-	OutcomeSkipManaged          Outcome = "skip_managed"
-	OutcomeSkipKind             Outcome = "skip_kind"
+	OutcomeSkipExcluded Outcome = "skip_excluded"
+	OutcomeSkipManaged  Outcome = "skip_managed"
+	OutcomeSkipKind     Outcome = "skip_kind"
 	// OutcomeSkipMetadataDocument: the client's published metadata document lists its scope.
 	OutcomeSkipMetadataDocument Outcome = "skip_metadata_document"
-	OutcomeSkipSignIn          Outcome = "skip_sign_in_client"
+	OutcomeSkipSignIn           Outcome = "skip_sign_in_client"
 	OutcomeSkipIdentityChaining Outcome = "skip_identity_chaining"
 	OutcomeSkipUnlinked         Outcome = "skip_unlinked"
 	OutcomeSkipEdited           Outcome = "skip_edited"
