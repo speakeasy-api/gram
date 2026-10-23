@@ -65,7 +65,7 @@ func (s *Service) UpdateKeyPolicy(ctx context.Context, payload *gen.UpdateKeyPol
 		return nil, oops.E(oops.CodeBadRequest, nil, "policy_grants need a consumer, producer or chat scope")
 	}
 
-	policy, err := s.validatedKeyPolicy(ctx, authCtx.ActiveOrganizationID, payload.PolicyGrants, key.ProjectID)
+	policy, err := s.validatedKeyPolicy(ctx, dbtx, authCtx.ActiveOrganizationID, payload.PolicyGrants, key.ProjectID)
 	if err != nil {
 		return nil, err
 	}
