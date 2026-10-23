@@ -49,7 +49,6 @@ import { useListDomains } from "@gram/client/react-query/listDomains.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -80,7 +79,7 @@ type NetworkAccessProps =
       toolset?: never;
     }
   | {
-      mcpServer?: never;
+      mcpServer: McpServer;
       metaMcpServer?: never;
       endpoints?: never;
       toolset: Toolset & {
@@ -97,8 +96,8 @@ export function NetworkAccessSection({
   const { status: rolloutStatus, canManageIngress } =
     useNetworkIngressRollout();
   const hasStoredPrivateMode =
-    (mcpServer ?? metaMcpServer ?? toolset)?.networkAccessMode !== undefined &&
-    (mcpServer ?? metaMcpServer ?? toolset)?.networkAccessMode !==
+    (toolset ?? mcpServer ?? metaMcpServer)?.networkAccessMode !== undefined &&
+    (toolset ?? mcpServer ?? metaMcpServer)?.networkAccessMode !==
       McpServerNetworkAccessMode.PublicOnly;
 
   if (
@@ -299,12 +298,17 @@ function NetworkAccessSectionContent({
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        ...(toolset
+          ? [
+              invalidateAllToolset(queryClient, { refetchType: "all" }),
+              invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+            ]
+          : []),
       ]);
       toast.success("Network access updated");
     },
     onError,
   });
-  const updateHostedToolset = useUpdateToolsetMutation();
   const updateGateway = useUpdateMetaMcpServerMutation({
     onSuccess: async () => {
       setConfirmPrivateOnlyOpen(false);
@@ -316,11 +320,7 @@ function NetworkAccessSectionContent({
     },
     onError,
   });
-  const isUpdating = toolset
-    ? updateHostedToolset.isPending
-    : mcpServer
-      ? update.isPending
-      : updateGateway.isPending;
+  const isUpdating = mcpServer ? update.isPending : updateGateway.isPending;
 
   const save = () => {
     if (
@@ -337,37 +337,7 @@ function NetworkAccessSectionContent({
       return;
     }
 
-    if (toolset) {
-      updateHostedToolset.mutate(
-        {
-          request: {
-            slug: toolset.slug,
-            updateToolsetRequestBody: {
-              networkAccessMode: requireKnownEnumValue(
-                UpdateMcpServerFormNetworkAccessMode,
-                draft,
-              ),
-            },
-          },
-        },
-        {
-          onSuccess: () => {
-            setConfirmPrivateOnlyOpen(false);
-            void Promise.all([
-              invalidateAllToolset(queryClient, { refetchType: "all" }),
-              invalidateAllListToolsets(queryClient, { refetchType: "all" }),
-              invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
-              invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-            ])
-              .then(() => {
-                toast.success("Network access updated");
-              })
-              .catch(onError);
-          },
-          onError,
-        },
-      );
-    } else if (metaMcpServer) {
+    if (metaMcpServer) {
       updateGateway.mutate({
         request: {
           updateMetaMcpServerForm: {

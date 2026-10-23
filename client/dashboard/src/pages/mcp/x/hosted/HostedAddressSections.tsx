@@ -20,15 +20,20 @@ import { useMcpSlugValidation } from "@/pages/mcp/mcp-details-utils";
 import { PageSection } from "@/pages/mcp/PageSection";
 import { useRoutes } from "@/routes";
 import { invalidateMcpServerQueries } from "@/lib/mcp-server-visibility";
+import { patchMcpEndpointInCache } from "@/hooks/useRootMcpEndpoint";
+import {
+  invalidateAllMcpEndpoints,
+  useMcpEndpoints,
+} from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
-import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
+import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import React, { useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 
-// A canonical server's endpoint is still toolset-owned, so these write through toolsets.update.
+// The server applies canonical endpoint writes to the toolset's hosting columns.
 export function HostedAddressSections({
   toolset,
 }: {
@@ -43,10 +48,21 @@ export function HostedAddressSections({
   const { domain } = useCustomDomain();
   const routes = useRoutes();
 
-  const updateToolsetMutation = useUpdateToolsetMutation({
-    onSuccess: () => {
+  const { data: endpointsResult } = useMcpEndpoints({
+    mcpServerId: toolset.id,
+  });
+  const hostedEndpoint = endpointsResult?.mcpEndpoints.find(
+    (e) =>
+      e.slug === toolset.mcpSlug &&
+      (e.customDomainId ?? undefined) === (toolset.customDomainId ?? undefined),
+  );
+
+  const updateEndpointMutation = useUpdateMcpEndpointMutation({
+    onSuccess: (updated) => {
+      patchMcpEndpointInCache(queryClient, updated);
       void invalidateAllToolset(queryClient);
       void invalidateMcpServerQueries(queryClient);
+      void invalidateAllMcpEndpoints(queryClient);
       toast.success("MCP settings saved successfully");
       telemetry.capture("mcp_event", {
         action: "mcp_settings_saved",
@@ -59,11 +75,30 @@ export function HostedAddressSections({
     },
   });
 
-  // Moves to the endpoints table once hosted endpoints are writable through mcpEndpoints.
   const [mcpSlug, setMcpSlug] = useState(toolset.mcpSlug || "");
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
 
-  const mcpSlugError = useMcpSlugValidation(mcpSlug, toolset.mcpSlug);
+  const mcpSlugError = useMcpSlugValidation(
+    mcpSlug,
+    toolset.mcpSlug,
+    toolset.customDomainId,
+  );
+
+  const updateHostedEndpoint = (fields: {
+    slug: string;
+    customDomainId?: string;
+  }) => {
+    if (!hostedEndpoint) return;
+    updateEndpointMutation.mutate({
+      request: {
+        updateMcpEndpointForm: {
+          id: hostedEndpoint.id,
+          mcpServerId: toolset.id,
+          ...fields,
+        },
+      },
+    });
+  };
 
   const { customServerURL } = useMcpUrl(toolset);
 
@@ -83,17 +118,15 @@ export function HostedAddressSections({
             size="sm"
             className="mr-2"
             disabled={
-              updateToolsetMutation.isPending || !!mcpSlugError || !mcpSlug
+              !hostedEndpoint ||
+              updateEndpointMutation.isPending ||
+              !!mcpSlugError ||
+              !mcpSlug
             }
             onClick={() => {
-              updateToolsetMutation.mutate({
-                request: {
-                  slug: toolset.slug,
-                  updateToolsetRequestBody: {
-                    customDomainId: domain.id,
-                    mcpSlug: mcpSlug,
-                  },
-                },
+              updateHostedEndpoint({
+                slug: mcpSlug,
+                customDomainId: domain.id,
               });
             }}
           >
@@ -133,17 +166,13 @@ export function HostedAddressSections({
   const saveButton = anyChanges && (
     <Button
       onClick={() => {
-        updateToolsetMutation.mutate({
-          request: {
-            slug: toolset.slug,
-            updateToolsetRequestBody: {
-              mcpSlug: mcpSlug,
-            },
-          },
+        updateHostedEndpoint({
+          slug: mcpSlug,
+          customDomainId: toolset.customDomainId,
         });
       }}
       size="sm"
-      disabled={!!mcpSlugError || !mcpSlug || !anyChanges}
+      disabled={!hostedEndpoint || !!mcpSlugError || !mcpSlug || !anyChanges}
     >
       Save
     </Button>

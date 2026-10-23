@@ -1,8 +1,9 @@
-import { UpdateMcpServerFormNetworkAccessMode as KnownUpdateMcpServerFormNetworkAccessMode } from "@gram/client/models/components/updatemcpserverform.js";
-import { requireKnownEnumValue } from "@/lib/enum";
-import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
+import {
+  linkMcpServerUserSessionIssuer,
+  linkToolsetUserSessionIssuer,
+} from "@/lib/linkUserSessionIssuer";
 import type { Toolset } from "@/lib/toolTypes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
@@ -79,29 +80,12 @@ export function useMcpServerAuthTarget(
       attachImpactTarget: { mcpServerId: mcpServer.id },
       mcpUrl,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
-      linkUserSessionIssuer: async (userSessionIssuerId: string) => {
-        const latest = await client.mcpServers.get({ id: mcpServer.id });
-        await client.mcpServers.update({
-          updateMcpServerForm: {
-            id: latest.id,
-            environmentId: latest.environmentId,
-            networkAccessMode: requireKnownEnumValue(
-              KnownUpdateMcpServerFormNetworkAccessMode,
-              latest.networkAccessMode,
-            ),
-            remoteMcpServerId: latest.remoteMcpServerId,
-            tunneledMcpServerId: latest.tunneledMcpServerId,
-            toolsetId: latest.toolsetId,
-            unproxiedMcpServerId: latest.unproxiedMcpServerId,
-            toolVariationsGroupId: latest.toolVariationsGroupId,
-            userSessionIssuerId,
-            visibility: requireKnownEnumValue(
-              KnownUpdateMcpServerFormVisibility,
-              latest.visibility,
-            ),
-          },
-        });
-      },
+      linkUserSessionIssuer: (userSessionIssuerId: string) =>
+        linkMcpServerUserSessionIssuer(
+          client,
+          mcpServer.id,
+          userSessionIssuerId,
+        ),
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([
           invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
@@ -133,14 +117,8 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
       attachImpactTarget: { toolsetId: toolset.id },
       mcpUrl,
-      linkUserSessionIssuer: async (userSessionIssuerId: string) => {
-        // Toolsets are already live, so linking only flips auth gating —
-        // mcpEnabled / mcpIsPublic stay untouched.
-        await client.toolsets.setUserSessionIssuer({
-          slug: toolset.slug,
-          setUserSessionIssuerRequestBody: { userSessionIssuerId },
-        });
-      },
+      linkUserSessionIssuer: (userSessionIssuerId: string) =>
+        linkToolsetUserSessionIssuer(client, toolset, userSessionIssuerId),
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([
           invalidateAllToolset(queryClient, { refetchType: "all" }),

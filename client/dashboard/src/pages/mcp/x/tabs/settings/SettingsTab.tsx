@@ -173,7 +173,10 @@ export function SettingsTab({
             level="section"
           >
             <HostedAddressSections toolset={hostedToolset} />
-            <NetworkAccessSection toolset={hostedToolset} />
+            <NetworkAccessSection
+              mcpServer={mcpServer}
+              toolset={hostedToolset}
+            />
             <div id={MCP_AUTHENTICATION_SECTION_ID}>
               <ToolsetOAuthSection toolset={hostedToolset} />
             </div>
