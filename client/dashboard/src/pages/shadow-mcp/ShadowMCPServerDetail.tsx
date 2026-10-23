@@ -158,6 +158,7 @@ function statusTone(status: ShadowMCPInventoryStatus): MetricCardProps["tone"] {
       // vocabulary; orange stays reserved for the partial-access family.
       return "information";
     case "observed":
+    case "unknown":
       return "neutral";
   }
 }

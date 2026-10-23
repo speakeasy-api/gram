@@ -99,6 +99,8 @@ type Publishers struct {
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	LLMAnalysis             gcp.Publisher[*riskv1.LLMAnalysis]
+	ToolCallAnalysis        gcp.Publisher[*riskv1.ToolCallAnalysis]
+	AccountIdentityAnalysis gcp.Publisher[*riskv1.AccountIdentityAnalysis]
 	RiskFindings            gcp.Publisher[*riskv1.Finding]
 	MeterReadings           gcp.Publisher[*meteringv1.MeterReading]
 	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
@@ -142,6 +144,7 @@ type Activities struct {
 	deployFunctionRunners            *activities.DeployFunctionRunners
 	reapFlyApps                      *activities.ReapFlyApps
 	weeklyUsageSummary               *activities.WeeklyUsageSummary
+	directoryReviewEmails            *activities.DirectoryReviewEmails
 	refreshOpenRouterKey             *activities.RefreshOpenRouterKey
 	setOpenRouterSpendCap            *activities.SetOpenRouterSpendCap
 	reconcilePaygOpenRouterChatKey   *activities.ReconcilePaygOpenRouterChatKey
@@ -282,13 +285,12 @@ func NewActivities(
 		publishers.PromptPolicyAnalysis,
 		publishers.CustomRulesAnalysis,
 		publishers.LLMAnalysis,
-		publishers.RiskFindings,
+		publishers.ToolCallAnalysis,
+		publishers.AccountIdentityAnalysis,
 		customRuleScanner,
 		celEng,
 		builtinPresets,
-		&shadowMCPPolicyBypassChecker{
-			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
-		},
+		NewShadowMCPPolicyBypassChecker(logger, db),
 		riskRecorder,
 		llmAnalyzerEnabled,
 	)
@@ -436,6 +438,7 @@ func NewActivities(
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, orgHosts),
+		directoryReviewEmails:            activities.NewDirectoryReviewEmails(logger, db, emailService, orgHosts),
 		refreshOpenRouterKey:             activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:            activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
 		reconcilePaygOpenRouterChatKey:   activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),

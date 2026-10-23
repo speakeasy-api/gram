@@ -5,14 +5,23 @@ import { AgentLink } from "./agent-link";
 
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
-    agents: { href: () => "/org/projects/project/agent-management" },
+    identities: {
+      detail: {
+        overview: {
+          href: (urn: string) =>
+            `/org/projects/project/identities/${urn}/overview`,
+        },
+      },
+    },
   }),
 }));
 
 afterEach(cleanup);
 
 describe("AgentLink", () => {
-  it("selects the authorized agent at the project management destination", () => {
+  // An agent has one page, under Identities. It used to have a second one at
+  // agent-management, and which you reached depended on where you clicked.
+  it("opens the authorized agent's identity page", () => {
     const onRowClick = vi.fn<() => void>();
     render(
       <MemoryRouter>
@@ -29,7 +38,7 @@ describe("AgentLink", () => {
 
     const link = screen.getByRole("link", { name: "Release assistant" });
     expect(link.getAttribute("href")).toBe(
-      "/org/projects/project/agent-management?id=agent%2Fwith%3Freserved%26characters",
+      "/org/projects/project/identities/agent%3Aagent%2Fwith%3Freserved%26characters/overview",
     );
     expect(link.classList.contains("custom")).toBe(true);
     fireEvent.click(link);

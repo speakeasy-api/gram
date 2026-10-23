@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -61,7 +60,6 @@ func TestGetObservabilityOverview_CanonicalHostedIdentity(t *testing.T) {
 			"tools:remote:"+event.server+":"+event.tool, event.server,
 			attrs, event.status, 0.4)
 	}
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	payload := &gen.GetObservabilityOverviewPayload{
 		From: now.Add(-time.Hour).Format(time.RFC3339), To: now.Format(time.RFC3339),

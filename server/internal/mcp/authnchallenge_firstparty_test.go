@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 )
 
 // Dashboard-started connects for remote servers must stay on the /mcp surface.
@@ -46,7 +47,7 @@ func TestHandleFirstPartyConnect_RemoteMcpEndpointStaysOnMcpSurface(t *testing.T
 	stored, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+loc.Query().Get("state"))
 	require.NoError(t, err)
 	require.True(t, stored.FirstParty)
-	require.Equal(t, "mcp", stored.Endpoint.RouteBase)
+	require.Equal(t, mcproute.MCP, stored.Endpoint.RouteBase)
 	require.Equal(t, slug, stored.Endpoint.McpSlug)
 	require.True(t, stored.Endpoint.McpServerID.Valid)
 	require.Equal(t, mcpServer.ID, stored.Endpoint.McpServerID.UUID)

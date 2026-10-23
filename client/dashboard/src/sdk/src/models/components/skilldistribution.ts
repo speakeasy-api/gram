@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const Channel = {
 /**
  * The distribution channel.
  */
-export type Channel = ClosedEnum<typeof Channel>;
+export type Channel = OpenEnum<typeof Channel>;
 
 /**
  * An active plugin or assistant distribution of a project skill.
@@ -92,9 +93,8 @@ export type SkillDistribution = {
 };
 
 /** @internal */
-export const Channel$inboundSchema: z.ZodMiniEnum<typeof Channel> = z.enum(
-  Channel,
-);
+export const Channel$inboundSchema: z.ZodMiniType<Channel, unknown> = openEnums
+  .inboundSchema(Channel);
 
 /** @internal */
 export const SkillDistribution$inboundSchema: z.ZodMiniType<

@@ -81,6 +81,10 @@ export const AUDIT_ACTIONS = [
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
   "device_integration:upsert",
+  "directory_review_item:approve",
+  "directory_review_item:dismiss",
+  "directory_review_item:opt_out",
+  "directory_review_settings:update",
   "directory_role_mapping:delete",
   "directory_role_mapping:set",
   "environment:create",
@@ -263,14 +267,17 @@ export const AUDIT_ACTIONS = [
   "skill:archive",
   "skill:create",
   "skill:distribute",
+  "skill:link",
   "skill:restore_version",
   "skill:share_link_create",
   "skill:share_link_revoke",
   "skill:suggestion_approve",
   "skill:suggestion_dismiss",
   "skill:undistribute",
+  "skill:unlink",
   "skill:update",
   "skill:update_distribution",
+  "skill:update_link",
   "skill_efficacy_settings:upsert",
   "spend_rule:archive",
   "spend_rule:create",
@@ -320,6 +327,8 @@ export const AUDIT_ACTIONS = [
   "workload-admission:admit",
   "workload-admission:update",
   "workload-admission:withdraw",
+  "workload-device-join-token:create",
+  "workload-device-join-token:redeem",
   "workload-issuer:create",
   "workload-issuer:delete",
   "workload-issuer:update",
@@ -560,6 +569,15 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated device integration schedule";
     case "device_integration:retry_schedule":
       return "retried device integration sync";
+
+    case "directory_review_item:approve":
+      return "approved directory change";
+    case "directory_review_item:dismiss":
+      return "dismissed directory change";
+    case "directory_review_item:opt_out":
+      return "stopped review of new attribute values";
+    case "directory_review_settings:update":
+      return "updated directory review emails";
 
     case "directory_role_mapping:set":
       return "set directory role mapping";
@@ -832,7 +850,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "remote-session-issuer:delete":
       return "deleted remote session issuer";
     case "remote-session-issuer:update_ema_providers":
-      return "changed the EMA provider order for";
+      return "changed the enabled identity providers for";
     case "remote-session-issuer:migrate":
       return "migrated remote session issuer";
 
@@ -909,6 +927,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "stopped distributing skill";
     case "skill:update_distribution":
       return "updated distribution for skill";
+    case "skill:link":
+      return "linked skill";
+    case "skill:update_link":
+      return "updated a link for skill";
+    case "skill:unlink":
+      return "unlinked skill";
     case "skill:share_link_create":
       return "created a share link for";
     case "skill:share_link_revoke":
@@ -1025,6 +1049,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated workload";
     case "workload-admission:withdraw":
       return "withdrew workload";
+    case "workload-device-join-token:create":
+      return "created a device join token for";
+    case "workload-device-join-token:redeem":
+      return "enrolled a device with a join token for";
 
     default:
       return assertNever(action);

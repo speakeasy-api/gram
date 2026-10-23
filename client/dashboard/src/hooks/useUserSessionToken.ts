@@ -8,14 +8,18 @@ import { useQuery } from "@tanstack/react-query";
  * exactly one of these:
  *
  * - `toolset` binds to the toolset's `/mcp/{slug}` surface.
- * - `mcpServer` binds to the server's user_session_issuer (the /x/mcp
- *   convention) — proxied MCP servers are mcp_servers-backed and carry no
- *   toolset.
+ * - `mcpServer` binds to the server's user_session_issuer — proxied MCP
+ *   servers are mcp_servers-backed and carry no toolset.
  */
 export type UserSessionTokenTarget =
   | { kind: "toolset"; id: string | undefined }
   | { kind: "mcpServer"; id: string | undefined }
-  | { kind: "metaMcpServer"; id: string | undefined };
+  | {
+      kind: "metaMcpServer";
+      id: string | undefined;
+      discoveryMode?: "direct" | "progressive";
+      connectionVersion?: string;
+    };
 
 export interface UseUserSessionTokenResult {
   /** The minted user-session JWT, or undefined while loading / not gated. */
@@ -23,6 +27,7 @@ export interface UseUserSessionTokenResult {
   isLoading: boolean;
   /** Whether minting failed (when the caller handles errors inline). */
   isError: boolean;
+  error: Error | null;
   /** Retry minting only when the target is issuer-gated and available. */
   refetch: () => void;
 }
@@ -36,7 +41,10 @@ function mintRequestBody(
     case "mcpServer":
       return { mcpServerId: target.id };
     case "metaMcpServer":
-      return { metaMcpServerId: target.id };
+      return {
+        metaMcpServerId: target.id,
+        discoveryMode: target.discoveryMode,
+      };
   }
 }
 
@@ -46,7 +54,7 @@ function mintRequestBody(
  * `Authorization: Bearer` on the target's MCP surface, so the runtime gateway
  * resolves the dashboard user's stored upstream credentials through the same
  * path a real MCP client would after an OAuth dance — for proxied MCP servers
- * it matches what /x/mcp/{slug}/token would emit.
+ * it matches what /mcp/{slug}/token would emit.
  *
  * Only issuer-gated targets get a token; the mint RPC 400s for the rest, so a
  * target with no `userSessionIssuerId` leaves `accessToken` undefined and lets
@@ -95,6 +103,9 @@ export function useUserSessionToken({
       id,
       userSessionIssuerId,
       session.user.id,
+      ...(target.kind === "metaMcpServer"
+        ? [target.discoveryMode, target.connectionVersion]
+        : []),
     ],
     queryFn: async () => {
       if (!enabled) return null;
@@ -128,6 +139,7 @@ export function useUserSessionToken({
     isLoading:
       enabled && (query.isLoading || (query.isError && query.isFetching)),
     isError: enabled && query.isError,
+    error: enabled ? query.error : null,
     refetch: () => {
       if (enabled) void query.refetch({ cancelRefetch: false });
     },

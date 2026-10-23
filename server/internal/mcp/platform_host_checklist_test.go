@@ -78,7 +78,7 @@ func newPlatformHostMux(t *testing.T, ti *testInstance) (http.Handler, platformH
 	mux.Use(mcpSecurity)
 	mux.Use(customdomains.Middleware(ti.logger, ti.conn, platformHostChecklistEnvironment, ti.serverURL, platformHosts))
 	mux.Use(middleware.SessionMiddleware)
-	mcp.Attach(mux, ti.service, metadataService)
+	mcp.Attach(mux, ti.service.Service, metadataService)
 
 	canonical := platformHostTarget{host: ti.serverURL.Host, baseURL: strings.TrimSuffix(ti.serverURL.String(), "/")}
 	extra := platformHostTarget{host: platformHostChecklistExtraHost, baseURL: platformHosts[platformHostChecklistExtraHost]}

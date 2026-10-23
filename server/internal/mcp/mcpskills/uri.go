@@ -3,13 +3,14 @@ package mcpskills
 import (
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 )
 
 const (
 	// skillURIPrefix is the scheme and authority separator of every served
-	// skill URI. SEP-2640 recommends the skill:// scheme and places the skill
-	// name in the authority component.
+	// skill URI. SEP-2640 recommends the skill:// scheme; Speakeasy puts the
+	// project slug in the authority and the skill name in the path.
 	skillURIPrefix = "skill://"
 
 	// skillFileName is the one file a served skill consists of. Speakeasy
@@ -19,24 +20,31 @@ const (
 )
 
 // SkillURI returns the resource URI of a served skill's SKILL.md, which is
-// also the entry's identity: skill://<name>/SKILL.md.
-func SkillURI(name string) string {
-	return skillURIPrefix + name + "/" + skillFileName
+// also the entry's identity: skill://<project-slug>/<name>/SKILL.md. The
+// project slug keeps two projects' skills of the same name apart, and SEP-2640
+// only requires the final path segment to equal the frontmatter name.
+func SkillURI(projectSlug, name string) string {
+	return skillURIPrefix + projectSlug + "/" + name + "/" + skillFileName
 }
 
-// ParseSkillURI recovers the skill name from a URI of the exact form
-// skill://<name>/SKILL.md. It reports false for any other shape, including
-// nested skill paths and supporting files, and for a name that does not
-// satisfy the Agent Skills naming rules, so a caller can treat false as "not
-// a skill this server could serve" without consulting storage.
-func ParseSkillURI(uri string) (string, bool) {
+// ParseSkillURI recovers the project slug and skill name from a URI of the
+// exact form skill://<project-slug>/<name>/SKILL.md. It reports false for any
+// other shape, including a bare skill://<name>/SKILL.md, deeper paths and
+// supporting files, and for a slug or name that does not satisfy its naming
+// rules, so a caller can treat false as "not a skill this server could serve"
+// without consulting storage.
+func ParseSkillURI(uri string) (projectSlug, name string, ok bool) {
 	rest, ok := strings.CutPrefix(uri, skillURIPrefix)
 	if !ok {
-		return "", false
+		return "", "", false
 	}
-	name, ok := strings.CutSuffix(rest, "/"+skillFileName)
-	if !ok || !skills.ValidSpecName(name) {
-		return "", false
+	path, ok := strings.CutSuffix(rest, "/"+skillFileName)
+	if !ok {
+		return "", "", false
 	}
-	return name, true
+	projectSlug, name, ok = strings.Cut(path, "/")
+	if !ok || !constants.SlugPatternRE.MatchString(projectSlug) || !skills.ValidSpecName(name) {
+		return "", "", false
+	}
+	return projectSlug, name, true
 }

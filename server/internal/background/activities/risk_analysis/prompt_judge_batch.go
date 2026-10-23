@@ -30,11 +30,7 @@ func setEventMatch(findings []scanners.Finding, msg batchMessage) {
 	if len(findings) == 0 {
 		return
 	}
-	ev := judgemessage.Render(batchJudgeMessage(msg))
-	for j := range findings {
-		findings[j].Match = ev
-		findings[j].EndPos = len(ev)
-	}
+	scanners.SetEventMatch(findings, judgemessage.Render(batchJudgeMessage(msg)))
 }
 
 // judgeConcurrency bounds the number of in-flight judge calls per batch.
@@ -93,7 +89,7 @@ func judgeFanout(
 	}
 }
 
-func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
+func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks, judgeInHandlers bool) ([][]scanners.Finding, error) {
 	out := make([]scanners.Result, len(messages))
 	models := make([]string, len(messages))
 	providers := make([]string, len(messages))
@@ -113,7 +109,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		return findingsFromResults(out), nil
 	}
 
-	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
+	if !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" || (!judgeInHandlers && a.judge == nil) {
 		// Fresh slice per index (not one shared slice) so setEventMatch below
 		// stamps each finding with its own message rather than aliasing.
 		for _, idx := range indices {
@@ -123,8 +119,11 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		return findingsFromResults(out), nil
 	}
 
-	if err := a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices); err != nil {
+	if err := a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices, judgeInHandlers); err != nil {
 		return nil, err
+	}
+	if judgeInHandlers {
+		return findingsFromResults(out), nil
 	}
 
 	startedAt := time.Now().UTC()
@@ -164,14 +163,18 @@ func (a *AnalyzeBatch) projectFlagEnabled(ctx context.Context, orgID string, pro
 	return policyflags.ProjectFlagEnabled(ctx, a.logger, repo.New(a.db), a.flags, orgID, projectID, flag)
 }
 
-func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int) error {
+func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int, judgeInHandlers bool) error {
 
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(indices))
 	requestID := batchScanRequestID(args, "prompt_policy")
+	executionPath := shadowStreamExecutionPath
+	if judgeInHandlers {
+		executionPath = judgeHandlerStreamExecutionPath
+	}
 	for _, idx := range indices {
 		msg := messages[idx]
-		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID.String())
+		provenance := batchRiskProvenance(args, msg, executionPath, requestID.String())
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptPolicyAnalysis_ToolCall, 0, len(jm.ToolCalls))
@@ -196,7 +199,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 			OriginRiskPolicyId:      new(args.RiskPolicyID.String()),
 			OriginRiskPolicyVersion: &args.PolicyVersion,
 			MessageLinkReason:       &provenance.MessageLinkReason,
-			ExecutionPath:           new(shadowStreamExecutionPath),
+			ExecutionPath:           &executionPath,
 			ToolCallId:              &provenance.ToolCallID,
 			HookSource:              &msg.Source,
 
@@ -208,6 +211,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 			Body:        &jm.Body,
 			ToolName:    &jm.ToolName,
 			ToolCalls:   toolCalls,
+			RunJudge:    &judgeInHandlers,
 		}.Build()))
 	}
 	return drainPublishAcks(ctx, "publish prompt policy scan requests", publishResults)
