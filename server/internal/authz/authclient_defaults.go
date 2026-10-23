@@ -103,10 +103,22 @@ func MarkAuthPermissionTakenOverTx(ctx context.Context, dbtx repo.DBTX, organiza
 	return nil
 }
 
+// LockAuthPermissionBackfillTx waits for any running auth client backfill in
+// the organization and keeps new runs out until the transaction ends, so a
+// run never acts on a plan made before the transaction's writes. Take it
+// before the transaction writes anything.
+func LockAuthPermissionBackfillTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	if err := repo.New(dbtx).LockAuthPermissionBackfill(ctx, organizationID); err != nil {
+		return fmt.Errorf("lock auth permission backfill: %w", err)
+	}
+	return nil
+}
+
 // TakeOverPrincipalPolicyTx records that an explicit write replaced
 // principal's whole policy, even with an empty one: every grant the backfill
 // provisioned for it is taken over, and a marker row keeps a principal with
-// no provisioning history from reading as untouched.
+// no provisioning history from reading as untouched. The transaction must
+// hold LockAuthPermissionBackfillTx.
 func TakeOverPrincipalPolicyTx(ctx context.Context, dbtx repo.DBTX, organizationID string, principal urn.Principal) error {
 	q := repo.New(dbtx)
 	if err := q.MarkPrincipalAuthPermissionsTakenOver(ctx, repo.MarkPrincipalAuthPermissionsTakenOverParams{
