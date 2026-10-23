@@ -213,8 +213,11 @@ export function ChangeClientIdDialog({
 }): JSX.Element {
   // isFetching for the same reason as RotateClientDialog: a reopened dialog
   // must not confirm against a count from before the last change.
-  const { data: preflight, isFetching } =
-    useOrganizationRemoteSessionClientDeletePreflight({ id: clientId });
+  const {
+    data: preflight,
+    isFetching,
+    isError,
+  } = useOrganizationRemoteSessionClientDeletePreflight({ id: clientId });
   const sessionCount = preflight?.sessionCount ?? 0;
 
   return (
@@ -228,11 +231,23 @@ export function ChangeClientIdDialog({
       confirmLabel="Change client ID"
       pendingLabel="Saving…"
       isPending={isPending}
-      impact={{
-        summary: `${sessionCount} ${sessionCount === 1 ? "session" : "sessions"} will be revoked.`,
-        mcpServerNames: preflight?.mcpServerNames,
-        isLoading: isFetching,
-      }}
+      impact={
+        isError
+          ? undefined
+          : {
+              summary: `${sessionCount} ${sessionCount === 1 ? "session" : "sessions"} will be revoked.`,
+              mcpServerNames: preflight?.mcpServerNames,
+              isLoading: isFetching,
+            }
+      }
+      // Without the count the admin can't see who will be signed out, so
+      // don't let them confirm blind.
+      error={
+        isError
+          ? "Couldn't check how many sessions this would sign out. Close this and try again."
+          : undefined
+      }
+      confirmDisabled={isError}
       onConfirm={onConfirm}
     />
   );
