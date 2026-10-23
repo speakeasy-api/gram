@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -247,4 +248,25 @@ func TestWorkloadInference_RejectsOtherCredentials(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, handled, "MCP-only credentials must not authenticate inference")
 	}
+}
+
+func TestWorkloadInference_ResourceContract(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "urn:speakeasy:inference", mcp.InferenceResource)
+	f := newWorkloadGrantFixture(t)
+	issuer := f.sharedIssuer(t)
+	enableWorkloadInference(t, f)
+	assertion := f.assertion(t, issuer)
+	// The former product prefix is not an alias for the new resource.
+	legacyResource := strings.Replace(mcp.InferenceResource, "speakeasy", "gram", 1)
+	rejected := sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), url.Values{
+		"grant_type": {workloadGrantJWTBearer}, "assertion": {assertion}, "resource": {legacyResource}, "project_id": {f.fx.target.ProjectID.String()},
+	})
+	require.Equal(t, http.StatusBadRequest, rejected.Code)
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, rejected).Error)
+	require.Empty(t, f.workloadSessions(t))
+	accepted := exchangeWorkloadInference(t, f, assertion)
+	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
+	claims := unverifiedClaims(t, decodeSharedTokenResponse(t, accepted).AccessToken)
+	require.Equal(t, []any{"urn:speakeasy:inference"}, claims["aud"])
 }

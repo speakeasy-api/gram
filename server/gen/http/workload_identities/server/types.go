@@ -39,8 +39,9 @@ type RegisterIssuerRequestBody struct {
 	// tags of at most 64 characters each.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped *bool `form:"project_scoped,omitempty" json:"project_scoped,omitempty" xml:"project_scoped,omitempty"`
 }
 
@@ -87,8 +88,9 @@ type AdmitSubjectRequestBody struct {
 	// The agent whose policy the admitted workload inherits.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped *bool `form:"project_scoped,omitempty" json:"project_scoped,omitempty" xml:"project_scoped,omitempty"`
 }
 

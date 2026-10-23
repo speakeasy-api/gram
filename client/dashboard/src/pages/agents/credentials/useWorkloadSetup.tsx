@@ -1,8 +1,12 @@
+import { useOrganization, useProject } from "@/contexts/Auth";
+import { WorkloadIssuerSelector } from "./WorkloadIssuerSelector";
+import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { useAdmitWorkloadSubjectMutation } from "@gram/client/react-query/admitWorkloadSubject.js";
 import { useRegisterWorkloadIssuerMutation } from "@gram/client/react-query/registerWorkloadIssuer.js";
 import {
   invalidateAllWorkloadIdentities,
+  queryKeyWorkloadIdentities,
   useWorkloadIdentities,
 } from "@gram/client/react-query/workloadIdentities.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -107,8 +111,17 @@ export function useWorkloadSetup({
   onValueChange?: (key: string) => void;
 }): WorkloadSetup {
   const queryClient = useQueryClient();
-  const identities = useWorkloadIdentities({});
-  const issuers = identities.data?.issuers ?? [];
+  const organization = useOrganization();
+  const project = useProject();
+  const identityRequest = { gramProject: project.slug };
+  const identities = useWorkloadIdentities(identityRequest, undefined, {
+    throwOnError: false,
+  });
+  const issuers = (identities.data?.issuers ?? []).filter(
+    (issuer) =>
+      issuer.organizationId === organization.id &&
+      (issuer.projectId === "" || issuer.projectId === project.id),
+  );
   const admissions = identities.data?.admissions ?? [];
 
   const [values, setValues] = useState<VariableValues>(initialValues ?? {});
@@ -151,7 +164,36 @@ export function useWorkloadSetup({
         ? undefined
         : platformSetup(entry));
 
-  const connection = setup?.connection(values) ?? null;
+  const customFlow = platformKey === CUSTOM_PLATFORM_KEY;
+  const selectedIssuer = issuers.find((issuer) =>
+    values.issuer_id
+      ? issuer.id === values.issuer_id
+      : issuer.issuer === values.issuer,
+  );
+  const resolvedValues =
+    selectedIssuer && customFlow
+      ? {
+          ...values,
+          name: selectedIssuer.name,
+          issuer: selectedIssuer.issuer,
+          jwks_uri: selectedIssuer.jwksUri,
+        }
+      : values;
+  const connection =
+    customFlow &&
+    (!selectedIssuer || identities.isPending || identities.isError)
+      ? null
+      : (setup?.connection(resolvedValues) ?? null);
+  const selectIssuer = (issuer: WorkloadIssuer) => {
+    setValues((current) => ({
+      ...current,
+      issuer_id: issuer.id,
+      name: issuer.name,
+      issuer: issuer.issuer,
+      jwks_uri: issuer.jwksUri,
+    }));
+    onValueChange?.("issuer");
+  };
   const platformName = entry?.displayName ?? "this platform";
 
   const isTrusted =
@@ -214,7 +256,11 @@ export function useWorkloadSetup({
       admitting = true;
       await admitSubject.mutateAsync({
         request: {
+          ...(customFlow ? { gramProject: project.slug } : {}),
           admitWorkloadSubjectForm: {
+            ...(customFlow
+              ? { projectScoped: !!selectedIssuer?.projectId }
+              : {}),
             issuer: connection.issuer,
             subject: connection.subject,
             matchKind: connection.matchKind,
@@ -240,7 +286,7 @@ export function useWorkloadSetup({
   };
 
   const context: SetupContext = {
-    values,
+    values: resolvedValues,
     setValue: (key: string, value: string) => {
       setValues((current) => ({ ...current, [key]: value }));
       onValueChange?.(key);
@@ -270,8 +316,40 @@ export function useWorkloadSetup({
     exchange: setupValues,
     steps: setup?.steps ?? [],
     requirements: setup?.requirements ?? null,
-    render: (step) => <div className="space-y-4">{step.body(context)}</div>,
-    complete: (step) => step.complete?.(context) ?? true,
+    render: (step) =>
+      customFlow && step.id === "issuer" ? (
+        <WorkloadIssuerSelector
+          key={`${organization.id}:${project.id}`}
+          issuers={issuers}
+          selectedId={selectedIssuer?.id ?? ""}
+          loading={identities.isPending}
+          failed={identities.isError}
+          onRetry={() => {
+            void identities.refetch();
+          }}
+          onSelect={selectIssuer}
+          issuerStep={step}
+          onCreated={(policy, issuer) => {
+            queryClient.setQueryData(
+              queryKeyWorkloadIdentities(identityRequest),
+              policy,
+            );
+            selectIssuer(issuer);
+            // An organization-tier create response may omit project-tier rows.
+            if (!issuer.projectId) {
+              void queryClient.invalidateQueries({
+                queryKey: queryKeyWorkloadIdentities(identityRequest),
+              });
+            }
+          }}
+        />
+      ) : (
+        <div className="space-y-4">{step.body(context)}</div>
+      ),
+    complete: (step) =>
+      customFlow && step.id === "issuer"
+        ? !!selectedIssuer && !identities.isPending && !identities.isError
+        : (step.complete?.(context) ?? true),
     connect,
     connecting,
     canConnect: connection !== null,

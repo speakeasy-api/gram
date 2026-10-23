@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   serverURL: "https://api.example.test",
   emptyEndpoints: false,
   admin: false,
+  emptyIssuers: false,
+  includeScopedIssuers: false,
 }));
 vi.mock("@/lib/utils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/utils")>()),
@@ -30,6 +32,7 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example" }),
   useProject: () => ({
     id: mocks.projectId,
+    slug: mocks.projectId,
     name: mocks.projectId === "project_one" ? "Project one" : "Project two",
   }),
   useSession: () => ({ user: { id: "owner" } }),
@@ -57,10 +60,62 @@ vi.mock("@/routes", () => ({
   }),
 }));
 vi.mock("../agent-policy-grants", () => ({ invalidateAgentPolicy: vi.fn() }));
-vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
-  useWorkloadIdentities: () => ({ data: { issuers: [], admissions: [] } }),
-  invalidateAllWorkloadIdentities: vi.fn(),
-}));
+const issuer = {
+  id: "issuer_one",
+  name: "Workload issuer",
+  organizationId: "org_example",
+  projectId: "",
+  issuer: "https://issuer.example.test",
+  jwksUri: "https://issuer.example.test/jwks",
+  tags: [],
+};
+vi.mock("@gram/client/react-query/workloadIdentities.js", async () => {
+  const { useQuery } = await import("@tanstack/react-query");
+  const scopedIssuers = () =>
+    mocks.includeScopedIssuers
+      ? [
+          {
+            ...issuer,
+            id: "issuer_project",
+            name: "Project issuer",
+            projectId: "project_one",
+          },
+          {
+            ...issuer,
+            id: "issuer_other_project",
+            name: "Other project issuer",
+            projectId: "project_other",
+          },
+          {
+            ...issuer,
+            id: "issuer_other_org",
+            name: "Other organization issuer",
+            organizationId: "org_other",
+          },
+        ]
+      : [];
+  const queryKeyWorkloadIdentities = (request: unknown) => [
+    "workload-identities",
+    request,
+  ];
+  return {
+    queryKeyWorkloadIdentities,
+    useWorkloadIdentities: (request: unknown) =>
+      useQuery({
+        queryKey: queryKeyWorkloadIdentities(request),
+        queryFn: async () => ({
+          issuers: mocks.emptyIssuers ? [] : [issuer, ...scopedIssuers()],
+          admissions: [],
+        }),
+        initialData: {
+          issuers: mocks.emptyIssuers ? [] : [issuer, ...scopedIssuers()],
+          admissions: [],
+        },
+        staleTime: Infinity,
+      }),
+    invalidateAllWorkloadIdentities: vi.fn(),
+  };
+});
 vi.mock("@gram/client/react-query/registerWorkloadIssuer.js", () => ({
   useRegisterWorkloadIssuerMutation: () => ({ mutateAsync: mocks.register }),
 }));
@@ -108,14 +163,8 @@ function fill() {
   fireEvent.change(screen.getByLabelText("Agent identity name"), {
     target: { value: "Inference worker" },
   });
-  fireEvent.change(screen.getByLabelText("Name"), {
-    target: { value: "Workload issuer" },
-  });
-  fireEvent.change(screen.getByLabelText("Issuer URL"), {
-    target: { value: "https://issuer.example.test" },
-  });
-  fireEvent.change(screen.getByLabelText("JWKS URL"), {
-    target: { value: "https://issuer.example.test/jwks" },
+  fireEvent.change(screen.getByLabelText("Workload issuer"), {
+    target: { value: "issuer_one" },
   });
   fireEvent.change(screen.getByLabelText("Subject"), {
     target: { value: "workload:worker" },
@@ -131,8 +180,13 @@ beforeEach(() => {
   mocks.serverURL = "https://api.example.test";
   mocks.emptyEndpoints = false;
   mocks.admin = false;
+  mocks.emptyIssuers = false;
+  mocks.includeScopedIssuers = false;
   mocks.create.mockResolvedValue({ id: "agent_one" });
-  mocks.register.mockResolvedValue({});
+  mocks.register.mockResolvedValue({
+    issuers: [{ ...issuer, projectId: "project_one" }],
+    admissions: [],
+  });
   mocks.admit.mockResolvedValue({});
 });
 describe("inference workload setup", () => {
@@ -150,7 +204,7 @@ describe("inference workload setup", () => {
       },
     ]);
   });
-  it("reuses issuer/admission creation with opt-in, then shows inference-only exchange guidance", async () => {
+  it("selects existing issuer trust with opt-in, then shows inference-only exchange guidance", async () => {
     setup();
     fill();
     expect(
@@ -172,20 +226,12 @@ describe("inference workload setup", () => {
         policyGrants: inferencePolicyGrants("project_one"),
       },
     });
-    expect(mocks.register).toHaveBeenCalledWith({
-      request: {
-        registerWorkloadIssuerForm: {
-          name: "Workload issuer",
-          description: "Federated from https://issuer.example.test",
-          issuer: "https://issuer.example.test",
-          jwksUri: "https://issuer.example.test/jwks",
-          tags: [],
-        },
-      },
-    });
+    expect(mocks.register).not.toHaveBeenCalled();
     expect(mocks.admit).toHaveBeenCalledWith({
       request: {
+        gramProject: mocks.projectId,
         admitWorkloadSubjectForm: {
+          projectScoped: false,
           issuer: "https://issuer.example.test",
           subject: "workload:worker",
           matchKind: "exact",
@@ -197,7 +243,7 @@ describe("inference workload setup", () => {
     expect(
       screen.getByText(/grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer/)
         .textContent,
-    ).toContain("resource=urn:gram:inference\nproject_id=project_one");
+    ).toContain("resource=urn:speakeasy:inference\nproject_id=project_one");
     expect(
       screen.getByText("Speakeasy issuer / external JWT audience"),
     ).toBeTruthy();
@@ -242,7 +288,7 @@ describe("inference workload setup", () => {
     );
     await waitFor(() => expect(mocks.admit).toHaveBeenCalledTimes(2));
     expect(mocks.create).toHaveBeenCalledTimes(1);
-    expect(mocks.register).toHaveBeenCalledTimes(1);
+    expect(mocks.register).not.toHaveBeenCalled();
   });
 });
 
@@ -394,7 +440,9 @@ it.each(["connected", "partial"])(
     });
     expect(mocks.admit).toHaveBeenLastCalledWith({
       request: {
+        gramProject: mocks.projectId,
         admitWorkloadSubjectForm: {
+          projectScoped: false,
           issuer: "https://issuer.example.test",
           subject: "workload:second",
           matchKind: "exact",
@@ -405,3 +453,92 @@ it.each(["connected", "partial"])(
     });
   },
 );
+
+it("creates issuer trust separately before provisioning an inference identity", async () => {
+  mocks.emptyIssuers = true;
+  setup();
+  expect(
+    screen.queryByRole("combobox", { name: "Workload issuer" }),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Create new workload issuer" }),
+  );
+  for (const [label, value] of [
+    ["Name", "Workload issuer"],
+    ["Issuer URL", issuer.issuer],
+    ["JWKS URL", issuer.jwksUri],
+  ]) {
+    fireEvent.change(screen.getByLabelText(label!), { target: { value } });
+  }
+  fireEvent.click(
+    screen.getByRole("button", { name: "Create workload issuer" }),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(
+    (screen.getByLabelText("Workload issuer") as HTMLSelectElement).value,
+  ).toBe("issuer_one");
+  expect(mocks.register).toHaveBeenCalledWith({
+    request: {
+      gramProject: "project_one",
+      registerWorkloadIssuerForm: {
+        name: "Workload issuer",
+        issuer: issuer.issuer,
+        jwksUri: issuer.jwksUri,
+        description: `Federated from ${issuer.issuer}`,
+        projectScoped: true,
+        tags: [],
+      },
+    },
+  });
+  expect(mocks.create).not.toHaveBeenCalled();
+  expect(mocks.admit).not.toHaveBeenCalled();
+  fill();
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Create inference identity" }),
+  );
+  await screen.findByRole("status");
+  expect(mocks.register).toHaveBeenCalledTimes(1);
+  expect(mocks.create).toHaveBeenCalledTimes(1);
+  expect(mocks.admit).toHaveBeenCalledTimes(1);
+});
+
+it("offers only organization and current-project trust and scopes project admissions", async () => {
+  mocks.includeScopedIssuers = true;
+  setup();
+  expect(
+    screen.getByRole("option", { name: "Workload issuer — Organization" }),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("option", { name: "Project issuer — Current project" }),
+  ).toBeTruthy();
+  expect(
+    screen.queryByRole("option", { name: /Other project issuer/ }),
+  ).toBeNull();
+  expect(
+    screen.queryByRole("option", { name: /Other organization issuer/ }),
+  ).toBeNull();
+  fill();
+  fireEvent.change(screen.getByLabelText("Workload issuer"), {
+    target: { value: "issuer_project" },
+  });
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Create inference identity" }),
+  );
+  await screen.findByRole("status");
+  expect(mocks.register).not.toHaveBeenCalled();
+  expect(mocks.admit).toHaveBeenCalledWith({
+    request: {
+      gramProject: "project_one",
+      admitWorkloadSubjectForm: {
+        projectScoped: true,
+        issuer: issuer.issuer,
+        subject: "workload:worker",
+        matchKind: "exact",
+        agentId: "agent_one",
+        tags: [],
+      },
+    },
+  });
+});

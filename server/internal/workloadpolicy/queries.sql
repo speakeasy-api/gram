@@ -349,3 +349,10 @@ WHERE organization_id = @organization_id
   AND subject = @subject
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: SetWorkloadIssuerWildcardAdmissionForTest :execrows
+-- Test-only fixture for an issuer policy change while admission waits on its lock.
+UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission
+WHERE organization_id = @organization_id
+  AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND id = @id AND deleted IS FALSE;

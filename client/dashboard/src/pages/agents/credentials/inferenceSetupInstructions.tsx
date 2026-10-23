@@ -3,7 +3,7 @@ import { customSetupInstructions } from "./CustomSetupInstructions";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import type { PlatformSetup } from "./setupInstructions";
 
-const INFERENCE_RESOURCE = "urn:gram:inference";
+const INFERENCE_RESOURCE = "urn:speakeasy:inference";
 
 export function inferencePolicyGrants(
   projectId: string,

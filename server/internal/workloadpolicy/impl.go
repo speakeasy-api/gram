@@ -13,6 +13,7 @@ package workloadpolicy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
@@ -31,11 +32,13 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/workload_identities/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
@@ -132,8 +135,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // request. Both are needed on every query: organization_id is the tenancy
 // boundary, and project_id narrows within it rather than replacing it, because
 // the trust policy has an organization tier whose rows carry no project. A
-// dashboard session never selects a project, so its projectID is NULL and it
-// reads and writes the organization tier alone; only an API key names a project.
+// dashboard session reads and writes the organization tier alone unless it
+// explicitly selects an authorized project. API keys are already project-bound.
 type tenancy struct {
 	organizationID string
 	projectID      uuid.NullUUID
@@ -141,7 +144,25 @@ type tenancy struct {
 	actorEmail     *string
 }
 
-func (s *Service) resolve(ctx context.Context, scope authz.Scope) (tenancy, error) {
+func (s *Service) resolve(ctx context.Context, scope authz.Scope, explicitProject *string) (tenancy, error) {
+	selectedProject := explicitProject != nil
+	if selectedProject {
+		if strings.TrimSpace(*explicitProject) == "" {
+			return tenancy{}, oops.E(oops.CodeInvalid, nil, "an explicit project slug must not be empty")
+		}
+		// Session authentication does not evaluate the optional project security
+		// scheme. Resolve it here through the same organization-bound, project-read
+		// authorization used by other project APIs; never trust the header itself.
+		if original, ok := contextvalues.GetAuthContext(ctx); ok && original != nil {
+			cloned := *original
+			ctx = contextvalues.SetAuthContext(ctx, &cloned)
+		}
+		var err error
+		ctx, err = s.auth.Authorize(ctx, *explicitProject, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema, Scopes: nil, RequiredScopes: nil})
+		if err != nil {
+			return tenancy{}, err
+		}
+	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return tenancy{}, oops.C(oops.CodeUnauthorized)
@@ -160,12 +181,10 @@ func (s *Service) resolve(ctx context.Context, scope authz.Scope) (tenancy, erro
 		return tenancy{}, err
 	}
 
-	// Only an API key selects a project. Every other caller, a dashboard
-	// session included, resolves to the organization tier even when its auth
-	// context carries a project, so the tier never depends on which security
-	// schemes happened to populate ProjectID.
+	// API keys are already project-bound. Sessions select a project only by an
+	// explicit, validated slug; an incidental context project is not selection.
 	projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey && authCtx.ProjectID != nil {
+	if _, byKey := contextvalues.APIKeyAuthorization(ctx); (byKey || selectedProject) && authCtx.ProjectID != nil {
 		projectID = conv.ToNullUUID(*authCtx.ProjectID)
 	}
 
@@ -196,7 +215,7 @@ func (t tenancy) requestedTier(projectScoped bool) (uuid.NullUUID, error) {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
 	if !t.projectID.Valid {
-		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, nil, "project_scoped requires a caller that names a project, and a dashboard session does not: omit it to write at the organization tier")
+		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, nil, "project_scoped requires a caller that names a project; send its slug in Gram-Project")
 	}
 	return t.projectID, nil
 }
@@ -230,7 +249,7 @@ func (s *Service) loadPolicy(ctx context.Context, dbtx repo.DBTX, t tenancy) (*g
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadRead)
+	t, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +258,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Work
 }
 
 func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsPayload) (*gen.WorkloadPlatformCatalog, error) {
-	if _, err := s.resolve(ctx, authz.ScopeWorkloadRead); err != nil {
+	if _, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput); err != nil {
 		return nil, err
 	}
 
@@ -252,7 +271,7 @@ func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsP
 }
 
 func (s *Service) GetCustomFlows(ctx context.Context, payload *gen.GetCustomFlowsPayload) (*gen.WorkloadCustomFlows, error) {
-	if _, err := s.resolve(ctx, authz.ScopeWorkloadRead); err != nil {
+	if _, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput); err != nil {
 		return nil, err
 	}
 
@@ -265,13 +284,13 @@ func (s *Service) GetCustomFlows(ctx context.Context, payload *gen.GetCustomFlow
 }
 
 func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListTokenEndpointsPayload) (*types.WorkloadTokenEndpoints, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadRead)
+	t, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
 
-	// An API key names a project, and sees that project's issuers alongside the
-	// organization's; a dashboard session sees every project's.
+	// A project-bound caller sees that project's issuers alongside the
+	// organization's; an organization-wide dashboard session sees every project's.
 	rows, err := usersessions_repo.New(s.db).ListSharedUserSessionIssuersInOrganization(ctx, usersessions_repo.ListSharedUserSessionIssuersInOrganizationParams{
 		OrganizationID: t.organizationID,
 		ProjectID:      t.projectID,
@@ -445,7 +464,7 @@ func AdmissionSnapshot(row repo.WorkloadIdentityAdmission, issuer repo.WorkloadI
 }
 
 func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -547,7 +566,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 }
 
 func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -695,7 +714,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPay
 }
 
 func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -819,8 +838,26 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 	return policy, nil
 }
 
+// requireSubjectAgentAuthorization preserves API-key scope enforcement while
+// using live membership, ownership, and grants for human assignment requests.
+func (s *Service) requireSubjectAgentAuthorization(ctx context.Context, dbtx pgx.Tx, agentID uuid.UUID) error {
+	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey {
+		return s.authz.Require(ctx, authz.Check{
+			Scope:        authz.ScopeAgentAuthorize,
+			ResourceKind: authz.ResourceKindAgent,
+			ResourceID:   agentID.String(),
+			Dimensions:   nil,
+		})
+	}
+	_, _, err := agentmanagement.NewAuthorizer(s.authz).RequireAgentForUpdate(ctx, dbtx, agentID, agentmanagement.OwnedAgentAuthorize)
+	if err != nil {
+		return fmt.Errorf("authorize workload subject agent: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -919,6 +956,10 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
 	}
 
+	if err := s.requireSubjectAgentAuthorization(ctx, dbtx, agent.ID); err != nil {
+		return nil, err
+	}
+
 	// Held before the children are written, so a concurrent withdrawal of this
 	// issuer either happens first — making the insert below a foreign-key failure
 	// against a tombstone the caller is told about — or waits and cascades over
@@ -931,6 +972,23 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 			return nil, oops.E(oops.CodeNotFound, err, "the issuer was withdrawn while admitting this subject")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload issuer").LogError(ctx, s.logger)
+	}
+
+	// The selected issuer may have changed while this transaction waited for
+	// its lock. Validate the live policy, not the pre-lock snapshot.
+	issuerRow, err = q.GetWorkloadIssuer(ctx, repo.GetWorkloadIssuerParams{
+		OrganizationID: t.organizationID,
+		ProjectID:      projectID,
+		ID:             issuerRow.ID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "the issuer was withdrawn while admitting this subject")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading workload issuer").LogError(ctx, s.logger)
+	}
+	if err := workloadidentity.ValidateSubjectRule(matchKind, payload.Subject, issuerRow.AllowWildcardAdmission); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused")
 	}
 
 	admission, err := q.CreateWorkloadAdmission(ctx, repo.CreateWorkloadAdmissionParams{
@@ -988,7 +1046,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 }
 
 func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1049,6 +1107,26 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading admission").LogError(ctx, s.logger)
 	}
 
+	// Resolved exactly as admission resolves it: another organization's agent
+	// is a not-found, not a rejected write.
+	var agent *repo.GetOrganizationAgentRow
+	if agentID != nil {
+		row, err := q.GetOrganizationAgent(ctx, repo.GetOrganizationAgentParams{
+			OrganizationID: t.organizationID,
+			ID:             *agentID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "agent not found")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
+		}
+		if err := s.requireSubjectAgentAuthorization(ctx, dbtx, row.ID); err != nil {
+			return nil, err
+		}
+		agent = &row
+	}
+
 	// Every write under this issuer serializes here, so the fields this edit
 	// leaves alone are merged from the row as it stands, and a concurrent
 	// withdrawal cannot strip the assignment this edit repoints.
@@ -1096,23 +1174,6 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading the workload's agent assignment").LogError(ctx, s.logger)
-	}
-
-	// Resolved exactly as admission resolves it: another organization's agent
-	// is a not-found, not a rejected write.
-	var agent *repo.GetOrganizationAgentRow
-	if agentID != nil {
-		row, err := q.GetOrganizationAgent(ctx, repo.GetOrganizationAgentParams{
-			OrganizationID: t.organizationID,
-			ID:             *agentID,
-		})
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "agent not found")
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
-		}
-		agent = &row
 	}
 
 	agentBefore := ""
@@ -1184,7 +1245,7 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 }
 
 func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}

@@ -8,7 +8,7 @@ Reader support and issuance are separate contracts:
 | ---------------------------------------------------------------------------- | ---------------------------------- |
 | Existing general delegated credentials and workload MCP exchanges            | 4 (`IssuedDelegatedPolicyVersion`) |
 | Existing assistant MCP credentials and internal assistant inference ceilings | 5 (`AssistantIssuedPolicyVersion`) |
-| New external `urn:gram:inference` workload credentials                       | 6 (`InferenceIssuedPolicyVersion`) |
+| New external `urn:speakeasy:inference` workload credentials                  | 6 (`InferenceIssuedPolicyVersion`) |
 
 Before this feature, the assistant issuers used `CurrentDelegatedPolicyVersion`, which was 5. They are now pinned to 5, not downgraded to 4. Internal assistant ceilings exclude scopes introduced after version 5, preserving existing grants and exclusions even when the agent also has an external inference grant.
 

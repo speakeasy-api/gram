@@ -8,11 +8,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -118,6 +120,18 @@ func TestWorkloadInference_CompletionEndToEnd(t *testing.T) {
 		require.Error(t, err)
 		require.Len(t, upstream.requests, before)
 	})
+	for _, audience := range []string{strings.Replace(mcp.InferenceResource, "speakeasy", "gram", 1), "urn:example:inference"} {
+		t.Run("reject signed audience "+audience, func(t *testing.T) {
+			claims := unverifiedClaims(t, token)
+			claims["aud"] = []string{audience}
+			other, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte("test-jwt-secret"))
+			require.NoError(t, err)
+			before := len(upstream.requests)
+			_, err = complete(other, nil)
+			require.Error(t, err)
+			require.Len(t, upstream.requests, before, "other inference audiences must never reach upstream")
+		})
+	}
 	t.Run("credit exhaustion blocks workload upstream", func(t *testing.T) {
 		require.NoError(t, orgrepo.New(f.ti.conn).SetAccountType(t.Context(), orgrepo.SetAccountTypeParams{ID: f.fx.orgID, GramAccountType: string(billing.TierBase)}))
 		billingRepo.exhausted = true

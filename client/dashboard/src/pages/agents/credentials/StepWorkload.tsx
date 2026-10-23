@@ -72,7 +72,7 @@ const CUSTOM_ENTRY: PickerEntry = {
   key: CUSTOM_PLATFORM_KEY,
   displayName: "Anything else",
   description:
-    "Federate any OIDC issuer by entering its URLs yourself — a CI provider, a cluster, your own identity service.",
+    "Reuse a trusted workload issuer or register a new one — a CI provider, a cluster, your own identity service.",
   Icon: KeyRound,
 };
 

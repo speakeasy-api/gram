@@ -29,7 +29,7 @@ import (
 
 // InferenceResource is an explicit, inference-only OAuth resource. It is never
 // a default resource and cannot be presented at an MCP endpoint.
-const InferenceResource = "urn:gram:inference"
+const InferenceResource = "urn:speakeasy:inference"
 
 func encodeInferenceWorkloadPolicy(projectID uuid.UUID, version runtimepolicy.DelegatedPolicyVersion) ([]byte, error) {
 	policy, err := runtimepolicy.NewDelegatedPolicy(version, []authz.Grant{{
