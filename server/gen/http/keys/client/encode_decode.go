@@ -941,6 +941,240 @@ func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildUpdateKeyPolicyRequest instantiates a HTTP request object with method
+// and path set to call the "keys" service "updateKeyPolicy" endpoint
+func (c *Client) BuildUpdateKeyPolicyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateKeyPolicyKeysPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("keys", "updateKeyPolicy", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateKeyPolicyRequest returns an encoder for requests sent to the
+// keys updateKeyPolicy server.
+func EncodeUpdateKeyPolicyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*keys.UpdateKeyPolicyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("keys", "updateKeyPolicy", "*keys.UpdateKeyPolicyPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpdateKeyPolicyRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("keys", "updateKeyPolicy", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateKeyPolicyResponse returns a decoder for responses returned by
+// the keys updateKeyPolicy endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeUpdateKeyPolicyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateKeyPolicyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateKeyPolicyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			res := NewUpdateKeyPolicyKeyOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateKeyPolicyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateKeyPolicyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateKeyPolicyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateKeyPolicyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateKeyPolicyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateKeyPolicyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateKeyPolicyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateKeyPolicyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+				}
+				err = ValidateUpdateKeyPolicyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+				}
+				return nil, NewUpdateKeyPolicyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateKeyPolicyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+				}
+				err = ValidateUpdateKeyPolicyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+				}
+				return nil, NewUpdateKeyPolicyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "updateKeyPolicy", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateKeyPolicyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "updateKeyPolicy", err)
+			}
+			err = ValidateUpdateKeyPolicyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "updateKeyPolicy", err)
+			}
+			return nil, NewUpdateKeyPolicyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("keys", "updateKeyPolicy", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildVerifyKeyRequest instantiates a HTTP request object with method and
 // path set to call the "keys" service "verifyKey" endpoint
 func (c *Client) BuildVerifyKeyRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1198,6 +1432,7 @@ func marshalKeysAgentPolicySelectorToAgentPolicySelectorRequestBody(v *keys.Agen
 		ResourceID:      v.ResourceID,
 		ClientType:      v.ClientType,
 		ConnectionOwner: v.ConnectionOwner,
+		UpstreamClient:  v.UpstreamClient,
 		Disposition:     v.Disposition,
 		Tool:            v.Tool,
 		ProjectID:       v.ProjectID,
@@ -1266,6 +1501,7 @@ func marshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector(v *AgentPoli
 		ResourceID:      v.ResourceID,
 		ClientType:      v.ClientType,
 		ConnectionOwner: v.ConnectionOwner,
+		UpstreamClient:  v.UpstreamClient,
 		Disposition:     v.Disposition,
 		Tool:            v.Tool,
 		ProjectID:       v.ProjectID,
@@ -1356,6 +1592,7 @@ func unmarshalAgentPolicySelectorResponseBodyToKeysAgentPolicySelector(v *AgentP
 		ResourceID:      *v.ResourceID,
 		ClientType:      v.ClientType,
 		ConnectionOwner: v.ConnectionOwner,
+		UpstreamClient:  v.UpstreamClient,
 		Disposition:     v.Disposition,
 		Tool:            v.Tool,
 		ProjectID:       v.ProjectID,

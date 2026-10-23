@@ -11,6 +11,10 @@ import {
   AnalyticsDataset,
   AnalyticsDataset$inboundSchema,
 } from "./analyticsdataset.js";
+import {
+  AnalyticsSignalCatalog,
+  AnalyticsSignalCatalog$inboundSchema,
+} from "./analyticssignalcatalog.js";
 
 export type AnalyticsDescribeResult = {
   /**
@@ -21,6 +25,7 @@ export type AnalyticsDescribeResult = {
    * Names of the datasets the caller cannot read, such as one only organization administrators can read, so a saved widget over one can say why it shows nothing rather than reading as broken
    */
   restrictedDatasets?: Array<string> | undefined;
+  signalMetrics?: AnalyticsSignalCatalog | undefined;
 };
 
 /** @internal */
@@ -31,10 +36,12 @@ export const AnalyticsDescribeResult$inboundSchema: z.ZodMiniType<
   z.object({
     datasets: z.array(AnalyticsDataset$inboundSchema),
     restricted_datasets: z.optional(z.array(z.string())),
+    signal_metrics: z.optional(AnalyticsSignalCatalog$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
       "restricted_datasets": "restrictedDatasets",
+      "signal_metrics": "signalMetrics",
     });
   }),
 );

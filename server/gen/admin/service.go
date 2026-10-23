@@ -1495,9 +1495,21 @@ type AdminUpstreamOAuthMigrationAuthClients struct {
 	Warnings []*AdminUpstreamOAuthMigrationUnresolvedAssociation
 	// The same counts for each kind of configured identity.
 	Kinds []*AdminUpstreamOAuthMigrationAuthClientKind
-	// Phases whose check failed: oauth, headers, ema, reconcile or mark. The
-	// counts cover the other phases.
+	// Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile,
+	// mark, selections or grants. The counts cover the other phases.
 	FailedPhases []string
+	// Whether every live credential choice names a usable auth client or is an
+	// explicit no-auth choice, and the selections check did not fail.
+	SelectionsComplete *bool
+	// Live credential choices with exactly one auth client to name, not yet named.
+	PendingSelectionMappings *int64
+	// Credential choice coverage for each credential class.
+	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClass
+	// The first live credential choices left without a usable auth client.
+	SelectionGaps []*AdminUpstreamOAuthMigrationSelectionGap
+	// Every live credential choice left without a usable auth client, including
+	// those beyond selection_gaps.
+	SelectionGapCount *int64
 }
 
 // An organization the upstream OAuth migration applies to: it has a live MCP
@@ -1537,11 +1549,62 @@ type AdminUpstreamOAuthMigrationRun struct {
 	// Servers marked as needing upstream authentication because they offer a
 	// backfilled auth client.
 	ServersMarkedRequiringUpstreamAuth *int64
+	// Credential choices this run named a typed auth client on.
+	SelectionsMapped *int64
+	// Default auth permissions this run granted across the organization: the
+	// personal default and shared client grants for every recorded client, and API
+	// key policies once every client is recorded. The auth-permission-defaults
+	// backfill grants the rest.
+	AuthPermissionGrantsWritten *int64
 	// Why recording typed auth clients failed, when it did. The upstream OAuth
 	// migration itself is unaffected.
 	AuthClientsError *string
 	// The organization's status after the run.
 	Status *AdminUpstreamOAuthMigrationStatus
+}
+
+// How the live credential choices of one credential class map onto typed auth
+// clients.
+type AdminUpstreamOAuthMigrationSelectionClass struct {
+	// The class: interactive, id_jag, dashboard_mint, workload or agent.
+	CredentialClass string
+	// Live credential choices of this class.
+	Selections int64
+	// Choices that already name a usable auth client.
+	Mapped int64
+	// Choices with exactly one auth client to name, not yet named.
+	Pending int64
+	// Explicit no-auth choices on servers with no auth client.
+	NoAuth int64
+	// Choices several auth clients could serve. They are never guessed: configure
+	// the server or ask the credential to reconnect.
+	Ambiguous int64
+	// Choices whose upstream OAuth client has no live, enabled auth client linked
+	// to the server.
+	NoClient int64
+	// No-auth choices, and choices naming the server's headers, on servers that
+	// now offer an OAuth-backed client; the credential reconnects.
+	StaleNoAuth int64
+	// Choices naming an auth client that is no longer usable for the server; the
+	// credential reconnects.
+	Unusable int64
+}
+
+// One live credential choice left without a usable typed auth client.
+type AdminUpstreamOAuthMigrationSelectionGap struct {
+	// The choice.
+	SelectionID string
+	// The class of the credential the choice belongs to.
+	CredentialClass string
+	// The credential.
+	CredentialID string
+	// The server the choice is for.
+	McpServerID string
+	// The server's project.
+	ProjectID string
+	// Why the choice has no usable auth client: ambiguous, no_client,
+	// stale_no_auth, unusable or skipped_race.
+	Outcome string
 }
 
 // An MCP server whose upstream OAuth client the existing configuration does

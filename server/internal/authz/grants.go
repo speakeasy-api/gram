@@ -32,6 +32,10 @@ type Grant struct {
 	PrincipalUrn string
 	Scope        Scope
 	Selector     Selector
+	// Inferred marks a grant provisioned by the default auth permission
+	// backfill that no explicit write has taken over. It allows like any
+	// other grant but never outranks an inherited block.
+	Inferred bool
 }
 
 type ScopedGrant struct {
@@ -169,6 +173,9 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSlug string, rolePrincipalURN string, addGrants []*RoleGrant, removeGrants []*RoleGrant) ([]*ScopedGrant, error) {
 	if orgID == "" {
 		return nil, fmt.Errorf("organization id is required")
+	}
+	if err := RequireUpstreamSelectorWritesForGrants(ctx, orgID, addGrants); err != nil {
+		return nil, err
 	}
 
 	principal, err := loadRolePrincipal(ctx, dbtx, orgID, roleSlug, rolePrincipalURN)
@@ -310,6 +317,7 @@ func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGran
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        scope,
 			Selector:     selectors,
+			Inferred:     false,
 		})
 	}
 

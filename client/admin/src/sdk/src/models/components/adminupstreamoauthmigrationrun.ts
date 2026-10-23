@@ -37,6 +37,14 @@ export type AdminUpstreamOAuthMigrationRun = {
    */
   authClientsWritten?: number | undefined;
   /**
+   * Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.
+   */
+  authPermissionGrantsWritten?: number | undefined;
+  /**
+   * Credential choices this run named a typed auth client on.
+   */
+  selectionsMapped?: number | undefined;
+  /**
    * Credential choices recorded.
    */
   selectionsWritten: number;
@@ -61,6 +69,8 @@ export const AdminUpstreamOAuthMigrationRun$inboundSchema: z.ZodMiniType<
     auth_client_links_written: z.optional(z.int()),
     auth_clients_error: z.optional(z.string()),
     auth_clients_written: z.optional(z.int()),
+    auth_permission_grants_written: z.optional(z.int()),
+    selections_mapped: z.optional(z.int()),
     selections_written: z.int(),
     servers_marked_requiring_upstream_auth: z.optional(z.int()),
     status: AdminUpstreamOAuthMigrationStatus$inboundSchema,
@@ -72,6 +82,8 @@ export const AdminUpstreamOAuthMigrationRun$inboundSchema: z.ZodMiniType<
       "auth_client_links_written": "authClientLinksWritten",
       "auth_clients_error": "authClientsError",
       "auth_clients_written": "authClientsWritten",
+      "auth_permission_grants_written": "authPermissionGrantsWritten",
+      "selections_mapped": "selectionsMapped",
       "selections_written": "selectionsWritten",
       "servers_marked_requiring_upstream_auth":
         "serversMarkedRequiringUpstreamAuth",

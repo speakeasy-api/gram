@@ -527,6 +527,9 @@ var McpServerToolsetSummary = Type("McpServerToolsetSummary", func() {
 		Format(FormatUUID)
 	})
 	Attribute("registry_specifier", String, "The registry specifier the toolset originated from, if any")
+	Attribute("hosting_mcp_server_id", String, "The ID of the MCP server that stands in for the toolset: its canonical server, whose ID is the toolset's, or when it has none, its oldest live server with a live endpoint. Absent when it has neither.", func() {
+		Format(FormatUUID)
+	})
 
 	Required("id", "slug", "name", "tool_count", "tool_selection_mode", "external_mcp_slugs", "external_mcp_proxy_only")
 })

@@ -58,6 +58,16 @@ describe("McpServerCardStatus", () => {
     expect(screen.getByRole("button", { name: "Private" })).toBeDefined();
     expect(screen.queryByRole("switch")).toBeNull();
   });
+
+  it("renders nothing for unproxied MCP", () => {
+    const { container } = render(
+      <McpServerCardStatus
+        server={server({ unproxiedMcpServerId: "unproxied-source-1" })}
+      />,
+    );
+
+    expect(container.childElementCount).toBe(0);
+  });
 });
 
 describe("RemoteIdentitySummary", () => {

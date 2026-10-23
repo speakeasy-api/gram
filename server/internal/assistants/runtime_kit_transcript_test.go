@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/assistants/kitacp"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestKitTranscriptStableMessageIDs(t *testing.T) {
@@ -147,10 +149,25 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	outboxRows, err := testrepo.New(db).ListPublishOutboxRows(t.Context())
 	require.NoError(t, err)
 	topics := make(map[string]struct{})
+	var messageEvents []*conversationv1.MessageEvent
 	for _, row := range outboxRows {
 		topics[row.Topic] = struct{}{}
+		if row.Topic == string(proto.MessageName(&conversationv1.MessageEvent{})) {
+			event := &conversationv1.MessageEvent{}
+			require.NoError(t, proto.Unmarshal(row.Message, event))
+			messageEvents = append(messageEvents, event)
+		}
 	}
 	require.GreaterOrEqual(t, len(topics), 2)
+	require.Len(t, messageEvents, 1)
+	created := messageEvents[0]
+	require.Equal(t, chat.CaptureOriginal, created.GetCaptureKind())
+	require.Empty(t, created.GetOriginalMessageId())
+	require.Zero(t, created.GetGeneration())
+	require.Positive(t, created.GetSequence())
+	require.Equal(t, KitTranscriptMessageID(b, "agent_message", "reply").String(), created.GetMessageId())
+	require.Equal(t, chatID.String(), created.GetConversationId())
+	require.Equal(t, "kit", created.GetIngestion().GetSource())
 	result, err = projector.Handle(t.Context(), b, first)
 	require.NoError(t, err)
 	require.False(t, result.Changed)
@@ -186,6 +203,12 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "two", row.Content)
 	require.Equal(t, "cancelled", row.FinishReason.String)
+	require.Equal(t, created.GetMessageId(), row.ID.String())
+	require.Equal(t, created.GetSequence(), row.Seq)
+	require.Equal(t, created.GetGeneration(), row.Generation)
+	require.Equal(t, created.GetMessageCreatedAt(), row.CreatedAt.Time.UTC().Format(time.RFC3339Nano))
+	require.False(t, row.OriginalMessageID.Valid, "canonical patches must not become transcript copies")
+	require.Equal(t, beforeTerminal.CaptureKind, row.CaptureKind)
 	require.Equal(t, beforeTerminal.ContentRaw, row.ContentRaw, "reason-only projection must preserve raw content")
 	require.Equal(t, beforeTerminal.ToolCalls, row.ToolCalls, "reason-only projection must preserve tool calls")
 	require.True(t, row.RiskAnalyzedAt.Valid, "reason-only updates preserve completed risk analysis")
@@ -255,10 +278,15 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	echoID := uuid.New()
 	_, err = writer.Write(t.Context(), project, []chat.MessageWrite{{Params: chatrepo.CreateChatMessageParams{ID: echoID, ProjectID: project, ChatID: chatID, Role: "user", Content: "dashboard prompt"}}})
 	require.NoError(t, err)
+	beforeEcho, err := testrepo.New(db).CountPublishOutboxRows(t.Context())
+	require.NoError(t, err)
 	b.UserEchoes = map[string]uuid.UUID{"user-echo": echoID}
 	result, err = projector.Handle(t.Context(), b, notification(`{"sessionUpdate":"user_message","messageId":"user-echo","content":[{"type":"text","text":"dashboard prompt"}]}`))
 	require.NoError(t, err)
 	require.True(t, result.Ignored)
+	afterEcho, err := testrepo.New(db).CountPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, beforeEcho, afterEcho, "correlated echoes must not publish duplicate signal activity")
 	rows, err := chatrepo.New(db).CountChatMessages(t.Context(), chatrepo.CountChatMessagesParams{ProjectID: project, ChatID: chatID})
 	require.NoError(t, err)
 	require.EqualValues(t, 2, rows)

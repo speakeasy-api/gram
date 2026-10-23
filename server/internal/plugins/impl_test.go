@@ -1245,7 +1245,7 @@ func TestPluginsService_DirectToolsetUserConfigFailsClosed(t *testing.T) {
 	}))
 
 	metadata, err := mcpmetarepo.New(ti.conn).UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
-		McpServerID:               uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		McpServerID:               toolset.ID,
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  pgtype.Text{},
 		ExternalDocumentationText: pgtype.Text{},
@@ -2041,7 +2041,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 	// Create MCP metadata + environment config for the public toolset.
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
-		McpServerID:               uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		McpServerID:               toolset.ID,
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
 		ExternalDocumentationText: pgtype.Text{Valid: false},
@@ -2122,7 +2122,7 @@ func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *t
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
-		McpServerID:               uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		McpServerID:               toolset.ID,
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
 		ExternalDocumentationText: pgtype.Text{Valid: false},
@@ -2559,7 +2559,7 @@ func TestPluginsService_PublishPlugins_CodexPublicToolsetEnvHeaders(t *testing.T
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
-		McpServerID:               uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		McpServerID:               toolset.ID,
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
 		ExternalDocumentationText: pgtype.Text{Valid: false},

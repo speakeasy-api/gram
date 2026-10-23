@@ -568,7 +568,7 @@ func principalPolicyTestContext(t *testing.T, credential, agent, owner []Grant) 
 		ActiveOrganizationID: "org_123",
 		APIKeyID:             "key_123",
 	}, actor, contextvalues.PrincipalCredential{})
-	return admittedPoliciesToContext(ctx, RepresentedUserPolicy{UserID: "", Policy: nil}, credential, agent, owner)
+	return admittedPoliciesToContext(ctx, RepresentedUserPolicy{UserID: "", Policy: nil}, false, credential, agent, owner)
 }
 
 func TestEngineFilter_enforcesForNonEnterpriseAccount(t *testing.T) {

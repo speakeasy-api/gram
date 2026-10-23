@@ -200,6 +200,7 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     user_id SimpleAggregateFunction(max, String) COMMENT '@access: confidential-pii',
     -- Managed runtime actor, not the credential owner or approving human.
     agent_id SimpleAggregateFunction(max, String) COMMENT '@access: confidential',
+    authorizer_user_id SimpleAggregateFunction(max, String) COMMENT 'Person an agent call acted on behalf of. Empty for direct calls and for agents that sign in as themselves.\n@access: confidential-pii',
     mcp_match SimpleAggregateFunction(max, String) COMMENT '@access: opaque-restricted',
     mcp_server_url SimpleAggregateFunction(max, String) COMMENT '@access: opaque-restricted',
 
@@ -247,7 +248,12 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- it, so a non-empty value must win over empty siblings across part
     -- merges, exactly as toolset_slug and meta_mcp_server_id do.
     mcp_client_name SimpleAggregateFunction(max, String) COMMENT '@access: opaque-confidential',
-    mcp_client_version SimpleAggregateFunction(max, String) COMMENT '@access: confidential'
+    mcp_client_version SimpleAggregateFunction(max, String) COMMENT '@access: confidential',
+    -- Concrete MCP server the trace was served by, materialized on
+    -- telemetry_logs from attributes.gram.mcp_server.id. Empty on traces
+    -- recorded before hosted servers stamped it. Carried, max() keeps the
+    -- non-empty value over empty siblings.
+    mcp_server_id SimpleAggregateFunction(max, String) COMMENT '@access: confidential'
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
@@ -285,6 +291,7 @@ SELECT
     anyIf(external_user_id, external_user_id != '') AS external_user_id,
     anyIf(user_id, user_id != '') AS user_id,
     max(if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')) AS agent_id,
+    max(if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.authorizer_user_id), '')) AS authorizer_user_id,
     anyIf(toString(attributes.gram.mcp.match), toString(attributes.gram.mcp.match) != '') AS mcp_match,
     anyIf(toString(attributes.gram.mcp.server_url), toString(attributes.gram.mcp.server_url) != '') AS mcp_server_url,
     min(time_unix_nano) AS start_time_unix_nano,
@@ -301,7 +308,8 @@ SELECT
     anyIf(provider, provider != '') AS provider,
     anyIf(meta_mcp_server_id, meta_mcp_server_id != '') AS meta_mcp_server_id,
     anyIf(mcp_client_name, mcp_client_name != '') AS mcp_client_name,
-    anyIf(mcp_client_version, mcp_client_version != '') AS mcp_client_version
+    anyIf(mcp_client_version, mcp_client_version != '') AS mcp_client_version,
+    anyIf(mcp_server_id, mcp_server_id != '') AS mcp_server_id
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
@@ -1604,6 +1612,10 @@ CREATE TABLE IF NOT EXISTS sigint_readings_v2 (
     event_context_type LowCardinality(String) DEFAULT '' COMMENT 'Source-context variant.\n@access: confidential',
     conversation_id Nullable(UUID) COMMENT 'Associated Speakeasy conversation identity.\n@access: confidential',
     conversation_role LowCardinality(String) DEFAULT '' COMMENT 'Source message role.\n@access: confidential',
+    conversation_generation Int32 DEFAULT 0 COMMENT 'Captured transcript generation.\n@access: confidential',
+    conversation_sequence Int64 DEFAULT 0 COMMENT 'Captured source message sequence.\n@access: confidential',
+    conversation_capture_kind LowCardinality(String) DEFAULT '' COMMENT 'Original, reobserved, synthetic or unknown source lineage. Empty means unavailable.\n@access: confidential',
+    conversation_original_message_id Nullable(UUID) COMMENT 'Original source message for an exact transcript copy.\n@access: confidential',
     tool_name String DEFAULT '' COMMENT 'Producer-defined tool name.\n@access: opaque-confidential',
     tool_call_id String DEFAULT '' COMMENT 'Producer protocol call identifier.\n@access: opaque-confidential',
     mcp_server_id Nullable(UUID) COMMENT 'Associated Speakeasy MCP server identity.\n@access: confidential',
@@ -1623,7 +1635,8 @@ CREATE TABLE IF NOT EXISTS sigint_readings_v2 (
     selected_signal_id Nullable(UUID) COMMENT 'Selected signal identity for choice results.\n@access: confidential',
     selected_signal_slug String DEFAULT '' COMMENT 'Customer-defined slug of the selected signal.\n@access: opaque-confidential',
     expected_index Nullable(Float64) COMMENT 'Probability-weighted ordered-score index.\n@access: confidential',
-    confidence Nullable(Float64) COMMENT 'Optional classifier confidence.\n@access: confidential'
+    confidence Nullable(Float64) COMMENT 'Optional classifier confidence.\n@access: confidential',
+    INDEX event_occurred_at_minmax_idx event_occurred_at TYPE minmax GRANULARITY 1
 ) ENGINE = ReplacingMergeTree(evaluated_at)
 PARTITION BY toYYYYMM(evaluation_requested_at)
 PRIMARY KEY (organization_id, project_id, trigger_kind, run_id, sensor_id, event_occurred_at)
