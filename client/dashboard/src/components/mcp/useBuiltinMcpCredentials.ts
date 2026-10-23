@@ -8,7 +8,7 @@ import { useListEnvironments } from "@gram/client/react-query/listEnvironments.j
 /** Project creation provisions this environment; an unset default inherits it. */
 const PROJECT_DEFAULT_ENVIRONMENT_SLUG = "default";
 
-export type BuiltinCredential = {
+type BuiltinCredential = {
   /** The environment variable the value is stored under. */
   variable: string;
   /** "SLACK_BOT_TOKEN" reads as "Slack bot token". */
