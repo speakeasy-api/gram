@@ -3156,17 +3156,17 @@ func (q *Queries) RetireStaleBackfillLinks(ctx context.Context, organizationID s
 const seedAgentAttachmentFixture = `-- name: SeedAgentAttachmentFixture :one
 WITH link AS (
   INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-  VALUES ($5, $4)
+  VALUES ($4, $7)
   ON CONFLICT DO NOTHING
 ), session AS (
   INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted)
-  VALUES ($8::text, $4, $5, 'fixture-not-a-token')
+  VALUES ($8::text, $7, $4, 'fixture-not-a-token')
   ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
   DO UPDATE SET access_token_encrypted = EXCLUDED.access_token_encrypted
-  RETURNING id, grant_generation
+  RETURNING id, grant_generation, user_session_issuer_id
 )
 INSERT INTO principal_remote_session_bindings (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
-SELECT $1, $2, $3, $4, $5, session.id, session.grant_generation + $6::bigint, $7::text
+SELECT $1, $2, $3, session.user_session_issuer_id, $4, session.id, session.grant_generation + $5::bigint, $6::text
 FROM session
 RETURNING id
 `
@@ -3175,10 +3175,10 @@ type SeedAgentAttachmentFixtureParams struct {
 	ProjectID             uuid.UUID
 	OrganizationID        string
 	AgentID               uuid.UUID
-	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
 	GenerationOffset      int64
 	AttachedBy            string
+	UserSessionIssuerID   uuid.UUID
 	ConnectionSubject     string
 }
 
@@ -3187,10 +3187,10 @@ func (q *Queries) SeedAgentAttachmentFixture(ctx context.Context, arg SeedAgentA
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.AgentID,
-		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
 		arg.GenerationOffset,
 		arg.AttachedBy,
+		arg.UserSessionIssuerID,
 		arg.ConnectionSubject,
 	)
 	var id uuid.UUID
