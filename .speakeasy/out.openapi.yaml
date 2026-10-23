@@ -97441,7 +97441,7 @@ components:
       properties:
         code_mode_enabled:
           type: boolean
-          description: 'Whether this project can select Code Mode: a code runtime must be configured.'
+          description: Whether this gateway can select Code Mode. True only when the code runtime is available, the organization has Code Mode, and the gateway requires sign-in through a user session issuer.
         created_at:
           type: string
           description: When the meta MCP server was created

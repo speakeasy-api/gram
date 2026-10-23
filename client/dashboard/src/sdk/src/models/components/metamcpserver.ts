@@ -55,7 +55,7 @@ export type MetaMcpServerVisibility = OpenEnum<typeof MetaMcpServerVisibility>;
  */
 export type MetaMcpServer = {
   /**
-   * Whether this project can select Code Mode: a code runtime must be configured.
+   * Whether this gateway can select Code Mode. True only when the code runtime is available, the organization has Code Mode, and the gateway requires sign-in through a user session issuer.
    */
   codeModeEnabled?: boolean | undefined;
   /**
