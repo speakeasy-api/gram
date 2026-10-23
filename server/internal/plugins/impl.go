@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
@@ -177,6 +178,11 @@ type Service struct {
 	publisher             PluginPublishSignaler
 	publicationRequests   PublicationRequests
 	distributionAdmission *admission.Guard
+
+	// orgHosts resolves the platform host stored as an organization's default
+	// host, which generated plugins use for server routes and MCP addresses.
+	// Nil, or an organization without a stored platform host, uses serverURL.
+	orgHosts *orghost.Resolver
 }
 
 var (
@@ -220,6 +226,7 @@ func NewService(
 		publisher:             publisher,
 		publicationRequests:   PublicationRequests{Enabled: false},
 		distributionAdmission: admission.NewGuard(),
+		orgHosts:              nil,
 	}
 }
 
@@ -256,6 +263,7 @@ func NewPublisher(
 		publisher:             nil,
 		publicationRequests:   PublicationRequests{Enabled: false},
 		distributionAdmission: admission.NewGuard(),
+		orgHosts:              nil,
 	}
 }
 
@@ -3209,6 +3217,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "resolve gateway distribution project").LogError(ctx, s.logger)
 	}
+	serverURL := s.organizationServerURL(project.DefaultHost)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin gateway distribution check").LogError(ctx, s.logger)
@@ -3300,7 +3309,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 	for _, m := range mcpRows {
 		pb := ensurePlugin(m.PluginID, m.PluginName, m.PluginSlug, m.PluginDescription)
 
-		mcpURL, isUnproxied, err := remoteServerURL(s.serverURL, m)
+		mcpURL, isUnproxied, err := remoteServerURL(serverURL, m)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve MCP plugin address").LogError(ctx, s.logger)
 		}
@@ -3331,7 +3340,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 			return nil, oops.E(oops.CodeUnavailable, nil, "gateway plugin member has no OAuth issuer").LogError(ctx, s.logger)
 		}
 		pb := ensurePlugin(gateway.PluginID, gateway.PluginName, gateway.PluginSlug, gateway.PluginDescription)
-		mcpBase := s.serverURL
+		mcpBase := serverURL
 		if cd := conv.FromPGText[string](gateway.EndpointCustomDomain); cd != nil {
 			mcpBase = fmt.Sprintf("https://%s", *cd)
 		}
@@ -3431,6 +3440,17 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		IsDefaultProject: s.isDefaultProject(ctx, projectID),
 		BrowserLogin:     false,
 		InstallFailOpen:  false,
+	}
+	if s.orgHosts != nil {
+		project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to fetch organization default host, falling back to server url",
+				attr.SlogOrganizationID(orgID),
+				attr.SlogError(err),
+			)
+		} else {
+			cfg.ServerURL = s.organizationServerURL(project.DefaultHost)
+		}
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
