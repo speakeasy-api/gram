@@ -50,6 +50,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 		Title: "Describe the Analytics Catalog",
 		Description: "Read the catalog a project's agent session data is queried through: every dataset (what one row is, and how many days back it can be asked about), its dimensions with the filter operators and the one aggregation each admits, its measures with their units and aggregations, the time grains, and the limits every query is held to. " +
 			"Call this before run_analytics_query or list_analytics_dimension_values: the names it returns are the only vocabulary they accept, and nothing here is a table or SQL. A field's description says which producers fill it; a field's lookup names the per-project map it reads through, so grouping and filtering on it speak the mapped names. " +
+			"Only the datasets this caller can read are listed: risk_findings, which counts what risk policies caught, is listed to organization administrators alone. A dataset of kind metric answers grouped queries only. " +
 			"Requires Explore to be switched on for the organization.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: analyticsProjectSchema(nil, []string{"project_id"}),
@@ -74,7 +75,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 		Title: "Run an Analytics Query",
 		Description: "Run one query against a dataset from describe_analytics_catalog, in catalog vocabulary, never SQL. " +
 			fmt.Sprintf("Grouped, the default: group by up to %d dimensions, optionally bucketed by a time grain, with one or more measures (count alone, count_distinct over a dimension that admits it, or an aggregation over a measure field that admits it), filters ANDed with at most %d values each, an order by measure alias, and a limit of at most %d rows (%d by default), ordered by the first measure descending unless order_by says otherwise. ", analytics.MaxDimensions, analytics.MaxFilterValues, analytics.MaxLimit, analytics.DefaultLimit) +
-			"Ungrouped: rows at the dataset's grain, newest first, projecting the named dimensions, with no measures and no grain. " +
+			"Ungrouped: rows at the dataset's grain, newest first, projecting the named dimensions, with no measures and no grain; a dataset of kind metric refuses it. " +
 			"Row keys are the dimension names plus each measure's alias; time_bucket is present when a grain is set and time on ungrouped rows, both RFC 3339 in UTC, and columns says which key is which. " +
 			"The half-open window [from, to) is bounded by the dataset's max_time_range_days. An invalid request is refused naming the field to correct; a result holds at most limit rows and does not say whether more exist. Requires Explore to be switched on for the organization.",
 		Annotations: readOnlyAnnotations(),
@@ -151,6 +152,9 @@ func analyticsRefusalFor(err error) (refusal analyticsRefusal, named bool) {
 	case errors.Is(err, ErrAnalyticsNotEnabled):
 		refusal.Code = analyticsNotEnabledCode
 		refusal.Message = "Analytics queries are not switched on for your organization yet. They arrive with Explore; ask your Speakeasy contact to turn it on."
+	case errors.Is(err, ErrAnalyticsDatasetRestricted):
+		refusal.Code = "forbidden"
+		refusal.Message = "Only organization administrators can read that dataset. Choose another dataset from describe_analytics_catalog, which lists only the ones this caller can read."
 	case errors.Is(err, ErrForbidden):
 		refusal.Code = "forbidden"
 		refusal.Message = "That project is not one this caller can read."

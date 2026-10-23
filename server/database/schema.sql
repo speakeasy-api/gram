@@ -3800,6 +3800,9 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- at creation: no update query sets this column.
   credential_owner TEXT NOT NULL DEFAULT 'subject',
 
+  -- Administrator-chosen label. NULL means unset, and readers show client_id.
+  display_name TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -3862,6 +3865,7 @@ COMMENT ON COLUMN remote_session_clients.organization_id IS '@access: confidenti
 COMMENT ON COLUMN remote_session_clients.attachment_scope IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.remote_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_id IS '@access: restricted';
+COMMENT ON COLUMN remote_session_clients.display_name IS '@access: opaque-confidential';
 COMMENT ON COLUMN remote_session_clients.client_secret_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN remote_session_clients.client_id_issued_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_secret_expires_at IS '@access: confidential';
@@ -9346,6 +9350,47 @@ ON principal_grants (organization_id, principal_urn, scope, COALESCE(effect, 'al
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
 USING GIN (selectors);
+
+-- Grants the default auth permission backfill wrote, kept after the grant is
+-- deleted: a rerun never restores what an admin removed, and a rollback
+-- deletes exactly these, except those an admin since took over by writing the
+-- same grant.
+CREATE TABLE IF NOT EXISTS auth_permission_provisions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  principal_urn TEXT NOT NULL CHECK (principal_urn <> ''),
+  scope TEXT NOT NULL CHECK (scope <> ''),
+  selectors JSONB NOT NULL,
+  kind TEXT NOT NULL CHECK (kind <> ''),
+  taken_over_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT auth_permission_provisions_pkey PRIMARY KEY (id),
+  CONSTRAINT auth_permission_provisions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT auth_permission_provisions_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
+);
+
+COMMENT ON TABLE auth_permission_provisions IS 'Default auth permission grants provisioned by the backfill or at organization creation, one row per grant, kept after the grant itself is deleted.';
+COMMENT ON COLUMN auth_permission_provisions.id IS '@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.organization_id IS 'The organization the grant belongs to.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.principal_urn IS 'The principal the grant was written to, as in principal_grants.principal_urn.
+@access: confidential-pii';
+COMMENT ON COLUMN auth_permission_provisions.scope IS 'The granted scope, mcp:auth or mcp:connect.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.selectors IS 'The grant''s selector, as in principal_grants.selectors.
+@access: opaque-restricted';
+COMMENT ON COLUMN auth_permission_provisions.kind IS 'Which default the grant belongs to: personal_default, shared_client or api_key from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.taken_over_at IS 'When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.created_at IS '@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS auth_permission_provisions_org_principal_scope_selector_key
+ON auth_permission_provisions (organization_id, principal_urn, scope, selectors);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

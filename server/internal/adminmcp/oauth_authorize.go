@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -109,7 +110,7 @@ func (s *StaffOAuthAuthorization) AuthorizeHandler() http.Handler {
 		}
 		client, err := s.clients.GetClient(r.Context(), request.ClientID)
 		if err != nil || !slices.Contains(client.RedirectURIs, request.RedirectURI) {
-			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id or redirect_uri")
+			staffOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id or redirect_uri")
 			return
 		}
 		if err := request.ValidatePostRedirect(); err != nil {
@@ -172,23 +173,23 @@ func (s *StaffOAuthAuthorization) ConnectHandler() http.Handler {
 func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Request) {
 	challenge, err := s.cache.Get(r.Context(), staffChallengePrefix+r.URL.Query().Get("state"))
 	if err != nil || challenge.ID == "" || time.Since(challenge.CreatedAt) >= staffCodeLifetime || challenge.ResourceURI != s.resource {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		staffOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
 		return
 	}
 	if !staffBrowserProofMatches(r, challenge) {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization browser is invalid")
+		staffOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization browser is invalid")
 		return
 	}
 	client, err := s.clients.GetClient(r.Context(), challenge.ClientID)
 	if err != nil || !slices.Contains(client.RedirectURIs, challenge.RedirectURI) {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+		staffOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable")
 		return
 	}
 	_, sessionID, err := s.staffSession(r)
 	if err != nil {
 		var authErr *oops.ShareableError
 		if !errors.Is(err, errMissingStaffCookie) && (!errors.As(err, &authErr) || authErr.Code != oops.CodeUnauthorized) {
-			staffOAuthError(w, http.StatusUnauthorized, "access_denied", "staff login is required")
+			staffOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "staff login is required")
 			return
 		}
 		// A logged-out session can leave a path-scoped browser cookie behind.
@@ -277,29 +278,29 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 	}
 	challenge, err := s.cache.GetAndDelete(r.Context(), staffChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.ID == "" || time.Since(challenge.CreatedAt) >= staffCodeLifetime || challenge.ResourceURI != s.resource {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		staffOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
 		return
 	}
 	if !staffBrowserProofMatches(r, challenge) {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization browser is invalid")
+		staffOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization browser is invalid")
 		return
 	}
 	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization confirmation is invalid")
+		staffOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization confirmation is invalid")
 		return
 	}
 	client, err := s.clients.GetClient(r.Context(), challenge.ClientID)
 	if err != nil || !slices.Contains(client.RedirectURIs, challenge.RedirectURI) {
-		staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+		staffOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable")
 		return
 	}
 	staff, sessionID, err := s.staffSession(r)
 	if err != nil {
-		staffOAuthError(w, http.StatusUnauthorized, "access_denied", "staff login is required")
+		staffOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "staff login is required")
 		return
 	}
 	if challenge.SessionHash == "" || subtle.ConstantTimeCompare([]byte(challenge.SessionHash), []byte(staffTokenHash(sessionID))) != 1 {
-		staffOAuthError(w, http.StatusUnauthorized, "access_denied", "staff session changed during authorization")
+		staffOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "staff session changed during authorization")
 		return
 	}
 	if r.PostForm.Get("action") != "approve" {
@@ -332,7 +333,7 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 	}
 	if err := s.store.Authorize(r.Context(), input); err != nil {
 		if errors.Is(err, errStaffGrant) {
-			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+			staffOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable")
 		} else {
 			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not complete authorization")
 		}
