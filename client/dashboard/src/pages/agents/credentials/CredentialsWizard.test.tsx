@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   admitSubject: vi.fn(),
   projectId: "project_one",
   canFederate: true,
+  canReadWorkloads: true,
   renameAgent: vi.fn(),
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
@@ -71,20 +72,41 @@ vi.mock("@/contexts/Sdk", () => ({
 // The credential step offers workload identity, which reads the catalog the
 // server ships and the caller's permission to trust a platform.
 vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
-  useWorkloadPlatforms: () => ({
-    data:
-      mocks.platformsStatus === "success"
-        ? { platforms: mocks.platforms() }
-        : undefined,
-    isPending: mocks.platformsStatus === "pending",
-    isError: mocks.platformsStatus === "error",
-    refetch: vi.fn(),
-  }),
+  // A disabled query never fetches and, like react-query, stays pending.
+  useWorkloadPlatforms: (
+    _request: unknown,
+    _security: unknown,
+    options?: { enabled?: boolean },
+  ) => {
+    if (options?.enabled === false) {
+      return {
+        data: undefined,
+        isPending: true,
+        isError: false,
+        refetch: vi.fn(),
+      };
+    }
+    return {
+      data:
+        mocks.platformsStatus === "success"
+          ? { platforms: mocks.platforms() }
+          : undefined,
+      isPending: mocks.platformsStatus === "pending",
+      isError: mocks.platformsStatus === "error",
+      refetch: vi.fn(),
+    };
+  },
 }));
+// Reading the workload catalog is its own permission; everything else this
+// flow checks follows canFederate.
+function hasScope(scope: string): boolean {
+  if (scope === "workload:read") return mocks.canReadWorkloads;
+  return mocks.canFederate;
+}
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasAllScopes: () => mocks.canFederate,
-    hasAnyScope: () => mocks.canFederate,
+    hasAllScopes: (scopes: string[]) => scopes.every(hasScope),
+    hasAnyScope: (scopes: string[]) => scopes.some(hasScope),
     isLoading: false,
   }),
 }));
@@ -196,6 +218,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.projectId = "project_one";
   mocks.canFederate = true;
+  mocks.canReadWorkloads = true;
   mocks.platformsStatus = "success";
   mocks.platforms.mockReturnValue([]);
   mocks.agentList.mockReturnValue([]);
@@ -477,6 +500,25 @@ describe("Federating a platform's own tokens", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Advanced:/ }));
     const custom = screen.getByRole("radio", { name: /Custom OIDC issuer/ });
     expect(custom.getAttribute("data-disabled")).not.toBeNull();
+    const apiKey = screen.getByRole("radio", { name: /API key/ });
+    expect(apiKey.getAttribute("data-disabled")).toBeNull();
+    expect(
+      screen.getByText(/need permission to manage workload identities/),
+    ).toBeTruthy();
+  });
+
+  it("offers the API key alone, with no error, to someone who cannot read the catalog", async () => {
+    // Reading the catalog is refused without workload access, so the request
+    // is never made. Before the presets moved up front this went unnoticed;
+    // shown as a load failure, it read as a broken page.
+    mocks.canFederate = false;
+    mocks.canReadWorkloads = false;
+    mocks.platforms.mockReturnValue([platform]);
+    await reachCredentialStep();
+
+    expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
+    expect(screen.queryByText(/could not be loaded/)).toBeNull();
+    expect(screen.queryByText(/Loading platforms/)).toBeNull();
     const apiKey = screen.getByRole("radio", { name: /API key/ });
     expect(apiKey.getAttribute("data-disabled")).toBeNull();
     expect(

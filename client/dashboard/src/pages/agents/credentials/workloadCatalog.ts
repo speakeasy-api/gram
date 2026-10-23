@@ -110,7 +110,8 @@ export function useCatalogEntries(enabled = true): {
   );
   return {
     entries,
-    isPending: query.isPending,
+    // A disabled query stays pending forever; it is not loading anything.
+    isPending: enabled && query.isPending,
     isError: query.isError,
     refetch: () => void query.refetch(),
   };

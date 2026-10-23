@@ -157,12 +157,17 @@ export function CredentialsWizard({
   const { user } = useSession();
   const queryClient = useQueryClient();
   const inventory = useServerInventory();
-  const catalog = useCatalogEntries();
   // Trusting a platform and admitting a subject are both writes against the
   // organization's workload identities, so the choice is offered only to
   // someone who could carry it out.
-  const { hasAllScopes } = useRBAC();
+  const { hasAllScopes, hasAnyScope } = useRBAC();
   const canFederate = hasAllScopes(["workload:write"]);
+  // The catalog itself needs workload read access. Without it the request is
+  // refused, so it is not made, and the step shows the API key alone rather
+  // than an error. Write satisfies read on the server, so either scope counts.
+  const catalog = useCatalogEntries(
+    hasAnyScope(["workload:read", "workload:write"]),
+  );
   const renameAgent = useRenameAgentMutation();
   // Only to keep a prefilled name from colliding, so a failure to read the
   // list leaves the field empty rather than blocking the flow.
