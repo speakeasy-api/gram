@@ -434,11 +434,10 @@ func TestSkillReportsLastLoadOverMCPWithoutDistribution(t *testing.T) {
 
 	seenAt := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	written, err := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn).RecordRead(ctx, mcpskills.Read{
-		ProjectID: ti.projectID,
 		Entry: mcpskills.Entry{
-			SkillID: skillID, VersionID: versionID, PluginID: uuid.Nil,
+			SkillID: skillID, ProjectID: ti.projectID, ProjectSlug: "", VersionID: versionID,
 			Name: created.Skill.Name, Content: created.Version.Content, RawSHA256: created.Version.RawSha256,
-			Frontmatter: nil, Pinned: false,
+			Frontmatter: nil,
 		},
 		UserID: ti.authContext.UserID, SessionID: "mcp-session-linked", SeenAt: seenAt,
 	})
@@ -520,16 +519,16 @@ func TestSkillDistributionReportsLastLoadOverMCP(t *testing.T) {
 	// Two hosted MCP reads in different sessions: the newest one is reported.
 	resolver := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn)
 	entry := mcpskills.Entry{
-		SkillID: skillID, VersionID: versionID, PluginID: pluginA.ID,
+		SkillID: skillID, ProjectID: ti.projectID, ProjectSlug: "", VersionID: versionID,
 		Name: created.Skill.Name, Content: created.Version.Content, RawSHA256: created.Version.RawSha256,
-		Frontmatter: nil, Pinned: false,
+		Frontmatter: nil,
 	}
 	earlier := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	latest := earlier.Add(2 * time.Hour)
-	written, err := resolver.RecordRead(ctx, mcpskills.Read{ProjectID: ti.projectID, Entry: entry, UserID: ti.authContext.UserID, SessionID: "mcp-session-a", SeenAt: latest})
+	written, err := resolver.RecordRead(ctx, mcpskills.Read{Entry: entry, UserID: ti.authContext.UserID, SessionID: "mcp-session-a", SeenAt: latest})
 	require.NoError(t, err)
 	require.True(t, written)
-	written, err = resolver.RecordRead(ctx, mcpskills.Read{ProjectID: ti.projectID, Entry: entry, UserID: ti.authContext.UserID, SessionID: "mcp-session-b", SeenAt: earlier})
+	written, err = resolver.RecordRead(ctx, mcpskills.Read{Entry: entry, UserID: ti.authContext.UserID, SessionID: "mcp-session-b", SeenAt: earlier})
 	require.NoError(t, err)
 	require.True(t, written)
 
