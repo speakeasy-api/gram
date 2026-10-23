@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -138,6 +139,7 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 		AuthClientsWritten:                 new(int64(authClients.ClientsWritten)),
 		AuthClientLinksWritten:             new(int64(authClients.LinksWritten)),
 		ServersMarkedRequiringUpstreamAuth: new(int64(authClients.ServersMarked)),
+		SelectionsMapped:                   new(int64(authClients.SelectionsMapped)),
 		AuthPermissionGrantsWritten:        new(int64(authClients.GrantsWritten)),
 		AuthClientsError:                   authClientsError,
 		Status:                             status,
@@ -204,19 +206,24 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 	switch {
 	case errors.Is(err, authclientbackfill.ErrRunInProgress):
 		return &gen.AdminUpstreamOAuthMigrationAuthClients{
-			Complete:               false,
-			InProgress:             true,
-			Associations:           0,
-			PendingClients:         0,
-			PendingLinks:           0,
-			PendingHeaders:         0,
-			PendingRetirements:     0,
-			PendingMarkedServers:   0,
-			Unresolved:             0,
-			UnresolvedAssociations: []*gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{},
-			Warnings:               []*gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{},
-			Kinds:                  []*gen.AdminUpstreamOAuthMigrationAuthClientKind{},
-			FailedPhases:           []string{},
+			Complete:                 false,
+			InProgress:               true,
+			Associations:             0,
+			PendingClients:           0,
+			PendingLinks:             0,
+			PendingHeaders:           0,
+			PendingRetirements:       0,
+			PendingMarkedServers:     0,
+			Unresolved:               0,
+			UnresolvedAssociations:   []*gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{},
+			Warnings:                 []*gen.AdminUpstreamOAuthMigrationUnresolvedAssociation{},
+			Kinds:                    []*gen.AdminUpstreamOAuthMigrationAuthClientKind{},
+			FailedPhases:             []string{},
+			SelectionsComplete:       new(false),
+			PendingSelectionMappings: new(int64(0)),
+			SelectionClasses:         []*gen.AdminUpstreamOAuthMigrationSelectionClass{},
+			SelectionGaps:            []*gen.AdminUpstreamOAuthMigrationSelectionGap{},
+			SelectionGapCount:        new(int64(0)),
 		}
 	case err != nil:
 		logger.ErrorContext(ctx, "check typed auth clients", attr.SlogError(err))
@@ -271,27 +278,77 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 		})
 	}
 	pendingRetirements := int64(report.PendingRetiredClients + report.PendingRetiredLinks)
+	classes, gaps, gapCount := selectionCoverage(report)
+	_, selectionsFailed := report.PhaseErrors[authclientbackfill.PhaseSelections]
 	return &gen.AdminUpstreamOAuthMigrationAuthClients{
-		Complete:               report.PendingClients == 0 && report.PendingLinks == 0 && report.PendingHeaders == 0 && report.Gaps == 0 && pendingRetirements == 0 && report.PendingMarkedServers == 0 && len(phases) == 0,
-		InProgress:             false,
-		Associations:           int64(report.Associations),
-		PendingClients:         int64(report.PendingClients),
-		PendingLinks:           int64(report.PendingLinks),
-		PendingHeaders:         int64(report.PendingHeaders),
-		PendingRetirements:     pendingRetirements,
-		PendingMarkedServers:   int64(report.PendingMarkedServers),
-		Unresolved:             int64(len(unresolved)),
-		UnresolvedAssociations: unresolved,
-		Warnings:               warnings,
-		Kinds:                  kinds,
-		FailedPhases:           phases,
+		Complete:                 report.PendingClients == 0 && report.PendingLinks == 0 && report.PendingHeaders == 0 && report.Gaps == 0 && pendingRetirements == 0 && report.PendingMarkedServers == 0 && report.AttachmentsWaiting == 0 && len(phases) == 0,
+		InProgress:               false,
+		Associations:             int64(report.Associations),
+		PendingClients:           int64(report.PendingClients),
+		PendingLinks:             int64(report.PendingLinks),
+		PendingHeaders:           int64(report.PendingHeaders),
+		PendingRetirements:       pendingRetirements,
+		PendingMarkedServers:     int64(report.PendingMarkedServers),
+		Unresolved:               int64(len(unresolved)),
+		UnresolvedAssociations:   unresolved,
+		Warnings:                 warnings,
+		Kinds:                    kinds,
+		FailedPhases:             phases,
+		SelectionsComplete:       new(gapCount == 0 && report.PendingSelectionMappings == 0 && !selectionsFailed),
+		PendingSelectionMappings: new(int64(report.PendingSelectionMappings)),
+		SelectionClasses:         classes,
+		SelectionGaps:            gaps,
+		SelectionGapCount:        new(int64(gapCount)),
 	}
+}
+
+// selectionGapLimit bounds the choices a status lists; the count covers the
+// rest.
+const selectionGapLimit = 100
+
+// selectionCoverage reports a run's choice coverage by credential class, in a
+// stable order, with the first gaps.
+func selectionCoverage(report authclientbackfill.Report) ([]*gen.AdminUpstreamOAuthMigrationSelectionClass, []*gen.AdminUpstreamOAuthMigrationSelectionGap, int) {
+	names := make([]string, 0, len(report.Selections))
+	for class := range report.Selections {
+		names = append(names, string(class))
+	}
+	slices.Sort(names)
+	classes := make([]*gen.AdminUpstreamOAuthMigrationSelectionClass, 0, len(names))
+	gapCount := 0
+	for _, name := range names {
+		counts := report.Selections[authclientbackfill.CredentialClass(name)]
+		gapCount += counts.Gaps()
+		classes = append(classes, &gen.AdminUpstreamOAuthMigrationSelectionClass{
+			CredentialClass: name,
+			Selections:      int64(counts.Selections),
+			Mapped:          int64(counts.Outcomes[authclientbackfill.SelectionMapped] + counts.Written),
+			Pending:         int64(counts.Outcomes[authclientbackfill.SelectionMap] - counts.Written),
+			NoAuth:          int64(counts.Outcomes[authclientbackfill.SelectionNoAuth]),
+			Ambiguous:       int64(counts.Outcomes[authclientbackfill.SelectionAmbiguous]),
+			NoClient:        int64(counts.Outcomes[authclientbackfill.SelectionNoClient]),
+			StaleNoAuth:     int64(counts.Outcomes[authclientbackfill.SelectionStaleNoAuth]),
+			Unusable:        int64(counts.Outcomes[authclientbackfill.SelectionUnusable]),
+		})
+	}
+	gaps := make([]*gen.AdminUpstreamOAuthMigrationSelectionGap, 0, min(len(report.SelectionGaps), selectionGapLimit))
+	for _, gap := range report.SelectionGaps[:min(len(report.SelectionGaps), selectionGapLimit)] {
+		gaps = append(gaps, &gen.AdminUpstreamOAuthMigrationSelectionGap{
+			SelectionID:     gap.SelectionID.String(),
+			CredentialClass: string(gap.CredentialClass),
+			CredentialID:    gap.CredentialID.String(),
+			McpServerID:     gap.MCPServerID.String(),
+			ProjectID:       gap.ProjectID.String(),
+			Outcome:         string(gap.Outcome),
+		})
+	}
+	return classes, gaps, gapCount
 }
 
 // failedPhases names the phases a run reports failed, in run order.
 func failedPhases(report authclientbackfill.Report) []string {
 	phases := []string{}
-	for _, phase := range []string{authclientbackfill.PhaseOAuth, authclientbackfill.PhaseHeaders, authclientbackfill.PhaseEMA, authclientbackfill.PhaseEMAWarnings, authclientbackfill.PhaseReconcile, authclientbackfill.PhaseMark, authclientbackfill.PhaseGrants} {
+	for _, phase := range []string{authclientbackfill.PhaseOAuth, authclientbackfill.PhaseHeaders, authclientbackfill.PhaseEMA, authclientbackfill.PhaseEMAWarnings, authclientbackfill.PhaseReconcile, authclientbackfill.PhaseMark, authclientbackfill.PhaseSelections, authclientbackfill.PhaseGrants} {
 		if _, failed := report.PhaseErrors[phase]; failed {
 			phases = append(phases, phase)
 		}

@@ -123,7 +123,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
-		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
+		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -608,6 +608,19 @@ func ParseEndpoint(
 		agentsDeletePolicyGrantFlags            = flag.NewFlagSet("delete-policy-grant", flag.ExitOnError)
 		agentsDeletePolicyGrantBodyFlag         = agentsDeletePolicyGrantFlags.String("body", "REQUIRED", "")
 		agentsDeletePolicyGrantSessionTokenFlag = agentsDeletePolicyGrantFlags.String("session-token", "", "")
+
+		agentsListConnectionBlocksFlags            = flag.NewFlagSet("list-connection-blocks", flag.ExitOnError)
+		agentsListConnectionBlocksCursorFlag       = agentsListConnectionBlocksFlags.String("cursor", "", "")
+		agentsListConnectionBlocksLimitFlag        = agentsListConnectionBlocksFlags.String("limit", "50", "")
+		agentsListConnectionBlocksSessionTokenFlag = agentsListConnectionBlocksFlags.String("session-token", "", "")
+
+		agentsBlockAgentOnConnectionFlags            = flag.NewFlagSet("block-agent-on-connection", flag.ExitOnError)
+		agentsBlockAgentOnConnectionBodyFlag         = agentsBlockAgentOnConnectionFlags.String("body", "REQUIRED", "")
+		agentsBlockAgentOnConnectionSessionTokenFlag = agentsBlockAgentOnConnectionFlags.String("session-token", "", "")
+
+		agentsRemoveConnectionBlockFlags            = flag.NewFlagSet("remove-connection-block", flag.ExitOnError)
+		agentsRemoveConnectionBlockBodyFlag         = agentsRemoveConnectionBlockFlags.String("body", "REQUIRED", "")
+		agentsRemoveConnectionBlockSessionTokenFlag = agentsRemoveConnectionBlockFlags.String("session-token", "", "")
 
 		agentsTransferFlags            = flag.NewFlagSet("transfer", flag.ExitOnError)
 		agentsTransferBodyFlag         = agentsTransferFlags.String("body", "REQUIRED", "")
@@ -5315,6 +5328,9 @@ func ParseEndpoint(
 	agentsCreatePolicyGrantFlags.Usage = agentsCreatePolicyGrantUsage
 	agentsUpdatePolicyGrantFlags.Usage = agentsUpdatePolicyGrantUsage
 	agentsDeletePolicyGrantFlags.Usage = agentsDeletePolicyGrantUsage
+	agentsListConnectionBlocksFlags.Usage = agentsListConnectionBlocksUsage
+	agentsBlockAgentOnConnectionFlags.Usage = agentsBlockAgentOnConnectionUsage
+	agentsRemoveConnectionBlockFlags.Usage = agentsRemoveConnectionBlockUsage
 	agentsTransferFlags.Usage = agentsTransferUsage
 	agentsReassignFlags.Usage = agentsReassignUsage
 	agentsSuspendFlags.Usage = agentsSuspendUsage
@@ -6802,6 +6818,15 @@ func ParseEndpoint(
 
 			case "delete-policy-grant":
 				epf = agentsDeletePolicyGrantFlags
+
+			case "list-connection-blocks":
+				epf = agentsListConnectionBlocksFlags
+
+			case "block-agent-on-connection":
+				epf = agentsBlockAgentOnConnectionFlags
+
+			case "remove-connection-block":
+				epf = agentsRemoveConnectionBlockFlags
 
 			case "transfer":
 				epf = agentsTransferFlags
@@ -9961,6 +9986,15 @@ func ParseEndpoint(
 			case "delete-policy-grant":
 				endpoint = c.DeletePolicyGrant()
 				data, err = agentsc.BuildDeletePolicyGrantPayload(*agentsDeletePolicyGrantBodyFlag, *agentsDeletePolicyGrantSessionTokenFlag)
+			case "list-connection-blocks":
+				endpoint = c.ListConnectionBlocks()
+				data, err = agentsc.BuildListConnectionBlocksPayload(*agentsListConnectionBlocksCursorFlag, *agentsListConnectionBlocksLimitFlag, *agentsListConnectionBlocksSessionTokenFlag)
+			case "block-agent-on-connection":
+				endpoint = c.BlockAgentOnConnection()
+				data, err = agentsc.BuildBlockAgentOnConnectionPayload(*agentsBlockAgentOnConnectionBodyFlag, *agentsBlockAgentOnConnectionSessionTokenFlag)
+			case "remove-connection-block":
+				endpoint = c.RemoveConnectionBlock()
+				data, err = agentsc.BuildRemoveConnectionBlockPayload(*agentsRemoveConnectionBlockBodyFlag, *agentsRemoveConnectionBlockSessionTokenFlag)
 			case "transfer":
 				endpoint = c.Transfer()
 				data, err = agentsc.BuildTransferPayload(*agentsTransferBodyFlag, *agentsTransferSessionTokenFlag)
@@ -13261,7 +13295,7 @@ func accessCreateRoleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-role --body '{\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-role --body '{\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessUpdateRoleUsage() {
@@ -13283,7 +13317,7 @@ func accessUpdateRoleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"add_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"description\": \"abc123\",\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"remove_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"add_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"description\": \"abc123\",\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"remove_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessDeleteRoleUsage() {
@@ -13475,7 +13509,7 @@ func accessApplyDirectoryRoleSetupUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access apply-directory-role-setup --body '{\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"items\": [\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         },\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access apply-directory-role-setup --body '{\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"items\": [\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         },\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessListDirectoryReviewItemsUsage() {
@@ -13517,7 +13551,7 @@ func accessResolveDirectoryReviewItemUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-directory-review-item --body '{\n      \"decision\": \"dismiss\",\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"roles\": [\n         {\n            \"create_name\": \"aa\",\n            \"role_urn\": \"abc123\"\n         }\n      ],\n      \"version\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-directory-review-item --body '{\n      \"decision\": \"dismiss\",\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"roles\": [\n         {\n            \"create_name\": \"aa\",\n            \"role_urn\": \"abc123\"\n         }\n      ],\n      \"version\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessGetDirectoryReviewSettingsUsage() {
@@ -14370,6 +14404,9 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, `    create-policy-grant: CreatePolicyGrant implements createPolicyGrant.`)
 	fmt.Fprintln(os.Stderr, `    update-policy-grant: UpdatePolicyGrant implements updatePolicyGrant.`)
 	fmt.Fprintln(os.Stderr, `    delete-policy-grant: DeletePolicyGrant implements deletePolicyGrant.`)
+	fmt.Fprintln(os.Stderr, `    list-connection-blocks: List the agents the caller blocked from their own connections. Needs no agent management access.`)
+	fmt.Fprintln(os.Stderr, `    block-agent-on-connection: Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.`)
+	fmt.Fprintln(os.Stderr, `    remove-connection-block: Remove a block the caller wrote on their own connection. Blocks written by an agent manager are not affected.`)
 	fmt.Fprintln(os.Stderr, `    transfer: Transfer implements transfer.`)
 	fmt.Fprintln(os.Stderr, `    reassign: Reassign implements reassign.`)
 	fmt.Fprintln(os.Stderr, `    suspend: Suspend implements suspend.`)
@@ -14475,7 +14512,7 @@ func agentsCreateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create --body '{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ],\n      \"project_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create --body '{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"project_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func agentsGetUsage() {
@@ -14579,7 +14616,7 @@ func agentsCreatePolicyGrantUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
 }
 
 func agentsUpdatePolicyGrantUsage() {
@@ -14599,7 +14636,7 @@ func agentsUpdatePolicyGrantUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents update-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents update-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
 }
 
 func agentsDeletePolicyGrantUsage() {
@@ -14620,6 +14657,68 @@ func agentsDeletePolicyGrantUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents delete-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func agentsListConnectionBlocksUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents list-connection-blocks", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the agents the caller blocked from their own connections. Needs no agent management access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-connection-blocks --cursor \"abc123\" --limit 2 --session-token \"abc123\"")
+}
+
+func agentsBlockAgentOnConnectionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents block-agent-on-connection", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents block-agent-on-connection --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func agentsRemoveConnectionBlockUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents remove-connection-block", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove a block the caller wrote on their own connection. Blocks written by an agent manager are not affected.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents remove-connection-block --body '{\n      \"block_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func agentsTransferUsage() {
@@ -20048,7 +20147,7 @@ func keysCreateKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys create-key --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"name\": \"aaa\",\n      \"policy_grants\": [\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         }\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys create-key --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"name\": \"aaa\",\n      \"policy_grants\": [\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         }\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func keysRotateKeyUsage() {
@@ -20068,7 +20167,7 @@ func keysRotateKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys rotate-key --body '{\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys rotate-key --body '{\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func keysListKeysUsage() {

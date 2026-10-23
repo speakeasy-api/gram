@@ -57,6 +57,18 @@ type Client struct {
 	// deletePolicyGrant endpoint.
 	DeletePolicyGrantDoer goahttp.Doer
 
+	// ListConnectionBlocks Doer is the HTTP client used to make requests to the
+	// listConnectionBlocks endpoint.
+	ListConnectionBlocksDoer goahttp.Doer
+
+	// BlockAgentOnConnection Doer is the HTTP client used to make requests to the
+	// blockAgentOnConnection endpoint.
+	BlockAgentOnConnectionDoer goahttp.Doer
+
+	// RemoveConnectionBlock Doer is the HTTP client used to make requests to the
+	// removeConnectionBlock endpoint.
+	RemoveConnectionBlockDoer goahttp.Doer
+
 	// Transfer Doer is the HTTP client used to make requests to the transfer
 	// endpoint.
 	TransferDoer goahttp.Doer
@@ -98,28 +110,31 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListSessionsDoer:        doer,
-		RevokeSessionDoer:       doer,
-		ListDoer:                doer,
-		CreateDoer:              doer,
-		GetDoer:                 doer,
-		RenameDoer:              doer,
-		ListDelegableGrantsDoer: doer,
-		ListPolicyGrantsDoer:    doer,
-		CreatePolicyGrantDoer:   doer,
-		UpdatePolicyGrantDoer:   doer,
-		DeletePolicyGrantDoer:   doer,
-		TransferDoer:            doer,
-		ReassignDoer:            doer,
-		SuspendDoer:             doer,
-		ResumeDoer:              doer,
-		RevokeDoer:              doer,
-		DeleteDoer:              doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		ListSessionsDoer:           doer,
+		RevokeSessionDoer:          doer,
+		ListDoer:                   doer,
+		CreateDoer:                 doer,
+		GetDoer:                    doer,
+		RenameDoer:                 doer,
+		ListDelegableGrantsDoer:    doer,
+		ListPolicyGrantsDoer:       doer,
+		CreatePolicyGrantDoer:      doer,
+		UpdatePolicyGrantDoer:      doer,
+		DeletePolicyGrantDoer:      doer,
+		ListConnectionBlocksDoer:   doer,
+		BlockAgentOnConnectionDoer: doer,
+		RemoveConnectionBlockDoer:  doer,
+		TransferDoer:               doer,
+		ReassignDoer:               doer,
+		SuspendDoer:                doer,
+		ResumeDoer:                 doer,
+		RevokeDoer:                 doer,
+		DeleteDoer:                 doer,
+		RestoreResponseBody:        restoreBody,
+		scheme:                     scheme,
+		host:                       host,
+		decoder:                    dec,
+		encoder:                    enc,
 	}
 }
 
@@ -382,6 +397,78 @@ func (c *Client) DeletePolicyGrant() goa.Endpoint {
 		resp, err := c.DeletePolicyGrantDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agents", "deletePolicyGrant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListConnectionBlocks returns an endpoint that makes HTTP requests to the
+// agents service listConnectionBlocks server.
+func (c *Client) ListConnectionBlocks() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListConnectionBlocksRequest(c.encoder)
+		decodeResponse = DecodeListConnectionBlocksResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListConnectionBlocksRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListConnectionBlocksDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "listConnectionBlocks", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BlockAgentOnConnection returns an endpoint that makes HTTP requests to the
+// agents service blockAgentOnConnection server.
+func (c *Client) BlockAgentOnConnection() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBlockAgentOnConnectionRequest(c.encoder)
+		decodeResponse = DecodeBlockAgentOnConnectionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBlockAgentOnConnectionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.BlockAgentOnConnectionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "blockAgentOnConnection", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RemoveConnectionBlock returns an endpoint that makes HTTP requests to the
+// agents service removeConnectionBlock server.
+func (c *Client) RemoveConnectionBlock() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRemoveConnectionBlockRequest(c.encoder)
+		decodeResponse = DecodeRemoveConnectionBlockResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRemoveConnectionBlockRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RemoveConnectionBlockDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "removeConnectionBlock", err)
 		}
 		return decodeResponse(resp)
 	}

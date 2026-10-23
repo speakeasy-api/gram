@@ -15996,6 +15996,93 @@ paths:
             x-speakeasy-name-override: upsertAiScanTarget
             x-speakeasy-react-hook:
                 name: UpsertAiScanTarget
+    /rpc/agents.blockOnConnection:
+        post:
+            description: Block one agent in the caller's organization from the caller's own connection through an upstream OAuth client, across every auth client sharing it. Only the connection owner can do this, and it needs no agent management access. Blocks only; it never grants access.
+            operationId: blockAgentOnConnection
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BlockAgentOnConnectionForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentConnectionBlock'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: blockAgentOnConnection agents
+            tags:
+                - agents
+            x-speakeasy-name-override: blockOnConnection
+            x-speakeasy-react-hook:
+                name: BlockAgentOnConnection
     /rpc/agents.create:
         post:
             operationId: createAgent
@@ -16575,6 +16662,113 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: Agents
+    /rpc/agents.listConnectionBlocks:
+        get:
+            description: List the agents the caller blocked from their own connections. Needs no agent management access.
+            operationId: listAgentConnectionBlocks
+            parameters:
+                - allowEmptyValue: true
+                  description: Cursor for the next page of blocks.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of blocks.
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of blocks to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: The number of blocks to return per page.
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAgentConnectionBlocksResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listConnectionBlocks agents
+            tags:
+                - agents
+            x-speakeasy-name-override: listConnectionBlocks
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: AgentConnectionBlocks
     /rpc/agents.listDelegableGrants:
         get:
             description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
@@ -16973,6 +17167,89 @@ paths:
             x-speakeasy-name-override: reassign
             x-speakeasy-react-hook:
                 name: ReassignAgent
+    /rpc/agents.removeConnectionBlock:
+        post:
+            description: Remove a block the caller wrote on their own connection. Blocks written by an agent manager are not affected.
+            operationId: removeAgentConnectionBlock
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AgentConnectionBlockIDForm'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: removeConnectionBlock agents
+            tags:
+                - agents
+            x-speakeasy-name-override: removeConnectionBlock
+            x-speakeasy-react-hook:
+                name: RemoveAgentConnectionBlock
     /rpc/agents.rename:
         post:
             operationId: renameAgent
@@ -92980,7 +93257,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: 'Phases whose check failed: oauth, headers, ema, reconcile or mark. The counts cover the other phases.'
+                    description: 'Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile, mark, selections or grants. The counts cover the other phases.'
                 in_progress:
                     type: boolean
                     description: Whether a run is recording typed auth clients for the organization right now. The other counts are then empty; check again when it finishes.
@@ -93009,6 +93286,27 @@ components:
                     type: integer
                     description: Backfilled auth clients and server links the configuration no longer yields, not yet retired.
                     format: int64
+                pending_selection_mappings:
+                    type: integer
+                    description: Live credential choices with exactly one auth client to name, not yet named.
+                    format: int64
+                selection_classes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationSelectionClass'
+                    description: Credential choice coverage for each credential class.
+                selection_gap_count:
+                    type: integer
+                    description: Every live credential choice left without a usable auth client, including those beyond selection_gaps.
+                    format: int64
+                selection_gaps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminUpstreamOAuthMigrationSelectionGap'
+                    description: The first live credential choices left without a usable auth client.
+                selections_complete:
+                    type: boolean
+                    description: Whether every live credential choice names a usable auth client or is an explicit no-auth choice, and the selections check did not fail.
                 unresolved:
                     type: integer
                     description: Configured identities that cannot be recorded without a guess and need attention.
@@ -93096,6 +93394,10 @@ components:
                     type: integer
                     description: 'Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.'
                     format: int64
+                selections_mapped:
+                    type: integer
+                    description: Credential choices this run named a typed auth client on.
+                    format: int64
                 selections_written:
                     type: integer
                     description: Credential choices recorded.
@@ -93112,6 +93414,88 @@ components:
                 - associations_skipped
                 - selections_written
                 - status
+        AdminUpstreamOAuthMigrationSelectionClass:
+            type: object
+            properties:
+                ambiguous:
+                    type: integer
+                    description: 'Choices several auth clients could serve. They are never guessed: configure the server or ask the credential to reconnect.'
+                    format: int64
+                credential_class:
+                    type: string
+                    description: 'The class: interactive, id_jag, dashboard_mint, workload or agent.'
+                mapped:
+                    type: integer
+                    description: Choices that already name a usable auth client.
+                    format: int64
+                no_auth:
+                    type: integer
+                    description: Explicit no-auth choices on servers with no auth client.
+                    format: int64
+                no_client:
+                    type: integer
+                    description: Choices whose upstream OAuth client has no live, enabled auth client linked to the server.
+                    format: int64
+                pending:
+                    type: integer
+                    description: Choices with exactly one auth client to name, not yet named.
+                    format: int64
+                selections:
+                    type: integer
+                    description: Live credential choices of this class.
+                    format: int64
+                stale_no_auth:
+                    type: integer
+                    description: No-auth choices, and choices naming the server's headers, on servers that now offer an OAuth-backed client; the credential reconnects.
+                    format: int64
+                unusable:
+                    type: integer
+                    description: Choices naming an auth client that is no longer usable for the server; the credential reconnects.
+                    format: int64
+            description: How the live credential choices of one credential class map onto typed auth clients.
+            required:
+                - credential_class
+                - selections
+                - mapped
+                - pending
+                - no_auth
+                - ambiguous
+                - no_client
+                - stale_no_auth
+                - unusable
+        AdminUpstreamOAuthMigrationSelectionGap:
+            type: object
+            properties:
+                credential_class:
+                    type: string
+                    description: The class of the credential the choice belongs to.
+                credential_id:
+                    type: string
+                    description: The credential.
+                    format: uuid
+                mcp_server_id:
+                    type: string
+                    description: The server the choice is for.
+                    format: uuid
+                outcome:
+                    type: string
+                    description: 'Why the choice has no usable auth client: ambiguous, no_client, stale_no_auth, unusable or skipped_race.'
+                project_id:
+                    type: string
+                    description: The server's project.
+                    format: uuid
+                selection_id:
+                    type: string
+                    description: The choice.
+                    format: uuid
+            description: One live credential choice left without a usable typed auth client.
+            required:
+                - selection_id
+                - credential_class
+                - credential_id
+                - mcp_server_id
+                - project_id
+                - outcome
         AdminUpstreamOAuthMigrationServer:
             type: object
             properties:
@@ -93316,6 +93700,38 @@ components:
                 - issuer
                 - subject
                 - agent_id
+        AgentConnectionBlock:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: The blocked agent
+                    format: uuid
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    format: uuid
+                remote_session_client_id:
+                    type: string
+                    description: The upstream OAuth client the connection uses; the block covers every auth client sharing it
+                    format: uuid
+            description: An agent the caller blocked from their own connection through one upstream OAuth client.
+            required:
+                - id
+                - agent_id
+                - remote_session_client_id
+                - created_at
+        AgentConnectionBlockIDForm:
+            type: object
+            properties:
+                block_id:
+                    type: string
+                    description: Connection block identifier
+                    format: uuid
+            required:
+                - block_id
         AgentDelegatedGrant:
             type: object
             properties:
@@ -93537,7 +93953,7 @@ components:
             properties:
                 client_type:
                     type: string
-                    description: Auth client type filter (mcp:auth scopes only).
+                    description: Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
                     enum:
                         - remote_session
                         - service_account
@@ -93547,7 +93963,7 @@ components:
                         - '*'
                 connection_owner:
                     type: string
-                    description: 'Personal connection owner filter (mcp:auth scopes on remote_session clients only): a user ID, ''*'', or ''$represented_user''.'
+                    description: 'Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only): a user ID, ''*'', or ''$represented_user''.'
                 disposition:
                     type: string
                     description: Tool disposition filter (MCP scopes only).
@@ -93558,7 +93974,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, assistant, and mcp:auth scopes).
+                    description: Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -93587,6 +94003,9 @@ components:
                 tool:
                     type: string
                     description: Specific tool name filter (MCP scopes only).
+                upstream_client:
+                    type: string
+                    description: Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
             description: A constraint that narrows which resources an agent grant applies to.
             required:
                 - resource_kind
@@ -95761,6 +96180,20 @@ components:
                     type: string
                     description: The configured billing notification email. Omitted when organization administrators receive billing notifications.
                     format: email
+        BlockAgentOnConnectionForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: The agent to block; any agent in the caller's organization
+                    format: uuid
+                remote_session_client_id:
+                    type: string
+                    description: The upstream OAuth client of the caller's own connection
+                    format: uuid
+            required:
+                - agent_id
+                - remote_session_client_id
         BuiltInCard:
             type: object
             properties:
@@ -106579,6 +107012,19 @@ components:
                     description: The member attributes available to target conditions, in editor display order.
             required:
                 - attributes
+        ListAgentConnectionBlocksResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentConnectionBlock'
+                    description: Blocks the caller wrote on their own connections
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; absent when exhausted.
+            required:
+                - items
         ListAgentsResult:
             type: object
             properties:
@@ -118148,6 +118594,9 @@ components:
                 tool:
                     type: string
                     description: Specific tool name filter (MCP scopes only).
+                upstream_client:
+                    type: string
+                    description: Upstream OAuth client filter (mcp:auth and mcp:blocked_auth on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
             description: A constraint that narrows which resources a grant applies to.
             required:
                 - resource_kind

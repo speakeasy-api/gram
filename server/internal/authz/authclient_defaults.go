@@ -39,6 +39,19 @@ func AuthClientSelector(clientID, projectID string) Selector {
 	return selector
 }
 
+// ConnectionAuthClientSelector names one logical connection: ownerUserID's
+// connection through the upstream OAuth client, whichever personal auth
+// client uses it.
+func ConnectionAuthClientSelector(upstreamClientID, ownerUserID string) Selector {
+	return Selector{
+		SelectorKeyResourceKind:    ResourceKindMCPAuthClient,
+		SelectorKeyResourceID:      WildcardResource,
+		SelectorKeyClientType:      AuthClientTypeRemoteSession,
+		SelectorKeyUpstreamClient:  upstreamClientID,
+		SelectorKeyConnectionOwner: ownerUserID,
+	}
+}
+
 // AuthClientTypeSelector covers every client of one type, narrowed to a
 // project when projectID is set.
 func AuthClientTypeSelector(clientType, projectID string) Selector {
@@ -147,6 +160,9 @@ func TakeOverPrincipalPolicyTx(ctx context.Context, dbtx repo.DBTX, organization
 
 // upsertGrant writes an explicit grant and takes it over from the backfill.
 func upsertGrant(ctx context.Context, q *repo.Queries, params repo.UpsertPrincipalGrantParams) error {
+	if err := RequireUpstreamSelectorWritesRaw(ctx, params.OrganizationID, params.Selectors); err != nil {
+		return err
+	}
 	if _, err := q.UpsertPrincipalGrant(ctx, params); err != nil {
 		return fmt.Errorf("upsert grant: %w", err)
 	}
@@ -169,6 +185,9 @@ func InsertPrincipalGrantsIfAbsentTx(ctx context.Context, dbtx repo.DBTX, organi
 	}
 	if _, err := principal.Value(); err != nil {
 		return 0, fmt.Errorf("invalid grant principal: %w", err)
+	}
+	if err := RequireUpstreamSelectorWritesForGrants(ctx, organizationID, grants); err != nil {
+		return 0, err
 	}
 	rows, err := flattenRoleGrants(grants)
 	if err != nil {

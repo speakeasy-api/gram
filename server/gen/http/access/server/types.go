@@ -8163,6 +8163,10 @@ type SelectorResponseBody struct {
 	// remote_session clients only). A user ID, '*', or '$represented_user' for the
 	// user the request acts for. Never lets a caller use another user's connection.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
+	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
@@ -8963,6 +8967,10 @@ type SelectorRequestBody struct {
 	// remote_session clients only). A user ID, '*', or '$represented_user' for the
 	// user the request acts for. Never lets a caller use another user's connection.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
+	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
