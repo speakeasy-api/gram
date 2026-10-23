@@ -1,7 +1,9 @@
 // Package orghost resolves the base URL of the URLs Speakeasy renders for an
 // organization without an inbound request to follow: emails, Slack messages,
-// and background jobs. Request-driven URLs follow the request's platform
-// origin instead.
+// and background jobs. Request-driven browser redirects follow the request's
+// platform origin instead. MCP addresses given to members during a request use
+// a stored platform default host when there is one (StoredPlatformHost), so
+// they match the host the dashboard serves the organization on.
 //
 // An organization's organization_metadata.default_host names the platform host
 // those URLs use. NULL means the legacy host, which stays fixed when the

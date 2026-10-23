@@ -8,11 +8,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -100,14 +102,23 @@ func TestJWTAuthenticatorBindsTokensToPlatformHost(t *testing.T) {
 	}
 }
 
-// Member install and connection-status URLs point at the platform host the
-// request arrived on. Custom domains, private networks, and requests without
-// an origin keep the configured server URL.
-func TestMemberMCPURLsFollowPlatformHost(t *testing.T) {
-	t.Parallel()
+// memberMCPURLFixture is an organization with one MCP server that a member
+// may connect to, and a plugins service that builds that member's links.
+type memberMCPURLFixture struct {
+	conn         *pgxpool.Pool
+	service      *PluginsService
+	principal    Principal
+	project      ResolvedProject
+	mcpID        uuid.UUID
+	endpointSlug string
+}
+
+// newMemberMCPURLFixture also returns a context acting as that member.
+func newMemberMCPURLFixture(t *testing.T, name string) (context.Context, memberMCPURLFixture) {
+	t.Helper()
 
 	ctx := t.Context()
-	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_member_urls_platform_host")
+	conn, err := platformMCPInfra.CloneTestDatabase(t, name)
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	rows, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidates(ctx, principal.OrganizationID)
@@ -126,15 +137,36 @@ func TestMemberMCPURLsFollowPlatformHost(t *testing.T) {
 
 	serverURL, err := url.Parse(testCanonicalBaseURL)
 	require.NoError(t, err)
-	service := NewPluginsService(conn, allowBudget(), "member-urls-platform-host-key").
+	service := NewPluginsService(conn, allowBudget(), name+"-key").
 		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
 		withMemberMCPConnectionReader(testMemberMCPConnectionReader{}).
 		WithInstallLinks(serverURL, serverURL)
 	// A session makes the authorization engine enforce, so both tools check the
 	// mcp:connect grant rather than skipping authorization.
-	sessionID := "session-member-urls-platform-host"
+	sessionID := "session-" + name
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: "example-org", SessionID: &sessionID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())})
+	return ctx, memberMCPURLFixture{conn: conn, service: service, principal: principal, project: project, mcpID: mcpID, endpointSlug: target.EndpointSlug}
+}
+
+// testOrganizationHosts resolves stored default hosts to the canonical host or
+// the extra platform host.
+func testOrganizationHosts(t *testing.T) *orghost.Resolver {
+	t.Helper()
+	serverURL, err := url.Parse(testCanonicalBaseURL)
+	require.NoError(t, err)
+	extraHost, err := url.Parse(testExtraHostBaseURL)
+	require.NoError(t, err)
+	return orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: serverURL, PlatformHosts: map[string]string{extraHost.Host: testExtraHostBaseURL}, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil})
+}
+
+// Member install and connection-status URLs point at the platform host the
+// request arrived on. Custom domains, private networks, and requests without
+// an origin keep the configured server URL.
+func TestMemberMCPURLsFollowPlatformHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newMemberMCPURLFixture(t, "platform_mcp_member_urls_platform_host")
 
 	for _, tc := range []struct {
 		name     string
@@ -155,17 +187,53 @@ func TestMemberMCPURLsFollowPlatformHost(t *testing.T) {
 			if tc.surface != "" {
 				requestCtx = requestorigin.WithContext(ctx, requestorigin.Origin{Surface: tc.surface, BaseURL: tc.baseURL, OrganizationID: "", NetworkIngressID: uuid.Nil, NetworkIdentity: nil})
 			}
-			wantURL := tc.wantBase + "/mcp/" + target.EndpointSlug
+			wantURL := tc.wantBase + "/mcp/" + f.endpointSlug
 
-			install, err := service.GetMyInstallInstructions(requestCtx, principal, GetMyInstallInstructionsInput{ProjectID: project.ID.String(), Plugin: "", MCPID: mcpID.String(), ClientFamily: OnboardingClientClaudeCode})
+			install, err := f.service.GetMyInstallInstructions(requestCtx, f.principal, GetMyInstallInstructionsInput{ProjectID: f.project.ID.String(), Plugin: "", MCPID: f.mcpID.String(), ClientFamily: OnboardingClientClaudeCode})
 			require.NoError(t, err)
 			require.True(t, install.Supported)
 			require.NotEmpty(t, install.Instructions)
 			require.Equal(t, wantURL, install.Instructions[0].URL)
 
-			status, err := service.GetMyMCPConnectionStatus(requestCtx, principal, GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()})
+			status, err := f.service.GetMyMCPConnectionStatus(requestCtx, f.principal, GetMyMCPStatusInput{ProjectID: f.project.ID.String(), MCPID: f.mcpID.String()})
 			require.NoError(t, err)
 			require.Equal(t, wantURL, status.ConnectionURL)
 		})
 	}
+}
+
+// Member install and connection-status URLs use the platform host stored as
+// the organization's default host, which is where the dashboard serves the
+// organization and so the host of its Hosted Address, even when the Platform
+// MCP request arrived on another platform host.
+func TestMemberMCPURLsFollowOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newMemberMCPURLFixture(t, "platform_mcp_member_urls_org_default_host")
+	require.NoError(t, organizationsrepo.New(f.conn).SetOrganizationDefaultHostForTest(ctx, organizationsrepo.SetOrganizationDefaultHostForTestParams{ID: f.principal.OrganizationID, DefaultHost: pgtype.Text{String: testExtraHostBaseURL, Valid: true}}))
+	service := f.service.WithOrganizationHosts(testOrganizationHosts(t))
+	ctx = requestorigin.WithContext(ctx, requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: testCanonicalBaseURL, OrganizationID: "", NetworkIngressID: uuid.Nil, NetworkIdentity: nil})
+	wantURL := testExtraHostBaseURL + "/mcp/" + f.endpointSlug
+
+	install, err := service.GetMyInstallInstructions(ctx, f.principal, GetMyInstallInstructionsInput{ProjectID: f.project.ID.String(), Plugin: "", MCPID: f.mcpID.String(), ClientFamily: OnboardingClientCursor})
+	require.NoError(t, err)
+	require.True(t, install.Supported)
+	require.NotEmpty(t, install.Instructions)
+	require.Equal(t, wantURL, install.Instructions[0].URL)
+
+	status, err := service.GetMyMCPConnectionStatus(ctx, f.principal, GetMyMCPStatusInput{ProjectID: f.project.ID.String(), MCPID: f.mcpID.String()})
+	require.NoError(t, err)
+	require.Equal(t, wantURL, status.ConnectionURL)
+
+	plugin, err := service.pluginInstallInstructions(ctx, f.principal.OrganizationID, OnboardingClientCursor, "Example plugin")
+	require.NoError(t, err)
+	require.NotEmpty(t, plugin.Instructions)
+	require.Equal(t, testExtraHostBaseURL+"/example-org/device-agent", plugin.Instructions[0].URL)
+
+	// A private network caller may not reach a platform host, so it keeps the
+	// configured server URL.
+	privateCtx := requestorigin.WithContext(ctx, requestorigin.Origin{Surface: requestorigin.SurfacePrivateNetwork, BaseURL: "https://private.example", OrganizationID: "", NetworkIngressID: uuid.Nil, NetworkIdentity: nil})
+	private, err := service.GetMyMCPConnectionStatus(privateCtx, f.principal, GetMyMCPStatusInput{ProjectID: f.project.ID.String(), MCPID: f.mcpID.String()})
+	require.NoError(t, err)
+	require.Equal(t, testCanonicalBaseURL+"/mcp/"+f.endpointSlug, private.ConnectionURL)
 }

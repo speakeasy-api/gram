@@ -15,6 +15,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -116,4 +117,22 @@ func TestOrganizationGatewayUnavailableWhenTurnedOff(t *testing.T) {
 	require.Empty(t, output.URL)
 	require.Equal(t, "turned_off", output.UnavailableReason)
 	require.Contains(t, output.NextAction, "review MCP Assignments")
+}
+
+// The gateway URL uses the platform host stored as the organization's default
+// host, where the dashboard serves the organization, even when the request
+// arrived on another platform host.
+func TestOrganizationGatewayFollowsOrganizationDefaultHost(t *testing.T) {
+	t.Parallel()
+	ctx, conn, service, principal, slug := newOrganizationGatewayFixture(t)
+	createOrganizationIssuerForGateway(t, ctx, conn, principal.OrganizationID)
+	require.NoError(t, organizationsrepo.New(conn).SetOrganizationDefaultHostForTest(ctx, organizationsrepo.SetOrganizationDefaultHostForTestParams{ID: principal.OrganizationID, DefaultHost: pgtype.Text{String: testExtraHostBaseURL, Valid: true}}))
+	service = service.WithOrganizationHosts(testOrganizationHosts(t))
+	ctx = requestorigin.WithContext(ctx, requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: testCanonicalBaseURL, OrganizationID: "", NetworkIngressID: uuid.Nil, NetworkIdentity: nil})
+
+	output, err := service.Get(ctx, principal)
+
+	require.NoError(t, err)
+	require.True(t, output.Available)
+	require.Equal(t, testExtraHostBaseURL+"/mcp/gateway/"+slug, output.URL)
 }
