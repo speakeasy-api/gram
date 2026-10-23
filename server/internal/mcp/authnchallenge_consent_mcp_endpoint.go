@@ -105,8 +105,12 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	// stays reachable like the install page, but hides its picker island on a
 	// locked-down platform origin; on the custom domain the island's same-host
 	// relative fetch has already passed the ingress allowlist.
-	if err := s.enforceCustomDomainLockdown(ctx, logger, endpoint.ProjectID); err != nil {
+	lockedDown, err := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
+	if err != nil {
 		return err
+	}
+	if lockedDown {
+		return oops.E(oops.CodeForbidden, nil, "this MCP server is only accessible via its custom domain")
 	}
 
 	// 404 matches how the island's absence hides the surface entirely.
@@ -138,10 +142,10 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	// TTL and must not consume the state the approve POST needs.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "invalid consent browser binding")
+		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
@@ -151,17 +155,17 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return oauthAuthorityError(err).LogWarn(ctx, logger)
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogWarn(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "invalid consent csrf token").LogWarn(ctx, logger)
 	}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
-		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogWarn(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "authn challenge subject is not resolved").LogWarn(ctx, logger)
 	}
 	if challengeState.FirstParty {
 		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no tool picker").LogWarn(ctx, logger)
 	}
 	if _, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogWarn(ctx, logger)
+			return oops.E(oops.CodeBadRequest, err, "user session client revoked").LogWarn(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
@@ -176,6 +180,10 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 			return oops.E(oops.CodeUnexpected, rerr, "load mcp server for consent transport").LogError(ctx, logger)
 		}
 		serverRow = &row
+	}
+
+	if endpoint.MetaMcpServerID.Valid {
+		return oops.E(oops.CodeBadRequest, nil, "gateway tools are captured when the consent page loads").LogWarn(ctx, logger)
 	}
 
 	draft, err := s.loadConsentInventoryDraft(ctx, endpoint, stateID, attempt)
@@ -287,7 +295,7 @@ func (s *Service) authorizedToolsetConsentInventory(ctx context.Context, endpoin
 		private = !endpoint.IsPublic || !toolset.McpIsPublic
 	}
 	if private && challengeState.Subject.Kind == urn.SessionSubjectKindAnonymous {
-		return nil, nil, oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 	}
 	// The RBAC gate keys off the consent subject, exactly like the
 	// runtime request the minted session will make.
@@ -297,7 +305,7 @@ func (s *Service) authorizedToolsetConsentInventory(ctx context.Context, endpoin
 	}
 	if private {
 		if _, ok := contextvalues.GetAuthContext(authzCtx); !ok {
-			return nil, nil, oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeBadRequest, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
 		}
 	}
 	connectResourceID := endpoint.connectResourceID()
@@ -355,7 +363,7 @@ func (s *Service) serveConsentProxiedMCP(
 
 	subject := *challengeState.Subject
 	if serverRow.Visibility == mcpservers.VisibilityPrivate && subject.Kind == urn.SessionSubjectKindAnonymous {
-		return oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 	}
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	if err != nil {
@@ -395,17 +403,10 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	if serverRow.Visibility == mcpservers.VisibilityPrivate {
 		if _, ok := contextvalues.GetAuthContext(ctx); !ok {
-			return oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
+			return oops.E(oops.CodeBadRequest, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
 		}
 	}
-	// Discovery identity belongs to the user who authenticated this challenge.
-	ctx = mcpidentity.WithoutIdentity(ctx)
-	if subject.Kind == urn.SessionSubjectKindUser &&
-		challengeState.AuthorizerImpersonated != nil && !*challengeState.AuthorizerImpersonated &&
-		challengeState.AuthorizerUserID != "" && subject.ID == challengeState.AuthorizerUserID &&
-		challengeState.Federation == nil && !challengeState.CreatedAt.IsZero() && !challengeState.CreatedAt.After(time.Now().Add(time.Minute)) {
-		ctx = s.identityValidator.StampConsentDiscovery(ctx, subject.ID, challengeState.CreatedAt.Add(challengeState.TTL()))
-	}
+	ctx = s.consentDiscoveryContext(ctx, challengeState)
 	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, endpoint.ProjectID, serverRow)
 	if err != nil {
 		return fmt.Errorf("authorize consent transport access: %w", err)
@@ -588,8 +589,10 @@ func (i *consentInventoryCaptureInterceptor) InterceptToolsListResponse(ctx cont
 		}
 		pageTools = append(pageTools, consentInventoryTool{
 			Name:           tool.Name,
+			Definition:     nil,
 			DefinitionHash: consentEvidenceHash(tool),
 			Annotations:    consentAnnotationsFromSDK(tool.Annotations),
+			Source:         "",
 		})
 	}
 	updated, err := i.service.appendConsentInventoryPage(ctx, *i.draft, requestCursor, pageTools, list.Result.NextCursor)
@@ -822,4 +825,17 @@ func consentJSONRPCID(id json.RawMessage) json.RawMessage {
 		return json.RawMessage("null")
 	}
 	return id
+}
+
+// consentDiscoveryContext binds discovery to the challenge's human authorizer.
+func (s *Service) consentDiscoveryContext(ctx context.Context, state AuthnChallengeState) context.Context {
+	ctx = mcpidentity.WithoutIdentity(ctx)
+	subject := state.Subject
+	if subject != nil && subject.Kind == urn.SessionSubjectKindUser &&
+		state.AuthorizerImpersonated != nil && !*state.AuthorizerImpersonated &&
+		state.AuthorizerUserID != "" && subject.ID == state.AuthorizerUserID &&
+		state.Federation == nil && !state.CreatedAt.IsZero() && !state.CreatedAt.After(time.Now().Add(time.Minute)) {
+		return s.identityValidator.StampConsentDiscovery(ctx, subject.ID, state.CreatedAt.Add(state.TTL()))
+	}
+	return ctx
 }

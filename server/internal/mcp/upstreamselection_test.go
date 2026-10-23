@@ -86,6 +86,7 @@ func (f selectionFixture) issuePicked(t *testing.T, ctx context.Context, slug st
 		Source:              upstreamclients.SelectionSourceIssuance,
 		PickedMcpServerIds:  servers,
 		PickedClientIds:     clients,
+		PickedAuthClientIds: nil,
 	})
 	require.NoError(t, err)
 	return token

@@ -540,6 +540,32 @@ func TestService_ExplainResourceAccess_WildcardToolRuleCoversEveryTool(t *testin
 	require.Equal(t, explainedToolAccessAll, *use.ToolAccess)
 }
 
+func TestFindMCPResourceProjectsMatchesTheSingleLookup(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	first, second := uuid.MustParse(seedMCPServer(t, ctx, ti.conn, orgID)), uuid.MustParse(seedMCPServer(t, ctx, ti.conn, orgID))
+	q := accessrepo.New(ti.conn)
+	rows, err := q.FindMCPResourceProjects(ctx, accessrepo.FindMCPResourceProjectsParams{OrganizationID: orgID, ResourceIds: []uuid.UUID{first, second, uuid.New()}})
+	require.NoError(t, err)
+	got := map[uuid.UUID]uuid.UUID{}
+	for _, row := range rows {
+		got[row.ResourceID] = row.ProjectID
+	}
+	want := map[uuid.UUID]uuid.UUID{}
+	for _, id := range []uuid.UUID{first, second} {
+		project, err := q.FindMCPResourceProject(ctx, accessrepo.FindMCPResourceProjectParams{OrganizationID: orgID, ResourceID: id})
+		require.NoError(t, err)
+		want[id] = project
+	}
+	require.Equal(t, want, got, "unknown ids are absent")
+
+	rows, err = q.FindMCPResourceProjects(ctx, accessrepo.FindMCPResourceProjectsParams{OrganizationID: "org-other-" + uuid.NewString(), ResourceIds: []uuid.UUID{first, second}})
+	require.NoError(t, err)
+	require.Empty(t, rows, "another organization resolves nothing")
+}
+
 func TestSummarizeMCPAccessRulesReportsBlocksAndOverridesWithoutIdentity(t *testing.T) {
 	t.Parallel()
 	serverID, projectID := "server-1", "project-1"

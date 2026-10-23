@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"goa.design/goa/v3/security"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -59,14 +61,30 @@ func (s *StaffOAuthTokens) TokenHandler() http.Handler {
 			staffOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse token request")
 			return
 		}
-		presented, ok := staffClientCredentials(r)
-		if !ok {
-			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication method is invalid")
+		presented, credentialError := staffClientCredentials(r)
+		if credentialError != "" {
+			status := http.StatusBadRequest
+			if credentialError == oautherr.CodeInvalidClient {
+				var challenge string
+				status, challenge = oauthwire.InvalidClientResponse(r.Header)
+				if challenge != "" {
+					w.Header().Set("WWW-Authenticate", challenge)
+				}
+			}
+			staffOAuthError(w, status, credentialError, "client authentication method is invalid")
 			return
 		}
 		client, err := s.authenticateClient(r.Context(), presented)
 		if err != nil {
-			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
+			if !errors.Is(err, errStaffGrant) {
+				staffOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "client authentication is temporarily unavailable")
+				return
+			}
+			status, challenge := oauthwire.InvalidClientResponse(r.Header)
+			if challenge != "" {
+				w.Header().Set("WWW-Authenticate", challenge)
+			}
+			staffOAuthError(w, status, oautherr.CodeInvalidClient, "client authentication failed")
 			return
 		}
 		switch r.PostForm.Get("grant_type") {
@@ -104,27 +122,29 @@ type staffPresentedClient struct {
 	Public bool
 }
 
-// staffClientCredentials accepts exactly one presentation: HTTP Basic for
-// confidential clients, or a single form client_id with no secret and no
-// Authorization header for public clients. A form client_secret, a Basic
-// header mixed with a form client_id, or any other Authorization header is
-// refused.
-func staffClientCredentials(r *http.Request) (staffPresentedClient, bool) {
-	authorization := r.Header.Values("Authorization")
-	if r.PostForm.Has("client_secret") || len(authorization) > 1 {
-		return staffPresentedClient{ID: "", Secret: "", Public: false}, false
+// staffClientCredentials accepts HTTP Basic for confidential clients or a
+// single form client_id for public clients. Basic may include a matching form
+// client_id; empty parameters are treated as omitted. Nonempty body credentials
+// and other Authorization schemes are unsupported. Shared validation rejects
+// duplicate credentials, conflicting identifiers, and mixed methods first.
+func staffClientCredentials(r *http.Request) (staffPresentedClient, string) {
+	if code := oauthwire.ClientAuthenticationError(r); code != "" {
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, code
+	}
+	if r.PostForm.Get(oauthwire.ParamClientSecret) != "" || r.PostForm.Get(oauthwire.ParamClientAssertion) != "" || r.PostForm.Get(oauthwire.ParamClientAssertionType) != "" {
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
 	}
 	if id, secret, basic := r.BasicAuth(); basic {
-		if r.PostForm.Has("client_id") || id == "" {
-			return staffPresentedClient{ID: "", Secret: "", Public: false}, false
+		if id == "" {
+			return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
 		}
-		return staffPresentedClient{ID: id, Secret: secret, Public: false}, true
+		return staffPresentedClient{ID: id, Secret: secret, Public: false}, ""
 	}
-	ids := r.PostForm["client_id"]
-	if len(authorization) != 0 || len(ids) != 1 || ids[0] == "" {
-		return staffPresentedClient{ID: "", Secret: "", Public: false}, false
+	id := r.PostForm.Get(oauthwire.ParamClientID)
+	if id == "" {
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, oautherr.CodeInvalidClient
 	}
-	return staffPresentedClient{ID: ids[0], Secret: "", Public: true}, true
+	return staffPresentedClient{ID: id, Secret: "", Public: true}, ""
 }
 
 // authenticateClient enforces the method implied by the stored client: a
@@ -132,7 +152,13 @@ func staffClientCredentials(r *http.Request) (staffPresentedClient, bool) {
 // client must present no credentials at all.
 func (s *StaffOAuthTokens) authenticateClient(ctx context.Context, presented staffPresentedClient) (staffOAuthClient, error) {
 	client, err := s.clients.GetClient(ctx, presented.ID)
-	if err != nil || (client.SecretExpiresAt != nil && !time.Now().Before(*client.SecretExpiresAt)) {
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return staffOAuthClient{}, errStaffGrant
+		}
+		return staffOAuthClient{}, fmt.Errorf("lookup staff OAuth client: %w", err)
+	}
+	if client.SecretExpiresAt != nil && !time.Now().Before(*client.SecretExpiresAt) {
 		return staffOAuthClient{}, errStaffGrant
 	}
 	if presented.Public {

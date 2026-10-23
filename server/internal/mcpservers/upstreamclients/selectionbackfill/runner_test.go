@@ -177,6 +177,7 @@ func (f *fixture) recordPicked(userIssuerID, credentialID uuid.UUID, picks map[u
 		Source:              upstreamclients.SelectionSourceIssuance,
 		PickedMcpServerIds:  servers,
 		PickedClientIds:     clients,
+		PickedAuthClientIds: nil,
 	})
 	require.NoError(f.t, err)
 	return n
@@ -471,4 +472,51 @@ func TestRecordUpstreamClientSelectionsRecordsTheConsentPick(t *testing.T) {
 	require.Equal(t, map[uuid.UUID]uuid.UUID{server: second}, f.selections(picked))
 	require.Empty(t, f.selections(unpicked))
 	require.Empty(t, f.selections(foreign))
+}
+
+// A consent pick of a header-only auth client persists with no remote client
+// and no no-auth flag. Coverage reads it as usable exactly as
+// GetUpstreamClientSelection serves it, so the run reports no gap.
+func TestCoverageCountsHeaderOnlyChoiceAsSelected(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	server := f.server(issuer)
+	authClient := uuid.New()
+	require.NoError(t, f.q.SeedHeaderAuthClientFixture(t.Context(), SeedHeaderAuthClientFixtureParams{
+		ID:             authClient,
+		OrganizationID: f.orgID,
+		ProjectID:      uuid.NullUUID{UUID: f.projectID, Valid: true},
+		McpServerID:    server,
+	}))
+	credential := f.session(issuer)
+
+	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: issuer,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        credential,
+		Source:              upstreamclients.SelectionSourceIssuance,
+		PickedMcpServerIds:  []uuid.UUID{server},
+		PickedClientIds:     []uuid.UUID{uuid.Nil},
+		PickedAuthClientIds: []uuid.UUID{authClient},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+	served := f.selection(issuer, credential, server)
+	require.False(t, served.RemoteSessionClientID.Valid)
+	require.True(t, served.Usable)
+
+	rows, err := f.q.ListUpstreamClientSelectionCoverage(t.Context(), ListUpstreamClientSelectionCoverageParams{
+		UserSessionIssuerID: issuer,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        credential,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, OutcomeSelected, Classify(rows[0]))
+
+	report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 1, report.Pairs[OutcomeSelected])
+	require.Empty(t, report.Gaps)
 }
