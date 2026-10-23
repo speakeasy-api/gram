@@ -72,6 +72,11 @@ var smokeChecks = []smokeCheck{
 		if r.Error == nil {
 			return errors.New("a name from an earlier run resolved")
 		}
+		// Any other failure, such as capacity or transport, proves nothing
+		// about state.
+		if !strings.Contains(r.Error.Message, "name 'page' is not defined") {
+			return fmt.Errorf("expected a NameError for page: %+v", r.Error)
+		}
 		return nil
 	}},
 	{name: "denies OS calls", code: "import os\nos.getenv(\"HOME\")", check: func(r *codemode.ExecutionResult) error {
