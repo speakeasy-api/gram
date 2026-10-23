@@ -2143,10 +2143,10 @@ WITH link AS (
   VALUES (@connection_subject::text, @user_session_issuer_id, @remote_session_client_id, 'fixture-not-a-token')
   ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
   DO UPDATE SET access_token_encrypted = EXCLUDED.access_token_encrypted
-  RETURNING id, grant_generation
+  RETURNING id, grant_generation, user_session_issuer_id
 )
 INSERT INTO principal_remote_session_bindings (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
-SELECT @project_id, @organization_id, @agent_id, @user_session_issuer_id, @remote_session_client_id, session.id, session.grant_generation + @generation_offset::bigint, @attached_by::text
+SELECT @project_id, @organization_id, @agent_id, session.user_session_issuer_id, @remote_session_client_id, session.id, session.grant_generation + @generation_offset::bigint, @attached_by::text
 FROM session
 RETURNING id;
 
