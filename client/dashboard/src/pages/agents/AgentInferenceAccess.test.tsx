@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AgentInferenceAccess } from "./AgentInferenceAccess";
@@ -53,6 +54,7 @@ it("does not grant anything until a project and explicit allow action are select
   fireEvent.change(screen.getByLabelText("Project for inference"), {
     target: { value: "project_one" },
   });
+  expect(mocks.create).not.toHaveBeenCalled();
   fireEvent.click(
     screen.getByRole("button", { name: "Allow inference in this project" }),
   );
@@ -76,6 +78,18 @@ it("revokes only the chosen inference grant", async () => {
       agent={agent}
       grants={[
         {
+          id: "grant_two",
+          effect: "allow",
+          scope: "inference:execute",
+          selector: {
+            resourceKind: "inference",
+            resourceId: "*",
+            projectId: "project_two",
+          },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
           id: "grant_one",
           effect: "allow",
           scope: "inference:execute",
@@ -91,11 +105,40 @@ it("revokes only the chosen inference grant", async () => {
       onChanged={vi.fn().mockResolvedValue(undefined)}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Revoke inference" }));
+  fireEvent.click(
+    within(
+      screen.getByText("Project one", { selector: "span" }).closest("div")!,
+    ).getByRole("button", { name: "Revoke inference" }),
+  );
   await waitFor(() =>
     expect(mocks.remove).toHaveBeenCalledWith({
       agentPolicyGrantIDForm: { agentId: "agent_one", grantId: "grant_one" },
     }),
   );
+  expect(mocks.remove).toHaveBeenCalledTimes(1);
   expect(mocks.create).not.toHaveBeenCalled();
 });
+
+it.each([undefined, "*"])(
+  "labels unrestricted project selector %s as All projects",
+  (projectId) => {
+    render(
+      <AgentInferenceAccess
+        agent={agent}
+        grants={[
+          {
+            id: "grant_all",
+            effect: "allow",
+            scope: "inference:execute",
+            selector: { resourceKind: "inference", resourceId: "*", projectId },
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ]}
+        onChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    expect(screen.getByText("All projects")).toBeTruthy();
+    expect(screen.queryByText("*")).toBeNull();
+  },
+);

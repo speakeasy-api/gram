@@ -124,15 +124,6 @@ type CreateCimdClientPayload struct {
 // organizationUserSessionIssuers service createIssuer method.
 type CreateIssuerPayload struct {
 	SessionToken *string
-	// Organization-level or global remote_session_issuer whose assertions this
-	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
-	TrustedRemoteSessionIssuerID *string
-	// Organization-level remote_session_client Speakeasy uses with the trusted
-	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
-	TrustedRemoteSessionClientID *string
-	// Authorization-server topology. Shared mode supports standalone workload
-	// token exchange without an MCP server.
-	AuthorizationServerMode string
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug string
@@ -140,6 +131,12 @@ type CreateIssuerPayload struct {
 	AuthnChallengeMode string
 	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours int
+	// Organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
+	TrustedRemoteSessionIssuerID *string
+	// Organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
+	TrustedRemoteSessionClientID *string
 }
 
 // CreateUserSessionIssuerCimdClientResult is the result type of the

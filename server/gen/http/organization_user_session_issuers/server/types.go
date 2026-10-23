@@ -16,15 +16,6 @@ import (
 // CreateIssuerRequestBody is the type of the "organizationUserSessionIssuers"
 // service "createIssuer" endpoint HTTP request body.
 type CreateIssuerRequestBody struct {
-	// Organization-level or global remote_session_issuer whose assertions this
-	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
-	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
-	// Organization-level remote_session_client Speakeasy uses with the trusted
-	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
-	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	// Authorization-server topology. Shared mode supports standalone workload
-	// token exchange without an MCP server.
-	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
@@ -32,6 +23,12 @@ type CreateIssuerRequestBody struct {
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// Organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Omit to leave enterprise-managed authorization disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// Organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer. Must be supplied together with trusted_remote_session_issuer_id.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 }
 
 // UpdateIssuerRequestBody is the type of the "organizationUserSessionIssuers"
@@ -6543,17 +6540,11 @@ func NewDeleteCimdClientGatewayErrorResponseBody(res *goa.ServiceError) *DeleteC
 // createIssuer endpoint payload.
 func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string) *organizationusersessionissuers.CreateIssuerPayload {
 	v := &organizationusersessionissuers.CreateIssuerPayload{
-		TrustedRemoteSessionIssuerID: body.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID: body.TrustedRemoteSessionClientID,
 		Slug:                         *body.Slug,
 		AuthnChallengeMode:           *body.AuthnChallengeMode,
 		SessionDurationHours:         *body.SessionDurationHours,
-	}
-	if body.AuthorizationServerMode != nil {
-		v.AuthorizationServerMode = *body.AuthorizationServerMode
-	}
-	if body.AuthorizationServerMode == nil {
-		v.AuthorizationServerMode = "endpoint"
+		TrustedRemoteSessionIssuerID: body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID: body.TrustedRemoteSessionClientID,
 	}
 	v.SessionToken = sessionToken
 
@@ -6747,17 +6738,6 @@ func ValidateCreateIssuerRequestBody(body *CreateIssuerRequestBody) (err error) 
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
-	if body.TrustedRemoteSessionIssuerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
-	}
-	if body.TrustedRemoteSessionClientID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
-	}
-	if body.AuthorizationServerMode != nil {
-		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
-		}
-	}
 	if body.AuthnChallengeMode != nil {
 		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
@@ -6772,6 +6752,12 @@ func ValidateCreateIssuerRequestBody(body *CreateIssuerRequestBody) (err error) 
 		if *body.SessionDurationHours > 2.562047e+06 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
 		}
+	}
+	if body.TrustedRemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.TrustedRemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
 	}
 	return
 }

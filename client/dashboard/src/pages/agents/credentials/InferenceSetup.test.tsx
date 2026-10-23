@@ -14,13 +14,24 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   register: vi.fn(),
   admit: vi.fn(),
-  allowed: true,
+  workloadWrite: true,
+  inferenceProject: "project_one",
+  projectWrite: true,
+  projectId: "project_one",
+  serverURL: "https://api.example.test",
   emptyEndpoints: false,
   admin: false,
 }));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => mocks.serverURL,
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example" }),
-  useProject: () => ({ id: "project_one", name: "Project one" }),
+  useProject: () => ({
+    id: mocks.projectId,
+    name: mocks.projectId === "project_one" ? "Project one" : "Project two",
+  }),
   useSession: () => ({ user: { id: "owner" } }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -28,8 +39,16 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (scope: string) =>
-      scope === "org:admin" ? mocks.admin : mocks.allowed,
+    hasScope: (scope: string, resourceId?: string, projectId?: string) => {
+      if (scope === "org:admin")
+        return mocks.admin && resourceId === "org_example";
+      if (scope === "workload:write") return mocks.workloadWrite;
+      if (scope === "inference:execute")
+        return resourceId === "*" && projectId === mocks.inferenceProject;
+      if (scope === "project:write")
+        return mocks.projectWrite && resourceId === mocks.projectId;
+      return false;
+    },
   }),
 }));
 vi.mock("@/routes", () => ({
@@ -72,16 +91,19 @@ vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
 }));
 
 function setup() {
-  return render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <InferenceSetup onDone={vi.fn<() => void>()} />
-    </QueryClientProvider>,
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const onDone = vi.fn<() => void>();
+  const ui = () => (
+    <QueryClientProvider client={client}>
+      <InferenceSetup onDone={onDone} />
+    </QueryClientProvider>
   );
+  const view = render(ui());
+  return { ...view, refreshProject: () => view.rerender(ui()) };
 }
+
 function fill() {
   fireEvent.change(screen.getByLabelText("Agent identity name"), {
     target: { value: "Inference worker" },
@@ -102,7 +124,11 @@ function fill() {
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.allowed = true;
+  mocks.workloadWrite = true;
+  mocks.inferenceProject = "project_one";
+  mocks.projectWrite = true;
+  mocks.projectId = "project_one";
+  mocks.serverURL = "https://api.example.test";
   mocks.emptyEndpoints = false;
   mocks.admin = false;
   mocks.create.mockResolvedValue({ id: "agent_one" });
@@ -179,7 +205,7 @@ describe("inference workload setup", () => {
     expect(screen.queryByText("MCP host")).toBeNull();
   });
   it("does not create identities when permission is absent", () => {
-    mocks.allowed = false;
+    mocks.workloadWrite = false;
     setup();
     expect(screen.getByRole("alert").textContent).toContain(
       "explicit inference:execute",
@@ -202,6 +228,15 @@ describe("inference workload setup", () => {
       screen.getByRole("button", { name: "Create inference identity" }),
     );
     await screen.findByRole("alert");
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Create inference identity",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Create inference identity" }),
     );
@@ -212,7 +247,8 @@ describe("inference workload setup", () => {
 });
 
 it("links administrators without inference access to owner role configuration", () => {
-  mocks.allowed = false;
+  mocks.workloadWrite = false;
+  mocks.inferenceProject = "";
   mocks.admin = true;
   setup();
   expect(
@@ -245,3 +281,127 @@ it("requires an eligible exchange issuer before creating an inference identity",
   ).toBe(true);
   expect(mocks.create).not.toHaveBeenCalled();
 });
+
+it.each([
+  {
+    workloadWrite: false,
+    inferenceProject: "project_one",
+    reason: "missing workload trust permission",
+  },
+  {
+    workloadWrite: true,
+    inferenceProject: "",
+    reason: "missing inference permission",
+  },
+  {
+    workloadWrite: true,
+    inferenceProject: "other_project",
+    reason: "inference permission for another project",
+  },
+])("blocks mutation with $reason", ({ workloadWrite, inferenceProject }) => {
+  mocks.workloadWrite = workloadWrite;
+  mocks.inferenceProject = inferenceProject;
+  setup();
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Create inference identity",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  expect(mocks.create).not.toHaveBeenCalled();
+});
+it("does not require project:write to use an existing exchange authorization server", async () => {
+  mocks.projectWrite = false;
+  setup();
+  fill();
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Create inference identity" }),
+  );
+  await screen.findByRole("status");
+  expect(mocks.create).toHaveBeenCalledTimes(1);
+});
+it("blocks provisioning when the configured inference destination is plaintext on a remote host", () => {
+  mocks.serverURL = "http://api.example.test";
+  setup();
+  fill();
+  fireEvent.click(screen.getByRole("checkbox"));
+  expect(screen.getByRole("alert").textContent).toContain("must use HTTPS");
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Create inference identity",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  expect(mocks.create).not.toHaveBeenCalled();
+});
+
+it.each(["connected", "partial"])(
+  "resets %s inference setup when the active project changes",
+  async (state) => {
+    mocks.create
+      .mockResolvedValueOnce({ id: "first_agent" })
+      .mockResolvedValueOnce({ id: "second_agent" });
+    if (state === "partial")
+      mocks.admit.mockRejectedValueOnce(new Error("Admission unavailable"));
+    const view = setup();
+    fill();
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create inference identity" }),
+    );
+    if (state === "connected") await screen.findByRole("status");
+    else {
+      await screen.findByRole("alert");
+      await waitFor(() =>
+        expect(
+          (
+            screen.getByRole("button", {
+              name: "Create inference identity",
+            }) as HTMLButtonElement
+          ).disabled,
+        ).toBe(false),
+      );
+    }
+    mocks.projectId = "project_two";
+    mocks.inferenceProject = "project_two";
+    view.refreshProject();
+    expect(
+      (screen.getByLabelText("Agent identity name") as HTMLInputElement).value,
+    ).toBe("");
+    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(
+      false,
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+    fill();
+    fireEvent.change(screen.getByLabelText("Subject"), {
+      target: { value: "workload:second" },
+    });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create inference identity" }),
+    );
+    await screen.findByRole("status");
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+    expect(mocks.create).toHaveBeenLastCalledWith({
+      createAgentForm: {
+        name: "Inference worker",
+        projectId: "project_two",
+        policyGrants: inferencePolicyGrants("project_two"),
+      },
+    });
+    expect(mocks.admit).toHaveBeenLastCalledWith({
+      request: {
+        admitWorkloadSubjectForm: {
+          issuer: "https://issuer.example.test",
+          subject: "workload:second",
+          matchKind: "exact",
+          agentId: "second_agent",
+          tags: [],
+        },
+      },
+    });
+  },
+);

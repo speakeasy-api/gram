@@ -105,9 +105,7 @@ export function useLauncherCandidates({
   const skills = useSkillCandidates({
     enabled: projectEnabled && canReadSkills,
   });
-  const inferenceSetup = useInferenceSetupCandidate({
-    enabled: projectEnabled,
-  });
+  const inferenceSetup = useInferenceSetupCandidate({ enabled, inProject });
   const agentIdentities = useAgentIdentityCandidates({ enabled });
   const environments = useEnvironmentCandidates({ enabled: projectEnabled });
   const sources = useSourceCandidates({

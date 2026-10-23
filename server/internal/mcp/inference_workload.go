@@ -73,16 +73,16 @@ func (s *Service) handleInferenceWorkloadGrant(ctx context.Context, w http.Respo
 	if err != nil {
 		return fmt.Errorf("exchange workload inference: %w", err)
 	}
-	// Admission remains bound to the authorization server's tenancy, not an
-	// arbitrary project named by the caller of an organization issuer.
-	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, workloadTenancy{OrganizationID: issuer.organizationID, ProjectID: shared.projectID, UserSessionIssuerID: shared.issuerID}, []string{urls.Issuer, urls.Token}, assertion)
+	// The target project has been checked against the authorization server tenancy.
+	// Use it for project-tier admission, including organization-owned issuers.
+	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, workloadTenancy{OrganizationID: issuer.organizationID, ProjectID: projectID, UserSessionIssuerID: shared.issuerID}, []string{urls.Issuer, urls.Token}, assertion)
 	if err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
 	}
 	// This new audience has no legacy consumers. Its inference-only ceiling
 	// uses version 6 without advancing issuance for existing MCP credentials.
 	// Older replicas reject this audience rather than interpreting its grants.
-	version := runtimepolicy.DelegatedPolicyVersion6
+	version := runtimepolicy.InferenceIssuedPolicyVersion
 	grants, err := encodeInferenceWorkloadPolicy(projectID, version)
 	if err != nil {
 		return fmt.Errorf("exchange workload inference: %w", err)
@@ -190,7 +190,7 @@ func (s *Service) AuthorizeWorkloadInference(ctx context.Context, token string) 
 	if err != nil {
 		return denied()
 	}
-	admitted, err := workloadidentity.IsAdmitted(ctx, s.db, workloadidentity.AdmissionParams{OrganizationID: issuer.ResolvedOrganizationID, ProjectID: uuid.NullUUID{UUID: shared.projectID, Valid: shared.projectID != uuid.Nil}, WorkloadIssuerID: workloadIssuerID, Subject: externalSubject})
+	admitted, err := workloadidentity.IsAdmitted(ctx, s.db, workloadidentity.AdmissionParams{OrganizationID: issuer.ResolvedOrganizationID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, WorkloadIssuerID: workloadIssuerID, Subject: externalSubject})
 	if err != nil {
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
 	}

@@ -2,15 +2,18 @@ package assistanttokens
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/stretchr/testify/require"
@@ -82,4 +85,31 @@ func TestInferenceCredentialStorageFencing(t *testing.T) {
 	createRuntime(uuid.New())
 	_, err = q.ReadKitAPIKeyBinding(ctx, keyID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestInferenceCeilingPreservesVersion5(t *testing.T) {
+	t.Parallel()
+	auth := authz.NewGrant(authz.ScopeMCPAuth, authz.WildcardResource)
+	blockedAuth := authz.NewGrant(authz.ScopeMCPBlockedAuth, "blocked-client")
+	connect := authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)
+	blockedConnect := authz.NewGrant(authz.ScopeMCPBlockedConnect, "blocked-server")
+	legacy := []authz.Grant{auth, blockedAuth, connect, blockedConnect}
+	for _, inference := range []bool{false, true} {
+		t.Run(fmt.Sprintf("inference=%t", inference), func(t *testing.T) {
+			t.Parallel()
+			agent := append([]authz.Grant(nil), legacy...)
+			if inference {
+				agent = append(agent, authz.NewGrant(authz.ScopeInferenceExecute, authz.WildcardResource))
+			}
+			ceiling, err := buildInferenceCeiling(agent)
+			require.NoError(t, err)
+			require.Equal(t, runtimepolicy.DelegatedPolicyVersion5, ceiling.EncodingVersion)
+			decoded, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion5, ceiling.Policy)
+			require.NoError(t, err)
+			require.ElementsMatch(t, legacy, decoded.RuntimeGrants())
+			require.NotContains(t, string(ceiling.Policy), string(authz.ScopeInferenceExecute))
+			_, err = runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion4, ceiling.Policy)
+			require.Error(t, err, "version 5 auth scopes must be retained")
+		})
+	}
 }

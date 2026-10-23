@@ -5297,7 +5297,7 @@ examples:
   createOrganizationUserSessionIssuer:
     speakeasy-default-create-organization-user-session-issuer:
       requestBody:
-        application/json: {"authn_challenge_mode": "chain", "authorization_server_mode": "endpoint", "session_duration_hours": 499598, "slug": "<value>"}
+        application/json: {"authn_challenge_mode": "chain", "session_duration_hours": 499598, "slug": "<value>"}
       responses:
         "200":
           application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "endpoint", "client_id_metadata_admission_mode": "presets", "created_at": "2024-06-20T22:02:10.421Z", "id": "0c256f1c-5d81-493b-ba3e-4ab2399908f6", "issuer_url_pinned": true, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 357767, "slug": "<value>", "updated_at": "2025-01-11T19:31:48.102Z", "use_authentication_host": true}

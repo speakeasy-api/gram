@@ -3,8 +3,6 @@ import { Button } from "@/components/ui/Button";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useQueryClient } from "@tanstack/react-query";
-import { invalidateIssuers } from "@/pages/user-session-issuers/invalidateIssuers";
 import { TextField } from "./SetupFields";
 
 /** Creates only a Speakeasy authorization server, not an external issuer or MCP server. */
@@ -17,7 +15,6 @@ export function CreateInferenceExchangeIssuer({
 }): JSX.Element {
   const project = useProject();
   const sdk = useSdkClient();
-  const queryClient = useQueryClient();
   const { hasScope } = useRBAC();
   const canCreate = hasScope("project:write", project.id);
   const [slug, setSlug] = useState("inference");
@@ -45,10 +42,9 @@ export function CreateInferenceExchangeIssuer({
         });
         createdID.current = issuer.id;
       }
-      await Promise.all([
-        invalidateIssuers(queryClient),
-        onCreated(createdID.current),
-      ]);
+      // Discovery is the only refresh needed here. Organization issuer queries
+      // require org:read, which project-only administrators need not hold.
+      await onCreated(createdID.current);
       setComplete(true);
     } catch (failure) {
       setError(

@@ -29,9 +29,11 @@ func TestWorkloadInference_ConcurrentAssertionExchange(t *testing.T) {
 	}
 	results := make([]result, attempts)
 	start := make(chan struct{})
-	var wg sync.WaitGroup
+	var wg, ready sync.WaitGroup
+	ready.Add(attempts)
 	for i := range attempts {
 		wg.Go(func() {
+			ready.Done()
 			<-start
 			w := httptest.NewRecorder()
 			issuerID := f.fx.target.UserSessionIssuerID.String()
@@ -39,6 +41,7 @@ func TestWorkloadInference_ConcurrentAssertionExchange(t *testing.T) {
 			results[i] = result{response: w, err: err}
 		})
 	}
+	ready.Wait()
 	close(start)
 	wg.Wait()
 	successes := 0

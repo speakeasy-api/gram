@@ -1,11 +1,13 @@
 package usersessions_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -140,4 +142,13 @@ func TestCreateUserSessionIssuer_SharedUnavailable(t *testing.T) {
 	created, err := ti.service.CreateUserSessionIssuer(ctx, &gen.CreateUserSessionIssuerPayload{Slug: "unavailable-shared", AuthnChallengeMode: "chain", SessionDurationHours: 24, AuthorizationServerMode: "endpoint"})
 	require.NoError(t, err)
 	require.Equal(t, "endpoint", created.AuthorizationServerMode)
+}
+
+// Organization creation must not advertise a project-only option its handler ignores.
+func TestCreateUserSessionIssuer_ModeIsProjectOnly(t *testing.T) {
+	t.Parallel()
+	_, projectHasMode := reflect.TypeFor[gen.CreateUserSessionIssuerPayload]().FieldByName("AuthorizationServerMode")
+	require.True(t, projectHasMode)
+	_, organizationHasMode := reflect.TypeFor[orggen.CreateIssuerPayload]().FieldByName("AuthorizationServerMode")
+	require.False(t, organizationHasMode)
 }

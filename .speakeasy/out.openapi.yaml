@@ -88586,13 +88586,6 @@ components:
           enum:
             - chain
             - interactive
-        authorization_server_mode:
-          type: string
-          description: Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
-          default: endpoint
-          enum:
-            - endpoint
-            - shared
         session_duration_hours:
           type: integer
           description: Maximum issued user session lifetime, in hours.

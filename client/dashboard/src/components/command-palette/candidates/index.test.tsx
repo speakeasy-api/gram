@@ -272,6 +272,9 @@ vi.mock("../recentlyVisited", () => ({
   getRecentLabelOverride: () => undefined,
 }));
 vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    access: { roles: { href: () => "/acme/access/roles" } },
+  }),
   useRoutes: () => ({
     plugins: {
       goTo: mocks.goToPlugins,

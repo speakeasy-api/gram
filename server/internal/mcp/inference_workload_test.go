@@ -166,9 +166,12 @@ func TestWorkloadInference_LiveRevocation(t *testing.T) {
 			case "expired session":
 				sessions := f.workloadSessions(t)
 				require.Len(t, sessions, 1)
-				_, err := f.ti.conn.Exec( //nolint:glint // notestingrawsql: exercise live session expiry without waiting for the access token TTL
-					t.Context(), `UPDATE user_sessions SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1 AND organization_id = $2 AND user_session_issuer_id = $3`, sessions[0].ID, f.fx.orgID, f.fx.target.UserSessionIssuerID)
+				rows, err := testrepo.New(f.ti.conn).ExpireUserSessionFixture(t.Context(), testrepo.ExpireUserSessionFixtureParams{
+					ID: sessions[0].ID, OrganizationID: f.fx.orgID, ProjectID: f.fx.target.ProjectID,
+					UserSessionIssuerID: f.fx.target.UserSessionIssuerID,
+				})
 				require.NoError(t, err)
+				require.Equal(t, int64(1), rows)
 			}
 			_, handled, err = f.ti.service.AuthorizeWorkloadInference(t.Context(), token)
 			require.True(t, handled)

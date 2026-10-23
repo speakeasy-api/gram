@@ -249,12 +249,12 @@ export function computeRuleTooltip(
       const name = projects.find(
         (p) => p.id === projectSels[0]!.projectId!,
       )?.name;
-      const resources =
-        resourceType === "inference"
-          ? "inference"
-          : isProjectFilteredResourceType(resourceType)
-            ? `${resourceType}s`
-            : "servers";
+      if (resourceType === "inference") {
+        return `${verb} access to inference in ${name ?? "1 project"}`;
+      }
+      const resources = isProjectFilteredResourceType(resourceType)
+        ? `${resourceType}s`
+        : "servers";
       return name
         ? `${verb} access to all ${resources} in ${name}`
         : `${verb} access to 1 project`;

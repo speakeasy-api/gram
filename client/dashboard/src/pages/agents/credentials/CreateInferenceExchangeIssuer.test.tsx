@@ -8,7 +8,11 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CreateInferenceExchangeIssuer } from "./CreateInferenceExchangeIssuer";
-const mocks = vi.hoisted(() => ({ create: vi.fn(), permitted: true }));
+const mocks = vi.hoisted(() => ({
+  create: vi.fn(),
+  permitted: true,
+  refreshOrganization: vi.fn(),
+}));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({
     id: "project_one",
@@ -26,13 +30,14 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 vi.mock("@/pages/user-session-issuers/invalidateIssuers", () => ({
-  invalidateIssuers: vi.fn().mockResolvedValue(undefined),
+  invalidateIssuers: mocks.refreshOrganization,
 }));
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.permitted = true;
   mocks.create.mockResolvedValue({ id: "new_issuer" });
+  mocks.refreshOrganization.mockRejectedValue(new Error("org:read required"));
 });
 function setup(
   onCreated = vi
@@ -67,6 +72,7 @@ it("creates a shared project issuer without any MCP or external issuer API", asy
     },
   });
   expect(onCreated).toHaveBeenCalledWith("new_issuer");
+  expect(mocks.refreshOrganization).not.toHaveBeenCalled();
   expect(onBusy).toHaveBeenLastCalledWith(false);
 });
 it("allows project administrators to create an issuer without inference or workload privileges", async () => {

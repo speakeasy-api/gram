@@ -17,7 +17,15 @@ const mocks = vi.hoisted(() => ({
   href: vi.fn((urn: string) => `/identities/${urn}/overview`),
   queryOptions: undefined as Record<string, unknown> | undefined,
   queryData: undefined as
-    | { pages: Array<{ items: Array<{ id: string; name: string }> }> }
+    | {
+        pages: Array<{
+          items: Array<{
+            id: string;
+            name: string;
+            permissions?: { write: boolean };
+          }>;
+        }>;
+      }
     | undefined,
   hasNextPage: false,
   isFetchingNextPage: false,
@@ -42,7 +50,14 @@ vi.mock("@/routes", () => ({
   useRoutes: (overrides: unknown) => {
     expect(overrides).toEqual({ projectSlug: mocks.projectSlug });
     return {
-      identities: { detail: { overview: { href: mocks.href } } },
+      identities: {
+        detail: {
+          overview: { href: mocks.href },
+          permissions: {
+            href: (urn: string) => `/identities/${urn}/permissions`,
+          },
+        },
+      },
     };
   },
 }));
@@ -216,5 +231,38 @@ describe("useAgentIdentityCandidates", () => {
     rerender({ enabled: false });
     expect(result.current).toEqual([]);
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("adds an inference-access alias only for editable agents and keeps names private", () => {
+    mocks.queryData = {
+      pages: [
+        {
+          items: [
+            { id: "read_only", name: "Viewer", permissions: { write: false } },
+          ],
+        },
+        {
+          items: [
+            { id: "editable", name: "Worker", permissions: { write: true } },
+          ],
+        },
+      ],
+    };
+    const { result } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    const aliases = result.current.filter((candidate) =>
+      candidate.id.startsWith("agent-inference-access:"),
+    );
+    expect(aliases).toHaveLength(1);
+    expect(aliases[0]).toMatchObject({
+      title: "Worker · Inference access",
+      fuzzyOnly: true,
+      keywords: expect.arrayContaining(["inference", "permissions"]),
+    });
+    void aliases[0]!.run("open");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/identities/agent%3Aeditable/permissions?range=30d&from=2025-01-01&to=2025-01-31",
+    );
   });
 });

@@ -13,16 +13,14 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every MCP server its own authorization server, rooted at the server's URL. 'shared' serves one authorization server for the issuer, used by all of its MCP servers; issuer_url and token_endpoint locate it. A shared issuer whose authorization server this deployment does not serve falls back to per-endpoint authorization servers, and authorization_server_unavailable_reason says why.
  */
-export const UserSessionIssuerAuthorizationServerMode = {
+export const AuthorizationServerMode = {
   Endpoint: "endpoint",
   Shared: "shared",
 } as const;
 /**
  * Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every MCP server its own authorization server, rooted at the server's URL. 'shared' serves one authorization server for the issuer, used by all of its MCP servers; issuer_url and token_endpoint locate it. A shared issuer whose authorization server this deployment does not serve falls back to per-endpoint authorization servers, and authorization_server_unavailable_reason says why.
  */
-export type UserSessionIssuerAuthorizationServerMode = OpenEnum<
-  typeof UserSessionIssuerAuthorizationServerMode
->;
+export type AuthorizationServerMode = OpenEnum<typeof AuthorizationServerMode>;
 
 /**
  * Why a shared issuer's authorization server is not served, so its MCP servers fall back to per-endpoint authorization servers: the pinned issuer URL is not this issuer's shared authorization server (pinned_issuer_url_invalid), or it is on a host this deployment does not serve (host_not_served). Absent otherwise.
@@ -69,7 +67,7 @@ export type UserSessionIssuer = {
   /**
    * Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every MCP server its own authorization server, rooted at the server's URL. 'shared' serves one authorization server for the issuer, used by all of its MCP servers; issuer_url and token_endpoint locate it. A shared issuer whose authorization server this deployment does not serve falls back to per-endpoint authorization servers, and authorization_server_unavailable_reason says why.
    */
-  authorizationServerMode: UserSessionIssuerAuthorizationServerMode;
+  authorizationServerMode: AuthorizationServerMode;
   /**
    * Why a shared issuer's authorization server is not served, so its MCP servers fall back to per-endpoint authorization servers: the pinned issuer URL is not this issuer's shared authorization server (pinned_issuer_url_invalid), or it is on a host this deployment does not serve (host_not_served). Absent otherwise.
    */
@@ -133,9 +131,10 @@ export type UserSessionIssuer = {
 };
 
 /** @internal */
-export const UserSessionIssuerAuthorizationServerMode$inboundSchema:
-  z.ZodMiniType<UserSessionIssuerAuthorizationServerMode, unknown> = openEnums
-    .inboundSchema(UserSessionIssuerAuthorizationServerMode);
+export const AuthorizationServerMode$inboundSchema: z.ZodMiniType<
+  AuthorizationServerMode,
+  unknown
+> = openEnums.inboundSchema(AuthorizationServerMode);
 
 /** @internal */
 export const AuthorizationServerUnavailableReason$inboundSchema: z.ZodMiniType<
@@ -157,8 +156,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
   z.object({
     authentication_host_available: z.optional(z.boolean()),
     authn_challenge_mode: z.string(),
-    authorization_server_mode:
-      UserSessionIssuerAuthorizationServerMode$inboundSchema,
+    authorization_server_mode: AuthorizationServerMode$inboundSchema,
     authorization_server_unavailable_reason: z.optional(
       AuthorizationServerUnavailableReason$inboundSchema,
     ),

@@ -2203,6 +2203,15 @@ WHERE project_id = @project_id
   AND deployment_id = @deployment_id
   AND tool_urn = @tool_urn;
 
+-- name: ExpireUserSessionFixture :execrows
+-- Test-only fixture: expires a session without waiting for its access token TTL.
+UPDATE user_sessions
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id
+  AND organization_id = @organization_id::text
+  AND project_id = @project_id::uuid
+  AND user_session_issuer_id = @user_session_issuer_id;
+
 -- name: ExpireAPIKeyFixture :exec
 -- Test-only fixture: puts a key's expiry in the past.
 UPDATE api_keys

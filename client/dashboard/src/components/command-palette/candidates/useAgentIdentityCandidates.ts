@@ -99,9 +99,9 @@ export function useAgentIdentityCandidates({
     if (!queryEnabled) return [];
     return (data?.pages ?? [])
       .flatMap((page) => page.items)
-      .map((agent): LauncherCandidate => {
+      .flatMap((agent): LauncherCandidate[] => {
         const urn = `agent:${agent.id}`;
-        return {
+        const identity: LauncherCandidate = {
           id: `agent-identity:${agent.id}`,
           // Identity names share the same privacy treatment as people.
           kind: "person",
@@ -121,6 +121,32 @@ export function useAgentIdentityCandidates({
             );
           },
         };
+        if (!agent.permissions?.write) return [identity];
+        return [
+          identity,
+          {
+            ...identity,
+            id: `agent-inference-access:${agent.id}`,
+            title: `${agent.name} · Inference access`,
+            detail: "Agent permissions · project-scoped inference",
+            keywords: [
+              ...identity.keywords,
+              "inference",
+              "inference:execute",
+              "permissions",
+            ],
+            run: () => {
+              void navigate(
+                withIdentityWindow(
+                  routes.identities.detail.permissions.href(
+                    encodeIdentityUrn(urn),
+                  ),
+                  search,
+                ),
+              );
+            },
+          },
+        ];
       });
   }, [data, navigate, queryEnabled, routes, search]);
 }

@@ -74,7 +74,7 @@ export function AgentInferenceAccess({
           className="flex items-center justify-between gap-3 text-sm"
         >
           <span>
-            {grant.selector.projectId
+            {grant.selector.projectId && grant.selector.projectId !== "*"
               ? (organization.projects.find(
                   (project) => project.id === grant.selector.projectId,
                 )?.name ?? grant.selector.projectId)

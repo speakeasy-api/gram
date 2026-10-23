@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -86,6 +87,25 @@ func TestInferenceAccessRoleConfiguration(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, replayed.Receipt.Replayed)
 	require.Equal(t, enabled.Receipt.ID, replayed.Receipt.ID)
+	// Expired handles recover completed receipts but cannot authorize fresh writes.
+	now := reads.now()
+	reads.now = func() time.Time { return now.Add(SubjectReferenceTTL + time.Second) }
+	replayed, err = service.ConfigureInference(ctx, principal, input)
+	require.NoError(t, err)
+	require.True(t, replayed.Receipt.Replayed)
+	expiredFresh := input
+	expiredFresh.IdempotencyKey = "expired-fresh"
+	_, err = service.ConfigureInference(ctx, principal, expiredFresh)
+	require.ErrorIs(t, err, ErrAccessRoleMutationNotFound)
+	changedScope := input
+	changedScope.AllProjects = true
+	_, err = service.ConfigureInference(ctx, principal, changedScope)
+	require.ErrorIs(t, err, ErrAccessRoleMutationConflict)
+	otherPrincipal := principal
+	otherPrincipal.UserID = "another-user"
+	_, err = service.ConfigureInference(ctx, otherPrincipal, input)
+	require.Error(t, err)
+	reads.now = func() time.Time { return now }
 	changed := input
 	changed.Enabled = false
 	_, err = service.ConfigureInference(ctx, principal, changed)
@@ -104,6 +124,38 @@ func TestInferenceAccessRoleConfiguration(t *testing.T) {
 	require.True(t, replayed.Receipt.Replayed)
 	require.False(t, replayed.ExactGrantPresent)
 	stored, err := manager.GetRoleByID(ctx, principal.OrganizationID, roleID)
+	require.NoError(t, err)
+	require.Equal(t, []*accessgen.RoleGrant{baseline}, stored.Grants)
+
+	all := input
+	all.AllProjects = true
+	all.ExpectedVersion = disabled.Role.Version
+	all.IdempotencyKey = "enable-all-projects"
+	all.Confirmed = false
+	_, err = service.ConfigureInference(ctx, principal, all)
+	require.ErrorIs(t, err, ErrAccessRoleMutationInvalid)
+	all.Confirmed = true
+	allEnabled, err := service.ConfigureInference(ctx, principal, all)
+	require.NoError(t, err)
+	require.True(t, allEnabled.AllProjects)
+	require.True(t, allEnabled.ExactGrantPresent)
+	stored, err = manager.GetRoleByID(ctx, principal.OrganizationID, roleID)
+	require.NoError(t, err)
+	require.True(t, hasInferenceAccessRoleGrant(stored, project.ID, true))
+	require.False(t, hasInferenceAccessRoleGrant(stored, project.ID, false))
+	allReplay, err := service.ConfigureInference(ctx, principal, all)
+	require.NoError(t, err)
+	require.True(t, allReplay.Receipt.Replayed)
+	removeAll := all
+	removeAll.Enabled = false
+	removeAll.IdempotencyKey = "remove-all-projects"
+	_, err = service.ConfigureInference(ctx, principal, removeAll)
+	require.ErrorIs(t, err, ErrAccessRoleMutationConflict)
+	removeAll.ExpectedVersion = allEnabled.Role.Version
+	allDisabled, err := service.ConfigureInference(ctx, principal, removeAll)
+	require.NoError(t, err)
+	require.False(t, allDisabled.ExactGrantPresent)
+	stored, err = manager.GetRoleByID(ctx, principal.OrganizationID, roleID)
 	require.NoError(t, err)
 	require.Equal(t, []*accessgen.RoleGrant{baseline}, stored.Grants)
 }

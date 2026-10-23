@@ -15,15 +15,23 @@ import {
 import { useWorkloadSetup } from "./useWorkloadSetup";
 import { invalidateAgentPolicy } from "../agent-policy-grants";
 import { getServerURL } from "@/lib/utils";
+import { inferenceCompletionEndpoint } from "./inferenceEndpoint";
 
 /** Uses the same agent, issuer, admission, and policy records as MCP federation. */
-export function InferenceSetup({
-  onDone,
-  onBusy,
-}: {
+type InferenceSetupProps = {
   onDone: (agentID?: string) => void;
   onBusy?: (busy: boolean) => void;
-}): JSX.Element {
+};
+
+export function InferenceSetup(props: InferenceSetupProps): JSX.Element {
+  const project = useProject();
+  return <ProjectInferenceSetup key={project.id} {...props} />;
+}
+
+function ProjectInferenceSetup({
+  onDone,
+  onBusy,
+}: InferenceSetupProps): JSX.Element {
   const project = useProject();
   const organization = useOrganization();
   const { user } = useSession();
@@ -40,18 +48,21 @@ export function InferenceSetup({
   const canConfigure =
     hasScope("workload:write") &&
     hasScope("inference:execute", "*", project.id);
-  const completionEndpoint = new URL(
-    "/chat/completions",
+  const completionEndpoint = inferenceCompletionEndpoint(
     getServerURL() || window.location.origin,
-  ).toString();
+    import.meta.env.DEV,
+  );
   const setup = useWorkloadSetup({
     targetProjectId: project.id,
     entry: undefined,
     platformKey: CUSTOM_PLATFORM_KEY,
     agentName: name,
-    setupOverride: inferenceSetupInstructions(project.id, completionEndpoint),
+    setupOverride: inferenceSetupInstructions(
+      project.id,
+      completionEndpoint ?? "",
+    ),
     ensureAgent: async () => {
-      if (!canConfigure || !consent || !name.trim())
+      if (!completionEndpoint || !canConfigure || !consent || !name.trim())
         throw new Error(
           "Name the identity and explicitly allow inference in this project.",
         );
@@ -88,6 +99,13 @@ export function InferenceSetup({
         Connect any workload that can obtain a signed JWT. No Kubernetes
         cluster, cloud provider, MCP server, or managed assistant is required.
       </p>
+      {!completionEndpoint && (
+        <p role="alert">
+          The inference endpoint must use HTTPS. Configure the deployment with a
+          secure server URL before provisioning workloads. HTTP is supported
+          only on loopback addresses in local development.
+        </p>
+      )}
       {!canConfigure && (
         <p role="alert">
           You need workload:write and an explicit inference:execute permission
@@ -177,6 +195,7 @@ export function InferenceSetup({
             !consent ||
             setup.connecting ||
             creatingIssuer ||
+            !completionEndpoint ||
             !setup.exchange.values ||
             !setup.canConnect ||
             !configuration.every(setup.complete)

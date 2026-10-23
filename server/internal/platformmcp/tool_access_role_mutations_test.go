@@ -30,7 +30,8 @@ func TestAccessRoleMutationToolsAreStableExternalOnlyMutations(t *testing.T) {
 			arguments = json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","member_reference":"opaque-member","role_reference":"opaque-role","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","idempotency_key":"key","confirmed":true}`)
 		}
 		if name == operationConfigureInferenceAccessRole {
-			arguments = json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","role_reference":"opaque","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","enabled":true,"idempotency_key":"key","confirmed":true}`)
+			require.Contains(t, string(descriptor.InputSchema), `"all_projects"`)
+			arguments = json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","role_reference":"opaque","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","enabled":true,"all_projects":true,"idempotency_key":"key","confirmed":true}`)
 		}
 		_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), arguments)
 		var refusal *ToolRefusalError

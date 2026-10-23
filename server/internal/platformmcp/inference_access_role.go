@@ -18,34 +18,40 @@ import (
 const operationConfigureInferenceAccessRole = "configure_inference_access_role"
 
 type ConfigureInferenceAccessRoleInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"explicit project ID for the inference permission"`
+	ProjectID       string `json:"project_id" jsonschema:"explicit project ID for admission and receipt scope; grant scope is controlled by all_projects"`
+	AllProjects     bool   `json:"all_projects,omitempty" jsonschema:"true targets the all-project inference grant; confirm impact across every project and role holder; false targets only project_id"`
 	RoleReference   string `json:"role_reference" jsonschema:"fresh opaque custom role reference from list_access_roles"`
 	ExpectedVersion string `json:"expected_version" jsonschema:"version from the fresh role read"`
-	Enabled         bool   `json:"enabled" jsonschema:"true adds the exact project inference grant; false removes only that exact grant, not broader grants"`
+	Enabled         bool   `json:"enabled" jsonschema:"true adds the selected inference grant; false removes only that exact grant, not other scopes"`
 	IdempotencyKey  string `json:"idempotency_key" jsonschema:"stable unique key for this exact mutation and retries"`
-	Confirmed       bool   `json:"confirmed" jsonschema:"true only after explicit confirmation of the project, role, grant change and impact on all role holders"`
+	Confirmed       bool   `json:"confirmed" jsonschema:"true only after explicit confirmation of the selected scope, role, grant change and impact on all role holders and affected projects"`
 }
 
 type ConfigureInferenceAccessRoleOutput struct {
 	Role              AccessRoleMutationSummary `json:"role" jsonschema:"historical committed role snapshot; read roles again before another change"`
 	ProjectID         string                    `json:"project_id"`
 	Scope             string                    `json:"scope"`
-	ExactGrantPresent bool                      `json:"exact_grant_present" jsonschema:"fresh read of the exact project inference grant on this role, not effective agent or owner access; broader grants may still permit inference"`
+	AllProjects       bool                      `json:"all_projects"`
+	ExactGrantPresent bool                      `json:"exact_grant_present" jsonschema:"fresh read of the exact selected inference grant on this role, not effective agent or owner access; other grants may still permit inference"`
 	Receipt           RiskMutationToolReceipt   `json:"receipt"`
 }
 
-func inferenceAccessRoleGrant(projectID uuid.UUID) *accessgen.RoleGrant {
+func inferenceAccessRoleGrant(projectID uuid.UUID, allProjects bool) *accessgen.RoleGrant {
 	project := projectID.String()
-	return &accessgen.RoleGrant{Scope: string(authz.ScopeInferenceExecute), Selectors: []*accessgen.Selector{{ResourceKind: "inference", ResourceID: "*", ProjectID: &project, Tool: nil, Disposition: nil, ServerURL: nil, ClientType: nil, ConnectionOwner: nil, UpstreamClient: nil}}}
+	var selectorProject *string
+	if !allProjects {
+		selectorProject = &project
+	}
+	return &accessgen.RoleGrant{Scope: string(authz.ScopeInferenceExecute), Selectors: []*accessgen.Selector{{ResourceKind: "inference", ResourceID: "*", ProjectID: selectorProject, Tool: nil, Disposition: nil, ServerURL: nil, ClientType: nil, ConnectionOwner: nil, UpstreamClient: nil}}}
 }
 
-func hasInferenceAccessRoleGrant(role *accessgen.Role, projectID uuid.UUID) bool {
+func hasInferenceAccessRoleGrant(role *accessgen.Role, projectID uuid.UUID, allProjects bool) bool {
 	for _, grant := range role.Grants {
 		if grant.Scope != string(authz.ScopeInferenceExecute) {
 			continue
 		}
 		for _, selector := range grant.Selectors {
-			if selector.ResourceKind == "inference" && selector.ResourceID == "*" && selector.ProjectID != nil && *selector.ProjectID == projectID.String() && selector.Tool == nil && selector.Disposition == nil && selector.ServerURL == nil && selector.ClientType == nil && selector.ConnectionOwner == nil && selector.UpstreamClient == nil {
+			if selector.ResourceKind == "inference" && selector.ResourceID == "*" && ((allProjects && selector.ProjectID == nil) || (!allProjects && selector.ProjectID != nil && *selector.ProjectID == projectID.String())) && selector.Tool == nil && selector.Disposition == nil && selector.ServerURL == nil && selector.ClientType == nil && selector.ConnectionOwner == nil && selector.UpstreamClient == nil {
 				return true
 			}
 		}
@@ -58,7 +64,7 @@ func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, prin
 		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationInvalid("Inference access configuration requires the external Platform MCP.")
 	}
 	if !input.Confirmed {
-		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationConfirmationRequired()
+		return ConfigureInferenceAccessRoleOutput{}, &AccessRoleMutationError{Code: "confirmation_required", Message: "Show the role, selected inference scope (one project or all projects), grant change and impact on all role holders; ask the user to confirm it, then retry with confirmed: true.", Cause: ErrAccessRoleMutationInvalid}
 	}
 	if !s.valid() {
 		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationUnavailable(nil)
@@ -74,7 +80,7 @@ func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, prin
 	if err != nil {
 		return ConfigureInferenceAccessRoleOutput{}, err
 	}
-	roleID, err := s.reads.references.Decode(input.RoleReference, principal, subjectKindAccessRole, s.reads.now().UTC())
+	roleID, err := s.reads.references.decodeForReceiptLookup(input.RoleReference, principal, subjectKindAccessRole, s.reads.now().UTC())
 	if err != nil {
 		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationNotFound()
 	}
@@ -83,17 +89,24 @@ func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, prin
 		RoleID          string `json:"role_id"`
 		ExpectedVersion string `json:"expected_version"`
 		Enabled         bool   `json:"enabled"`
-	}{project.ID.String(), roleID, input.ExpectedVersion, input.Enabled}
+		// Omission preserves hashes for existing project-scoped receipts.
+		AllProjects bool `json:"all_projects,omitempty"`
+	}{project.ID.String(), roleID, input.ExpectedVersion, input.Enabled, input.AllProjects}
 	var addGrants, removeGrants []*accessgen.RoleGrant
-	grant := inferenceAccessRoleGrant(project.ID)
+	grant := inferenceAccessRoleGrant(project.ID, input.AllProjects)
 	if input.Enabled {
 		addGrants = []*accessgen.RoleGrant{grant}
 	} else {
 		removeGrants = []*accessgen.RoleGrant{grant}
 	}
+	// Only inference grants change here, so role delivery cannot gain MCP Use
+	// access and needs no administrator exposure-approval marker.
 	// A replayed receipt must not repeat the role write or reconciliation.
 	var delivery access.RoleReconciliation
 	receipt, err := s.receipts.execute(ctx, principal, project, operationConfigureInferenceAccessRole, input.IdempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
+		if _, err := s.reads.references.Decode(input.RoleReference, principal, subjectKindAccessRole, s.reads.now().UTC()); err != nil {
+			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
+		}
 		roleUUID, parseErr := uuid.Parse(roleID)
 		if parseErr != nil || roleUUID == uuid.Nil {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
@@ -151,5 +164,5 @@ func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, prin
 	if current == nil {
 		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationNotFound()
 	}
-	return ConfigureInferenceAccessRoleOutput{Role: summary, ProjectID: project.ID.String(), Scope: string(authz.ScopeInferenceExecute), ExactGrantPresent: hasInferenceAccessRoleGrant(current, project.ID), Receipt: riskMutationToolReceipt(receipt)}, nil
+	return ConfigureInferenceAccessRoleOutput{Role: summary, ProjectID: project.ID.String(), Scope: string(authz.ScopeInferenceExecute), AllProjects: input.AllProjects, ExactGrantPresent: hasInferenceAccessRoleGrant(current, project.ID, input.AllProjects), Receipt: riskMutationToolReceipt(receipt)}, nil
 }

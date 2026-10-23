@@ -338,7 +338,7 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
 		}
 		resources := r.PostForm[oauthwire.ParamResource]
-		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 1 && resources[0] == InferenceResource {
+		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 1 && resources[0] == InferenceResource && extractClientCredentials(r).clientless(r) {
 			return s.handleInferenceWorkloadGrant(ctx, w, r, issuer)
 		}
 		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 && extractClientCredentials(r).clientless(r) {
