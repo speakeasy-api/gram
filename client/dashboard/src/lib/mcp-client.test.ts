@@ -146,10 +146,11 @@ describe("createMCPClientWithVersionFallback", () => {
     const server = fakeServer({ supported: LEGACY_VERSIONS, failStatus: 401 });
 
     await expect(listToolNames(server)).rejects.toThrow("Unauthorized");
-    // Every connection attempt starts with server/discover, so a single one
-    // means the helper did not retry.
-    expect(
-      server.seen.filter((m) => m.startsWith("server/discover")),
-    ).toHaveLength(1);
+    // After a 401 on server/discover the client tries `initialize` once on its
+    // own; a retry from the helper would add a second `initialize`.
+    expect(server.seen).toEqual([
+      `server/discover@${MODERN_VERSION}`,
+      "initialize@2025-11-25",
+    ]);
   });
 });
