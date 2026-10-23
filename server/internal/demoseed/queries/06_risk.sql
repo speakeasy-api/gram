@@ -20,8 +20,8 @@ VALUES (@id, @project_id, @organization_id, @name, 'standard',
 -- name: RiskInsertApproval :exec
 -- One tool call held by the approval policy, at a point in its life cycle.
 -- Times are relative to now(). The pending request gets the longest window,
--- 24 hours, so it is still waiting until the daily reseed replaces it. The
--- project delete cascades these.
+-- 24 hours from when it was held, so it is still waiting until a few minutes
+-- before the daily reseed replaces it. The project delete cascades these.
 INSERT INTO risk_policy_approvals
   (id, organization_id, project_id, risk_policy_id, policy_version, token,
    requester_urn, surface, toolset_id, tool_name, call_fingerprint,

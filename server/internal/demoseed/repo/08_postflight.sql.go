@@ -57,7 +57,8 @@ SELECT count(*) FROM risk_policy_approvals
 WHERE organization_id = $1::text AND deleted IS FALSE
 `
 
-// The Tool approvals tab needs its approval requests, one per status.
+// The Tool approvals tab needs its four seeded approval requests: pending,
+// used, denied and expired.
 func (q *Queries) PostflightCountApprovals(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountApprovals, orgID)
 	var count int64

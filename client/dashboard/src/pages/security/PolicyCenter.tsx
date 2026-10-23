@@ -105,6 +105,7 @@ import {
   POLICY_CENTER_TABS,
   policyCenterTabLabel,
   policyCenterTabs,
+  resolvePolicyCenterTab,
   type PolicyCenterTab,
 } from "./policy-center-tabs";
 import { MCPApprovalsTab } from "./MCPApprovalsTab";
@@ -650,12 +651,19 @@ function PolicyCenterContent() {
 
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
-  const [activeTab] = useQueryState(
+  const [requestedTab] = useQueryState(
     "tab",
     parseAsStringLiteral(POLICY_CENTER_TABS).withDefault("policies"),
   );
-  const toolApprovalsEnabled =
-    useFeatureFlag(FEATURE_FLAGS.toolApprovals).status === "enabled";
+  const toolApprovalsFlag = useFeatureFlag(FEATURE_FLAGS.toolApprovals).status;
+  const toolApprovalsEnabled = toolApprovalsFlag === "enabled";
+  // A hidden tab's link lands on Policies once the flags have loaded.
+  const activeTab =
+    toolApprovalsFlag === "loading"
+      ? requestedTab
+      : resolvePolicyCenterTab(requestedTab, {
+          toolApprovals: toolApprovalsEnabled,
+        });
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
   // The Detection Rules tab's create sheet is owned here so the page-level

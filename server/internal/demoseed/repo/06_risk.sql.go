@@ -107,8 +107,8 @@ type RiskInsertApprovalParams struct {
 
 // One tool call held by the approval policy, at a point in its life cycle.
 // Times are relative to now(). The pending request gets the longest window,
-// 24 hours, so it is still waiting until the daily reseed replaces it. The
-// project delete cascades these.
+// 24 hours from when it was held, so it is still waiting until a few minutes
+// before the daily reseed replaces it. The project delete cascades these.
 func (q *Queries) RiskInsertApproval(ctx context.Context, arg RiskInsertApprovalParams) error {
 	_, err := q.db.Exec(ctx, riskInsertApproval,
 		arg.ID,

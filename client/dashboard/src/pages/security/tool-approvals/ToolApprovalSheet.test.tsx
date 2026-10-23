@@ -90,6 +90,43 @@ describe("ToolApprovalSheet", () => {
     });
   });
 
+  it("drops a draft note when the sheet closes", () => {
+    const onOpenChange = vi.fn<(open: boolean) => void>();
+    const { rerender } = render(
+      <ToolApprovalSheet
+        approval={approval()}
+        members={[]}
+        onOpenChange={onOpenChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Note for the agent"), {
+      target: { value: "Not this one." },
+    });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+
+    rerender(
+      <ToolApprovalSheet
+        approval={null}
+        members={[]}
+        onOpenChange={onOpenChange}
+      />,
+    );
+    rerender(
+      <ToolApprovalSheet
+        approval={approval({ id: "00000000-0000-0000-0000-000000000007" })}
+        members={[]}
+        onOpenChange={onOpenChange}
+      />,
+    );
+
+    expect(
+      (screen.getByLabelText("Note for the agent") as HTMLTextAreaElement)
+        .value,
+    ).toBe("");
+  });
+
   it("hides the decision buttons from people who cannot decide", () => {
     render(
       <ToolApprovalSheet

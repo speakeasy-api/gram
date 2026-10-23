@@ -36,15 +36,30 @@ export function policyCenterTabSearch(tab: PolicyCenterTab): string {
   return `?tab=${tab}`;
 }
 
-/** The tabs to show. Tool approvals is behind its rollout flag. */
-export function policyCenterTabs({
+type PolicyCenterFlags = { toolApprovals?: boolean };
+
+function visibleTabs({
   toolApprovals = false,
-}: { toolApprovals?: boolean } = {}): PageTab[] {
+}: PolicyCenterFlags): PolicyCenterTab[] {
   return POLICY_CENTER_TABS.filter(
     (tab) => toolApprovals || tab !== "tool-approvals",
-  ).map((tab) => ({
+  );
+}
+
+/** The tabs to show. Tool approvals is behind its rollout flag. */
+export function policyCenterTabs(flags: PolicyCenterFlags = {}): PageTab[] {
+  return visibleTabs(flags).map((tab) => ({
     value: tab,
     label: TAB_LABEL[tab],
     href: policyCenterTabSearch(tab),
   }));
+}
+
+/** The tab a link lands on: one that is hidden, such as Tool approvals with
+ *  its flag off, falls back to "policies" rather than an empty page. */
+export function resolvePolicyCenterTab(
+  requested: PolicyCenterTab,
+  flags: PolicyCenterFlags = {},
+): PolicyCenterTab {
+  return visibleTabs(flags).includes(requested) ? requested : "policies";
 }

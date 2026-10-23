@@ -8,6 +8,7 @@ import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import type { RiskPolicyApproval } from "@gram/client/models/components/riskpolicyapproval.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useRiskGetApproval } from "@gram/client/react-query/riskGetApproval.js";
 import { useRiskListApprovals } from "@gram/client/react-query/riskListApprovals.js";
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useState } from "react";
@@ -21,6 +22,9 @@ type StatusFilter = "pending" | "all";
  *  on someone, so a new request should show without a reload. */
 const QUEUE_REFRESH_MS = 15_000;
 
+/** The most requests one load lists, newest first. */
+const QUEUE_LIMIT = 100;
+
 /**
  * The Tool approvals tab: tool calls held by approval policies, pending ones
  * first by default. A row opens the request with its arguments and the
@@ -28,9 +32,17 @@ const QUEUE_REFRESH_MS = 15_000;
  */
 export function ToolApprovalsTab(): JSX.Element {
   const [filter, setFilter] = useState<StatusFilter>("pending");
-  const [selected, setSelected] = useState<RiskPolicyApproval | null>(null);
+  // A Slack card's Open in Speakeasy link names the request to open.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedID = searchParams.get("request");
+  const [selectedID, setSelectedID] = useState<string | null>(requestedID);
+  useEffect(() => {
+    if (requestedID) setSelectedID(requestedID);
+  }, [requestedID]);
   const approvalsQuery = useRiskListApprovals(
-    filter === "pending" ? { status: "pending", limit: 100 } : { limit: 100 },
+    filter === "pending"
+      ? { status: "pending", limit: QUEUE_LIMIT }
+      : { limit: QUEUE_LIMIT },
     undefined,
     { refetchInterval: QUEUE_REFRESH_MS },
   );
@@ -38,24 +50,31 @@ export function ToolApprovalsTab(): JSX.Element {
   const members = membersQuery.data?.members ?? [];
   const approvals = approvalsQuery.data?.approvals ?? [];
 
-  // A Slack card's Open in Speakeasy link names the request: open it. A
-  // request that is already decided is only in the All list.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const requestedID = searchParams.get("request");
-  const loaded = approvalsQuery.data;
+  // The open request is read on its own, so it stays current while the
+  // queue polls, even once a decision elsewhere (in Slack, say) drops it from
+  // Pending, and a link opens it wherever it sits in the queue. Until it
+  // loads, the clicked row stands in.
+  const openQuery = useRiskGetApproval({ id: selectedID ?? "" }, undefined, {
+    enabled: selectedID !== null,
+    refetchInterval: QUEUE_REFRESH_MS,
+  });
+  const open =
+    selectedID === null
+      ? null
+      : (openQuery.data ??
+        approvals.find((approval) => approval.id === selectedID) ??
+        null);
+  // A linked request that is already decided is only in the All list.
+  const linked =
+    requestedID !== null && requestedID === selectedID
+      ? openQuery.data
+      : undefined;
   useEffect(() => {
-    if (!requestedID || selected || !loaded) return;
-    const match = loaded.approvals.find(
-      (approval) => approval.id === requestedID,
-    );
-    if (match) {
-      setSelected(match);
-      return;
-    }
-    if (filter === "pending") setFilter("all");
-  }, [requestedID, selected, loaded, filter]);
+    if (!linked || linked.status === "pending" || filter !== "pending") return;
+    setFilter("all");
+  }, [linked, filter]);
   const closeRequest = () => {
-    setSelected(null);
+    setSelectedID(null);
     if (!requestedID) return;
     setSearchParams(
       (prev) => {
@@ -170,20 +189,27 @@ export function ToolApprovalsTab(): JSX.Element {
       ) : approvalsQuery.isPending ? (
         <SkeletonTable />
       ) : (
-        <Table
-          columns={columns}
-          data={approvals}
-          rowKey={(approval) => approval.id}
-          onRowClick={setSelected}
-          noResultsMessage={
-            filter === "pending"
-              ? "No calls are waiting for approval."
-              : "No tool calls have been held yet."
-          }
-        />
+        <>
+          <Table
+            columns={columns}
+            data={approvals}
+            rowKey={(approval) => approval.id}
+            onRowClick={(approval) => setSelectedID(approval.id)}
+            noResultsMessage={
+              filter === "pending"
+                ? "No calls are waiting for approval."
+                : "No tool calls have been held yet."
+            }
+          />
+          {approvalsQuery.data?.nextCursor ? (
+            <Text small muted>
+              Showing the {QUEUE_LIMIT} newest requests.
+            </Text>
+          ) : null}
+        </>
       )}
       <ToolApprovalSheet
-        approval={selected}
+        approval={open}
         members={members}
         onOpenChange={(open) => {
           if (!open) closeRequest();

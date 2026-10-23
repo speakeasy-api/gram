@@ -422,13 +422,10 @@ func riskStrpos(haystack, needle string) int {
 	return utf8.RuneCountInString(before)
 }
 
-// seedRiskChats writes the bulk chats, their transcripts, and their findings.
-// The old per-row loop becomes three COPYs (chats, then messages, then
-// findings) with rows in the loop's order, so FKs hold and
-// chat_messages.seq comes out the same.
 // approvalWindowMinutes is how long a seeded request waits for a decision: the
-// 24-hour maximum for the pending one, so it outlives the time until the next
-// daily reseed, and the 30-minute default for the rest.
+// 24-hour maximum for the pending one, so it stays pending until a few minutes
+// before the next daily reseed replaces it, and the 30-minute default for the
+// rest.
 func approvalWindowMinutes(status string) int32 {
 	if status == "pending" {
 		return 24 * 60
@@ -436,8 +433,8 @@ func approvalWindowMinutes(status string) int32 {
 	return 30
 }
 
-// seedToolApprovals writes one held Slack post per status the Tool approvals
-// tab shows: waiting, approved and used, denied with a note, and expired.
+// seedToolApprovals writes four held Slack posts for the Tool approvals tab:
+// waiting, approved and used, denied with a note, and expired.
 func (s *seeder) seedToolApprovals(ctx context.Context) error {
 	agent := "agent:" + s.det("managed-agent-1").String()
 	approver := "user:" + s.userID("lucas")
@@ -495,6 +492,10 @@ func (s *seeder) seedToolApprovals(ctx context.Context) error {
 	return nil
 }
 
+// seedRiskChats writes the bulk chats, their transcripts, and their findings.
+// The old per-row loop becomes three COPYs (chats, then messages, then
+// findings) with rows in the loop's order, so FKs hold and
+// chat_messages.seq comes out the same.
 func (s *seeder) seedRiskChats(ctx context.Context) error {
 	ts := func(t time.Time) pgtype.Timestamptz {
 		return pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}

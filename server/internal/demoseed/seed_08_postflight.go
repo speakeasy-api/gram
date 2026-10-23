@@ -350,7 +350,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byOrg(s.q.PostflightCountPolicyMissingCustomRules),
 			fail:  postflightMustBeZero("%d policy custom_rule_ids have no rule row"),
 		},
-		// One approval request per status the Tool approvals tab shows.
+		// The four seeded tool approval requests: pending, used, denied and expired.
 		{
 			what:  "tool approval requests",
 			count: byOrg(s.q.PostflightCountApprovals),

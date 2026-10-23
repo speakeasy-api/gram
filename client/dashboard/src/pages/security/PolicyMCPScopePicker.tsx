@@ -754,23 +754,10 @@ function FocusedServerPane({
       : ruleTools;
   const followingAnnotationRule =
     selection.kind === "rule" && toolAnnotations.length > 0;
-  // A policy can name tools Speakeasy has not discovered on the server yet,
-  // for example on a remote server whose tools were never loaded. Counting
-  // them against the discovered tools would read as "1 of 0".
-  const discoveredNames = new Set(server.tools.map((tool) => tool.name));
-  const undiscoveredCount = selectedTools.filter(
-    (name) => !discoveredNames.has(name),
-  ).length;
-  const customNote =
-    undiscoveredCount === 0
-      ? `Custom · ${selectedTools.length} of ${server.tools.length}`
-      : server.tools.length === 0
-        ? `Custom · ${pluralize(undiscoveredCount, "tool")}, not discovered yet`
-        : `Custom · ${selectedTools.length - undiscoveredCount} of ${server.tools.length}, plus ${undiscoveredCount} not discovered yet`;
   const note = !selected
     ? "Not in scope"
     : custom
-      ? customNote
+      ? customScopeNote(server, selectedTools)
       : wildcard
         ? "All tools, unconditionally — including ones added later"
         : toolAnnotations.length === 0
@@ -790,7 +777,7 @@ function FocusedServerPane({
           <p className="text-muted-foreground text-xs">
             {server.kind === "gateway"
               ? `${server.memberCount ?? gatewayMembers.length} member servers`
-              : `${pluralize(server.tools.length, "tool")} discovered`}
+              : `${pluralize(server.tools.length, "tool")}${server.toolSource === "discovered" ? " discovered" : ""}`}
           </p>
         </div>
         {selected ? (
@@ -917,6 +904,38 @@ function FocusedServerPane({
       )}
     </div>
   );
+}
+
+/**
+ * The note for a hand-picked tool list. A policy can name tools the server's
+ * list does not have, for example on a remote server whose tools were never
+ * discovered; counting them against that list would read as "1 of 0".
+ */
+function customScopeNote(
+  server: PickerServer,
+  selectedTools: string[],
+): string {
+  const listed = new Set(server.tools.map((tool) => tool.name));
+  const missingCount = selectedTools.filter((name) => !listed.has(name)).length;
+  if (missingCount === 0) {
+    return `Custom · ${selectedTools.length} of ${server.tools.length}`;
+  }
+  // Without a complete tool list there is nothing to count against.
+  if (
+    server.toolsLoading ||
+    server.toolsError ||
+    server.toolSource === "unlisted"
+  ) {
+    return `Custom · ${pluralize(selectedTools.length, "tool")}`;
+  }
+  const missing =
+    server.toolSource === "discovered"
+      ? "not discovered yet"
+      : "not on this server";
+  if (server.tools.length === 0) {
+    return `Custom · ${pluralize(missingCount, "tool")}, ${missing}`;
+  }
+  return `Custom · ${selectedTools.length - missingCount} of ${server.tools.length}, plus ${missingCount} ${missing}`;
 }
 
 function noToolsMessage(source: PickerServer["toolSource"]): string {
