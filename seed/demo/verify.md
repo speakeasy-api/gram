@@ -597,9 +597,9 @@ open their effective assignments; the dropdown always offers compact member sear
       the submitted source remains visible after editing the next snippet.
     - Select Progressive/Direct overrides and reconnect; return to the gateway
       default and confirm execute returns. Reconnect through the consent screen
-      with Specific tools and a Code override: search and calls only reach the
+      with Specific tools and a Code Mode override: search and calls only reach the
       chosen tools.
-    - In Settings select Code, save, and verify a new default connection. A missing
+    - In Settings select Code Mode, save, and verify a new default connection. A missing
       runtime must prevent new Code selections with a visible error or
       unavailable option; stored Code defaults and connections are served in
       Progressive mode until the runtime returns.
@@ -610,6 +610,11 @@ open their effective assignments; the dropdown always offers compact member sear
       Code Mode on the consent page ("Gateway default (Progressive)" stays the
       default), and confirm one execute tool whose search and calls reach
       servers from every project you can reach.
+    - Command K: gateways are not Command K resource candidates (the MCP Servers
+      source indexes `/mcp` server rows, not gateways), so searching "Python
+      Code Gateway" is not expected to find it. Open it from the MCP page
+      instead. This is a known gap shared by every gateway, not specific to this
+      fixture.
 
 ## On failure
 
