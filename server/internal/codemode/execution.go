@@ -45,6 +45,20 @@ type ExecutionResult struct {
 	Error *ExecutionError `json:"error,omitempty"`
 	// ToolCalls records dispatch outcomes independently of Python's return value.
 	ToolCalls []CallOutcome `json:"tool_calls"`
+
+	// Timing splits the server's time between admission and the run. It is
+	// reported beside the result, never inside it.
+	Timing ExecutionTiming `json:"-"`
+}
+
+// ExecutionTiming is where an execution spent its server-side time.
+type ExecutionTiming struct {
+	// Admission covers waiting for caller, organization and runner capacity
+	// and recording ownership, until the program could be submitted.
+	Admission time.Duration
+
+	// Run covers submission, Python and tool callbacks, until the result.
+	Run time.Duration
 }
 
 // ExecutionError is a bounded public failure, not an upstream internal error.
@@ -115,7 +129,7 @@ type executionState struct {
 
 // Run executes once, with no transport retry after submitting the start frame.
 func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code string, factory HostFactory) *ExecutionResult {
-	result := &ExecutionResult{Value: json.RawMessage("null"), Output: "", OutputTruncated: false, Error: nil, ToolCalls: []CallOutcome{}}
+	result := &ExecutionResult{Value: json.RawMessage("null"), Output: "", OutputTruncated: false, Error: nil, ToolCalls: []CallOutcome{}, Timing: ExecutionTiming{Admission: 0, Run: 0}}
 	fail := func(code, message string) { result.Error = &ExecutionError{Code: code, Message: message} }
 	if len(code) == 0 || len(code) > MaxSourceBytes || factory == nil {
 		fail("invalid_program", "code must contain 1 to 65536 UTF-8 bytes")

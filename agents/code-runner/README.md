@@ -87,8 +87,9 @@ be at least 35 seconds to cover execution, terminal-frame and connection drainin
 - 1 MiB per helper result; 8 MiB cumulative callback arguments and results.
 - 256 KiB final JSON; 16 KiB captured print output, truncated at a UTF-8 boundary.
 - Twelve executions by default (`GRAM_CODE_RUNNER_CAPACITY`), configurable
-  from 1 to 16; it must match the server's streams per pod. Saturation refuses
-  admission. At most 32 connections, 16 streams and 4 MiB receive window per
+  from 1 to 16. The upgrade response reports it in `Gram-Code-Capacity`, and
+  the server opens at most that many streams per pod. Saturation refuses with
+  `capacity_exceeded`. At most 32 connections, 16 streams and 4 MiB receive window per
   connection; five seconds to receive headers and the first execution frame.
   At most 16 streams buffer an unadmitted first frame at once; a stream that
   cannot start reading within those five seconds is refused admission.

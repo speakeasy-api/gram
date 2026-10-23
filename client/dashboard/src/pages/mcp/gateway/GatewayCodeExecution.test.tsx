@@ -168,6 +168,73 @@ it("shows an admission refusal without claiming tools might have run", async () 
   expect(alert.textContent).toContain("No program was submitted.");
   expect(alert.textContent).not.toContain("may have");
 });
+it("shows a structured capacity refusal as refused, with the server's time", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result: {
+            isError: true,
+            content: [{ type: "text", text: "{}" }],
+            structuredContent: {
+              error: {
+                code: "capacity_exceeded",
+                message: "Code Mode is busy. No program was submitted.",
+                retryable: true,
+                retry_after_ms: 1000,
+              },
+            },
+            _meta: { "com.speakeasy.ai/timing": { server_ms: 3004 } },
+          },
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    ),
+  );
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("The run was refused");
+  expect(alert.textContent).toContain("Code Mode is busy.");
+  expect(alert.textContent).toContain("Refused after 3.0 s on the server.");
+  expect(alert.textContent).not.toContain("may have");
+});
+it("separates server time from the round trip", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result: {
+            structuredContent: {
+              value: 2,
+              output: "",
+              output_truncated: false,
+              tool_calls: [],
+            },
+            _meta: {
+              "com.speakeasy.ai/timing": {
+                server_ms: 15,
+                admission_ms: 3,
+                run_ms: 12,
+              },
+            },
+          },
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    ),
+  );
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "Run Python" }));
+  expect(
+    await screen.findByText(/round trip · 15 ms on the server/),
+  ).toBeTruthy();
+  expect(
+    screen.getByText("Server time: 3 ms waiting for capacity, 12 ms running."),
+  ).toBeTruthy();
+});
 it.each([
   [
     "a JSON-RPC rejection",

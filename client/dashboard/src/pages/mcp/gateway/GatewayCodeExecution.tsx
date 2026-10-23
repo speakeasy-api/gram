@@ -18,7 +18,33 @@ const resultSchema = z.object({
   tool_calls: z.array(z.object({ path: z.string(), outcome: z.string() })),
 });
 
-class ExecutionNotAdmittedError extends Error {}
+/** A run refused before its program was submitted, such as at capacity. */
+const refusalSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    retryable: z.boolean(),
+  }),
+});
+
+/** The gateway's own time for an execute request, from the result's _meta. */
+const timingSchema = z.object({
+  server_ms: z.number(),
+  admission_ms: z.number().optional(),
+  run_ms: z.number().optional(),
+});
+type ServerTiming = z.infer<typeof timingSchema>;
+
+const TIMING_META_KEY = "com.speakeasy.ai/timing";
+
+class ExecutionNotAdmittedError extends Error {
+  readonly timing: ServerTiming | undefined;
+
+  constructor(message: string, timing?: ServerTiming) {
+    super(message);
+    this.timing = timing;
+  }
+}
 
 const JSONRPC_INTERNAL_ERROR = -32603;
 
@@ -85,21 +111,37 @@ export function GatewayCodeExecution({
         );
         const response = z
           .object({
-            structuredContent: resultSchema.optional(),
+            structuredContent: z.unknown().optional(),
             content: z
               .array(z.object({ text: z.string().optional() }).passthrough())
               .optional(),
             isError: z.boolean().optional(),
+            _meta: z
+              .object({ [TIMING_META_KEY]: timingSchema.optional() })
+              .passthrough()
+              .optional(),
           })
           .parse(raw);
+        const timing = response._meta?.[TIMING_META_KEY];
         if (!response.structuredContent) {
           const message =
             response.content?.[0]?.text ??
             "The gateway returned no execution result.";
-          if (response.isError) throw new ExecutionNotAdmittedError(message);
+          if (response.isError)
+            throw new ExecutionNotAdmittedError(message, timing);
           throw new Error(message);
         }
-        return response.structuredContent;
+        const refusal = refusalSchema.safeParse(response.structuredContent);
+        if (response.isError && refusal.success) {
+          throw new ExecutionNotAdmittedError(
+            refusal.data.error.message,
+            timing,
+          );
+        }
+        return {
+          result: resultSchema.parse(response.structuredContent),
+          timing,
+        };
       } catch (error) {
         if (error instanceof ExecutionNotAdmittedError) throw error;
         if (refusedBeforeExecution(error)) {
@@ -131,7 +173,7 @@ export function GatewayCodeExecution({
   });
   const sourceBytes = new TextEncoder().encode(code).length;
   const tooLarge = sourceBytes > MAX_SOURCE_BYTES;
-  const result = execution.data;
+  const result = execution.data?.result;
   const submitted = execution.variables;
   const canRun =
     !disabled && !execution.isPending && !!code.trim() && !tooLarge;
@@ -203,7 +245,15 @@ export function GatewayCodeExecution({
               ? "The run was refused"
               : "The run did not finish"}
           </AlertTitle>
-          <AlertDescription>{execution.error.message}</AlertDescription>
+          <AlertDescription>
+            {execution.error.message}
+            {execution.error instanceof ExecutionNotAdmittedError &&
+              execution.error.timing && (
+                <span className="text-muted-foreground block text-xs">
+                  {`Refused after ${formatDuration(execution.error.timing.server_ms)} on the server.`}
+                </span>
+              )}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -211,6 +261,7 @@ export function GatewayCodeExecution({
         <ExecutionResult
           result={result}
           durationMs={durationMs}
+          serverTiming={execution.data?.timing}
           submitted={submitted !== code ? submitted : undefined}
         />
       )}
@@ -236,10 +287,13 @@ const outcomeLabels: Record<
 function ExecutionResult({
   result,
   durationMs,
+  serverTiming,
   submitted,
 }: {
   result: z.infer<typeof resultSchema>;
+  /** Round trip measured in the browser, including the network. */
   durationMs: number | undefined;
+  serverTiming: ServerTiming | undefined;
   /** The source that produced this result, when the editor has moved on. */
   submitted: string | undefined;
 }): JSX.Element {
@@ -247,7 +301,10 @@ function ExecutionResult({
   const summary = [
     result.error ? "Failed" : "Returned",
     `${calls.length} tool ${calls.length === 1 ? "call" : "calls"}`,
-    durationMs === undefined ? undefined : formatDuration(durationMs),
+    durationMs === undefined
+      ? undefined
+      : `${formatDuration(durationMs)} round trip`,
+    serverTiming && `${formatDuration(serverTiming.server_ms)} on the server`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -265,6 +322,12 @@ function ExecutionResult({
         />
         <Text small>{summary}</Text>
       </div>
+      {serverTiming?.admission_ms !== undefined &&
+        serverTiming.run_ms !== undefined && (
+          <Text muted small className="-mt-2">
+            {`Server time: ${formatDuration(serverTiming.admission_ms)} waiting for capacity, ${formatDuration(serverTiming.run_ms)} running.`}
+          </Text>
+        )}
       {result.error && (
         <Alert variant="error" dismissible={false}>
           <AlertTitle>{result.error.message}</AlertTitle>

@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +38,9 @@ const (
 	// runner's GRAM_CODE_RUNNER_CAPACITY default and stays below the peer's
 	// 16-stream limit, which counts closing streams too.
 	RunnerStreams = 12
+	// runnerCapacityHeader is the upgrade response header in which a runner
+	// reports how many executions it admits concurrently.
+	runnerCapacityHeader = "Gram-Code-Capacity"
 	// runnerSlotWait bounds how long an execution waits for a free stream on
 	// a runner that every caller shares, such as the local runner.
 	runnerSlotWait = DefaultAdmissionWait
@@ -52,6 +56,10 @@ type RunnerClient struct {
 	session  *yamux.Session
 	closed   bool
 	slots    *semaphore.Weighted
+	// capacity is the runner's reported concurrency, capped at RunnerStreams;
+	// zero until the first connection. Slots above it are reserved once, so
+	// executions wait here instead of being refused by a smaller runner.
+	capacity int
 	// connecting is closed when the in-flight connection attempt finishes, so
 	// other callers wait on it, or their own context, instead of the mutex.
 	connecting chan struct{}
@@ -66,7 +74,7 @@ func NewRunnerClient(endpoint, token string, dialer *net.Dialer) (*RunnerClient,
 	if len(token) < 32 || strings.ContainsAny(token, "\r\n") || dialer == nil {
 		return nil, fmt.Errorf("code runner requires a guarded dialer and a token of at least 32 bytes")
 	}
-	return &RunnerClient{mu: sync.Mutex{}, endpoint: u, token: token, dialer: dialer, session: nil, closed: false, slots: semaphore.NewWeighted(RunnerStreams), connecting: nil}, nil
+	return &RunnerClient{mu: sync.Mutex{}, endpoint: u, token: token, dialer: dialer, session: nil, closed: false, slots: semaphore.NewWeighted(RunnerStreams), capacity: 0, connecting: nil}, nil
 }
 
 // Close terminates the transport and all active executions during provider release.
@@ -144,7 +152,7 @@ func (c *RunnerClient) currentSession(ctx context.Context) (*yamux.Session, erro
 		c.connecting = done
 		c.mu.Unlock()
 
-		session, err := c.connect(ctx)
+		session, capacity, err := c.connect(ctx)
 		c.mu.Lock()
 		c.connecting = nil
 		close(done)
@@ -153,10 +161,20 @@ func (c *RunnerClient) currentSession(ctx context.Context) (*yamux.Session, erro
 			_ = session.Close()
 			return nil, fmt.Errorf("code runner connection released")
 		}
+		reserve := 0
 		if err == nil {
 			c.session = session
+			if c.capacity == 0 {
+				c.capacity = capacity
+				reserve = RunnerStreams - capacity
+			}
 		}
 		c.mu.Unlock()
+		if reserve > 0 {
+			// Executions already holding slots finish within their wall time,
+			// so the reservation completes without blocking this connection.
+			go func() { _ = c.slots.Acquire(context.WithoutCancel(ctx), int64(reserve)) }()
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -164,7 +182,15 @@ func (c *RunnerClient) currentSession(ctx context.Context) (*yamux.Session, erro
 	}
 }
 
-func (c *RunnerClient) connect(ctx context.Context) (*yamux.Session, error) {
+// knownCapacity returns the concurrency the runner reported on its first
+// connection, or zero before the runner has been reached.
+func (c *RunnerClient) knownCapacity() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.capacity
+}
+
+func (c *RunnerClient) connect(ctx context.Context) (*yamux.Session, int, error) {
 	ctx, cancel := context.WithTimeout(ctx, connectTimeout)
 	defer cancel()
 	port := c.endpoint.Port()
@@ -177,7 +203,7 @@ func (c *RunnerClient) connect(ctx context.Context) (*yamux.Session, error) {
 	}
 	conn, err := c.dialer.DialContext(ctx, "tcp", net.JoinHostPort(c.endpoint.Hostname(), port))
 	if err != nil {
-		return nil, fmt.Errorf("dial code runner: %w", err)
+		return nil, 0, fmt.Errorf("dial code runner: %w", err)
 	}
 	accepted := false
 	defer func() {
@@ -187,7 +213,7 @@ func (c *RunnerClient) connect(ctx context.Context) (*yamux.Session, error) {
 	}()
 	deadline, _ := ctx.Deadline()
 	if err := conn.SetDeadline(deadline); err != nil {
-		return nil, fmt.Errorf("bound code handshake: %w", err)
+		return nil, 0, fmt.Errorf("bound code handshake: %w", err)
 	}
 	// Cancellation, not only the deadline, interrupts the handshake reads.
 	stopInterrupt := context.AfterFunc(ctx, func() { _ = conn.SetDeadline(time.Now()) })
@@ -195,7 +221,7 @@ func (c *RunnerClient) connect(ctx context.Context) (*yamux.Session, error) {
 	if c.endpoint.Scheme == "https" {
 		secure := tls.Client(conn, &tls.Config{ServerName: c.endpoint.Hostname(), MinVersion: tls.VersionTLS12})
 		if err := secure.HandshakeContext(ctx); err != nil {
-			return nil, fmt.Errorf("code runner TLS: %w", err)
+			return nil, 0, fmt.Errorf("code runner TLS: %w", err)
 		}
 		conn = secure
 	}
@@ -203,24 +229,24 @@ func (c *RunnerClient) connect(ctx context.Context) (*yamux.Session, error) {
 	u.Path = "/v1/connect"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("build code upgrade: %w", err)
+		return nil, 0, fmt.Errorf("build code upgrade: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "gram-code-yamux")
 	req.Header.Set("Gram-Code-Protocol", "1")
 	if err := req.Write(conn); err != nil {
-		return nil, fmt.Errorf("write code upgrade: %w", err)
+		return nil, 0, fmt.Errorf("write code upgrade: %w", err)
 	}
 	reader := bufio.NewReaderSize(conn, maxUpgradeHeaderBytes)
 	var headers bytes.Buffer
 	for {
 		line, err := reader.ReadSlice('\n')
 		if err != nil {
-			return nil, fmt.Errorf("read code upgrade: %w", err)
+			return nil, 0, fmt.Errorf("read code upgrade: %w", err)
 		}
 		if headers.Len()+len(line) > maxUpgradeHeaderBytes {
-			return nil, fmt.Errorf("code upgrade headers exceed limit")
+			return nil, 0, fmt.Errorf("code upgrade headers exceed limit")
 		}
 		headers.Write(line)
 		if bytes.Equal(line, []byte("\r\n")) {
@@ -229,14 +255,19 @@ func (c *RunnerClient) connect(ctx context.Context) (*yamux.Session, error) {
 	}
 	response, err := http.ReadResponse(bufio.NewReader(&headers), req) //nolint:bodyclose // Closed through o11y.NoLogDefer below; the body only wraps the bounded header buffer.
 	if err != nil {
-		return nil, fmt.Errorf("parse code upgrade: %w", err)
+		return nil, 0, fmt.Errorf("parse code upgrade: %w", err)
 	}
 	defer o11y.NoLogDefer(response.Body.Close)
 	if response.StatusCode != http.StatusSwitchingProtocols || !strings.EqualFold(response.Header.Get("Upgrade"), "gram-code-yamux") {
-		return nil, fmt.Errorf("code runner refused protocol upgrade")
+		return nil, 0, fmt.Errorf("code runner refused protocol upgrade")
 	}
+	capacity, err := strconv.Atoi(response.Header.Get(runnerCapacityHeader))
+	if err != nil || capacity < 1 {
+		return nil, 0, fmt.Errorf("code runner did not report its capacity")
+	}
+	capacity = min(capacity, RunnerStreams)
 	if err := conn.SetDeadline(time.Time{}); err != nil {
-		return nil, fmt.Errorf("clear code handshake deadline: %w", err)
+		return nil, 0, fmt.Errorf("clear code handshake deadline: %w", err)
 	}
 	config := yamux.DefaultConfig()
 	config.LogOutput = io.Discard
@@ -244,10 +275,10 @@ func (c *RunnerClient) connect(ctx context.Context) (*yamux.Session, error) {
 	config.ConnectionWriteTimeout = connectTimeout
 	session, err := yamux.Client(&bufferedRunnerConn{Conn: conn, reader: reader}, config)
 	if err != nil {
-		return nil, fmt.Errorf("start code multiplexing: %w", err)
+		return nil, 0, fmt.Errorf("start code multiplexing: %w", err)
 	}
 	accepted = true
-	return session, nil
+	return session, capacity, nil
 }
 
 type bufferedRunnerConn struct {

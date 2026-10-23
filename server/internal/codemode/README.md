@@ -65,11 +65,14 @@ the next helper boundary. A replacement bearer cannot inherit or cancel that
 execution; use the original HTTP request lifetime to interrupt it. This preserves
 the admitted credential boundary even when a refreshed session gains permissions.
 
-The Go client reuses an authenticated HTTP-upgraded yamux connection. Twelve local
-admission slots bound discovery and open/closing streams; an execution waits up
-to three seconds for one, and refusals do not open
+The Go client reuses an authenticated HTTP-upgraded yamux connection. The runner
+reports its concurrency in the upgrade's `Gram-Code-Capacity` header, and the
+client refuses a runner that omits it. Local admission slots, twelve or the
+runner's smaller capacity, bound discovery and open/closing streams; an
+execution waits up to three seconds for one, and refusals do not open
 another stream. Admission remains held until the peer's FIN. The runner's
-`admission_refused` response proves the program did not run. A missing `started`
+`admission_refused` and `capacity_exceeded` responses prove the program did not
+run. A missing `started`
 response does not prove that. Submitted programs are never automatically retried.
 
 Host construction, including an optional exact tool allowlist, runs after
@@ -185,13 +188,21 @@ warming pods' streams are spoken for. At the organization cap an execution
 waits up to three seconds for a free stream and is then refused as retryable
 capacity. A full replica evicts another organization's oldest idle pod; busy
 pods are never evicted. Each pod admits twelve concurrent executions (the
-runner's `GRAM_CODE_RUNNER_CAPACITY` default); a worker starts in about a
+runner's `GRAM_CODE_RUNNER_CAPACITY` default), or the smaller capacity its
+runner reports, so a pod from an older template is never sent more than it
+admits; a worker starts in about a
 millisecond, so pods are CPU-bound and should request about 1 CPU and 1 to 1.5
 GiB. Readiness polls start at 25 ms and back off to one second, so adopting a
 warm pod costs little more than the controller's bind. Claims expire after five
 minutes; pods still in use renew their claim two minutes before expiry, so an
 active organization keeps its warm pods. A pod refuses admission with less than
-35 seconds remaining and is deleted after ten minutes idle. A replacement can
+35 seconds remaining and is deleted after ten minutes idle. A pod is also
+retired thirty minutes after its claim, or two minutes after it if its runner
+reports a capacity other than twelve, even while busy: it takes no new
+executions, a replacement warms beside it, and it is deleted once its in-flight
+executions finish. A busy organization may never go idle, so this is what rolls
+a template change out to its pods. A failed renewal lets the claim near expiry,
+which retires the pod the same way. A replacement can
 warm while the old pod drains. Warm-up has its own two-minute deadline; cancellation of one waiting
 request does not cancel the shared cold start. Local housekeeping consumes zero Temporal
 actions. Claim deletion uses a UID precondition. Every admission, including one
@@ -314,6 +325,11 @@ An execution refused before submission returns a tool error whose structured
 content is `{"error": {"code", "message", "retryable", "retry_after_ms"}}`, with
 codes `capacity_exceeded`, `runtime_unavailable`, `request_active`, `cancelled`
 and `not_admitted`. The message always says no program was submitted.
+
+Every execute result, including a refusal, carries the gateway's timing in
+`_meta["com.speakeasy.ai/timing"]`: `server_ms`, plus `admission_ms` (waiting
+for capacity) and `run_ms` once the program was submitted. Inspect shows it
+beside the browser's round trip.
 
 Each tool call from an execution starts its own trace, linked to the
 execution's, so Tool Logs shows one correctly attributed row per member call.

@@ -429,6 +429,70 @@ func TestCodeGKEDrainsBeforeExpiryAndDeletesWithUID(t *testing.T) {
 	require.Equal(t, 1, deletes)
 }
 
+func TestCodeGKEReplacesAgedPodWhileBusy(t *testing.T) {
+	t.Parallel()
+	provider, client, scope := newCodeGKEFixture(t, nil)
+	lease, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	typed, ok := lease.(*gkeLease)
+	require.True(t, ok)
+	provider.mu.Lock()
+	typed.entry.claimed = time.Now().Add(-codeRunnerMaxAge)
+	provider.mu.Unlock()
+	replacement, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	require.NotSame(t, lease.Client(), replacement.Client(), "a busy pod past its maximum age takes no new executions")
+	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, claims.Items, 2, "the aged pod keeps its in-flight execution while the replacement serves")
+	require.NoError(t, lease.Release(t.Context()))
+	claims, err = client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, claims.Items, 1, "the aged pod is released once its last execution ends")
+	require.NoError(t, replacement.Release(t.Context()))
+}
+
+func TestCodeGKEPlacesByReportedRunnerCapacity(t *testing.T) {
+	t.Parallel()
+	provider, _, scope := newCodeGKEFixture(t, nil)
+	first, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	runner := first.Client()
+	runner.mu.Lock()
+	runner.capacity = 1
+	runner.mu.Unlock()
+	second, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	require.NotSame(t, runner, second.Client(), "a runner that admits one execution is never sent a second")
+	require.NoError(t, first.Release(t.Context()))
+	require.NoError(t, second.Release(t.Context()))
+}
+
+func TestCodeGKEReplacesPodWithMismatchedCapacity(t *testing.T) {
+	t.Parallel()
+	provider, _, scope := newCodeGKEFixture(t, nil)
+	lease, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	typed, ok := lease.(*gkeLease)
+	require.True(t, ok)
+	runner := lease.Client()
+	runner.mu.Lock()
+	runner.capacity = RunnerStreams / 3
+	runner.mu.Unlock()
+	same, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	require.Same(t, runner, same.Client(), "a smaller runner keeps serving at its own capacity at first")
+	require.NoError(t, same.Release(t.Context()))
+	provider.mu.Lock()
+	typed.entry.claimed = time.Now().Add(-codeMismatchedRunnerAge)
+	provider.mu.Unlock()
+	replacement, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	require.NotSame(t, runner, replacement.Client(), "a pod from another template is replaced soon after it is seen")
+	require.NoError(t, lease.Release(t.Context()))
+	require.NoError(t, replacement.Release(t.Context()))
+}
+
 func TestCodeGKEIdleReapAndShutdown(t *testing.T) {
 	t.Parallel()
 	provider, client, scope := newCodeGKEFixture(t, nil)

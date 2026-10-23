@@ -67,6 +67,12 @@ async fn multiplexes_fresh_executions_on_one_authenticated_connection() {
     let (addr, cancel, task) = fixture().await;
     let (socket, response) = upgrade(addr, TOKEN, 1).await;
     assert!(response.starts_with("HTTP/1.1 101"), "{response}");
+    assert!(
+        response
+            .to_ascii_lowercase()
+            .contains("gram-code-capacity: 2\r\n"),
+        "the upgrade reports the runner's capacity: {response}"
+    );
     let mut connection = yamux::Connection::new(
         socket.compat(),
         yamux::Config::default(),

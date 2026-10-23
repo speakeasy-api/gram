@@ -280,6 +280,30 @@ async fn cancelled_and_disconnected_executions_release_capacity() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_full_runner_refuses_as_capacity() {
+    let state = state(1).await;
+    let mut pending = Run::new(
+        state.clone(),
+        Uuid::new_v4().to_string(),
+        "await tools.call('a--write', {})",
+        5000,
+    )
+    .await;
+    pending.started().await;
+    assert!(matches!(pending.next().await, ServerFrame::Callback { .. }));
+    let mut full = Run::new(state.clone(), Uuid::new_v4().to_string(), "1", 5000).await;
+    assert!(
+        matches!(full.next().await, ServerFrame::Error { code, .. } if code == "capacity_exceeded")
+    );
+    full.close().await.unwrap();
+    write_frame(&mut pending.stream, &ClientFrame::Cancel)
+        .await
+        .unwrap();
+    assert!(matches!(pending.next().await, ServerFrame::Error { code, .. } if code == "cancelled"));
+    pending.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn deadline_includes_host_wait() {
     let mut pending = Run::new(
         state(1).await,

@@ -219,6 +219,52 @@ func TestCodeModeRefusalIsStructured(t *testing.T) {
 	require.True(t, refusal.Retryable)
 	require.Positive(t, refusal.RetryAfterMS)
 	require.Contains(t, refusal.Message, "No program was submitted.")
+	var timed struct {
+		Result struct {
+			Meta map[string]json.RawMessage `json:"_meta"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &timed))
+	var refusalTiming map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(timed.Result.Meta["com.speakeasy.ai/timing"], &refusalTiming))
+	require.Contains(t, refusalTiming, "server_ms")
+	require.NotContains(t, refusalTiming, "admission_ms", "a refusal reports server time only")
+	require.NotContains(t, refusalTiming, "run_ms")
+	require.Contains(t, timed.Result.Meta, "io.modelcontextprotocol/serverInfo", "timing joins the server identity in _meta")
+}
+
+// TestCodeModeReportsServerTiming pins the timing an execute result carries
+// in _meta, so clients can separate server time from their own network time.
+func TestCodeModeReportsServerTiming(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil, run: func(context.Context, string, codemode.Host) (*codemode.ExecutionResult, error) {
+		return &codemode.ExecutionResult{Value: json.RawMessage("2"), ToolCalls: []codemode.CallOutcome{}, Timing: codemode.ExecutionTiming{Admission: 3 * time.Millisecond, Run: 12 * time.Millisecond}}, nil
+	}}
+	mcp.SetTestCodeExecutor(ti.service.Service, executor)
+	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
+
+	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1+1"}}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var response struct {
+		Result struct {
+			Meta map[string]struct {
+				ServerMS    int64  `json:"server_ms"`
+				AdmissionMS *int64 `json:"admission_ms"`
+				RunMS       *int64 `json:"run_ms"`
+			} `json:"_meta"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	timing, ok := response.Result.Meta["com.speakeasy.ai/timing"]
+	require.True(t, ok, w.Body.String())
+	require.NotNil(t, timing.AdmissionMS)
+	require.NotNil(t, timing.RunMS)
+	require.Equal(t, int64(3), *timing.AdmissionMS)
+	require.Equal(t, int64(12), *timing.RunMS)
+	require.GreaterOrEqual(t, timing.ServerMS, int64(0))
 }
 
 // TestCodeModeRunnerRefusalIsStructured pins that a runner refusing a

@@ -36,6 +36,16 @@ const (
 	// codeIdleTTL releases an organization's pod after ten minutes without
 	// executions, so an active organization does not cold-start between bursts.
 	codeIdleTTL = 10 * time.Minute
+	// codeRunnerMaxAge retires a pod this long after its claim, even while it
+	// is busy: a replacement warms beside it and in-flight executions finish
+	// first. A busy organization may never go idle, so this is what rolls a
+	// template change (image, capacity, resources) out to its pods.
+	codeRunnerMaxAge = 30 * time.Minute
+	// codeMismatchedRunnerAge retires sooner a pod whose runner reports a
+	// capacity other than RunnerStreams, such as a warm pod from a previous
+	// template. It still serves at its own capacity until then, and a
+	// misconfigured template costs one replacement claim per pod per period.
+	codeMismatchedRunnerAge = 2 * time.Minute
 	// codeTemplateRefresh is how often the sandbox template's presence is
 	// re-read, so a deploy that installs it late enables Code Mode promptly.
 	codeTemplateRefresh = 15 * time.Second
@@ -157,6 +167,8 @@ type projectRunner struct {
 	ip     string
 	// expires is the claim's confirmed shutdown time.
 	expires time.Time
+	// claimed is when this replica created the claim; it bounds the pod's age.
+	claimed time.Time
 	// renewal is a shutdown time being written to the claim; until the write
 	// is confirmed, either time is accepted.
 	renewal time.Time
@@ -323,9 +335,9 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 				if warming == nil || entry.waiting < warming.waiting {
 					warming = entry
 				}
-			case entry.retired || !p.now().Add(codeDrainMargin).Before(entry.expires):
+			case entry.retired || !p.now().Add(codeDrainMargin).Before(entry.expires) || p.agedLocked(ctx, entry):
 				expiring = entry
-			case entry.refs < RunnerStreams && (best == nil || entry.refs < best.refs):
+			case entry.refs < p.streamsLocked(entry) && (best == nil || entry.refs < best.refs):
 				best = entry
 			}
 		}
@@ -387,7 +399,7 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 			for p.entries[runnerScope{organization: organization, slot: slot}] != nil {
 				slot++
 			}
-			warming = &projectRunner{key: runnerScope{organization: organization, slot: slot}, name: "gram-code-" + uuid.NewString(), uid: "", podUID: "", ip: "", expires: p.now().UTC().Add(codeClaimTTL).Truncate(time.Second), renewal: time.Time{}, idle: time.Time{}, refs: 0, waiting: 0, creating: true, retired: false, cleaning: false, ready: make(chan struct{}), client: nil, err: nil}
+			warming = &projectRunner{key: runnerScope{organization: organization, slot: slot}, name: "gram-code-" + uuid.NewString(), uid: "", podUID: "", ip: "", expires: p.now().UTC().Add(codeClaimTTL).Truncate(time.Second), claimed: p.now(), renewal: time.Time{}, idle: time.Time{}, refs: 0, waiting: 0, creating: true, retired: false, cleaning: false, ready: make(chan struct{}), client: nil, err: nil}
 			p.entries[warming.key] = warming
 			p.workers.Add(1)
 			go p.initialize(warming)
@@ -441,6 +453,32 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 		}
 		return &gkeLease{provider: p, entry: entry, once: sync.Once{}}, nil
 	}
+}
+
+// streamsLocked is how many executions an admitted pod takes at once: the
+// capacity its runner reported, or RunnerStreams before it has been reached.
+func (p *GKEProvider) streamsLocked(entry *projectRunner) int {
+	if entry.client != nil {
+		if capacity := entry.client.knownCapacity(); capacity > 0 {
+			return capacity
+		}
+	}
+	return RunnerStreams
+}
+
+// agedLocked reports whether a pod should be replaced for its age, sooner
+// when its runner's capacity does not match the server's.
+func (p *GKEProvider) agedLocked(ctx context.Context, entry *projectRunner) bool {
+	age := p.now().Sub(entry.claimed)
+	if age >= codeRunnerMaxAge {
+		return true
+	}
+	streams := p.streamsLocked(entry)
+	if streams == RunnerStreams || age < codeMismatchedRunnerAge {
+		return false
+	}
+	p.config.Logger.WarnContext(ctx, "code runner capacity differs from the server's streams; replacing its pod", attr.SlogValueInt(streams), attr.SlogOrganizationID(entry.key.organization))
+	return true
 }
 
 // retireLocked removes an admission target while retaining active leases in the
@@ -799,7 +837,7 @@ func (p *GKEProvider) reap(ctx context.Context) {
 		if entry.creating {
 			continue
 		}
-		if !p.now().Add(codeDrainMargin).Before(entry.expires) {
+		if !p.now().Add(codeDrainMargin).Before(entry.expires) || p.agedLocked(ctx, entry) {
 			entry.retired = true
 		}
 		if entry.refs == 0 && (entry.retired || p.now().Sub(entry.idle) >= codeIdleTTL) {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -87,7 +88,7 @@ func runnerRefusal(code string) (error, bool) {
 
 // marshalCodeAdmissionRefusal returns the refusal as both text and
 // structured content, so clients can branch on the code and retry hint.
-func marshalCodeAdmissionRefusal(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, refusal codeAdmissionRefusal) (json.RawMessage, error) {
+func marshalCodeAdmissionRefusal(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, refusal codeAdmissionRefusal, timing codeExecutionTiming) (json.RawMessage, error) {
 	structured, err := json.Marshal(refusal)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code refusal").LogError(ctx, logger)
@@ -96,9 +97,47 @@ func marshalCodeAdmissionRefusal(ctx context.Context, logger *slog.Logger, id mc
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code refusal content").LogError(ctx, logger)
 	}
-	body, err := json.Marshal(&result[toolCallResult]{ID: id, Result: toolCallResult{Content: []json.RawMessage{chunk}, StructuredContent: structured, IsError: true}, serverIdentity: serverInfoMetaServer, cacheHints: nil})
+	body, err := json.Marshal(&result[codeToolCallResult]{ID: id, Result: codeToolCallResult{toolCallResult: toolCallResult{Content: []json.RawMessage{chunk}, StructuredContent: structured, IsError: true}, Meta: map[string]codeExecutionTiming{codeTimingMetaKey: timing}}, serverIdentity: serverInfoMetaServer, cacheHints: nil})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code refusal response").LogError(ctx, logger)
 	}
 	return body, nil
+}
+
+// codeTimingMetaKey namespaces the gateway's timing in an execute result's
+// _meta, beside the server identity.
+const codeTimingMetaKey = "com.speakeasy.ai/timing"
+
+// codeExecutionTiming reports where the gateway spent an execute request, so
+// a client can tell its own network time from server time.
+type codeExecutionTiming struct {
+	// ServerMS is the gateway's total time for the request, in milliseconds.
+	ServerMS int64 `json:"server_ms"`
+
+	// AdmissionMS is time spent waiting for capacity before submission; absent
+	// when the request was refused before reaching the runtime.
+	AdmissionMS *int64 `json:"admission_ms,omitempty"`
+
+	// RunMS is time from submission to the result, including tool callbacks;
+	// absent when the program was never submitted.
+	RunMS *int64 `json:"run_ms,omitempty"`
+}
+
+// newCodeExecutionTiming measures the request from started; execution is nil
+// when the coordinator refused it.
+func newCodeExecutionTiming(started time.Time, execution *codemode.ExecutionResult) codeExecutionTiming {
+	timing := codeExecutionTiming{ServerMS: time.Since(started).Milliseconds(), AdmissionMS: nil, RunMS: nil}
+	if execution != nil {
+		timing.AdmissionMS = new(execution.Timing.Admission.Milliseconds())
+		timing.RunMS = new(execution.Timing.Run.Milliseconds())
+	}
+	return timing
+}
+
+// codeToolCallResult is an execute result with the gateway's timing in _meta.
+type codeToolCallResult struct {
+	toolCallResult
+
+	// Meta carries the timing under codeTimingMetaKey.
+	Meta map[string]codeExecutionTiming `json:"_meta"`
 }

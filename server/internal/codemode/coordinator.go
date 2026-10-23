@@ -180,6 +180,7 @@ func (c *Coordinator) Execute(ctx context.Context, scope Scope, code string, fac
 	if len(code) == 0 || len(code) > MaxSourceBytes {
 		return nil, fmt.Errorf("program exceeds source limit")
 	}
+	started := time.Now()
 	release, err := c.admit(ctx, scope)
 	if err != nil {
 		return nil, err
@@ -229,7 +230,10 @@ func (c *Coordinator) Execute(ctx context.Context, scope Scope, code string, fac
 	if ctx.Err() != nil {
 		return nil, ErrCancelledBeforeSubmit
 	}
-	return lease.Client().Run(ctx, id, code, factory), nil
+	admitted := time.Now()
+	result := lease.Client().Run(ctx, id, code, factory)
+	result.Timing = ExecutionTiming{Admission: admitted.Sub(started), Run: time.Since(admitted)}
+	return result, nil
 }
 
 // admit waits up to the admission bound for a caller slot and then an

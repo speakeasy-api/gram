@@ -43,6 +43,9 @@ pub struct State {
     pool: Pool,
     token: String,
     capacity: Semaphore,
+    // Reported in the upgrade response so the server never opens more
+    // concurrent executions than this runner admits.
+    streams: usize,
     start_reads: Semaphore,
     seen: Mutex<HashMap<String, Instant>>,
 }
@@ -57,6 +60,7 @@ impl State {
             pool: runtime::new_pool(binary, capacity).await?,
             token,
             capacity: Semaphore::new(capacity),
+            streams: capacity,
             start_reads: Semaphore::new(MAX_START_READS),
             seen: Mutex::new(HashMap::new()),
         }))
@@ -192,6 +196,7 @@ async fn handle_http(
             "gram-code-yamux protocol 1 required",
         ));
     }
+    let streams = state.streams;
     let upgrade = hyper::upgrade::on(&mut request);
     upgrades.spawn(async move {
         let _permit = permit;
@@ -245,6 +250,9 @@ async fn handle_http(
     accepted
         .headers_mut()
         .insert("gram-code-protocol", "1".parse().unwrap());
+    accepted
+        .headers_mut()
+        .insert("gram-code-capacity", streams.into());
     Ok(accepted)
 }
 
@@ -289,27 +297,37 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
         anyhow::bail!("first frame must be start")
     };
     let admission = (|| {
-        ensure!(!shutdown.is_cancelled(), "runner draining");
-        ensure!(version == VERSION, "unsupported protocol version");
-        ensure!(
-            wall_ms > 0 && wall_ms <= 30_000,
-            "wall deadline must be 1 to 30000ms"
-        );
-        ensure!(!code.is_empty(), "code must not be empty");
-        ensure!(code.len() <= runtime::MAX_CODE, "code exceeds 64 KiB");
-        // Refused capacity attempts must not consume the replay guard budget.
-        let permit = state.capacity.try_acquire()?;
-        state.admit(&execution_id)?;
-        Ok::<_, anyhow::Error>(permit)
+        let refused = |error: anyhow::Error| ("admission_refused", error.to_string());
+        let checks = (|| {
+            ensure!(!shutdown.is_cancelled(), "runner draining");
+            ensure!(version == VERSION, "unsupported protocol version");
+            ensure!(
+                wall_ms > 0 && wall_ms <= 30_000,
+                "wall deadline must be 1 to 30000ms"
+            );
+            ensure!(!code.is_empty(), "code must not be empty");
+            ensure!(code.len() <= runtime::MAX_CODE, "code exceeds 64 KiB");
+            Ok(())
+        })();
+        checks.map_err(refused)?;
+        // A full runner is distinct from a refused program: the server may
+        // place the same execution on another stream. Refused capacity
+        // attempts must not consume the replay guard budget.
+        let permit = state
+            .capacity
+            .try_acquire()
+            .map_err(|_| ("capacity_exceeded", "runner is at capacity".to_string()))?;
+        state.admit(&execution_id).map_err(refused)?;
+        Ok(permit)
     })();
     let _capacity = match admission {
         Ok(permit) => permit,
-        Err(error) => {
+        Err((code, message)) => {
             finish_stream(
                 &mut stream,
                 &ServerFrame::Error {
-                    code: "admission_refused".into(),
-                    message: error.to_string(),
+                    code: code.into(),
+                    message,
                 },
             )
             .await?;
