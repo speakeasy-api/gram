@@ -248,7 +248,7 @@ func TestServeOrganizationGateway_UnauthenticatedIsChallenged(t *testing.T) {
 
 // Slugs are unique per project, so two projects may each hold a server with
 // the same slug. Both must be listed, each under its own project's name.
-func TestServeOrganizationGateway_DirectConnectionListsMemberTools(t *testing.T) {
+func TestServeOrganizationGateway_DirectConnectionRefusesUnansweredListingButRoutesCalls(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	fx := seedOrganizationGateway(t, ctx, ti)
@@ -265,11 +265,14 @@ func TestServeOrganizationGateway_DirectConnectionListsMemberTools(t *testing.T)
 	require.Contains(t, w.Body.String(), `"name":"list_servers"`)
 	require.NotContains(t, w.Body.String(), hosted.slug+"--alpha")
 
+	// The fixture's proxied members have placeholder upstreams that never
+	// answer, so Direct refuses the listing instead of omitting them.
 	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeDirect)
 	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, listTools)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), `"name":"`+hosted.slug+`--alpha"`)
+	require.Contains(t, w.Body.String(), "gateway tool inventory is incomplete")
+	require.NotContains(t, w.Body.String(), `"name":"`+hosted.slug+`--alpha"`)
 	require.NotContains(t, w.Body.String(), `"name":"list_servers"`)
 
 	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{

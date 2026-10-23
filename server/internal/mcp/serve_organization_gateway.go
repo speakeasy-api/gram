@@ -386,7 +386,7 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 	}
 	tokens, err := g.projectTokens.get(ctx, member.projectID)
 	if err != nil {
-		return nil, &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
+		return nil, memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}}
 	}
 	return tokens, nil
 }

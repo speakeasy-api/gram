@@ -275,23 +275,23 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt *memberRou
 	}
 	switch {
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
-		return &metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}
+		return memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}}
 	case errors.Is(err, errMemberResponseTooLarge) || errors.Is(exchangeErr, errMemberResponseTooLarge):
-		return &metaMemberError{message: fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug)}
+		return memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug)}}
 	case errors.Is(err, errMemberUnroutable) || errors.Is(exchangeErr, errMemberUnroutable):
 		// A tunnel with no live route is a member outage, not a meta MCP bug.
-		return &metaMemberError{message: fmt.Sprintf("server %q is not reachable right now", member.slug)}
+		return memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q is not reachable right now", member.slug)}}
 	case exchangeErr != nil:
-		return &metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}
+		return memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}}
 	}
 	if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok {
-		return &metaMemberError{message: fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message)}
+		return memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message)}}
 	}
 	if status := rt.status(); status != 0 && !upstreamStatusOK(status) {
-		return &metaMemberError{message: fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status)}
+		return memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status)}}
 	}
 	logger.WarnContext(ctx, "unclassified meta MCP member failure", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
-	return &metaMemberError{message: fmt.Sprintf("server %q returned a response the meta MCP could not read", member.slug)}
+	return memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q returned a response the meta MCP could not read", member.slug)}}
 }
 
 // memberClientTransport retains the original connection so failed negotiation

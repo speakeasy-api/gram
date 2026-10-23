@@ -149,6 +149,15 @@ type memberCredentialError struct{ *metaMemberError }
 
 func (e memberCredentialError) Unwrap() error { return e.metaMemberError }
 
+// memberUnansweredError is a member failure that leaves its tools unknown
+// because the upstream did not answer successfully: a timeout, transport
+// failure, failed HTTP status such as a rate limit, JSON-RPC error, or a
+// response the meta MCP cannot accept. It is distinct from a failure that
+// excludes the member, such as a missing or rejected credential.
+type memberUnansweredError struct{ *metaMemberError }
+
+func (e memberUnansweredError) Unwrap() error { return e.metaMemberError }
+
 // dialMetaMember routes a member for dispatch and counts the routing outcome.
 func (s *Service) dialMetaMember(
 	ctx context.Context,
@@ -510,7 +519,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 			NextCursor string           `json:"nextCursor"`
 		}
 		if uerr := json.Unmarshal(upstreamResult, &listing); uerr != nil {
-			return nil, &metaMemberError{message: fmt.Sprintf("server %q returned a tool listing the meta MCP could not read", member.slug)}
+			return nil, memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q returned a tool listing the meta MCP could not read", member.slug)}}
 		}
 		for _, entry := range listing.Tools {
 			if entry == nil || entry.Name == "" {
@@ -534,7 +543,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 			break
 		}
 		if listing.NextCursor == cursor || seenCursors[listing.NextCursor] {
-			return nil, &metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug)}
+			return nil, memberUnansweredError{&metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug)}}
 		}
 		seenCursors[listing.NextCursor] = true
 		cursor = listing.NextCursor
