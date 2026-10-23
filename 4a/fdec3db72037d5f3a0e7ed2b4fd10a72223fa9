@@ -1,0 +1,33 @@
+server/internal/judgemessage/payload.go
+  s_dc89ea5159cdcf::t_61cf4256285620 100-113
+server/internal/judgemessage/payload_test.go
+  s_dc89ea5159cdcf::t_2b2a8abd2d942e 8,25-32
+server/internal/scanners/customruleanalyzer/enforce_handler.go
+  s_dc89ea5159cdcf::t_03df32a8b3a023 27
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_dc89ea5159cdcf::t_af818fd00d1924 29
+server/internal/scanners/promptinjection/enforce_handler.go
+  s_dc89ea5159cdcf::t_497520bb311d01 29-30,131-137
+server/internal/scanners/promptinjection/enforce_handler_test.go
+  s_dc89ea5159cdcf::t_abaa05ed654df0 5,66-96
+server/internal/scanners/promptpolicy/enforce_handler.go
+  s_dc89ea5159cdcf::t_f6d5543bb1dee7 29-30,131-138
+server/internal/scanners/promptpolicy/enforce_handler_test.go
+  s_dc89ea5159cdcf::t_c8e2996e5a9cf7 126-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4afdec3db72037d5f3a0e7ed2b4fd10a72223fa9",
+  "prompts": {},
+  "sessions": {
+    "s_dc89ea5159cdcf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "104c7732-7201-4b08-b421-6c1ef3104d36",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
