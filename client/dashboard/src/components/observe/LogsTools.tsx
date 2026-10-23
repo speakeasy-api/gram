@@ -1759,7 +1759,7 @@ function LogsToolsTraceRow({
             <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
               {trace.targetType === "hosted_mcp_server" && trace.targetId ? (
                 <Link
-                  to={routes.toolset.overview.href(trace.targetId)}
+                  to={routes.mcp.details.overview.href(trace.targetId)}
                   onClick={(event) => event.stopPropagation()}
                   className="hover:text-foreground hover:underline"
                 >
