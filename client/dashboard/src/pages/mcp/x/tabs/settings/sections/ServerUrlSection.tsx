@@ -187,8 +187,10 @@ export function ServerUrlSection({
                     <AddressRow
                       backend={backend}
                       endpoint={platformEndpoint}
+                      domains={availableDomains}
                       isLastEndpoint={endpoints.length === 1}
                       canRemove={!singleAddress}
+                      movesInPlace={singleAddress}
                     />
                   ) : addingPlatform ? (
                     <NewPlatformAddressRow
@@ -227,6 +229,7 @@ export function ServerUrlSection({
                       isLastEndpoint={endpoints.length === 1}
                       canManageDomainRoot={canManageDomains}
                       canRemove={!singleAddress}
+                      movesInPlace={singleAddress}
                     />
                   ))}
                   {addingCustom && (
@@ -336,6 +339,7 @@ function AddressRow({
   isLastEndpoint,
   canManageDomainRoot = false,
   canRemove = true,
+  movesInPlace = false,
 }: {
   backend: EndpointBackendRef;
   endpoint: McpEndpoint;
@@ -343,6 +347,8 @@ function AddressRow({
   isLastEndpoint: boolean;
   canManageDomainRoot?: boolean;
   canRemove?: boolean;
+  // A hosted server's one address moves between the platform and the custom domain in place.
+  movesInPlace?: boolean;
 }) {
   const { orgSlug } = useSlugs();
   // Platform endpoints must carry the `${orgSlug}-` prefix. It's folded into
@@ -420,6 +426,38 @@ function AddressRow({
       },
     });
   };
+  const currentDomain = endpoint.customDomainId
+    ? domains?.find((d) => d.id === endpoint.customDomainId)
+    : undefined;
+  // A hosted address moves onto the verified domain, and back only once its domain can no longer serve.
+  const moveTarget = !movesInPlace
+    ? undefined
+    : endpoint.customDomainId
+      ? !currentDomain ||
+        (!(currentDomain.verified && currentDomain.activated) &&
+          !currentDomain.healthCheckedAt)
+        ? { label: "Move to Speakeasy domain", customDomainId: undefined }
+        : undefined
+      : domains
+          ?.filter((d) => d.verified && d.activated)
+          .map((d) => ({ label: `Move to ${d.domain}`, customDomainId: d.id }))
+          .at(0);
+  const handleMove = (customDomainId: string | undefined) => {
+    const platformSlug =
+      orgSlug && !endpoint.slug.startsWith(`${orgSlug}-`)
+        ? `${orgSlug}-${endpoint.slug}`
+        : endpoint.slug;
+    update.mutate({
+      request: {
+        updateMcpEndpointForm: {
+          id: endpoint.id,
+          ...backend,
+          slug: customDomainId ? endpoint.slug : platformSlug,
+          customDomainId,
+        },
+      },
+    });
+  };
 
   return (
     <Field
@@ -476,6 +514,20 @@ function AddressRow({
       </Stack>
       {slugError && <FieldError className="text-xs">{slugError}</FieldError>}
       {update.isError && <FieldError>{update.error.message}</FieldError>}
+      {moveTarget && (
+        <RequireScope scope="mcp:write" level="component">
+          <div>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={update.isPending}
+              onClick={() => handleMove(moveTarget.customDomainId)}
+            >
+              <Button.Text>{moveTarget.label}</Button.Text>
+            </Button>
+          </div>
+        </RequireScope>
+      )}
       {endpoint.customDomainId && (
         <div className="flex flex-wrap items-center gap-2">
           {endpoint.isDomainRoot && (

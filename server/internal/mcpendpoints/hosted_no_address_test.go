@@ -114,7 +114,8 @@ func TestHostedServerWithoutAddressCannotBeEnabled(t *testing.T) {
 }
 
 // A platform address with no endpoint can only come from legacy rows; hosting writes leave the toolset's address
-// as it is and add no endpoint.
+// as it is and add no endpoint. An older pod's sync would recreate the platform endpoint for such a row, as #8009
+// itself does for that state, which restores the address; no write here creates the state.
 func TestHostedWritesLeavePlatformAliasWithoutEndpoint(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedAddressFixture(t, "pro")

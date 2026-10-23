@@ -159,3 +159,34 @@ func TestOrganizationUserSessionIssuerMigrateResyncsHostedWrapperRemoteIssuers(t
 		require.Equal(t, conv.ToNullUUID(remoteIssuerID), got)
 	}
 }
+
+// A deleted hosted server on the source issuer does not stop the migration; live consumers still move.
+func TestOrganizationUserSessionIssuerMigrateSkipsDeletedHostedServerAudit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+
+	sourceID := seedIssuer(t, ctx, ti, "deleted-migrate-source")
+	target, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "deleted-migrate-target", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	targetID := uuid.MustParse(target.ID)
+
+	deleted := seedMigrationToolset(t, ctx, ti, "deleted-migrate", "deleted-migrate-mcp", sourceID)
+	syncMigrationWrapper(t, ctx, ti, deleted)
+	_, err = mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: deleted.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	live := seedMigrationToolset(t, ctx, ti, "live-migrate", "live-migrate-mcp", sourceID)
+	syncMigrationWrapper(t, ctx, ti, live)
+
+	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID})
+	require.NoError(t, err)
+
+	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: live.ID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(targetID), server.UserSessionIssuerID)
+	hostedmcptest.RequireMirrored(t, ctx, ti.conn, projectID, live.ID)
+}

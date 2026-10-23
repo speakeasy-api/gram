@@ -247,3 +247,19 @@ func setHostedMode(t *testing.T, ctx context.Context, ti *testInstance, toolset 
 	require.NoError(t, err)
 	return updated
 }
+
+// A disabled public server reads back as public, so the dashboard re-enables it public.
+func TestDisabledPublicHostedServerReadsPublic(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Disabled Public")
+	require.NoError(t, ti.service.DisableHostedServer(ctx, uuid.MustParse(created.ID)))
+
+	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(created.Slug)})
+	require.NoError(t, err)
+	require.NotNil(t, stored.McpEnabled)
+	require.False(t, *stored.McpEnabled)
+	require.NotNil(t, stored.McpIsPublic)
+	require.True(t, *stored.McpIsPublic, "the mirrored public flag survives disabling")
+	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
+}

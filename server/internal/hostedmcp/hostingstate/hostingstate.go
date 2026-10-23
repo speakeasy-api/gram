@@ -25,9 +25,12 @@ import (
 type Row = toolsetsrepo.ListCanonicalHostingByToolsetIDsRow
 
 // ApplyServer sets toolset's enabled, public and issuer state from its canonical wrapper's visibility and issuer.
+// A disabled server keeps the toolset's mirrored public flag, which says how it re-enables.
 func ApplyServer(toolset toolsetsrepo.Toolset, serverVisibility string, issuer uuid.NullUUID) toolsetsrepo.Toolset {
 	toolset.McpEnabled = serverVisibility == visibility.Public || serverVisibility == visibility.Private
-	toolset.McpIsPublic = serverVisibility == visibility.Public
+	if serverVisibility != visibility.Disabled {
+		toolset.McpIsPublic = serverVisibility == visibility.Public
+	}
 	toolset.UserSessionIssuerID = issuer
 	return toolset
 }

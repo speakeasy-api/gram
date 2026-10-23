@@ -6047,7 +6047,7 @@ WHERE server.user_session_issuer_id = $2
         OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = $3::text AND issuer_project.deleted IS FALSE)
       )
   )
-RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id)::boolean AS canonical
+RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id AND server.deleted IS FALSE)::boolean AS canonical
 `
 
 type UpdateMCPServersToUserSessionIssuerParams struct {
@@ -6062,7 +6062,7 @@ type UpdateMCPServersToUserSessionIssuerRow struct {
 	Canonical bool
 }
 
-// Returns each moved server so hosted ones can be audited as their own update.
+// Returns each moved server so live hosted ones can be audited as their own update.
 func (q *Queries) UpdateMCPServersToUserSessionIssuer(ctx context.Context, arg UpdateMCPServersToUserSessionIssuerParams) ([]UpdateMCPServersToUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, updateMCPServersToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {

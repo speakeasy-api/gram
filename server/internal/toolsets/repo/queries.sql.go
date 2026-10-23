@@ -1716,7 +1716,7 @@ type UpdateToolsetParams struct {
 	ProjectID              uuid.UUID
 }
 
-// Test fixture: also writes the frozen MCP hosting alias columns, which production code never writes.
+// Test fixture: also writes the MCP hosting columns, which production code writes only through MirrorToolsetHosting.
 func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolset,
 		arg.Name,
@@ -1777,7 +1777,7 @@ type UpdateToolsetDetailsParams struct {
 	ProjectID              uuid.UUID
 }
 
-// Leaves the MCP hosting columns alone: they are a frozen alias, and the canonical wrapper owns hosting state.
+// Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state and MirrorToolsetHosting writes them.
 func (q *Queries) UpdateToolsetDetails(ctx context.Context, arg UpdateToolsetDetailsParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolsetDetails,
 		arg.Name,
@@ -1917,7 +1917,7 @@ type UpdateToolsetUserSessionIssuerParams struct {
 	ProjectID           uuid.UUID
 }
 
-// Test fixture: production code never writes the frozen issuer alias column.
+// Test fixture: production code writes the issuer column only through MirrorToolsetHosting and the issuer migration.
 func (q *Queries) UpdateToolsetUserSessionIssuer(ctx context.Context, arg UpdateToolsetUserSessionIssuerParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolsetUserSessionIssuer, arg.UserSessionIssuerID, arg.Slug, arg.ProjectID)
 	var i Toolset

@@ -31,7 +31,7 @@ func TestWithServerState(t *testing.T) {
 		{name: "no wrapper keeps toolset columns", wrapper: nil, enabled: true, public: true, issuer: stale.UserSessionIssuerID},
 		{name: "public wrapper", wrapper: canonical(visibility.Public), enabled: true, public: true, issuer: issuer},
 		{name: "private wrapper", wrapper: canonical(visibility.Private), enabled: true, public: false, issuer: issuer},
-		{name: "disabled wrapper is not public", wrapper: canonical(visibility.Disabled), enabled: false, public: false, issuer: issuer},
+		{name: "disabled wrapper keeps the mirrored public flag", wrapper: canonical(visibility.Disabled), enabled: false, public: true, issuer: issuer},
 		{name: "unknown visibility fails closed", wrapper: canonical("unexpected"), enabled: false, public: false, issuer: issuer},
 		{
 			name:    "other server for the toolset is ignored",
