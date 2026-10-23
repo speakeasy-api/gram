@@ -15,28 +15,91 @@ import type { JSX } from "react";
 
 export type VerifyState = "waiting" | "connected" | "unknown";
 
+interface VerifyCopy {
+  checks: { title: string; description: string }[];
+  /** What a reader checks when nothing arrives, one cause per line. */
+  causes: { code?: string; text: string }[];
+}
+
+/**
+ * The checks, and the causes of silence, for what the agent calls: the MCP
+ * gateway, or for an agent that reaches no server, the hooks endpoint.
+ */
+function verifyCopy(gatewayURL: string, hooksOnly: boolean): VerifyCopy {
+  if (hooksOnly) {
+    return {
+      checks: [
+        {
+          title: "Credential accepted",
+          description:
+            "The API key was presented with a hook event and admitted.",
+        },
+        {
+          title: "Hook events arriving",
+          description:
+            "The observability plugin sent an event under this agent.",
+        },
+      ],
+      causes: [
+        {
+          code: "401",
+          text: "the key was rejected. Check that the runtime was restarted after the key was set.",
+        },
+        {
+          code: "403",
+          text: "the events named another project. Set the project slug to this agent's project.",
+        },
+        {
+          text: "No requests at all: the observability plugin is not installed, or its hooks are not enabled.",
+        },
+      ],
+    };
+  }
+  return {
+    checks: [
+      {
+        title: "Credential accepted",
+        description:
+          "The API key was presented to the agent gateway and admitted.",
+      },
+      {
+        title: "Gateway reachable",
+        description: `The runtime resolved ${gatewayURL} and completed a request.`,
+      },
+    ],
+    causes: [
+      {
+        code: "401",
+        text: "the credential was rejected. Run the setup command again; a code is spent on first use.",
+      },
+      {
+        code: "403",
+        text: "the tool is not granted. Check the server selection and the agent's permissions.",
+      },
+      {
+        text: "No requests at all: the runtime is not pointed at the gateway URL.",
+      },
+    ],
+  };
+}
+
 export function StepVerify({
   state,
   firstCallAt,
   gatewayURL,
+  hooksOnly = false,
 }: {
   state: VerifyState;
   firstCallAt?: Date;
   gatewayURL: string;
+  /** The agent reaches no MCP server and only sends hook events. */
+  hooksOnly?: boolean;
 }): JSX.Element {
-  const checks: { title: string; description: string; done: boolean }[] = [
-    {
-      title: "Credential accepted",
-      description:
-        "The API key was presented to the agent gateway and admitted.",
-      done: state === "connected",
-    },
-    {
-      title: "Gateway reachable",
-      description: `The runtime resolved ${gatewayURL} and completed a request.`,
-      done: state === "connected",
-    },
-  ];
+  const copy = verifyCopy(gatewayURL, hooksOnly);
+  const checks = copy.checks.map((check) => ({
+    ...check,
+    done: state === "connected",
+  }));
 
   return (
     <div className="space-y-5">
@@ -110,17 +173,16 @@ export function StepVerify({
           If nothing arrives
         </span>
         <ul className="space-y-1 text-sm">
-          <li>
-            <code className="text-xs">401</code> — the credential was rejected.
-            Run the setup command again; a code is spent on first use.
-          </li>
-          <li>
-            <code className="text-xs">403</code> — the tool is not granted.
-            Check the server selection and the agent's permissions.
-          </li>
-          <li>
-            No requests at all — the runtime is not pointed at the gateway URL.
-          </li>
+          {copy.causes.map((cause) => (
+            <li key={cause.text}>
+              {cause.code && (
+                <>
+                  <code className="text-xs">{cause.code}</code>:{" "}
+                </>
+              )}
+              {cause.text}
+            </li>
+          ))}
         </ul>
       </div>
     </div>

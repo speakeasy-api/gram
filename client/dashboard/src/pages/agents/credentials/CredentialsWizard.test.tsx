@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   admitSubject: vi.fn(),
   projectId: "project_one",
   canFederate: true,
+  canGrantHooks: true,
   renameAgent: vi.fn(),
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
@@ -79,7 +80,12 @@ vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasAllScopes: () => mocks.canFederate,
+    // An agent with no server is given the hook grants, which the caller must
+    // hold; every other check here is the one for trusting a platform.
+    hasAllScopes: (scopes: string[]) =>
+      scopes.includes("org:hooks_ingest")
+        ? mocks.canGrantHooks
+        : mocks.canFederate,
     hasAnyScope: () => mocks.canFederate,
     isLoading: false,
   }),
@@ -192,6 +198,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.projectId = "project_one";
   mocks.canFederate = true;
+  mocks.canGrantHooks = true;
   mocks.platforms.mockReturnValue([]);
   mocks.agentList.mockReturnValue([]);
   mocks.renameAgent.mockResolvedValue({});
@@ -256,25 +263,76 @@ describe("Provisioning a new agent", () => {
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
 
-  it("will not move on without a name or a server", async () => {
+  it("will not move on without a name", () => {
     setup();
     expect(
       (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
     expect(screen.getByText("Name this agent.")).toBeTruthy();
+  });
 
+  it("moves on with no server, as an agent that only sends hook events", async () => {
+    setup();
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
-    await screen.findByRole("heading", { name: "Server selection" });
+    // None is a choice once the list it is chosen from is on screen.
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    expect(
+      screen.getByText(
+        "No servers selected. This agent will only send hook events.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("does not read a server list that failed to load as choosing none", async () => {
+    mocks.mcpServers.mockRejectedValue(new Error("list failed"));
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText(/The server list could not be loaded\./),
+    ).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
-    expect(screen.getByText("Select at least one MCP server.")).toBeTruthy();
+  });
+
+  it("asks for a server from someone who cannot grant hook events", async () => {
+    mocks.canGrantHooks = false;
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText(
+        /Select at least one MCP server\. An agent with none/,
+      ),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    // A server is the other way on, and needs nothing more.
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
   });
 
   it("creates the agent, issues its first key and mints one setup command", async () => {
@@ -341,6 +399,106 @@ describe("Provisioning a new agent", () => {
       keys: [{ id: "key_new", lastAccessedAt: new Date(Date.now() + 60_000) }],
     });
     expect(await screen.findByText("Connected")).toBeTruthy();
+  });
+});
+
+const hooksGrants = [
+  {
+    effect: "allow",
+    scope: "org:hooks_ingest",
+    selector: {
+      resourceKind: "org",
+      resourceId: "org_example",
+      projectId: "project_one",
+    },
+  },
+  {
+    effect: "allow",
+    scope: "org:device_agent_sync",
+    selector: { resourceKind: "org", resourceId: "org_example" },
+  },
+];
+
+async function reachHooksOnlyCredentialStep() {
+  setup();
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Hooks Bot" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await screen.findByRole("checkbox", { name: "GitHub" });
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  return screen.findByRole("button", { name: "Create agent" });
+}
+
+describe("Provisioning an agent with no server", () => {
+  beforeEach(() => {
+    // Unscoped discovery answers from the agent's whole policy; anything but
+    // the hook grants must stay out of the key.
+    mocks.listDelegableGrants.mockResolvedValue([...hooksGrants, grant]);
+  });
+
+  it("grants only hook ingestion in its project and device-agent sync", async () => {
+    fireEvent.click(await reachHooksOnlyCredentialStep());
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toEqual(hooksGrants);
+    // Discovery names no server, because these grants name none.
+    expect(mocks.listDelegableGrants.mock.calls[0]?.[0]).toEqual({
+      agentId: "agent_new",
+    });
+    expect(
+      mocks.createKey.mock.calls[0]?.[0]?.createKeyForm?.requestedGrants,
+    ).toEqual(hooksGrants);
+  });
+
+  it("hands over the key as the observability plugin's environment, not a gateway setup link", async () => {
+    fireEvent.click(await reachHooksOnlyCredentialStep());
+
+    // Highlighted asynchronously, as a run of token elements: read the block.
+    const environment = await screen.findByLabelText("Hooks environment");
+    await waitFor(() =>
+      expect(environment.textContent).toContain(
+        'SPEAKEASY_AI_HOOKS_API_KEY="gram_secret"',
+      ),
+    );
+    expect(environment.textContent).toContain(
+      'SPEAKEASY_AI_HOOKS_PROJECT_SLUG="project-one"',
+    );
+    expect(screen.queryByLabelText("setup command")).toBeNull();
+    expect(screen.queryByText("One-line setup")).toBeNull();
+    // The setup link only adds the gateway to MCP clients, so none is minted.
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("waits for a hook event rather than a gateway call", async () => {
+    fireEvent.click(await reachHooksOnlyCredentialStep());
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue to verification" }),
+    );
+
+    expect(await screen.findByText("Hook events arriving")).toBeTruthy();
+    expect(screen.queryByText("Gateway reachable")).toBeNull();
+  });
+
+  it("issues no key that would lack plugin sync, and says which grant is missing", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([hooksGrants[0]]);
+    fireEvent.click(await reachHooksOnlyCredentialStep());
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "would lack org:device_agent_sync",
+    );
+    expect(mocks.createAgent).toHaveBeenCalledTimes(1);
+    expect(mocks.createKey).not.toHaveBeenCalled();
+  });
+
+  it("names the hook grants on the summary", async () => {
+    await reachHooksOnlyCredentialStep();
+
+    expect(
+      screen.getByText("org:hooks_ingest, org:device_agent_sync"),
+    ).toBeTruthy();
   });
 });
 

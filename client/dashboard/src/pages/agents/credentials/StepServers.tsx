@@ -110,7 +110,7 @@ export function StepServers({
     <div className="space-y-5">
       <WizardStepHeader
         title="Server selection"
-        description="The MCP servers this agent may call. It can reach nothing else, and never more than you can reach yourself."
+        description="The MCP servers this agent may call. It can reach nothing else, and never more than you can reach yourself. Optional: with none selected, the agent only sends hook events from the observability plugin."
       />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex-1">
