@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -271,4 +272,32 @@ func TestHTTPResponderOnlyPostsToSlack(t *testing.T) {
 	} {
 		require.Error(t, responder.Respond(t.Context(), target, message), target)
 	}
+}
+
+// roundTripFunc answers requests without a network.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestHTTPResponderPostsTheReplyToSlack(t *testing.T) {
+	t.Parallel()
+	var method, target, contentType, body string
+	status := http.StatusOK
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		raw, _ := io.ReadAll(r.Body)
+		method, target, contentType, body = r.Method, r.URL.String(), r.Header.Get("Content-Type"), string(raw)
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader("ok")), Header: http.Header{}, Request: r}, nil
+	})}
+	responder := slackapproval.NewHTTPResponder(client)
+	responseURL := "https://hooks.slack.com/actions/T/1/x"
+	message := slackapproval.ResponseMessage{ResponseType: "", ReplaceOriginal: true, Text: "Approved", Blocks: nil}
+
+	require.NoError(t, responder.Respond(t.Context(), responseURL, message))
+	require.Equal(t, http.MethodPost, method)
+	require.Equal(t, responseURL, target)
+	require.Equal(t, "application/json", contentType)
+	require.JSONEq(t, `{"replace_original":true,"text":"Approved"}`, body)
+
+	status = http.StatusNotFound
+	require.Error(t, responder.Respond(t.Context(), responseURL, message), "a refused reply is an error")
 }

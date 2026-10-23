@@ -39,9 +39,13 @@ const (
 	// slackResponseHost is the only host a response_url may point at.
 	slackResponseHost = "hooks.slack.com"
 
-	// responseTimeout bounds the reply to a click. Slack expects the click
-	// acknowledged within 3 seconds, and the reply is sent before that.
-	responseTimeout = 2 * time.Second
+	// responseTimeout bounds the reply to a click.
+	responseTimeout = 10 * time.Second
+
+	// clickTimeout bounds deciding a click and replying to it. The click is
+	// acknowledged first, and Slack takes replies through response_url for 30
+	// minutes, so this only has to stop a stuck click from running forever.
+	clickTimeout = time.Minute
 )
 
 // slackSignature is how Slack signs requests: v0=HMAC-SHA256 over
@@ -135,7 +139,9 @@ type interactionPayload struct {
 // ServeHTTP verifies Slack's signature, decides the request for the approver
 // the DM was sent to, and replies to the click. Everything after the
 // signature check answers 200, since Slack shows any other status to the
-// clicker as a generic failure; refusals go back as ephemeral notes.
+// clicker as a generic failure; refusals go back as ephemeral notes. A click
+// is acknowledged before it is decided: Slack wants the 200 within 3 seconds,
+// and the outcome goes back through response_url.
 func (h *Interactions) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxInteractionBytes+1))
@@ -162,20 +168,25 @@ func (h *Interactions) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
 	if payload.Type != "block_actions" || len(payload.Actions) != 1 {
-		w.WriteHeader(http.StatusOK)
 		return
 	}
 	action := payload.Actions[0]
 	if action.ActionID != ActionApprove && action.ActionID != ActionDeny {
-		w.WriteHeader(http.StatusOK)
 		return
 	}
+	if err := http.NewResponseController(w).Flush(); err != nil {
+		h.logger.WarnContext(ctx, "acknowledge Slack interaction early", attr.SlogError(err))
+	}
+	// Slack may close the connection once it has the 200; the decision and
+	// the reply still have to finish.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), clickTimeout)
+	defer cancel()
 	reply := h.handleClick(ctx, payload, action.ActionID == ActionApprove, action.Value)
 	if err := h.responder.Respond(ctx, payload.ResponseURL, reply); err != nil {
 		h.logger.WarnContext(ctx, "reply to Slack interaction", attr.SlogSlackTeamID(payload.Team.ID), attr.SlogError(err))
 	}
-	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Interactions) handleClick(ctx context.Context, payload interactionPayload, approve bool, value string) ResponseMessage {
