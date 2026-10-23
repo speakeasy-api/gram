@@ -151,6 +151,11 @@ type RotateClientRegistrationParams struct {
 	// the login belongs to. It covers legacy rows whose own organization_id was
 	// never backfilled; an empty value falls back to the row's.
 	OrganizationID string
+
+	// RegistrationScope is what the replacement registers when the client
+	// stores no scope: the scope the triggering login requests. Empty falls
+	// back to what a login without a resource would request.
+	RegistrationScope []string
 }
 
 // ClientRotator re-registers a remote_session_client with its issuer in
@@ -437,7 +442,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	// it does not widen who can create a tunnel binding.
 	registered, err := RegisterDynamicClient(ctx, r.policy, r.tunnels, r.origins.ForClient(current.CallbackBaseUrl), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
-		Scope:                   conv.PtrEmpty(strings.Join(current.Scope, " ")),
+		Scope:                   conv.PtrEmpty(strings.Join(rotationRegistrationScope(row, params.RegistrationScope), " ")),
 		TokenEndpointAuthMethod: conv.PtrEmpty(current.TokenEndpointAuthMethod.String),
 		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(row.IssuerTunneledMcpServerID)),
 	}, r.registrationTelemetry)
@@ -746,8 +751,9 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 // the issuer has stopped recognizing it, returning the client to send to the
 // authorize endpoint. Any failure leaves the client as it was: the login then
 // fails at the issuer exactly as it would have without this step, and the
-// warning here names why.
-func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organizationID string, client Client) Client {
+// warning here names why. scopes is what the login requests, registered when
+// the client stores none.
+func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organizationID string, client Client, scopes []string) Client {
 	trigger, needed := client.needsRegistrationRotation(time.Now())
 	if !needed {
 		return client
@@ -762,6 +768,7 @@ func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organ
 		ActorDisplayName:         &actorLabel,
 		ConfirmUpstreamRejection: trigger == RotationTriggerUpstreamRejected,
 		OrganizationID:           organizationID,
+		RegistrationScope:        scopes,
 	})
 	if errors.Is(err, ErrClientStillRecognized) {
 		// The rejection was spurious and its marker is already cleared; the
@@ -791,6 +798,23 @@ func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organ
 	client.ClientSecretExpiresAt = timestampPtr(rotated.ClientSecretExpiresAt)
 	client.UpstreamRejectedAt = timestampPtr(rotated.UpstreamRejectedAt)
 	return client
+}
+
+// rotationRegistrationScope keeps a replacement registered for what logins
+// request: a registration naming no scope can leave a provider granting less.
+func rotationRegistrationScope(row repo.GetRemoteSessionClientForRotationRow, requested []string) []string {
+	if len(row.RemoteSessionClient.Scope) > 0 {
+		return row.RemoteSessionClient.Scope
+	}
+	if len(requested) > 0 {
+		return requested
+	}
+	login := Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
+		IssuerScopesSupported:   row.IssuerScopesSupported,
+		IssuerScopeOverride:     row.IssuerScopeOverride,
+		IssuerOmitScopeFallback: row.IssuerOmitScopeFallback.Valid && row.IssuerOmitScopeFallback.Bool,
+	}
+	return login.RequestedScopes(ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: true}).Scopes
 }
 
 // timestampPtr is the nullable form of a pgtype.Timestamptz.

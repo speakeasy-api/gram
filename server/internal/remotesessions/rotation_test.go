@@ -280,6 +280,33 @@ func TestBuildAuthorizationUrl_RotatesExpiredSecretWithoutProbe(t *testing.T) {
 	require.Equal(t, "rotated-cid", loadClient(t, env).ClientID)
 }
 
+// A replacement is registered for the scope logins request: the login's own
+// request when the client stores none, else the stored scope.
+func TestBuildAuthorizationUrl_RotationRegistersRequestedScope(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		opts []syntheticLoginOption
+		want string
+	}{
+		"no stored scope": {opts: nil, want: "channels:history"},
+		"stored scope":    {opts: []syntheticLoginOption{withClientScope("chat:write")}, want: "chat:write"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+			_, env := newSyntheticExpiryEnv(t, "rotate-scope-"+conv.Ternary(tc.opts == nil, "none", "stored"), upstream.handler(), tc.opts...)
+			expiredAt := time.Now().Add(-time.Minute)
+			stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", nil, &expiredAt)
+
+			require.Equal(t, "rotated-cid", mintLogin(t, env))
+			require.EqualValues(t, 1, upstream.registrationAttempts.Load())
+			require.Equal(t, tc.want, (*upstream.lastRegistration.Load())["scope"])
+		})
+	}
+}
+
 // An issuer that publishes no registration endpoint gives Speakeasy nowhere to
 // re-register: a rejected client under it goes to the authorize endpoint
 // unchanged, and the issuer is not contacted.

@@ -814,7 +814,8 @@ WHERE id = @id
 -- endpoint to probe and the registration endpoint to re-register at, both as
 -- discovery last refreshed them on the issuer, and the issuer's transport
 -- binding, since both of those endpoints are only reachable over the tunnel
--- when one is set. Not locked: the rotation talks to the issuer between this
+-- when one is set, and the issuer's scope inputs for a client that stores no
+-- scope. Not locked: the rotation talks to the issuer between this
 -- read and its write, and the write compares the client_id it read here so a
 -- concurrent rotation is detected rather than blocked. The ID comes from an
 -- authorized client selection, not a caller-supplied issuer ID. Restrict the
@@ -829,7 +830,10 @@ SELECT
     i.updated_at             AS issuer_updated_at,
     i.project_id             AS issuer_project_id,
     i.organization_id        AS issuer_organization_id,
-    i.tunneled_mcp_server_id AS issuer_tunneled_mcp_server_id
+    i.tunneled_mcp_server_id AS issuer_tunneled_mcp_server_id,
+    i.scopes_supported       AS issuer_scopes_supported,
+    i.scope_override         AS issuer_scope_override,
+    i.omit_scope_fallback    AS issuer_omit_scope_fallback
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
