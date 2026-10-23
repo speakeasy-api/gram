@@ -38,12 +38,17 @@ type LogKeyCreateEvent struct {
 
 	Scopes          []string
 	AgentCredential *AgentKeyCredentialMetadata
+	// PolicyGrants is an ordinary key's own policy, written with the key.
+	PolicyGrants json.RawMessage
 }
 
-func keyAuditMetadata(scopes []string, credential *AgentKeyCredentialMetadata) ([]byte, error) {
+func keyAuditMetadata(scopes []string, credential *AgentKeyCredentialMetadata, policyGrants json.RawMessage) ([]byte, error) {
 	fields := map[string]any{"scopes": scopes}
 	if credential != nil {
 		fields["agent_credential"] = credential
+	}
+	if policyGrants != nil {
+		fields["policy_grants"] = policyGrants
 	}
 	return marshalAuditPayload(fields)
 }
@@ -51,7 +56,7 @@ func keyAuditMetadata(scopes []string, credential *AgentKeyCredentialMetadata) (
 func (l *Logger) LogKeyCreate(ctx context.Context, dbtx repo.DBTX, event LogKeyCreateEvent) error {
 	action := ActionKeyCreate
 
-	metadata, err := keyAuditMetadata(event.Scopes, event.AgentCredential)
+	metadata, err := keyAuditMetadata(event.Scopes, event.AgentCredential, event.PolicyGrants)
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
@@ -93,12 +98,14 @@ type LogKeyRevokeEvent struct {
 
 	Scopes          []string
 	AgentCredential *AgentKeyCredentialMetadata
+	// PolicyGrants is the policy an ordinary key held when it was revoked.
+	PolicyGrants json.RawMessage
 }
 
 func (l *Logger) LogKeyRevoke(ctx context.Context, dbtx repo.DBTX, event LogKeyRevokeEvent) error {
 	action := ActionKeyRevoke
 
-	metadata, err := keyAuditMetadata(event.Scopes, event.AgentCredential)
+	metadata, err := keyAuditMetadata(event.Scopes, event.AgentCredential, event.PolicyGrants)
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}

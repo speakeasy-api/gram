@@ -8,14 +8,31 @@ package analytics
 import (
 	"fmt"
 	"slices"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 // Kind is the shape of a dataset: occurrences or measurements.
 type Kind string
 
 const (
-	KindEvent  Kind = "event"
+	// KindEvent rows are occurrences, which a query can count, aggregate or
+	// list one by one.
+	KindEvent Kind = "event"
+	// KindMetric rows are measurements, answered in aggregate only: a query
+	// that asks for the rows themselves is refused.
 	KindMetric Kind = "metric"
+)
+
+// Access is who may read a dataset, beyond reading the project it belongs to.
+type Access string
+
+const (
+	// AccessProject admits anyone who can read the project.
+	AccessProject Access = "project"
+	// AccessOrgAdmin admits organization administrators only, for a dataset
+	// over data the rest of the product shows to them alone.
+	AccessOrgAdmin Access = "org_admin"
 )
 
 // Role is what a field is for: grouping and filtering, or aggregating.
@@ -99,12 +116,11 @@ const (
 	MaxLimit     = 1000
 	MaxRowsLimit = 200
 
-	// How long each kind's table keeps a row, from server/clickhouse/schema.sql:
-	// agent_events 90 days, agent_metrics 730 so billing can read historical
-	// cycles. A window reaching past a table's retention reads rows the TTL
-	// has already dropped and comes back silently incomplete, so a dataset
-	// caps its window at what its table still holds. These are the schema's
-	// numbers restated, and a test holds them to it.
+	// How long the agent tables keep a row, from server/clickhouse/schema.sql:
+	// agent_events and the tables folded from it 90 days, agent_metrics 730
+	// so billing can read historical cycles. A dataset caps its window at
+	// what its source table still holds. These are the schema's numbers
+	// restated, and a test holds every source table to its TTL.
 	MaxEventTimeRangeDays  = 90
 	MaxMetricTimeRangeDays = 730
 
@@ -138,7 +154,7 @@ type Field struct {
 	// shown by describe and the builder's pickers; most fields need none.
 	Description string
 	// Lookup names the lookup every read of this dimension folds Expr through;
-	// empty reads it as reported.
+	// empty reads it as reported, as does a value the lookup has no entry for.
 	Lookup string
 	// Typeahead is the agent_events column a dimension's values are listed
 	// from, read off Source.Observations. Empty lists them from Source.Rows.
@@ -160,17 +176,27 @@ type Dataset struct {
 	// TimeExpr is the column of the source query's output that carries the
 	// row's event time, used for bucketing and for ordering row lists.
 	TimeExpr string
-	Fields   []Field
-	Source   Source
+	// Access is who may read the dataset. Describe, query and value listing
+	// all enforce it, and so does saving a widget over the dataset.
+	Access Access
+	Fields []Field
+	Source Source
+}
+
+// AccessCheck is the check a caller must pass to read the dataset, beyond
+// reading its project; ok is false when reading the project is enough.
+func (d *Dataset) AccessCheck(organizationID string) (check authz.Check, ok bool) {
+	if d.Access != AccessOrgAdmin {
+		var none authz.Check
+		return none, false
+	}
+	return authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}, true
 }
 
 // MaxTimeRangeDays is the longest window this dataset can answer honestly:
-// the retention of the table its kind reads.
+// the retention of the table its source reads.
 func (d *Dataset) MaxTimeRangeDays() int {
-	if d.Kind == KindMetric {
-		return MaxMetricTimeRangeDays
-	}
-	return MaxEventTimeRangeDays
+	return d.Source.Table.retentionDays()
 }
 
 // MaxTimeRangeNanos is MaxTimeRangeDays as a span of nanoseconds, the unit a
@@ -280,6 +306,11 @@ func (d *Dataset) validate(lookups map[string]struct{}) error {
 	}
 	if d.TimeExpr == "" {
 		return fmt.Errorf("catalog: dataset %q has no time expression", d.Name)
+	}
+	switch d.Access {
+	case AccessProject, AccessOrgAdmin:
+	default:
+		return fmt.Errorf("catalog: dataset %q has unknown access %q", d.Name, d.Access)
 	}
 	if d.Source.Key == "" || d.Source.Table == nil {
 		return fmt.Errorf("catalog: dataset %q has no source query", d.Name)

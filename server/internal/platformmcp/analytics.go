@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 )
@@ -26,6 +27,10 @@ var (
 	ErrAnalyticsNotEnabled = errors.New("platform mcp analytics not enabled")
 	// ErrAnalyticsInvalid marks a read that does not name one exact project.
 	ErrAnalyticsInvalid = errors.New("invalid platform mcp analytics read")
+	// ErrAnalyticsDatasetRestricted marks a read of a dataset the caller may
+	// not read although they can read its project, such as one only
+	// organization administrators may read.
+	ErrAnalyticsDatasetRestricted = errors.New("platform mcp analytics dataset restricted")
 )
 
 // AnalyticsService serves the analytics catalog, values and queries to the
@@ -142,11 +147,57 @@ func (s *AnalyticsService) Describe(ctx context.Context, principal Principal, in
 	if err != nil {
 		return DescribeAnalyticsCatalogOutput{}, err
 	}
-	return describeAnalyticsCatalog(project, s.engine.Catalog()), nil
+	catalog := s.engine.Catalog()
+	datasets := make([]*analytics.Dataset, 0, len(catalog.Datasets()))
+	for _, ds := range catalog.Datasets() {
+		readable, err := datasetReadable(ctx, principal, ds)
+		if err != nil {
+			return DescribeAnalyticsCatalogOutput{}, err
+		}
+		if readable {
+			datasets = append(datasets, ds)
+		}
+	}
+	return describeAnalyticsCatalog(project, catalog, datasets), nil
 }
 
-func describeAnalyticsCatalog(project ResolvedProject, catalog *analytics.Catalog) DescribeAnalyticsCatalogOutput {
-	datasets := catalog.Datasets()
+// datasetReadable says whether the caller may read a dataset, beyond reading
+// its project, from the grants loaded for this call. Without loaded grants a
+// restricted dataset reads as unreadable, as an undiscoverable tool does.
+func datasetReadable(ctx context.Context, principal Principal, ds *analytics.Dataset) (bool, error) {
+	check, restricted := ds.AccessCheck(principal.OrganizationID)
+	if !restricted {
+		return true, nil
+	}
+	grants, ok := authz.GrantsFromContext(ctx)
+	if !ok {
+		return false, nil
+	}
+	allowed, err := authz.GrantsAuthorize(grants, check)
+	if err != nil {
+		return false, fmt.Errorf("authorize dataset %s: %w", ds.Name, err)
+	}
+	return allowed, nil
+}
+
+// requireDataset refuses a read of a dataset the caller may not read. An
+// unknown dataset is left for the compiler to name.
+func (s *AnalyticsService) requireDataset(ctx context.Context, principal Principal, dataset string) error {
+	ds, ok := s.engine.Catalog().Dataset(dataset)
+	if !ok {
+		return nil
+	}
+	readable, err := datasetReadable(ctx, principal, ds)
+	if err != nil {
+		return err
+	}
+	if !readable {
+		return ErrAnalyticsDatasetRestricted
+	}
+	return nil
+}
+
+func describeAnalyticsCatalog(project ResolvedProject, catalog *analytics.Catalog, datasets []*analytics.Dataset) DescribeAnalyticsCatalogOutput {
 	out := DescribeAnalyticsCatalogOutput{
 		Project:  analyticsProject(project),
 		Datasets: make([]AnalyticsDataset, 0, len(datasets)),
@@ -237,6 +288,9 @@ func (s *AnalyticsService) Values(ctx context.Context, principal Principal, inpu
 	if err != nil {
 		return zero, err
 	}
+	if err := s.requireDataset(ctx, principal, input.Dataset); err != nil {
+		return zero, err
+	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return zero, err
 	}
@@ -325,6 +379,9 @@ func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input
 	var zero RunAnalyticsQueryOutput
 	project, err := s.authorize(ctx, principal, input.ProjectID)
 	if err != nil {
+		return zero, err
+	}
+	if err := s.requireDataset(ctx, principal, input.Dataset); err != nil {
 		return zero, err
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {

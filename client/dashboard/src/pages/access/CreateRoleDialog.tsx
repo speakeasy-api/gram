@@ -26,6 +26,7 @@ import {
 } from "@gram/client/react-query/members.js";
 import { queryKeyAgents } from "@gram/client/react-query/agents.js";
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
+import type { ListRolesResult } from "@gram/client/models/components/listrolesresult.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Dialog } from "@/components/ui/Dialog";
@@ -43,7 +44,10 @@ import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import { RoleAccessMatrix } from "./RoleAccessMatrix";
 import { useOrgMcpServers } from "./useOrgMcpServers";
 import { RoleDirectorySources } from "./RoleDirectorySources";
-import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import type {
+  RoleGrant as SdkRoleGrant,
+  Scope,
+} from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
 import {
@@ -58,6 +62,7 @@ import {
   applyRemoveRule,
   diffGrants,
   grantsFromRole,
+  roleHoldsGrants,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
 
@@ -271,33 +276,57 @@ export function CreateRoleDialog({
     name: string;
     description: string;
     grantKeys: string;
+    grants: SdkRoleGrant[];
     members: Set<string>;
     agents: Set<string>;
   } | null>(null);
 
   const updateRole = useUpdateRoleMutation({
-    onSuccess: async () => {
+    onSuccess: async (role) => {
+      // The next save is worked out against the role being edited, so it has
+      // to be the role as stored now, not the list read before this save.
+      queryClient.setQueriesData<ListRolesResult>(
+        { queryKey: ["@gram/client", "access", "listRoles"] },
+        (data) =>
+          data && {
+            ...data,
+            roles: data.roles.map((r) => (r.id === role.id ? role : r)),
+          },
+      );
       await Promise.all([
         invalidateAllRoles(queryClient),
         invalidateAllResourceAudience(queryClient),
         invalidateAllMembers(queryClient),
       ]);
+      const saved = submitted.current;
+      // A save the server accepted can still leave a permission as it was, so
+      // check what it stored before saying it saved. The form keeps the
+      // change and Save stays enabled, so saving again retries it against
+      // the role as stored.
+      const grantsStored =
+        !saved ||
+        !scopeDefinitions ||
+        roleHoldsGrants(role, saved.grants, scopeDefinitions);
+      if (!grantsStored) {
+        toast.error(
+          "Some permission changes weren't saved. Check the role and save again.",
+        );
+      }
       // On its own page the editor stays open after a save: what was saved
       // becomes the starting point, so Save waits for the next change. The
       // sheet over the roles list closes as before.
       // The baseline is what the click sent, not the form now: an edit made
       // while the save was in flight stays unsaved and keeps Save enabled.
-      const saved = submitted.current;
       if (presentation === "page" && saved) {
         setInitialName(saved.name);
         setInitialDescription(saved.description);
-        setInitialGrantKeys(saved.grantKeys);
+        if (grantsStored) setInitialGrantKeys(saved.grantKeys);
         setInitialMembers(saved.members);
         setInitialAgents(saved.agents);
-        toast.success("Role saved");
+        if (grantsStored) toast.success("Role saved");
         return;
       }
-      handleClose();
+      if (grantsStored) handleClose();
     },
   });
 
@@ -494,6 +523,7 @@ export function CreateRoleDialog({
         name,
         description,
         grantKeys: grantKeysStringFn(grants),
+        grants: sdkGrants,
         members: new Set(selectedMembers),
         agents: new Set(selectedAgents),
       };
