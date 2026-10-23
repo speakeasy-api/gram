@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -156,30 +155,14 @@ var (
 )
 
 // AttachToDefaultPluginParams identifies the server to attach — exactly one
-// of ToolsetID / McpServerID must be Valid, mirroring the plugin_servers
-// backend-exclusivity constraint.
+// of ToolsetID / McpServerID must be Valid; a toolset resolves to its
+// canonical MCP server.
 type AttachToDefaultPluginParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
 	ToolsetID      uuid.NullUUID
 	McpServerID    uuid.NullUUID
 	DisplayName    string
-}
-
-// PluginServer is a plugin_servers row as the plugin queries return it.
-type PluginServer struct {
-	ID              uuid.UUID
-	PluginID        uuid.UUID
-	ProjectID       uuid.NullUUID
-	McpServerID     uuid.NullUUID
-	MetaMcpServerID uuid.NullUUID
-	DisplayName     string
-	Policy          string
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
 }
 
 // AttachToDefaultPluginResult is nil when AttachToDefaultPlugin no-ops
@@ -189,7 +172,7 @@ type AttachToDefaultPluginResult struct {
 	PluginName    string
 	PluginSlug    string
 	PluginCreated bool
-	Server        PluginServer
+	Server        repo.PluginServer
 }
 
 // AttachToDefaultPlugin idempotently adds a server (toolset- or mcp_server-
@@ -331,9 +314,9 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		return nil, fmt.Errorf("check existing default plugin server: %w", err)
 	}
 
-	// A different attached server (a same-named toolset row, or a stale row
-	// from a deleted server) may already hold the display name, which the
-	// (plugin_id, display_name) unique index spans across backends. Blocking
+	// A different attached server (a stale row from a deleted server) may
+	// already hold the display name, which the (plugin_id, display_name)
+	// unique index spans across backends. Blocking
 	// the attach — and with it the triggering action, e.g. enabling a server —
 	// over a marketplace display name is disproportionate, so uniquify instead.
 	displayName, err := availableDisplayName(ctx, q, plugin.ID, params)
@@ -374,7 +357,7 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		PluginName:    plugin.Name,
 		PluginSlug:    plugin.Slug,
 		PluginCreated: pluginCreated,
-		Server:        PluginServer(server),
+		Server:        server,
 	}, nil
 }
 
