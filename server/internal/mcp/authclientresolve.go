@@ -140,6 +140,9 @@ type authClientPermitRequest struct {
 	ServerID       uuid.UUID
 	ClientID       uuid.UUID
 	ClientType     string
+	// RegistrationID is the upstream OAuth client behind an OAuth-backed
+	// client; personal checks name it.
+	RegistrationID uuid.NullUUID
 	// CredentialKind and CredentialID identify the credential whose choice
 	// named the client.
 	CredentialKind string
@@ -310,11 +313,11 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 	}
 	resolved := res.outcome == authClientResolved
 	return s.prepareAuthClient(ctx, authClientPermitRequest{
-		OrganizationID: selector.organizationID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType,
+		OrganizationID: selector.organizationID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 		CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: selector.credentialID, Subject: subject,
 	}, res, func(permitted bool) {
 		if resolved {
-			s.shadowAuthClientUse(ctx, selector.organizationID, permitted, projectID, res.clientID, res.clientType, subject)
+			s.shadowAuthClientUse(ctx, selector.organizationID, permitted, projectID, res.clientID, res.choice.clientID, res.clientType, subject)
 		}
 	})
 }
@@ -337,7 +340,7 @@ func (s *Service) resolveAuthClientForConsent(ctx context.Context, organizationI
 		res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
 	}
 
-	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject}, res, nil)
+	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject}, res, nil)
 }
 
 func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermitRequest, res authClientResolution, observe func(permitted bool)) (authClientResolution, error) {
@@ -603,7 +606,7 @@ func (s *Service) shadowAuthClient(ctx context.Context, selector *upstreamSelect
 	// the request, any other error is not a decision.
 	legacyDenied := errors.Is(choiceErr, errUpstreamSelectionMissing) || errors.Is(choiceErr, errUpstreamSelectionUnusable)
 	if res.outcome == authClientResolved && (choiceErr == nil || legacyDenied) {
-		s.shadowAuthClientUse(ctx, selector.organizationID, choiceErr == nil, projectID, res.clientID, res.clientType, subject)
+		s.shadowAuthClientUse(ctx, selector.organizationID, choiceErr == nil, projectID, res.clientID, res.choice.clientID, res.clientType, subject)
 	}
 	annotateAuthClient(ctx, s.logger, res)
 	s.reportAuthClientParity(ctx, selector.organizationID, serverID, res, choice, choiceErr)

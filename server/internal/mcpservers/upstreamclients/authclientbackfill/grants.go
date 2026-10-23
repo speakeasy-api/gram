@@ -27,10 +27,51 @@ const (
 	// GrantAPIKey is a legacy key's own policy: mcp:connect on every server
 	// in each project it reaches, and mcp:auth on their shared clients.
 	GrantAPIKey GrantKind = "api_key"
+
+	// GrantAttachment is mcp:auth for an agent on the one connection an
+	// attachment binds it to: that user's connection through that upstream
+	// OAuth client, whichever auth client uses it.
+	GrantAttachment GrantKind = "attachment"
 )
 
 // GrantKinds lists every grant kind in report order.
-var GrantKinds = []GrantKind{GrantPersonalDefault, GrantSharedClient, GrantAPIKey}
+var GrantKinds = []GrantKind{GrantPersonalDefault, GrantSharedClient, GrantAPIKey, GrantAttachment}
+
+// AttachmentRemediation reasons name why an attachment was not carried over.
+// Each needs its owner to reconnect or configure the agent; the backfill never
+// substitutes another user or a broader grant.
+const (
+	// AttachmentNotByUser is an attachment no user made.
+	AttachmentNotByUser = "not_attached_by_user"
+	// AttachmentOwnerChanged is an attachment made by someone who no longer
+	// owns the agent; the attachment runtime no longer serves it.
+	AttachmentOwnerChanged = "owner_changed"
+	// AttachmentForeignConnection is an attachment to a connection the
+	// attaching user does not own.
+	AttachmentForeignConnection = "foreign_connection"
+	// AttachmentConnectionGone is an attachment whose connection was removed
+	// or authorized again since.
+	AttachmentConnectionGone = "connection_gone"
+	// AttachmentAgentInactive is an attachment of an agent that is suspended,
+	// revoked or waiting for a new owner, or whose owner is no longer an
+	// active member.
+	AttachmentAgentInactive = "agent_inactive"
+	// AttachmentConfigurationGone is an attachment whose sign-in, project,
+	// upstream client or issuer was removed, or no longer reaches the
+	// attachment's project.
+	AttachmentConfigurationGone = "configuration_gone"
+	// AttachmentClientUnrecorded is an attachment whose upstream OAuth client
+	// no personal auth client in the organization uses yet.
+	AttachmentClientUnrecorded = "client_unrecorded"
+)
+
+// AttachmentRemediation is one attachment the grants phase could not carry
+// over, by id only.
+type AttachmentRemediation struct {
+	BindingID string `json:"binding_id"`
+	AgentID   string `json:"agent_id"`
+	Reason    string `json:"reason"`
+}
 
 // serverAccessScopes are the scopes that satisfy mcp:connect.
 var serverAccessScopes = []string{string(authz.ScopeMCPConnect), string(authz.ScopeMCPRead), string(authz.ScopeMCPWrite)}
@@ -144,6 +185,9 @@ func runGrants(ctx context.Context, tx pgx.Tx, opts Options, report *Report, wit
 		uses = nil
 	}
 	if err := planServerAccessGrants(ctx, q, opts, uses, plan); err != nil {
+		return err
+	}
+	if err := planAttachmentGrants(ctx, q, opts, plan, report); err != nil {
 		return err
 	}
 	// A key's policy is written once, so never from a run whose earlier
@@ -372,4 +416,51 @@ func planAPIKeyGrants(ctx context.Context, q *Queries, opts Options, uses []List
 		}
 	}
 	return nil
+}
+
+// planAttachmentGrants carries each attachment over to the grant that serves
+// the same access without it: the agent may use its authorizing user's
+// connection through the attached upstream OAuth client. The connection owner
+// is that user, concretely, so the grant never reaches another user's
+// connection. An attachment the runtime would no longer serve, or whose client
+// is not recorded, is reported for remediation instead.
+func planAttachmentGrants(ctx context.Context, q *Queries, opts Options, plan *grantPlan, report *Report) error {
+	rows, err := q.ListLiveAgentAttachments(ctx, opts.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("list agent attachments: %w", err)
+	}
+	for _, row := range rows {
+		reason := attachmentRemediationReason(row)
+		if reason != "" {
+			report.AttachmentRemediations = append(report.AttachmentRemediations, AttachmentRemediation{BindingID: row.BindingID.String(), AgentID: row.AgentID.String(), Reason: reason})
+			continue
+		}
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, row.AgentID.String())
+		if err := plan.want(GrantAttachment, principal, authz.ScopeMCPAuth, authz.ConnectionAuthClientSelector(row.RemoteSessionClientID.String(), row.OwnerUserID)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func attachmentRemediationReason(row ListLiveAgentAttachmentsRow) string {
+	attacher, err := urn.ParseSessionSubject(row.AttachedBySubjectID)
+	switch {
+	case err != nil || attacher.Kind != urn.SessionSubjectKindUser:
+		return AttachmentNotByUser
+	case attacher.ID != row.OwnerUserID:
+		return AttachmentOwnerChanged
+	case row.ConnectionSubject != row.AttachedBySubjectID:
+		return AttachmentForeignConnection
+	case !row.AgentActive:
+		return AttachmentAgentInactive
+	case !row.ConnectionLive:
+		return AttachmentConnectionGone
+	case !row.ConfigurationLive:
+		return AttachmentConfigurationGone
+	case !row.ClientRecorded:
+		return AttachmentClientUnrecorded
+	default:
+		return ""
+	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -474,6 +475,202 @@ func TestRecordUpstreamClientSelectionsRecordsTheConsentPick(t *testing.T) {
 	require.Empty(t, f.selections(foreign))
 }
 
+// A choice naming the server's header client keeps that client once an OAuth
+// client is associated later: only an untyped no-auth choice is replaced. The
+// upstream client choice reads it as no-auth, so it becomes unusable and
+// coverage reports a client choice to reconnect rather than a gap to fill.
+func TestChoiceNamingTheServersHeadersIsKeptWhenAClientIsAssociated(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	server := f.server(issuer)
+	credential := f.session(issuer)
+	f.record(issuer, credential)
+	headers, err := f.q.SeedHeaderAuthClientFixture(t.Context(), SeedHeaderAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, f.q.NameAuthClientOnSelectionFixture(t.Context(), NameAuthClientOnSelectionFixtureParams{AuthClientID: headers, CredentialID: credential, McpServerID: server}))
+
+	covered, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 1, covered.Pairs[OutcomeSelected], "the server's headers serve it while it has no associated client")
+
+	client := f.client(issuer)
+	f.associate(server, client)
+	require.Equal(t, int64(0), f.record(issuer, credential), "a choice naming an auth client is never replaced")
+	row := f.selection(issuer, credential, server)
+	require.False(t, row.RemoteSessionClientID.Valid)
+	require.True(t, row.NoAuth, "the upstream client choice still reads it as no-auth")
+	require.False(t, row.Usable, "the server now has an associated client")
+	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+
+	report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 1, report.Pairs[OutcomeUnusableClient], "coverage reports a client choice to reconnect")
+	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, f.namedAuthClient(credential, server).AuthClientID, "the backfill does not replace it either")
+}
+
+func (f *fixture) authClient(clientType string, registration uuid.UUID, serverIDs ...uuid.UUID) uuid.UUID {
+	f.t.Helper()
+	ctx := f.t.Context()
+	var id uuid.UUID
+	var err error
+	if registration == uuid.Nil {
+		id, err = f.q.SeedHeaderAuthClientFixture(ctx, SeedHeaderAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}})
+	} else {
+		id, err = f.q.SeedOAuthAuthClientFixture(ctx, SeedOAuthAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ClientType: clientType, RemoteSessionClientID: registration})
+	}
+	require.NoError(f.t, err)
+	for _, serverID := range serverIDs {
+		n, err := f.q.LinkAuthClientFixture(ctx, LinkAuthClientFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: serverID, AuthClientID: id})
+		require.NoError(f.t, err)
+		require.Equal(f.t, int64(1), n)
+	}
+	if registration == uuid.Nil && len(serverIDs) > 0 {
+		// A header client carries its server's credential headers.
+		require.NoError(f.t, f.q.CopyServerHeadersFixture(ctx, CopyServerHeadersFixtureParams{AuthClientID: id, OrganizationID: f.orgID, McpServerID: serverIDs[0]}))
+	}
+	return id
+}
+
+// staticAuthorization gives serverID's source a static Authorization header.
+func (f *fixture) staticAuthorization(serverID uuid.UUID) uuid.UUID {
+	f.t.Helper()
+	id, err := f.q.SeedServerHeaderFixture(f.t.Context(), SeedServerHeaderFixtureParams{
+		McpServerID:            serverID,
+		Name:                   "Authorization",
+		IsSecret:               true,
+		Value:                  pgtype.Text{String: "enc:v1:not-a-real-secret", Valid: true},
+		ValueFromRequestHeader: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(f.t, err)
+	return id
+}
+
+func (f *fixture) namedAuthClient(credentialID, serverID uuid.UUID) GetSelectionAuthClientFixtureRow {
+	f.t.Helper()
+	row, err := f.q.GetSelectionAuthClientFixture(f.t.Context(), GetSelectionAuthClientFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID, McpServerID: serverID})
+	require.NoError(f.t, err)
+	return row
+}
+
+func TestRecordUpstreamClientSelectionsCapturesTheAuthClient(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a client choice names its registration's auth client", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer, registration)
+		authClient := f.authClient("remote_session", registration, server)
+		credential := f.session(issuer)
+
+		f.record(issuer, credential)
+		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential), "the upstream client choice is recorded as before")
+	})
+
+	t.Run("a choice several auth clients could serve is left unmapped", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer, registration)
+		f.authClient("remote_session", registration, server)
+		f.authClient("remote_session", registration, server)
+		credential := f.session(issuer)
+
+		f.record(issuer, credential)
+		require.False(t, f.namedAuthClient(credential, server).AuthClientID.Valid)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+	})
+
+	t.Run("a no-auth choice names the server's headers", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		server := f.server(issuer)
+		f.staticAuthorization(server)
+		headers := f.authClient("static_credential", uuid.Nil, server)
+		credential := f.session(issuer)
+
+		f.record(issuer, credential)
+		named := f.namedAuthClient(credential, server)
+		require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, named.AuthClientID)
+		require.False(t, named.NoAuth, "a choice naming a client is never no-auth")
+		row := f.selection(issuer, credential, server)
+		require.True(t, row.NoAuth, "the upstream client choice still reads it as no-auth")
+		require.True(t, row.Usable)
+	})
+
+	t.Run("a headers choice is kept when a client is associated later", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		server := f.server(issuer)
+		f.staticAuthorization(server)
+		f.authClient("static_credential", uuid.Nil, server)
+		credential := f.session(issuer)
+		f.record(issuer, credential)
+		require.True(t, f.namedAuthClient(credential, server).AuthClientID.Valid)
+
+		registration := f.client(issuer)
+		f.associate(server, registration)
+		f.authClient("remote_session", registration, server)
+		headers := f.namedAuthClient(credential, server).AuthClientID
+		require.Equal(t, int64(0), f.record(issuer, credential))
+		require.Equal(t, headers, f.namedAuthClient(credential, server).AuthClientID)
+	})
+
+	t.Run("an untyped no-auth choice is replaced by a unique client and names its auth client", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		server := f.server(issuer)
+		credential := f.session(issuer)
+		f.record(issuer, credential)
+		named := f.namedAuthClient(credential, server)
+		require.False(t, named.AuthClientID.Valid)
+		require.True(t, named.NoAuth)
+
+		registration := f.client(issuer)
+		f.associate(server, registration)
+		authClient := f.authClient("remote_session", registration, server)
+		require.Equal(t, int64(1), f.record(issuer, credential))
+		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+	})
+
+	t.Run("a header client derived from changed headers is not named", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		server := f.server(issuer)
+		header := f.staticAuthorization(server)
+		backfill := func() authclientbackfill.Report {
+			report, err := authclientbackfill.Run(t.Context(), f.pool, authclientbackfill.Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+			require.NoError(t, err)
+			require.Empty(t, report.PhaseErrors)
+			return report
+		}
+		backfill()
+		// The server now forwards the caller's header instead, and a
+		// credential is issued before the backfill runs again.
+		require.NoError(t, f.q.ForwardServerHeaderFixture(t.Context(), ForwardServerHeaderFixtureParams{ID: header, ValueFromRequestHeader: pgtype.Text{String: "X-Upstream-Authorization", Valid: true}}))
+		credential := f.session(issuer)
+
+		f.record(issuer, credential)
+		named := f.namedAuthClient(credential, server)
+		require.False(t, named.AuthClientID.Valid, "the static client no longer represents the server's headers")
+		require.True(t, named.NoAuth)
+
+		report := backfill()
+		require.Equal(t, 1, report.SelectionsMapped)
+		require.Empty(t, report.SelectionGaps)
+		require.True(t, f.namedAuthClient(credential, server).AuthClientID.Valid, "the backfill maps it onto the reconciled client")
+	})
+}
+
 // A consent pick of a header-only auth client persists with no remote client
 // and no no-auth flag. Coverage reads it as usable exactly as
 // GetUpstreamClientSelection serves it, so the run reports no gap.
@@ -483,7 +680,7 @@ func TestCoverageCountsHeaderOnlyChoiceAsSelected(t *testing.T) {
 	issuer := f.projectIssuer()
 	server := f.server(issuer)
 	authClient := uuid.New()
-	require.NoError(t, f.q.SeedHeaderAuthClientFixture(t.Context(), SeedHeaderAuthClientFixtureParams{
+	require.NoError(t, f.q.SeedLinkedHeaderAuthClientFixture(t.Context(), SeedLinkedHeaderAuthClientFixtureParams{
 		ID:             authClient,
 		OrganizationID: f.orgID,
 		ProjectID:      uuid.NullUUID{UUID: f.projectID, Valid: true},
@@ -519,4 +716,45 @@ func TestCoverageCountsHeaderOnlyChoiceAsSelected(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, report.Pairs[OutcomeSelected])
 	require.Empty(t, report.Gaps)
+}
+
+// An explicit consent pick of the server's header client is a known choice:
+// neither a later issuance deciding the server's only OAuth client nor the auth
+// client backfill replaces or remaps it.
+func TestExplicitHeaderPickIsNeverReplaced(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	registration := f.client(issuer)
+	server := f.server(issuer, registration)
+	f.authClient("remote_session", registration, server)
+	headers := uuid.New()
+	require.NoError(t, f.q.SeedLinkedHeaderAuthClientFixture(t.Context(), SeedLinkedHeaderAuthClientFixtureParams{
+		ID:             headers,
+		OrganizationID: f.orgID,
+		ProjectID:      uuid.NullUUID{UUID: f.projectID, Valid: true},
+		McpServerID:    server,
+	}))
+	credential := f.session(issuer)
+
+	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: issuer,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        credential,
+		Source:              upstreamclients.SelectionSourceIssuance,
+		PickedMcpServerIds:  []uuid.UUID{server},
+		PickedClientIds:     []uuid.UUID{uuid.Nil},
+		PickedAuthClientIds: []uuid.UUID{headers},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+
+	require.Equal(t, int64(0), f.record(issuer, credential), "issuance without a pick keeps the explicit choice")
+	report, err := authclientbackfill.Run(t.Context(), f.pool, authclientbackfill.Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+	require.NoError(t, err)
+	require.Empty(t, report.PhaseErrors)
+	named := f.namedAuthClient(credential, server)
+	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, named.AuthClientID, "the backfill keeps the explicit choice")
+	require.False(t, f.selection(issuer, credential, server).RemoteSessionClientID.Valid)
 }

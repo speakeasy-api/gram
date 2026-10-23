@@ -39,6 +39,19 @@ func AuthClientSelector(clientID, projectID string) Selector {
 	return selector
 }
 
+// ConnectionAuthClientSelector names one logical connection: ownerUserID's
+// connection through the upstream OAuth client, whichever personal auth
+// client uses it.
+func ConnectionAuthClientSelector(upstreamClientID, ownerUserID string) Selector {
+	return Selector{
+		SelectorKeyResourceKind:    ResourceKindMCPAuthClient,
+		SelectorKeyResourceID:      WildcardResource,
+		SelectorKeyClientType:      AuthClientTypeRemoteSession,
+		SelectorKeyUpstreamClient:  upstreamClientID,
+		SelectorKeyConnectionOwner: ownerUserID,
+	}
+}
+
 // AuthClientTypeSelector covers every client of one type, narrowed to a
 // project when projectID is set.
 func AuthClientTypeSelector(clientType, projectID string) Selector {
