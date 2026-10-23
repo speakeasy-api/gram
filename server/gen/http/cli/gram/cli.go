@@ -30,6 +30,7 @@ import (
 	assistantsc "github.com/speakeasy-api/gram/server/gen/http/assistants/client"
 	auditlogsc "github.com/speakeasy-api/gram/server/gen/http/auditlogs/client"
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
+	authclientsc "github.com/speakeasy-api/gram/server/gen/http/auth_clients/client"
 	businessmemoriesc "github.com/speakeasy-api/gram/server/gen/http/business_memories/client"
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
@@ -131,6 +132,7 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|upgrade-assistant-identity|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|logout-everywhere|register|info|transfer-out|transfer-in)",
+		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|detach-auth-client-from-mcp-server|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
@@ -931,6 +933,41 @@ func ParseEndpoint(
 		authTransferInCodeFlag           = authTransferInFlags.String("code", "", "")
 		authTransferInRedirectFlag       = authTransferInFlags.String("redirect", "", "")
 		authTransferInReplaceSessionFlag = authTransferInFlags.String("replace-session", "", "")
+
+		authClientsFlags = flag.NewFlagSet("auth-clients", flag.ContinueOnError)
+
+		authClientsListAuthClientsFlags            = flag.NewFlagSet("list-auth-clients", flag.ExitOnError)
+		authClientsListAuthClientsMcpServerIDFlag  = authClientsListAuthClientsFlags.String("mcp-server-id", "", "")
+		authClientsListAuthClientsClientTypeFlag   = authClientsListAuthClientsFlags.String("client-type", "", "")
+		authClientsListAuthClientsCursorFlag       = authClientsListAuthClientsFlags.String("cursor", "", "")
+		authClientsListAuthClientsLimitFlag        = authClientsListAuthClientsFlags.String("limit", "50", "")
+		authClientsListAuthClientsSessionTokenFlag = authClientsListAuthClientsFlags.String("session-token", "", "")
+		authClientsListAuthClientsApikeyTokenFlag  = authClientsListAuthClientsFlags.String("apikey-token", "", "")
+
+		authClientsGetAuthClientFlags            = flag.NewFlagSet("get-auth-client", flag.ExitOnError)
+		authClientsGetAuthClientIDFlag           = authClientsGetAuthClientFlags.String("id", "REQUIRED", "")
+		authClientsGetAuthClientSessionTokenFlag = authClientsGetAuthClientFlags.String("session-token", "", "")
+		authClientsGetAuthClientApikeyTokenFlag  = authClientsGetAuthClientFlags.String("apikey-token", "", "")
+
+		authClientsUpdateAuthClientFlags            = flag.NewFlagSet("update-auth-client", flag.ExitOnError)
+		authClientsUpdateAuthClientBodyFlag         = authClientsUpdateAuthClientFlags.String("body", "REQUIRED", "")
+		authClientsUpdateAuthClientSessionTokenFlag = authClientsUpdateAuthClientFlags.String("session-token", "", "")
+		authClientsUpdateAuthClientApikeyTokenFlag  = authClientsUpdateAuthClientFlags.String("apikey-token", "", "")
+
+		authClientsDetachAuthClientFromMcpServerFlags            = flag.NewFlagSet("detach-auth-client-from-mcp-server", flag.ExitOnError)
+		authClientsDetachAuthClientFromMcpServerBodyFlag         = authClientsDetachAuthClientFromMcpServerFlags.String("body", "REQUIRED", "")
+		authClientsDetachAuthClientFromMcpServerSessionTokenFlag = authClientsDetachAuthClientFromMcpServerFlags.String("session-token", "", "")
+		authClientsDetachAuthClientFromMcpServerApikeyTokenFlag  = authClientsDetachAuthClientFromMcpServerFlags.String("apikey-token", "", "")
+
+		authClientsGetMcpServerAuthenticationFlags            = flag.NewFlagSet("get-mcp-server-authentication", flag.ExitOnError)
+		authClientsGetMcpServerAuthenticationMcpServerIDFlag  = authClientsGetMcpServerAuthenticationFlags.String("mcp-server-id", "REQUIRED", "")
+		authClientsGetMcpServerAuthenticationSessionTokenFlag = authClientsGetMcpServerAuthenticationFlags.String("session-token", "", "")
+		authClientsGetMcpServerAuthenticationApikeyTokenFlag  = authClientsGetMcpServerAuthenticationFlags.String("apikey-token", "", "")
+
+		authClientsSetMcpServerUpstreamAuthRequirementFlags            = flag.NewFlagSet("set-mcp-server-upstream-auth-requirement", flag.ExitOnError)
+		authClientsSetMcpServerUpstreamAuthRequirementBodyFlag         = authClientsSetMcpServerUpstreamAuthRequirementFlags.String("body", "REQUIRED", "")
+		authClientsSetMcpServerUpstreamAuthRequirementSessionTokenFlag = authClientsSetMcpServerUpstreamAuthRequirementFlags.String("session-token", "", "")
+		authClientsSetMcpServerUpstreamAuthRequirementApikeyTokenFlag  = authClientsSetMcpServerUpstreamAuthRequirementFlags.String("apikey-token", "", "")
 
 		businessMemoriesFlags = flag.NewFlagSet("business-memories", flag.ContinueOnError)
 
@@ -5340,6 +5377,14 @@ func ParseEndpoint(
 	authTransferOutFlags.Usage = authTransferOutUsage
 	authTransferInFlags.Usage = authTransferInUsage
 
+	authClientsFlags.Usage = authClientsUsage
+	authClientsListAuthClientsFlags.Usage = authClientsListAuthClientsUsage
+	authClientsGetAuthClientFlags.Usage = authClientsGetAuthClientUsage
+	authClientsUpdateAuthClientFlags.Usage = authClientsUpdateAuthClientUsage
+	authClientsDetachAuthClientFromMcpServerFlags.Usage = authClientsDetachAuthClientFromMcpServerUsage
+	authClientsGetMcpServerAuthenticationFlags.Usage = authClientsGetMcpServerAuthenticationUsage
+	authClientsSetMcpServerUpstreamAuthRequirementFlags.Usage = authClientsSetMcpServerUpstreamAuthRequirementUsage
+
 	businessMemoriesFlags.Usage = businessMemoriesUsage
 	businessMemoriesListBusinessMemoriesFlags.Usage = businessMemoriesListBusinessMemoriesUsage
 	businessMemoriesListBusinessMemoryContentScopesFlags.Usage = businessMemoriesListBusinessMemoryContentScopesUsage
@@ -6321,6 +6366,8 @@ func ParseEndpoint(
 			svcf = auditlogsFlags
 		case "auth":
 			svcf = authFlags
+		case "auth-clients":
+			svcf = authClientsFlags
 		case "business-memories":
 			svcf = businessMemoriesFlags
 		case "chat":
@@ -6947,6 +6994,28 @@ func ParseEndpoint(
 
 			case "transfer-in":
 				epf = authTransferInFlags
+
+			}
+
+		case "auth-clients":
+			switch epn {
+			case "list-auth-clients":
+				epf = authClientsListAuthClientsFlags
+
+			case "get-auth-client":
+				epf = authClientsGetAuthClientFlags
+
+			case "update-auth-client":
+				epf = authClientsUpdateAuthClientFlags
+
+			case "detach-auth-client-from-mcp-server":
+				epf = authClientsDetachAuthClientFromMcpServerFlags
+
+			case "get-mcp-server-authentication":
+				epf = authClientsGetMcpServerAuthenticationFlags
+
+			case "set-mcp-server-upstream-auth-requirement":
+				epf = authClientsSetMcpServerUpstreamAuthRequirementFlags
 
 			}
 
@@ -10090,6 +10159,28 @@ func ParseEndpoint(
 			case "transfer-in":
 				endpoint = c.TransferIn()
 				data, err = authc.BuildTransferInPayload(*authTransferInSourceHostFlag, *authTransferInCodeFlag, *authTransferInRedirectFlag, *authTransferInReplaceSessionFlag)
+			}
+		case "auth-clients":
+			c := authclientsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-auth-clients":
+				endpoint = c.ListAuthClients()
+				data, err = authclientsc.BuildListAuthClientsPayload(*authClientsListAuthClientsMcpServerIDFlag, *authClientsListAuthClientsClientTypeFlag, *authClientsListAuthClientsCursorFlag, *authClientsListAuthClientsLimitFlag, *authClientsListAuthClientsSessionTokenFlag, *authClientsListAuthClientsApikeyTokenFlag)
+			case "get-auth-client":
+				endpoint = c.GetAuthClient()
+				data, err = authclientsc.BuildGetAuthClientPayload(*authClientsGetAuthClientIDFlag, *authClientsGetAuthClientSessionTokenFlag, *authClientsGetAuthClientApikeyTokenFlag)
+			case "update-auth-client":
+				endpoint = c.UpdateAuthClient()
+				data, err = authclientsc.BuildUpdateAuthClientPayload(*authClientsUpdateAuthClientBodyFlag, *authClientsUpdateAuthClientSessionTokenFlag, *authClientsUpdateAuthClientApikeyTokenFlag)
+			case "detach-auth-client-from-mcp-server":
+				endpoint = c.DetachAuthClientFromMcpServer()
+				data, err = authclientsc.BuildDetachAuthClientFromMcpServerPayload(*authClientsDetachAuthClientFromMcpServerBodyFlag, *authClientsDetachAuthClientFromMcpServerSessionTokenFlag, *authClientsDetachAuthClientFromMcpServerApikeyTokenFlag)
+			case "get-mcp-server-authentication":
+				endpoint = c.GetMcpServerAuthentication()
+				data, err = authclientsc.BuildGetMcpServerAuthenticationPayload(*authClientsGetMcpServerAuthenticationMcpServerIDFlag, *authClientsGetMcpServerAuthenticationSessionTokenFlag, *authClientsGetMcpServerAuthenticationApikeyTokenFlag)
+			case "set-mcp-server-upstream-auth-requirement":
+				endpoint = c.SetMcpServerUpstreamAuthRequirement()
+				data, err = authclientsc.BuildSetMcpServerUpstreamAuthRequirementPayload(*authClientsSetMcpServerUpstreamAuthRequirementBodyFlag, *authClientsSetMcpServerUpstreamAuthRequirementSessionTokenFlag, *authClientsSetMcpServerUpstreamAuthRequirementApikeyTokenFlag)
 			}
 		case "business-memories":
 			c := businessmemoriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -15951,6 +16042,160 @@ func authTransferInUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-in --source-host \"abc123\" --code \"abc123\" --redirect \"abc123\" --replace-session false")
+}
+
+// authClientsUsage displays the usage of the auth-clients command and its
+// subcommands.
+func authClientsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect only where typed auth client resolution is enforced, which is being rolled out in stages. They revoke no upstream credentials and remove no existing upstream OAuth associations; elsewhere, including in shadow mode, existing upstream configuration keeps serving.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] auth-clients COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-auth-clients: List the auth clients in the caller's organization. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-auth-client: Get an auth client in the caller's organization. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    update-auth-client: Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials; elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    detach-auth-client-from-mcp-server: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    get-mcp-server-authentication: Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    set-mcp-server-upstream-auth-requirement: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s auth-clients COMMAND --help\n", os.Args[0])
+}
+func authClientsListAuthClientsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients list-auth-clients", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -client-type STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the auth clients in the caller's organization. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -client-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients list-auth-clients --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --client-type \"service_account\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsGetAuthClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients get-auth-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an auth client in the caller's organization. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients get-auth-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsUpdateAuthClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients update-auth-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials; elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients update-auth-client --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsDetachAuthClientFromMcpServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients detach-auth-client-from-mcp-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients detach-auth-client-from-mcp-server --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsGetMcpServerAuthenticationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients get-mcp-server-authentication", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients get-mcp-server-authentication --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsSetMcpServerUpstreamAuthRequirementUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients set-mcp-server-upstream-auth-requirement", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients set-mcp-server-upstream-auth-requirement --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requires_upstream_auth\": false\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 // businessMemoriesUsage displays the usage of the business-memories command

@@ -2209,3 +2209,27 @@ UPDATE api_keys
 SET expires_at = clock_timestamp() - interval '1 minute'
 WHERE id = @id
   AND organization_id = @organization_id;
+-- name: CreateRemoteMCPBackendFixture :exec
+INSERT INTO remote_mcp_servers (id, project_id, transport_type, url)
+VALUES (@id, @project_id, 'streamable-http', @url);
+
+-- name: CreateRemoteBackedMCPServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, slug, name, remote_mcp_server_id, visibility)
+VALUES (@id, @project_id, @slug, @slug, @remote_mcp_server_id, @visibility);
+
+-- name: CreateAuthClientFixture :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
+VALUES (@organization_id, @project_id, @client_type, 'backfill', @name)
+RETURNING id;
+
+-- name: CreateAuthClientHeaderFixture :exec
+INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, is_secret, value)
+VALUES (@auth_client_id, @organization_id, @name, @is_secret, @value);
+
+-- name: AssociateAuthClientFixture :exec
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+VALUES (
+    @project_id, @organization_id, @mcp_server_id, @auth_client_id,
+    (SELECT ac.attachment_scope FROM mcp_auth_clients ac WHERE ac.id = @auth_client_id),
+    'backfill'
+);
