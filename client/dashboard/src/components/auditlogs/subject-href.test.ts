@@ -54,6 +54,23 @@ describe("audit subject links", () => {
     ).toBe("/example/signing-keys/set-1/keys");
   });
 
+  it("links built-in updates to their own project and key", () => {
+    const builtin = {
+      ...log("builtin_mcp_server", "synthetic-id"),
+      projectSlug: "other-project",
+      subjectSlug: "slack",
+    };
+    expect(subjectHref(builtin, "example")).toBe(
+      "/example/projects/other-project/mcp/builtin/slack",
+    );
+    expect(
+      subjectHref({ ...builtin, projectSlug: undefined }, "example"),
+    ).toBeNull();
+    expect(
+      subjectHref({ ...builtin, subjectSlug: undefined }, "example"),
+    ).toBeNull();
+  });
+
   it("returns the unknown-subject fallback without using metadata", () => {
     expect(subjectHref(log("future_subject"), "example")).toBeNull();
   });
