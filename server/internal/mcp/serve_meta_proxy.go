@@ -408,9 +408,12 @@ func (s *Service) executeProxiedMemberTool(
 		})
 	}
 	// Execution resolves the member credential again before dialing.
-	callGate := *gate
-	callGate.chainUpstream = s.gatewayMemberChainer(gate, mcpidentity.KindUserSession, uuid.Nil)
-	dial, err := s.dialMetaMember(ctx, logger, callGate, member, codeCallerIdentity(ctx, gate))
+	redial := func(ctx context.Context, gate *metaGateContext, member metaMember) (memberDial, error) {
+		callGate := *gate
+		callGate.chainUpstream = s.gatewayMemberChainer(gate, mcpidentity.KindUserSession, uuid.Nil)
+		return s.dialMetaMember(ctx, logger, callGate, member, codeCallerIdentity(ctx, gate))
+	}
+	dial, err := redial(ctx, gate, member)
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
@@ -424,10 +427,10 @@ func (s *Service) executeProxiedMemberTool(
 	// protocol metadata for the negotiated revision.
 	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 	defer cancel()
-	upstreamResult, unsent, err := s.callOnMemberSession(ctx, logger, dial, member, toolName, arguments)
+	upstreamResult, unsent, err := s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
 	if unsent {
 		// The shared session failed before this call was sent, so one retry cannot replay it.
-		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, dial, member, toolName, arguments)
+		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
 	}
 	if err != nil {
 		return marshalMetaToolError(ctx, logger, req.ID, err.Error())
@@ -448,8 +451,8 @@ func (s *Service) executeProxiedMemberTool(
 
 // callOnMemberSession runs one tools/call on the member's session. unsent
 // reports a failure on a shared session before the call left the gateway.
-func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, dial memberDial, member metaMember, toolName string, arguments json.RawMessage) (json.RawMessage, bool, error) {
-	ctx, ms, err := s.openMemberSession(ctx, logger, dial, member)
+func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, dial memberDial, redial memberRedial, member metaMember, toolName string, arguments json.RawMessage) (json.RawMessage, bool, error) {
+	ctx, ms, err := s.openMemberSession(ctx, logger, dial, redial, member)
 	if err != nil {
 		return nil, false, err
 	}
@@ -462,7 +465,7 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 		if ms.unsent() && ctx.Err() == nil {
 			return nil, true, err
 		}
-		return nil, false, memberClientFailure(ctx, logger, ms.outcome, dial, member, err)
+		return nil, false, memberClientFailure(ctx, logger, ms.outcome, ms.dial, member, err)
 	}
 	return upstreamResult, false, nil
 }
@@ -491,11 +494,14 @@ func (s *Service) describeMetaMember(ctx context.Context, logger *slog.Logger, g
 // tools/list interceptors.
 func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
 	ctx = s.memberAttributionContext(ctx, logger, gate)
-	probe := *gate
-	if gate.catalog != nil {
-		probe.chainUpstream = s.gatewayMemberChainer(gate, mcpidentity.KindUserSession, uuid.Nil)
+	redial := func(ctx context.Context, gate *metaGateContext, member metaMember) (memberDial, error) {
+		probe := *gate
+		if gate.catalog != nil {
+			probe.chainUpstream = s.gatewayMemberChainer(gate, mcpidentity.KindUserSession, uuid.Nil)
+		}
+		return s.dialMetaMember(ctx, logger, probe, member, codeCallerIdentity(ctx, gate))
 	}
-	dial, err := s.dialMetaMember(ctx, logger, probe, member, codeCallerIdentity(ctx, gate))
+	dial, err := redial(ctx, gate, member)
 	if err != nil {
 		// Member-scoped errors stay detectable through the %w chain.
 		return nil, fmt.Errorf("dial meta MCP member: %w", err)
@@ -504,13 +510,13 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 	// One deadline and one upstream session cover the whole pagination.
 	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 	defer cancel()
-	sessionCtx, ms, err := s.openMemberSession(ctx, logger, dial, member)
+	sessionCtx, ms, err := s.openMemberSession(ctx, logger, dial, redial, member)
 	if err != nil {
 		return nil, err
 	}
 	ctx = sessionCtx
 	defer ms.release(ctx, logger)
-	catalog, err := listMemberSessionTools(ctx, logger, ms.session, ms.outcome, dial, member)
+	catalog, err := listMemberSessionTools(ctx, logger, ms.session, ms.outcome, ms.dial, member)
 	if err != nil {
 		ms.fail(ctx)
 		return nil, err

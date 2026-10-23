@@ -74,15 +74,16 @@ func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateCon
 		surface = networkaccess.SurfacePrivate
 	}
 	backend := &metaCodeBackend{service: service, gate: *gate, admitted: admitted, meta: meta, boundary: boundary, refresh: refresh, endpoint: endpoint, issuer: issuer, surface: surface, revoked: atomic.Bool{}, sessions: nil}
-	recheck := func(ctx context.Context, slug string) (context.Context, error) {
-		ctx, _, members, err := backend.current(ctx, true)
+	recheck := func(ctx context.Context, slug string) (context.Context, *metaGateContext, metaMember, error) {
+		ctx, gate, members, err := backend.current(ctx, true)
 		if err != nil {
-			return ctx, err
+			return ctx, nil, metaMember{}, err
 		}
-		if _, ok := findMetaMember(members, slug); !ok {
-			return ctx, codemode.ErrToolUnavailable
+		member, ok := findMetaMember(members, slug)
+		if !ok {
+			return ctx, nil, metaMember{}, codemode.ErrToolUnavailable
 		}
-		return ctx, nil
+		return ctx, gate, member, nil
 	}
 	// Only a member of the gateway's organization holding a verified
 	// credential may reuse sessions across executions, and only its own: the

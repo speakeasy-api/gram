@@ -41,9 +41,9 @@ type codeSessionScope struct {
 	// a reused session keeps landing on the tunnel gateway that holds it.
 	affinity string
 	// recheck re-runs the execution's admission for an operation that
-	// waited on another, returning the refreshed authority to dispatch with,
-	// so a revocation during the wait still applies.
-	recheck func(ctx context.Context, slug string) (context.Context, error)
+	// waited on another, returning the refreshed authority, gate and member
+	// to dispatch with, so a revocation during the wait still applies.
+	recheck func(ctx context.Context, slug string) (context.Context, *metaGateContext, metaMember, error)
 	// owned pools close when their execution ends.
 	owned bool
 }
@@ -195,6 +195,9 @@ func (p *codeMemberSessions) acquire(ctx context.Context, key codeMemberSessionK
 	defer func() { <-entry.slot }()
 	if waited {
 		fresh, err := recheck(ctx)
+		if errors.Is(err, errMemberRouteChanged) {
+			none.ctx = fresh
+		}
 		if err != nil {
 			return none, fmt.Errorf("recheck admission after waiting: %w", err)
 		}
@@ -214,6 +217,11 @@ func (p *codeMemberSessions) acquire(ctx context.Context, key codeMemberSessionK
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	// Retiring a session past its maximum age drops its entry; the
+	// replacement connected under the entry's slot takes it back.
+	if _, held := p.entries[key]; !p.closed && !held && len(p.entries) < p.maxEntries {
+		p.entries[key] = entry
+	}
 	if p.closed || p.entries[key] != entry {
 		none.session, none.rt = session, rt
 		return none, nil
@@ -462,17 +470,29 @@ func (c withoutCallState) Value(key any) any {
 type memberSession struct {
 	session *mcp.ClientSession
 	outcome memberOutcome
+	// dial is the route the session was opened on, which a recheck during
+	// a wait may have replaced.
+	dial memberDial
 
 	scope *codeSessionScope
 	entry *codeMemberEntry
 	lease *pooledMemberSession
 }
 
+// errMemberRouteChanged reports a recheck whose refreshed authority routes
+// the member to another destination or credential than the pending lease.
+var errMemberRouteChanged = errors.New("member route changed during wait")
+
+// memberRedial routes a member again under authority refreshed after a wait.
+type memberRedial func(ctx context.Context, gate *metaGateContext, member metaMember) (memberDial, error)
+
 // openMemberSession connects to a member, leasing a pooled session for it
 // when the operation runs inside Code Mode. A failure is member-scoped.
-// The returned context carries the operation's attempt and authority and
-// must be used for it.
-func (s *Service) openMemberSession(ctx context.Context, logger *slog.Logger, dial memberDial, member metaMember) (context.Context, *memberSession, error) {
+// redial routes the member again after a wait, so a lease never outlives the
+// route or credential it was keyed on. The returned context carries the
+// operation's attempt and authority and must be used for it; the returned
+// session's dial is the route it was opened on.
+func (s *Service) openMemberSession(ctx context.Context, logger *slog.Logger, dial memberDial, redial memberRedial, member metaMember) (context.Context, *memberSession, error) {
 	connect := func(ctx context.Context) (*mcp.ClientSession, *memberRoundTripper, error) {
 		return s.connectMetaMember(ctx, logger, dial.build, memberSessionCloseTimeout)
 	}
@@ -481,38 +501,71 @@ func (s *Service) openMemberSession(ctx context.Context, logger *slog.Logger, di
 		if err != nil {
 			return ctx, nil, memberClientFailure(ctx, logger, rt, dial, member, err)
 		}
-		return ctx, &memberSession{session: session, outcome: rt, scope: nil, entry: nil, lease: nil}, nil
+		return ctx, &memberSession{session: session, outcome: rt, dial: dial, scope: nil, entry: nil, lease: nil}, nil
 	}
 	scope, _ := ctx.Value(codeMemberSessionsKey{}).(*codeSessionScope)
 	if scope == nil {
 		return own(ctx)
 	}
-	key, err := newCodeMemberSessionKey(scope, codeMemberDestination(member)+"\x00"+dial.sessionKey)
-	if err != nil {
-		return ctx, nil, &pooledMemberError{
-			metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q requires an authorized caller scope", member.slug)},
-			cause:           err,
+	keyFor := func(dial memberDial) (codeMemberSessionKey, error) {
+		key, err := newCodeMemberSessionKey(scope, codeMemberDestination(member)+"\x00"+dial.sessionKey)
+		if err != nil {
+			return key, &pooledMemberError{
+				metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q requires an authorized caller scope", member.slug)},
+				cause:           err,
+			}
 		}
+		return key, nil
 	}
-	recheck := func(ctx context.Context) (context.Context, error) { return scope.recheck(ctx, member.slug) }
-	// A stale session that fails its ping is retired and connected again once.
+	key, err := keyFor(dial)
+	if err != nil {
+		return ctx, nil, err
+	}
+	// recheck refreshes authority and routes the member again; a changed
+	// route abandons the pending lease so the next attempt keys on the new one.
+	recheck := func(ctx context.Context) (context.Context, error) {
+		fresh, gate, current, err := scope.recheck(ctx, member.slug)
+		if err != nil {
+			return fresh, err
+		}
+		if redial == nil {
+			return fresh, nil
+		}
+		next, err := redial(fresh, gate, current)
+		if err != nil {
+			return fresh, err
+		}
+		changed := next.sessionKey != dial.sessionKey || codeMemberDestination(current) != codeMemberDestination(member)
+		dial, member = next, current
+		if !changed {
+			return fresh, nil
+		}
+		if key, err = keyFor(dial); err != nil {
+			return fresh, err
+		}
+		return fresh, errMemberRouteChanged
+	}
+	// A stale session that fails its ping, or a route that changed while
+	// waiting, is connected again once.
 	for range 2 {
 		got, err := scope.pool.acquire(ctx, key, recheck, connect)
 		ctx = got.ctx
 		switch {
+		case errors.Is(err, errMemberRouteChanged):
+			continue
 		case err != nil && got.rt == nil:
 			return ctx, nil, pooledMemberFailure(member, err)
 		case err != nil:
 			return ctx, nil, memberClientFailure(ctx, logger, got.rt, dial, member, err)
 		case got.lease == nil && got.session != nil:
-			return ctx, &memberSession{session: got.session, outcome: got.rt, scope: nil, entry: nil, lease: nil}, nil
+			return ctx, &memberSession{session: got.session, outcome: got.rt, dial: dial, scope: nil, entry: nil, lease: nil}, nil
 		case got.lease == nil:
 			// The pool will not hold this session; serve the call on its own.
 			return own(ctx)
 		}
 		attempt := newMemberAttempt(dial.build)
 		callCtx := context.WithValue(ctx, memberAttemptKey{}, attempt)
-		ms := &memberSession{session: got.session, outcome: attempt, scope: scope, entry: got.entry, lease: got.lease}
+		ms := &memberSession{session: got.session, outcome: attempt, dial: dial, scope: scope, entry: got.entry, lease: got.lease}
 		switch {
 		case got.stale:
 			// MCP ping has no side effects, so it is safe to learn here,
@@ -534,12 +587,16 @@ func (s *Service) openMemberSession(ctx context.Context, logger *slog.Logger, di
 			if healthy {
 				base = callCtx
 			}
-			fresh, err := scope.recheck(base, member.slug)
-			if err != nil {
+			fresh, err := recheck(base)
+			switch {
+			case errors.Is(err, errMemberRouteChanged):
+				scope.pool.release(ctx, got.entry, got.lease)
+				ctx = fresh
+				continue
+			case err != nil:
 				scope.pool.release(ctx, got.entry, got.lease)
 				return ctx, nil, pooledMemberFailure(member, err)
-			}
-			if healthy {
+			case healthy:
 				return fresh, ms, nil
 			}
 			// The ping failed: connect again under the refreshed authority.
