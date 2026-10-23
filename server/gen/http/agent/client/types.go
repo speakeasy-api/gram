@@ -2551,12 +2551,17 @@ type AgentServerConnectionResponseBody struct {
 	// `connected`: the user is signed in. `not_connected`: the user has not signed
 	// in. `reauthorization_required`: a sign-in exists but must be renewed.
 	// `not_required`: the server needs no sign-in from the user. `setup_required`:
-	// an administrator must finish the server's sign-in setup first. `unknown`:
-	// the state can't be determined, for example for a gateway.
+	// an administrator must finish the server's sign-in setup first. `no_access`:
+	// the user lacks permission to connect to the server. `unknown`: the state
+	// can't be determined, for example for a gateway.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
 	// Page that signs the user in to this server in the browser. Present when
 	// state is not_connected or reauthorization_required.
 	ConnectURL *string `form:"connect_url,omitempty" json:"connect_url,omitempty" xml:"connect_url,omitempty"`
+	// Page where the user can ask an administrator for access to this server.
+	// Present only when state is no_access and the organization accepts access
+	// requests.
+	RequestAccessURL *string `form:"request_access_url,omitempty" json:"request_access_url,omitempty" xml:"request_access_url,omitempty"`
 }
 
 // SyncedAgentUserResponseBody is used to define fields on response body types.
@@ -8007,12 +8012,15 @@ func ValidateAgentServerConnectionResponseBody(body *AgentServerConnectionRespon
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
 	}
 	if body.State != nil {
-		if !(*body.State == "connected" || *body.State == "not_connected" || *body.State == "reauthorization_required" || *body.State == "not_required" || *body.State == "setup_required" || *body.State == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"connected", "not_connected", "reauthorization_required", "not_required", "setup_required", "unknown"}))
+		if !(*body.State == "connected" || *body.State == "not_connected" || *body.State == "reauthorization_required" || *body.State == "not_required" || *body.State == "setup_required" || *body.State == "no_access" || *body.State == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"connected", "not_connected", "reauthorization_required", "not_required", "setup_required", "no_access", "unknown"}))
 		}
 	}
 	if body.ConnectURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.connect_url", *body.ConnectURL, goa.FormatURI))
+	}
+	if body.RequestAccessURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.request_access_url", *body.RequestAccessURL, goa.FormatURI))
 	}
 	return
 }

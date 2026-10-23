@@ -169,3 +169,25 @@ func addExistingServerToPlugin(t *testing.T, ctx context.Context, ti *testInstan
 	})
 	require.NoError(t, err)
 }
+
+func TestGetMyConnections_NoPermissionIsNoAccess(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	plugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "engineering")
+	assignPlugin(t, ctx, ti.conn, plugin, ti.orgID, "*")
+	server, _ := seedPluginMCPServer(t, ctx, ti.conn, ti.orgID, ti.projectID, plugin, "Linear", 1)
+	ti.service.WithConnectionStatuses(&stubConnectionStatuses{byMCP: map[uuid.UUID]platformmcp.GetMyMCPConnectionStatusOutput{
+		server: {
+			State: platformmcp.MCPConnectionStateNotApplicable, Reason: platformmcp.MCPConnectionReasonPermissionRequired,
+			RequiredScope: "mcp:connect", RequestAccessURL: testSiteURL + "/request-access",
+		},
+	}})
+
+	res, err := ti.service.GetMyConnections(ctx, &gen.GetMyConnectionsPayload{Email: new(mockidp.MockUserEmail)})
+	require.NoError(t, err)
+	c := connectionByID(t, res, server)
+	require.Equal(t, "no_access", c.State, "a member who may not connect can't fix it by signing in")
+	require.Equal(t, testSiteURL+"/request-access", *c.RequestAccessURL)
+	require.Nil(t, c.ConnectURL)
+}

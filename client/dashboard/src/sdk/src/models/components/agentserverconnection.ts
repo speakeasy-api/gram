@@ -11,7 +11,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * `connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `unknown`: the state can't be determined, for example for a gateway.
+ * `connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can't be determined, for example for a gateway.
  */
 export const AgentServerConnectionState = {
   Connected: "connected",
@@ -19,10 +19,11 @@ export const AgentServerConnectionState = {
   ReauthorizationRequired: "reauthorization_required",
   NotRequired: "not_required",
   SetupRequired: "setup_required",
+  NoAccess: "no_access",
   Unknown: "unknown",
 } as const;
 /**
- * `connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `unknown`: the state can't be determined, for example for a gateway.
+ * `connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can't be determined, for example for a gateway.
  */
 export type AgentServerConnectionState = OpenEnum<
   typeof AgentServerConnectionState
@@ -38,7 +39,11 @@ export type AgentServerConnection = {
    */
   id: string;
   /**
-   * `connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `unknown`: the state can't be determined, for example for a gateway.
+   * Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.
+   */
+  requestAccessUrl?: string | undefined;
+  /**
+   * `connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can't be determined, for example for a gateway.
    */
   state: AgentServerConnectionState;
 };
@@ -57,11 +62,13 @@ export const AgentServerConnection$inboundSchema: z.ZodMiniType<
   z.object({
     connect_url: z.optional(z.string()),
     id: z.string(),
+    request_access_url: z.optional(z.string()),
     state: AgentServerConnectionState$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       "connect_url": "connectUrl",
+      "request_access_url": "requestAccessUrl",
     });
   }),
 );

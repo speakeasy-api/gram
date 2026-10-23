@@ -29,6 +29,10 @@ const (
 	MCPConnectionStateSetupRequired           = "setup_required"
 	MCPConnectionStateNotApplicable           = "not_applicable"
 
+	// MCPConnectionReasonPermissionRequired marks a member who lacks
+	// mcp:connect on the server, so no sign-in can make it usable.
+	MCPConnectionReasonPermissionRequired = "permission_required"
+
 	// MCPConnectionReasonIdentityChaining marks an active connection served by
 	// a usable identity chaining credential rather than an interactive one.
 	MCPConnectionReasonIdentityChaining = "identity_chaining"
@@ -145,7 +149,7 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 	}
 	if !target.canConnect {
 		output.State = MCPConnectionStateNotApplicable
-		output.Reason = "permission_required"
+		output.Reason = MCPConnectionReasonPermissionRequired
 		output.RequiredScope = string(authz.ScopeMCPConnect)
 		output.RequestAccessURL = s.requestMCPAccessURL(ctx, principal.OrganizationID, target.mcpID.String(), target.name)
 		output.NextAction = memberMCPAccessNextAction(output.RequestAccessURL)

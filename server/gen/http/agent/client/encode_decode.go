@@ -2961,9 +2961,10 @@ func unmarshalAgentMCPServerResponseBodyToAgentAgentMCPServer(v *AgentMCPServerR
 // *AgentServerConnectionResponseBody.
 func unmarshalAgentServerConnectionResponseBodyToAgentAgentServerConnection(v *AgentServerConnectionResponseBody) *agent.AgentServerConnection {
 	res := &agent.AgentServerConnection{
-		ID:         *v.ID,
-		State:      *v.State,
-		ConnectURL: v.ConnectURL,
+		ID:               *v.ID,
+		State:            *v.State,
+		ConnectURL:       v.ConnectURL,
+		RequestAccessURL: v.RequestAccessURL,
 	}
 
 	return res

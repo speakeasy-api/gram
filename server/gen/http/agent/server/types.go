@@ -2551,12 +2551,17 @@ type AgentServerConnectionResponseBody struct {
 	// `connected`: the user is signed in. `not_connected`: the user has not signed
 	// in. `reauthorization_required`: a sign-in exists but must be renewed.
 	// `not_required`: the server needs no sign-in from the user. `setup_required`:
-	// an administrator must finish the server's sign-in setup first. `unknown`:
-	// the state can't be determined, for example for a gateway.
+	// an administrator must finish the server's sign-in setup first. `no_access`:
+	// the user lacks permission to connect to the server. `unknown`: the state
+	// can't be determined, for example for a gateway.
 	State string `form:"state" json:"state" xml:"state"`
 	// Page that signs the user in to this server in the browser. Present when
 	// state is not_connected or reauthorization_required.
 	ConnectURL *string `form:"connect_url,omitempty" json:"connect_url,omitempty" xml:"connect_url,omitempty"`
+	// Page where the user can ask an administrator for access to this server.
+	// Present only when state is no_access and the organization accepts access
+	// requests.
+	RequestAccessURL *string `form:"request_access_url,omitempty" json:"request_access_url,omitempty" xml:"request_access_url,omitempty"`
 }
 
 // SyncedAgentUserResponseBody is used to define fields on response body types.

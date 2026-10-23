@@ -83998,15 +83998,20 @@ components:
         id:
           type: string
           description: The server's id, as getPlugins reports it on each plugin server.
+        request_access_url:
+          type: string
+          description: Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.
+          format: uri
         state:
           type: string
-          description: '`connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server''s sign-in setup first. `unknown`: the state can''t be determined, for example for a gateway.'
+          description: '`connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server''s sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can''t be determined, for example for a gateway.'
           enum:
             - connected
             - not_connected
             - reauthorization_required
             - not_required
             - setup_required
+            - no_access
             - unknown
       required:
         - id

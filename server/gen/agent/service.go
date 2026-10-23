@@ -239,12 +239,17 @@ type AgentServerConnection struct {
 	// `connected`: the user is signed in. `not_connected`: the user has not signed
 	// in. `reauthorization_required`: a sign-in exists but must be renewed.
 	// `not_required`: the server needs no sign-in from the user. `setup_required`:
-	// an administrator must finish the server's sign-in setup first. `unknown`:
-	// the state can't be determined, for example for a gateway.
+	// an administrator must finish the server's sign-in setup first. `no_access`:
+	// the user lacks permission to connect to the server. `unknown`: the state
+	// can't be determined, for example for a gateway.
 	State string
 	// Page that signs the user in to this server in the browser. Present when
 	// state is not_connected or reauthorization_required.
 	ConnectURL *string
+	// Page where the user can ask an administrator for access to this server.
+	// Present only when state is no_access and the organization accepts access
+	// requests.
+	RequestAccessURL *string
 }
 
 type AgentSessionMeta struct {

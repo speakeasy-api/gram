@@ -711,10 +711,13 @@ var AgentServerConnectionModel = Type("AgentServerConnection", func() {
 	Required("id", "state")
 	Attribute("id", String, "The server's id, as getPlugins reports it on each plugin server.")
 	Attribute("state", String, func() {
-		Description("`connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `unknown`: the state can't be determined, for example for a gateway.")
-		Enum("connected", "not_connected", "reauthorization_required", "not_required", "setup_required", "unknown")
+		Description("`connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can't be determined, for example for a gateway.")
+		Enum("connected", "not_connected", "reauthorization_required", "not_required", "setup_required", "no_access", "unknown")
 	})
 	Attribute("connect_url", String, "Page that signs the user in to this server in the browser. Present when state is not_connected or reauthorization_required.", func() {
+		Format(FormatURI)
+	})
+	Attribute("request_access_url", String, "Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.", func() {
 		Format(FormatURI)
 	})
 })
