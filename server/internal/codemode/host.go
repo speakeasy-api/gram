@@ -19,6 +19,10 @@ const (
 	discoveryConcurrency = 4
 	// memberDeadline limits an individual catalog lookup.
 	memberDeadline = 5 * time.Second
+	// pathSeparator joins a member slug and an upstream tool name. Member
+	// slugs never contain it, so the first occurrence is the boundary and the
+	// tool name may contain further occurrences.
+	pathSeparator = "--"
 )
 
 // ErrToolUnavailable deliberately does not distinguish hidden and absent names.
@@ -118,12 +122,14 @@ func (h *CatalogHost) members(ctx context.Context) ([]Server, Lister, error) {
 	if len(servers) > maxMembers {
 		return nil, nil, fmt.Errorf("gateway exceeds code-mode member limit")
 	}
-	if h.allowed == nil {
-		return servers, list, nil
-	}
 	permitted := make([]Server, 0, len(servers))
 	for _, server := range servers {
-		if h.allowedServers[server.Slug] {
+		// A slug containing the separator would make its paths ambiguous with
+		// another member's, so it is not addressable.
+		if server.Slug == "" || strings.Contains(server.Slug, pathSeparator) {
+			continue
+		}
+		if h.allowed == nil || h.allowedServers[server.Slug] {
 			permitted = append(permitted, server)
 		}
 	}
@@ -307,7 +313,7 @@ func (h *CatalogHost) Call(ctx context.Context, path string, arguments json.RawM
 }
 
 func splitPath(path string) (string, string, error) {
-	server, name, ok := strings.Cut(path, "--")
+	server, name, ok := strings.Cut(path, pathSeparator)
 	if !ok || server == "" || name == "" || len(path) > maxQueryBytes {
 		return "", "", ErrToolUnavailable
 	}

@@ -143,6 +143,26 @@ func TestRunRestrictionNarrowsDiscoveryAndCalls(t *testing.T) {
 	require.JSONEq(t, `{}`, string(result.Data))
 }
 
+func TestSeparatorInMemberSlugIsNotAddressable(t *testing.T) {
+	t.Parallel()
+	backend := &fixtureBackend{servers: []Server{{Slug: "crm", Name: "CRM"}, {Slug: "crm--billing", Name: "Ambiguous"}}, catalogs: map[string]*Catalog{"crm": {Tools: []Tool{fixtureTool("crm--billing--list")}}, "crm--billing": {Tools: []Tool{fixtureTool("crm--billing--list")}}}}
+	for _, tools := range [][]string{nil, {"crm--billing--list"}} {
+		host, err := NewHost(t.Context(), backend, "scope", tools)
+		require.NoError(t, err)
+		servers, err := host.Servers(t.Context(), PageArgs{})
+		require.NoError(t, err)
+		require.Equal(t, []Server{{Slug: "crm", Name: "CRM"}}, servers.Items)
+		page, err := host.Search(t.Context(), SearchArgs{})
+		require.NoError(t, err)
+		require.Len(t, page.Items, 1)
+		require.Equal(t, "crm--billing--list", page.Items[0].Path)
+		require.False(t, page.Incomplete)
+		_, err = host.Search(t.Context(), SearchArgs{Server: "crm--billing"})
+		require.ErrorIs(t, err, ErrToolUnavailable)
+	}
+	require.NotContains(t, backend.listed, "crm--billing")
+}
+
 func TestEmptyRestrictionNeedsNoToolEnumeration(t *testing.T) {
 	t.Parallel()
 	backend := &fixtureBackend{servers: []Server{{Slug: "crm", Name: "CRM"}}}
