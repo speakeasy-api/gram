@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,10 +15,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	endpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/approvalserver"
+	approvalrepo "github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -83,23 +89,75 @@ func TestEnsureCreatesTheServerOnceAndAddsItToTheDefaultPlugin(t *testing.T) {
 
 	plugin, err := pluginsrepo.New(conn).GetDefaultPlugin(t.Context(), pluginsrepo.GetDefaultPluginParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	servers, err := pluginsrepo.New(conn).ListPluginServers(t.Context(), plugin.ID)
-	require.NoError(t, err)
-	var member bool
-	for _, server := range servers {
-		if server.McpServerID.Valid && server.McpServerID.UUID == first.Server.ID {
-			member = true
-			require.Equal(t, approval.MCPServerName, server.DisplayName)
-		}
-	}
-	require.True(t, member, "the approvals server joins the Default plugin")
+	member, found := defaultPluginMember(t, conn, plugin.ID, first.Server.ID)
+	require.True(t, found, "the approvals server joins the Default plugin")
+	require.Equal(t, approval.MCPServerName, member.DisplayName)
 
 	// Later calls find the server and change nothing, so an admin who removes
 	// it from a plugin is not overruled.
+	_, err = pluginsrepo.New(conn).RemovePluginServer(t.Context(), pluginsrepo.RemovePluginServerParams{ID: member.ID, PluginID: plugin.ID})
+	require.NoError(t, err)
 	second := ensure(t, conn, authCtx)
 	require.False(t, second.Created)
 	require.False(t, second.AddedToDefaultPlugin)
 	require.Equal(t, first.Server, second.Server)
+	_, found = defaultPluginMember(t, conn, plugin.ID, first.Server.ID)
+	require.False(t, found, "a removed approvals server stays out of the Default plugin")
+}
+
+func defaultPluginMember(t *testing.T, conn *pgxpool.Pool, pluginID, serverID uuid.UUID) (pluginsrepo.PluginServer, bool) {
+	t.Helper()
+	servers, err := pluginsrepo.New(conn).ListPluginServers(t.Context(), pluginID)
+	require.NoError(t, err)
+	for _, server := range servers {
+		if server.McpServerID.Valid && server.McpServerID.UUID == serverID {
+			return server, true
+		}
+	}
+	return pluginsrepo.PluginServer{}, false
+}
+
+func TestEnsureFitsALongEndpointSlug(t *testing.T) {
+	t.Parallel()
+	conn, authCtx := newProject(t)
+
+	long := *authCtx
+	long.OrganizationSlug = strings.Repeat("o", 150)
+	outcome := ensure(t, conn, &long)
+	require.True(t, outcome.Created)
+	require.Len(t, outcome.Server.EndpointSlug, 128)
+	require.True(t, strings.HasPrefix(outcome.Server.EndpointSlug, strings.Repeat("o", 100)))
+}
+
+func TestEnsureSkipsTakenEndpointSlugs(t *testing.T) {
+	t.Parallel()
+	conn, authCtx := newProject(t)
+
+	// Another server holds the slug the approvals server would take first.
+	other, err := approvalrepo.New(conn).CreateBuiltinMCPServer(t.Context(), approvalrepo.CreateBuiltinMCPServerParams{
+		ID:                uuid.New(),
+		ProjectID:         *authCtx.ProjectID,
+		Name:              conv.ToPGText("Other"),
+		Slug:              conv.ToPGText("other"),
+		BuiltinBackend:    conv.ToPGText("other"),
+		Visibility:        visibility.Private,
+		NetworkAccessMode: networkaccess.Storage(networkaccess.ModePublicOnly),
+	})
+	require.NoError(t, err)
+	base := authCtx.OrganizationSlug + "-" + *authCtx.ProjectSlug + "-approvals"
+	_, err = endpointsrepo.New(conn).CreateMCPEndpoint(t.Context(), endpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       *authCtx.ProjectID,
+		CustomDomainID:  uuid.NullUUID{},
+		McpServerID:     uuid.NullUUID{UUID: other.ID, Valid: true},
+		MetaMcpServerID: uuid.NullUUID{},
+		Slug:            base,
+	})
+	require.NoError(t, err)
+
+	outcome := ensure(t, conn, authCtx)
+	require.True(t, outcome.Created)
+	id := outcome.Server.ID.String()
+	require.Equal(t, base+"-"+id[len(id)-4:], outcome.Server.EndpointSlug)
 }
 
 func TestEnsureGivesTheServerItsOwnSignInIssuer(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -34,6 +35,9 @@ const (
 	// endpointSuffix ends the endpoint slug, after the organization and
 	// project slugs that make it unique.
 	endpointSuffix = "approvals"
+
+	// maxEndpointSlugLen is the mcp_endpoints.slug column limit.
+	maxEndpointSlugLen = 128
 )
 
 // Server is a project's approvals server.
@@ -171,12 +175,11 @@ func Ensure(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *
 
 // createEndpoint gives the server a platform endpoint. Endpoint slugs start
 // with the organization slug, and the project slug keeps each project's
-// approvals server apart; a taken slug gets the server ID's suffix.
+// approvals server apart; a taken slug gets a longer and longer suffix of the
+// server ID.
 func createEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, serverID uuid.UUID) (string, error) {
 	noDomain := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	base := fmt.Sprintf("%s-%s-%s", authCtx.OrganizationSlug, *authCtx.ProjectSlug, endpointSuffix)
-	candidates := []string{base, fmt.Sprintf("%s-%s", base, serverID.String()[len(serverID.String())-4:])}
-	for _, slug := range candidates {
+	for _, slug := range endpointSlugCandidates(authCtx.OrganizationSlug, *authCtx.ProjectSlug, serverID) {
 		// The same lock and unified slug check the endpoints service uses, so
 		// the slug cannot collide with an endpoint or a toolset's MCP slug.
 		endpoints := endpointsrepo.New(tx)
@@ -221,4 +224,28 @@ func createEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, a
 		return endpoint.Slug, nil
 	}
 	return "", errors.New("no free endpoint slug for the approvals server")
+}
+
+// endpointSlugCandidates are the endpoint slugs to try in order: the
+// organization, project and suffix, then the same with 4, 8 and 12 characters
+// of the server ID's random tail. Each is cut to fit the endpoint column.
+func endpointSlugCandidates(organizationSlug, projectSlug string, serverID uuid.UUID) []string {
+	base := fmt.Sprintf("%s-%s-%s", organizationSlug, projectSlug, endpointSuffix)
+	id := serverID.String()
+	tail := id[len(id)-12:]
+	candidates := []string{fitEndpointSlug(base, "")}
+	for _, n := range []int{4, 8, 12} {
+		candidates = append(candidates, fitEndpointSlug(base, tail[len(tail)-n:]))
+	}
+	return candidates
+}
+
+// fitEndpointSlug joins base and suffix, cutting base so the slug fits the
+// endpoint column. Slugs are ASCII, so a byte cut is a character cut.
+func fitEndpointSlug(base, suffix string) string {
+	if suffix == "" {
+		return strings.TrimRight(base[:min(len(base), maxEndpointSlugLen)], "-")
+	}
+	keep := maxEndpointSlugLen - len(suffix) - 1
+	return strings.TrimRight(base[:min(len(base), keep)], "-") + "-" + suffix
 }
