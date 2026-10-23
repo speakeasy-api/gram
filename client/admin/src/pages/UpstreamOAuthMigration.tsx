@@ -302,7 +302,12 @@ function MigrationStatus({
     );
   }
   const s = status.data;
-  const authClients = <AuthClientStatus status={s} />;
+  const authClients = (
+    <>
+      <AuthClientStatus status={s} />
+      <ExecutionProfileStatus status={s} />
+    </>
+  );
   const reconnect =
     s.reconnectCredentials > 0
       ? `${s.reconnectCredentials} ${s.reconnectCredentials === 1 ? "credential" : "credentials"} will be asked to reconnect`
@@ -553,6 +558,59 @@ function AuthClientItems({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// The auth client choices assistant turns use, per assistant, trigger and
+// execution context. Gaps are never guessed: the server's auth clients are
+// configured instead.
+function ExecutionProfileStatus({
+  status,
+}: {
+  status: AdminUpstreamOAuthMigrationStatus;
+}): JSX.Element | null {
+  const p = status.executionProfiles;
+  if (!p) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Assistant profiles: couldn't check
+      </p>
+    );
+  }
+  if (p.targets === 0) {
+    return null;
+  }
+  if (p.complete) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Assistant profiles: recorded for {p.targets}{" "}
+        {p.targets === 1
+          ? "assistant and trigger pair"
+          : "assistant and trigger pairs"}
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground text-xs">
+        Assistant profiles:{" "}
+        {p.pendingVersions > 0
+          ? `${p.pendingVersions} to record`
+          : "every profile recorded"}
+      </p>
+      {p.gaps.length > 0 ? (
+        <ul className="text-muted-foreground text-xs">
+          {p.gaps.map((gap) => (
+            <li key={`${gap.executionContext}:${gap.reason}`}>
+              {gap.executionContext} {gap.reason}: {gap.servers}{" "}
+              {gap.servers === 1
+                ? "profile and server pair"
+                : "profile and server pairs"}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

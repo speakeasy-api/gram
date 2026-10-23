@@ -116,6 +116,46 @@ describe("needsMigrationRun", () => {
     expect(needsMigrationRun(s)).toBe(false);
   });
 
+  it("includes an organization with execution profiles to record", () => {
+    const s = status(true, true);
+    s.executionProfiles = {
+      complete: false,
+      targets: 1,
+      pendingVersions: 2,
+      gaps: [],
+    };
+    expect(needsMigrationRun(s)).toBe(true);
+  });
+
+  it("skips an organization whose only profile gaps need configuring", () => {
+    const s = status(true, true);
+    s.executionProfiles = {
+      complete: false,
+      targets: 1,
+      pendingVersions: 0,
+      gaps: [
+        {
+          executionContext: "userless",
+          reason: "personal_requires_user",
+          servers: 1,
+        },
+      ],
+    };
+    expect(needsMigrationRun(s)).toBe(false);
+  });
+
+  it("skips profiles to record while a run records auth clients", () => {
+    const s = status(true, true);
+    if (s.authClients) s.authClients.inProgress = true;
+    s.executionProfiles = {
+      complete: false,
+      targets: 1,
+      pendingVersions: 2,
+      gaps: [],
+    };
+    expect(needsMigrationRun(s)).toBe(false);
+  });
+
   it("skips an organization whose auth clients a run is recording", () => {
     const s = status(true, false);
     if (s.authClients) s.authClients.inProgress = true;

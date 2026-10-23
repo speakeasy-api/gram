@@ -2404,6 +2404,9 @@ type GetUpstreamOAuthMigrationStatusResponseBody struct {
 	// migrated: it never gates the upstream OAuth cutover. Absent when its check
 	// failed.
 	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
 }
 
 // RunUpstreamOAuthMigrationResponseBody is the type of the "admin" service
@@ -2425,6 +2428,8 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
 	// Credential choices this run named a typed auth client on.
 	SelectionsMapped *int64 `form:"selections_mapped,omitempty" json:"selections_mapped,omitempty" xml:"selections_mapped,omitempty"`
+	// Execution-selection profile versions this run recorded.
+	ExecutionProfileVersionsWritten *int64 `form:"execution_profile_versions_written,omitempty" json:"execution_profile_versions_written,omitempty" xml:"execution_profile_versions_written,omitempty"`
 	// Default auth permissions this run granted across the organization: the
 	// personal default and shared client grants for every recorded client, and API
 	// key policies once every client is recorded. The auth-permission-defaults
@@ -21955,6 +21960,38 @@ type AdminUpstreamOAuthMigrationSelectionGapResponseBody struct {
 	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
 }
 
+// AdminUpstreamOAuthMigrationExecutionProfilesResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfilesResponseBody struct {
+	// Whether every profile is recorded and holds a choice for every server its
+	// assistant reaches.
+	Complete bool `form:"complete" json:"complete" xml:"complete"`
+	// Assistant and trigger pairs, each with a profile per execution context.
+	Targets int64 `form:"targets" json:"targets" xml:"targets"`
+	// Profile versions not yet recorded.
+	PendingVersions int64 `form:"pending_versions" json:"pending_versions" xml:"pending_versions"`
+	// Servers the profiles hold no choice for, by execution context and reason.
+	// They are never guessed: configure the server's auth clients.
+	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody `form:"gaps" json:"gaps" xml:"gaps"`
+}
+
+// AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody is used to define
+// fields on response body types.
+type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
+	// user_backed for turns run for a user the event identified, userless for
+	// turns run as the trigger's workload.
+	ExecutionContext string `form:"execution_context" json:"execution_context" xml:"execution_context"`
+	// Why there is no choice: selection_required (several clients could serve it),
+	// personal_requires_user (only a personal client serves it, and the turn has
+	// no user), no_client (no live, enabled auth client carries its upstream OAuth
+	// client), setup_incomplete (it needs upstream authentication and offers no
+	// auth client) or upstream_auth_undecided (it offers no auth client and an
+	// administrator has not decided whether it needs upstream authentication).
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+	// Profile and server pairs with no choice for this reason.
+	Servers int64 `form:"servers" json:"servers" xml:"servers"`
+}
+
 // AdminUpstreamOAuthMigrationStatusResponseBody is used to define fields on
 // response body types.
 type AdminUpstreamOAuthMigrationStatusResponseBody struct {
@@ -21981,6 +22018,9 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	// migrated: it never gates the upstream OAuth cutover. Absent when its check
 	// failed.
 	AuthClients *AdminUpstreamOAuthMigrationAuthClientsResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfilesResponseBody `form:"execution_profiles,omitempty" json:"execution_profiles,omitempty" xml:"execution_profiles,omitempty"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -24270,6 +24310,9 @@ func NewGetUpstreamOAuthMigrationStatusResponseBody(res *admin.AdminUpstreamOAut
 	if res.AuthClients != nil {
 		body.AuthClients = marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigrationAuthClientsResponseBody(res.AuthClients)
 	}
+	if res.ExecutionProfiles != nil {
+		body.ExecutionProfiles = marshalAdminAdminUpstreamOAuthMigrationExecutionProfilesToAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(res.ExecutionProfiles)
+	}
 	return body
 }
 
@@ -24285,6 +24328,7 @@ func NewRunUpstreamOAuthMigrationResponseBody(res *admin.AdminUpstreamOAuthMigra
 		AuthClientLinksWritten:             res.AuthClientLinksWritten,
 		ServersMarkedRequiringUpstreamAuth: res.ServersMarkedRequiringUpstreamAuth,
 		SelectionsMapped:                   res.SelectionsMapped,
+		ExecutionProfileVersionsWritten:    res.ExecutionProfileVersionsWritten,
 		AuthPermissionGrantsWritten:        res.AuthPermissionGrantsWritten,
 		AuthClientsError:                   res.AuthClientsError,
 	}

@@ -1512,6 +1512,38 @@ type AdminUpstreamOAuthMigrationAuthClients struct {
 	SelectionGapCount *int64
 }
 
+// MCP servers execution-selection profiles hold no choice for, for one
+// execution context and reason.
+type AdminUpstreamOAuthMigrationExecutionProfileGap struct {
+	// user_backed for turns run for a user the event identified, userless for
+	// turns run as the trigger's workload.
+	ExecutionContext string
+	// Why there is no choice: selection_required (several clients could serve it),
+	// personal_requires_user (only a personal client serves it, and the turn has
+	// no user), no_client (no live, enabled auth client carries its upstream OAuth
+	// client), setup_incomplete (it needs upstream authentication and offers no
+	// auth client) or upstream_auth_undecided (it offers no auth client and an
+	// administrator has not decided whether it needs upstream authentication).
+	Reason string
+	// Profile and server pairs with no choice for this reason.
+	Servers int64
+}
+
+// Where one organization stands in recording, for each assistant, trigger and
+// execution context, the versioned auth client choices its turns use.
+type AdminUpstreamOAuthMigrationExecutionProfiles struct {
+	// Whether every profile is recorded and holds a choice for every server its
+	// assistant reaches.
+	Complete bool
+	// Assistant and trigger pairs, each with a profile per execution context.
+	Targets int64
+	// Profile versions not yet recorded.
+	PendingVersions int64
+	// Servers the profiles hold no choice for, by execution context and reason.
+	// They are never guessed: configure the server's auth clients.
+	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGap
+}
+
 // An organization the upstream OAuth migration applies to: it has a live MCP
 // server signed in through a user session issuer.
 type AdminUpstreamOAuthMigrationOrganization struct {
@@ -1551,6 +1583,8 @@ type AdminUpstreamOAuthMigrationRun struct {
 	ServersMarkedRequiringUpstreamAuth *int64
 	// Credential choices this run named a typed auth client on.
 	SelectionsMapped *int64
+	// Execution-selection profile versions this run recorded.
+	ExecutionProfileVersionsWritten *int64
 	// Default auth permissions this run granted across the organization: the
 	// personal default and shared client grants for every recorded client, and API
 	// key policies once every client is recorded. The auth-permission-defaults
@@ -1643,6 +1677,9 @@ type AdminUpstreamOAuthMigrationStatus struct {
 	// migrated: it never gates the upstream OAuth cutover. Absent when its check
 	// failed.
 	AuthClients *AdminUpstreamOAuthMigrationAuthClients
+	// Where the organization stands in recording the auth client choices its
+	// assistants' turns use. Separate from migrated. Absent when its check failed.
+	ExecutionProfiles *AdminUpstreamOAuthMigrationExecutionProfiles
 }
 
 // Configuration the typed auth client backfill cannot record without a guess,
