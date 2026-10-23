@@ -1,0 +1,14 @@
+server/internal/risk/scanner_test.go
+  h_e404c1a6a54184 965-968,991
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "04abf6c97ddd1ed1f7e63049ad164df359c6226a",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
