@@ -235,7 +235,7 @@ func TestChosenToolSelection_RejectsOverCountAndOverlongNames(t *testing.T) {
 func TestConsentPrefillAttr_NilIsEmpty(t *testing.T) {
 	t.Parallel()
 
-	require.Empty(t, consentPrefillAttr(nil))
+	require.Empty(t, consentPrefillAttr(nil, nil))
 }
 
 func TestConsentPrefillAttr_SerializesGrantsAndPicks(t *testing.T) {
@@ -253,7 +253,7 @@ func TestConsentPrefillAttr_SerializesGrantsAndPicks(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t,
 		`{"annotations":[{"name":"read_only","mode":"live"}],"tools":["plain"]}`,
-		consentPrefillAttr(sel),
+		consentPrefillAttr(sel, nil),
 	)
 }
 
@@ -286,6 +286,15 @@ func TestAppendConsentInventoryPage_SinglePageCompletesAndSorts(t *testing.T) {
 	require.Equal(t, []string{}, updated.Tools[0].Annotations)
 	require.Equal(t, "zeta", updated.Tools[1].Name)
 	require.Equal(t, []string{"read_only", "open_world"}, updated.Tools[1].Annotations)
+}
+
+func TestAppendConsentInventoryPage_GatewaySizeCap(t *testing.T) {
+	t.Parallel()
+	s := inventoryServiceForTest(t)
+	draft := emptyDraft()
+	draft.Resource = "meta_mcp_server:" + uuid.NewString()
+	_, err := s.appendConsentInventoryPage(t.Context(), draft, "", []consentInventoryTool{{Name: "source--large", Definition: &toolListEntry{Name: "source--large", Description: strings.Repeat("x", connectionCatalogMaxBytes)}}}, "")
+	require.ErrorIs(t, err, errConnectionCatalogTooLarge, "oversized capture must fail before storing a Redis value")
 }
 
 func TestAppendConsentInventoryPage_MultiPageCursorChain(t *testing.T) {

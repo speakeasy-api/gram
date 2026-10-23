@@ -92677,6 +92677,12 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AnalyticsDataset'
+                    description: The datasets the caller can read
+                restricted_datasets:
+                    type: array
+                    items:
+                        type: string
+                    description: Names of the datasets the caller cannot read, such as one only organization administrators can read, so a saved widget over one can say why it shows nothing rather than reading as broken
             required:
                 - datasets
         AnalyticsDimensionValue:

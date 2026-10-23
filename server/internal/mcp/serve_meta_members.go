@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -38,6 +39,8 @@ const (
 // metaMember is one servable, authorized member in a request's snapshot.
 type metaMember struct {
 	serverID uuid.UUID
+	// configurationHash is loaded with the request's approved member set.
+	configurationHash string
 	// The member's own project. A stored gateway's members all share the
 	// gateway's project, but an agent gateway's can span several, so member
 	// dispatch keys on this rather than on the request's project.
@@ -76,6 +79,7 @@ type metaMember struct {
 	// upstreamUnavailable is why the credential cannot reach this member
 	// under its choices, nil otherwise.
 	upstreamUnavailable error
+	authClient          *authClientResolution
 
 	// associatedClients is a proxied member's associated upstream clients;
 	// nil for a hosted member, which matches clients by authorization server
@@ -190,7 +194,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 // an organization gateway's derived members.
 func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slog.Logger, surface string, endpoint *ResolvedMcpEndpoint) (context.Context, []metaMember, error) {
 	if endpoint.IsOrganizationGateway() {
-		return s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		return s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.UserSessionIssuerID, endpoint.ProjectID)
 	}
 	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 	if err != nil {
@@ -219,13 +223,35 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, metaServerID, projectID)
 	} else {
 		issuer := uuid.Nil
+		scopeProjectID := uuid.Nil
 		if gate.organizationGateway {
 			issuer = gate.userSessionIssuerID
+			scopeProjectID = gate.projectID
 		}
-		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer)
+		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer, scopeProjectID)
+	}
+	if err == nil && gate.catalog != nil {
+		members, gate.unapprovedMembers = gate.catalog.approvedMembers(members)
+	}
+	if err == nil && gate.catalog != nil {
+		ids := make([]uuid.UUID, 0, len(members))
+		for _, member := range members {
+			ids = append(ids, member.serverID)
+		}
+		hashes, hashErr := s.catalogMemberConfigurations(ctx, gate.organizationID, ids)
+		if hashErr != nil {
+			return ctx, nil, hashErr
+		}
+		for i := range members {
+			members[i].configurationHash = hashes[members[i].serverID]
+		}
 	}
 	if err == nil && gate.memberChoices != nil {
-		gate.memberChoices.apply(ctx, logger, members)
+		if gate.catalog == nil {
+			gate.memberChoices.apply(ctx, logger, members, false)
+		} else if gate.catalogMode != toolfilter.CatalogModeCached || gate.execute {
+			gate.memberChoices.apply(ctx, logger, members, true)
+		}
 	}
 	return ctx, members, err
 }
@@ -241,7 +267,8 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 //
 // userSessionIssuerID is the organization gateway's issuer, whose clients are
 // the only way a person connects a member that signs in upstream. uuid.Nil
-// (the agent gateway) skips that check.
+// (the agent gateway) skips that check. A nonzero scopeProjectID restricts
+// candidates before admission and credential association for project gateways.
 //
 // The organization gateway also drops servers backed by a toolset with
 // Platform tools, mirroring automatic plugin delivery: those toolsets serve
@@ -254,6 +281,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	authzSurface string,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
+	scopeProjectID uuid.UUID,
 ) (context.Context, []metaMember, error) {
 	// Unconditional for the same reason resolveMetaMemberSnapshot prepares it.
 	ctx, err := s.authz.PrepareContext(ctx)
@@ -276,6 +304,9 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 
 	candidates := make([]metaMemberCandidate, 0, len(rows))
 	for _, row := range rows {
+		if scopeProjectID != uuid.Nil && row.McpServerProjectID != scopeProjectID {
+			continue
+		}
 		if !servableOnSurface(row.McpServerNetworkAccessMode, surface) {
 			continue
 		}
@@ -440,6 +471,8 @@ func (s *Service) admitMetaMembers(
 
 		members = append(members, metaMember{
 			serverID:                   candidate.serverID,
+			configurationHash:          "",
+			authClient:                 nil,
 			projectID:                  candidate.projectID,
 			projectSlug:                candidate.projectSlug,
 			slug:                       candidate.slug,

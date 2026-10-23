@@ -2,8 +2,11 @@ package dashboards
 
 import (
 	"encoding/json"
+	"slices"
 
 	gen "github.com/speakeasy-api/gram/server/gen/dashboards"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 )
 
 // A built-in dashboard ships with the product: its layout is this code, the
@@ -39,7 +42,7 @@ type builtInCard struct {
 
 // builtIns is every built-in dashboard, in the order the Dashboards page
 // lists them.
-var builtIns = []builtIn{mcpTools}
+var builtIns = []builtIn{mcpTools, securityRisk}
 
 // builtInBySlug finds a built-in dashboard by its slug.
 func builtInBySlug(slug string) (builtIn, bool) {
@@ -58,6 +61,25 @@ func builtInViews() []*gen.BuiltInDashboard {
 		out = append(out, page.view())
 	}
 	return out
+}
+
+// accessChecks is what reading the dashboard asks beyond reading the project:
+// the check of each dataset its cards ask that has one. A caller who fails
+// any of them would see cards that cannot answer, so the dashboard is not
+// shown to them at all.
+func (b builtIn) accessChecks(catalog *analytics.Catalog, organizationID string) []authz.Check {
+	checks := make([]authz.Check, 0, 1)
+	for _, card := range b.Cards {
+		ds, ok := catalog.Dataset(card.Dataset)
+		if !ok {
+			continue
+		}
+		check, restricted := ds.AccessCheck(organizationID)
+		if restricted && !slices.ContainsFunc(checks, func(c authz.Check) bool { return c.Scope == check.Scope && c.ResourceID == check.ResourceID }) {
+			checks = append(checks, check)
+		}
+	}
+	return checks
 }
 
 func (b builtIn) view() *gen.BuiltInDashboard {
@@ -176,6 +198,83 @@ var mcpTools = builtIn{
 			Description:   "",
 			Dataset:       "tool_calls",
 			Query:         json.RawMessage(`{"window":"7d","grain":"none","ungrouped":false,"dimensions":["user"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[{"measure":"count","direction":"desc"}],"limit":10}`),
+			Visualization: json.RawMessage(`{"type":"ranked","options":{}}`),
+			X:             6, Y: 10, W: 6, H: 4,
+		},
+	},
+}
+
+// securityRisk counts what the project's risk policies caught over the past
+// seven days: how many findings, how severe, of what kind, from which agents
+// and people. It asks the risk_findings dataset, so like that dataset it is
+// shown to organization administrators alone, and every card is an
+// aggregate: no card names what was found or where.
+var securityRisk = builtIn{
+	Slug:        "security-risk",
+	Name:        "Security & risk",
+	Description: "What the risk policies caught: how many findings, how severe, of what kind, and which agents and people they came from.",
+	Cards: []builtInCard{
+		{
+			Name:          "Findings",
+			Description:   "Live findings, after dismissals and exclusions",
+			Dataset:       "risk_findings",
+			Query:         json.RawMessage(`{"window":"7d","grain":"none","ungrouped":false,"dimensions":[],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":0}`),
+			Visualization: json.RawMessage(`{"type":"number","options":{}}`),
+			X:             0, Y: 0, W: 4, H: 2,
+		},
+		{
+			Name:          "High and critical",
+			Description:   "Findings of high or critical severity",
+			Dataset:       "risk_findings",
+			Query:         json.RawMessage(`{"window":"7d","grain":"none","ungrouped":false,"dimensions":[],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[{"field":"severity","operator":"in","values":["critical","high"]}],"order_by":[],"limit":0}`),
+			Visualization: json.RawMessage(`{"type":"number","options":{}}`),
+			X:             4, Y: 0, W: 4, H: 2,
+		},
+		{
+			Name:          "People affected",
+			Description:   "People whose sessions raised a finding",
+			Dataset:       "risk_findings",
+			Query:         json.RawMessage(`{"window":"7d","grain":"none","ungrouped":false,"dimensions":[],"measures":[{"op":"count_distinct","field":"user","alias":"count_distinct_user"}],"filters":[],"order_by":[],"limit":0}`),
+			Visualization: json.RawMessage(`{"type":"number","options":{}}`),
+			X:             8, Y: 0, W: 4, H: 2,
+		},
+		{
+			Name:          "Findings over time",
+			Description:   "What kind of risk was caught, day by day",
+			Dataset:       "risk_findings",
+			Query:         json.RawMessage(`{"window":"7d","grain":"day","ungrouped":false,"dimensions":["category"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":1000}`),
+			Visualization: json.RawMessage(`{"type":"stacked_bar","options":{}}`),
+			X:             0, Y: 2, W: 12, H: 4,
+		},
+		{
+			Name:          "Top rules",
+			Description:   "The detection rules that fired most",
+			Dataset:       "risk_findings",
+			Query:         json.RawMessage(`{"window":"7d","grain":"none","ungrouped":false,"dimensions":["rule"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[{"measure":"count","direction":"desc"}],"limit":10}`),
+			Visualization: json.RawMessage(`{"type":"ranked","options":{}}`),
+			X:             0, Y: 6, W: 6, H: 4,
+		},
+		{
+			Name:          "Findings by agent",
+			Description:   "The agents and apps the findings came from",
+			Dataset:       "risk_findings",
+			Query:         json.RawMessage(`{"window":"7d","grain":"none","ungrouped":false,"dimensions":["surface"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[{"measure":"count","direction":"desc"}],"limit":10}`),
+			Visualization: json.RawMessage(`{"type":"ranked","options":{}}`),
+			X:             6, Y: 6, W: 6, H: 4,
+		},
+		{
+			Name:          "People with the most findings",
+			Description:   "",
+			Dataset:       "risk_findings",
+			Query:         json.RawMessage(`{"window":"7d","grain":"none","ungrouped":false,"dimensions":["user"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[{"measure":"count","direction":"desc"}],"limit":10}`),
+			Visualization: json.RawMessage(`{"type":"ranked","options":{}}`),
+			X:             0, Y: 10, W: 6, H: 4,
+		},
+		{
+			Name:          "Findings by policy",
+			Description:   "The risk policies that caught the most",
+			Dataset:       "risk_findings",
+			Query:         json.RawMessage(`{"window":"7d","grain":"none","ungrouped":false,"dimensions":["policy"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[{"measure":"count","direction":"desc"}],"limit":10}`),
 			Visualization: json.RawMessage(`{"type":"ranked","options":{}}`),
 			X:             6, Y: 10, W: 6, H: 4,
 		},

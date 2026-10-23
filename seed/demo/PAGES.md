@@ -377,3 +377,15 @@ references and catalog edits. Postflight checks five matching product links.
 
 The AI tool library reads the seeded global catalog through the live snapshot.
 Catalog edits reach the library and gateway matchers on the next refresh.
+
+### Gateway tool picker
+
+Browser verification: [~] — follow check 32 in `seed/demo/verify.md`.
+
+Consent screens offer All tools (live), All tools (frozen), and Specific tools. Frozen and Specific tool lists stay at their consented definitions and are served from a fast cache; live lists include later tools from the connected servers approved at consent. Adding a server or connecting a previously unavailable one requires new consent. The consent page captures discovery server-side, including identity-provider exchanges. Its server list, actions, and picker use that capture. A custom-domain allowlist blocks capture, identity-provider checks, connection validation, and approval from the platform host and links to the custom domain. Admitted custom-domain and private-ingress requests may capture tools. Reloading replaces the challenge’s one bounded capture and invalidates an older page. No stored demo connection catalog is seeded: it is created by each real consent flow.
+
+On the Acme Agent Gateway, the picker groups member tools by server. Specific tools includes only tools shown at consent; annotation choices do not grant future matching tools.
+
+First-party connect pages link services without issuing a client grant. Agent approvals and management-issued sessions use their explicit principal grants rather than a human tool catalogue. Existing v1 gateway policies retain their unrestricted member scope until their fixed authorization expiry or revocation. Refresh preserves that deadline and policy. A new browser consent records a v2 catalogue.
+
+Denying consent retires unadopted identity-provider credentials for the same issuer, subject, and sign-in across member projects. This also clears pending credentials from other concurrent consent flows; those flows re-exchange on retry. Credentials already adopted by a session remain usable.

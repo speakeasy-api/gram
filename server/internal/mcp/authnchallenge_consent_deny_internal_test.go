@@ -18,8 +18,8 @@ type retireRecorder struct {
 	retired []string
 }
 
-func (r *retireRecorder) RetireConsentCredentials(_ context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, userID string, signInID uuid.UUID) error {
-	r.retired = append(r.retired, organizationID+"|"+projectID.String()+"|"+userSessionIssuerID.String()+"|"+userID+"|"+signInID.String())
+func (r *retireRecorder) RetireConsentCredentials(_ context.Context, organizationID string, userSessionIssuerID uuid.UUID, userID string, signInID uuid.UUID) error {
+	r.retired = append(r.retired, organizationID+"|"+userSessionIssuerID.String()+"|"+userID+"|"+signInID.String())
 	return nil
 }
 
@@ -37,5 +37,5 @@ func TestRetireDeniedConsentCredentials(t *testing.T) {
 	require.Empty(t, r.retired, "a flow without a recorded sign-in minted nothing")
 
 	s.retireDeniedConsentCredentials(t.Context(), s.logger, endpoint, AuthnChallengeState{Subject: &subject, SignInID: &signInID})
-	require.Equal(t, []string{chainingTestOrg + "|" + endpoint.ProjectID.String() + "|" + endpoint.UserSessionIssuerID.String() + "|user-1|" + signInID.String()}, r.retired)
+	require.Equal(t, []string{chainingTestOrg + "|" + endpoint.UserSessionIssuerID.String() + "|user-1|" + signInID.String()}, r.retired)
 }
