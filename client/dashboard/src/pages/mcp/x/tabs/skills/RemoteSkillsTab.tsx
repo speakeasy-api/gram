@@ -47,7 +47,7 @@ export function RemoteSkillsTab({
       target={{ kind: "mcp_server", mcpServerId: mcpServer.id }}
       surfaceName={mcpServer.name || "this server"}
       notice={
-        <Alert variant="info" alignTop className="mb-4 text-sm">
+        <Alert variant="info" className="mb-4 text-sm">
           The remote server&apos;s own skills pass through to agents unchanged.
           Skills added here aren&apos;t served at this server&apos;s own URL;
           agents load them through gateways that include this server.
