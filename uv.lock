@@ -12,11 +12,11 @@ constraints = [{ name = "certifi", specifier = ">=2026.10.19" }]
 
 [[package]]
 name = "aiocop"
-version = "1.1.4"
+version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d8/3d/73386449323002edc3d88bc14cb72b59545fd6397f1610516685c042e82b/aiocop-1.1.4.tar.gz", hash = "sha256:2059a9837440dcd7122a16f5803f6c7a76e8bef99dea6f9af9d70d937debf6f0", size = 1391465, upload-time = "2026-02-26T10:50:41.277Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1a/e5/427c75ab0f5da633d819d13bd7faa13e025d1036d44d994d498b4f421633/aiocop-1.2.0.tar.gz", hash = "sha256:81a748ed85130cc79520027e24df4d39df154f9b857a8f182c19dc0b37d4155b", size = 1404686, upload-time = "2026-08-24T08:49:17.947Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/91/b3/84769a0bcf73a548c095494b5cf1e1feba5ed685c91232029ffff7859062/aiocop-1.1.4-py3-none-any.whl", hash = "sha256:7263a4bc0c58023767729477590b20ce0dd9e5f51116cbba9a8ad1ec7e9ac51c", size = 21188, upload-time = "2026-02-26T10:50:42.609Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/a4/f8e55f71242c2ba7be1788a1bddc63dfc0bbfc0ed2dceca9788b15e1facd/aiocop-1.2.0-py3-none-any.whl", hash = "sha256:cedea2ccaf150cbc1f7ff767527bfc0fea642ce755bc9cfeeea788c2f8cd0726", size = 27545, upload-time = "2026-08-24T08:49:16.975Z" },
 ]
 
 [[package]]
