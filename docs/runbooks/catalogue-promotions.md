@@ -42,20 +42,37 @@ its receipt on the next permitted attempt.
 
 ## Staff UI and MCP
 
-The admin catalogue workflow separates candidates awaiting review from promoted
-entries and guide delivery requiring attention. Staff review eligibility,
-explicitly enter public metadata, and confirm publication. Guide status and
-retry information remain visible after promotion.
+The admin catalogue workflow opens on active candidates, newest first by discovery
+creation time, with status filters for all candidates, rejected, archived, and
+published entries. Reject and Archive remove unpublished candidates from the active
+queue and suspend automatic qualification until Restore. These actions preserve the
+source and are distinct from unpublishing a catalogue entry. Restore requires fresh
+eligibility before publication. Each change checks the reviewed curation revision.
+
+The review form suggests an editable title, catalogue name, guide slug, shared
+endpoint, authentication, and observed documentation URL where available. Source
+metadata is untrusted and may be private: staff must check each value and explicitly
+confirm it is suitable for public distribution. Credentials, query strings, fragments,
+and arbitrary endpoint paths are not suggested. Descriptions and missing official
+documentation references require staff input; the form does not invent them.
+Suggestions never overwrite edits on refresh. Guide status and retry information
+remain visible through the Published filter after promotion.
 
 Enable staff Admin MCP using `GRAM_ADMIN_MCP_ENABLED` and its independent
 `GRAM_ADMIN_MCP_SIGNING_KEY`. For writes, set `GRAM_ADMIN_MCP_WRITES_ENABLED=true`
-and include `promote_registry_candidate` and `retry_registry_promotion_docs` in
+and include `promote_registry_candidate`, `retry_registry_promotion_docs`, and
+`curate_registry_promotion_candidate` in
 `GRAM_ADMIN_MCP_WRITE_OPERATIONS`, preserving other configured operations.
 Preparing a write creates an exact stored proposal; the same staff member
 reviews and approves it in the admin browser. Tool discovery alone grants no
 publication or retry authority.
 
 Admin MCP uses the same business service and canonical targets as the dashboard.
+`list_registry_promotion_candidates` accepts the same status filters and returns
+newest-first pages. Use `prepare_registry_promotion_curation` to reject, archive, or
+restore an exact candidate, then approve it in the browser and execute its proposal.
+Private source-derived suggestions are confined to the staff review form; Admin MCP
+retains bounded evidence and requires independently supplied public metadata.
 Retrying documentation changes only the delivery attempt state, never the
 approved public metadata or catalogue publication. Completed guide receipts
 remain completed. Retained promotions can be recovered after their source

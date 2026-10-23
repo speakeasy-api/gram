@@ -18,8 +18,8 @@ func (s *seeder) postflight(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("count synthetic catalogue promotion candidates: %w", err)
 	}
-	if count != 1 {
-		return fmt.Errorf("expected one ineligible catalogue promotion candidate, got %d", count)
+	if count != 3 {
+		return fmt.Errorf("expected three ineligible catalogue promotion candidates, got %d", count)
 	}
 	if err := s.postflightCore(ctx); err != nil {
 		return err

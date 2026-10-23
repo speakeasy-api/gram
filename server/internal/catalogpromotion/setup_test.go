@@ -90,7 +90,7 @@ func newPromotionFixture(t *testing.T) promotionFixture {
 	candidate, err := svc.GetCandidate(t.Context(), target)
 	require.NoError(t, err)
 	require.True(t, candidate.Eligible)
-	request := Request{Target: target, SourceRevision: candidate.SourceRevision, PublicMetadataConfirmed: true, RetryKey: "synthetic-retry",
+	request := Request{Target: target, SourceRevision: candidate.SourceRevision, CurationRevision: candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "synthetic-retry",
 		Public: PublicMetadata{Name: "io.example/catalog", Title: "Synthetic MCP", Description: "Public synthetic service", URL: "https://catalog.example.com/mcp", DocumentationURL: "https://docs.example.com/setup", DocsSlug: "synthetic-mcp", AuthMode: "none"}}
 	return promotionFixture{service: svc, db: db, target: target, request: request, health: health}
 }

@@ -56,22 +56,50 @@ export function RegistryPromotionSheet({
     documentationUrl: "",
     docsSlug: "",
   });
-  const [authMode, setAuthMode] = useState<"none" | "oauth">("none");
+  const [authMode, setAuthMode] = useState<"" | "none" | "oauth">("");
+  const [initialMetadata, setInitialMetadata] = useState<{
+    form: typeof form;
+    authMode: "" | "none" | "oauth";
+  } | null>(null);
+  const candidate = result ?? query.data;
+  if (query.data && initialMetadata === null) {
+    const suggested = query.data.suggestedMetadata;
+    const initialForm = {
+      publicName: suggested?.publicName ?? "",
+      publicTitle: suggested?.publicTitle ?? "",
+      publicDescription: suggested?.publicDescription ?? "",
+      publicUrl: suggested?.publicUrl ?? "",
+      documentationUrl: suggested?.documentationUrl ?? "",
+      docsSlug: suggested?.docsSlug ?? "",
+    };
+    const initialAuth =
+      suggested?.authMode === "oauth" || suggested?.authMode === "none"
+        ? suggested.authMode
+        : "";
+    setInitialMetadata({ form: initialForm, authMode: initialAuth });
+    setForm(initialForm);
+    setAuthMode(initialAuth);
+  }
   const [confirmed, setConfirmed] = useState(false);
   const [reviewedRevision, setReviewedRevision] = useState("");
+  const [reviewedCurationRevision, setReviewedCurationRevision] = useState("");
   const [failure, setFailure] = useState(false);
   const [refreshRequired, setRefreshRequired] = useState(false);
   const inFlight = useRef(false);
   const retryKey = useRef(crypto.randomUUID());
   const dirty =
-    !result && (authMode !== "none" || Object.values(form).some(Boolean));
+    !result &&
+    initialMetadata !== null &&
+    (authMode !== initialMetadata.authMode ||
+      (Object.keys(form) as (keyof typeof form)[]).some(
+        (field) => form[field] !== initialMetadata.form[field],
+      ));
   useBlocker({
     shouldBlockFn: () =>
       inFlight.current ||
       (dirty && !window.confirm("Discard this promotion review?")),
     enableBeforeUnload: dirty || mutation.isPending,
   });
-  const candidate = result ?? query.data;
   const close = (): void => {
     if (
       !inFlight.current &&
@@ -87,6 +115,8 @@ export function RegistryPromotionSheet({
   const submit = async (): Promise<void> => {
     if (
       !candidate?.eligible ||
+      candidate.status !== "candidate" ||
+      !authMode ||
       !confirmed ||
       inFlight.current ||
       refreshRequired
@@ -101,6 +131,7 @@ export function RegistryPromotionSheet({
           ...form,
           authMode,
           sourceRevision: reviewedRevision,
+          curationRevision: reviewedCurationRevision,
           publicMetadataConfirmed: true,
           retryKey: retryKey.current,
         },
@@ -216,6 +247,13 @@ export function RegistryPromotionSheet({
               )}
             </div>
           )}
+          {(candidate?.status === "rejected" ||
+            candidate?.status === "archived") && (
+            <p role="status" className="rounded-md border p-3 text-sm">
+              This candidate is {candidate.status}. Restore it from the
+              promotion queue before reviewing it for publication.
+            </p>
+          )}
           {candidate?.status === "promoted" ? (
             <div className="space-y-2">
               <div className="space-y-1">
@@ -243,7 +281,7 @@ export function RegistryPromotionSheet({
                 Refresh delivery status
               </Button>
             </div>
-          ) : candidate?.eligible ? (
+          ) : candidate?.status === "candidate" && candidate.eligible ? (
             <form
               className="space-y-3"
               onSubmit={(event) => {
@@ -254,7 +292,10 @@ export function RegistryPromotionSheet({
               <div>
                 <h3 className="font-medium">Public listing</h3>
                 <p className="text-muted-foreground text-sm">
-                  These details appear in the catalog and guide request.
+                  Suggestions are untrusted draft values from the source server.
+                  Review and edit every field before publishing. Complete the
+                  description and any missing documentation URL. These details
+                  appear in the public catalog and guide request.
                 </p>
               </div>
               {fields.map(([field, label, placeholder]) => (
@@ -303,7 +344,7 @@ export function RegistryPromotionSheet({
                   }}
                 >
                   <SelectTrigger aria-labelledby="promotion-auth-label">
-                    <SelectValue />
+                    <SelectValue placeholder="Select authentication" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No authentication</SelectItem>
@@ -318,6 +359,7 @@ export function RegistryPromotionSheet({
                   onCheckedChange={(value) => {
                     setConfirmed(value === true);
                     setReviewedRevision(candidate.sourceRevision);
+                    setReviewedCurationRevision(candidate.curationRevision);
                   }}
                 />
                 <span>
@@ -348,6 +390,7 @@ export function RegistryPromotionSheet({
                 type="submit"
                 disabled={
                   !confirmed ||
+                  !authMode ||
                   mutation.isPending ||
                   refreshRequired ||
                   query.isFetching

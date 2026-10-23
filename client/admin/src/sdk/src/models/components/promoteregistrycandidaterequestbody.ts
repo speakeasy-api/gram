@@ -6,14 +6,17 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
-export const AuthMode = {
+export const PromoteRegistryCandidateRequestBodyAuthMode = {
   None: "none",
   Oauth: "oauth",
 } as const;
-export type AuthMode = ClosedEnum<typeof AuthMode>;
+export type PromoteRegistryCandidateRequestBodyAuthMode = ClosedEnum<
+  typeof PromoteRegistryCandidateRequestBodyAuthMode
+>;
 
 export type PromoteRegistryCandidateRequestBody = {
-  authMode: AuthMode;
+  authMode: PromoteRegistryCandidateRequestBodyAuthMode;
+  curationRevision: string;
   docsSlug: string;
   documentationUrl: string;
   mcpServerId: string;
@@ -29,13 +32,15 @@ export type PromoteRegistryCandidateRequestBody = {
 };
 
 /** @internal */
-export const AuthMode$outboundSchema: z.ZodMiniEnum<typeof AuthMode> = z.enum(
-  AuthMode,
-);
+export const PromoteRegistryCandidateRequestBodyAuthMode$outboundSchema:
+  z.ZodMiniEnum<typeof PromoteRegistryCandidateRequestBodyAuthMode> = z.enum(
+    PromoteRegistryCandidateRequestBodyAuthMode,
+  );
 
 /** @internal */
 export type PromoteRegistryCandidateRequestBody$Outbound = {
   auth_mode: string;
+  curation_revision: string;
   docs_slug: string;
   documentation_url: string;
   mcp_server_id: string;
@@ -56,7 +61,8 @@ export const PromoteRegistryCandidateRequestBody$outboundSchema: z.ZodMiniType<
   PromoteRegistryCandidateRequestBody
 > = z.pipe(
   z.object({
-    authMode: AuthMode$outboundSchema,
+    authMode: PromoteRegistryCandidateRequestBodyAuthMode$outboundSchema,
+    curationRevision: z.string(),
     docsSlug: z.string(),
     documentationUrl: z.string(),
     mcpServerId: z.string(),
@@ -73,6 +79,7 @@ export const PromoteRegistryCandidateRequestBody$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       authMode: "auth_mode",
+      curationRevision: "curation_revision",
       docsSlug: "docs_slug",
       documentationUrl: "documentation_url",
       mcpServerId: "mcp_server_id",

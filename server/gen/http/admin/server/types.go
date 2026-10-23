@@ -428,6 +428,7 @@ type PromoteRegistryCandidateRequestBody struct {
 	ProjectID               *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	McpServerID             *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	SourceRevision          *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	CurationRevision        *string `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
 	PublicName              *string `form:"public_name,omitempty" json:"public_name,omitempty" xml:"public_name,omitempty"`
 	PublicTitle             *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
 	PublicDescription       *string `form:"public_description,omitempty" json:"public_description,omitempty" xml:"public_description,omitempty"`
@@ -437,6 +438,16 @@ type PromoteRegistryCandidateRequestBody struct {
 	AuthMode                *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
 	RetryKey                *string `form:"retry_key,omitempty" json:"retry_key,omitempty" xml:"retry_key,omitempty"`
 	PublicMetadataConfirmed *bool   `form:"public_metadata_confirmed,omitempty" json:"public_metadata_confirmed,omitempty" xml:"public_metadata_confirmed,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateRequestBody is the type of the "admin"
+// service "curateRegistryPromotionCandidate" endpoint HTTP request body.
+type CurateRegistryPromotionCandidateRequestBody struct {
+	OrganizationID   *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	PromotionID      *string `form:"promotion_id,omitempty" json:"promotion_id,omitempty" xml:"promotion_id,omitempty"`
+	CurationRevision *string `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	Action           *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	RetryKey         *string `form:"retry_key,omitempty" json:"retry_key,omitempty" xml:"retry_key,omitempty"`
 }
 
 // RetryRegistryPromotionDocsRequestBody is the type of the "admin" service
@@ -2063,94 +2074,137 @@ type ListRegistryPromotionCandidatesResponseBody struct {
 // GetRegistryPromotionCandidateResponseBody is the type of the "admin" service
 // "getRegistryPromotionCandidate" endpoint HTTP response body.
 type GetRegistryPromotionCandidateResponseBody struct {
-	ID                string  `form:"id" json:"id" xml:"id"`
-	OrganizationID    string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string  `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string  `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string  `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	SourceRevision    string  `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool    `form:"eligible" json:"eligible" xml:"eligible"`
-	Reason            string  `form:"reason" json:"reason" xml:"reason"`
-	Status            string  `form:"status" json:"status" xml:"status"`
-	ObservedSuccesses int64   `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
-	ObservedFailures  int64   `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
-	ObservedDays      int     `form:"observed_days" json:"observed_days" xml:"observed_days"`
-	CheckedAt         *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
-	RegistryEntryID   *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
-	DocsStatus        *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
-	DocsURL           *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
-	DocsRevision      string  `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
-	DocsRetryAllowed  bool    `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
-	DocsAttempts      int     `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
-	DocsLastAttemptAt *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
-	DocsNextAttemptAt *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
-	DocsQueuedAt      *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
-	PromotedAt        *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
-	PublicTitle       *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
-	DeliveryError     *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	Reason            string                                         `form:"reason" json:"reason" xml:"reason"`
+	Status            string                                         `form:"status" json:"status" xml:"status"`
+	ObservedSuccesses int64                                          `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
+	ObservedFailures  int64                                          `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
+	ObservedDays      int                                            `form:"observed_days" json:"observed_days" xml:"observed_days"`
+	CheckedAt         *string                                        `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID   *string                                        `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus        *string                                        `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL           *string                                        `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision      string                                         `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	DocsRetryAllowed  bool                                           `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
+	DocsAttempts      int                                            `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
+	DocsLastAttemptAt *string                                        `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt *string                                        `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt      *string                                        `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt        *string                                        `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle       *string                                        `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError     *string                                        `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
 }
 
 // PromoteRegistryCandidateResponseBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP response body.
 type PromoteRegistryCandidateResponseBody struct {
-	ID                string  `form:"id" json:"id" xml:"id"`
-	OrganizationID    string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string  `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string  `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string  `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	SourceRevision    string  `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool    `form:"eligible" json:"eligible" xml:"eligible"`
-	Reason            string  `form:"reason" json:"reason" xml:"reason"`
-	Status            string  `form:"status" json:"status" xml:"status"`
-	ObservedSuccesses int64   `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
-	ObservedFailures  int64   `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
-	ObservedDays      int     `form:"observed_days" json:"observed_days" xml:"observed_days"`
-	CheckedAt         *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
-	RegistryEntryID   *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
-	DocsStatus        *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
-	DocsURL           *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
-	DocsRevision      string  `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
-	DocsRetryAllowed  bool    `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
-	DocsAttempts      int     `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
-	DocsLastAttemptAt *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
-	DocsNextAttemptAt *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
-	DocsQueuedAt      *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
-	PromotedAt        *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
-	PublicTitle       *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
-	DeliveryError     *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	Reason            string                                         `form:"reason" json:"reason" xml:"reason"`
+	Status            string                                         `form:"status" json:"status" xml:"status"`
+	ObservedSuccesses int64                                          `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
+	ObservedFailures  int64                                          `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
+	ObservedDays      int                                            `form:"observed_days" json:"observed_days" xml:"observed_days"`
+	CheckedAt         *string                                        `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID   *string                                        `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus        *string                                        `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL           *string                                        `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision      string                                         `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	DocsRetryAllowed  bool                                           `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
+	DocsAttempts      int                                            `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
+	DocsLastAttemptAt *string                                        `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt *string                                        `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt      *string                                        `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt        *string                                        `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle       *string                                        `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError     *string                                        `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// CurateRegistryPromotionCandidateResponseBody is the type of the "admin"
+// service "curateRegistryPromotionCandidate" endpoint HTTP response body.
+type CurateRegistryPromotionCandidateResponseBody struct {
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	Reason            string                                         `form:"reason" json:"reason" xml:"reason"`
+	Status            string                                         `form:"status" json:"status" xml:"status"`
+	ObservedSuccesses int64                                          `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
+	ObservedFailures  int64                                          `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
+	ObservedDays      int                                            `form:"observed_days" json:"observed_days" xml:"observed_days"`
+	CheckedAt         *string                                        `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID   *string                                        `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus        *string                                        `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL           *string                                        `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision      string                                         `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	DocsRetryAllowed  bool                                           `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
+	DocsAttempts      int                                            `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
+	DocsLastAttemptAt *string                                        `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt *string                                        `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt      *string                                        `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt        *string                                        `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle       *string                                        `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError     *string                                        `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
 }
 
 // RetryRegistryPromotionDocsResponseBody is the type of the "admin" service
 // "retryRegistryPromotionDocs" endpoint HTTP response body.
 type RetryRegistryPromotionDocsResponseBody struct {
-	ID                string  `form:"id" json:"id" xml:"id"`
-	OrganizationID    string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string  `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string  `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string  `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	SourceRevision    string  `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool    `form:"eligible" json:"eligible" xml:"eligible"`
-	Reason            string  `form:"reason" json:"reason" xml:"reason"`
-	Status            string  `form:"status" json:"status" xml:"status"`
-	ObservedSuccesses int64   `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
-	ObservedFailures  int64   `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
-	ObservedDays      int     `form:"observed_days" json:"observed_days" xml:"observed_days"`
-	CheckedAt         *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
-	RegistryEntryID   *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
-	DocsStatus        *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
-	DocsURL           *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
-	DocsRevision      string  `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
-	DocsRetryAllowed  bool    `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
-	DocsAttempts      int     `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
-	DocsLastAttemptAt *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
-	DocsNextAttemptAt *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
-	DocsQueuedAt      *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
-	PromotedAt        *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
-	PublicTitle       *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
-	DeliveryError     *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	Reason            string                                         `form:"reason" json:"reason" xml:"reason"`
+	Status            string                                         `form:"status" json:"status" xml:"status"`
+	ObservedSuccesses int64                                          `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
+	ObservedFailures  int64                                          `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
+	ObservedDays      int                                            `form:"observed_days" json:"observed_days" xml:"observed_days"`
+	CheckedAt         *string                                        `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID   *string                                        `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus        *string                                        `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL           *string                                        `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision      string                                         `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	DocsRetryAllowed  bool                                           `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
+	DocsAttempts      int                                            `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
+	DocsLastAttemptAt *string                                        `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt *string                                        `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt      *string                                        `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt        *string                                        `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle       *string                                        `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError     *string                                        `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
 }
 
 // GetRegistryOktaCandidatesResponseBody is the type of the "admin" service
@@ -15478,6 +15532,196 @@ type PromoteRegistryCandidateGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CurateRegistryPromotionCandidateUnauthorizedResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "unauthorized" error.
+type CurateRegistryPromotionCandidateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateForbiddenResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "forbidden" error.
+type CurateRegistryPromotionCandidateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateBadRequestResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "bad_request" error.
+type CurateRegistryPromotionCandidateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateNotFoundResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "not_found" error.
+type CurateRegistryPromotionCandidateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateConflictResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "conflict" error.
+type CurateRegistryPromotionCandidateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateUnsupportedMediaResponseBody is the type of
+// the "admin" service "curateRegistryPromotionCandidate" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CurateRegistryPromotionCandidateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateInvalidResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "invalid" error.
+type CurateRegistryPromotionCandidateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateInvariantViolationResponseBody is the type
+// of the "admin" service "curateRegistryPromotionCandidate" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CurateRegistryPromotionCandidateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateUnexpectedResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "unexpected" error.
+type CurateRegistryPromotionCandidateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CurateRegistryPromotionCandidateGatewayErrorResponseBody is the type of the
+// "admin" service "curateRegistryPromotionCandidate" endpoint HTTP response
+// body for the "gateway_error" error.
+type CurateRegistryPromotionCandidateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RetryRegistryPromotionDocsUnauthorizedResponseBody is the type of the
 // "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
 // the "unauthorized" error.
@@ -22471,32 +22715,47 @@ type AdminExternalMcpMigrationOutcomeResponseBody struct {
 // AdminRegistryPromotionCandidateResponseBody is used to define fields on
 // response body types.
 type AdminRegistryPromotionCandidateResponseBody struct {
-	ID                string  `form:"id" json:"id" xml:"id"`
-	OrganizationID    string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string  `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string  `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string  `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	SourceRevision    string  `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool    `form:"eligible" json:"eligible" xml:"eligible"`
-	Reason            string  `form:"reason" json:"reason" xml:"reason"`
-	Status            string  `form:"status" json:"status" xml:"status"`
-	ObservedSuccesses int64   `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
-	ObservedFailures  int64   `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
-	ObservedDays      int     `form:"observed_days" json:"observed_days" xml:"observed_days"`
-	CheckedAt         *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
-	RegistryEntryID   *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
-	DocsStatus        *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
-	DocsURL           *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
-	DocsRevision      string  `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
-	DocsRetryAllowed  bool    `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
-	DocsAttempts      int     `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
-	DocsLastAttemptAt *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
-	DocsNextAttemptAt *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
-	DocsQueuedAt      *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
-	PromotedAt        *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	Reason            string                                         `form:"reason" json:"reason" xml:"reason"`
+	Status            string                                         `form:"status" json:"status" xml:"status"`
+	ObservedSuccesses int64                                          `form:"observed_successes" json:"observed_successes" xml:"observed_successes"`
+	ObservedFailures  int64                                          `form:"observed_failures" json:"observed_failures" xml:"observed_failures"`
+	ObservedDays      int                                            `form:"observed_days" json:"observed_days" xml:"observed_days"`
+	CheckedAt         *string                                        `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID   *string                                        `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus        *string                                        `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL           *string                                        `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision      string                                         `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	DocsRetryAllowed  bool                                           `form:"docs_retry_allowed" json:"docs_retry_allowed" xml:"docs_retry_allowed"`
+	DocsAttempts      int                                            `form:"docs_attempts" json:"docs_attempts" xml:"docs_attempts"`
+	DocsLastAttemptAt *string                                        `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt *string                                        `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt      *string                                        `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt        *string                                        `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle       *string                                        `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError     *string                                        `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// AdminRegistryPromotionSuggestionsResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionSuggestionsResponseBody struct {
+	PublicName        *string `form:"public_name,omitempty" json:"public_name,omitempty" xml:"public_name,omitempty"`
 	PublicTitle       *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
-	DeliveryError     *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+	PublicDescription *string `form:"public_description,omitempty" json:"public_description,omitempty" xml:"public_description,omitempty"`
+	PublicURL         *string `form:"public_url,omitempty" json:"public_url,omitempty" xml:"public_url,omitempty"`
+	DocumentationURL  *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+	DocsSlug          *string `form:"docs_slug,omitempty" json:"docs_slug,omitempty" xml:"docs_slug,omitempty"`
+	AuthMode          *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
 }
 
 // AdminRegistryOktaCandidateResponseBody is used to define fields on response
@@ -24568,6 +24827,8 @@ func NewGetRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromot
 		McpServerID:       res.McpServerID,
 		RemoteMcpServerID: res.RemoteMcpServerID,
 		SourceName:        res.SourceName,
+		CreatedAt:         res.CreatedAt,
+		CurationRevision:  res.CurationRevision,
 		SourceRevision:    res.SourceRevision,
 		Eligible:          res.Eligible,
 		Reason:            res.Reason,
@@ -24589,6 +24850,9 @@ func NewGetRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromot
 		PublicTitle:       res.PublicTitle,
 		DeliveryError:     res.DeliveryError,
 	}
+	if res.SuggestedMetadata != nil {
+		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
 	return body
 }
 
@@ -24602,6 +24866,8 @@ func NewPromoteRegistryCandidateResponseBody(res *admin.AdminRegistryPromotionCa
 		McpServerID:       res.McpServerID,
 		RemoteMcpServerID: res.RemoteMcpServerID,
 		SourceName:        res.SourceName,
+		CreatedAt:         res.CreatedAt,
+		CurationRevision:  res.CurationRevision,
 		SourceRevision:    res.SourceRevision,
 		Eligible:          res.Eligible,
 		Reason:            res.Reason,
@@ -24622,6 +24888,49 @@ func NewPromoteRegistryCandidateResponseBody(res *admin.AdminRegistryPromotionCa
 		PromotedAt:        res.PromotedAt,
 		PublicTitle:       res.PublicTitle,
 		DeliveryError:     res.DeliveryError,
+	}
+	if res.SuggestedMetadata != nil {
+		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateResponseBody builds the HTTP response
+// body from the result of the "curateRegistryPromotionCandidate" endpoint of
+// the "admin" service.
+func NewCurateRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromotionCandidate) *CurateRegistryPromotionCandidateResponseBody {
+	body := &CurateRegistryPromotionCandidateResponseBody{
+		ID:                res.ID,
+		OrganizationID:    res.OrganizationID,
+		ProjectID:         res.ProjectID,
+		McpServerID:       res.McpServerID,
+		RemoteMcpServerID: res.RemoteMcpServerID,
+		SourceName:        res.SourceName,
+		CreatedAt:         res.CreatedAt,
+		CurationRevision:  res.CurationRevision,
+		SourceRevision:    res.SourceRevision,
+		Eligible:          res.Eligible,
+		Reason:            res.Reason,
+		Status:            res.Status,
+		ObservedSuccesses: res.ObservedSuccesses,
+		ObservedFailures:  res.ObservedFailures,
+		ObservedDays:      res.ObservedDays,
+		CheckedAt:         res.CheckedAt,
+		RegistryEntryID:   res.RegistryEntryID,
+		DocsStatus:        res.DocsStatus,
+		DocsURL:           res.DocsURL,
+		DocsRevision:      res.DocsRevision,
+		DocsRetryAllowed:  res.DocsRetryAllowed,
+		DocsAttempts:      res.DocsAttempts,
+		DocsLastAttemptAt: res.DocsLastAttemptAt,
+		DocsNextAttemptAt: res.DocsNextAttemptAt,
+		DocsQueuedAt:      res.DocsQueuedAt,
+		PromotedAt:        res.PromotedAt,
+		PublicTitle:       res.PublicTitle,
+		DeliveryError:     res.DeliveryError,
+	}
+	if res.SuggestedMetadata != nil {
+		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
 	}
 	return body
 }
@@ -24637,6 +24946,8 @@ func NewRetryRegistryPromotionDocsResponseBody(res *admin.AdminRegistryPromotion
 		McpServerID:       res.McpServerID,
 		RemoteMcpServerID: res.RemoteMcpServerID,
 		SourceName:        res.SourceName,
+		CreatedAt:         res.CreatedAt,
+		CurationRevision:  res.CurationRevision,
 		SourceRevision:    res.SourceRevision,
 		Eligible:          res.Eligible,
 		Reason:            res.Reason,
@@ -24657,6 +24968,9 @@ func NewRetryRegistryPromotionDocsResponseBody(res *admin.AdminRegistryPromotion
 		PromotedAt:        res.PromotedAt,
 		PublicTitle:       res.PublicTitle,
 		DeliveryError:     res.DeliveryError,
+	}
+	if res.SuggestedMetadata != nil {
+		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
 	}
 	return body
 }
@@ -35455,6 +35769,156 @@ func NewPromoteRegistryCandidateGatewayErrorResponseBody(res *goa.ServiceError) 
 	return body
 }
 
+// NewCurateRegistryPromotionCandidateUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateUnauthorizedResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateUnauthorizedResponseBody {
+	body := &CurateRegistryPromotionCandidateUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateForbiddenResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateForbiddenResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateForbiddenResponseBody {
+	body := &CurateRegistryPromotionCandidateForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateBadRequestResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateBadRequestResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateBadRequestResponseBody {
+	body := &CurateRegistryPromotionCandidateBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateNotFoundResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateNotFoundResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateNotFoundResponseBody {
+	body := &CurateRegistryPromotionCandidateNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateConflictResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateConflictResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateConflictResponseBody {
+	body := &CurateRegistryPromotionCandidateConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateUnsupportedMediaResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateUnsupportedMediaResponseBody {
+	body := &CurateRegistryPromotionCandidateUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateInvalidResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateInvalidResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateInvalidResponseBody {
+	body := &CurateRegistryPromotionCandidateInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateInvariantViolationResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateInvariantViolationResponseBody {
+	body := &CurateRegistryPromotionCandidateInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateUnexpectedResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateUnexpectedResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateUnexpectedResponseBody {
+	body := &CurateRegistryPromotionCandidateUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCurateRegistryPromotionCandidateGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "curateRegistryPromotionCandidate"
+// endpoint of the "admin" service.
+func NewCurateRegistryPromotionCandidateGatewayErrorResponseBody(res *goa.ServiceError) *CurateRegistryPromotionCandidateGatewayErrorResponseBody {
+	body := &CurateRegistryPromotionCandidateGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRetryRegistryPromotionDocsUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "retryRegistryPromotionDocs" endpoint
 // of the "admin" service.
@@ -41125,9 +41589,10 @@ func NewMigrateExternalMcpServersPayload(body *MigrateExternalMcpServersRequestB
 
 // NewListRegistryPromotionCandidatesPayload builds a admin service
 // listRegistryPromotionCandidates endpoint payload.
-func NewListRegistryPromotionCandidatesPayload(cursor *string, limit int, adminSessionToken *string) *admin.ListRegistryPromotionCandidatesPayload {
+func NewListRegistryPromotionCandidatesPayload(cursor *string, status string, limit int, adminSessionToken *string) *admin.ListRegistryPromotionCandidatesPayload {
 	v := &admin.ListRegistryPromotionCandidatesPayload{}
 	v.Cursor = cursor
+	v.Status = status
 	v.Limit = limit
 	v.AdminSessionToken = adminSessionToken
 
@@ -41155,6 +41620,7 @@ func NewPromoteRegistryCandidatePayload(body *PromoteRegistryCandidateRequestBod
 		ProjectID:               *body.ProjectID,
 		McpServerID:             *body.McpServerID,
 		SourceRevision:          *body.SourceRevision,
+		CurationRevision:        *body.CurationRevision,
 		PublicName:              *body.PublicName,
 		PublicTitle:             *body.PublicTitle,
 		PublicDescription:       *body.PublicDescription,
@@ -41164,6 +41630,21 @@ func NewPromoteRegistryCandidatePayload(body *PromoteRegistryCandidateRequestBod
 		AuthMode:                *body.AuthMode,
 		RetryKey:                *body.RetryKey,
 		PublicMetadataConfirmed: *body.PublicMetadataConfirmed,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewCurateRegistryPromotionCandidatePayload builds a admin service
+// curateRegistryPromotionCandidate endpoint payload.
+func NewCurateRegistryPromotionCandidatePayload(body *CurateRegistryPromotionCandidateRequestBody, adminSessionToken *string) *admin.CurateRegistryPromotionCandidatePayload {
+	v := &admin.CurateRegistryPromotionCandidatePayload{
+		OrganizationID:   *body.OrganizationID,
+		PromotionID:      *body.PromotionID,
+		CurationRevision: *body.CurationRevision,
+		Action:           *body.Action,
+		RetryKey:         *body.RetryKey,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -42108,6 +42589,9 @@ func ValidatePromoteRegistryCandidateRequestBody(body *PromoteRegistryCandidateR
 	if body.McpServerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
 	}
+	if body.CurationRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("curation_revision", "body"))
+	}
 	if body.SourceRevision == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("source_revision", "body"))
 	}
@@ -42144,9 +42628,44 @@ func ValidatePromoteRegistryCandidateRequestBody(body *PromoteRegistryCandidateR
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
+	if body.CurationRevision != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.curation_revision", *body.CurationRevision, goa.FormatUUID))
+	}
 	if body.AuthMode != nil {
 		if !(*body.AuthMode == "none" || *body.AuthMode == "oauth") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.auth_mode", *body.AuthMode, []any{"none", "oauth"}))
+		}
+	}
+	return
+}
+
+// ValidateCurateRegistryPromotionCandidateRequestBody runs the validations
+// defined on CurateRegistryPromotionCandidateRequestBody
+func ValidateCurateRegistryPromotionCandidateRequestBody(body *CurateRegistryPromotionCandidateRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.PromotionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("promotion_id", "body"))
+	}
+	if body.CurationRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("curation_revision", "body"))
+	}
+	if body.Action == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
+	}
+	if body.RetryKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("retry_key", "body"))
+	}
+	if body.PromotionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promotion_id", *body.PromotionID, goa.FormatUUID))
+	}
+	if body.CurationRevision != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.curation_revision", *body.CurationRevision, goa.FormatUUID))
+	}
+	if body.Action != nil {
+		if !(*body.Action == "reject" || *body.Action == "archive" || *body.Action == "restore") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"reject", "archive", "restore"}))
 		}
 	}
 	return

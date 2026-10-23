@@ -2389,12 +2389,24 @@ func BuildMigrateExternalMcpServersPayload(adminMigrateExternalMcpServersBody st
 
 // BuildListRegistryPromotionCandidatesPayload builds the payload for the admin
 // listRegistryPromotionCandidates endpoint from CLI flags.
-func BuildListRegistryPromotionCandidatesPayload(adminListRegistryPromotionCandidatesCursor string, adminListRegistryPromotionCandidatesLimit string, adminListRegistryPromotionCandidatesAdminSessionToken string) (*admin.ListRegistryPromotionCandidatesPayload, error) {
+func BuildListRegistryPromotionCandidatesPayload(adminListRegistryPromotionCandidatesCursor string, adminListRegistryPromotionCandidatesStatus string, adminListRegistryPromotionCandidatesLimit string, adminListRegistryPromotionCandidatesAdminSessionToken string) (*admin.ListRegistryPromotionCandidatesPayload, error) {
 	var err error
 	var cursor *string
 	{
 		if adminListRegistryPromotionCandidatesCursor != "" {
 			cursor = &adminListRegistryPromotionCandidatesCursor
+		}
+	}
+	var status string
+	{
+		if adminListRegistryPromotionCandidatesStatus != "" {
+			status = adminListRegistryPromotionCandidatesStatus
+			if !(status == "active" || status == "all" || status == "candidate" || status == "rejected" || status == "archived" || status == "promoted") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", status, []any{"active", "all", "candidate", "rejected", "archived", "promoted"}))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var limit int
@@ -2425,6 +2437,7 @@ func BuildListRegistryPromotionCandidatesPayload(adminListRegistryPromotionCandi
 	}
 	v := &admin.ListRegistryPromotionCandidatesPayload{}
 	v.Cursor = cursor
+	v.Status = status
 	v.Limit = limit
 	v.AdminSessionToken = adminSessionToken
 
@@ -2471,10 +2484,11 @@ func BuildPromoteRegistryCandidatePayload(adminPromoteRegistryCandidateBody stri
 	{
 		err = json.Unmarshal([]byte(adminPromoteRegistryCandidateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auth_mode\": \"oauth\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auth_mode\": \"oauth\",\n      \"curation_revision\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.curation_revision", body.CurationRevision, goa.FormatUUID))
 		if !(body.AuthMode == "none" || body.AuthMode == "oauth") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.auth_mode", body.AuthMode, []any{"none", "oauth"}))
 		}
@@ -2493,6 +2507,7 @@ func BuildPromoteRegistryCandidatePayload(adminPromoteRegistryCandidateBody stri
 		ProjectID:               body.ProjectID,
 		McpServerID:             body.McpServerID,
 		SourceRevision:          body.SourceRevision,
+		CurationRevision:        body.CurationRevision,
 		PublicName:              body.PublicName,
 		PublicTitle:             body.PublicTitle,
 		PublicDescription:       body.PublicDescription,
@@ -2502,6 +2517,43 @@ func BuildPromoteRegistryCandidatePayload(adminPromoteRegistryCandidateBody stri
 		AuthMode:                body.AuthMode,
 		RetryKey:                body.RetryKey,
 		PublicMetadataConfirmed: body.PublicMetadataConfirmed,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildCurateRegistryPromotionCandidatePayload builds the payload for the
+// admin curateRegistryPromotionCandidate endpoint from CLI flags.
+func BuildCurateRegistryPromotionCandidatePayload(adminCurateRegistryPromotionCandidateBody string, adminCurateRegistryPromotionCandidateAdminSessionToken string) (*admin.CurateRegistryPromotionCandidatePayload, error) {
+	var err error
+	var body CurateRegistryPromotionCandidateRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCurateRegistryPromotionCandidateBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"archive\",\n      \"curation_revision\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"promotion_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"retry_key\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promotion_id", body.PromotionID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.curation_revision", body.CurationRevision, goa.FormatUUID))
+		if !(body.Action == "reject" || body.Action == "archive" || body.Action == "restore") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", body.Action, []any{"reject", "archive", "restore"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCurateRegistryPromotionCandidateAdminSessionToken != "" {
+			adminSessionToken = &adminCurateRegistryPromotionCandidateAdminSessionToken
+		}
+	}
+	v := &admin.CurateRegistryPromotionCandidatePayload{
+		OrganizationID:   body.OrganizationID,
+		PromotionID:      body.PromotionID,
+		CurationRevision: body.CurationRevision,
+		Action:           body.Action,
+		RetryKey:         body.RetryKey,
 	}
 	v.AdminSessionToken = adminSessionToken
 

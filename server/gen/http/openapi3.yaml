@@ -5147,6 +5147,83 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: createRegistryEntry
+    /admin/registry.curatePromotionCandidate:
+        post:
+            description: Reject, archive, or restore one exact unpublished catalogue candidate. Hidden candidates cannot be promoted until restored and refreshed.
+            operationId: adminCurateRegistryPromotionCandidate
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CurateRegistryPromotionCandidateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryPromotionCandidate'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: curateRegistryPromotionCandidate admin
+            tags:
+                - admin
+            x-speakeasy-name-override: curateRegistryPromotionCandidate
     /admin/registry.get:
         get:
             description: Staff-only registry administration.
@@ -5640,6 +5717,19 @@ paths:
                   in: query
                   name: cursor
                   schema:
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: status
+                  schema:
+                    default: active
+                    enum:
+                        - active
+                        - all
+                        - candidate
+                        - rejected
+                        - archived
+                        - promoted
                     type: string
                 - allowEmptyValue: true
                   in: query
@@ -93353,6 +93443,12 @@ components:
                 checked_at:
                     type: string
                     format: date-time
+                created_at:
+                    type: string
+                    format: date-time
+                curation_revision:
+                    type: string
+                    format: uuid
                 delivery_error:
                     type: string
                 docs_attempts:
@@ -93411,7 +93507,11 @@ components:
                     type: string
                 status:
                     type: string
+                suggested_metadata:
+                    $ref: '#/components/schemas/AdminRegistryPromotionSuggestions'
             required:
+                - created_at
+                - curation_revision
                 - id
                 - organization_id
                 - project_id
@@ -93438,6 +93538,27 @@ components:
                     type: string
             required:
                 - candidates
+        AdminRegistryPromotionSuggestions:
+            type: object
+            properties:
+                auth_mode:
+                    type: string
+                    enum:
+                        - none
+                        - oauth
+                docs_slug:
+                    type: string
+                documentation_url:
+                    type: string
+                public_description:
+                    type: string
+                public_name:
+                    type: string
+                public_title:
+                    type: string
+                public_url:
+                    type: string
+            description: Untrusted observed metadata suggestions. Staff must edit and explicitly confirm every value before publication.
         AdminRegistrySummary:
             type: object
             properties:
@@ -100330,6 +100451,31 @@ components:
             required:
                 - credits_used
                 - monthly_credits
+        CurateRegistryPromotionCandidateRequestBody:
+            type: object
+            properties:
+                action:
+                    type: string
+                    enum:
+                        - reject
+                        - archive
+                        - restore
+                curation_revision:
+                    type: string
+                    format: uuid
+                organization_id:
+                    type: string
+                promotion_id:
+                    type: string
+                    format: uuid
+                retry_key:
+                    type: string
+            required:
+                - organization_id
+                - promotion_id
+                - curation_revision
+                - action
+                - retry_key
         CursorHookPayload:
             type: object
             properties:
@@ -114142,6 +114288,9 @@ components:
                     enum:
                         - none
                         - oauth
+                curation_revision:
+                    type: string
+                    format: uuid
                 docs_slug:
                     type: string
                 documentation_url:
@@ -114172,6 +114321,7 @@ components:
                 - organization_id
                 - project_id
                 - mcp_server_id
+                - curation_revision
                 - source_revision
                 - public_name
                 - public_title

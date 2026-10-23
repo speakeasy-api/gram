@@ -18,7 +18,7 @@ import (
 // catalogPromotionMutator shares the same transactional rules as the admin UI.
 type catalogPromotionMutator interface {
 	GetCandidate(context.Context, catalogpromotion.Target) (catalogpromotion.Candidate, error)
-	ValidateTx(context.Context, pgx.Tx, catalogpromotion.Target, string, catalogpromotion.PublicMetadata) (catalogpromotion.Candidate, error)
+	ValidateTx(context.Context, pgx.Tx, catalogpromotion.Target, string, string, catalogpromotion.PublicMetadata) (catalogpromotion.Candidate, error)
 	PromoteTx(context.Context, pgx.Tx, catalogpromotion.Request, string) (catalogpromotion.Candidate, error)
 }
 
@@ -32,6 +32,8 @@ type PrepareCatalogPromotionInput struct {
 	MCPServerID string `json:"mcp_server_id" jsonschema:"Exact MCP server UUID from the candidate"`
 	// SourceRevision binds the reviewed configuration.
 	SourceRevision string `json:"source_revision" jsonschema:"Exact current source revision from get_registry_promotion_candidate"`
+	// CurationRevision binds approval to the current staff review state.
+	CurationRevision string `json:"curation_revision" jsonschema:"Exact current curation_revision from the candidate"`
 	// Public contains only metadata deliberately approved for public distribution.
 	Public catalogpromotion.PublicMetadata `json:"public" jsonschema:"Independently reviewed public metadata; never copy customer endpoints, credentials, names or configuration"`
 	// PublicMetadataConfirmed attests that these fields can be publicly distributed.
@@ -61,12 +63,12 @@ func catalogPromotionRequest(input PrepareCatalogPromotionInput) (catalogpromoti
 	if err := checkPrepareTarget(input.OrganizationID, input.RetryKey); err != nil {
 		return catalogpromotion.Request{}, err
 	}
-	if !validRegistryUUID(input.ProjectID) || !validRegistryUUID(input.MCPServerID) || input.SourceRevision == "" || len(input.SourceRevision) > maxRegistryText || !input.PublicMetadataConfirmed {
+	if !validRegistryUUID(input.ProjectID) || !validRegistryUUID(input.MCPServerID) || input.SourceRevision == "" || len(input.SourceRevision) > maxRegistryText || !input.PublicMetadataConfirmed || !validRegistryUUID(input.CurationRevision) {
 		return catalogpromotion.Request{}, errors.New("provide exact project and server UUIDs, a current source revision, and confirm the public metadata")
 	}
 	return catalogpromotion.Request{
 		Target:         catalogpromotion.Target{OrganizationID: input.OrganizationID, ProjectID: uuid.MustParse(input.ProjectID), MCPServerID: uuid.MustParse(input.MCPServerID)},
-		SourceRevision: input.SourceRevision, Public: input.Public,
+		SourceRevision: input.SourceRevision, CurationRevision: input.CurationRevision, Public: input.Public,
 		PublicMetadataConfirmed: true, RetryKey: input.RetryKey,
 	}, nil
 }
@@ -88,7 +90,7 @@ func (w *catalogPromotionWriter) prepare(ctx context.Context, input PrepareCatal
 	if err != nil {
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
-	if !candidate.Eligible || candidate.SourceRevision != request.SourceRevision {
+	if !candidate.Eligible || candidate.SourceRevision != request.SourceRevision || candidate.CurationRevision != request.CurationRevision || candidate.Status != "candidate" {
 		return ProposalOutput{}, ErrStaleState
 	}
 	tx, err := w.store.db.Begin(ctx)
@@ -96,7 +98,7 @@ func (w *catalogPromotionWriter) prepare(ctx context.Context, input PrepareCatal
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
-	if _, err := w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.Public); err != nil {
+	if _, err := w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public); err != nil {
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -122,7 +124,7 @@ func storedCatalogPromotion(proposal Proposal) (catalogpromotion.Request, error)
 	if proposal.Operation != OperationPromoteRegistryCandidate || proposal.SchemaVersion != 1 || proposal.PlatformGlobal || !proposal.Target.ProjectID.Valid || proposal.Target.ResourceKind != "mcp_server" || json.Unmarshal(proposal.Arguments, &request) != nil {
 		return request, ErrProposalInvalidated
 	}
-	if !request.PublicMetadataConfirmed || request.Target.OrganizationID != proposal.Target.OrganizationID || request.Target.ProjectID != proposal.Target.ProjectID.UUID || request.Target.MCPServerID.String() != proposal.Target.ResourceID || request.RetryKey != proposal.IdempotencyKey {
+	if !validRegistryUUID(request.CurationRevision) || !request.PublicMetadataConfirmed || request.Target.OrganizationID != proposal.Target.OrganizationID || request.Target.ProjectID != proposal.Target.ProjectID.UUID || request.Target.MCPServerID.String() != proposal.Target.ResourceID || request.RetryKey != proposal.IdempotencyKey {
 		return request, ErrProposalInvalidated
 	}
 	digest, err := stateDigest(proposal.Arguments)
@@ -137,7 +139,7 @@ func (w *catalogPromotionWriter) revalidate(ctx context.Context, tx pgx.Tx, prop
 	if err != nil {
 		return err
 	}
-	_, err = w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.Public)
+	_, err = w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public)
 	if err != nil {
 		return catalogPromotionValidationError(err)
 	}
@@ -204,7 +206,7 @@ func (w *catalogPromotionWriter) registerPrepare(server *mcp.Server) {
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
 		Name:        "prepare_registry_promotion", Title: "Prepare Catalogue Promotion",
-		Description: "Prepare publication of a healthy remote MCP source using exact organization, project, server and source revision. Supply independently reviewed public metadata only. Creates a stored preview for same-staff browser approval; execute_admin_proposal publishes and queues setup docs. Requires admin:write. Does not publish during preparation.",
+		Description: "Prepare publication of a healthy remote MCP source using exact organization, project, server and current source and curation revisions. Supply independently reviewed public metadata only. Creates a stored preview for same-staff browser approval; execute_admin_proposal publishes and queues setup docs. Requires admin:write. Does not publish during preparation.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareCatalogPromotionInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := w.prepare(ctx, input)
 		return nil, out, err

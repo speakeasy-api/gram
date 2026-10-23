@@ -21,6 +21,7 @@ type recordingCatalogPromotionReader struct {
 	getCalls   int
 	cursor     string
 	limit      int
+	status     string
 	target     catalogpromotion.Target
 	candidates []catalogpromotion.Candidate
 	next       string
@@ -28,9 +29,9 @@ type recordingCatalogPromotionReader struct {
 	err        error
 }
 
-func (r *recordingCatalogPromotionReader) ListCandidates(_ context.Context, cursor string, limit int) ([]catalogpromotion.Candidate, string, error) {
+func (r *recordingCatalogPromotionReader) ListCandidates(_ context.Context, cursor string, limit int, status string) ([]catalogpromotion.Candidate, string, error) {
 	r.listCalls++
-	r.cursor, r.limit = cursor, limit
+	r.cursor, r.limit, r.status = cursor, limit, status
 	return r.candidates, r.next, r.err
 }
 
@@ -169,4 +170,39 @@ func TestCatalogPromotionProjectsUnobservedCandidate(t *testing.T) {
 	candidate.Eligible = true
 	_, ok = projectCatalogPromotion(candidate)
 	require.False(t, ok)
+}
+
+func TestCatalogPromotionStatusFiltersAndPrivateDrafts(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"active", "all", "candidate", "rejected", "archived", "promoted"} {
+		reader := &recordingCatalogPromotionReader{candidates: []catalogpromotion.Candidate{{ID: testRegistryID, OrganizationID: "org-example", ProjectID: testRegistryID, MCPServerID: testRegistryID, RemoteMCPServerID: testRegistryID, SourceRevision: "aabb", Status: "rejected", Reason: "eligible", Eligible: true, CreatedAt: "2026-01-01T00:00:00Z", CurationRevision: testRegistryID, SuggestedMetadata: &catalogpromotion.PublicMetadata{Title: "private source draft"}}}}
+		body, data := catalogPromotionToolCall(t, reader, "list_registry_promotion_candidates", `{"status":"`+status+`"}`, true)
+		require.NotContains(t, body, `"isError":true`)
+		require.Equal(t, status, reader.status)
+		require.NotContains(t, body, "private source draft")
+		var page CatalogPromotionPage
+		require.NoError(t, json.Unmarshal(data, &page))
+		require.Equal(t, "rejected", page.Candidates[0].Status)
+		require.Equal(t, testRegistryID, page.Candidates[0].CurationRevision)
+	}
+	reader := &recordingCatalogPromotionReader{}
+	body, _ := catalogPromotionToolCall(t, reader, "list_registry_promotion_candidates", `{"status":"arbitrary"}`, true)
+	require.Contains(t, body, `"isError":true`)
+	require.Zero(t, reader.listCalls)
+}
+
+func TestCatalogPromotionListsSyntheticReviewStates(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"candidate", "rejected", "archived"} {
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			reader := &recordingCatalogPromotionReader{candidates: []catalogpromotion.Candidate{{ID: testRegistryID, OrganizationID: "org-example", ProjectID: testRegistryID, MCPServerID: testRegistryID, RemoteMCPServerID: testRegistryID, SourceRevision: "unobserved", Status: status, Reason: "insufficient_evidence", CurationRevision: testRegistryID}}}
+			body, data := catalogPromotionToolCall(t, reader, "list_registry_promotion_candidates", `{"status":"`+status+`"}`, true)
+			require.NotContains(t, body, `"isError":true`)
+			var result CatalogPromotionPage
+			require.NoError(t, json.Unmarshal(data, &result))
+			require.Len(t, result.Candidates, 1)
+			require.Equal(t, status, result.Candidates[0].Status)
+		})
+	}
 }

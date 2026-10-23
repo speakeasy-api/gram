@@ -62,6 +62,9 @@ export const AUDIT_ACTIONS = [
   "billing_metadata:create_stripe_portal",
   "billing_metadata:resume_stripe_subscription",
   "billing_metadata:update",
+  "catalog-promotion:archive",
+  "catalog-promotion:reject",
+  "catalog-promotion:restore",
   "catalog-promotion:retry-docs",
   "chat_analysis_settings:upsert",
   "chat_session:access",
@@ -536,6 +539,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "resumed Stripe subscription for";
     case "billing_metadata:update":
       return "updated billing metadata";
+    case "catalog-promotion:archive":
+      return "archived catalog promotion candidate";
+    case "catalog-promotion:reject":
+      return "rejected catalog promotion candidate";
+    case "catalog-promotion:restore":
+      return "restored catalog promotion candidate";
     case "catalog-promotion:retry-docs":
       return "retried setup documentation for";
     case "chat_analysis_settings:upsert":

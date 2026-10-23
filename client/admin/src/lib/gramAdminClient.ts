@@ -1,4 +1,10 @@
 import {
+  buildAdminCurateRegistryPromotionCandidateMutation,
+  type AdminCurateRegistryPromotionCandidateMutationData,
+  type AdminCurateRegistryPromotionCandidateMutationError,
+  type AdminCurateRegistryPromotionCandidateMutationVariables,
+} from "@gram/admin-client/react-query/adminCurateRegistryPromotionCandidate";
+import {
   buildAdminRetryRegistryPromotionDocsMutation,
   type AdminRetryRegistryPromotionDocsMutationData,
   type AdminRetryRegistryPromotionDocsMutationError,
@@ -1244,6 +1250,19 @@ export function useRetryRegistryPromotionDocsMutation(): UseMutationResult<
 > {
   return useMutation({
     ...buildAdminRetryRegistryPromotionDocsMutation(redirectingClient, {
+      retries: { strategy: "none" },
+    }),
+    retry: false,
+  });
+}
+
+export function useCurateRegistryPromotionCandidateMutation(): UseMutationResult<
+  AdminCurateRegistryPromotionCandidateMutationData,
+  AdminCurateRegistryPromotionCandidateMutationError,
+  AdminCurateRegistryPromotionCandidateMutationVariables
+> {
+  return useMutation({
+    ...buildAdminCurateRegistryPromotionCandidateMutation(redirectingClient, {
       retries: { strategy: "none" },
     }),
     retry: false,

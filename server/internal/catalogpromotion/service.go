@@ -3,6 +3,7 @@ package catalogpromotion
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -129,6 +130,9 @@ func (s *Service) GetCandidate(ctx context.Context, target Target) (Candidate, e
 	}
 	result := s.candidate(row)
 	result.SourceName = current.SourceName
+	if row.CurationStatus == "active" && !row.PromotedAt.Valid {
+		result.SuggestedMetadata = suggestedMetadata(current)
+	}
 	return result, nil
 }
 
@@ -243,30 +247,52 @@ func qualify(outcomes *telemetry.MCPServerOutcomes, points []telemetry.MCPServer
 	return out
 }
 
-// ListCandidates returns a bounded staff-only page with opaque UUID pagination.
-func (s *Service) ListCandidates(ctx context.Context, cursor string, limit int) ([]Candidate, string, error) {
+// candidateCursor pins ordering and filter, so changing tabs cannot reuse another queue's cursor.
+type candidateCursor struct {
+	// CreatedAt is the immutable ordering timestamp.
+	CreatedAt time.Time `json:"created_at"`
+	// ID breaks timestamp ties deterministically.
+	ID uuid.UUID `json:"id"`
+	// Status binds pagination to the selected queue.
+	Status string `json:"status"`
+}
+
+// ListCandidates returns a bounded staff-only page in newest-created order.
+func (s *Service) ListCandidates(ctx context.Context, cursor string, limit int, status string) ([]Candidate, string, error) {
 	if limit == 0 {
 		limit = 25
 	}
-	if limit < 1 || limit > 50 {
+	if status == "" {
+		status = "active"
+	}
+	switch status {
+	case "active", "all", "candidate", "rejected", "archived", "promoted":
+	default:
 		return nil, "", ErrInvalid
 	}
-	id := uuid.Nil
+	if limit < 1 || limit > 50 || len(cursor) > 2048 {
+		return nil, "", ErrInvalid
+	}
+	var position candidateCursor
 	if cursor != "" {
-		var err error
-		id, err = uuid.Parse(cursor)
-		if err != nil {
+		encoded, err := base64.RawURLEncoding.DecodeString(cursor)
+		if err != nil || json.Unmarshal(encoded, &position) != nil || position.ID == uuid.Nil || position.CreatedAt.IsZero() || position.Status != status {
 			return nil, "", ErrInvalid
 		}
 	}
-	rows, err := repo.New(s.db).ListCandidates(ctx, repo.ListCandidatesParams{HasCursor: cursor != "", CursorID: id, PageLimit: int32(limit + 1)})
+	rows, err := repo.New(s.db).ListCandidates(ctx, repo.ListCandidatesParams{HasCursor: cursor != "", CursorID: position.ID, CursorCreatedAt: conv.ToPGTimestamptz(position.CreatedAt), PageLimit: conv.SafeInt32(limit + 1), StatusFilter: status})
 	if err != nil {
 		return nil, "", fmt.Errorf("list promotion candidates: %w", err)
 	}
 	next := ""
 	if len(rows) > limit {
 		rows = rows[:limit]
-		next = rows[len(rows)-1].RegistryPromotionCandidate.ID.String()
+		last := rows[len(rows)-1].RegistryPromotionCandidate
+		encoded, err := json.Marshal(candidateCursor{CreatedAt: last.CreatedAt.Time, ID: last.ID, Status: status})
+		if err != nil {
+			return nil, "", fmt.Errorf("encode promotion cursor: %w", err)
+		}
+		next = base64.RawURLEncoding.EncodeToString(encoded)
 	}
 	result := make([]Candidate, 0, len(rows))
 	for _, row := range rows {
@@ -278,7 +304,7 @@ func (s *Service) ListCandidates(ctx context.Context, cursor string, limit int) 
 }
 
 // ValidateTx locks the source and candidate and rejects stale or insufficient evidence.
-func (s *Service) ValidateTx(ctx context.Context, tx pgx.Tx, target Target, revision string, public PublicMetadata) (Candidate, error) {
+func (s *Service) ValidateTx(ctx context.Context, tx pgx.Tx, target Target, revision, curationRevision string, public PublicMetadata) (Candidate, error) {
 	source, err := repo.New(tx).GetSource(ctx, repo.GetSourceParams{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.MCPServerID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Candidate{}, ErrNotFound
@@ -293,10 +319,10 @@ func (s *Service) ValidateTx(ctx context.Context, tx pgx.Tx, target Target, revi
 	if err != nil {
 		return Candidate{}, fmt.Errorf("lock promotion candidate: %w", err)
 	}
-	if row.PromotedAt.Valid {
+	if row.PromotedAt.Valid || row.CurationStatus != "active" {
 		return s.candidate(row), ErrConflict
 	}
-	if revision != source.SourceRevision || revision != row.SourceRevision || !row.CheckedAt.Valid || s.now().Sub(row.CheckedAt.Time) > evidenceLifetime {
+	if row.CurationRevision.String() != curationRevision || revision != source.SourceRevision || revision != row.SourceRevision || !row.CheckedAt.Valid || s.now().Sub(row.CheckedAt.Time) > evidenceLifetime {
 		return Candidate{}, ErrStale
 	}
 	if !row.Eligible || source.Visibility == "disabled" || source.HeaderCount != 0 {
@@ -370,7 +396,7 @@ func (s *Service) PromoteTx(ctx context.Context, tx pgx.Tx, request Request, act
 		}
 		return Candidate{}, ErrConflict
 	}
-	if _, err := s.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.Public); err != nil {
+	if _, err := s.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public); err != nil {
 		return Candidate{}, err
 	}
 	principal, err := urn.ParsePrincipal(actor)
@@ -514,6 +540,8 @@ func buildRecord(public PublicMetadata, transport string) (json.RawMessage, erro
 func (s *Service) candidate(row repo.RegistryPromotionCandidate) Candidate {
 	var out Candidate
 	out.ID = row.ID.String()
+	out.CreatedAt = row.CreatedAt.Time.UTC().Format(time.RFC3339Nano)
+	out.CurationRevision = row.CurationRevision.String()
 	out.OrganizationID = row.OrganizationID
 	if row.ProjectID.Valid {
 		out.ProjectID = row.ProjectID.UUID.String()
@@ -528,6 +556,9 @@ func (s *Service) candidate(row repo.RegistryPromotionCandidate) Candidate {
 	out.Eligible = row.Eligible
 	out.Reason = row.Reason
 	out.Status = "candidate"
+	if row.CurationStatus != "active" {
+		out.Status = row.CurationStatus
+	}
 	out.ObservedSuccesses = row.ObservedSuccesses
 	out.ObservedFailures = row.ObservedFailures
 	out.ObservedDays = int(row.ObservedDays)

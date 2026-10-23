@@ -255,6 +255,9 @@ type Service interface {
 	// Publish an explicitly reviewed public catalogue entry and queue setup
 	// documentation. Customer credentials are never copied.
 	PromoteRegistryCandidate(context.Context, *PromoteRegistryCandidatePayload) (res *AdminRegistryPromotionCandidate, err error)
+	// Reject, archive, or restore one exact unpublished catalogue candidate.
+	// Hidden candidates cannot be promoted until restored and refreshed.
+	CurateRegistryPromotionCandidate(context.Context, *CurateRegistryPromotionCandidatePayload) (res *AdminRegistryPromotionCandidate, err error)
 	// Retry a failed setup-guide request for one exact reviewed promotion without
 	// republishing the catalogue entry.
 	RetryRegistryPromotionDocs(context.Context, *RetryRegistryPromotionDocsPayload) (res *AdminRegistryPromotionCandidate, err error)
@@ -371,7 +374,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [99]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration"}
+var MethodNames = [100]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -1382,6 +1385,9 @@ type AdminRegistryPromotionCandidate struct {
 	McpServerID       string
 	RemoteMcpServerID string
 	SourceName        *string
+	CreatedAt         string
+	CurationRevision  string
+	SuggestedMetadata *AdminRegistryPromotionSuggestions
 	SourceRevision    string
 	Eligible          bool
 	Reason            string
@@ -1409,6 +1415,18 @@ type AdminRegistryPromotionCandidate struct {
 type AdminRegistryPromotionCandidates struct {
 	Candidates []*AdminRegistryPromotionCandidate
 	NextCursor *string
+}
+
+// Untrusted observed metadata suggestions. Staff must edit and explicitly
+// confirm every value before publication.
+type AdminRegistryPromotionSuggestions struct {
+	PublicName        *string
+	PublicTitle       *string
+	PublicDescription *string
+	PublicURL         *string
+	DocumentationURL  *string
+	DocsSlug          *string
+	AuthMode          *string
 }
 
 type AdminRegistrySummary struct {
@@ -2015,6 +2033,17 @@ type CreateSignupOfferPayload struct {
 	SignupFlow            string
 }
 
+// CurateRegistryPromotionCandidatePayload is the payload type of the admin
+// service curateRegistryPromotionCandidate method.
+type CurateRegistryPromotionCandidatePayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	PromotionID       string
+	CurationRevision  string
+	Action            string
+	RetryKey          string
+}
+
 // DeleteGlobalIssuerPayload is the payload type of the admin service
 // deleteGlobalIssuer method.
 type DeleteGlobalIssuerPayload struct {
@@ -2606,6 +2635,7 @@ type ListRegistryOktaUnmappedPayload struct {
 type ListRegistryPromotionCandidatesPayload struct {
 	AdminSessionToken *string
 	Cursor            *string
+	Status            string
 	Limit             int
 }
 
@@ -2809,6 +2839,7 @@ type PromoteRegistryCandidatePayload struct {
 	ProjectID               string
 	McpServerID             string
 	SourceRevision          string
+	CurationRevision        string
 	PublicName              string
 	PublicTitle             string
 	PublicDescription       string

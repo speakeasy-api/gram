@@ -267,7 +267,7 @@ func TestDocsRetryRevisionTenantAndAtomicAudit(t *testing.T) {
 	promoted, err := f.promote(t)
 	require.NoError(t, err)
 	require.Error(t, f.service.Dispatch(t.Context()))
-	rows, _, err := f.service.ListCandidates(t.Context(), "", 10)
+	rows, _, err := f.service.ListCandidates(t.Context(), "", 10, "all")
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	parked := rows[0]
@@ -373,7 +373,7 @@ func TestPromotionDNSOutagesRemainOperationalErrors(t *testing.T) {
 				return []net.IP{net.ParseIP(tc.ip)}, nil
 			}})))
 			tx := testenv.BeginTx(t, t.Context(), f.db)
-			_, err := f.service.ValidateTx(t.Context(), tx, f.target, f.request.SourceRevision, f.request.Public)
+			_, err := f.service.ValidateTx(t.Context(), tx, f.target, f.request.SourceRevision, f.request.CurationRevision, f.request.Public)
 			require.ErrorIs(t, err, tc.expected)
 			if errors.Is(tc.expected, ErrUnavailable) {
 				require.ErrorIs(t, err, tc.lookupErr)
@@ -381,4 +381,27 @@ func TestPromotionDNSOutagesRemainOperationalErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCandidateListExcludesDeletedUnpublishedSources(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	_, err := f.service.GetCandidate(t.Context(), f.target)
+	require.NoError(t, err)
+	require.NoError(t, repo.New(f.db).SoftDeletePromotionSourceFixture(t.Context(), repo.SoftDeletePromotionSourceFixtureParams{ID: f.target.MCPServerID, ProjectID: f.target.ProjectID}))
+	rows, _, err := f.service.ListCandidates(t.Context(), "", 25, "all")
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+func TestCandidateListRetainsPublishedDeletedSources(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	published, err := f.promote(t)
+	require.NoError(t, err)
+	require.NoError(t, repo.New(f.db).SoftDeletePromotionSourceFixture(t.Context(), repo.SoftDeletePromotionSourceFixtureParams{ID: f.target.MCPServerID, ProjectID: f.target.ProjectID}))
+	rows, _, err := f.service.ListCandidates(t.Context(), "", 25, "promoted")
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, published.ID, rows[0].ID)
 }

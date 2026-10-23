@@ -14,7 +14,7 @@ import (
 )
 
 type catalogPromotionReader interface {
-	ListCandidates(context.Context, string, int) ([]catalogpromotion.Candidate, string, error)
+	ListCandidates(context.Context, string, int, string) ([]catalogpromotion.Candidate, string, error)
 	GetCandidate(context.Context, catalogpromotion.Target) (catalogpromotion.Candidate, error)
 }
 
@@ -32,6 +32,8 @@ type CatalogPromotionTargetInput struct {
 type ListCatalogPromotionInput struct {
 	// Cursor continues the previous page.
 	Cursor string `json:"cursor,omitempty" jsonschema:"Opaque next cursor from the previous page"`
+	// Status selects active (default), all, candidate, rejected, archived, or promoted.
+	Status string `json:"status,omitempty" jsonschema:"Queue filter: active,all,candidate,rejected,archived,promoted; default active"`
 	// Limit bounds returned candidates.
 	Limit int `json:"limit,omitempty" jsonschema:"Page size from 1 to 50; default 20"`
 }
@@ -48,7 +50,7 @@ func registerCatalogPromotionTools(server *mcp.Server, reader catalogPromotionRe
 	mcp.AddTool(server, &mcp.Tool{
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name: "list_registry_promotion_candidates", Title: "List Catalogue Promotion Candidates",
-		Description: "List a bounded staff-only page of remote MCP promotion candidates with aggregate health evidence and setup documentation delivery status. Source URLs, credentials, headers, tool arguments and customer text are omitted. Eligibility does not authorize publication.",
+		Description: "List newest-first remote MCP promotion candidates, defaulting to active unpublished candidates; status filters include all, candidate, rejected, archived, and promoted. Returns a bounded staff-only page with aggregate health evidence and setup documentation delivery status. Source URLs, credentials, headers, tool arguments and customer text are omitted. Eligibility does not authorize publication.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListCatalogPromotionInput) (*mcp.CallToolResult, CatalogPromotionPage, error) {
 		out := CatalogPromotionPage{Candidates: []CatalogPromotionCandidate{}, NextCursor: ""}
@@ -62,7 +64,16 @@ func registerCatalogPromotionTools(server *mcp.Server, reader catalogPromotionRe
 		if limit == 0 {
 			limit = 20
 		}
-		candidates, next, err := reader.ListCandidates(ctx, input.Cursor, limit)
+		status := input.Status
+		if status == "" {
+			status = "active"
+		}
+		switch status {
+		case "active", "all", "candidate", "rejected", "archived", "promoted":
+		default:
+			return nil, out, errors.New("provide a supported promotion status filter")
+		}
+		candidates, next, err := reader.ListCandidates(ctx, input.Cursor, limit, status)
 		if err != nil || len(candidates) > limit || len(next) > maxRegistryCursor {
 			return nil, out, errRegistryUnavailable
 		}
@@ -112,6 +123,10 @@ type CatalogPromotionCandidate struct {
 	MCPServerID string `json:"mcp_server_id"`
 	// RemoteMCPServerID identifies its remote configuration.
 	RemoteMCPServerID string `json:"remote_mcp_server_id"`
+	// CreatedAt is the immutable candidate creation timestamp.
+	CreatedAt string `json:"created_at"`
+	// CurationRevision pins the exact staff review disposition.
+	CurationRevision string `json:"curation_revision"`
 	// SourceRevision pins the reviewed configuration.
 	SourceRevision string `json:"source_revision"`
 	// Eligible reports current qualification.
@@ -179,13 +194,13 @@ func projectCatalogPromotion(candidate catalogpromotion.Candidate) (CatalogPromo
 	if candidate.SourceRevision == "" || len(candidate.SourceRevision) > maxRegistryText {
 		return empty, false
 	}
-	if _, err := hex.DecodeString(candidate.SourceRevision); err != nil && (candidate.SourceRevision != "unobserved" || candidate.Status != "candidate" || candidate.Eligible) {
+	if _, err := hex.DecodeString(candidate.SourceRevision); err != nil && (candidate.SourceRevision != "unobserved" || candidate.Status == "promoted" || candidate.Eligible) {
 		return empty, false
 	}
 	if candidate.ObservedSuccesses < 0 || candidate.ObservedFailures < 0 || candidate.ObservedDays < 0 {
 		return empty, false
 	}
-	for _, stamp := range []string{candidate.CheckedAt, candidate.DocsLastAttemptAt, candidate.DocsNextAttemptAt, candidate.DocsQueuedAt, candidate.PromotedAt} {
+	for _, stamp := range []string{candidate.CreatedAt, candidate.CheckedAt, candidate.DocsLastAttemptAt, candidate.DocsNextAttemptAt, candidate.DocsQueuedAt, candidate.PromotedAt} {
 		if stamp != "" {
 			if _, err := time.Parse(time.RFC3339Nano, stamp); err != nil {
 				return empty, false
@@ -193,6 +208,9 @@ func projectCatalogPromotion(candidate catalogpromotion.Candidate) (CatalogPromo
 		}
 	}
 	if candidate.DocsAttempts < 0 || len(candidate.DocsRevision) > maxRegistryText || len(candidate.PublicTitle) > 200 {
+		return empty, false
+	}
+	if candidate.CurationRevision != "" && !validRegistryUUID(candidate.CurationRevision) {
 		return empty, false
 	}
 	if candidate.DocsRevision != "" && !validRegistryUUID(candidate.DocsRevision) {
@@ -206,7 +224,7 @@ func projectCatalogPromotion(candidate catalogpromotion.Candidate) (CatalogPromo
 	default:
 		return empty, false
 	}
-	if candidate.Status != "candidate" && candidate.Status != "promoted" {
+	if candidate.Status != "candidate" && candidate.Status != "promoted" && candidate.Status != "rejected" && candidate.Status != "archived" {
 		return empty, false
 	}
 	switch candidate.DocsStatus {
@@ -224,7 +242,7 @@ func projectCatalogPromotion(candidate catalogpromotion.Candidate) (CatalogPromo
 	}
 	return CatalogPromotionCandidate{
 		ID: candidate.ID, OrganizationID: candidate.OrganizationID, ProjectID: candidate.ProjectID, MCPServerID: candidate.MCPServerID, RemoteMCPServerID: candidate.RemoteMCPServerID,
-		SourceRevision: candidate.SourceRevision, Eligible: candidate.Eligible, Reason: candidate.Reason, Status: candidate.Status,
+		CreatedAt: candidate.CreatedAt, CurationRevision: candidate.CurationRevision, SourceRevision: candidate.SourceRevision, Eligible: candidate.Eligible, Reason: candidate.Reason, Status: candidate.Status,
 		ObservedSuccesses: candidate.ObservedSuccesses, ObservedFailures: candidate.ObservedFailures, ObservedDays: candidate.ObservedDays, CheckedAt: candidate.CheckedAt,
 		DocsRevision: candidate.DocsRevision, DocsRetryAllowed: candidate.DocsRetryAllowed, DocsAttempts: candidate.DocsAttempts,
 		DocsLastAttemptAt: candidate.DocsLastAttemptAt, DocsNextAttemptAt: candidate.DocsNextAttemptAt, DocsQueuedAt: candidate.DocsQueuedAt, PromotedAt: candidate.PromotedAt, PublicTitle: candidate.PublicTitle,

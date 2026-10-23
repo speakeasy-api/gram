@@ -15575,6 +15575,7 @@ func EncodeListRegistryPromotionCandidatesRequest(encoder func(*http.Request) go
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
+		values.Add("status", p.Status)
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -16248,6 +16249,243 @@ func DecodePromoteRegistryCandidateResponse(decoder func(*http.Response) goahttp
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("admin", "promoteRegistryCandidate", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCurateRegistryPromotionCandidateRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "curateRegistryPromotionCandidate" endpoint
+func (c *Client) BuildCurateRegistryPromotionCandidateRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CurateRegistryPromotionCandidateAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "curateRegistryPromotionCandidate", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCurateRegistryPromotionCandidateRequest returns an encoder for
+// requests sent to the admin curateRegistryPromotionCandidate server.
+func EncodeCurateRegistryPromotionCandidateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.CurateRegistryPromotionCandidatePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "curateRegistryPromotionCandidate", "*admin.CurateRegistryPromotionCandidatePayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewCurateRegistryPromotionCandidateRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "curateRegistryPromotionCandidate", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCurateRegistryPromotionCandidateResponse returns a decoder for
+// responses returned by the admin curateRegistryPromotionCandidate endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeCurateRegistryPromotionCandidateResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCurateRegistryPromotionCandidateResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CurateRegistryPromotionCandidateResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			err = ValidateCurateRegistryPromotionCandidateResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			res := NewCurateRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CurateRegistryPromotionCandidateUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			err = ValidateCurateRegistryPromotionCandidateUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			return nil, NewCurateRegistryPromotionCandidateUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CurateRegistryPromotionCandidateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			err = ValidateCurateRegistryPromotionCandidateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			return nil, NewCurateRegistryPromotionCandidateForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CurateRegistryPromotionCandidateBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			err = ValidateCurateRegistryPromotionCandidateBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			return nil, NewCurateRegistryPromotionCandidateBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CurateRegistryPromotionCandidateNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			err = ValidateCurateRegistryPromotionCandidateNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			return nil, NewCurateRegistryPromotionCandidateNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CurateRegistryPromotionCandidateConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			err = ValidateCurateRegistryPromotionCandidateConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			return nil, NewCurateRegistryPromotionCandidateConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CurateRegistryPromotionCandidateUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			err = ValidateCurateRegistryPromotionCandidateUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			return nil, NewCurateRegistryPromotionCandidateUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CurateRegistryPromotionCandidateInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			err = ValidateCurateRegistryPromotionCandidateInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			return nil, NewCurateRegistryPromotionCandidateInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CurateRegistryPromotionCandidateInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "curateRegistryPromotionCandidate", err)
+				}
+				err = ValidateCurateRegistryPromotionCandidateInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "curateRegistryPromotionCandidate", err)
+				}
+				return nil, NewCurateRegistryPromotionCandidateInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CurateRegistryPromotionCandidateUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "curateRegistryPromotionCandidate", err)
+				}
+				err = ValidateCurateRegistryPromotionCandidateUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "curateRegistryPromotionCandidate", err)
+				}
+				return nil, NewCurateRegistryPromotionCandidateUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "curateRegistryPromotionCandidate", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CurateRegistryPromotionCandidateGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			err = ValidateCurateRegistryPromotionCandidateGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "curateRegistryPromotionCandidate", err)
+			}
+			return nil, NewCurateRegistryPromotionCandidateGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "curateRegistryPromotionCandidate", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -25010,6 +25248,8 @@ func unmarshalAdminRegistryPromotionCandidateResponseBodyToAdminAdminRegistryPro
 		McpServerID:       *v.McpServerID,
 		RemoteMcpServerID: *v.RemoteMcpServerID,
 		SourceName:        v.SourceName,
+		CreatedAt:         *v.CreatedAt,
+		CurationRevision:  *v.CurationRevision,
 		SourceRevision:    *v.SourceRevision,
 		Eligible:          *v.Eligible,
 		Reason:            *v.Reason,
@@ -25030,6 +25270,29 @@ func unmarshalAdminRegistryPromotionCandidateResponseBodyToAdminAdminRegistryPro
 		PromotedAt:        v.PromotedAt,
 		PublicTitle:       v.PublicTitle,
 		DeliveryError:     v.DeliveryError,
+	}
+	if v.SuggestedMetadata != nil {
+		res.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(v.SuggestedMetadata)
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions
+// builds a value of type *admin.AdminRegistryPromotionSuggestions from a value
+// of type *AdminRegistryPromotionSuggestionsResponseBody.
+func unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(v *AdminRegistryPromotionSuggestionsResponseBody) *admin.AdminRegistryPromotionSuggestions {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminRegistryPromotionSuggestions{
+		PublicName:        v.PublicName,
+		PublicTitle:       v.PublicTitle,
+		PublicDescription: v.PublicDescription,
+		PublicURL:         v.PublicURL,
+		DocumentationURL:  v.DocumentationURL,
+		DocsSlug:          v.DocsSlug,
+		AuthMode:          v.AuthMode,
 	}
 
 	return res

@@ -12,7 +12,10 @@ import { adminListRegistryPromotionCandidates } from "../funcs/adminListRegistry
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AdminRegistryPromotionCandidates } from "../models/components/adminregistrypromotioncandidates.js";
-import { AdminListRegistryPromotionCandidatesRequest } from "../models/operations/adminlistregistrypromotioncandidates.js";
+import {
+  AdminListRegistryPromotionCandidatesRequest,
+  Status,
+} from "../models/operations/adminlistregistrypromotioncandidates.js";
 import { unwrapAsync } from "../types/fp.js";
 export type AdminListRegistryPromotionCandidatesQueryData =
   AdminRegistryPromotionCandidates;
@@ -45,6 +48,7 @@ export function buildAdminListRegistryPromotionCandidatesQuery(
   return {
     queryKey: queryKeyAdminListRegistryPromotionCandidates({
       cursor: request?.cursor,
+      status: request?.status,
       limit: request?.limit,
     }),
     queryFn: async function adminListRegistryPromotionCandidatesQueryFn(
@@ -71,7 +75,11 @@ export function buildAdminListRegistryPromotionCandidatesQuery(
 }
 
 export function queryKeyAdminListRegistryPromotionCandidates(
-  parameters: { cursor?: string | undefined; limit?: number | undefined },
+  parameters: {
+    cursor?: string | undefined;
+    status?: Status | undefined;
+    limit?: number | undefined;
+  },
 ): QueryKey {
   return [
     "@gram/admin-client",

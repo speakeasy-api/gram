@@ -3,15 +3,33 @@
  */
 
 import * as z from "zod/v4-mini";
+import { ClosedEnum } from "../../types/enums.js";
+
+export const Status = {
+  Active: "active",
+  All: "all",
+  Candidate: "candidate",
+  Rejected: "rejected",
+  Archived: "archived",
+  Promoted: "promoted",
+} as const;
+export type Status = ClosedEnum<typeof Status>;
 
 export type AdminListRegistryPromotionCandidatesRequest = {
   cursor?: string | undefined;
+  status?: Status | undefined;
   limit?: number | undefined;
 };
 
 /** @internal */
+export const Status$outboundSchema: z.ZodMiniEnum<typeof Status> = z.enum(
+  Status,
+);
+
+/** @internal */
 export type AdminListRegistryPromotionCandidatesRequest$Outbound = {
   cursor?: string | undefined;
+  status: string;
   limit: number;
 };
 
@@ -22,6 +40,7 @@ export const AdminListRegistryPromotionCandidatesRequest$outboundSchema:
     AdminListRegistryPromotionCandidatesRequest
   > = z.object({
     cursor: z.optional(z.string()),
+    status: z._default(Status$outboundSchema, "active"),
     limit: z._default(z.int(), 25),
   });
 

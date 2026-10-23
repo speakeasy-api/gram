@@ -13,6 +13,7 @@ import { adminCreateOnboardingUseCase } from "../funcs/adminCreateOnboardingUseC
 import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { adminCreateRegistryEntry } from "../funcs/adminCreateRegistryEntry.js";
 import { adminCreateSignupOffer } from "../funcs/adminCreateSignupOffer.js";
+import { adminCurateRegistryPromotionCandidate } from "../funcs/adminCurateRegistryPromotionCandidate.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDeleteOnboardingPlaybook } from "../funcs/adminDeleteOnboardingPlaybook.js";
 import { adminDeleteOnboardingUseCase } from "../funcs/adminDeleteOnboardingUseCase.js";
@@ -156,6 +157,7 @@ import { CreateOrganizationRequestBody } from "../models/components/createorgani
 import { CreateRegistryEntryRequestBody } from "../models/components/createregistryentryrequestbody.js";
 import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
 import { CreateSignupOfferRequestBody } from "../models/components/createsignupofferrequestbody.js";
+import { CurateRegistryPromotionCandidateRequestBody } from "../models/components/curateregistrypromotioncandidaterequestbody.js";
 import { DeleteOnboardingPlaybookRequestBody } from "../models/components/deleteonboardingplaybookrequestbody.js";
 import { DeleteOnboardingUseCaseRequestBody } from "../models/components/deleteonboardingusecaserequestbody.js";
 import { DisableOrganizationRequestBody } from "../models/components/disableorganizationrequestbody.js";
@@ -1213,6 +1215,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminRegistryEntry> {
     return unwrapAsync(adminCreateRegistryEntry(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * curateRegistryPromotionCandidate admin
+   *
+   * @remarks
+   * Reject, archive, or restore one exact unpublished catalogue candidate. Hidden candidates cannot be promoted until restored and refreshed.
+   */
+  async curateRegistryPromotionCandidate(
+    request: CurateRegistryPromotionCandidateRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryPromotionCandidate> {
+    return unwrapAsync(adminCurateRegistryPromotionCandidate(
       this,
       request,
       options,

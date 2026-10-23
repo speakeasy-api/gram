@@ -41,6 +41,14 @@ function goAuditActions(): string[] {
 }
 
 describe("AUDIT_ACTIONS", () => {
+  it.each([
+    ["catalog-promotion:reject", "rejected catalog promotion candidate"],
+    ["catalog-promotion:archive", "archived catalog promotion candidate"],
+    ["catalog-promotion:restore", "restored catalog promotion candidate"],
+  ] as const)("describes candidate curation action %s", (action, phrase) => {
+    expect(isAuditAction(action)).toBe(true);
+    expect(staticActionPhrase(action)).toBe(phrase);
+  });
   it("describes catalogue publication and setup documentation retries", () => {
     expect(isAuditAction("mcp-server:promote-catalogue")).toBe(true);
     expect(isAuditAction("catalog-promotion:retry-docs")).toBe(true);

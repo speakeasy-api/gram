@@ -5,6 +5,17 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
+var AdminRegistryPromotionSuggestions = Type("AdminRegistryPromotionSuggestions", func() {
+	Description("Untrusted observed metadata suggestions. Staff must edit and explicitly confirm every value before publication.")
+	Attribute("public_name", String)
+	Attribute("public_title", String)
+	Attribute("public_description", String)
+	Attribute("public_url", String)
+	Attribute("documentation_url", String)
+	Attribute("docs_slug", String)
+	Attribute("auth_mode", String, func() { Enum("none", "oauth") })
+})
+
 var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", func() {
 	Attribute("id", String)
 	Attribute("organization_id", String)
@@ -12,6 +23,9 @@ var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", fu
 	Attribute("mcp_server_id", String)
 	Attribute("remote_mcp_server_id", String)
 	Attribute("source_name", String)
+	Attribute("created_at", String, func() { Format(FormatDateTime) })
+	Attribute("curation_revision", String, func() { Format(FormatUUID) })
+	Attribute("suggested_metadata", AdminRegistryPromotionSuggestions)
 	Attribute("source_revision", String)
 	Attribute("eligible", Boolean)
 	Attribute("reason", String)
@@ -32,7 +46,7 @@ var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", fu
 	Attribute("promoted_at", String, func() { Format(FormatDateTime) })
 	Attribute("public_title", String)
 	Attribute("delivery_error", String)
-	Required("id", "organization_id", "project_id", "mcp_server_id", "remote_mcp_server_id", "source_revision", "eligible", "reason", "status", "observed_successes", "observed_failures", "observed_days", "docs_revision", "docs_retry_allowed", "docs_attempts")
+	Required("created_at", "curation_revision", "id", "organization_id", "project_id", "mcp_server_id", "remote_mcp_server_id", "source_revision", "eligible", "reason", "status", "observed_successes", "observed_failures", "observed_days", "docs_revision", "docs_retry_allowed", "docs_attempts")
 })
 
 var AdminRegistryPromotionCandidates = Type("AdminRegistryPromotionCandidates", func() {
@@ -54,12 +68,14 @@ func registryPromotionDesign() {
 		Payload(func() {
 			security.AdminAuthPayload()
 			Attribute("cursor", String)
+			Attribute("status", String, func() { Default("active"); Enum("active", "all", "candidate", "rejected", "archived", "promoted") })
 			Attribute("limit", Int, func() { Default(25); Minimum(1); Maximum(50) })
 		})
 		Result(AdminRegistryPromotionCandidates)
 		HTTP(func() {
 			GET("/admin/registry.promotionCandidates")
 			Param("cursor")
+			Param("status")
 			Param("limit")
 			Response(StatusOK)
 		})
@@ -83,6 +99,7 @@ func registryPromotionDesign() {
 			security.AdminAuthPayload()
 			promotionTarget()
 			Attribute("source_revision", String)
+			Attribute("curation_revision", String, func() { Format(FormatUUID) })
 			Attribute("public_name", String)
 			Attribute("public_title", String)
 			Attribute("public_description", String)
@@ -92,13 +109,30 @@ func registryPromotionDesign() {
 			Attribute("auth_mode", String, func() { Enum("none", "oauth") })
 			Attribute("retry_key", String)
 			Attribute("public_metadata_confirmed", Boolean)
-			Required("source_revision", "public_name", "public_title", "public_description", "public_url", "documentation_url", "docs_slug", "auth_mode", "retry_key", "public_metadata_confirmed")
+			Required("curation_revision", "source_revision", "public_name", "public_title", "public_description", "public_url", "documentation_url", "docs_slug", "auth_mode", "retry_key", "public_metadata_confirmed")
 		})
 		Result(AdminRegistryPromotionCandidate)
 		HTTP(func() { POST("/admin/registry.promoteCandidate"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminPromoteRegistryCandidate")
 		Meta("openapi:extension:x-speakeasy-name-override", "promoteRegistryCandidate")
 	})
+	Method("curateRegistryPromotionCandidate", func() {
+		Description("Reject, archive, or restore one exact unpublished catalogue candidate. Hidden candidates cannot be promoted until restored and refreshed.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("promotion_id", String, func() { Format(FormatUUID) })
+			Attribute("curation_revision", String, func() { Format(FormatUUID) })
+			Attribute("action", String, func() { Enum("reject", "archive", "restore") })
+			Attribute("retry_key", String)
+			Required("organization_id", "promotion_id", "curation_revision", "action", "retry_key")
+		})
+		Result(AdminRegistryPromotionCandidate)
+		HTTP(func() { POST("/admin/registry.curatePromotionCandidate"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminCurateRegistryPromotionCandidate")
+		Meta("openapi:extension:x-speakeasy-name-override", "curateRegistryPromotionCandidate")
+	})
+
 	Method("retryRegistryPromotionDocs", func() {
 		Description("Retry a failed setup-guide request for one exact reviewed promotion without republishing the catalogue entry.")
 		Payload(func() {

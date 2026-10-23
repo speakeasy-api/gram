@@ -83,6 +83,22 @@ type RegistryPromotionCandidate struct {
 	DocsRetryRevision pgtype.Text
 	// @access: confidential-pii
 	DocsRetryBy pgtype.Text
+	// Staff curation state, independent of observed eligibility.
+	// @access: confidential
+	CurationStatus string
+	// Compare-and-swap revision for staff curation changes.
+	// @access: confidential
+	CurationRevision uuid.UUID
+	// @access: confidential
+	CurationUpdatedAt pgtype.Timestamptz
+	// @access: confidential-pii
+	CurationUpdatedBy pgtype.Text
+	// @access: confidential
+	CurationRetryKey pgtype.Text
+	// @access: confidential
+	CurationRetryRevision pgtype.Text
+	// @access: confidential
+	CurationRetryAction pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

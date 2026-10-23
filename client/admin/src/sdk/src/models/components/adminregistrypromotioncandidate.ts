@@ -7,9 +7,15 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AdminRegistryPromotionSuggestions,
+  AdminRegistryPromotionSuggestions$inboundSchema,
+} from "./adminregistrypromotionsuggestions.js";
 
 export type AdminRegistryPromotionCandidate = {
   checkedAt?: Date | undefined;
+  createdAt: Date;
+  curationRevision: string;
   deliveryError?: string | undefined;
   docsAttempts: number;
   docsLastAttemptAt?: Date | undefined;
@@ -35,6 +41,10 @@ export type AdminRegistryPromotionCandidate = {
   sourceName?: string | undefined;
   sourceRevision: string;
   status: string;
+  /**
+   * Untrusted observed metadata suggestions. Staff must edit and explicitly confirm every value before publication.
+   */
+  suggestedMetadata?: AdminRegistryPromotionSuggestions | undefined;
 };
 
 /** @internal */
@@ -46,6 +56,11 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
     checked_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    created_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
+    curation_revision: z.string(),
     delivery_error: z.optional(z.string()),
     docs_attempts: z.int(),
     docs_last_attempt_at: z.optional(
@@ -79,10 +94,15 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
     source_name: z.optional(z.string()),
     source_revision: z.string(),
     status: z.string(),
+    suggested_metadata: z.optional(
+      AdminRegistryPromotionSuggestions$inboundSchema,
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
       "checked_at": "checkedAt",
+      "created_at": "createdAt",
+      "curation_revision": "curationRevision",
       "delivery_error": "deliveryError",
       "docs_attempts": "docsAttempts",
       "docs_last_attempt_at": "docsLastAttemptAt",
@@ -104,6 +124,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
       "remote_mcp_server_id": "remoteMcpServerId",
       "source_name": "sourceName",
       "source_revision": "sourceRevision",
+      "suggested_metadata": "suggestedMetadata",
     });
   }),
 );

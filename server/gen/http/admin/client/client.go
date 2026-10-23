@@ -284,6 +284,10 @@ type Client struct {
 	// the promoteRegistryCandidate endpoint.
 	PromoteRegistryCandidateDoer goahttp.Doer
 
+	// CurateRegistryPromotionCandidate Doer is the HTTP client used to make
+	// requests to the curateRegistryPromotionCandidate endpoint.
+	CurateRegistryPromotionCandidateDoer goahttp.Doer
+
 	// RetryRegistryPromotionDocs Doer is the HTTP client used to make requests to
 	// the retryRegistryPromotionDocs endpoint.
 	RetryRegistryPromotionDocsDoer goahttp.Doer
@@ -499,6 +503,7 @@ func NewClient(
 		ListRegistryPromotionCandidatesDoer:         doer,
 		GetRegistryPromotionCandidateDoer:           doer,
 		PromoteRegistryCandidateDoer:                doer,
+		CurateRegistryPromotionCandidateDoer:        doer,
 		RetryRegistryPromotionDocsDoer:              doer,
 		GetRegistryOktaCandidatesDoer:               doer,
 		ListRegistryOktaUnmappedDoer:                doer,
@@ -2147,6 +2152,30 @@ func (c *Client) PromoteRegistryCandidate() goa.Endpoint {
 		resp, err := c.PromoteRegistryCandidateDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "promoteRegistryCandidate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CurateRegistryPromotionCandidate returns an endpoint that makes HTTP
+// requests to the admin service curateRegistryPromotionCandidate server.
+func (c *Client) CurateRegistryPromotionCandidate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCurateRegistryPromotionCandidateRequest(c.encoder)
+		decodeResponse = DecodeCurateRegistryPromotionCandidateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCurateRegistryPromotionCandidateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CurateRegistryPromotionCandidateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "curateRegistryPromotionCandidate", err)
 		}
 		return decodeResponse(resp)
 	}

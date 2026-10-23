@@ -500,6 +500,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListRegistryPromotionCandidates = service.preauthorizeAdmin(server.ListRegistryPromotionCandidates)
 	server.GetRegistryPromotionCandidate = service.strictAdminJSON(server.GetRegistryPromotionCandidate, func() any { return new(adminserver.GetRegistryPromotionCandidateRequestBody) })
 	server.RetryRegistryPromotionDocs = service.strictAdminJSON(server.RetryRegistryPromotionDocs, func() any { return new(adminserver.RetryRegistryPromotionDocsRequestBody) })
+	server.CurateRegistryPromotionCandidate = service.strictAdminJSON(server.CurateRegistryPromotionCandidate, func() any { return new(adminserver.CurateRegistryPromotionCandidateRequestBody) })
 	server.PromoteRegistryCandidate = service.strictAdminJSON(server.PromoteRegistryCandidate, func() any { return new(adminserver.PromoteRegistryCandidateRequestBody) })
 	server.CreateRegistryEntry = service.strictAdminJSONLimit(server.CreateRegistryEntry, func() any { return new(adminserver.CreateRegistryEntryRequestBody) }, 16<<20)
 	server.SaveRegistryEntry = service.strictAdminJSONLimit(server.SaveRegistryEntry, func() any { return new(adminserver.SaveRegistryEntryRequestBody) }, 16<<20)

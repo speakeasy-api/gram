@@ -21,7 +21,10 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import { AdminListRegistryPromotionCandidatesRequest } from "../models/operations/adminlistregistrypromotioncandidates.js";
+import {
+  AdminListRegistryPromotionCandidatesRequest,
+  Status,
+} from "../models/operations/adminlistregistrypromotioncandidates.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -109,7 +112,11 @@ export function useAdminListRegistryPromotionCandidatesSuspense(
 export function setAdminListRegistryPromotionCandidatesData(
   client: QueryClient,
   queryKeyBase: [
-    parameters: { cursor?: string | undefined; limit?: number | undefined },
+    parameters: {
+      cursor?: string | undefined;
+      status?: Status | undefined;
+      limit?: number | undefined;
+    },
   ],
   data: AdminListRegistryPromotionCandidatesQueryData,
 ): AdminListRegistryPromotionCandidatesQueryData | undefined {
@@ -124,7 +131,11 @@ export function setAdminListRegistryPromotionCandidatesData(
 export function invalidateAdminListRegistryPromotionCandidates(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { cursor?: string | undefined; limit?: number | undefined }]
+    [parameters: {
+      cursor?: string | undefined;
+      status?: Status | undefined;
+      limit?: number | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

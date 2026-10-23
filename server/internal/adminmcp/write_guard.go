@@ -20,6 +20,8 @@ const (
 type WriteOperation string
 
 const (
+	// OperationCurateRegistryPromotionCandidate changes staff review status for an unpublished candidate.
+	OperationCurateRegistryPromotionCandidate     WriteOperation = "curate_registry_promotion_candidate"
 	OperationRetryRegistryPromotionDocs           WriteOperation = "retry_registry_promotion_docs"
 	OperationPromoteRegistryCandidate             WriteOperation = "promote_registry_candidate"
 	OperationSetOrganizationFeature               WriteOperation = "set_organization_feature"
@@ -38,6 +40,7 @@ const (
 
 // AllWriteOperations is the complete allowlist, in a stable order.
 var AllWriteOperations = []WriteOperation{
+	OperationCurateRegistryPromotionCandidate,
 	OperationRetryRegistryPromotionDocs,
 	OperationPromoteRegistryCandidate,
 	OperationSetOrganizationFeature,
@@ -100,7 +103,7 @@ func ParseWriteOperations(raw string) (map[WriteOperation]bool, error) {
 // keep this consent allowlist aligned with the operation registry.
 func (op WriteOperation) implemented() bool {
 	switch op {
-	case OperationRetryRegistryPromotionDocs, OperationPromoteRegistryCandidate, OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
+	case OperationCurateRegistryPromotionCandidate, OperationRetryRegistryPromotionDocs, OperationPromoteRegistryCandidate, OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
 		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
 		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationUploadPlatformImage:
 		return true

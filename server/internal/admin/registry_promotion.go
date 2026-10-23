@@ -22,7 +22,11 @@ func (s *Service) SetCatalogPromotionService(service *catalogpromotion.Service) 
 func (s *Service) CatalogPromotionService() *catalogpromotion.Service { return s.catalogPromotion }
 
 func promotionCandidateView(c catalogpromotion.Candidate) *gen.AdminRegistryPromotionCandidate {
-	return &gen.AdminRegistryPromotionCandidate{ID: c.ID, OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, McpServerID: c.MCPServerID, RemoteMcpServerID: c.RemoteMCPServerID,
+	var suggestions *gen.AdminRegistryPromotionSuggestions
+	if v := c.SuggestedMetadata; v != nil {
+		suggestions = &gen.AdminRegistryPromotionSuggestions{PublicName: conv.PtrEmpty(v.Name), PublicTitle: conv.PtrEmpty(v.Title), PublicDescription: conv.PtrEmpty(v.Description), PublicURL: conv.PtrEmpty(v.URL), DocumentationURL: conv.PtrEmpty(v.DocumentationURL), DocsSlug: conv.PtrEmpty(v.DocsSlug), AuthMode: conv.PtrEmpty(v.AuthMode)}
+	}
+	return &gen.AdminRegistryPromotionCandidate{CreatedAt: c.CreatedAt, CurationRevision: c.CurationRevision, SuggestedMetadata: suggestions, ID: c.ID, OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, McpServerID: c.MCPServerID, RemoteMcpServerID: c.RemoteMCPServerID,
 		SourceName: conv.PtrEmpty(c.SourceName), SourceRevision: c.SourceRevision, Eligible: c.Eligible, Reason: c.Reason, Status: c.Status, ObservedSuccesses: c.ObservedSuccesses, ObservedFailures: c.ObservedFailures, ObservedDays: c.ObservedDays,
 		CheckedAt: conv.PtrEmpty(c.CheckedAt), RegistryEntryID: conv.PtrEmpty(c.RegistryEntryID), DocsStatus: conv.PtrEmpty(c.DocsStatus), DocsURL: conv.PtrEmpty(c.DocsURL), DeliveryError: conv.PtrEmpty(c.DeliveryError), DocsRevision: c.DocsRevision, DocsRetryAllowed: c.DocsRetryAllowed, DocsAttempts: c.DocsAttempts,
 		DocsLastAttemptAt: conv.PtrEmpty(c.DocsLastAttemptAt), DocsNextAttemptAt: conv.PtrEmpty(c.DocsNextAttemptAt), DocsQueuedAt: conv.PtrEmpty(c.DocsQueuedAt), PromotedAt: conv.PtrEmpty(c.PromotedAt), PublicTitle: conv.PtrEmpty(c.PublicTitle)}
@@ -64,7 +68,7 @@ func (s *Service) ListRegistryPromotionCandidates(ctx context.Context, p *gen.Li
 	if s.catalogPromotion == nil {
 		return nil, oops.C(oops.CodeUnavailable)
 	}
-	rows, next, err := s.catalogPromotion.ListCandidates(ctx, conv.PtrValOr(p.Cursor, ""), p.Limit)
+	rows, next, err := s.catalogPromotion.ListCandidates(ctx, conv.PtrValOr(p.Cursor, ""), p.Limit, p.Status)
 	if err != nil {
 		return nil, promotionError(err)
 	}
@@ -108,7 +112,7 @@ func (s *Service) PromoteRegistryCandidate(ctx context.Context, p *gen.PromoteRe
 		defer cancel()
 		return tx.Rollback(cleanupCtx)
 	})
-	result, err := s.catalogPromotion.PromoteTx(ctx, tx, catalogpromotion.Request{Target: target, SourceRevision: p.SourceRevision,
+	result, err := s.catalogPromotion.PromoteTx(ctx, tx, catalogpromotion.Request{Target: target, SourceRevision: p.SourceRevision, CurationRevision: p.CurationRevision,
 		Public:                  catalogpromotion.PublicMetadata{Name: p.PublicName, Title: p.PublicTitle, Description: p.PublicDescription, URL: p.PublicURL, DocumentationURL: p.DocumentationURL, DocsSlug: p.DocsSlug, AuthMode: p.AuthMode},
 		PublicMetadataConfirmed: p.PublicMetadataConfirmed, RetryKey: p.RetryKey}, actor.String())
 	if err != nil {
@@ -139,6 +143,34 @@ func (s *Service) RetryRegistryPromotionDocs(ctx context.Context, p *gen.RetryRe
 		return tx.Rollback(cleanupCtx)
 	})
 	result, err := s.catalogPromotion.RetryDocsTx(ctx, tx, catalogpromotion.DocsRetryRequest{OrganizationID: p.OrganizationID, PromotionID: id, DocsRevision: p.DocsRevision, RetryKey: p.RetryKey}, actor.String())
+	if err != nil {
+		return nil, promotionError(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, promotionError(err)
+	}
+	return promotionCandidateView(result), nil
+}
+
+func (s *Service) CurateRegistryPromotionCandidate(ctx context.Context, p *gen.CurateRegistryPromotionCandidatePayload) (*gen.AdminRegistryPromotionCandidate, error) {
+	if s.catalogPromotion == nil {
+		return nil, oops.C(oops.CodeUnavailable)
+	}
+	id, err := uuid.Parse(p.PromotionID)
+	if err != nil || id == uuid.Nil || p.OrganizationID == "" {
+		return nil, oops.C(oops.CodeBadRequest)
+	}
+	actor, _, _ := adminActor(ctx)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, promotionError(err)
+	}
+	defer o11y.NoLogDefer(func() error {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		return tx.Rollback(cleanupCtx)
+	})
+	result, err := s.catalogPromotion.CurateTx(ctx, tx, catalogpromotion.CurationRequest{OrganizationID: p.OrganizationID, PromotionID: id, CurationRevision: p.CurationRevision, Action: p.Action, RetryKey: p.RetryKey}, actor.String())
 	if err != nil {
 		return nil, promotionError(err)
 	}

@@ -88,6 +88,7 @@ type Server struct {
 	ListRegistryPromotionCandidates         http.Handler
 	GetRegistryPromotionCandidate           http.Handler
 	PromoteRegistryCandidate                http.Handler
+	CurateRegistryPromotionCandidate        http.Handler
 	RetryRegistryPromotionDocs              http.Handler
 	GetRegistryOktaCandidates               http.Handler
 	ListRegistryOktaUnmapped                http.Handler
@@ -216,6 +217,7 @@ func New(
 			{"ListRegistryPromotionCandidates", "GET", "/admin/registry.promotionCandidates"},
 			{"GetRegistryPromotionCandidate", "POST", "/admin/registry.promotionCandidate"},
 			{"PromoteRegistryCandidate", "POST", "/admin/registry.promoteCandidate"},
+			{"CurateRegistryPromotionCandidate", "POST", "/admin/registry.curatePromotionCandidate"},
 			{"RetryRegistryPromotionDocs", "POST", "/admin/registry.retryPromotionDocs"},
 			{"GetRegistryOktaCandidates", "GET", "/admin/registry.oktaCandidates"},
 			{"ListRegistryOktaUnmapped", "GET", "/admin/registry.oktaUnmapped"},
@@ -316,6 +318,7 @@ func New(
 		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesHandler(e.ListRegistryPromotionCandidates, mux, decoder, encoder, errhandler, formatter),
 		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateHandler(e.GetRegistryPromotionCandidate, mux, decoder, encoder, errhandler, formatter),
 		PromoteRegistryCandidate:                NewPromoteRegistryCandidateHandler(e.PromoteRegistryCandidate, mux, decoder, encoder, errhandler, formatter),
+		CurateRegistryPromotionCandidate:        NewCurateRegistryPromotionCandidateHandler(e.CurateRegistryPromotionCandidate, mux, decoder, encoder, errhandler, formatter),
 		RetryRegistryPromotionDocs:              NewRetryRegistryPromotionDocsHandler(e.RetryRegistryPromotionDocs, mux, decoder, encoder, errhandler, formatter),
 		GetRegistryOktaCandidates:               NewGetRegistryOktaCandidatesHandler(e.GetRegistryOktaCandidates, mux, decoder, encoder, errhandler, formatter),
 		ListRegistryOktaUnmapped:                NewListRegistryOktaUnmappedHandler(e.ListRegistryOktaUnmapped, mux, decoder, encoder, errhandler, formatter),
@@ -423,6 +426,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListRegistryPromotionCandidates = m(s.ListRegistryPromotionCandidates)
 	s.GetRegistryPromotionCandidate = m(s.GetRegistryPromotionCandidate)
 	s.PromoteRegistryCandidate = m(s.PromoteRegistryCandidate)
+	s.CurateRegistryPromotionCandidate = m(s.CurateRegistryPromotionCandidate)
 	s.RetryRegistryPromotionDocs = m(s.RetryRegistryPromotionDocs)
 	s.GetRegistryOktaCandidates = m(s.GetRegistryOktaCandidates)
 	s.ListRegistryOktaUnmapped = m(s.ListRegistryOktaUnmapped)
@@ -529,6 +533,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListRegistryPromotionCandidatesHandler(mux, h.ListRegistryPromotionCandidates)
 	MountGetRegistryPromotionCandidateHandler(mux, h.GetRegistryPromotionCandidate)
 	MountPromoteRegistryCandidateHandler(mux, h.PromoteRegistryCandidate)
+	MountCurateRegistryPromotionCandidateHandler(mux, h.CurateRegistryPromotionCandidate)
 	MountRetryRegistryPromotionDocsHandler(mux, h.RetryRegistryPromotionDocs)
 	MountGetRegistryOktaCandidatesHandler(mux, h.GetRegistryOktaCandidates)
 	MountListRegistryOktaUnmappedHandler(mux, h.ListRegistryOktaUnmapped)
@@ -4157,6 +4162,60 @@ func NewPromoteRegistryCandidateHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "promoteRegistryCandidate")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCurateRegistryPromotionCandidateHandler configures the mux to serve the
+// "admin" service "curateRegistryPromotionCandidate" endpoint.
+func MountCurateRegistryPromotionCandidateHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/registry.curatePromotionCandidate", f)
+}
+
+// NewCurateRegistryPromotionCandidateHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "curateRegistryPromotionCandidate" endpoint.
+func NewCurateRegistryPromotionCandidateHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCurateRegistryPromotionCandidateRequest(mux, decoder)
+		encodeResponse = EncodeCurateRegistryPromotionCandidateResponse(encoder)
+		encodeError    = EncodeCurateRegistryPromotionCandidateError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "curateRegistryPromotionCandidate")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

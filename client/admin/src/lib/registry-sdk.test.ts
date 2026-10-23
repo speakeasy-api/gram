@@ -107,6 +107,12 @@ test("eligibility refresh uses POST with a canonical target and decodes timestam
             mcp_server_id: id,
             remote_mcp_server_id: id,
             source_revision: "aabb",
+            curation_revision: id,
+            created_at: token,
+            suggested_metadata: {
+              public_title: "Example MCP",
+              auth_mode: "oauth",
+            },
             eligible: true,
             reason: "eligible",
             status: "candidate",
@@ -131,6 +137,8 @@ test("eligibility refresh uses POST with a canonical target and decodes timestam
   expect(result.ok).toBe(true);
   if (!result.ok) throw result.error;
   expect(result.value.checkedAt).toEqual(new Date(token));
+  expect(result.value.createdAt).toEqual(new Date(token));
+  expect(result.value.suggestedMetadata?.publicTitle).toBe("Example MCP");
   expect(observed).toHaveLength(1);
   const request = observed[0]!;
   expect(request.method).toBe("POST");

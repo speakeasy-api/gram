@@ -1,9 +1,12 @@
 # Demo org page checklist
 
-Staff catalogue promotion review includes one synthetic, ineligible remote MCP
-candidate. It has no publication or documentation jobs. The shared
-demo organization is excluded from qualification. Reseeding deletes candidates by
-the seeded organization before recreating this row. Staff UI verification is pending.
+Staff catalogue promotion review includes three synthetic, ineligible remote MCP
+candidates: active, rejected, and archived, with distinct creation times. They have
+no publication or documentation jobs. The shared demo organization is excluded
+from qualification. Reseeding deletes candidates by the seeded organization before
+recreating these rows. Verify **MCP Registry → Remote server promotions**: the
+default Active filter shows one row; All shows three, newest first; Rejected and
+Archived each show their row with a Restore action.
 
 Acceptance contract for the demo seed. Every dashboard page a demo user can
 reach must render populated (no empty state, no error boundary) from the data

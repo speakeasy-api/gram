@@ -26,11 +26,11 @@ func (f *promotionMutatorFake) GetCandidate(context.Context, catalogpromotion.Ta
 	return f.candidate, nil
 }
 
-func (f *promotionMutatorFake) ValidateTx(_ context.Context, _ pgx.Tx, target catalogpromotion.Target, revision string, _ catalogpromotion.PublicMetadata) (catalogpromotion.Candidate, error) {
+func (f *promotionMutatorFake) ValidateTx(_ context.Context, _ pgx.Tx, target catalogpromotion.Target, revision, curationRevision string, _ catalogpromotion.PublicMetadata) (catalogpromotion.Candidate, error) {
 	if f.validationErr != nil {
 		return catalogpromotion.Candidate{}, f.validationErr
 	}
-	if f.invalid || revision != f.candidate.SourceRevision || target.OrganizationID != f.candidate.OrganizationID || target.ProjectID.String() != f.candidate.ProjectID || target.MCPServerID.String() != f.candidate.MCPServerID {
+	if f.invalid || curationRevision != f.candidate.CurationRevision || f.candidate.Status != "candidate" || revision != f.candidate.SourceRevision || target.OrganizationID != f.candidate.OrganizationID || target.ProjectID.String() != f.candidate.ProjectID || target.MCPServerID.String() != f.candidate.MCPServerID {
 		return catalogpromotion.Candidate{}, catalogpromotion.ErrStale
 	}
 	return f.candidate, nil
@@ -51,10 +51,10 @@ func TestCatalogPromotionApprovalAndReplay(t *testing.T) {
 	seededProject, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
 	require.NoError(t, err)
 	project, server := seededProject.ID.String(), uuid.NewString()
-	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", Eligible: true}}
+	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: true}}
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
 	w := &catalogPromotionWriter{store: f.store, writes: writes, baseURL: "https://staff.example.test/admin-mcp", mutator: mutator, now: time.Now}
-	input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", PublicMetadataConfirmed: true, RetryKey: "publish-example", Public: catalogpromotion.PublicMetadata{Name: "com.example/mcp", Title: "Example", Description: "Public example server", URL: "https://mcp.example.test/mcp", DocumentationURL: "https://example.test/docs", DocsSlug: "example", AuthMode: "oauth"}}
+	input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "publish-example", Public: catalogpromotion.PublicMetadata{Name: "com.example/mcp", Title: "Example", Description: "Public example server", URL: "https://mcp.example.test/mcp", DocumentationURL: "https://example.test/docs", DocsSlug: "example", AuthMode: "oauth"}}
 	ctx := writeContext(t, f)
 	prepared, err := w.prepare(ctx, input)
 	require.NoError(t, err)
@@ -91,10 +91,10 @@ func TestCatalogPromotionRejectsChangedHealthAtExecution(t *testing.T) {
 	seededProject, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
 	require.NoError(t, err)
 	project, server := seededProject.ID.String(), uuid.NewString()
-	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", Eligible: true}}
+	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: true}}
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
 	w := &catalogPromotionWriter{store: f.store, writes: writes, baseURL: "", mutator: mutator, now: time.Now}
-	prepared, err := w.prepare(writeContext(t, f), PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", PublicMetadataConfirmed: true, RetryKey: "stale"})
+	prepared, err := w.prepare(writeContext(t, f), PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "stale"})
 	require.NoError(t, err)
 	p, err := f.store.GetForOwner(t.Context(), uuid.MustParse(prepared.ProposalID), f.owner)
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestCatalogPromotionRejectsChangedHealthAtExecution(t *testing.T) {
 
 func TestCatalogPromotionRejectsCrossTenantStoredTarget(t *testing.T) {
 	t.Parallel()
-	request := catalogpromotion.Request{Target: catalogpromotion.Target{OrganizationID: "org_example", ProjectID: uuid.New(), MCPServerID: uuid.New()}, SourceRevision: "source-v1", PublicMetadataConfirmed: true, RetryKey: "test"}
+	request := catalogpromotion.Request{Target: catalogpromotion.Target{OrganizationID: "org_example", ProjectID: uuid.New(), MCPServerID: uuid.New()}, SourceRevision: "source-v1", CurationRevision: uuid.NewString(), PublicMetadataConfirmed: true, RetryKey: "test"}
 	args, err := json.Marshal(request)
 	require.NoError(t, err)
 	digest, err := stateDigest(args)
@@ -133,11 +133,11 @@ func TestCatalogPromotionApprovalSurvivesValidationOutage(t *testing.T) {
 	f := newProposalFixture(t, "catalog_promotion_outage")
 	project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
 	require.NoError(t, err)
-	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: uuid.NewString(), SourceRevision: "source-v1", Eligible: true}}
+	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: uuid.NewString(), SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: true}}
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
 	w := &catalogPromotionWriter{store: f.store, writes: writes, baseURL: "", mutator: mutator, now: time.Now}
 	ctx := writeContext(t, f)
-	input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: mutator.candidate.MCPServerID, SourceRevision: "source-v1", PublicMetadataConfirmed: true, RetryKey: "outage"}
+	input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: mutator.candidate.MCPServerID, SourceRevision: "source-v1", CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "outage"}
 	prepared, err := w.prepare(ctx, input)
 	require.NoError(t, err)
 	proposal, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
@@ -167,4 +167,27 @@ func TestCatalogPromotionApprovalSurvivesValidationOutage(t *testing.T) {
 	persisted, err := f.store.GetForOwner(ctx, proposal.ID, f.owner)
 	require.NoError(t, err)
 	require.Equal(t, ProposalInvalidated, persisted.Status)
+}
+
+func TestCatalogPromotionRejectsApprovalAfterCurationCycle(t *testing.T) {
+	t.Parallel()
+	f := newProposalFixture(t, "catalog_promotion_curation_cycle")
+	project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
+	require.NoError(t, err)
+	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: uuid.NewString(), SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: true}}
+	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+	w := &catalogPromotionWriter{store: f.store, writes: writes, baseURL: "", mutator: mutator, now: time.Now}
+	ctx := writeContext(t, f)
+	prepared, err := w.prepare(ctx, PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: mutator.candidate.MCPServerID, SourceRevision: mutator.candidate.SourceRevision, CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "review-cycle"})
+	require.NoError(t, err)
+	proposal, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
+	require.NoError(t, err)
+	_, err = f.store.Approve(ctx, proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+	require.NoError(t, err)
+	// Reject then restore leaves the source configuration unchanged but replaces its review revision.
+	mutator.candidate.CurationRevision = uuid.NewString()
+	tools := newWriteTools(f.store, writes, "", map[WriteOperation]operationWriter{OperationPromoteRegistryCandidate: w}) //nolint:exhaustive // Only this operation is enabled.
+	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	require.ErrorIs(t, err, ErrStaleState)
+	require.Zero(t, mutator.calls.Load())
 }

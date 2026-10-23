@@ -17,6 +17,8 @@ const candidate: AdminRegistryPromotionCandidate = {
   mcpServerId: "",
   remoteMcpServerId: "",
   sourceRevision: "aabb",
+  curationRevision: "00000000-0000-4000-8000-000000000004",
+  createdAt: new Date("2026-01-02T12:00:00Z"),
   eligible: false,
   reason: "already_promoted",
   status: "promoted",

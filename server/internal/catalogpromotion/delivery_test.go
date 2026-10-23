@@ -41,7 +41,7 @@ func (r *recordingDelivery) EnsureGuide(ctx context.Context, guide delivery.Guid
 
 func deliveryCandidate(t *testing.T, f promotionFixture) Candidate {
 	t.Helper()
-	rows, _, err := f.service.ListCandidates(t.Context(), "", 10)
+	rows, _, err := f.service.ListCandidates(t.Context(), "", 10, "all")
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	return rows[0]
@@ -242,7 +242,7 @@ func TestDispatchIgnoresUnpromotedOrphanCandidate(t *testing.T) {
 	require.NoError(t, repo.New(f.db).DeletePromotionProjectFixture(t.Context(), f.target.ProjectID))
 	require.NoError(t, f.service.Dispatch(t.Context()))
 	require.Empty(t, r.guides)
-	rows, _, err := f.service.ListCandidates(t.Context(), "", 10)
+	rows, _, err := f.service.ListCandidates(t.Context(), "", 10, "all")
 	require.NoError(t, err)
 	require.Empty(t, rows)
 }
@@ -312,6 +312,7 @@ func TestDispatchCancelledEffectDoesNotStartNextGuide(t *testing.T) {
 	require.NoError(t, err)
 	second.request.Target = second.target
 	second.request.SourceRevision = candidate.SourceRevision
+	second.request.CurationRevision = candidate.CurationRevision
 	second.request.RetryKey = "second-synthetic-retry"
 	second.request.Public.URL = "https://second.example.com/mcp"
 	second.request.Public.Name = "io.example/second"
@@ -324,7 +325,7 @@ func TestDispatchCancelledEffectDoesNotStartNextGuide(t *testing.T) {
 	f.service.delivery = r
 	require.ErrorIs(t, f.service.Dispatch(ctx), context.Canceled)
 	require.Len(t, r.guides, 1)
-	rows, _, err := f.service.ListCandidates(t.Context(), "", 10)
+	rows, _, err := f.service.ListCandidates(t.Context(), "", 10, "all")
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 	require.Equal(t, 1, rows[0].DocsAttempts+rows[1].DocsAttempts)

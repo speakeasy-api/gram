@@ -54,6 +54,8 @@ type Request struct {
 	Target Target `json:"target"`
 	// SourceRevision binds the change to the observed source configuration.
 	SourceRevision string `json:"source_revision"`
+	// CurationRevision prevents older approvals from surviving rejection and restoration.
+	CurationRevision string `json:"curation_revision"`
 	// Public contains the exact metadata approved for public distribution.
 	Public PublicMetadata `json:"public"`
 	// PublicMetadataConfirmed records explicit staff review of public suitability.
@@ -74,6 +76,12 @@ type Candidate struct {
 	MCPServerID string `json:"mcp_server_id"`
 	// RemoteMCPServerID identifies the upstream configuration; empty after deletion.
 	RemoteMCPServerID string `json:"remote_mcp_server_id"`
+	// CreatedAt is the immutable observation creation timestamp for newest-first ordering.
+	CreatedAt string `json:"created_at"`
+	// CurationRevision pins the exact staff review disposition.
+	CurationRevision string `json:"curation_revision"`
+	// SuggestedMetadata is untrusted draft input, never an approval or published value.
+	SuggestedMetadata *PublicMetadata `json:"suggested_metadata,omitempty"`
 	// SourceName is a bounded private label for the staff UI only.
 	SourceName string `json:"source_name,omitempty"`
 	// SourceRevision binds the change to the observed source configuration.
@@ -82,7 +90,7 @@ type Candidate struct {
 	Eligible bool `json:"eligible"`
 	// Reason is a bounded eligibility or lifecycle code.
 	Reason string `json:"reason"`
-	// Status is candidate or promoted.
+	// Status is candidate, rejected, archived, or promoted.
 	Status string `json:"status"`
 	// ObservedSuccesses counts successful calls in the observation window.
 	ObservedSuccesses int64 `json:"observed_successes"`
@@ -154,4 +162,18 @@ type JobStatus struct {
 	LastDiscoveryAt time.Time
 	// DiscoveryFailures counts candidates whose latest discovery attempt failed.
 	DiscoveryFailures int64
+}
+
+// CurationRequest identifies one exact staff review disposition change.
+type CurationRequest struct {
+	// OrganizationID scopes the stored candidate to its canonical tenant.
+	OrganizationID string `json:"organization_id"`
+	// PromotionID identifies the unpublished candidate.
+	PromotionID uuid.UUID `json:"promotion_id"`
+	// CurationRevision binds the change to the reviewed disposition.
+	CurationRevision string `json:"curation_revision"`
+	// Action selects reject, archive, or restore.
+	Action string `json:"action"`
+	// RetryKey identifies the exact staff request.
+	RetryKey string `json:"retry_key"`
 }

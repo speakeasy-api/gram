@@ -40,8 +40,9 @@ ON CONFLICT(project_id,mcp_server_id) DO UPDATE SET
  discovery_last_attempt_at=EXCLUDED.discovery_last_attempt_at,discovery_next_attempt_at=EXCLUDED.discovery_next_attempt_at,
  updated_at=clock_timestamp()
 WHERE registry_promotion_candidates.promoted_at IS NULL
+ AND registry_promotion_candidates.curation_status='active'
  AND (registry_promotion_candidates.discovery_next_attempt_at IS NULL OR registry_promotion_candidates.discovery_next_attempt_at <= $1::timestamptz)
-RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, created_at, updated_at
+RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, created_at, updated_at
 `
 
 type ClaimDiscoveryParams struct {
@@ -98,6 +99,13 @@ func (q *Queries) ClaimDiscovery(ctx context.Context, arg ClaimDiscoveryParams) 
 		&i.DocsRetryKey,
 		&i.DocsRetryRevision,
 		&i.DocsRetryBy,
+		&i.CurationStatus,
+		&i.CurationRevision,
+		&i.CurationUpdatedAt,
+		&i.CurationUpdatedBy,
+		&i.CurationRetryKey,
+		&i.CurationRetryRevision,
+		&i.CurationRetryAction,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -112,7 +120,7 @@ UPDATE registry_promotion_candidates SET docs_attempts=docs_attempts+1, docs_fai
 WHERE id= $4 AND project_id IS NOT DISTINCT FROM $5::uuid AND promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE
  AND (docs_next_attempt_at IS NULL OR docs_next_attempt_at <= $1::timestamptz)
  AND (docs_lease_until IS NULL OR docs_lease_until <= $1::timestamptz)
-RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, created_at, updated_at
+RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, created_at, updated_at
 `
 
 type ClaimDocsParams struct {
@@ -169,6 +177,13 @@ func (q *Queries) ClaimDocs(ctx context.Context, arg ClaimDocsParams) (RegistryP
 		&i.DocsRetryKey,
 		&i.DocsRetryRevision,
 		&i.DocsRetryBy,
+		&i.CurationStatus,
+		&i.CurationRevision,
+		&i.CurationUpdatedAt,
+		&i.CurationUpdatedBy,
+		&i.CurationRetryKey,
+		&i.CurationRetryRevision,
+		&i.CurationRetryAction,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -185,6 +200,94 @@ func (q *Queries) CountPublishedPromotionFixture(ctx context.Context, projectID 
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const curateCandidate = `-- name: CurateCandidate :one
+UPDATE registry_promotion_candidates SET curation_status= $1,
+ curation_revision=generate_uuidv7(),curation_updated_at=clock_timestamp(),curation_updated_by= $2,
+ curation_retry_key= $3,curation_retry_revision= $4,curation_retry_action= $5,
+ eligible=CASE WHEN $5::text='restore' THEN false ELSE eligible END,
+ reason=CASE WHEN $5::text='restore' THEN 'insufficient_evidence' ELSE reason END,
+ discovery_next_attempt_at=CASE WHEN $5::text='restore' THEN NULL ELSE discovery_next_attempt_at END,
+ updated_at=clock_timestamp()
+WHERE id= $6 AND organization_id= $7 AND project_id IS NOT DISTINCT FROM $8::uuid
+ AND promoted_at IS NULL AND curation_revision= $9
+RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, created_at, updated_at
+`
+
+type CurateCandidateParams struct {
+	CurationStatus   string
+	Actor            pgtype.Text
+	RetryKey         pgtype.Text
+	RetryRevision    pgtype.Text
+	Action           pgtype.Text
+	ID               uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	CurationRevision uuid.UUID
+}
+
+func (q *Queries) CurateCandidate(ctx context.Context, arg CurateCandidateParams) (RegistryPromotionCandidate, error) {
+	row := q.db.QueryRow(ctx, curateCandidate,
+		arg.CurationStatus,
+		arg.Actor,
+		arg.RetryKey,
+		arg.RetryRevision,
+		arg.Action,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.CurationRevision,
+	)
+	var i RegistryPromotionCandidate
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.McpServerID,
+		&i.RemoteMcpServerID,
+		&i.SourceRevision,
+		&i.Eligible,
+		&i.Reason,
+		&i.ObservedSuccesses,
+		&i.ObservedFailures,
+		&i.ObservedDays,
+		&i.CheckedAt,
+		&i.RegistryEntryID,
+		&i.PublicMetadata,
+		&i.EndpointIdentity,
+		&i.RequestDigest,
+		&i.RetryKey,
+		&i.PromotedBy,
+		&i.PromotedAt,
+		&i.DocsUrl,
+		&i.DocsQueuedAt,
+		&i.DeliveryError,
+		&i.DiscoveryLastAttemptAt,
+		&i.DiscoveryNextAttemptAt,
+		&i.DiscoveryFailures,
+		&i.DocsAttempts,
+		&i.DocsFailures,
+		&i.DocsLastAttemptAt,
+		&i.DocsNextAttemptAt,
+		&i.DocsNeedsAttention,
+		&i.DocsLeaseUntil,
+		&i.DocsLeaseToken,
+		&i.DocsRevision,
+		&i.DocsRetryKey,
+		&i.DocsRetryRevision,
+		&i.DocsRetryBy,
+		&i.CurationStatus,
+		&i.CurationRevision,
+		&i.CurationUpdatedAt,
+		&i.CurationUpdatedBy,
+		&i.CurationRetryKey,
+		&i.CurationRetryRevision,
+		&i.CurationRetryAction,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const deletePromotionProjectFixture = `-- name: DeletePromotionProjectFixture :exec
@@ -212,6 +315,7 @@ JOIN projects p ON p.id = m.project_id
 JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id
 LEFT JOIN registry_promotion_candidates c ON c.project_id = m.project_id AND c.mcp_server_id = m.id
 WHERE m.deleted IS FALSE AND r.deleted IS FALSE AND p.deleted IS FALSE AND c.promoted_at IS NULL
+ AND (c.curation_status IS NULL OR c.curation_status='active')
  AND p.organization_id <> $1::text
 AND (c.discovery_next_attempt_at IS NULL OR c.discovery_next_attempt_at <= $2::timestamptz)
 ORDER BY c.discovery_last_attempt_at NULLS FIRST, m.id
@@ -268,7 +372,7 @@ UPDATE registry_promotion_candidates SET discovery_failures=CASE WHEN $1::boolea
  eligible=CASE WHEN $2::text <> '' AND checked_at <= $3::timestamptz THEN false ELSE eligible END,
  reason=CASE WHEN $2::text <> '' AND checked_at <= $3::timestamptz THEN $2::text ELSE reason END,
  updated_at=clock_timestamp()
-WHERE id= $4 AND project_id IS NOT DISTINCT FROM $5::uuid AND discovery_last_attempt_at= $3::timestamptz AND promoted_at IS NULL
+WHERE id= $4 AND project_id IS NOT DISTINCT FROM $5::uuid AND discovery_last_attempt_at= $3::timestamptz AND promoted_at IS NULL AND curation_status='active'
 `
 
 type FinishDiscoveryParams struct {
@@ -330,7 +434,7 @@ func (q *Queries) FinishDocs(ctx context.Context, arg FinishDocsParams) (int64, 
 }
 
 const getCandidate = `-- name: GetCandidate :one
-SELECT id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, created_at, updated_at FROM registry_promotion_candidates
+SELECT id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, created_at, updated_at FROM registry_promotion_candidates
 WHERE organization_id= $1 AND project_id= $2 AND mcp_server_id= $3
 FOR UPDATE
 `
@@ -381,6 +485,75 @@ func (q *Queries) GetCandidate(ctx context.Context, arg GetCandidateParams) (Reg
 		&i.DocsRetryKey,
 		&i.DocsRetryRevision,
 		&i.DocsRetryBy,
+		&i.CurationStatus,
+		&i.CurationRevision,
+		&i.CurationUpdatedAt,
+		&i.CurationUpdatedBy,
+		&i.CurationRetryKey,
+		&i.CurationRetryRevision,
+		&i.CurationRetryAction,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getCurationTarget = `-- name: GetCurationTarget :one
+SELECT id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, created_at, updated_at FROM registry_promotion_candidates WHERE organization_id= $1 AND id= $2
+`
+
+type GetCurationTargetParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) GetCurationTarget(ctx context.Context, arg GetCurationTargetParams) (RegistryPromotionCandidate, error) {
+	row := q.db.QueryRow(ctx, getCurationTarget, arg.OrganizationID, arg.ID)
+	var i RegistryPromotionCandidate
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.McpServerID,
+		&i.RemoteMcpServerID,
+		&i.SourceRevision,
+		&i.Eligible,
+		&i.Reason,
+		&i.ObservedSuccesses,
+		&i.ObservedFailures,
+		&i.ObservedDays,
+		&i.CheckedAt,
+		&i.RegistryEntryID,
+		&i.PublicMetadata,
+		&i.EndpointIdentity,
+		&i.RequestDigest,
+		&i.RetryKey,
+		&i.PromotedBy,
+		&i.PromotedAt,
+		&i.DocsUrl,
+		&i.DocsQueuedAt,
+		&i.DeliveryError,
+		&i.DiscoveryLastAttemptAt,
+		&i.DiscoveryNextAttemptAt,
+		&i.DiscoveryFailures,
+		&i.DocsAttempts,
+		&i.DocsFailures,
+		&i.DocsLastAttemptAt,
+		&i.DocsNextAttemptAt,
+		&i.DocsNeedsAttention,
+		&i.DocsLeaseUntil,
+		&i.DocsLeaseToken,
+		&i.DocsRevision,
+		&i.DocsRetryKey,
+		&i.DocsRetryRevision,
+		&i.DocsRetryBy,
+		&i.CurationStatus,
+		&i.CurationRevision,
+		&i.CurationUpdatedAt,
+		&i.CurationUpdatedBy,
+		&i.CurationRetryKey,
+		&i.CurationRetryRevision,
+		&i.CurationRetryAction,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -388,7 +561,7 @@ func (q *Queries) GetCandidate(ctx context.Context, arg GetCandidateParams) (Reg
 }
 
 const getPromotion = `-- name: GetPromotion :one
-SELECT id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, created_at, updated_at FROM registry_promotion_candidates WHERE organization_id= $1 AND id= $2 FOR UPDATE
+SELECT id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, created_at, updated_at FROM registry_promotion_candidates WHERE organization_id= $1 AND id= $2 FOR UPDATE
 `
 
 type GetPromotionParams struct {
@@ -436,6 +609,13 @@ func (q *Queries) GetPromotion(ctx context.Context, arg GetPromotionParams) (Reg
 		&i.DocsRetryKey,
 		&i.DocsRetryRevision,
 		&i.DocsRetryBy,
+		&i.CurationStatus,
+		&i.CurationRevision,
+		&i.CurationUpdatedAt,
+		&i.CurationUpdatedBy,
+		&i.CurationRetryKey,
+		&i.CurationRetryRevision,
+		&i.CurationRetryAction,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -444,13 +624,19 @@ func (q *Queries) GetPromotion(ctx context.Context, arg GetPromotionParams) (Reg
 
 const getSource = `-- name: GetSource :one
 SELECT p.organization_id, m.project_id, m.id AS mcp_server_id, r.id AS remote_mcp_server_id, left(m.name,200)::text AS source_name,
-  r.url, r.transport_type, m.visibility,
+  r.url, r.transport_type, m.visibility, left(COALESCE(r.name,''),200)::text AS remote_name, COALESCE(m.requires_upstream_auth,false)::boolean AS requires_upstream_auth, (m.requires_upstream_auth IS NOT NULL)::boolean AS upstream_auth_known, m.remote_session_issuer_id,
+  left(COALESCE(pr.resource_name,''),200)::text AS resource_name, left(COALESCE(pr.resource_documentation,''),2049)::text AS resource_documentation,
   md5(m.updated_at::text || r.updated_at::text || COALESCE(h.revision, ''))::text AS source_revision,
   GREATEST(m.updated_at, r.updated_at, h.updated_at)::timestamptz AS changed_at,
   COALESCE(h.header_count, 0)::bigint AS header_count
 FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id
 JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id
+LEFT JOIN LATERAL (
+  SELECT resource_name,resource_documentation FROM remote_protected_resources
+  WHERE organization_id=p.organization_id AND project_id=m.project_id AND resource_identifier=r.url AND deleted IS FALSE
+  ORDER BY updated_at DESC,id DESC LIMIT 1
+) pr ON true
 LEFT JOIN LATERAL (
   SELECT count(*) FILTER (WHERE deleted IS FALSE) AS header_count, max(updated_at) AS updated_at,
     string_agg(id::text || updated_at::text || deleted::text, ',' ORDER BY id) AS revision
@@ -468,17 +654,23 @@ type GetSourceParams struct {
 }
 
 type GetSourceRow struct {
-	OrganizationID    string
-	ProjectID         uuid.UUID
-	McpServerID       uuid.UUID
-	RemoteMcpServerID uuid.UUID
-	SourceName        string
-	Url               string
-	TransportType     string
-	Visibility        string
-	SourceRevision    string
-	ChangedAt         pgtype.Timestamptz
-	HeaderCount       int64
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	McpServerID           uuid.UUID
+	RemoteMcpServerID     uuid.UUID
+	SourceName            string
+	Url                   string
+	TransportType         string
+	Visibility            string
+	RemoteName            string
+	RequiresUpstreamAuth  bool
+	UpstreamAuthKnown     bool
+	RemoteSessionIssuerID uuid.NullUUID
+	ResourceName          string
+	ResourceDocumentation string
+	SourceRevision        string
+	ChangedAt             pgtype.Timestamptz
+	HeaderCount           int64
 }
 
 func (q *Queries) GetSource(ctx context.Context, arg GetSourceParams) (GetSourceRow, error) {
@@ -493,6 +685,12 @@ func (q *Queries) GetSource(ctx context.Context, arg GetSourceParams) (GetSource
 		&i.Url,
 		&i.TransportType,
 		&i.Visibility,
+		&i.RemoteName,
+		&i.RequiresUpstreamAuth,
+		&i.UpstreamAuthKnown,
+		&i.RemoteSessionIssuerID,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
 		&i.SourceRevision,
 		&i.ChangedAt,
 		&i.HeaderCount,
@@ -502,7 +700,7 @@ func (q *Queries) GetSource(ctx context.Context, arg GetSourceParams) (GetSource
 
 const invalidateCandidate = `-- name: InvalidateCandidate :exec
 UPDATE registry_promotion_candidates SET eligible=false, reason='source_changed', updated_at=clock_timestamp()
-WHERE id = $1 AND project_id IS NOT DISTINCT FROM $2::uuid AND promoted_at IS NULL
+WHERE id = $1 AND project_id IS NOT DISTINCT FROM $2::uuid AND promoted_at IS NULL AND curation_status='active'
 `
 
 type InvalidateCandidateParams struct {
@@ -520,7 +718,7 @@ SELECT count(*) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL
  count(*) FILTER (WHERE docs_needs_attention)::bigint AS needs_attention,
  min(promoted_at) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE)::timestamptz AS oldest_pending_at,
  max(discovery_last_attempt_at)::timestamptz AS last_discovery_at,
- count(*) FILTER (WHERE discovery_failures>0 AND promoted_at IS NULL)::bigint AS discovery_failures
+ count(*) FILTER (WHERE discovery_failures>0 AND promoted_at IS NULL AND curation_status='active')::bigint AS discovery_failures
 FROM registry_promotion_candidates
 `
 
@@ -546,17 +744,31 @@ func (q *Queries) JobStatus(ctx context.Context) (JobStatusRow, error) {
 }
 
 const listCandidates = `-- name: ListCandidates :many
-SELECT c.id, c.organization_id, c.project_id, c.mcp_server_id, c.remote_mcp_server_id, c.source_revision, c.eligible, c.reason, c.observed_successes, c.observed_failures, c.observed_days, c.checked_at, c.registry_entry_id, c.public_metadata, c.endpoint_identity, c.request_digest, c.retry_key, c.promoted_by, c.promoted_at, c.docs_url, c.docs_queued_at, c.delivery_error, c.discovery_last_attempt_at, c.discovery_next_attempt_at, c.discovery_failures, c.docs_attempts, c.docs_failures, c.docs_last_attempt_at, c.docs_next_attempt_at, c.docs_needs_attention, c.docs_lease_until, c.docs_lease_token, c.docs_revision, c.docs_retry_key, c.docs_retry_revision, c.docs_retry_by, c.created_at, c.updated_at,left(COALESCE(m.name,''),200)::text AS source_name FROM registry_promotion_candidates c
+SELECT c.id, c.organization_id, c.project_id, c.mcp_server_id, c.remote_mcp_server_id, c.source_revision, c.eligible, c.reason, c.observed_successes, c.observed_failures, c.observed_days, c.checked_at, c.registry_entry_id, c.public_metadata, c.endpoint_identity, c.request_digest, c.retry_key, c.promoted_by, c.promoted_at, c.docs_url, c.docs_queued_at, c.delivery_error, c.discovery_last_attempt_at, c.discovery_next_attempt_at, c.discovery_failures, c.docs_attempts, c.docs_failures, c.docs_last_attempt_at, c.docs_next_attempt_at, c.docs_needs_attention, c.docs_lease_until, c.docs_lease_token, c.docs_revision, c.docs_retry_key, c.docs_retry_revision, c.docs_retry_by, c.curation_status, c.curation_revision, c.curation_updated_at, c.curation_updated_by, c.curation_retry_key, c.curation_retry_revision, c.curation_retry_action, c.created_at, c.updated_at,left(COALESCE(m.name,''),200)::text AS source_name FROM registry_promotion_candidates c
 LEFT JOIN mcp_servers m ON m.id=c.mcp_server_id AND m.project_id=c.project_id AND m.deleted IS FALSE
-WHERE (c.promoted_at IS NOT NULL OR (c.project_id IS NOT NULL AND c.mcp_server_id IS NOT NULL))
-AND (NOT $1::boolean OR c.id > $2::uuid)
-ORDER BY c.id LIMIT $3
+WHERE (c.promoted_at IS NOT NULL OR EXISTS (
+ SELECT 1 FROM mcp_servers source
+ JOIN projects source_project ON source_project.id=source.project_id
+ JOIN remote_mcp_servers remote ON remote.id=source.remote_mcp_server_id AND remote.project_id=source.project_id
+ WHERE source.id=c.mcp_server_id AND source.project_id=c.project_id AND source_project.organization_id=c.organization_id
+ AND source.deleted IS FALSE AND source_project.deleted IS FALSE AND remote.deleted IS FALSE
+))
+AND (
+ $1::text='all'
+ OR ($1::text IN ('active','candidate') AND c.promoted_at IS NULL AND c.curation_status='active')
+ OR ($1::text IN ('rejected','archived') AND c.promoted_at IS NULL AND c.curation_status= $1::text)
+ OR ($1::text='promoted' AND c.promoted_at IS NOT NULL)
+)
+AND (NOT $2::boolean OR (c.created_at,c.id) < ($3::timestamptz,$4::uuid))
+ORDER BY c.created_at DESC,c.id DESC LIMIT $5
 `
 
 type ListCandidatesParams struct {
-	HasCursor bool
-	CursorID  uuid.UUID
-	PageLimit int32
+	StatusFilter    string
+	HasCursor       bool
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.UUID
+	PageLimit       int32
 }
 
 type ListCandidatesRow struct {
@@ -565,7 +777,13 @@ type ListCandidatesRow struct {
 }
 
 func (q *Queries) ListCandidates(ctx context.Context, arg ListCandidatesParams) ([]ListCandidatesRow, error) {
-	rows, err := q.db.Query(ctx, listCandidates, arg.HasCursor, arg.CursorID, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listCandidates,
+		arg.StatusFilter,
+		arg.HasCursor,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -610,6 +828,13 @@ func (q *Queries) ListCandidates(ctx context.Context, arg ListCandidatesParams) 
 			&i.RegistryPromotionCandidate.DocsRetryKey,
 			&i.RegistryPromotionCandidate.DocsRetryRevision,
 			&i.RegistryPromotionCandidate.DocsRetryBy,
+			&i.RegistryPromotionCandidate.CurationStatus,
+			&i.RegistryPromotionCandidate.CurationRevision,
+			&i.RegistryPromotionCandidate.CurationUpdatedAt,
+			&i.RegistryPromotionCandidate.CurationUpdatedBy,
+			&i.RegistryPromotionCandidate.CurationRetryKey,
+			&i.RegistryPromotionCandidate.CurationRetryRevision,
+			&i.RegistryPromotionCandidate.CurationRetryAction,
 			&i.RegistryPromotionCandidate.CreatedAt,
 			&i.RegistryPromotionCandidate.UpdatedAt,
 			&i.SourceName,
@@ -634,7 +859,7 @@ func (q *Queries) LockEndpoint(ctx context.Context, url string) error {
 }
 
 const pendingDeliveries = `-- name: PendingDeliveries :many
-SELECT id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, created_at, updated_at FROM registry_promotion_candidates
+SELECT id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, created_at, updated_at FROM registry_promotion_candidates
 WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE
  AND (docs_next_attempt_at IS NULL OR docs_next_attempt_at <= $1::timestamptz)
  AND (docs_lease_until IS NULL OR docs_lease_until <= $1::timestamptz)
@@ -687,6 +912,13 @@ func (q *Queries) PendingDeliveries(ctx context.Context, now pgtype.Timestamptz)
 			&i.DocsRetryKey,
 			&i.DocsRetryRevision,
 			&i.DocsRetryBy,
+			&i.CurationStatus,
+			&i.CurationRevision,
+			&i.CurationUpdatedAt,
+			&i.CurationUpdatedBy,
+			&i.CurationRetryKey,
+			&i.CurationRetryRevision,
+			&i.CurationRetryAction,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -704,8 +936,8 @@ const promoteCandidate = `-- name: PromoteCandidate :one
 UPDATE registry_promotion_candidates SET registry_entry_id= $1,public_metadata= $2,
  endpoint_identity= $3,request_digest= $4,retry_key= $5,promoted_by= $6,
  promoted_at=clock_timestamp(),updated_at=clock_timestamp()
-WHERE id= $7 AND organization_id= $8 AND project_id IS NOT DISTINCT FROM $9::uuid AND promoted_at IS NULL
-RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, created_at, updated_at
+WHERE id= $7 AND organization_id= $8 AND project_id IS NOT DISTINCT FROM $9::uuid AND promoted_at IS NULL AND curation_status='active'
+RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, created_at, updated_at
 `
 
 type PromoteCandidateParams struct {
@@ -770,6 +1002,13 @@ func (q *Queries) PromoteCandidate(ctx context.Context, arg PromoteCandidatePara
 		&i.DocsRetryKey,
 		&i.DocsRetryRevision,
 		&i.DocsRetryBy,
+		&i.CurationStatus,
+		&i.CurationRevision,
+		&i.CurationUpdatedAt,
+		&i.CurationUpdatedBy,
+		&i.CurationRetryKey,
+		&i.CurationRetryRevision,
+		&i.CurationRetryAction,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -777,7 +1016,7 @@ func (q *Queries) PromoteCandidate(ctx context.Context, arg PromoteCandidatePara
 }
 
 const promotionRowFixture = `-- name: PromotionRowFixture :one
-SELECT id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, created_at, updated_at FROM registry_promotion_candidates WHERE project_id = $1 AND mcp_server_id = $2
+SELECT id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, created_at, updated_at FROM registry_promotion_candidates WHERE project_id = $1 AND mcp_server_id = $2
 `
 
 type PromotionRowFixtureParams struct {
@@ -825,6 +1064,13 @@ func (q *Queries) PromotionRowFixture(ctx context.Context, arg PromotionRowFixtu
 		&i.DocsRetryKey,
 		&i.DocsRetryRevision,
 		&i.DocsRetryBy,
+		&i.CurationStatus,
+		&i.CurationRevision,
+		&i.CurationUpdatedAt,
+		&i.CurationUpdatedBy,
+		&i.CurationRetryKey,
+		&i.CurationRetryRevision,
+		&i.CurationRetryAction,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -859,7 +1105,7 @@ UPDATE registry_promotion_candidates SET docs_needs_attention=false,docs_failure
  docs_next_attempt_at=NULL,docs_lease_token=NULL,docs_lease_until=NULL,delivery_error=NULL,
  docs_retry_key= $1,docs_retry_revision= $2,docs_retry_by= $3,
  docs_revision=generate_uuidv7(),updated_at=clock_timestamp()
-WHERE id= $4 AND project_id IS NOT DISTINCT FROM $5::uuid AND organization_id= $6 RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, created_at, updated_at
+WHERE id= $4 AND project_id IS NOT DISTINCT FROM $5::uuid AND organization_id= $6 RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, created_at, updated_at
 `
 
 type RetryDocsParams struct {
@@ -918,6 +1164,13 @@ func (q *Queries) RetryDocs(ctx context.Context, arg RetryDocsParams) (RegistryP
 		&i.DocsRetryKey,
 		&i.DocsRetryRevision,
 		&i.DocsRetryBy,
+		&i.CurationStatus,
+		&i.CurationRevision,
+		&i.CurationUpdatedAt,
+		&i.CurationUpdatedBy,
+		&i.CurationRetryKey,
+		&i.CurationRetryRevision,
+		&i.CurationRetryAction,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -947,6 +1200,43 @@ func (q *Queries) SeedPromotionSourceFixture(ctx context.Context, arg SeedPromot
 	return id, err
 }
 
+const setCandidateCreatedAtFixture = `-- name: SetCandidateCreatedAtFixture :exec
+UPDATE registry_promotion_candidates SET created_at= $1
+WHERE organization_id= $2 AND project_id= $3 AND id= $4
+`
+
+type SetCandidateCreatedAtFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ID             uuid.UUID
+}
+
+func (q *Queries) SetCandidateCreatedAtFixture(ctx context.Context, arg SetCandidateCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setCandidateCreatedAtFixture,
+		arg.CreatedAt,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ID,
+	)
+	return err
+}
+
+const softDeletePromotionSourceFixture = `-- name: SoftDeletePromotionSourceFixture :exec
+UPDATE mcp_servers SET deleted_at=clock_timestamp()
+WHERE id= $1 AND project_id= $2
+`
+
+type SoftDeletePromotionSourceFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SoftDeletePromotionSourceFixture(ctx context.Context, arg SoftDeletePromotionSourceFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeletePromotionSourceFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const storeEvidence = `-- name: StoreEvidence :one
 INSERT INTO registry_promotion_candidates (organization_id,project_id,mcp_server_id,remote_mcp_server_id,source_revision,eligible,reason,observed_successes,observed_failures,observed_days,checked_at)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
@@ -955,9 +1245,11 @@ ON CONFLICT(project_id,mcp_server_id) DO UPDATE SET
  observed_successes=EXCLUDED.observed_successes, observed_failures=EXCLUDED.observed_failures,
  observed_days=EXCLUDED.observed_days, checked_at=EXCLUDED.checked_at, updated_at=clock_timestamp()
 WHERE registry_promotion_candidates.promoted_at IS NULL
+ AND registry_promotion_candidates.curation_status='active'
+ AND (registry_promotion_candidates.curation_updated_at IS NULL OR registry_promotion_candidates.curation_updated_at <= EXCLUDED.checked_at)
  AND (registry_promotion_candidates.checked_at <= EXCLUDED.checked_at
  OR registry_promotion_candidates.source_revision <> EXCLUDED.source_revision)
-RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, created_at, updated_at
+RETURNING id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason, observed_successes, observed_failures, observed_days, checked_at, registry_entry_id, public_metadata, endpoint_identity, request_digest, retry_key, promoted_by, promoted_at, docs_url, docs_queued_at, delivery_error, discovery_last_attempt_at, discovery_next_attempt_at, discovery_failures, docs_attempts, docs_failures, docs_last_attempt_at, docs_next_attempt_at, docs_needs_attention, docs_lease_until, docs_lease_token, docs_revision, docs_retry_key, docs_retry_revision, docs_retry_by, curation_status, curation_revision, curation_updated_at, curation_updated_by, curation_retry_key, curation_retry_revision, curation_retry_action, created_at, updated_at
 `
 
 type StoreEvidenceParams struct {
@@ -1026,6 +1318,13 @@ func (q *Queries) StoreEvidence(ctx context.Context, arg StoreEvidenceParams) (R
 		&i.DocsRetryKey,
 		&i.DocsRetryRevision,
 		&i.DocsRetryBy,
+		&i.CurationStatus,
+		&i.CurationRevision,
+		&i.CurationUpdatedAt,
+		&i.CurationUpdatedBy,
+		&i.CurationRetryKey,
+		&i.CurationRetryRevision,
+		&i.CurationRetryAction,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -33,3 +33,78 @@ func (l *Logger) LogCatalogPromotionRetryDocs(ctx context.Context, dbtx repo.DBT
 		SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: nil,
 	}, OutboxEvent: events.CatalogPromotionV1})
 }
+
+// ActionCatalogPromotionReject records an explicit staff candidate rejection.
+const ActionCatalogPromotionReject Action = "catalog-promotion:reject"
+
+// LogCatalogPromotionRejectEvent scopes rejection without source connection data.
+type LogCatalogPromotionRejectEvent struct {
+	// OrganizationID identifies the original source tenant.
+	OrganizationID string
+	// ProjectID is absent when the source project was deleted.
+	ProjectID uuid.NullUUID
+	// Actor is the verified staff principal.
+	Actor urn.Principal
+	// CatalogPromotionURN identifies the durable promotion receipt.
+	CatalogPromotionURN urn.CatalogPromotion
+}
+
+// LogCatalogPromotionReject writes an audit entry in the curation transaction.
+func (l *Logger) LogCatalogPromotionReject(ctx context.Context, dbtx repo.DBTX, event LogCatalogPromotionRejectEvent) error {
+	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID, ProjectID: event.ProjectID,
+		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""),
+		Action: string(ActionCatalogPromotionReject), SubjectID: event.CatalogPromotionURN.ID.String(), SubjectType: string(subjectTypeCatalogPromotion),
+		SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: nil,
+	}, OutboxEvent: events.CatalogPromotionV1})
+}
+
+// ActionCatalogPromotionArchive records an explicit staff candidate archive.
+const ActionCatalogPromotionArchive Action = "catalog-promotion:archive"
+
+// LogCatalogPromotionArchiveEvent scopes archive without source connection data.
+type LogCatalogPromotionArchiveEvent struct {
+	// OrganizationID identifies the original source tenant.
+	OrganizationID string
+	// ProjectID is absent when the source project was deleted.
+	ProjectID uuid.NullUUID
+	// Actor is the verified staff principal.
+	Actor urn.Principal
+	// CatalogPromotionURN identifies the durable promotion receipt.
+	CatalogPromotionURN urn.CatalogPromotion
+}
+
+// LogCatalogPromotionArchive writes an audit entry in the curation transaction.
+func (l *Logger) LogCatalogPromotionArchive(ctx context.Context, dbtx repo.DBTX, event LogCatalogPromotionArchiveEvent) error {
+	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID, ProjectID: event.ProjectID,
+		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""),
+		Action: string(ActionCatalogPromotionArchive), SubjectID: event.CatalogPromotionURN.ID.String(), SubjectType: string(subjectTypeCatalogPromotion),
+		SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: nil,
+	}, OutboxEvent: events.CatalogPromotionV1})
+}
+
+// ActionCatalogPromotionRestore records an explicit staff candidate restoration.
+const ActionCatalogPromotionRestore Action = "catalog-promotion:restore"
+
+// LogCatalogPromotionRestoreEvent scopes restoration without source connection data.
+type LogCatalogPromotionRestoreEvent struct {
+	// OrganizationID identifies the original source tenant.
+	OrganizationID string
+	// ProjectID is absent when the source project was deleted.
+	ProjectID uuid.NullUUID
+	// Actor is the verified staff principal.
+	Actor urn.Principal
+	// CatalogPromotionURN identifies the durable promotion receipt.
+	CatalogPromotionURN urn.CatalogPromotion
+}
+
+// LogCatalogPromotionRestore writes an audit entry in the curation transaction.
+func (l *Logger) LogCatalogPromotionRestore(ctx context.Context, dbtx repo.DBTX, event LogCatalogPromotionRestoreEvent) error {
+	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID, ProjectID: event.ProjectID,
+		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""),
+		Action: string(ActionCatalogPromotionRestore), SubjectID: event.CatalogPromotionURN.ID.String(), SubjectType: string(subjectTypeCatalogPromotion),
+		SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: nil,
+	}, OutboxEvent: events.CatalogPromotionV1})
+}

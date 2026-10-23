@@ -43,6 +43,7 @@ trackedFiles:
   src/funcs/adminCreateOrganization.ts: {}
   src/funcs/adminCreateRegistryEntry.ts: {}
   src/funcs/adminCreateSignupOffer.ts: {}
+  src/funcs/adminCurateRegistryPromotionCandidate.ts: {}
   src/funcs/adminDeleteGlobalIssuer.ts: {}
   src/funcs/adminDeleteOnboardingPlaybook.ts: {}
   src/funcs/adminDeleteOnboardingUseCase.ts: {}
@@ -221,6 +222,7 @@ trackedFiles:
   src/models/components/adminregistrypage.ts: {}
   src/models/components/adminregistrypromotioncandidate.ts: {}
   src/models/components/adminregistrypromotioncandidates.ts: {}
+  src/models/components/adminregistrypromotionsuggestions.ts: {}
   src/models/components/adminregistrysummary.ts: {}
   src/models/components/adminsession.ts: {}
   src/models/components/adminsignupoffer.ts: {}
@@ -253,6 +255,7 @@ trackedFiles:
   src/models/components/createregistryentryrequestbody.ts: {}
   src/models/components/createremotesessionissuerform.ts: {}
   src/models/components/createsignupofferrequestbody.ts: {}
+  src/models/components/curateregistrypromotioncandidaterequestbody.ts: {}
   src/models/components/deleteonboardingplaybookrequestbody.ts: {}
   src/models/components/deleteonboardingusecaserequestbody.ts: {}
   src/models/components/disableorganizationrequestbody.ts: {}
@@ -372,6 +375,7 @@ trackedFiles:
   src/react-query/adminCreateOrganization.ts: {}
   src/react-query/adminCreateRegistryEntry.ts: {}
   src/react-query/adminCreateSignupOffer.ts: {}
+  src/react-query/adminCurateRegistryPromotionCandidate.ts: {}
   src/react-query/adminDeleteGlobalIssuer.ts: {}
   src/react-query/adminDescribeMcpServerHealth.core.ts: {}
   src/react-query/adminDescribeMcpServerHealth.ts: {}
@@ -674,6 +678,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminCurateRegistryPromotionCandidate:
+    speakeasy-default-admin-curate-registry-promotion-candidate:
+      requestBody:
+        application/json: {"action": "restore", "curation_revision": "82572daa-561f-47df-9d3f-aeeed99b6013", "organization_id": "<id>", "promotion_id": "2641f46f-1e07-4bb3-9d8c-79a1adef2fcd", "retry_key": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-04-11T09:01:57.801Z", "curation_revision": "f75e5b9e-9f29-4694-94d6-6ff7c992833e", "docs_attempts": 743212, "docs_retry_allowed": false, "docs_revision": "<value>", "eligible": false, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 7723, "observed_failures": 463546, "observed_successes": 472321, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminDeleteGlobalIssuer:
     speakeasy-default-admin-delete-global-issuer:
       parameters:
@@ -1068,7 +1083,7 @@ examples:
         application/json: {"mcp_server_id": "9f2e767f-b8c0-4cbe-885d-d3118237a221", "organization_id": "<id>", "project_id": "1bf24fb5-3f07-460b-bd4b-feb4cbbffe73"}
       responses:
         "200":
-          application/json: {"docs_attempts": 148328, "docs_retry_allowed": true, "docs_revision": "<value>", "eligible": true, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 779297, "observed_failures": 240546, "observed_successes": 705810, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}
+          application/json: {"created_at": "2025-10-07T02:35:34.844Z", "curation_revision": "f2e767fb-8c0c-4be8-85dd-3118237a2211", "docs_attempts": 148328, "docs_retry_allowed": true, "docs_revision": "<value>", "eligible": true, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 779297, "observed_failures": 240546, "observed_successes": 705810, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -1337,9 +1352,10 @@ examples:
       parameters:
         query:
           limit: 25
+          status: "active"
       responses:
         "200":
-          application/json: {"candidates": [{"docs_attempts": 521426, "docs_retry_allowed": false, "docs_revision": "<value>", "eligible": false, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 625813, "observed_failures": 768735, "observed_successes": 322572, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}]}
+          application/json: {"candidates": [{"created_at": "2025-07-30T13:06:32.100Z", "curation_revision": "8fbac535-eb43-4c66-833e-01c356be98fe", "docs_attempts": 521426, "docs_retry_allowed": false, "docs_revision": "<value>", "eligible": false, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 625813, "observed_failures": 768735, "observed_successes": 322572, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1448,10 +1464,10 @@ examples:
   adminPromoteRegistryCandidate:
     speakeasy-default-admin-promote-registry-candidate:
       requestBody:
-        application/json: {"auth_mode": "none", "docs_slug": "<value>", "documentation_url": "https://twin-ice-cream.name/", "mcp_server_id": "423d3a85-96dd-47a4-b74d-51f60b82987b", "organization_id": "<id>", "project_id": "3675c45a-74c5-432d-b703-1ffbc249652b", "public_description": "<value>", "public_metadata_confirmed": true, "public_name": "<value>", "public_title": "<value>", "public_url": "https://gloomy-stir-fry.org/", "retry_key": "<value>", "source_revision": "<value>"}
+        application/json: {"auth_mode": "none", "curation_revision": "4e78423d-3a85-496d-ad7a-474d51f60b82", "docs_slug": "<value>", "documentation_url": "https://twin-ice-cream.name/", "mcp_server_id": "423d3a85-96dd-47a4-b74d-51f60b82987b", "organization_id": "<id>", "project_id": "3675c45a-74c5-432d-b703-1ffbc249652b", "public_description": "<value>", "public_metadata_confirmed": true, "public_name": "<value>", "public_title": "<value>", "public_url": "https://gloomy-stir-fry.org/", "retry_key": "<value>", "source_revision": "<value>"}
       responses:
         "200":
-          application/json: {"docs_attempts": 853867, "docs_retry_allowed": true, "docs_revision": "<value>", "eligible": true, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 510181, "observed_failures": 892583, "observed_successes": 91890, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}
+          application/json: {"created_at": "2024-11-27T04:36:55.810Z", "curation_revision": "e78423d3-a859-46dd-a7a4-74d51f60b829", "docs_attempts": 853867, "docs_retry_allowed": true, "docs_revision": "<value>", "eligible": true, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 510181, "observed_failures": 892583, "observed_successes": 91890, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1517,7 +1533,7 @@ examples:
         application/json: {"docs_revision": "6016a104-22b0-43ee-ad00-0c211e7c9a48", "organization_id": "<id>", "promotion_id": "d2e3065c-15b7-4500-bf23-277da8210bb4", "retry_key": "<value>"}
       responses:
         "200":
-          application/json: {"docs_attempts": 918858, "docs_retry_allowed": true, "docs_revision": "<value>", "eligible": false, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 864810, "observed_failures": 68281, "observed_successes": 656591, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}
+          application/json: {"created_at": "2025-04-13T09:52:43.826Z", "curation_revision": "016a1042-2b03-4eed-b000-c211e7c9a48a", "docs_attempts": 918858, "docs_retry_allowed": true, "docs_revision": "<value>", "eligible": false, "id": "<id>", "mcp_server_id": "<id>", "observed_days": 864810, "observed_failures": 68281, "observed_successes": 656591, "organization_id": "<id>", "project_id": "<id>", "reason": "<value>", "remote_mcp_server_id": "<id>", "source_revision": "<value>", "status": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

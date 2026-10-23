@@ -31,6 +31,7 @@ const candidate = {
   id: "candidate",
   remoteMcpServerId: "remote",
   sourceRevision: "revision-1",
+  curationRevision: "curation-1",
   eligible: true,
   reason: "eligible",
   status: "candidate",
@@ -62,6 +63,12 @@ afterEach(() => {
 });
 async function fill(): Promise<void> {
   await screen.findByText("Ready for staff review");
+  fireEvent.click(
+    screen.getByRole("combobox", { name: "Public authentication" }),
+  );
+  fireEvent.click(
+    await screen.findByRole("option", { name: "No authentication" }),
+  );
   for (const [name, value] of [
     ["Public catalog name", metadata.publicName],
     ["Public title", metadata.publicTitle],
@@ -94,6 +101,7 @@ it("publishes only explicitly reviewed public metadata against the canonical tar
       ...metadata,
       authMode: "none",
       sourceRevision: "revision-1",
+      curationRevision: "curation-1",
       publicMetadataConfirmed: true,
       retryKey: expect.any(String),
     },
@@ -197,4 +205,131 @@ it("confirms closing a review when only authentication was changed", async () =>
   fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]!);
   expect(window.confirm).toHaveBeenCalledWith("Discard this promotion review?");
   expect(close).not.toHaveBeenCalled();
+});
+
+it("prefills suggestions without confirming publication or marking the draft dirty", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: { ...metadata, authMode: "oauth" },
+  });
+  const close = vi.fn<() => void>();
+  vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={close} />,
+  );
+  const title = await screen.findByRole("textbox", { name: "Public title" });
+  expect((title as HTMLInputElement).value).toBe(metadata.publicTitle);
+  expect(
+    screen.getByRole("combobox", { name: "Public authentication" }).textContent,
+  ).toContain("OAuth");
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Publish catalog entry",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]!);
+  expect(close).toHaveBeenCalledOnce();
+  expect(window.confirm).not.toHaveBeenCalled();
+});
+
+it("keeps edited suggestions when refreshing eligibility after a conflict", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: { ...metadata, authMode: "none" },
+  });
+  api.promote.mockRejectedValue({ statusCode: 409 });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  await screen.findByRole("textbox", { name: "Public title" });
+  fireEvent.change(screen.getByRole("textbox", { name: "Public title" }), {
+    target: { value: "Reviewed title" },
+  });
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Publish catalog entry" }),
+  );
+  await screen.findByRole("button", { name: "Refresh eligibility" });
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    sourceRevision: "revision-2",
+    suggestedMetadata: { ...metadata, publicTitle: "New source suggestion" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Refresh eligibility" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: "Refresh eligibility" }),
+    ).toBeNull(),
+  );
+  expect(
+    (screen.getByRole("textbox", { name: "Public title" }) as HTMLInputElement)
+      .value,
+  ).toBe("Reviewed title");
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Publish catalog entry",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+});
+
+it.each(["rejected", "archived"])(
+  "blocks direct publication review of a %s candidate even with healthy evidence",
+  async (status) => {
+    api.candidate.mockResolvedValue({ ...candidate, status, eligible: true });
+    await renderWithApp(
+      <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+    );
+    await screen.findByText(/Restore it from the promotion queue/);
+    expect(
+      screen.queryByRole("button", { name: "Publish catalog entry" }),
+    ).toBeNull();
+  },
+);
+
+it("requires staff to choose authentication when the source has no known auth mode", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: metadata,
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  await screen.findByRole("textbox", { name: "Public title" });
+  expect(
+    screen.getByRole("combobox", { name: "Public authentication" }).textContent,
+  ).toContain("Select authentication");
+  fireEvent.click(screen.getByRole("checkbox"));
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Publish catalog entry",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  fireEvent.click(
+    screen.getByRole("combobox", { name: "Public authentication" }),
+  );
+  fireEvent.click(
+    await screen.findByRole("option", { name: "No authentication" }),
+  );
+  // Choosing auth changes reviewed metadata and requires a fresh confirmation.
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Publish catalog entry",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  fireEvent.click(screen.getByRole("checkbox"));
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Publish catalog entry",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(false);
 });

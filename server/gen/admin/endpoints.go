@@ -84,6 +84,7 @@ type Endpoints struct {
 	ListRegistryPromotionCandidates         goa.Endpoint
 	GetRegistryPromotionCandidate           goa.Endpoint
 	PromoteRegistryCandidate                goa.Endpoint
+	CurateRegistryPromotionCandidate        goa.Endpoint
 	RetryRegistryPromotionDocs              goa.Endpoint
 	GetRegistryOktaCandidates               goa.Endpoint
 	ListRegistryOktaUnmapped                goa.Endpoint
@@ -208,6 +209,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesEndpoint(s, a.APIKeyAuth),
 		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateEndpoint(s, a.APIKeyAuth),
 		PromoteRegistryCandidate:                NewPromoteRegistryCandidateEndpoint(s, a.APIKeyAuth),
+		CurateRegistryPromotionCandidate:        NewCurateRegistryPromotionCandidateEndpoint(s, a.APIKeyAuth),
 		RetryRegistryPromotionDocs:              NewRetryRegistryPromotionDocsEndpoint(s, a.APIKeyAuth),
 		GetRegistryOktaCandidates:               NewGetRegistryOktaCandidatesEndpoint(s, a.APIKeyAuth),
 		ListRegistryOktaUnmapped:                NewListRegistryOktaUnmappedEndpoint(s, a.APIKeyAuth),
@@ -312,6 +314,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListRegistryPromotionCandidates = m(e.ListRegistryPromotionCandidates)
 	e.GetRegistryPromotionCandidate = m(e.GetRegistryPromotionCandidate)
 	e.PromoteRegistryCandidate = m(e.PromoteRegistryCandidate)
+	e.CurateRegistryPromotionCandidate = m(e.CurateRegistryPromotionCandidate)
 	e.RetryRegistryPromotionDocs = m(e.RetryRegistryPromotionDocs)
 	e.GetRegistryOktaCandidates = m(e.GetRegistryOktaCandidates)
 	e.ListRegistryOktaUnmapped = m(e.ListRegistryOktaUnmapped)
@@ -1846,6 +1849,29 @@ func NewPromoteRegistryCandidateEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.PromoteRegistryCandidate(ctx, p)
+	}
+}
+
+// NewCurateRegistryPromotionCandidateEndpoint returns an endpoint function
+// that calls the method "curateRegistryPromotionCandidate" of service "admin".
+func NewCurateRegistryPromotionCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CurateRegistryPromotionCandidatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CurateRegistryPromotionCandidate(ctx, p)
 	}
 }
 

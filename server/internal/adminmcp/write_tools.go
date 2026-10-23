@@ -281,6 +281,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 	})
 	tools.uploads = deps.ImageUploads
 	if runtime.catalogPromotions != nil {
+		tools.writers[OperationCurateRegistryPromotionCandidate] = &catalogCurationWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
 		tools.writers[OperationRetryRegistryPromotionDocs] = &catalogDocsRetryWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
 		tools.writers[OperationPromoteRegistryCandidate] = &catalogPromotionWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
 	}
