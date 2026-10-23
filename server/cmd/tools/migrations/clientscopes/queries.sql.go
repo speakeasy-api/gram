@@ -342,6 +342,7 @@ SELECT
   COALESCE(i.omit_scope_fallback, FALSE)::boolean AS issuer_omit_scope_fallback,
   (c.identity_provider_connection_id IS NOT NULL)::boolean AS managed,
   (c.credential_owner <> 'subject' OR c.legacy_callback_url)::boolean AS excluded_kind,
+  (c.client_id_metadata_uri IS NOT NULL)::boolean AS metadata_document,
   EXISTS (
     SELECT 1 FROM user_session_issuers AS usi
     WHERE usi.trusted_remote_session_client_id = c.id AND usi.deleted IS FALSE
@@ -407,6 +408,7 @@ type ListClientScopeCandidatesRow struct {
 	IssuerOmitScopeFallback bool
 	Managed                 bool
 	ExcludedKind            bool
+	MetadataDocument        bool
 	TrustedSignIn           bool
 	IdentityChaining        bool
 	Linked                  bool
@@ -440,6 +442,7 @@ func (q *Queries) ListClientScopeCandidates(ctx context.Context, arg ListClientS
 			&i.IssuerOmitScopeFallback,
 			&i.Managed,
 			&i.ExcludedKind,
+			&i.MetadataDocument,
 			&i.TrustedSignIn,
 			&i.IdentityChaining,
 			&i.Linked,
@@ -735,6 +738,20 @@ func (q *Queries) SeedUserSessionIssuerFixture(ctx context.Context, arg SeedUser
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const setClientMetadataURIFixture = `-- name: SetClientMetadataURIFixture :exec
+UPDATE remote_session_clients SET client_id = $1::text, client_id_metadata_uri = $1::text WHERE id = $2
+`
+
+type SetClientMetadataURIFixtureParams struct {
+	ClientIDMetadataUri string
+	ID                  uuid.UUID
+}
+
+func (q *Queries) SetClientMetadataURIFixture(ctx context.Context, arg SetClientMetadataURIFixtureParams) error {
+	_, err := q.db.Exec(ctx, setClientMetadataURIFixture, arg.ClientIDMetadataUri, arg.ID)
+	return err
 }
 
 const setResourcePinFixture = `-- name: SetResourcePinFixture :exec

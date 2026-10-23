@@ -192,27 +192,31 @@ func TestRunClassifiesCandidates(t *testing.T) {
 	orgClient := f.client(t, clientSpec{project: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, scope: issuerScopes, createdAt: beforeCutoff, legacyCallback: false})
 	f.link(t, project, orgClient)
 
+	metadataDocument, _ := f.projectClient(t, project, issuerScopes)
+	require.NoError(t, q.SetClientMetadataURIFixture(t.Context(), SetClientMetadataURIFixtureParams{ClientIDMetadataUri: "https://speakeasy.example/oauth/client-metadata/doc", ID: metadataDocument}))
+
 	afterCutoff := f.client(t, clientSpec{project: uuid.NullUUID{UUID: project, Valid: true}, scope: issuerScopes, createdAt: cutoff.Add(time.Hour), legacyCallback: false})
 	unset, _ := f.projectClient(t, project, nil)
 
 	report := f.run(t, false)
 	got := outcomes(report)
 	require.Equal(t, map[uuid.UUID]Outcome{
-		issuerCopy:      OutcomeWouldClear,
-		resourceCopy:    OutcomeWouldClear,
-		pinned:          OutcomeSkipRequestChanges,
-		notOwned:        OutcomeSkipRequestChanges,
-		foreign:         OutcomeSkipUnmatched,
-		stale:           OutcomeSkipRequestChanges,
-		member:          OutcomeSkipRequestChanges,
-		subset:          OutcomeSkipUnmatched,
-		edited:          OutcomeSkipEdited,
-		missingSnapshot: OutcomeSkipEdited,
-		otherEdit:       OutcomeWouldClear,
-		unlinked:        OutcomeSkipUnlinked,
-		signIn:          OutcomeSkipSignIn,
-		legacy:          OutcomeSkipKind,
-		orgClient:       OutcomeWouldClear,
+		issuerCopy:       OutcomeWouldClear,
+		resourceCopy:     OutcomeWouldClear,
+		pinned:           OutcomeSkipRequestChanges,
+		notOwned:         OutcomeSkipRequestChanges,
+		foreign:          OutcomeSkipUnmatched,
+		stale:            OutcomeSkipRequestChanges,
+		member:           OutcomeSkipRequestChanges,
+		subset:           OutcomeSkipUnmatched,
+		edited:           OutcomeSkipEdited,
+		missingSnapshot:  OutcomeSkipEdited,
+		otherEdit:        OutcomeWouldClear,
+		unlinked:         OutcomeSkipUnlinked,
+		signIn:           OutcomeSkipSignIn,
+		legacy:           OutcomeSkipKind,
+		orgClient:        OutcomeWouldClear,
+		metadataDocument: OutcomeSkipMetadataDocument,
 	}, got)
 	require.NotContains(t, got, afterCutoff)
 	require.NotContains(t, got, unset)

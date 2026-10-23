@@ -12,6 +12,7 @@ SELECT
   COALESCE(i.omit_scope_fallback, FALSE)::boolean AS issuer_omit_scope_fallback,
   (c.identity_provider_connection_id IS NOT NULL)::boolean AS managed,
   (c.credential_owner <> 'subject' OR c.legacy_callback_url)::boolean AS excluded_kind,
+  (c.client_id_metadata_uri IS NOT NULL)::boolean AS metadata_document,
   EXISTS (
     SELECT 1 FROM user_session_issuers AS usi
     WHERE usi.trusted_remote_session_client_id = c.id AND usi.deleted IS FALSE
@@ -191,6 +192,9 @@ UPDATE user_session_issuers SET trusted_remote_session_client_id = @client_id WH
 
 -- name: SetResourcePinFixture :exec
 UPDATE remote_protected_resources SET scope_override = @scope_override WHERE project_id = @project_id;
+
+-- name: SetClientMetadataURIFixture :exec
+UPDATE remote_session_clients SET client_id = @client_id_metadata_uri::text, client_id_metadata_uri = @client_id_metadata_uri::text WHERE id = @id;
 
 -- name: SoftDeleteClientFixture :exec
 UPDATE remote_session_clients SET deleted_at = clock_timestamp() WHERE id = @id;

@@ -6,7 +6,7 @@ A client is cleared only when all of these hold:
 
 - live, with a live issuer that belongs to its project, its organization, or is platform-global, and a live project when project-scoped, created before `-created-before`, with a non-empty scope
 - linked to a user session issuer (every automatic create path linked one)
-- not managed by an identity provider connection, not a trusted sign-in client of a user session issuer, not bound for identity chaining (an unlinked binding does not count), owned by its subject, not on the legacy callback, and not platform-global
+- not managed by an identity provider connection, not a trusted sign-in client of a user session issuer, not bound for identity chaining (an unlinked binding does not count), owned by its subject, not on the legacy callback, not platform-global, and without a client metadata document (its published document lists the scope)
 - no `remote-session-client:update` audit entry changed `Scope` (an entry missing either snapshot counts as a change)
 - its scope equals, as a set, the issuer's `scopes_supported` or the last-read `scopes_supported` of a bound server's protected resource
 - for every server signing in through it, a login with no client scope would request that same set (`skip_request_changes` otherwise)

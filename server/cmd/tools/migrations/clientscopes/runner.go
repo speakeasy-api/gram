@@ -45,7 +45,9 @@ const (
 	OutcomeSkipExcluded         Outcome = "skip_excluded"
 	OutcomeSkipManaged          Outcome = "skip_managed"
 	OutcomeSkipKind             Outcome = "skip_kind"
-	OutcomeSkipSignIn           Outcome = "skip_sign_in_client"
+	// OutcomeSkipMetadataDocument: the client's published metadata document lists its scope.
+	OutcomeSkipMetadataDocument Outcome = "skip_metadata_document"
+	OutcomeSkipSignIn          Outcome = "skip_sign_in_client"
 	OutcomeSkipIdentityChaining Outcome = "skip_identity_chaining"
 	OutcomeSkipUnlinked         Outcome = "skip_unlinked"
 	OutcomeSkipEdited           Outcome = "skip_edited"
@@ -108,6 +110,8 @@ func Classify(row ListClientScopeCandidatesRow, logins []Login) (Outcome, string
 		return OutcomeSkipManaged, ""
 	case row.ExcludedKind || row.OrganizationID == "":
 		return OutcomeSkipKind, ""
+	case row.MetadataDocument:
+		return OutcomeSkipMetadataDocument, ""
 	case row.TrustedSignIn:
 		return OutcomeSkipSignIn, ""
 	case row.IdentityChaining:
