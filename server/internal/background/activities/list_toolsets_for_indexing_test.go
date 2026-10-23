@@ -74,6 +74,7 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 	require.NoError(t, err)
 	// A server that kept a toolset's id after leaving it leaves the toolset unserved.
 	keptToolset := createMCPToolset(t, db, organizationID, project.ID, "kept", []urn.Tool{validToolURN})
+	keptTarget := createMCPToolset(t, db, organizationID, project.ID, "kept-target", []urn.Tool{})
 	_, err = mcpserversrepo.New(db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                    keptToolset.ID,
 		ProjectID:             project.ID,
@@ -83,7 +84,7 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 		UserSessionIssuerID:   uuid.NullUUID{},
 		RemoteMcpServerID:     uuid.NullUUID{},
 		TunneledMcpServerID:   uuid.NullUUID{},
-		ToolsetID:             uuid.NullUUID{UUID: driftedToolset.ID, Valid: true},
+		ToolsetID:             uuid.NullUUID{UUID: keptTarget.ID, Valid: true},
 		UnproxiedMcpServerID:  uuid.NullUUID{},
 		ToolVariationsGroupID: uuid.NullUUID{},
 		Visibility:            "private",
