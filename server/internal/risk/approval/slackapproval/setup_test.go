@@ -322,13 +322,15 @@ func (f *fixture) messages(t *testing.T, approvalID uuid.UUID) []repo.RiskPolicy
 	return rows
 }
 
-// fakeWorkspaces is a fixed list of workspaces the app can post to.
+// fakeWorkspaces is a fixed list of workspaces the app can post to, and the
+// error for workspaces that cannot be used right now.
 type fakeWorkspaces struct {
-	workspaces []slackdirectoryconnections.MessagingWorkspace
+	workspaces  []slackdirectoryconnections.MessagingWorkspace
+	unavailable error
 }
 
 func (w *fakeWorkspaces) MessagingWorkspaces(context.Context, string, string) ([]slackdirectoryconnections.MessagingWorkspace, error) {
-	return w.workspaces, nil
+	return w.workspaces, w.unavailable
 }
 
 // slackCall is one Slack Web API call the fake received.
@@ -346,6 +348,8 @@ type fakeSlack struct {
 	calls []slackCall
 	// users maps emails to Slack user IDs for users.lookupByEmail.
 	users map[string]string
+	// unconfirmed are emails users.lookupByEmail reports as not confirmed.
+	unconfirmed map[string]bool
 	// failPost maps a Slack user ID to the error chat.postMessage answers.
 	failPost map[string]string
 	nextTS   int
@@ -353,18 +357,19 @@ type fakeSlack struct {
 
 func newFakeSlack(t *testing.T) *fakeSlack {
 	t.Helper()
-	fake := &fakeSlack{server: nil, mu: sync.Mutex{}, calls: nil, users: map[string]string{}, failPost: map[string]string{}, nextTS: 0}
+	fake := &fakeSlack{server: nil, mu: sync.Mutex{}, calls: nil, users: map[string]string{}, unconfirmed: map[string]bool{}, failPost: map[string]string{}, nextTS: 0}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users.lookupByEmail", func(w http.ResponseWriter, r *http.Request) {
 		form := fake.record(r, "users.lookupByEmail")
 		fake.mu.Lock()
 		id, ok := fake.users[form.Get("email")]
+		confirmed := !fake.unconfirmed[form.Get("email")]
 		fake.mu.Unlock()
 		if !ok {
 			writeJSON(w, map[string]any{"ok": false, "error": "users_not_found"})
 			return
 		}
-		writeJSON(w, map[string]any{"ok": true, "user": map[string]any{"id": id}})
+		writeJSON(w, map[string]any{"ok": true, "user": map[string]any{"id": id, "is_email_confirmed": confirmed}})
 	})
 	mux.HandleFunc("/chat.postMessage", func(w http.ResponseWriter, r *http.Request) {
 		form := fake.record(r, "chat.postMessage")
@@ -401,6 +406,15 @@ func (s *fakeSlack) mapUser(email, slackUserID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.users[email] = slackUserID
+}
+
+// mapUnconfirmedUser makes users.lookupByEmail find email as slackUserID, with
+// an email Slack has not confirmed.
+func (s *fakeSlack) mapUnconfirmedUser(email, slackUserID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.users[email] = slackUserID
+	s.unconfirmed[email] = true
 }
 
 // failPostTo makes chat.postMessage to slackUserID answer with code.

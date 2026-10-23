@@ -141,9 +141,12 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 	}
 	logger := n.logger.With(attr.SlogOrganizationID(target.OrganizationID), attr.SlogRiskPolicyApprovalID(target.ApprovalID.String()))
 
-	workspaces, err := n.workspaces.MessagingWorkspaces(ctx, target.OrganizationID, slackscopes.ChatWrite)
-	if err != nil {
-		return none, fmt.Errorf("list Slack workspaces: %w", err)
+	// Workspaces that cannot be used right now come back as a retryable error
+	// next to the ones that can. The DMs go out through those, and the retry
+	// reaches the rest.
+	workspaces, unavailable := n.workspaces.MessagingWorkspaces(ctx, target.OrganizationID, slackscopes.ChatWrite)
+	if len(workspaces) == 0 && unavailable != nil {
+		return none, fmt.Errorf("list Slack workspaces: %w", unavailable)
 	}
 	if len(workspaces) == 0 {
 		logger.InfoContext(ctx, "no Slack workspace can send approval DMs")
@@ -172,7 +175,7 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 	}
 	pending := pendingCard(content)
 
-	var retry error
+	retry := unavailable
 	for _, person := range recipients {
 		if sent[person.userID] {
 			continue
@@ -246,15 +249,14 @@ func (n *Notifier) Finish(ctx context.Context, target Target) error {
 	if err != nil {
 		return err
 	}
-	workspaces, err := n.workspaces.MessagingWorkspaces(ctx, target.OrganizationID, slackscopes.ChatWrite)
-	if err != nil {
-		return fmt.Errorf("list Slack workspaces: %w", err)
-	}
+	// A message in a workspace that cannot be used right now is skipped, and
+	// the retry reaches it.
+	workspaces, unavailable := n.workspaces.MessagingWorkspaces(ctx, target.OrganizationID, slackscopes.ChatWrite)
 	tokens := make(map[string]string, len(workspaces))
 	for _, workspace := range workspaces {
 		tokens[workspace.TeamID] = workspace.Token
 	}
-	var retry error
+	retry := unavailable
 	for _, message := range messages {
 		token := tokens[message.SlackTeamID.String]
 		if message.Provider != providerSlack || token == "" || !message.SlackChannelID.Valid || !message.SlackMessageTs.Valid {
@@ -309,8 +311,9 @@ func (c *Cards) policy(ctx context.Context, row repo.RiskPolicyApproval) (policy
 }
 
 // recipients are the people on the policy's approver list, with roles
-// expanded through the same principal resolution Decide uses. The person who
-// made the call is left out: they cannot decide it.
+// expanded through the same principal resolution Decide uses. People named on
+// the list come first, so a role expanding to maxRoleMembers cannot crowd them
+// out. The person who made the call is left out: they cannot decide it.
 func (n *Notifier) recipients(ctx context.Context, row repo.RiskPolicyApproval, config *policycore.ApprovalConfig) ([]recipient, error) {
 	userIDs := []string{}
 	expandRoles := false
@@ -334,6 +337,10 @@ func (n *Notifier) recipients(ctx context.Context, row repo.RiskPolicyApproval, 
 	if err != nil {
 		return nil, fmt.Errorf("list approval recipients: %w", err)
 	}
+	named := make(map[string]bool, len(userIDs))
+	for _, id := range userIDs {
+		named[id] = true
+	}
 	out := make([]recipient, 0, min(len(members), maxRecipients))
 	for _, member := range members {
 		if len(out) == maxRecipients {
@@ -343,7 +350,7 @@ func (n *Notifier) recipients(ctx context.Context, row repo.RiskPolicyApproval, 
 		if row.RequesterUserID.Valid && row.RequesterUserID.String == member.UserID {
 			continue
 		}
-		if expandRoles {
+		if !named[member.UserID] {
 			principals, err := n.approvals.ApproverPrincipals(ctx, row.OrganizationID, member.UserID)
 			if err != nil {
 				return nil, fmt.Errorf("resolve approver: %w", err)
@@ -358,8 +365,9 @@ func (n *Notifier) recipients(ctx context.Context, row repo.RiskPolicyApproval, 
 }
 
 // findSlackUser finds the approver in a workspace the app can post to: a
-// confirmed mapping first, then their email. It returns a nil workspace when
-// the approver has no Slack account there.
+// confirmed mapping first, then their email, when Slack has confirmed it the
+// way directory sync requires. It returns a nil workspace when the approver
+// has no Slack account there.
 func (n *Notifier) findSlackUser(ctx context.Context, organizationID string, person recipient, workspaces []slackdirectoryconnections.MessagingWorkspace) (*slackdirectoryconnections.MessagingWorkspace, string, error) {
 	accounts, err := slackdirectoryconnections.SlackAccounts(ctx, n.db, organizationID, person.userID)
 	if err != nil {
@@ -386,10 +394,11 @@ func (n *Notifier) findSlackUser(ctx context.Context, organizationID string, per
 		}
 		var found struct {
 			User struct {
-				ID string `json:"id"`
+				ID             string `json:"id"`
+				EmailConfirmed *bool  `json:"is_email_confirmed"`
 			} `json:"user"`
 		}
-		if err := json.Unmarshal(body, &found); err != nil || found.User.ID == "" {
+		if err := json.Unmarshal(body, &found); err != nil || found.User.ID == "" || !conv.PtrValOr(found.User.EmailConfirmed, true) {
 			continue
 		}
 		return &workspaces[i], found.User.ID, nil

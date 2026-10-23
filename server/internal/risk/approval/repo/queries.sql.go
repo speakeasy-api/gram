@@ -402,6 +402,7 @@ SELECT name, slug
 FROM mcp_servers
 WHERE id = $1
   AND project_id = $2
+  AND deleted IS FALSE
 `
 
 type GetApprovalServerParams struct {
@@ -414,7 +415,8 @@ type GetApprovalServerRow struct {
 	Slug pgtype.Text
 }
 
-// The MCP server a held call went to, named on the approver's card.
+// The MCP server a held call went to, named on the approver's card. A deleted
+// server finds no row.
 func (q *Queries) GetApprovalServer(ctx context.Context, arg GetApprovalServerParams) (GetApprovalServerRow, error) {
 	row := q.db.QueryRow(ctx, getApprovalServer, arg.ID, arg.ProjectID)
 	var i GetApprovalServerRow
@@ -559,7 +561,7 @@ WHERE our.organization_id = $1
   AND our.deleted_at IS NULL
   AND u.deleted_at IS NULL
   AND ($2::boolean OR u.id = ANY($3::text[]))
-ORDER BY u.id
+ORDER BY u.id = ANY($3::text[]) DESC, u.id
 LIMIT $4
 `
 
@@ -578,7 +580,8 @@ type ListApprovalRecipientMembersRow struct {
 
 // Active organization members who can receive approval requests: the members
 // in @user_ids, or every member when @all_members is set, which is how role
-// approvers expand to people. Ordered by id so a capped list is stable.
+// approvers expand to people. The members in @user_ids come first, so a
+// capped list keeps them, and then the order is by id, so it is stable.
 func (q *Queries) ListApprovalRecipientMembers(ctx context.Context, arg ListApprovalRecipientMembersParams) ([]ListApprovalRecipientMembersRow, error) {
 	rows, err := q.db.Query(ctx, listApprovalRecipientMembers,
 		arg.OrganizationID,

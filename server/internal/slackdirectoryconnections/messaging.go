@@ -36,15 +36,23 @@ type SlackAccount struct {
 	UserID string
 }
 
+// minTokenLifetime is the least time a token must have left to be used when
+// renewing it failed.
+const minTokenLifetime = time.Minute
+
 // MessagingWorkspaces returns the organization's connected workspaces that
 // granted scope. A workspace that needs reconnecting is left out; the Slack
-// workspaces page already tells admins to reconnect it.
+// workspaces page already tells admins to reconnect it. A workspace whose
+// expiring token cannot be renewed right now is left out too, and reported in
+// the error that comes back next to the workspaces that can be used, so one
+// busy workspace does not stop the others.
 func (s *DirectorySync) MessagingWorkspaces(ctx context.Context, organizationID, scope string) ([]MessagingWorkspace, error) {
 	rows, err := repo.New(s.db).ListSlackDirectoryConnections(ctx, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("list Slack workspaces: %w", err)
 	}
 	workspaces := make([]MessagingWorkspace, 0, len(rows))
+	var unavailable error
 	for _, row := range rows {
 		if !slices.Contains(row.GrantedScopes, scope) {
 			continue
@@ -54,17 +62,22 @@ func (s *DirectorySync) MessagingWorkspaces(ctx context.Context, organizationID,
 			continue
 		}
 		if tokens.ExpiresAt != nil && time.Until(*tokens.ExpiresAt) <= tokenRefreshMargin {
-			tokens, err = s.refreshForMessaging(ctx, organizationID, row.ID)
-			if err != nil {
-				return nil, err
-			}
-			if tokens == nil {
+			refreshed, err := s.refreshForMessaging(ctx, organizationID, row.ID)
+			switch {
+			case err == nil && refreshed == nil:
 				continue
+			case err == nil:
+				tokens = refreshed
+			case time.Until(*tokens.ExpiresAt) <= minTokenLifetime:
+				unavailable = errors.Join(unavailable, err)
+				continue
+			default:
+				// The current token still works; a later call renews it.
 			}
 		}
 		workspaces = append(workspaces, MessagingWorkspace{ConnectionID: row.ID, TeamID: row.SlackTeamID, Token: tokens.AccessToken})
 	}
-	return workspaces, nil
+	return workspaces, unavailable
 }
 
 // refreshForMessaging renews a rotating token under the directory sync lock, so

@@ -2,6 +2,7 @@ package slackapproval_test
 
 import (
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -190,6 +191,58 @@ func TestNotifyExpandsRoleApprovers(t *testing.T) {
 	posts := f.slack.callsTo("chat.postMessage")
 	require.Len(t, posts, 1)
 	require.Equal(t, "UONCALL", posts[0].Form.Get("channel"))
+}
+
+func TestNotifyExpandsRolesWithoutCrowdingOutNamedApprovers(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	oncall, oncallEmail := f.addMember(t, "On call")
+	f.slack.mapUser(f.email(t, f.approverID), "UAPPROVER")
+	f.slack.mapUser(oncallEmail, "UONCALL")
+	role := f.addRole(t, "on-call", oncall)
+	policy := f.addPolicy(t, userURN(f.approverID), role)
+	approvalID := f.pendingRequest(t, policy, "")
+
+	result, err := f.notifier.Notify(t.Context(), f.target(approvalID))
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Sent)
+	posts := f.slack.callsTo("chat.postMessage")
+	require.Len(t, posts, 2)
+	require.ElementsMatch(t, []string{"UAPPROVER", "UONCALL"}, []string{posts[0].Form.Get("channel"), posts[1].Form.Get("channel")})
+}
+
+func TestNotifyIgnoresAnUnconfirmedSlackEmail(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.slack.mapUnconfirmedUser(f.email(t, f.approverID), "USOMEONE")
+	policy := f.addPolicy(t, userURN(f.approverID))
+	approvalID := f.pendingRequest(t, policy, "")
+
+	result, err := f.notifier.Notify(t.Context(), f.target(approvalID))
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Sent)
+	require.Len(t, f.slack.callsTo("users.lookupByEmail"), 1)
+	require.Empty(t, f.slack.callsTo("chat.postMessage"))
+}
+
+func TestNotifySendsThroughTheWorkspacesItCanUse(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.workspaces.unavailable = errors.New("Slack directory: sync_busy")
+	f.slack.mapUser(f.email(t, f.approverID), "UAPPROVER")
+	policy := f.addPolicy(t, userURN(f.approverID))
+	approvalID := f.pendingRequest(t, policy, "")
+
+	// The usable workspace gets its DM; the error asks for a retry that
+	// reaches the busy one.
+	result, err := f.notifier.Notify(t.Context(), f.target(approvalID))
+	require.ErrorContains(t, err, "sync_busy")
+	require.Equal(t, 1, result.Sent)
+	require.Len(t, f.slack.callsTo("chat.postMessage"), 1)
+
+	f.workspaces.workspaces = nil
+	_, err = f.notifier.Notify(t.Context(), f.target(approvalID))
+	require.ErrorContains(t, err, "sync_busy", "with no usable workspace, the busy one is still retried")
 }
 
 func TestNotifyWithoutAWorkspaceSendsNothing(t *testing.T) {

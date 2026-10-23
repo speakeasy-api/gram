@@ -192,7 +192,8 @@ LIMIT @page_limit;
 -- name: ListApprovalRecipientMembers :many
 -- Active organization members who can receive approval requests: the members
 -- in @user_ids, or every member when @all_members is set, which is how role
--- approvers expand to people. Ordered by id so a capped list is stable.
+-- approvers expand to people. The members in @user_ids come first, so a
+-- capped list keeps them, and then the order is by id, so it is stable.
 SELECT u.id AS user_id, u.email, u.display_name
 FROM organization_user_relationships our
 JOIN users u ON u.id = our.user_id
@@ -200,7 +201,7 @@ WHERE our.organization_id = @organization_id
   AND our.deleted_at IS NULL
   AND u.deleted_at IS NULL
   AND (@all_members::boolean OR u.id = ANY(@user_ids::text[]))
-ORDER BY u.id
+ORDER BY u.id = ANY(@user_ids::text[]) DESC, u.id
 LIMIT @max_rows;
 
 -- name: GetApprovalProjectSlugs :one
@@ -265,8 +266,10 @@ ORDER BY created_at, id
 LIMIT 1;
 
 -- name: GetApprovalServer :one
--- The MCP server a held call went to, named on the approver's card.
+-- The MCP server a held call went to, named on the approver's card. A deleted
+-- server finds no row.
 SELECT name, slug
 FROM mcp_servers
 WHERE id = @id
-  AND project_id = @project_id;
+  AND project_id = @project_id
+  AND deleted IS FALSE;
