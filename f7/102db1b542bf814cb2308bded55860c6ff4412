@@ -1,0 +1,28 @@
+server/internal/risk/enforcereply/inbox.go
+  h_e404c1a6a54184 67
+server/internal/scanners/customruleanalyzer/enforce_handler.go
+  h_e404c1a6a54184 65-68,79
+server/internal/scanners/enforcement/helpers.go
+  h_e404c1a6a54184 29-33,38-41
+server/internal/scanners/gitleaks/enforce_handler.go
+  h_e404c1a6a54184 91-94,101
+server/internal/scanners/promptinjection/enforce_handler.go
+  h_e404c1a6a54184 67-70,81
+server/internal/scanners/promptinjection/enforce_handler_test.go
+  h_e404c1a6a54184 171-184
+server/internal/scanners/promptpolicy/enforce_handler.go
+  h_e404c1a6a54184 67-70,81,105,117-118
+server/internal/scanners/promptpolicy/enforce_handler_test.go
+  h_e404c1a6a54184 5,94-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f7102db1b542bf814cb2308bded55860c6ff4412",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
