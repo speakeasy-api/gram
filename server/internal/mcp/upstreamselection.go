@@ -376,7 +376,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	if typed && err == nil {
 		for id, res := range resolved {
 			prepared, prepareErr := c.selector.service.checkAuthClientPermission(ctx, authClientPermitRequest{
-				OrganizationID: c.selector.organizationID, ServerID: id, ClientID: res.clientID, ClientType: res.clientType,
+				OrganizationID: c.selector.organizationID, ServerID: id, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 				CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: c.selector.credentialID, Subject: c.subject,
 			}, res, nil)
 			resolved[id] = prepared
