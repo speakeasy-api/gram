@@ -15762,6 +15762,10 @@ COMMENT ON COLUMN assistant_kit_interrupt_requests.outcome IS '@access: confiden
 COMMENT ON COLUMN assistant_kit_interrupt_requests.created_at IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.acknowledged_at IS '@access: confidential';
 
+-- Retain the canonical organization identity and approved delivery input after
+-- source deletion so staff can recover documentation requests. Source/project
+-- pointers may become NULL; writers pin the full organization/project/source
+-- tuple through the canonical source query before storing or promoting evidence.
 CREATE TABLE IF NOT EXISTS registry_promotion_candidates (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id text NOT NULL,
@@ -15808,12 +15812,12 @@ CREATE TABLE IF NOT EXISTS registry_promotion_candidates (
   CONSTRAINT registry_promotion_candidates_registry_entry_id_fkey FOREIGN KEY (registry_entry_id) REFERENCES mcp_registry_entries(id) ON DELETE SET NULL
 );
 
-CREATE UNIQUE INDEX registry_promotion_candidates_source_key ON registry_promotion_candidates(project_id, mcp_server_id);
-CREATE UNIQUE INDEX registry_promotion_candidates_endpoint_key ON registry_promotion_candidates(endpoint_identity) WHERE endpoint_identity IS NOT NULL;
-CREATE UNIQUE INDEX registry_promotion_candidates_docs_slug_key ON registry_promotion_candidates((public_metadata->>'docs_slug')) WHERE public_metadata IS NOT NULL;
-CREATE UNIQUE INDEX registry_promotion_candidates_retry_key ON registry_promotion_candidates(project_id, retry_key) WHERE retry_key IS NOT NULL;
-CREATE INDEX registry_promotion_candidates_pending_idx ON registry_promotion_candidates(docs_next_attempt_at, id) WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE;
-CREATE INDEX registry_promotion_candidates_discovery_idx ON registry_promotion_candidates(discovery_next_attempt_at, id) WHERE promoted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS registry_promotion_candidates_source_key ON registry_promotion_candidates(project_id, mcp_server_id);
+CREATE UNIQUE INDEX IF NOT EXISTS registry_promotion_candidates_endpoint_key ON registry_promotion_candidates(endpoint_identity) WHERE endpoint_identity IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS registry_promotion_candidates_docs_slug_key ON registry_promotion_candidates((public_metadata->>'docs_slug')) WHERE public_metadata IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS registry_promotion_candidates_retry_key ON registry_promotion_candidates(project_id, retry_key) WHERE retry_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS registry_promotion_candidates_pending_idx ON registry_promotion_candidates(docs_next_attempt_at, id) WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE;
+CREATE INDEX IF NOT EXISTS registry_promotion_candidates_discovery_idx ON registry_promotion_candidates(discovery_next_attempt_at, id) WHERE promoted_at IS NULL;
 
 COMMENT ON COLUMN registry_promotion_candidates.id IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.organization_id IS '@access: confidential';
