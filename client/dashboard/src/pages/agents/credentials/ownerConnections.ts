@@ -99,8 +99,8 @@ export interface ConnectionApi {
  * reported instead of attached. An attachment already serving the agent is
  * kept; one whose connection was replaced, revoked or has ended is the
  * owner's own, so it is detached and the current connection attached in its
- * place. Any failure
- * throws, naming the server, and nothing after it is attempted.
+ * place. Any failure throws, naming the server, and nothing after it is
+ * attempted.
  */
 export async function attachOwnerConnections(
   api: ConnectionApi,
