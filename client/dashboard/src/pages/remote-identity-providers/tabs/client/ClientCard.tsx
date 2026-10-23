@@ -1,3 +1,4 @@
+import { InlineEditableText } from "@/components/inline-editable-text";
 import { isKnownEnumValue } from "@/lib/enum";
 import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
@@ -38,6 +39,7 @@ import {
   narrowTokenEndpointAuthMethod,
 } from "../../../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { ChangeClientIdDialog } from "../../clientDialogs";
+import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { InfoField, InfoText } from "../../detailFields";
 import { formatTimestamp } from "./formatTimestamp";
 import { KeySetField } from "./KeySetField";
@@ -88,7 +90,6 @@ export function ClientCard({
       ? client.tokenEndpointAuthAudienceFormat
       : undefined,
   );
-  const [displayName, setDisplayName] = useState(client.displayName ?? "");
   const [clientIdDraft, setClientIdDraft] = useState(client.clientId);
   const [confirmClientIdChange, setConfirmClientIdChange] = useState(false);
   const [scope, setScope] = useState<string[]>(client.scope ?? []);
@@ -112,7 +113,6 @@ export function ClientCard({
   const shownAuthAudienceFormat = canEdit
     ? authAudienceFormat
     : client.tokenEndpointAuthAudienceFormat;
-  const shownDisplayName = canEdit ? displayName : (client.displayName ?? "");
   const shownClientId = canEdit ? clientIdDraft : client.clientId;
   // A CIMD client's ID is the metadata document URL Speakeasy generated, so
   // only manually entered and dynamically registered IDs can be corrected.
@@ -165,24 +165,26 @@ export function ClientCard({
     if (isPrivateKeyJwtAuthMethod(method)) setClientSecret("");
   };
 
+  const invalidateClient = () =>
+    Promise.all([
+      invalidateAllOrganizationRemoteSessionClient(queryClient, {
+        refetchType: "all",
+      }),
+      // Lists and breadcrumbs show the name, and a changed client ID
+      // revokes the client's sessions.
+      invalidateAllOrganizationRemoteSessionClients(queryClient, {
+        refetchType: "all",
+      }),
+      invalidateAllOrganizationRemoteSessionClientSessions(queryClient, {
+        refetchType: "all",
+      }),
+    ]);
+
   const update = useUpdateOrganizationRemoteSessionClientMutation({
     onSuccess: async (saved) => {
-      await Promise.all([
-        invalidateAllOrganizationRemoteSessionClient(queryClient, {
-          refetchType: "all",
-        }),
-        // Lists and breadcrumbs show the name, and a changed client ID
-        // revokes the client's sessions.
-        invalidateAllOrganizationRemoteSessionClients(queryClient, {
-          refetchType: "all",
-        }),
-        invalidateAllOrganizationRemoteSessionClientSessions(queryClient, {
-          refetchType: "all",
-        }),
-      ]);
+      await invalidateClient();
       // An emptied audience is omitted, so show what was actually kept.
       setAudience(saved.audience ?? "");
-      setDisplayName(saved.displayName ?? "");
       setClientIdDraft(saved.clientId);
       setConfirmClientIdChange(false);
       setClientSecret("");
@@ -196,6 +198,34 @@ export function ClientCard({
     },
   });
 
+  // The name saves on its own from the card header, so renaming never submits
+  // or resets the other fields' unsaved edits.
+  const rename = useUpdateOrganizationRemoteSessionClientMutation({
+    onSuccess: async () => {
+      await invalidateClient();
+      toast.success("Client renamed");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to rename client",
+      );
+    },
+  });
+
+  const submitDisplayName = async (next: string) => {
+    try {
+      await rename.mutateAsync({
+        request: {
+          // An empty string clears the name.
+          updateRemoteSessionClientForm: { id: client.id, displayName: next },
+        },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   // Unchanged scopes are omitted, so a save never turns an unset scope into [].
   const savedScope = client.scope ?? [];
   const scopeChanged =
@@ -204,8 +234,7 @@ export function ClientCard({
 
   const dirty =
     canEdit &&
-    (displayName.trim() !== (client.displayName ?? "") ||
-      clientIdChanged ||
+    (clientIdChanged ||
       authMethod !== persistedAuthMethod ||
       scopeChanged ||
       audience !== (client.audience ?? "") ||
@@ -220,17 +249,11 @@ export function ClientCard({
 
   const submit = () => {
     if (!canEdit || (privateKeyJwtSelected && !supportsAudience)) return;
-    const trimmedDisplayName = displayName.trim();
     update.mutate({
       request: {
         updateRemoteSessionClientForm: {
           id: client.id,
           clientId: clientIdChanged ? trimmedClientId : undefined,
-          // An empty string clears the name; unchanged names are omitted.
-          displayName:
-            trimmedDisplayName !== (client.displayName ?? "")
-              ? trimmedDisplayName
-              : undefined,
           tokenEndpointAuthMethod: authMethod || undefined,
           tokenEndpointAuthAudienceFormat: privateKeyJwtSelected
             ? authAudienceFormat
@@ -259,7 +282,24 @@ export function ClientCard({
 
   return (
     <Card>
-      <Card.Header>Client</Card.Header>
+      <Card.Header>
+        {canEdit ? (
+          <InlineEditableText
+            value={client.displayName ?? ""}
+            onSubmit={submitDisplayName}
+            inputLabel="Name"
+            editTitle="Rename client"
+            maxLength={200}
+            buttonClassName="[&>svg]:opacity-100"
+          >
+            <span className="truncate py-0.5">
+              {remoteSessionClientDisplayName(client)}
+            </span>
+          </InlineEditableText>
+        ) : (
+          remoteSessionClientDisplayName(client)
+        )}
+      </Card.Header>
       <Card.Content>
         {!supportsEditing && (
           <Text small muted>
@@ -293,21 +333,6 @@ export function ClientCard({
             disabled={!canEdit}
             className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0"
           >
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="client-display-name">Name</Label>
-              <Input
-                id="client-display-name"
-                value={shownDisplayName}
-                onChange={setDisplayName}
-                placeholder={client.clientId}
-                maxLength={200}
-                disabled={!canEdit}
-              />
-              <Text small muted>
-                Shown in lists and page titles. Leave empty to show the client
-                ID.
-              </Text>
-            </div>
             {clientIdEditable && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="client-id">Client ID</Label>

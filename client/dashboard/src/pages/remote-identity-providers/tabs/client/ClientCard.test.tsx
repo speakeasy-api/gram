@@ -10,10 +10,15 @@ import { ClientCard } from "./ClientCard";
 // Unlike OverviewTab.test, this renders the real Radix select fields, which a
 // disabled fieldset does not stop from opening.
 
-const testState = vi.hoisted(() => ({ admin: false, mutate: vi.fn() }));
+const testState = vi.hoisted(() => ({
+  admin: false,
+  mutate: vi.fn(),
+  mutateAsync: vi.fn(),
+}));
 beforeEach(() => {
   testState.admin = false;
   testState.mutate.mockClear();
+  testState.mutateAsync.mockReset();
 });
 
 vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
@@ -40,6 +45,7 @@ vi.mock(
   () => ({
     useUpdateOrganizationRemoteSessionClientMutation: () => ({
       mutate: testState.mutate,
+      mutateAsync: testState.mutateAsync,
       isPending: false,
     }),
   }),
@@ -176,28 +182,54 @@ it("labels an unknown authentication method as unsupported rather than the defau
 });
 
 // A container such as the duplicate sheet warns before discarding edits, so a
-// typed name or corrected client ID must count as unsaved.
-it.each([
-  ["Name", "Production"],
-  ["Client ID", "corrected-client"],
-])("reports an edited %s as unsaved", (label, value) => {
+// corrected client ID must count as unsaved.
+it.each([["Client ID", "corrected-client"]])(
+  "reports an edited %s as unsaved",
+  (label, value) => {
+    testState.admin = true;
+    const onDirtyChange = vi.fn<(dirty: boolean) => void>();
+    render(
+      <ClientCard
+        client={client}
+        issuer={issuer}
+        issuerId="issuer-1"
+        onDirtyChange={onDirtyChange}
+      />,
+    );
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+    const input = screen.getByLabelText(label);
+    const original = (input as HTMLInputElement).value;
+    fireEvent.change(input, { target: { value } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent.change(input, { target: { value: original } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  },
+);
+
+it("renames the client from the card header without submitting the form", async () => {
   testState.admin = true;
-  const onDirtyChange = vi.fn<(dirty: boolean) => void>();
-  render(
-    <ClientCard
-      client={client}
-      issuer={issuer}
-      issuerId="issuer-1"
-      onDirtyChange={onDirtyChange}
-    />,
+  testState.mutateAsync.mockResolvedValue({
+    ...client,
+    displayName: "Production",
+  });
+  render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+
+  fireEvent.click(screen.getByTitle("Rename client"));
+  const input = screen.getByLabelText("Name");
+  fireEvent.change(input, { target: { value: "  Production " } });
+  fireEvent.keyDown(input, { key: "Enter" });
+
+  await vi.waitFor(() =>
+    expect(testState.mutateAsync).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: {
+          id: "client-1",
+          displayName: "Production",
+        },
+      },
+    }),
   );
-  expect(onDirtyChange).toHaveBeenLastCalledWith(false);
-
-  const input = screen.getByLabelText(label);
-  const original = (input as HTMLInputElement).value;
-  fireEvent.change(input, { target: { value } });
-  expect(onDirtyChange).toHaveBeenLastCalledWith(true);
-
-  fireEvent.change(input, { target: { value: original } });
-  expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  expect(testState.mutate).not.toHaveBeenCalled();
 });

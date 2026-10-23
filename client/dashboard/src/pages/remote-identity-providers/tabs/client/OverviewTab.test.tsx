@@ -17,6 +17,7 @@ import { OverviewTab } from "./OverviewTab";
 
 const mutation = vi.hoisted(() => ({
   mutate: vi.fn(),
+  mutateAsync: vi.fn(),
   onSuccess: undefined as ((saved: unknown) => Promise<void>) | undefined,
 }));
 const auth = vi.hoisted(() => ({ isPlatformAdmin: false, isOrgAdmin: true }));
@@ -76,8 +77,14 @@ vi.mock(
     useUpdateOrganizationRemoteSessionClientMutation: (options: {
       onSuccess: (saved: unknown) => Promise<void>;
     }) => {
-      mutation.onSuccess = options.onSuccess;
-      return { mutate: mutation.mutate, isPending: false };
+      // The card also holds a rename mutation whose onSuccess ignores the
+      // saved client; keep the form's handler, which reads it.
+      if (options.onSuccess.length > 0) mutation.onSuccess = options.onSuccess;
+      return {
+        mutate: mutation.mutate,
+        mutateAsync: mutation.mutateAsync,
+        isPending: false,
+      };
     },
   }),
 );
@@ -325,7 +332,7 @@ describe("client overview authorization server card", () => {
 
     expect(screen.queryByText("View authorization server")).toBeNull();
     expect(container.querySelector(".skeleton")).toBeNull();
-    expect(screen.getByText("Client")).toBeTruthy();
+    expect(screen.getByTitle("Rename client")).toBeTruthy();
   });
 
   it("keeps the card while the issuer loads", () => {
@@ -337,7 +344,7 @@ describe("client overview authorization server card", () => {
     // The card holds its place with a skeleton until the issuer arrives.
     expect(screen.queryByText("View authorization server")).toBeNull();
     expect(container.querySelector(".skeleton")).not.toBeNull();
-    expect(screen.getByText("Client")).toBeTruthy();
+    expect(screen.getByTitle("Rename client")).toBeTruthy();
   });
 });
 
@@ -541,31 +548,46 @@ describe("client overview settings", () => {
     ).toBe(true);
   });
 
-  it("saves a trimmed name and omits an unchanged one", () => {
+  it("renames from the header, trimmed, on its own request", async () => {
+    mutation.mutateAsync.mockResolvedValue({});
     renderTab();
 
-    expect(
-      (screen.getByLabelText("Name") as HTMLInputElement).placeholder,
-    ).toBe("upstream-client");
+    fireEvent.click(screen.getByTitle("Rename client"));
+    const input = screen.getByLabelText("Name");
+    expect((input as HTMLInputElement).value).toBe("");
+    fireEvent.change(input, { target: { value: "  Production login  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await vi.waitFor(() =>
+      expect(mutation.mutateAsync).toHaveBeenLastCalledWith({
+        request: {
+          updateRemoteSessionClientForm: {
+            id: "client-1",
+            displayName: "Production login",
+          },
+        },
+      }),
+    );
     save();
     expect(lastSaved().displayName).toBeUndefined();
-
-    fireEvent.change(screen.getByLabelText("Name"), {
-      target: { value: "  Production login  " },
-    });
-    save();
-    expect(lastSaved().displayName).toBe("Production login");
   });
 
-  it("clears a name with an empty string", () => {
+  it("clears a name with an empty string", async () => {
+    mutation.mutateAsync.mockResolvedValue({});
     renderTab({ client: client(undefined, { displayName: "Old name" }) });
 
-    fireEvent.change(screen.getByLabelText("Name"), {
-      target: { value: "" },
-    });
-    save();
+    expect(screen.getByText("Old name")).toBeTruthy();
+    fireEvent.click(screen.getByTitle("Rename client"));
+    const input = screen.getByLabelText("Name");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.keyDown(input, { key: "Enter" });
 
-    expect(lastSaved().displayName).toBe("");
+    await vi.waitFor(() =>
+      expect(
+        mutation.mutateAsync.mock.lastCall![0].request
+          .updateRemoteSessionClientForm.displayName,
+      ).toBe(""),
+    );
   });
 
   it("saves a trimmed audience", () => {
