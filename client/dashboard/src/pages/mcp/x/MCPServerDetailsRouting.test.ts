@@ -4,6 +4,7 @@ import {
   initialTabFromHash,
   isCanonicalHostedWrapper,
   isLegacyAuthenticationTabPath,
+  renamedServerHref,
   standsInForToolset,
   tabForServer,
 } from "./MCPServerDetailsRouting";
@@ -186,5 +187,81 @@ describe("tabForServer", () => {
     expect(tabForServer("resources", false)).toBe("overview");
     expect(tabForServer("prompts", false)).toBe("overview");
     expect(tabForServer("inspect", false)).toBe("inspect");
+  });
+});
+
+describe("renamedServerHref", () => {
+  const tabHref = (slug: string, tab: string) =>
+    `/acme/projects/default/mcp/x/${slug}/${tab}`;
+  const routes = Object.fromEntries(
+    [
+      "overview",
+      "tools",
+      "resources",
+      "prompts",
+      "inspect",
+      "teamAccess",
+      "guardrails",
+      "sessions",
+      "settings",
+    ].map((key) => [
+      key,
+      {
+        href: (slug: string) =>
+          tabHref(slug, key === "teamAccess" ? "team-access" : key),
+      },
+    ]),
+  );
+  const fakeRoutes = { mcp: { x: routes } } as unknown as Parameters<
+    typeof renamedServerHref
+  >[0];
+  const location = {
+    pathname: "/acme/projects/default/mcp/x/old-slug/settings",
+    search: "?tab=1",
+    hash: "#authentication",
+  };
+
+  it("keeps the tab, query and hash under the new slug", () => {
+    expect(
+      renamedServerHref(
+        fakeRoutes,
+        "old-slug",
+        { id: "srv-1", slug: "new-slug" },
+        location,
+      ),
+    ).toBe(
+      "/acme/projects/default/mcp/x/new-slug/settings?tab=1#authentication",
+    );
+  });
+
+  it("stays put when the slug is unchanged", () => {
+    expect(
+      renamedServerHref(
+        fakeRoutes,
+        "old-slug",
+        { id: "srv-1", slug: "old-slug" },
+        location,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("stays put when the route addresses the server by id", () => {
+    expect(
+      renamedServerHref(
+        fakeRoutes,
+        "srv-1",
+        { id: "srv-1", slug: "new-slug" },
+        {
+          ...location,
+          pathname: "/acme/projects/default/mcp/x/srv-1/settings",
+        },
+      ),
+    ).toBeUndefined();
+  });
+
+  it("falls back to the id when the server has no slug", () => {
+    expect(
+      renamedServerHref(fakeRoutes, "old-slug", { id: "srv-1" }, location),
+    ).toBe("/acme/projects/default/mcp/x/srv-1/settings?tab=1#authentication");
   });
 });

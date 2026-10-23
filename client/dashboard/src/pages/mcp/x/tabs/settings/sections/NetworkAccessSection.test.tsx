@@ -14,6 +14,11 @@ import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver
 import { NetworkAccessSection } from "./NetworkAccessSection";
 import type { Toolset } from "@/lib/toolTypes";
 
+const followRenamedServer = vi.hoisted(() => vi.fn());
+vi.mock("@/pages/mcp/x/useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => followRenamedServer,
+}));
+
 const testState = vi.hoisted(() => ({
   entitled: true,
   productTier: "enterprise" as "enterprise" | "payg" | "base",

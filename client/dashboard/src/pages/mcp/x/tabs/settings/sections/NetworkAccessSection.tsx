@@ -1,4 +1,5 @@
 import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { RequireScope } from "@/components/require-scope";
 import {
@@ -296,9 +297,11 @@ function NetworkAccessSectionContent({
     setConfirmPrivateOnlyOpen(false);
     toast.error(error.message || "Failed to update network access");
   };
+  const followRenamedServer = useFollowRenamedServer();
   const update = useUpdateMcpServerMutation({
-    onSuccess: async () => {
+    onSuccess: async (updated) => {
       setConfirmPrivateOnlyOpen(false);
+      followRenamedServer(updated);
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),

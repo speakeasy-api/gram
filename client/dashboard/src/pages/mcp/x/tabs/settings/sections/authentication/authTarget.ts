@@ -7,6 +7,7 @@ import {
 import type { Toolset } from "@/lib/toolTypes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
 import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
@@ -67,6 +68,7 @@ export function useMcpServerAuthTarget(
   mcpUrl?: string,
 ): AuthTarget {
   const client = useSdkClient();
+  const followRenamedServer = useFollowRenamedServer();
 
   return useMemo(
     () => ({
@@ -80,12 +82,15 @@ export function useMcpServerAuthTarget(
       attachImpactTarget: { mcpServerId: mcpServer.id },
       mcpUrl,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
-      linkUserSessionIssuer: (userSessionIssuerId: string) =>
-        linkMcpServerUserSessionIssuer(
-          client,
-          mcpServer.id,
-          userSessionIssuerId,
-        ),
+      linkUserSessionIssuer: async (userSessionIssuerId: string) => {
+        followRenamedServer(
+          await linkMcpServerUserSessionIssuer(
+            client,
+            mcpServer.id,
+            userSessionIssuerId,
+          ),
+        );
+      },
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([
           invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
@@ -93,12 +98,13 @@ export function useMcpServerAuthTarget(
         ]);
       },
     }),
-    [client, mcpServer, mcpUrl],
+    [client, mcpServer, mcpUrl, followRenamedServer],
   );
 }
 
 export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
   const client = useSdkClient();
+  const followRenamedServer = useFollowRenamedServer();
   const { url, customServerURL } = useMcpUrl(toolset);
   // A custom-domain URL takes the platform host until the domain resolves;
   // that address is not the one clients use, so leave it unknown until then.
@@ -117,8 +123,14 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
       attachImpactTarget: { toolsetId: toolset.id },
       mcpUrl,
-      linkUserSessionIssuer: (userSessionIssuerId: string) =>
-        linkToolsetUserSessionIssuer(client, toolset, userSessionIssuerId),
+      linkUserSessionIssuer: async (userSessionIssuerId: string) => {
+        const server = await linkToolsetUserSessionIssuer(
+          client,
+          toolset,
+          userSessionIssuerId,
+        );
+        if (server) followRenamedServer(server);
+      },
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([
           invalidateAllToolset(queryClient, { refetchType: "all" }),
@@ -128,7 +140,7 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
         ]);
       },
     }),
-    [client, toolset, mcpUrl],
+    [client, toolset, mcpUrl, followRenamedServer],
   );
 }
 

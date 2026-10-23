@@ -14,15 +14,14 @@ async function updateServerIssuer(
   latest: McpServer,
   userSessionIssuerId: string,
   options?: RequestOptions,
-): Promise<boolean> {
+): Promise<McpServer> {
   const { visibility, ...form } = mcpServerUpdateForm(latest);
-  if (!visibility) return false;
-  await client.mcpServers.update(
+  if (!visibility) throw new Error(UNSUPPORTED_VISIBILITY);
+  return await client.mcpServers.update(
     { updateMcpServerForm: { ...form, visibility, userSessionIssuerId } },
     undefined,
     options,
   );
-  return true;
 }
 
 export async function linkMcpServerUserSessionIssuer(
@@ -30,17 +29,13 @@ export async function linkMcpServerUserSessionIssuer(
   mcpServerId: string,
   userSessionIssuerId: string,
   options?: RequestOptions,
-): Promise<void> {
+): Promise<McpServer> {
   const latest = await client.mcpServers.get(
     { id: mcpServerId },
     undefined,
     options,
   );
-  if (
-    !(await updateServerIssuer(client, latest, userSessionIssuerId, options))
-  ) {
-    throw new Error(UNSUPPORTED_VISIBILITY);
-  }
+  return await updateServerIssuer(client, latest, userSessionIssuerId, options);
 }
 
 // Falls back to the toolset call only while the toolset has no canonical MCP server.
@@ -49,7 +44,7 @@ export async function linkToolsetUserSessionIssuer(
   toolset: { id: string; slug: string },
   userSessionIssuerId: string,
   options?: RequestOptions,
-): Promise<void> {
+): Promise<McpServer | undefined> {
   let canonical: McpServer | undefined;
   try {
     const server = await client.mcpServers.get(
@@ -67,17 +62,12 @@ export async function linkToolsetUserSessionIssuer(
   }
 
   if (canonical) {
-    if (
-      !(await updateServerIssuer(
-        client,
-        canonical,
-        userSessionIssuerId,
-        options,
-      ))
-    ) {
-      throw new Error(UNSUPPORTED_VISIBILITY);
-    }
-    return;
+    return await updateServerIssuer(
+      client,
+      canonical,
+      userSessionIssuerId,
+      options,
+    );
   }
 
   await client.toolsets.setUserSessionIssuer(
@@ -88,4 +78,5 @@ export async function linkToolsetUserSessionIssuer(
     undefined,
     options,
   );
+  return undefined;
 }

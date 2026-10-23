@@ -4,6 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { Toolset } from "@/lib/toolTypes";
 import { useMcpServerAuthTarget, useToolsetAuthTarget } from "./authTarget";
 
+const followRenamedServer = vi.hoisted(() => vi.fn());
+vi.mock("@/pages/mcp/x/useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => followRenamedServer,
+}));
+
 const { get, update, setUserSessionIssuer } = vi.hoisted(() => ({
   get: vi.fn(),
   update: vi.fn(),

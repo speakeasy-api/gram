@@ -11,11 +11,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Toolset } from "@/lib/toolTypes";
 import { HostedAddressSections } from "./HostedAddressSections";
 
+const followRenamedServer = vi.hoisted(() => vi.fn());
+vi.mock("@/pages/mcp/x/useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => followRenamedServer,
+}));
+
 const testState = vi.hoisted(() => ({
   mutate: vi.fn(),
   mutationOptions: undefined as
     | {
-        onSuccess?: (endpoint: unknown) => void;
+        onSuccess?: (endpoint: unknown) => unknown;
         onError?: (error: Error) => void;
       }
     | undefined,
@@ -44,6 +49,10 @@ vi.mock("@/pages/mcp/mcp-details-utils", () => ({
     slug && customDomainId && customDomainId === testState.takenOnDomain
       ? "This slug is already taken"
       : null,
+}));
+const getMcpServer = vi.hoisted(() => vi.fn());
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({ mcpServers: { get: getMcpServer } }),
 }));
 vi.mock("@/lib/mcp-server-visibility", () => ({
   invalidateMcpServerQueries: testState.invalidateMcpServerQueries,
@@ -263,11 +272,19 @@ describe("HostedAddressSections", () => {
     expect(screen.queryByText(/address could not be loaded/)).toBeNull();
   });
 
-  it("invalidates server queries and toasts on success", () => {
+  it("invalidates server queries and toasts on success", async () => {
     renderSections(platformToolset, [endpoint()]);
     const updated = endpoint({ slug: "acme-renamed" });
+    const renamed = { id: platformToolset.id, slug: "acme-renamed" };
+    getMcpServer.mockResolvedValue(renamed);
 
-    testState.mutationOptions?.onSuccess?.(updated);
+    await testState.mutationOptions?.onSuccess?.(updated);
+
+    expect(getMcpServer).toHaveBeenCalledWith({ id: platformToolset.id });
+    expect(followRenamedServer).toHaveBeenCalledWith(renamed);
+    expect(followRenamedServer.mock.invocationCallOrder[0]).toBeLessThan(
+      testState.invalidateMcpServerQueries.mock.invocationCallOrder[0]!,
+    );
 
     expect(testState.patchMcpEndpointInCache).toHaveBeenCalledWith(
       expect.anything(),

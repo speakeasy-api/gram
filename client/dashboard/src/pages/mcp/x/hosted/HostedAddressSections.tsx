@@ -23,6 +23,8 @@ import { invalidateMcpServerQueries } from "@/lib/mcp-server-visibility";
 import { patchMcpEndpointInCache } from "@/hooks/useRootMcpEndpoint";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
+import { useSdkClient } from "@/contexts/Sdk";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import React, { useMemo, useState } from "react";
@@ -60,9 +62,17 @@ export function HostedAddressSections({
     return nonRoot.length === 1 ? nonRoot[0] : undefined;
   }, [endpoints, toolset.mcpSlug, toolset.customDomainId]);
 
+  const client = useSdkClient();
+  const followRenamedServer = useFollowRenamedServer();
   const updateEndpointMutation = useUpdateMcpEndpointMutation({
-    onSuccess: (updated) => {
+    onSuccess: async (updated) => {
       patchMcpEndpointInCache(queryClient, updated);
+      // The hosted server's slug follows its address; move the route before refetching by slug.
+      try {
+        followRenamedServer(await client.mcpServers.get({ id: toolset.id }));
+      } catch {
+        // The refetch below still settles the page.
+      }
       void invalidateMcpServerQueries(queryClient);
       toast.success("MCP settings saved successfully");
       telemetry.capture("mcp_event", {

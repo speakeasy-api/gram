@@ -135,3 +135,22 @@ export function tabForServer(tab: TabValue, hosted: boolean): TabValue {
   if (tab === "tools") return "inspect";
   return HOSTED_ONLY_TABS.includes(tab) ? "overview" : tab;
 }
+
+/** Where to go after a save renamed the server's route slug, keeping tab, query and hash; undefined when unchanged. */
+export function renamedServerHref(
+  routes: ReturnType<typeof useRoutes>,
+  currentParam: string,
+  server: { id: string; slug?: string | null | undefined },
+  location: { pathname: string; search: string; hash: string },
+): string | undefined {
+  const nextParam = server.slug?.trim() || server.id;
+  if (
+    !currentParam ||
+    currentParam === nextParam ||
+    currentParam === server.id
+  ) {
+    return undefined;
+  }
+  const tab = activeTabFromPath(location.pathname, currentParam) ?? "overview";
+  return `${mcpServerTabHref(routes, nextParam, tab)}${location.search}${location.hash}`;
+}
