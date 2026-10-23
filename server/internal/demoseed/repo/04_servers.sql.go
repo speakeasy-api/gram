@@ -1140,8 +1140,36 @@ func (q *Queries) ServersInsertPrivateInventoryTunnel(ctx context.Context, arg S
 	return err
 }
 
-const serversInsertRemoteMCPServers = `-- name: ServersInsertRemoteMCPServers :exec
+const serversInsertRegistryPromotionCandidate = `-- name: ServersInsertRegistryPromotionCandidate :exec
 
+INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_server_id, remote_mcp_server_id, source_revision, eligible, reason)
+VALUES ($1::uuid, $2::text, $3::uuid, $4::uuid, $5::uuid, 'synthetic-unverified', false, 'insufficient_evidence')
+`
+
+type ServersInsertRegistryPromotionCandidateParams struct {
+	ID                uuid.UUID
+	OrgID             string
+	ProjectID         uuid.UUID
+	McpServerID       uuid.UUID
+	RemoteMcpServerID uuid.UUID
+}
+
+// MCP servers, gateway endpoints, plugins, meta MCP servers, remote sessions,
+// and killswitches (seed_04_servers.go). Each query is one statement of the
+// old demo.ensure_demo_org(); tenant identifiers arrive as parameters.
+// Synthetic evidence stays ineligible and queues no public publication or messages.
+func (q *Queries) ServersInsertRegistryPromotionCandidate(ctx context.Context, arg ServersInsertRegistryPromotionCandidateParams) error {
+	_, err := q.db.Exec(ctx, serversInsertRegistryPromotionCandidate,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.RemoteMcpServerID,
+	)
+	return err
+}
+
+const serversInsertRemoteMCPServers = `-- name: ServersInsertRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   ($1::uuid, $2::uuid, 'Linear', 'linear',
    'streamable-http', 'https://mcp.linear.app/mcp'),
@@ -1158,9 +1186,6 @@ type ServersInsertRemoteMCPServersParams struct {
 	GithubID  uuid.UUID
 }
 
-// MCP servers, gateway endpoints, plugins, meta MCP servers, remote sessions,
-// and killswitches (seed_04_servers.go). Each query is one statement of the
-// old demo.ensure_demo_org(); tenant identifiers arrive as parameters.
 // MCP servers and the Gateway Endpoint fronting them (AGE-3299).
 // Two backends so the gateway's member table shows both classes: the
 // toolset-backed pair executes in-process, the third-party remotes are

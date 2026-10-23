@@ -85,6 +85,10 @@ type Server struct {
 	ListExternalMcpMigrationCandidates      http.Handler
 	PreviewExternalMcpMigration             http.Handler
 	MigrateExternalMcpServers               http.Handler
+	ListRegistryPromotionCandidates         http.Handler
+	GetRegistryPromotionCandidate           http.Handler
+	PromoteRegistryCandidate                http.Handler
+	RetryRegistryPromotionDocs              http.Handler
 	GetRegistryOktaCandidates               http.Handler
 	ListRegistryOktaUnmapped                http.Handler
 	ListRegistryEntries                     http.Handler
@@ -209,6 +213,10 @@ func New(
 			{"ListExternalMcpMigrationCandidates", "GET", "/admin/externalMcpMigration.listCandidates"},
 			{"PreviewExternalMcpMigration", "POST", "/admin/externalMcpMigration.preview"},
 			{"MigrateExternalMcpServers", "POST", "/admin/externalMcpMigration.migrate"},
+			{"ListRegistryPromotionCandidates", "GET", "/admin/registry.promotionCandidates"},
+			{"GetRegistryPromotionCandidate", "GET", "/admin/registry.promotionCandidate"},
+			{"PromoteRegistryCandidate", "POST", "/admin/registry.promoteCandidate"},
+			{"RetryRegistryPromotionDocs", "POST", "/admin/registry.retryPromotionDocs"},
 			{"GetRegistryOktaCandidates", "GET", "/admin/registry.oktaCandidates"},
 			{"ListRegistryOktaUnmapped", "GET", "/admin/registry.oktaUnmapped"},
 			{"ListRegistryEntries", "GET", "/admin/registry.list"},
@@ -305,6 +313,10 @@ func New(
 		ListExternalMcpMigrationCandidates:      NewListExternalMcpMigrationCandidatesHandler(e.ListExternalMcpMigrationCandidates, mux, decoder, encoder, errhandler, formatter),
 		PreviewExternalMcpMigration:             NewPreviewExternalMcpMigrationHandler(e.PreviewExternalMcpMigration, mux, decoder, encoder, errhandler, formatter),
 		MigrateExternalMcpServers:               NewMigrateExternalMcpServersHandler(e.MigrateExternalMcpServers, mux, decoder, encoder, errhandler, formatter),
+		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesHandler(e.ListRegistryPromotionCandidates, mux, decoder, encoder, errhandler, formatter),
+		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateHandler(e.GetRegistryPromotionCandidate, mux, decoder, encoder, errhandler, formatter),
+		PromoteRegistryCandidate:                NewPromoteRegistryCandidateHandler(e.PromoteRegistryCandidate, mux, decoder, encoder, errhandler, formatter),
+		RetryRegistryPromotionDocs:              NewRetryRegistryPromotionDocsHandler(e.RetryRegistryPromotionDocs, mux, decoder, encoder, errhandler, formatter),
 		GetRegistryOktaCandidates:               NewGetRegistryOktaCandidatesHandler(e.GetRegistryOktaCandidates, mux, decoder, encoder, errhandler, formatter),
 		ListRegistryOktaUnmapped:                NewListRegistryOktaUnmappedHandler(e.ListRegistryOktaUnmapped, mux, decoder, encoder, errhandler, formatter),
 		ListRegistryEntries:                     NewListRegistryEntriesHandler(e.ListRegistryEntries, mux, decoder, encoder, errhandler, formatter),
@@ -408,6 +420,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListExternalMcpMigrationCandidates = m(s.ListExternalMcpMigrationCandidates)
 	s.PreviewExternalMcpMigration = m(s.PreviewExternalMcpMigration)
 	s.MigrateExternalMcpServers = m(s.MigrateExternalMcpServers)
+	s.ListRegistryPromotionCandidates = m(s.ListRegistryPromotionCandidates)
+	s.GetRegistryPromotionCandidate = m(s.GetRegistryPromotionCandidate)
+	s.PromoteRegistryCandidate = m(s.PromoteRegistryCandidate)
+	s.RetryRegistryPromotionDocs = m(s.RetryRegistryPromotionDocs)
 	s.GetRegistryOktaCandidates = m(s.GetRegistryOktaCandidates)
 	s.ListRegistryOktaUnmapped = m(s.ListRegistryOktaUnmapped)
 	s.ListRegistryEntries = m(s.ListRegistryEntries)
@@ -510,6 +526,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListExternalMcpMigrationCandidatesHandler(mux, h.ListExternalMcpMigrationCandidates)
 	MountPreviewExternalMcpMigrationHandler(mux, h.PreviewExternalMcpMigration)
 	MountMigrateExternalMcpServersHandler(mux, h.MigrateExternalMcpServers)
+	MountListRegistryPromotionCandidatesHandler(mux, h.ListRegistryPromotionCandidates)
+	MountGetRegistryPromotionCandidateHandler(mux, h.GetRegistryPromotionCandidate)
+	MountPromoteRegistryCandidateHandler(mux, h.PromoteRegistryCandidate)
+	MountRetryRegistryPromotionDocsHandler(mux, h.RetryRegistryPromotionDocs)
 	MountGetRegistryOktaCandidatesHandler(mux, h.GetRegistryOktaCandidates)
 	MountListRegistryOktaUnmappedHandler(mux, h.ListRegistryOktaUnmapped)
 	MountListRegistryEntriesHandler(mux, h.ListRegistryEntries)
@@ -3975,6 +3995,222 @@ func NewMigrateExternalMcpServersHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "migrateExternalMcpServers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListRegistryPromotionCandidatesHandler configures the mux to serve the
+// "admin" service "listRegistryPromotionCandidates" endpoint.
+func MountListRegistryPromotionCandidatesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/registry.promotionCandidates", f)
+}
+
+// NewListRegistryPromotionCandidatesHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "listRegistryPromotionCandidates" endpoint.
+func NewListRegistryPromotionCandidatesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRegistryPromotionCandidatesRequest(mux, decoder)
+		encodeResponse = EncodeListRegistryPromotionCandidatesResponse(encoder)
+		encodeError    = EncodeListRegistryPromotionCandidatesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRegistryPromotionCandidates")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetRegistryPromotionCandidateHandler configures the mux to serve the
+// "admin" service "getRegistryPromotionCandidate" endpoint.
+func MountGetRegistryPromotionCandidateHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/registry.promotionCandidate", f)
+}
+
+// NewGetRegistryPromotionCandidateHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "getRegistryPromotionCandidate" endpoint.
+func NewGetRegistryPromotionCandidateHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRegistryPromotionCandidateRequest(mux, decoder)
+		encodeResponse = EncodeGetRegistryPromotionCandidateResponse(encoder)
+		encodeError    = EncodeGetRegistryPromotionCandidateError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRegistryPromotionCandidate")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountPromoteRegistryCandidateHandler configures the mux to serve the "admin"
+// service "promoteRegistryCandidate" endpoint.
+func MountPromoteRegistryCandidateHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/registry.promoteCandidate", f)
+}
+
+// NewPromoteRegistryCandidateHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "promoteRegistryCandidate"
+// endpoint.
+func NewPromoteRegistryCandidateHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodePromoteRegistryCandidateRequest(mux, decoder)
+		encodeResponse = EncodePromoteRegistryCandidateResponse(encoder)
+		encodeError    = EncodePromoteRegistryCandidateError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "promoteRegistryCandidate")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRetryRegistryPromotionDocsHandler configures the mux to serve the
+// "admin" service "retryRegistryPromotionDocs" endpoint.
+func MountRetryRegistryPromotionDocsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/registry.retryPromotionDocs", f)
+}
+
+// NewRetryRegistryPromotionDocsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "retryRegistryPromotionDocs"
+// endpoint.
+func NewRetryRegistryPromotionDocsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRetryRegistryPromotionDocsRequest(mux, decoder)
+		encodeResponse = EncodeRetryRegistryPromotionDocsResponse(encoder)
+		encodeError    = EncodeRetryRegistryPromotionDocsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "retryRegistryPromotionDocs")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

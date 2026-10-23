@@ -14,6 +14,13 @@ import (
 // postflight asserts the demo data landed and nothing leaked outside the demo
 // org. Any failure rolls the whole Postgres seed back.
 func (s *seeder) postflight(ctx context.Context) error {
+	count, err := s.q.PostflightCountRegistryPromotionCandidates(ctx, repo.PostflightCountRegistryPromotionCandidatesParams{OrgID: s.orgID(), ProjectID: s.projectID()})
+	if err != nil {
+		return fmt.Errorf("count synthetic catalogue promotion candidates: %w", err)
+	}
+	if count != 1 {
+		return fmt.Errorf("expected one ineligible catalogue promotion candidate, got %d", count)
+	}
 	if err := s.postflightCore(ctx); err != nil {
 		return err
 	}

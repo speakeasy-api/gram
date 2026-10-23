@@ -1,5 +1,10 @@
 # Demo org page checklist
 
+Staff catalogue promotion review includes one synthetic, ineligible remote MCP
+candidate. It has no publication or documentation jobs. The shared
+demo organization is excluded from qualification. Reseeding deletes candidates by
+the seeded organization before recreating this row. Staff UI verification is pending.
+
 Acceptance contract for the demo seed. Every dashboard page a demo user can
 reach must render populated (no empty state, no error boundary) from the data
 in the demo seed (`server/internal/demoseed/`). A page is DONE when its `verify.md`

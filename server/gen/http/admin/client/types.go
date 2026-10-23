@@ -413,6 +413,33 @@ type MigrateExternalMcpServersRequestBody struct {
 	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers" json:"servers" xml:"servers"`
 }
 
+// PromoteRegistryCandidateRequestBody is the type of the "admin" service
+// "promoteRegistryCandidate" endpoint HTTP request body.
+type PromoteRegistryCandidateRequestBody struct {
+	OrganizationID          string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID               string `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID             string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	SourceRevision          string `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	PublicName              string `form:"public_name" json:"public_name" xml:"public_name"`
+	PublicTitle             string `form:"public_title" json:"public_title" xml:"public_title"`
+	PublicDescription       string `form:"public_description" json:"public_description" xml:"public_description"`
+	PublicURL               string `form:"public_url" json:"public_url" xml:"public_url"`
+	DocumentationURL        string `form:"documentation_url" json:"documentation_url" xml:"documentation_url"`
+	DocsSlug                string `form:"docs_slug" json:"docs_slug" xml:"docs_slug"`
+	AuthMode                string `form:"auth_mode" json:"auth_mode" xml:"auth_mode"`
+	RetryKey                string `form:"retry_key" json:"retry_key" xml:"retry_key"`
+	PublicMetadataConfirmed bool   `form:"public_metadata_confirmed" json:"public_metadata_confirmed" xml:"public_metadata_confirmed"`
+}
+
+// RetryRegistryPromotionDocsRequestBody is the type of the "admin" service
+// "retryRegistryPromotionDocs" endpoint HTTP request body.
+type RetryRegistryPromotionDocsRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	PromotionID    string `form:"promotion_id" json:"promotion_id" xml:"promotion_id"`
+	DocsRevision   string `form:"docs_revision" json:"docs_revision" xml:"docs_revision"`
+	RetryKey       string `form:"retry_key" json:"retry_key" xml:"retry_key"`
+}
+
 // CreateRegistryEntryRequestBody is the type of the "admin" service
 // "createRegistryEntry" endpoint HTTP request body.
 type CreateRegistryEntryRequestBody struct {
@@ -2008,6 +2035,106 @@ type PreviewExternalMcpMigrationResponseBody struct {
 type MigrateExternalMcpServersResponseBody struct {
 	// One outcome per requested server, in request order.
 	Outcomes []*AdminExternalMcpMigrationOutcomeResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesResponseBody is the type of the "admin"
+// service "listRegistryPromotionCandidates" endpoint HTTP response body.
+type ListRegistryPromotionCandidatesResponseBody struct {
+	Candidates []*AdminRegistryPromotionCandidateResponseBody `form:"candidates,omitempty" json:"candidates,omitempty" xml:"candidates,omitempty"`
+	NextCursor *string                                        `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetRegistryPromotionCandidateResponseBody is the type of the "admin" service
+// "getRegistryPromotionCandidate" endpoint HTTP response body.
+type GetRegistryPromotionCandidateResponseBody struct {
+	ID                *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	SourceRevision    *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible          *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	Reason            *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status            *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures  *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays      *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt         *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID   *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus        *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL           *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision      *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed  *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts      *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt      *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt        *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle       *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError     *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// PromoteRegistryCandidateResponseBody is the type of the "admin" service
+// "promoteRegistryCandidate" endpoint HTTP response body.
+type PromoteRegistryCandidateResponseBody struct {
+	ID                *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	SourceRevision    *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible          *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	Reason            *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status            *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures  *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays      *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt         *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID   *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus        *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL           *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision      *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed  *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts      *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt      *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt        *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle       *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError     *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// RetryRegistryPromotionDocsResponseBody is the type of the "admin" service
+// "retryRegistryPromotionDocs" endpoint HTTP response body.
+type RetryRegistryPromotionDocsResponseBody struct {
+	ID                *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	SourceRevision    *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible          *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	Reason            *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status            *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures  *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays      *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt         *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID   *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus        *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL           *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision      *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed  *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts      *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt      *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt        *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle       *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError     *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
 }
 
 // GetRegistryOktaCandidatesResponseBody is the type of the "admin" service
@@ -14758,6 +14885,766 @@ type MigrateExternalMcpServersGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListRegistryPromotionCandidatesUnauthorizedResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "unauthorized" error.
+type ListRegistryPromotionCandidatesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesForbiddenResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "forbidden" error.
+type ListRegistryPromotionCandidatesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesBadRequestResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "bad_request" error.
+type ListRegistryPromotionCandidatesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesNotFoundResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "not_found" error.
+type ListRegistryPromotionCandidatesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesConflictResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "conflict" error.
+type ListRegistryPromotionCandidatesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesUnsupportedMediaResponseBody is the type of
+// the "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ListRegistryPromotionCandidatesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesInvalidResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "invalid" error.
+type ListRegistryPromotionCandidatesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesInvariantViolationResponseBody is the type of
+// the "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListRegistryPromotionCandidatesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesUnexpectedResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "unexpected" error.
+type ListRegistryPromotionCandidatesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRegistryPromotionCandidatesGatewayErrorResponseBody is the type of the
+// "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
+// body for the "gateway_error" error.
+type ListRegistryPromotionCandidatesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateUnauthorizedResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetRegistryPromotionCandidateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateForbiddenResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "forbidden" error.
+type GetRegistryPromotionCandidateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateBadRequestResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "bad_request" error.
+type GetRegistryPromotionCandidateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateNotFoundResponseBody is the type of the "admin"
+// service "getRegistryPromotionCandidate" endpoint HTTP response body for the
+// "not_found" error.
+type GetRegistryPromotionCandidateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateConflictResponseBody is the type of the "admin"
+// service "getRegistryPromotionCandidate" endpoint HTTP response body for the
+// "conflict" error.
+type GetRegistryPromotionCandidateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateUnsupportedMediaResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetRegistryPromotionCandidateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateInvalidResponseBody is the type of the "admin"
+// service "getRegistryPromotionCandidate" endpoint HTTP response body for the
+// "invalid" error.
+type GetRegistryPromotionCandidateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateInvariantViolationResponseBody is the type of
+// the "admin" service "getRegistryPromotionCandidate" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetRegistryPromotionCandidateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateUnexpectedResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "unexpected" error.
+type GetRegistryPromotionCandidateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionCandidateGatewayErrorResponseBody is the type of the
+// "admin" service "getRegistryPromotionCandidate" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetRegistryPromotionCandidateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateUnauthorizedResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "unauthorized" error.
+type PromoteRegistryCandidateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateForbiddenResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "forbidden" error.
+type PromoteRegistryCandidateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateBadRequestResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "bad_request" error.
+type PromoteRegistryCandidateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateNotFoundResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "not_found" error.
+type PromoteRegistryCandidateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateConflictResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "conflict" error.
+type PromoteRegistryCandidateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateUnsupportedMediaResponseBody is the type of the
+// "admin" service "promoteRegistryCandidate" endpoint HTTP response body for
+// the "unsupported_media" error.
+type PromoteRegistryCandidateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateInvalidResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "invalid" error.
+type PromoteRegistryCandidateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateInvariantViolationResponseBody is the type of the
+// "admin" service "promoteRegistryCandidate" endpoint HTTP response body for
+// the "invariant_violation" error.
+type PromoteRegistryCandidateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateUnexpectedResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "unexpected" error.
+type PromoteRegistryCandidateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PromoteRegistryCandidateGatewayErrorResponseBody is the type of the "admin"
+// service "promoteRegistryCandidate" endpoint HTTP response body for the
+// "gateway_error" error.
+type PromoteRegistryCandidateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsUnauthorizedResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "unauthorized" error.
+type RetryRegistryPromotionDocsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsForbiddenResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "forbidden" error.
+type RetryRegistryPromotionDocsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsBadRequestResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "bad_request" error.
+type RetryRegistryPromotionDocsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsNotFoundResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "not_found" error.
+type RetryRegistryPromotionDocsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsConflictResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "conflict" error.
+type RetryRegistryPromotionDocsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsUnsupportedMediaResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "unsupported_media" error.
+type RetryRegistryPromotionDocsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsInvalidResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "invalid" error.
+type RetryRegistryPromotionDocsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsInvariantViolationResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "invariant_violation" error.
+type RetryRegistryPromotionDocsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsUnexpectedResponseBody is the type of the "admin"
+// service "retryRegistryPromotionDocs" endpoint HTTP response body for the
+// "unexpected" error.
+type RetryRegistryPromotionDocsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryRegistryPromotionDocsGatewayErrorResponseBody is the type of the
+// "admin" service "retryRegistryPromotionDocs" endpoint HTTP response body for
+// the "gateway_error" error.
+type RetryRegistryPromotionDocsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetRegistryOktaCandidatesUnauthorizedResponseBody is the type of the "admin"
 // service "getRegistryOktaCandidates" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -21585,6 +22472,37 @@ type AdminExternalMcpMigrationOutcomeResponseBody struct {
 	Warnings []string `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
 }
 
+// AdminRegistryPromotionCandidateResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionCandidateResponseBody struct {
+	ID                *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID    *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID         *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID       *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	SourceName        *string `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	SourceRevision    *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible          *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	Reason            *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status            *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures  *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays      *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt         *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID   *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus        *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL           *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision      *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed  *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts      *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt      *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt        *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle       *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError     *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
 // AdminRegistryOktaCandidateResponseBody is used to define fields on response
 // body types.
 type AdminRegistryOktaCandidateResponseBody struct {
@@ -22408,6 +23326,40 @@ func NewMigrateExternalMcpServersRequestBody(p *admin.MigrateExternalMcpServersP
 		}
 	} else {
 		body.Servers = []*AdminExternalMcpMigrationRequestRequestBody{}
+	}
+	return body
+}
+
+// NewPromoteRegistryCandidateRequestBody builds the HTTP request body from the
+// payload of the "promoteRegistryCandidate" endpoint of the "admin" service.
+func NewPromoteRegistryCandidateRequestBody(p *admin.PromoteRegistryCandidatePayload) *PromoteRegistryCandidateRequestBody {
+	body := &PromoteRegistryCandidateRequestBody{
+		OrganizationID:          p.OrganizationID,
+		ProjectID:               p.ProjectID,
+		McpServerID:             p.McpServerID,
+		SourceRevision:          p.SourceRevision,
+		PublicName:              p.PublicName,
+		PublicTitle:             p.PublicTitle,
+		PublicDescription:       p.PublicDescription,
+		PublicURL:               p.PublicURL,
+		DocumentationURL:        p.DocumentationURL,
+		DocsSlug:                p.DocsSlug,
+		AuthMode:                p.AuthMode,
+		RetryKey:                p.RetryKey,
+		PublicMetadataConfirmed: p.PublicMetadataConfirmed,
+	}
+	return body
+}
+
+// NewRetryRegistryPromotionDocsRequestBody builds the HTTP request body from
+// the payload of the "retryRegistryPromotionDocs" endpoint of the "admin"
+// service.
+func NewRetryRegistryPromotionDocsRequestBody(p *admin.RetryRegistryPromotionDocsPayload) *RetryRegistryPromotionDocsRequestBody {
+	body := &RetryRegistryPromotionDocsRequestBody{
+		OrganizationID: p.OrganizationID,
+		PromotionID:    p.PromotionID,
+		DocsRevision:   p.DocsRevision,
+		RetryKey:       p.RetryKey,
 	}
 	return body
 }
@@ -34088,6 +35040,733 @@ func NewMigrateExternalMcpServersGatewayError(body *MigrateExternalMcpServersGat
 	return v
 }
 
+// NewListRegistryPromotionCandidatesAdminRegistryPromotionCandidatesOK builds
+// a "admin" service "listRegistryPromotionCandidates" endpoint result from a
+// HTTP "OK" response.
+func NewListRegistryPromotionCandidatesAdminRegistryPromotionCandidatesOK(body *ListRegistryPromotionCandidatesResponseBody) *admin.AdminRegistryPromotionCandidates {
+	v := &admin.AdminRegistryPromotionCandidates{
+		NextCursor: body.NextCursor,
+	}
+	v.Candidates = make([]*admin.AdminRegistryPromotionCandidate, len(body.Candidates))
+	for i, val := range body.Candidates {
+		if val == nil {
+			v.Candidates[i] = nil
+			continue
+		}
+		v.Candidates[i] = unmarshalAdminRegistryPromotionCandidateResponseBodyToAdminAdminRegistryPromotionCandidate(val)
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesUnauthorized builds a admin service
+// listRegistryPromotionCandidates endpoint unauthorized error.
+func NewListRegistryPromotionCandidatesUnauthorized(body *ListRegistryPromotionCandidatesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesForbidden builds a admin service
+// listRegistryPromotionCandidates endpoint forbidden error.
+func NewListRegistryPromotionCandidatesForbidden(body *ListRegistryPromotionCandidatesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesBadRequest builds a admin service
+// listRegistryPromotionCandidates endpoint bad_request error.
+func NewListRegistryPromotionCandidatesBadRequest(body *ListRegistryPromotionCandidatesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesNotFound builds a admin service
+// listRegistryPromotionCandidates endpoint not_found error.
+func NewListRegistryPromotionCandidatesNotFound(body *ListRegistryPromotionCandidatesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesConflict builds a admin service
+// listRegistryPromotionCandidates endpoint conflict error.
+func NewListRegistryPromotionCandidatesConflict(body *ListRegistryPromotionCandidatesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesUnsupportedMedia builds a admin service
+// listRegistryPromotionCandidates endpoint unsupported_media error.
+func NewListRegistryPromotionCandidatesUnsupportedMedia(body *ListRegistryPromotionCandidatesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesInvalid builds a admin service
+// listRegistryPromotionCandidates endpoint invalid error.
+func NewListRegistryPromotionCandidatesInvalid(body *ListRegistryPromotionCandidatesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesInvariantViolation builds a admin service
+// listRegistryPromotionCandidates endpoint invariant_violation error.
+func NewListRegistryPromotionCandidatesInvariantViolation(body *ListRegistryPromotionCandidatesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesUnexpected builds a admin service
+// listRegistryPromotionCandidates endpoint unexpected error.
+func NewListRegistryPromotionCandidatesUnexpected(body *ListRegistryPromotionCandidatesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRegistryPromotionCandidatesGatewayError builds a admin service
+// listRegistryPromotionCandidates endpoint gateway_error error.
+func NewListRegistryPromotionCandidatesGatewayError(body *ListRegistryPromotionCandidatesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK builds a
+// "admin" service "getRegistryPromotionCandidate" endpoint result from a HTTP
+// "OK" response.
+func NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *GetRegistryPromotionCandidateResponseBody) *admin.AdminRegistryPromotionCandidate {
+	v := &admin.AdminRegistryPromotionCandidate{
+		ID:                *body.ID,
+		OrganizationID:    *body.OrganizationID,
+		ProjectID:         *body.ProjectID,
+		McpServerID:       *body.McpServerID,
+		RemoteMcpServerID: *body.RemoteMcpServerID,
+		SourceName:        body.SourceName,
+		SourceRevision:    *body.SourceRevision,
+		Eligible:          *body.Eligible,
+		Reason:            *body.Reason,
+		Status:            *body.Status,
+		ObservedSuccesses: *body.ObservedSuccesses,
+		ObservedFailures:  *body.ObservedFailures,
+		ObservedDays:      *body.ObservedDays,
+		CheckedAt:         body.CheckedAt,
+		RegistryEntryID:   body.RegistryEntryID,
+		DocsStatus:        body.DocsStatus,
+		DocsURL:           body.DocsURL,
+		DocsRevision:      *body.DocsRevision,
+		DocsRetryAllowed:  *body.DocsRetryAllowed,
+		DocsAttempts:      *body.DocsAttempts,
+		DocsLastAttemptAt: body.DocsLastAttemptAt,
+		DocsNextAttemptAt: body.DocsNextAttemptAt,
+		DocsQueuedAt:      body.DocsQueuedAt,
+		PromotedAt:        body.PromotedAt,
+		PublicTitle:       body.PublicTitle,
+		DeliveryError:     body.DeliveryError,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateUnauthorized builds a admin service
+// getRegistryPromotionCandidate endpoint unauthorized error.
+func NewGetRegistryPromotionCandidateUnauthorized(body *GetRegistryPromotionCandidateUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateForbidden builds a admin service
+// getRegistryPromotionCandidate endpoint forbidden error.
+func NewGetRegistryPromotionCandidateForbidden(body *GetRegistryPromotionCandidateForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateBadRequest builds a admin service
+// getRegistryPromotionCandidate endpoint bad_request error.
+func NewGetRegistryPromotionCandidateBadRequest(body *GetRegistryPromotionCandidateBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateNotFound builds a admin service
+// getRegistryPromotionCandidate endpoint not_found error.
+func NewGetRegistryPromotionCandidateNotFound(body *GetRegistryPromotionCandidateNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateConflict builds a admin service
+// getRegistryPromotionCandidate endpoint conflict error.
+func NewGetRegistryPromotionCandidateConflict(body *GetRegistryPromotionCandidateConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateUnsupportedMedia builds a admin service
+// getRegistryPromotionCandidate endpoint unsupported_media error.
+func NewGetRegistryPromotionCandidateUnsupportedMedia(body *GetRegistryPromotionCandidateUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateInvalid builds a admin service
+// getRegistryPromotionCandidate endpoint invalid error.
+func NewGetRegistryPromotionCandidateInvalid(body *GetRegistryPromotionCandidateInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateInvariantViolation builds a admin service
+// getRegistryPromotionCandidate endpoint invariant_violation error.
+func NewGetRegistryPromotionCandidateInvariantViolation(body *GetRegistryPromotionCandidateInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateUnexpected builds a admin service
+// getRegistryPromotionCandidate endpoint unexpected error.
+func NewGetRegistryPromotionCandidateUnexpected(body *GetRegistryPromotionCandidateUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionCandidateGatewayError builds a admin service
+// getRegistryPromotionCandidate endpoint gateway_error error.
+func NewGetRegistryPromotionCandidateGatewayError(body *GetRegistryPromotionCandidateGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK builds a
+// "admin" service "promoteRegistryCandidate" endpoint result from a HTTP "OK"
+// response.
+func NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK(body *PromoteRegistryCandidateResponseBody) *admin.AdminRegistryPromotionCandidate {
+	v := &admin.AdminRegistryPromotionCandidate{
+		ID:                *body.ID,
+		OrganizationID:    *body.OrganizationID,
+		ProjectID:         *body.ProjectID,
+		McpServerID:       *body.McpServerID,
+		RemoteMcpServerID: *body.RemoteMcpServerID,
+		SourceName:        body.SourceName,
+		SourceRevision:    *body.SourceRevision,
+		Eligible:          *body.Eligible,
+		Reason:            *body.Reason,
+		Status:            *body.Status,
+		ObservedSuccesses: *body.ObservedSuccesses,
+		ObservedFailures:  *body.ObservedFailures,
+		ObservedDays:      *body.ObservedDays,
+		CheckedAt:         body.CheckedAt,
+		RegistryEntryID:   body.RegistryEntryID,
+		DocsStatus:        body.DocsStatus,
+		DocsURL:           body.DocsURL,
+		DocsRevision:      *body.DocsRevision,
+		DocsRetryAllowed:  *body.DocsRetryAllowed,
+		DocsAttempts:      *body.DocsAttempts,
+		DocsLastAttemptAt: body.DocsLastAttemptAt,
+		DocsNextAttemptAt: body.DocsNextAttemptAt,
+		DocsQueuedAt:      body.DocsQueuedAt,
+		PromotedAt:        body.PromotedAt,
+		PublicTitle:       body.PublicTitle,
+		DeliveryError:     body.DeliveryError,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateUnauthorized builds a admin service
+// promoteRegistryCandidate endpoint unauthorized error.
+func NewPromoteRegistryCandidateUnauthorized(body *PromoteRegistryCandidateUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateForbidden builds a admin service
+// promoteRegistryCandidate endpoint forbidden error.
+func NewPromoteRegistryCandidateForbidden(body *PromoteRegistryCandidateForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateBadRequest builds a admin service
+// promoteRegistryCandidate endpoint bad_request error.
+func NewPromoteRegistryCandidateBadRequest(body *PromoteRegistryCandidateBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateNotFound builds a admin service
+// promoteRegistryCandidate endpoint not_found error.
+func NewPromoteRegistryCandidateNotFound(body *PromoteRegistryCandidateNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateConflict builds a admin service
+// promoteRegistryCandidate endpoint conflict error.
+func NewPromoteRegistryCandidateConflict(body *PromoteRegistryCandidateConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateUnsupportedMedia builds a admin service
+// promoteRegistryCandidate endpoint unsupported_media error.
+func NewPromoteRegistryCandidateUnsupportedMedia(body *PromoteRegistryCandidateUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateInvalid builds a admin service
+// promoteRegistryCandidate endpoint invalid error.
+func NewPromoteRegistryCandidateInvalid(body *PromoteRegistryCandidateInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateInvariantViolation builds a admin service
+// promoteRegistryCandidate endpoint invariant_violation error.
+func NewPromoteRegistryCandidateInvariantViolation(body *PromoteRegistryCandidateInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateUnexpected builds a admin service
+// promoteRegistryCandidate endpoint unexpected error.
+func NewPromoteRegistryCandidateUnexpected(body *PromoteRegistryCandidateUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPromoteRegistryCandidateGatewayError builds a admin service
+// promoteRegistryCandidate endpoint gateway_error error.
+func NewPromoteRegistryCandidateGatewayError(body *PromoteRegistryCandidateGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK builds a
+// "admin" service "retryRegistryPromotionDocs" endpoint result from a HTTP
+// "OK" response.
+func NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK(body *RetryRegistryPromotionDocsResponseBody) *admin.AdminRegistryPromotionCandidate {
+	v := &admin.AdminRegistryPromotionCandidate{
+		ID:                *body.ID,
+		OrganizationID:    *body.OrganizationID,
+		ProjectID:         *body.ProjectID,
+		McpServerID:       *body.McpServerID,
+		RemoteMcpServerID: *body.RemoteMcpServerID,
+		SourceName:        body.SourceName,
+		SourceRevision:    *body.SourceRevision,
+		Eligible:          *body.Eligible,
+		Reason:            *body.Reason,
+		Status:            *body.Status,
+		ObservedSuccesses: *body.ObservedSuccesses,
+		ObservedFailures:  *body.ObservedFailures,
+		ObservedDays:      *body.ObservedDays,
+		CheckedAt:         body.CheckedAt,
+		RegistryEntryID:   body.RegistryEntryID,
+		DocsStatus:        body.DocsStatus,
+		DocsURL:           body.DocsURL,
+		DocsRevision:      *body.DocsRevision,
+		DocsRetryAllowed:  *body.DocsRetryAllowed,
+		DocsAttempts:      *body.DocsAttempts,
+		DocsLastAttemptAt: body.DocsLastAttemptAt,
+		DocsNextAttemptAt: body.DocsNextAttemptAt,
+		DocsQueuedAt:      body.DocsQueuedAt,
+		PromotedAt:        body.PromotedAt,
+		PublicTitle:       body.PublicTitle,
+		DeliveryError:     body.DeliveryError,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsUnauthorized builds a admin service
+// retryRegistryPromotionDocs endpoint unauthorized error.
+func NewRetryRegistryPromotionDocsUnauthorized(body *RetryRegistryPromotionDocsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsForbidden builds a admin service
+// retryRegistryPromotionDocs endpoint forbidden error.
+func NewRetryRegistryPromotionDocsForbidden(body *RetryRegistryPromotionDocsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsBadRequest builds a admin service
+// retryRegistryPromotionDocs endpoint bad_request error.
+func NewRetryRegistryPromotionDocsBadRequest(body *RetryRegistryPromotionDocsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsNotFound builds a admin service
+// retryRegistryPromotionDocs endpoint not_found error.
+func NewRetryRegistryPromotionDocsNotFound(body *RetryRegistryPromotionDocsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsConflict builds a admin service
+// retryRegistryPromotionDocs endpoint conflict error.
+func NewRetryRegistryPromotionDocsConflict(body *RetryRegistryPromotionDocsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsUnsupportedMedia builds a admin service
+// retryRegistryPromotionDocs endpoint unsupported_media error.
+func NewRetryRegistryPromotionDocsUnsupportedMedia(body *RetryRegistryPromotionDocsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsInvalid builds a admin service
+// retryRegistryPromotionDocs endpoint invalid error.
+func NewRetryRegistryPromotionDocsInvalid(body *RetryRegistryPromotionDocsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsInvariantViolation builds a admin service
+// retryRegistryPromotionDocs endpoint invariant_violation error.
+func NewRetryRegistryPromotionDocsInvariantViolation(body *RetryRegistryPromotionDocsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsUnexpected builds a admin service
+// retryRegistryPromotionDocs endpoint unexpected error.
+func NewRetryRegistryPromotionDocsUnexpected(body *RetryRegistryPromotionDocsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryRegistryPromotionDocsGatewayError builds a admin service
+// retryRegistryPromotionDocs endpoint gateway_error error.
+func NewRetryRegistryPromotionDocsGatewayError(body *RetryRegistryPromotionDocsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetRegistryOktaCandidatesAdminRegistryOktaCandidatesOK builds a "admin"
 // service "getRegistryOktaCandidates" endpoint result from a HTTP "OK"
 // response.
@@ -41265,6 +42944,175 @@ func ValidateMigrateExternalMcpServersResponseBody(body *MigrateExternalMcpServe
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesResponseBody runs the validations
+// defined on ListRegistryPromotionCandidatesResponseBody
+func ValidateListRegistryPromotionCandidatesResponseBody(body *ListRegistryPromotionCandidatesResponseBody) (err error) {
+	if body.Candidates == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidates", "body"))
+	}
+	for _, e := range body.Candidates {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionCandidateResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateResponseBody runs the validations
+// defined on GetRegistryPromotionCandidateResponseBody
+func ValidateGetRegistryPromotionCandidateResponseBody(body *GetRegistryPromotionCandidateResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.RemoteMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_mcp_server_id", "body"))
+	}
+	if body.SourceRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_revision", "body"))
+	}
+	if body.Eligible == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ObservedSuccesses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_successes", "body"))
+	}
+	if body.ObservedFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_failures", "body"))
+	}
+	if body.ObservedDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_days", "body"))
+	}
+	if body.DocsRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_revision", "body"))
+	}
+	if body.DocsRetryAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_retry_allowed", "body"))
+	}
+	if body.DocsAttempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateResponseBody runs the validations defined on
+// PromoteRegistryCandidateResponseBody
+func ValidatePromoteRegistryCandidateResponseBody(body *PromoteRegistryCandidateResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.RemoteMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_mcp_server_id", "body"))
+	}
+	if body.SourceRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_revision", "body"))
+	}
+	if body.Eligible == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ObservedSuccesses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_successes", "body"))
+	}
+	if body.ObservedFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_failures", "body"))
+	}
+	if body.ObservedDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_days", "body"))
+	}
+	if body.DocsRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_revision", "body"))
+	}
+	if body.DocsRetryAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_retry_allowed", "body"))
+	}
+	if body.DocsAttempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsResponseBody runs the validations defined
+// on RetryRegistryPromotionDocsResponseBody
+func ValidateRetryRegistryPromotionDocsResponseBody(body *RetryRegistryPromotionDocsResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.RemoteMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_mcp_server_id", "body"))
+	}
+	if body.SourceRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_revision", "body"))
+	}
+	if body.Eligible == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ObservedSuccesses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_successes", "body"))
+	}
+	if body.ObservedFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_failures", "body"))
+	}
+	if body.ObservedDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_days", "body"))
+	}
+	if body.DocsRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_revision", "body"))
+	}
+	if body.DocsRetryAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_retry_allowed", "body"))
+	}
+	if body.DocsAttempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
 	}
 	return
 }
@@ -58105,6 +59953,983 @@ func ValidateMigrateExternalMcpServersGatewayErrorResponseBody(body *MigrateExte
 	return
 }
 
+// ValidateListRegistryPromotionCandidatesUnauthorizedResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_unauthorized_response_body
+func ValidateListRegistryPromotionCandidatesUnauthorizedResponseBody(body *ListRegistryPromotionCandidatesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesForbiddenResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_forbidden_response_body
+func ValidateListRegistryPromotionCandidatesForbiddenResponseBody(body *ListRegistryPromotionCandidatesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesBadRequestResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_bad_request_response_body
+func ValidateListRegistryPromotionCandidatesBadRequestResponseBody(body *ListRegistryPromotionCandidatesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesNotFoundResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_not_found_response_body
+func ValidateListRegistryPromotionCandidatesNotFoundResponseBody(body *ListRegistryPromotionCandidatesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesConflictResponseBody runs the
+// validations defined on listRegistryPromotionCandidates_conflict_response_body
+func ValidateListRegistryPromotionCandidatesConflictResponseBody(body *ListRegistryPromotionCandidatesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesUnsupportedMediaResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_unsupported_media_response_body
+func ValidateListRegistryPromotionCandidatesUnsupportedMediaResponseBody(body *ListRegistryPromotionCandidatesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesInvalidResponseBody runs the
+// validations defined on listRegistryPromotionCandidates_invalid_response_body
+func ValidateListRegistryPromotionCandidatesInvalidResponseBody(body *ListRegistryPromotionCandidatesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesInvariantViolationResponseBody runs
+// the validations defined on
+// listRegistryPromotionCandidates_invariant_violation_response_body
+func ValidateListRegistryPromotionCandidatesInvariantViolationResponseBody(body *ListRegistryPromotionCandidatesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesUnexpectedResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_unexpected_response_body
+func ValidateListRegistryPromotionCandidatesUnexpectedResponseBody(body *ListRegistryPromotionCandidatesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRegistryPromotionCandidatesGatewayErrorResponseBody runs the
+// validations defined on
+// listRegistryPromotionCandidates_gateway_error_response_body
+func ValidateListRegistryPromotionCandidatesGatewayErrorResponseBody(body *ListRegistryPromotionCandidatesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateUnauthorizedResponseBody runs the
+// validations defined on
+// getRegistryPromotionCandidate_unauthorized_response_body
+func ValidateGetRegistryPromotionCandidateUnauthorizedResponseBody(body *GetRegistryPromotionCandidateUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateForbiddenResponseBody runs the
+// validations defined on getRegistryPromotionCandidate_forbidden_response_body
+func ValidateGetRegistryPromotionCandidateForbiddenResponseBody(body *GetRegistryPromotionCandidateForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateBadRequestResponseBody runs the
+// validations defined on
+// getRegistryPromotionCandidate_bad_request_response_body
+func ValidateGetRegistryPromotionCandidateBadRequestResponseBody(body *GetRegistryPromotionCandidateBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateNotFoundResponseBody runs the
+// validations defined on getRegistryPromotionCandidate_not_found_response_body
+func ValidateGetRegistryPromotionCandidateNotFoundResponseBody(body *GetRegistryPromotionCandidateNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateConflictResponseBody runs the
+// validations defined on getRegistryPromotionCandidate_conflict_response_body
+func ValidateGetRegistryPromotionCandidateConflictResponseBody(body *GetRegistryPromotionCandidateConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateUnsupportedMediaResponseBody runs the
+// validations defined on
+// getRegistryPromotionCandidate_unsupported_media_response_body
+func ValidateGetRegistryPromotionCandidateUnsupportedMediaResponseBody(body *GetRegistryPromotionCandidateUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateInvalidResponseBody runs the
+// validations defined on getRegistryPromotionCandidate_invalid_response_body
+func ValidateGetRegistryPromotionCandidateInvalidResponseBody(body *GetRegistryPromotionCandidateInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateInvariantViolationResponseBody runs the
+// validations defined on
+// getRegistryPromotionCandidate_invariant_violation_response_body
+func ValidateGetRegistryPromotionCandidateInvariantViolationResponseBody(body *GetRegistryPromotionCandidateInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateUnexpectedResponseBody runs the
+// validations defined on getRegistryPromotionCandidate_unexpected_response_body
+func ValidateGetRegistryPromotionCandidateUnexpectedResponseBody(body *GetRegistryPromotionCandidateUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionCandidateGatewayErrorResponseBody runs the
+// validations defined on
+// getRegistryPromotionCandidate_gateway_error_response_body
+func ValidateGetRegistryPromotionCandidateGatewayErrorResponseBody(body *GetRegistryPromotionCandidateGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateUnauthorizedResponseBody runs the
+// validations defined on promoteRegistryCandidate_unauthorized_response_body
+func ValidatePromoteRegistryCandidateUnauthorizedResponseBody(body *PromoteRegistryCandidateUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateForbiddenResponseBody runs the validations
+// defined on promoteRegistryCandidate_forbidden_response_body
+func ValidatePromoteRegistryCandidateForbiddenResponseBody(body *PromoteRegistryCandidateForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateBadRequestResponseBody runs the validations
+// defined on promoteRegistryCandidate_bad_request_response_body
+func ValidatePromoteRegistryCandidateBadRequestResponseBody(body *PromoteRegistryCandidateBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateNotFoundResponseBody runs the validations
+// defined on promoteRegistryCandidate_not_found_response_body
+func ValidatePromoteRegistryCandidateNotFoundResponseBody(body *PromoteRegistryCandidateNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateConflictResponseBody runs the validations
+// defined on promoteRegistryCandidate_conflict_response_body
+func ValidatePromoteRegistryCandidateConflictResponseBody(body *PromoteRegistryCandidateConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateUnsupportedMediaResponseBody runs the
+// validations defined on
+// promoteRegistryCandidate_unsupported_media_response_body
+func ValidatePromoteRegistryCandidateUnsupportedMediaResponseBody(body *PromoteRegistryCandidateUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateInvalidResponseBody runs the validations
+// defined on promoteRegistryCandidate_invalid_response_body
+func ValidatePromoteRegistryCandidateInvalidResponseBody(body *PromoteRegistryCandidateInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateInvariantViolationResponseBody runs the
+// validations defined on
+// promoteRegistryCandidate_invariant_violation_response_body
+func ValidatePromoteRegistryCandidateInvariantViolationResponseBody(body *PromoteRegistryCandidateInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateUnexpectedResponseBody runs the validations
+// defined on promoteRegistryCandidate_unexpected_response_body
+func ValidatePromoteRegistryCandidateUnexpectedResponseBody(body *PromoteRegistryCandidateUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePromoteRegistryCandidateGatewayErrorResponseBody runs the
+// validations defined on promoteRegistryCandidate_gateway_error_response_body
+func ValidatePromoteRegistryCandidateGatewayErrorResponseBody(body *PromoteRegistryCandidateGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsUnauthorizedResponseBody runs the
+// validations defined on retryRegistryPromotionDocs_unauthorized_response_body
+func ValidateRetryRegistryPromotionDocsUnauthorizedResponseBody(body *RetryRegistryPromotionDocsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsForbiddenResponseBody runs the validations
+// defined on retryRegistryPromotionDocs_forbidden_response_body
+func ValidateRetryRegistryPromotionDocsForbiddenResponseBody(body *RetryRegistryPromotionDocsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsBadRequestResponseBody runs the
+// validations defined on retryRegistryPromotionDocs_bad_request_response_body
+func ValidateRetryRegistryPromotionDocsBadRequestResponseBody(body *RetryRegistryPromotionDocsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsNotFoundResponseBody runs the validations
+// defined on retryRegistryPromotionDocs_not_found_response_body
+func ValidateRetryRegistryPromotionDocsNotFoundResponseBody(body *RetryRegistryPromotionDocsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsConflictResponseBody runs the validations
+// defined on retryRegistryPromotionDocs_conflict_response_body
+func ValidateRetryRegistryPromotionDocsConflictResponseBody(body *RetryRegistryPromotionDocsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsUnsupportedMediaResponseBody runs the
+// validations defined on
+// retryRegistryPromotionDocs_unsupported_media_response_body
+func ValidateRetryRegistryPromotionDocsUnsupportedMediaResponseBody(body *RetryRegistryPromotionDocsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsInvalidResponseBody runs the validations
+// defined on retryRegistryPromotionDocs_invalid_response_body
+func ValidateRetryRegistryPromotionDocsInvalidResponseBody(body *RetryRegistryPromotionDocsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsInvariantViolationResponseBody runs the
+// validations defined on
+// retryRegistryPromotionDocs_invariant_violation_response_body
+func ValidateRetryRegistryPromotionDocsInvariantViolationResponseBody(body *RetryRegistryPromotionDocsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsUnexpectedResponseBody runs the
+// validations defined on retryRegistryPromotionDocs_unexpected_response_body
+func ValidateRetryRegistryPromotionDocsUnexpectedResponseBody(body *RetryRegistryPromotionDocsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryRegistryPromotionDocsGatewayErrorResponseBody runs the
+// validations defined on retryRegistryPromotionDocs_gateway_error_response_body
+func ValidateRetryRegistryPromotionDocsGatewayErrorResponseBody(body *RetryRegistryPromotionDocsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody runs the
 // validations defined on getRegistryOktaCandidates_unauthorized_response_body
 func ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody(body *GetRegistryOktaCandidatesUnauthorizedResponseBody) (err error) {
@@ -67209,6 +70034,57 @@ func ValidateAdminExternalMcpMigrationOutcomeResponseBody(body *AdminExternalMcp
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAdminRegistryPromotionCandidateResponseBody runs the validations
+// defined on AdminRegistryPromotionCandidateResponseBody
+func ValidateAdminRegistryPromotionCandidateResponseBody(body *AdminRegistryPromotionCandidateResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.RemoteMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_mcp_server_id", "body"))
+	}
+	if body.SourceRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_revision", "body"))
+	}
+	if body.Eligible == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ObservedSuccesses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_successes", "body"))
+	}
+	if body.ObservedFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_failures", "body"))
+	}
+	if body.ObservedDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observed_days", "body"))
+	}
+	if body.DocsRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_revision", "body"))
+	}
+	if body.DocsRetryAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_retry_allowed", "body"))
+	}
+	if body.DocsAttempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("docs_attempts", "body"))
 	}
 	return
 }

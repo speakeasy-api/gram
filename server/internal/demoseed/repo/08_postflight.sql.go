@@ -764,6 +764,24 @@ func (q *Queries) PostflightCountQuarantineOpenAudits(ctx context.Context, arg P
 	return count, err
 }
 
+const postflightCountRegistryPromotionCandidates = `-- name: PostflightCountRegistryPromotionCandidates :one
+SELECT count(*) FROM registry_promotion_candidates
+WHERE organization_id = $1::text AND project_id = $2::uuid
+ AND eligible IS FALSE AND promoted_at IS NULL
+`
+
+type PostflightCountRegistryPromotionCandidatesParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) PostflightCountRegistryPromotionCandidates(ctx context.Context, arg PostflightCountRegistryPromotionCandidatesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountRegistryPromotionCandidates, arg.OrgID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountRemovedGatewayMembers = `-- name: PostflightCountRemovedGatewayMembers :one
 SELECT count(*)
 FROM meta_mcp_server_members m

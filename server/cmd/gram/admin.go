@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -329,6 +330,7 @@ func newAdminCommand() *cli.Command {
 			Required: false,
 		},
 	}
+	flags = append(flags, catalogPromotionFlags()...)
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, clickHouseReadFlags()...)
@@ -525,6 +527,7 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, registryService)
+			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy))
 			adminService.SetMCPServerURL(mcpServerURL)
 			adminService.SetHookClients(telemetry.NewHookClients(chDB))
 			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))

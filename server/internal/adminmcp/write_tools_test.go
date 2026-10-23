@@ -79,7 +79,7 @@ func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 	require.Contains(t, oauth.Approval.operations, OperationAssignOrganizationOnboardingPlaybook)
 	require.Contains(t, oauth.Approval.operations, OperationExtendOrganizationTrial)
 	for _, op := range AllWriteOperations {
-		require.Equal(t, op.implemented() && !op.direct(), oauth.Approval.operations[op] != nil, op)
+		require.Equal(t, op.implemented() && !op.direct() && op != OperationPromoteRegistryCandidate && op != OperationRetryRegistryPromotionDocs, oauth.Approval.operations[op] != nil, op)
 	}
 }
 

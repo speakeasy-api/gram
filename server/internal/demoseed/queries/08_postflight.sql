@@ -501,3 +501,7 @@ WHERE organization_id = @org_id::text AND deleted IS FALSE;
 -- name: PostflightCountPersonalAccounts :one
 SELECT count(*) FROM user_accounts
 WHERE organization_id = @org_id::text AND account_type = 'personal';
+-- name: PostflightCountRegistryPromotionCandidates :one
+SELECT count(*) FROM registry_promotion_candidates
+WHERE organization_id = @org_id::text AND project_id = @project_id::uuid
+ AND eligible IS FALSE AND promoted_at IS NULL ;

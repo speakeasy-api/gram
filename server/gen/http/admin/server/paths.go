@@ -327,6 +327,26 @@ func MigrateExternalMcpServersAdminPath() string {
 	return "/admin/externalMcpMigration.migrate"
 }
 
+// ListRegistryPromotionCandidatesAdminPath returns the URL path to the admin service listRegistryPromotionCandidates HTTP endpoint.
+func ListRegistryPromotionCandidatesAdminPath() string {
+	return "/admin/registry.promotionCandidates"
+}
+
+// GetRegistryPromotionCandidateAdminPath returns the URL path to the admin service getRegistryPromotionCandidate HTTP endpoint.
+func GetRegistryPromotionCandidateAdminPath() string {
+	return "/admin/registry.promotionCandidate"
+}
+
+// PromoteRegistryCandidateAdminPath returns the URL path to the admin service promoteRegistryCandidate HTTP endpoint.
+func PromoteRegistryCandidateAdminPath() string {
+	return "/admin/registry.promoteCandidate"
+}
+
+// RetryRegistryPromotionDocsAdminPath returns the URL path to the admin service retryRegistryPromotionDocs HTTP endpoint.
+func RetryRegistryPromotionDocsAdminPath() string {
+	return "/admin/registry.retryPromotionDocs"
+}
+
 // GetRegistryOktaCandidatesAdminPath returns the URL path to the admin service getRegistryOktaCandidates HTTP endpoint.
 func GetRegistryOktaCandidatesAdminPath() string {
 	return "/admin/registry.oktaCandidates"

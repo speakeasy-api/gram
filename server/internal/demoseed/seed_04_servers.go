@@ -91,6 +91,12 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, proj); err != nil {
 		return fmt.Errorf("insert demo hosted toolset mcp servers: %w", err)
 	}
+	if err := s.q.ServersInsertRegistryPromotionCandidate(ctx, repo.ServersInsertRegistryPromotionCandidateParams{
+		ID: s.det("registry-promotion-candidate"), OrgID: org, ProjectID: proj,
+		McpServerID: s.det("mcpserver-linear"), RemoteMcpServerID: s.det("remotemcp-linear"),
+	}); err != nil {
+		return fmt.Errorf("insert synthetic catalogue promotion candidate: %w", err)
+	}
 	if err := s.q.ServersInsertHostedToolsetEndpoints(ctx, repo.ServersInsertHostedToolsetEndpointsParams{
 		EndpointNamePrefix: s.name("endpoint-hosted-"),
 		ProjectID:          proj,

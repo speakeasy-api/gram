@@ -2387,6 +2387,164 @@ func BuildMigrateExternalMcpServersPayload(adminMigrateExternalMcpServersBody st
 	return v, nil
 }
 
+// BuildListRegistryPromotionCandidatesPayload builds the payload for the admin
+// listRegistryPromotionCandidates endpoint from CLI flags.
+func BuildListRegistryPromotionCandidatesPayload(adminListRegistryPromotionCandidatesCursor string, adminListRegistryPromotionCandidatesLimit string, adminListRegistryPromotionCandidatesAdminSessionToken string) (*admin.ListRegistryPromotionCandidatesPayload, error) {
+	var err error
+	var cursor *string
+	{
+		if adminListRegistryPromotionCandidatesCursor != "" {
+			cursor = &adminListRegistryPromotionCandidatesCursor
+		}
+	}
+	var limit int
+	{
+		if adminListRegistryPromotionCandidatesLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListRegistryPromotionCandidatesLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 50 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListRegistryPromotionCandidatesAdminSessionToken != "" {
+			adminSessionToken = &adminListRegistryPromotionCandidatesAdminSessionToken
+		}
+	}
+	v := &admin.ListRegistryPromotionCandidatesPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetRegistryPromotionCandidatePayload builds the payload for the admin
+// getRegistryPromotionCandidate endpoint from CLI flags.
+func BuildGetRegistryPromotionCandidatePayload(adminGetRegistryPromotionCandidateOrganizationID string, adminGetRegistryPromotionCandidateProjectID string, adminGetRegistryPromotionCandidateMcpServerID string, adminGetRegistryPromotionCandidateAdminSessionToken string) (*admin.GetRegistryPromotionCandidatePayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetRegistryPromotionCandidateOrganizationID
+	}
+	var projectID string
+	{
+		projectID = adminGetRegistryPromotionCandidateProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var mcpServerID string
+	{
+		mcpServerID = adminGetRegistryPromotionCandidateMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetRegistryPromotionCandidateAdminSessionToken != "" {
+			adminSessionToken = &adminGetRegistryPromotionCandidateAdminSessionToken
+		}
+	}
+	v := &admin.GetRegistryPromotionCandidatePayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
+	v.McpServerID = mcpServerID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildPromoteRegistryCandidatePayload builds the payload for the admin
+// promoteRegistryCandidate endpoint from CLI flags.
+func BuildPromoteRegistryCandidatePayload(adminPromoteRegistryCandidateBody string, adminPromoteRegistryCandidateAdminSessionToken string) (*admin.PromoteRegistryCandidatePayload, error) {
+	var err error
+	var body PromoteRegistryCandidateRequestBody
+	{
+		err = json.Unmarshal([]byte(adminPromoteRegistryCandidateBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"auth_mode\": \"abc123\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminPromoteRegistryCandidateAdminSessionToken != "" {
+			adminSessionToken = &adminPromoteRegistryCandidateAdminSessionToken
+		}
+	}
+	v := &admin.PromoteRegistryCandidatePayload{
+		OrganizationID:          body.OrganizationID,
+		ProjectID:               body.ProjectID,
+		McpServerID:             body.McpServerID,
+		SourceRevision:          body.SourceRevision,
+		PublicName:              body.PublicName,
+		PublicTitle:             body.PublicTitle,
+		PublicDescription:       body.PublicDescription,
+		PublicURL:               body.PublicURL,
+		DocumentationURL:        body.DocumentationURL,
+		DocsSlug:                body.DocsSlug,
+		AuthMode:                body.AuthMode,
+		RetryKey:                body.RetryKey,
+		PublicMetadataConfirmed: body.PublicMetadataConfirmed,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRetryRegistryPromotionDocsPayload builds the payload for the admin
+// retryRegistryPromotionDocs endpoint from CLI flags.
+func BuildRetryRegistryPromotionDocsPayload(adminRetryRegistryPromotionDocsBody string, adminRetryRegistryPromotionDocsAdminSessionToken string) (*admin.RetryRegistryPromotionDocsPayload, error) {
+	var err error
+	var body RetryRegistryPromotionDocsRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRetryRegistryPromotionDocsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"docs_revision\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"promotion_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"retry_key\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.promotion_id", body.PromotionID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.docs_revision", body.DocsRevision, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRetryRegistryPromotionDocsAdminSessionToken != "" {
+			adminSessionToken = &adminRetryRegistryPromotionDocsAdminSessionToken
+		}
+	}
+	v := &admin.RetryRegistryPromotionDocsPayload{
+		OrganizationID: body.OrganizationID,
+		PromotionID:    body.PromotionID,
+		DocsRevision:   body.DocsRevision,
+		RetryKey:       body.RetryKey,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetRegistryOktaCandidatesPayload builds the payload for the admin
 // getRegistryOktaCandidates endpoint from CLI flags.
 func BuildGetRegistryOktaCandidatesPayload(adminGetRegistryOktaCandidatesID string, adminGetRegistryOktaCandidatesAdminSessionToken string) (*admin.GetRegistryOktaCandidatesPayload, error) {

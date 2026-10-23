@@ -177,6 +177,7 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		// cascade. mcp_servers in turn pins its toolset with RESTRICT, so it
 		// must still go before the toolsets delete.
 		{"delete assistant mcp servers", func() error { return s.q.OrgDeleteAssistantMCPServers(ctx, org) }},
+		{"delete catalogue promotion candidates", func() error { return s.q.OrgDeleteRegistryPromotionCandidates(ctx, org) }},
 		// Toolsets are cleared across the organization, including other
 		// projects. Clear their plugin attachments across the same scope before
 		// deleting them.

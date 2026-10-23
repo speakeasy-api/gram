@@ -1,3 +1,19 @@
+import {
+  buildAdminRetryRegistryPromotionDocsMutation,
+  type AdminRetryRegistryPromotionDocsMutationData,
+  type AdminRetryRegistryPromotionDocsMutationError,
+  type AdminRetryRegistryPromotionDocsMutationVariables,
+} from "@gram/admin-client/react-query/adminRetryRegistryPromotionDocs";
+import type {
+  AdminPromoteRegistryCandidateMutationData,
+  AdminPromoteRegistryCandidateMutationError,
+  AdminPromoteRegistryCandidateMutationVariables,
+} from "@gram/admin-client/react-query/adminPromoteRegistryCandidate";
+import { buildAdminListRegistryPromotionCandidatesQuery } from "@gram/admin-client/react-query/adminListRegistryPromotionCandidates.core";
+import { buildAdminGetRegistryPromotionCandidateQuery } from "@gram/admin-client/react-query/adminGetRegistryPromotionCandidate.core";
+import { buildAdminPromoteRegistryCandidateMutation } from "@gram/admin-client/react-query/adminPromoteRegistryCandidate";
+import type { AdminListRegistryPromotionCandidatesRequest } from "@gram/admin-client/models/operations/adminlistregistrypromotioncandidates";
+import type { AdminGetRegistryPromotionCandidateRequest } from "@gram/admin-client/models/operations/admingetregistrypromotioncandidate";
 import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
 import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
 import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
@@ -1161,4 +1177,68 @@ export function adminMigrateExternalMcpServers(
       request,
     }),
   );
+}
+
+function createRegistryPromotionCandidatesQuery(
+  params: AdminListRegistryPromotionCandidatesRequest,
+) {
+  const generated = buildAdminListRegistryPromotionCandidatesQuery(
+    redirectingClient,
+    params,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createRegistryPromotionCandidateQuery(
+  params: AdminGetRegistryPromotionCandidateRequest,
+) {
+  const generated = buildAdminGetRegistryPromotionCandidateQuery(
+    redirectingClient,
+    params,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function usePromoteRegistryCandidateMutation(): UseMutationResult<
+  AdminPromoteRegistryCandidateMutationData,
+  AdminPromoteRegistryCandidateMutationError,
+  AdminPromoteRegistryCandidateMutationVariables
+> {
+  return useMutation({
+    ...buildAdminPromoteRegistryCandidateMutation(redirectingClient, {
+      retries: { strategy: "none" },
+    }),
+    retry: false,
+  });
+}
+
+export function registryPromotionCandidatesQuery(
+  params: AdminListRegistryPromotionCandidatesRequest,
+): ReturnType<typeof createRegistryPromotionCandidatesQuery> {
+  return createRegistryPromotionCandidatesQuery(params);
+}
+export function registryPromotionCandidateQuery(
+  params: AdminGetRegistryPromotionCandidateRequest,
+): ReturnType<typeof createRegistryPromotionCandidateQuery> {
+  return createRegistryPromotionCandidateQuery(params);
+}
+
+export function useRetryRegistryPromotionDocsMutation(): UseMutationResult<
+  AdminRetryRegistryPromotionDocsMutationData,
+  AdminRetryRegistryPromotionDocsMutationError,
+  AdminRetryRegistryPromotionDocsMutationVariables
+> {
+  return useMutation({
+    ...buildAdminRetryRegistryPromotionDocsMutation(redirectingClient, {
+      retries: { strategy: "none" },
+    }),
+    retry: false,
+  });
 }
