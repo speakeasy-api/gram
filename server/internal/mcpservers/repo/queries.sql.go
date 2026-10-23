@@ -1264,7 +1264,7 @@ func (q *Queries) ListMCPServersByProjectIDLimited(ctx context.Context, arg List
 }
 
 const listMCPServersForTelemetryByProjectID = `-- name: ListMCPServersForTelemetryByProjectID :many
-SELECT id, name, slug, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, visibility, deleted, created_at
+SELECT id, name, slug, remote_mcp_server_id, tunneled_mcp_server_id
 FROM mcp_servers
 WHERE project_id = $1
 ORDER BY deleted ASC, created_at DESC
@@ -1276,10 +1276,6 @@ type ListMCPServersForTelemetryByProjectIDRow struct {
 	Slug                pgtype.Text
 	RemoteMcpServerID   uuid.NullUUID
 	TunneledMcpServerID uuid.NullUUID
-	ToolsetID           uuid.NullUUID
-	Visibility          string
-	Deleted             bool
-	CreatedAt           pgtype.Timestamptz
 }
 
 // Includes soft-deleted servers so tool-usage telemetry can classify historical
@@ -1304,10 +1300,6 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 			&i.Slug,
 			&i.RemoteMcpServerID,
 			&i.TunneledMcpServerID,
-			&i.ToolsetID,
-			&i.Visibility,
-			&i.Deleted,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -210,7 +210,7 @@ WHERE m.id = @id
 -- keeps a call's target_type stable instead of falling through to
 -- shadow_mcp_server. Live servers are ordered first so a source id shared by a
 -- live and a deleted server resolves to the live one.
-SELECT id, name, slug, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, visibility, deleted, created_at
+SELECT id, name, slug, remote_mcp_server_id, tunneled_mcp_server_id
 FROM mcp_servers
 WHERE project_id = @project_id
 ORDER BY deleted ASC, created_at DESC;

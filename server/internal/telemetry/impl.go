@@ -4179,7 +4179,10 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 		return nil, nil, fmt.Errorf("list project MCP servers: %w", err)
 	}
 
-	toolsetServerIDs := toolsetMCPServerIDs(servers)
+	toolsetServerIDs, err := toolsetHostingServerIDs(ctx, db, projectID, toolsets)
+	if err != nil {
+		return nil, nil, err
+	}
 	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
 	for _, toolset := range toolsets {
 		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
@@ -4244,39 +4247,31 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	return hostedMatchers, serverMatchers, nil
 }
 
-// toolsetMCPServerIDs picks each toolset's hosting wrapper the way
-// GetMCPServerByToolsetID does: live only, enabled, then canonical, then oldest.
-func toolsetMCPServerIDs(servers []mcpserversRepo.ListMCPServersForTelemetryByProjectIDRow) map[uuid.UUID]string {
-	best := make(map[uuid.UUID]mcpserversRepo.ListMCPServersForTelemetryByProjectIDRow, len(servers))
-	for _, server := range servers {
-		if !server.ToolsetID.Valid || server.Deleted {
-			continue
-		}
-		current, ok := best[server.ToolsetID.UUID]
-		if !ok || hostingWrapperBefore(server, current) {
-			best[server.ToolsetID.UUID] = server
-		}
+// toolsetHostingServerIDs attributes each toolset to its hosting server with
+// the same rule as the MCP servers API: the canonical wrapper whatever its
+// visibility, else the oldest live server with an endpoint. A visibility toggle
+// never moves a toolset's unstamped history to another server.
+func toolsetHostingServerIDs(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, toolsets []toolsetsRepo.Toolset) (map[uuid.UUID]string, error) {
+	if len(toolsets) == 0 {
+		return map[uuid.UUID]string{}, nil
 	}
-	ids := make(map[uuid.UUID]string, len(best))
-	for toolsetID, server := range best {
-		ids[toolsetID] = server.ID.String()
+	toolsetIDs := make([]uuid.UUID, 0, len(toolsets))
+	for _, toolset := range toolsets {
+		toolsetIDs = append(toolsetIDs, toolset.ID)
 	}
-	return ids
-}
-
-func hostingWrapperBefore(a, b mcpserversRepo.ListMCPServersForTelemetryByProjectIDRow) bool {
-	aEnabled, bEnabled := a.Visibility != "disabled", b.Visibility != "disabled"
-	if aEnabled != bEnabled {
-		return aEnabled
+	hosts, err := mcpserversRepo.New(db).ListToolsetHostingMCPServerIDs(ctx, mcpserversRepo.ListToolsetHostingMCPServerIDsParams{
+		OrganizationID: toolsets[0].OrganizationID,
+		ToolsetIds:     toolsetIDs,
+		ProjectIds:     []uuid.UUID{projectID},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list toolset hosting MCP servers: %w", err)
 	}
-	aCanonical, bCanonical := a.ID == a.ToolsetID.UUID, b.ID == b.ToolsetID.UUID
-	if aCanonical != bCanonical {
-		return aCanonical
+	ids := make(map[uuid.UUID]string, len(hosts))
+	for _, host := range hosts {
+		ids[host.ToolsetID] = host.McpServerID.String()
 	}
-	if !a.CreatedAt.Time.Equal(b.CreatedAt.Time) {
-		return a.CreatedAt.Time.Before(b.CreatedAt.Time)
-	}
-	return a.ID.String() < b.ID.String()
+	return ids, nil
 }
 
 // LoadMetaMCPMatchers loads the gateway endpoint URL suffixes (gram.mcp.server_url)
