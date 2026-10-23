@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/servernames"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -386,9 +387,9 @@ func TestUsageSummaryWindowSpec_DefaultsToAWeekAndAllowsAMonth(t *testing.T) {
 func TestToolUsageSummaryStubRefuses(t *testing.T) {
 	t.Parallel()
 
-	stubbed := newRegistrar(newTestMCPServer())
+	stubbed := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerUnavailableToolUsageSummaryTool(stubbed)
-	live := newRegistrar(newTestMCPServer())
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerToolUsageSummaryTool(live, nil)
 
 	stub := descriptorByName(t, stubbed, toolUsageSummaryToolName)
@@ -408,7 +409,7 @@ func TestToolUsageSummaryStubRefuses(t *testing.T) {
 
 	// A deployment with no telemetry at all registers the stub, not the live
 	// tool, so the catalogue never advertises a breakdown it cannot serve.
-	_, deployment := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, deployment := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptor := descriptorByName(t, deployment, toolUsageSummaryToolName)
 	_, err = descriptor.Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001"}`))
 	require.ErrorAs(t, err, &refusal)

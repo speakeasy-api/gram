@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -25,6 +26,7 @@ const testDeveloperEmail = "dev@example.com"
 func seedLocalPostgres(ctx context.Context, t *testing.T, db *pgxpool.Pool, spec Spec) {
 	t.Helper()
 
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, db))
 	_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), spec)
 	require.NoError(t, err)
 }

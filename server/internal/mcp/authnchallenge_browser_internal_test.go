@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -23,7 +24,9 @@ func browserTestService(t *testing.T) *Service {
 	logger := testenv.NewLogger(t)
 	serverURL, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
-	return &Service{logger: logger, serverURL: serverURL,
+	return &Service{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		logger:    logger, serverURL: serverURL,
 		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](logger, store, cache.SuffixNone),
 		remoteLoginCache:    cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger, store, cache.SuffixNone),
 		remoteLoginHopCache: cache.NewTypedObjectCache[remoteLoginHop](logger, store, cache.SuffixNone)}

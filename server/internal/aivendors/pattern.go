@@ -1,4 +1,4 @@
-package admission
+package aivendors
 
 import (
 	"errors"
@@ -13,10 +13,10 @@ import (
 // connector gets its own https://chatgpt.com/oauth/{id}/client.json, where
 // {id} is server-generated.
 //
-// It is deliberately available ONLY to the compile-time catalog, never to
+// It is available only to the staff-managed catalog, never to
 // operator-supplied custom URLs. A pattern is a security-relevant grant of
-// trust to a whole namespace, and confining it to code keeps every one of
-// them behind review and deploy. Customers who need a specific URL add that
+// trust to a whole namespace, and confining it to the catalog keeps every one of
+// them behind staff review. Customers who need a specific URL add that
 // URL exactly, which is what they want anyway.
 //
 // The syntax is one metacharacter, `*`, with two hard structural limits:
@@ -39,10 +39,8 @@ import (
 // expressed in the catalog. No known vendor publishes such a URL, and an
 // escape syntax would cost more than it buys.
 
-// errPatternHostWildcard and friends explain why a catalog pattern is
-// malformed. They surface only through the catalog's own validation test —
-// patterns are compile-time constants, so a bad one is a build-time bug,
-// never a runtime condition.
+// Pattern validation errors identify malformed staff-managed catalog rows.
+// The loader logs and skips these rows before publishing a snapshot.
 var (
 	errPatternHostWildcard    = errors.New("wildcard is not permitted in the scheme or host")
 	errPatternPartialSegment  = errors.New("wildcard must be a complete path segment")
@@ -50,14 +48,6 @@ var (
 	errPatternEmptySegment    = errors.New("pattern has an empty path segment")
 	errPatternNoPathComponent = errors.New("pattern has no path component")
 )
-
-// isPattern reports whether a catalog URL carries a wildcard. Exact entries
-// take a map lookup; only patterns pay for matching. Callers outside the
-// package ask [Preset.IsPattern] instead, since a bare URL string is never
-// the thing they hold.
-func isPattern(url string) bool {
-	return strings.Contains(url, "*")
-}
 
 // validatePattern enforces the structural rules above. Returns nil for a
 // pattern that is safe to match against.
@@ -194,6 +184,10 @@ func splitAuthorityAndPath(raw string) (string, string, bool) {
 	slash := strings.Index(rest, "/")
 	if slash <= 0 {
 		// No path, or an empty authority ("https:///x").
+		return "", "", false
+	}
+	if suffix := strings.IndexAny(rest, "?#"); suffix >= 0 && suffix < slash {
+		// A slash in a query or fragment cannot begin the URL's path.
 		return "", "", false
 	}
 	return raw[:len(scheme)+slash], rest[slash+1:], true

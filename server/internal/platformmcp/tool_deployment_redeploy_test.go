@@ -7,11 +7,13 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 func TestRedeployDeploymentToolManifest(t *testing.T) {
 	t.Parallel()
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "redeploy-manifest", Version: "1"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "redeploy-manifest", Version: "1"}, nil))
 	registerDeploymentRedeployTool(registrar, nil)
 
 	descriptor := descriptorByName(t, registrar, redeployDeploymentToolName)
@@ -39,8 +41,8 @@ func TestRedeployDeploymentToolManifest(t *testing.T) {
 
 func TestRedeployDeploymentToolUnavailableKeepsSchemaAndHidesSecrets(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "redeploy-live", Version: "1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "redeploy-unavailable", Version: "1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "redeploy-live", Version: "1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "redeploy-unavailable", Version: "1"}, nil))
 	service, _, _, _, _, _, _ := newRedeployServiceFixture(t)
 	registerDeploymentRedeployTool(live, service)
 	registerDeploymentRedeployTool(unavailable, nil)

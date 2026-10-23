@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // TestResolveMode_NullResolvesToOpen pins the resting policy. An issuer
@@ -19,7 +21,7 @@ func TestResolveMode_NullResolvesToOpen(t *testing.T) {
 	mode, recognized := ResolveMode("", false)
 	require.Equal(t, ModeOpen, mode)
 	require.True(t, recognized, "an absent mode is a valid state, not a data error")
-	require.Equal(t, OutcomeAdmit, Evaluate(mode, "https://unknown.example.com/client.json").Outcome,
+	require.Equal(t, OutcomeAdmit, Evaluate(aivendors.NewSnapshot(aivendors.Products()), mode, "https://unknown.example.com/client.json").Outcome,
 		"the default must refuse nobody")
 }
 

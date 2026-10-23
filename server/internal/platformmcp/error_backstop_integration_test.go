@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -196,7 +197,7 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 	management := sigint.NewService(logger, tracer, pool, &sessions.Manager{}, liveEngine, auditLogger, features)
 	signalAuthoring := NewSignalAuthoringService(management, reader, liveEngine, key)
 
-	_, registrar := newServerWithRiskMutations(reader, nil, registrations, key, nil, NewFeedbackService(pool), NewOnboardingService(pool),
+	_, registrar := newServerWithRiskMutations(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), reader, nil, registrations, key, nil, NewFeedbackService(pool), NewOnboardingService(pool),
 		distributions, skills, diagnostics, NewWorkflowRunService(logger, nil), pluginInventory, sessionRecall, riskMutations,
 		CatalogDescriptor{}, accessReads, accessRoleMutations, nil, signalAuthoring)
 	registrar.withLogger(logger)

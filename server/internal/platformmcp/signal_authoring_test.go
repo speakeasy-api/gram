@@ -14,6 +14,7 @@ import (
 
 	gensigint "github.com/speakeasy-api/gram/server/gen/sigint"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -143,8 +144,8 @@ func TestSignalAuthoringUpdateSharedSignalImpact(t *testing.T) {
 
 func TestSignalToolContractsAndUnavailableParity(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
 	registerSignalTools(live, &SignalAuthoringService{})
 	registerSignalTools(unavailable, nil)
 	require.Len(t, live.For(AudienceExternal), 8)
@@ -163,7 +164,7 @@ func TestSignalToolContractsAndUnavailableParity(t *testing.T) {
 func TestSignalToolMatchingPreviewAndExactProject(t *testing.T) {
 	t.Parallel()
 	ctx, f := newSignalAuthoringFixture(t)
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "signals", Version: "1"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "signals", Version: "1"}, nil))
 	registerSignalTools(reg, f.service)
 	descriptor := descriptorByName(t, reg, "preview_sensor_match")
 
@@ -203,7 +204,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	sensor, err := f.management.CreateSensor(ctx, &gensigint.CreateSensorPayload{Name: "Topics", Mode: "multi_label", SignalIds: []string{first.ID}, Instructions: new("Classify the message")})
 	require.NoError(t, err)
 
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "signals", Version: "1"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "signals", Version: "1"}, nil))
 	registerSignalTools(reg, f.service)
 	search := descriptorByName(t, reg, "find_signals")
 
@@ -293,7 +294,7 @@ func TestSignalToolsUnavailableRefusals(t *testing.T) {
 	t.Parallel()
 	server := mcp.NewServer(&mcp.Implementation{Name: "signals-unavailable", Version: "1"}, nil)
 	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerSignalTools(reg, nil)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()

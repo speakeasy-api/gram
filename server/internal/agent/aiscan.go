@@ -77,8 +77,8 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 
 	// Trouble reading the organization's scan targets must not reject a scan
 	// report.
-	catalog := aitargets.NewSnapshot(0, nil)
-	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID); err != nil {
+	catalog := aitargets.NewSnapshot(0, nil, "")
+	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID, s.aiCatalog.Snapshot()); err != nil {
 		s.logger.WarnContext(ctx, "ai scan targets unavailable; storing matches as reported", attr.SlogError(err))
 	} else {
 		catalog = list.Snapshot

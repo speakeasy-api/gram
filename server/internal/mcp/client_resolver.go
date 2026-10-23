@@ -267,7 +267,7 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 		return nil
 	}
 
-	decision := admission.Evaluate(mode, clientID)
+	decision := admission.Evaluate(s.aiCatalog.Snapshot(), mode, clientID)
 	if decision.Outcome == admission.OutcomeCheckCustom {
 		// The only branch admission cannot decide alone: whether this issuer
 		// carries the URL as one of its own entries.
@@ -327,7 +327,7 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 // catalog miss on an unconfigured issuer already paid for that query before
 // open became the resting state.
 func (s *Service) shadowCIMDAdmitReason(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string) admission.AdmitReason {
-	shadow := admission.EvaluateShadow(clientID)
+	shadow := admission.EvaluateShadow(s.aiCatalog.Snapshot(), clientID)
 
 	switch shadow.Outcome {
 	case admission.OutcomeAdmit:

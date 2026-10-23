@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	publicationv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
@@ -271,7 +272,7 @@ func TestComposedRepublishPluginToolDeclaresAnExternalAdminIdempotentWrite(t *te
 		WithRepublish(plugindelivery.PublicationRequests{Enabled: true}, nil, testOperationBudget())
 	require.True(t, plugins.republishValid())
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, plugins, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, plugins, nil, CatalogDescriptor{})
 	requireRepublishPluginDeclaration(t, registrar)
 	require.Equal(t, republishPluginDescription, descriptorByName(t, registrar, operationRepublishPlugin).Description)
 }
@@ -288,7 +289,7 @@ func TestPluginReadsWithoutAPublishPathKeepRepublishPluginDeclared(t *testing.T)
 	require.True(t, plugins.valid())
 	require.False(t, plugins.republishValid())
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, plugins, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, plugins, nil, CatalogDescriptor{})
 	requireRepublishPluginDeclaration(t, registrar)
 }
 

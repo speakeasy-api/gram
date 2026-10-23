@@ -13,7 +13,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directory"
@@ -211,19 +210,16 @@ func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrep
 		return nil, oops.E(oops.CodeUnexpected, err, "list ai detections").LogError(ctx, s.logger)
 	}
 
-	// Trouble reading the organization's scan targets degrades to the stored
-	// ids and categories.
-	queries := agentrepo.New(s.db)
-	// The target and what the organization decided about it come off one row,
-	// so one read covers both. Trouble reading it degrades rather than fails:
-	// tools list under their stored ids and read unreviewed. Nothing is
-	// enforced from here, so a degraded status column beats no inventory.
-	var catalog *aitargets.OrganizationList
-	if list, err := aitargets.LoadOrganizationList(ctx, queries, params.OrganizationID); err != nil {
-		s.logger.WarnContext(ctx, "ai scan targets unavailable; listing detections as stored", attr.SlogError(err))
-		catalog = &aitargets.OrganizationList{Entries: nil, Snapshot: aitargets.NewSnapshot(0, nil)}
-	} else {
-		catalog = list
+	// Decisions and definitions must come from a valid organization overlay.
+	// An unavailable overlay cannot honestly be represented as unreviewed.
+	catalog, err := aitargets.LoadOrganizationList(ctx, agentrepo.New(s.db), params.OrganizationID, s.aiCatalog.Snapshot())
+	if err != nil {
+		if errors.Is(err, aitargets.ErrInvalidTarget) {
+			// Employee inventory is also readable without org admin, so keep
+			// target details on the admin-only scan-target endpoint.
+			return nil, oops.E(oops.CodeConflict, err, "AI scan target configuration is invalid; an organization admin must inspect the scan target list and resolve its validation errors").LogWarn(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "read AI scan target configuration").LogError(ctx, s.logger)
 	}
 
 	detections := make([]*gen.AIDetection, 0, len(rows))

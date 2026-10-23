@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
@@ -47,6 +48,12 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 
 	if err := spec.Validate(); err != nil {
 		return err
+	}
+
+	// Reference data precedes tenant provisioning, without a global decision
+	// backfill that could modify another organization's rows during a reseed.
+	if err := catalogseed.EnsureCatalog(ctx, db); err != nil {
+		return fmt.Errorf("ensure AI catalog before demo seed: %w", err)
 	}
 
 	conn, err := db.Acquire(ctx)

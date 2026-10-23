@@ -373,6 +373,13 @@ The seeded gateway uses Progressive discovery. Settings shows this default and I
 
 Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, and no-agent state.
 
+AI tool decisions: all five seeded built-ins reference global catalog products.
+The catalog bootstrap runs before tenant provisioning; reseeding preserves the
+references and catalog edits. Postflight checks five matching product links.
+
+The AI tool library reads the seeded global catalog through the live snapshot.
+Catalog edits reach the library and gateway matchers on the next refresh.
+
 ### Gateway tool picker
 
 Browser verification: [~] — follow check 32 in `seed/demo/verify.md`.

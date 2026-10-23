@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -26,6 +27,8 @@ func TestPlatformMCPSetupResourcesStaticCallback(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			resources, err := platformMCPSetupResources(platformMCPConfig{
+				AICatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+
 				CallbackOrigins: remotesessions.CallbackOrigins{
 					Outbound: outbound, Registration: tt.registration, OrganizationHosts: nil,
 				},

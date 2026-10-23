@@ -18,6 +18,7 @@ import (
 	mcpserversgen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	toolsetsgen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -413,7 +414,7 @@ func TestCreateMCPFromFunctionsNeverReturnsDatabaseErrorText(t *testing.T) {
 	// database outage looks like from here.
 	broken.Close()
 
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-db-failure", Version: "0.0.1"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-db-failure", Version: "0.0.1"}, nil))
 	registerCreateMCPFromFunctionsTool(registrar, service)
 	descriptor := registrar.Descriptors()[0]
 	ctx = ContextWithPrincipal(ctx, fixture.principal)
@@ -599,7 +600,7 @@ func TestCreateMCPFromFunctionsUnavailableRegistrationMatchesLiveManifest(t *tes
 	require.True(t, fixture.service.valid())
 
 	describe := func(service *MCPToolExposureService) Descriptor {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-manifest", Version: "0.0.1"}, nil))
+		registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "create-from-functions-manifest", Version: "0.0.1"}, nil))
 		registerCreateMCPFromFunctionsTool(registrar, service)
 		descriptors := registrar.Descriptors()
 		require.Len(t, descriptors, 1)

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -55,7 +56,9 @@ func (c *recordingChainer) Acquire(_ context.Context, req identitychaining.Reque
 
 func chainingService(t *testing.T, chainer identityChainer) *Service {
 	t.Helper()
-	return &Service{identityChainer: chainer}
+	return &Service{
+		aiCatalog:       aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		identityChainer: chainer}
 }
 
 func humanChainingContext(t *testing.T, userID, organizationID string) context.Context {

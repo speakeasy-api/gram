@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -84,7 +85,7 @@ func TestSignalEntitlementDoesNotGrantRiskDatasetAccess(t *testing.T) {
 func TestSignalDefinitionToolHasExactScopeAndUnavailableParity(t *testing.T) {
 	t.Parallel()
 	live := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerAnalyticsTools(reg, nil)
 	a, b := descriptorByName(t, live.reg, getSignalDefinitionToolName), descriptorByName(t, reg, getSignalDefinitionToolName)
 	require.Equal(t, a.Meta, b.Meta)
@@ -116,7 +117,7 @@ func TestSignalSessionFinderSharesEntitlementAndUnavailableContract(t *testing.T
 	result, ok := raw.(FindSignalSessionsOutput)
 	require.True(t, ok)
 	require.InDelta(t, .5, result.Findings.Concentration["top_session_share"], .000001)
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerAnalyticsTools(reg, nil)
 	live, unavailable := descriptorByName(t, h.reg, findSignalSessionsToolName), descriptorByName(t, reg, findSignalSessionsToolName)
 	require.Equal(t, bothAudiences, live.Meta.Audiences)

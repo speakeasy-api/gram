@@ -11,6 +11,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -94,7 +95,7 @@ func TestRiskToolWrappersRecordTypedOutcomes(t *testing.T) {
 	require.True(t, ok)
 	require.Contains(t, text.Text, `"code":"feature_unavailable"`, "telemetry classification must not change the client refusal contract")
 
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	reg.withRiskTelemetry(recorder)
 	wrapped := instrumentRiskMutation(reg, "create_risk_exclusion", func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, CreateRiskExclusionToolOutput, error) {
 		return nil, CreateRiskExclusionToolOutput{

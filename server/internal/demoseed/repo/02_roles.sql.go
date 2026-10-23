@@ -210,24 +210,24 @@ func (q *Queries) RolesFindPluginBySlug(ctx context.Context, arg RolesFindPlugin
 }
 
 const rolesInsertAIScanTargets = `-- name: RolesInsertAIScanTargets :exec
-INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
+INSERT INTO ai_scan_targets (organization_id, id, ai_product_id, status, rationale)
 VALUES
-  ($1, 'claude-code', 'approved',
+  ($1, 'claude-code', 'claude-code', 'approved',
    'Standard issue for the platform team.'),
-  ($1, 'codex', 'blocked',
+  ($1, 'codex', 'codex', 'blocked',
    'Not covered by the vendor review. Ask in #ai-tooling if you need it.'),
-  ($1, 'hermes-agent', 'approved',
+  ($1, 'hermes-agent', 'hermes-agent', 'approved',
    'Reviewed with the research team. Publishes a client ID metadata '
    || 'document, so the approval is enforced at the gateway.'),
-  ($1, 'zed', 'approved',
+  ($1, 'zed', 'zed', 'approved',
    'Approved for the platform team after the editor review.'),
-  ($1, 'goose', 'blocked',
+  ($1, 'goose', 'goose', 'blocked',
    'Runs arbitrary local commands under its own extensions. Blocked until '
    || 'the extension policy lands.')
 `
 
-// The decided built-ins carry no definition: the compiled-in one stays
-// authoritative, so a later registry revision still reaches this org.
+// The decided built-ins reference global database products and carry only
+// decision overlays, so refreshed catalog definitions still reach this org.
 func (q *Queries) RolesInsertAIScanTargets(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, rolesInsertAIScanTargets, organizationID)
 	return err

@@ -15,6 +15,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -79,7 +80,9 @@ func memberClientFixture(t *testing.T, endpoint string) (*Service, memberProxyBu
 	tp := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tp, nil)
 	require.NoError(t, err)
-	return &Service{guardianPolicy: policy}, func(context.Context) (*proxy.Proxy, error) {
+	return &Service{
+		aiCatalog:      aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		guardianPolicy: policy}, func(context.Context) (*proxy.Proxy, error) {
 		return &proxy.Proxy{
 			GuardianPolicy: policy, Logger: testenv.NewLogger(t), Tracer: tp.Tracer("test"),
 			NonStreamingTimeout: 5 * time.Second, StreamingTimeout: 5 * time.Second,

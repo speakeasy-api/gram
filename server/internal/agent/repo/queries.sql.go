@@ -116,6 +116,42 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 	return i, err
 }
 
+const getAIScanTargetCatalogState = `-- name: GetAIScanTargetCatalogState :one
+SELECT
+  EXISTS (SELECT 1 FROM ai_products p WHERE p.id = $1) AS product_exists,
+  EXISTS (
+    SELECT 1 FROM ai_scan_targets t
+    WHERE t.organization_id = $2 AND t.id = $1
+      AND NOT (
+        t.display_name IS NULL AND t.category IS NULL AND t.version_plist_key IS NULL
+        AND cardinality(t.bundle_ids) = 0 AND cardinality(t.binaries) = 0
+        AND cardinality(t.config_dirs) = 0 AND cardinality(t.process_names) = 0
+        AND cardinality(t.cimd_vendor_keys) = 0 AND cardinality(t.oauth_client_ids) = 0
+        AND cardinality(t.client_info_names) = 0
+      )
+  ) AS has_definition
+`
+
+type GetAIScanTargetCatalogStateParams struct {
+	ID             string
+	OrganizationID string
+}
+
+type GetAIScanTargetCatalogStateRow struct {
+	ProductExists bool
+	HasDefinition bool
+}
+
+// ID matching alone cannot establish a stored row's kind: an organization's
+// definition may predate a built-in with the same ID. Only decision-only rows
+// can acquire a catalog reference, even while readers still overlay by ID.
+func (q *Queries) GetAIScanTargetCatalogState(ctx context.Context, arg GetAIScanTargetCatalogStateParams) (GetAIScanTargetCatalogStateRow, error) {
+	row := q.db.QueryRow(ctx, getAIScanTargetCatalogState, arg.ID, arg.OrganizationID)
+	var i GetAIScanTargetCatalogStateRow
+	err := row.Scan(&i.ProductExists, &i.HasDefinition)
+	return i, err
+}
+
 const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
 SELECT organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 FROM ai_scan_targets
@@ -794,10 +830,11 @@ func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedCha
 }
 
 const setAIScanTargetStatus = `-- name: SetAIScanTargetStatus :one
-INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
-VALUES ($1, $2, $3, $4)
+INSERT INTO ai_scan_targets (organization_id, id, ai_product_id, status, rationale)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (organization_id, id) DO UPDATE
-SET status = EXCLUDED.status
+SET ai_product_id = COALESCE(ai_scan_targets.ai_product_id, EXCLUDED.ai_product_id)
+  , status = EXCLUDED.status
   , rationale = EXCLUDED.rationale
   , updated_at = clock_timestamp()
 RETURNING organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
@@ -806,6 +843,7 @@ RETURNING organization_id, id, ai_product_id, display_name, category, bundle_ids
 type SetAIScanTargetStatusParams struct {
 	OrganizationID string
 	ID             string
+	AiProductID    pgtype.Text
 	Status         string
 	Rationale      pgtype.Text
 }
@@ -814,6 +852,7 @@ func (q *Queries) SetAIScanTargetStatus(ctx context.Context, arg SetAIScanTarget
 	row := q.db.QueryRow(ctx, setAIScanTargetStatus,
 		arg.OrganizationID,
 		arg.ID,
+		arg.AiProductID,
 		arg.Status,
 		arg.Rationale,
 	)
@@ -871,7 +910,8 @@ VALUES (
   $12::text[]
 )
 ON CONFLICT (organization_id, id) DO UPDATE
-SET display_name = EXCLUDED.display_name
+SET ai_product_id = NULL
+  , display_name = EXCLUDED.display_name
   , category = EXCLUDED.category
   , bundle_ids = EXCLUDED.bundle_ids
   , binaries = EXCLUDED.binaries
@@ -904,6 +944,10 @@ type UpsertAIScanTargetParams struct {
 // endpoints, so neither upsert touches the other's columns: adding a target
 // must not silently clear a standing block, and blocking one must not wipe
 // the signatures agents scan for.
+// Writing a definition makes the row the organization's own target. A
+// decision-only row left by a built-in since removed from the registry may
+// still reference its product, and keeping that would mark the definition
+// as a built-in's.
 func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTargetParams) (AiScanTarget, error) {
 	row := q.db.QueryRow(ctx, upsertAIScanTarget,
 		arg.OrganizationID,

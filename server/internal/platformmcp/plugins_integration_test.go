@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -993,6 +994,6 @@ func TestComposedPluginToolsKeepReadsForBothAudiencesAndMutationsExternal(t *tes
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_tool_audiences")
 	require.NoError(t, err)
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, testPluginTargets(conn), nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, testPluginTargets(conn), nil, CatalogDescriptor{})
 	requirePluginToolAudiences(t, registrar)
 }

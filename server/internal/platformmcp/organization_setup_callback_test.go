@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/stretchr/testify/require"
 	"net/url"
@@ -27,7 +28,7 @@ func TestSetupResourcesOrganizationCallback(t *testing.T) {
 			return resolver.ServerURL(stored).String() + "/mcp/remote_login_callback", nil
 		})
 		ctx := ContextWithPrincipal(t.Context(), Principal{OrganizationID: "test-organization"})
-		reg := newRegistrar(newTestMCPServer())
+		reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 		now := func() time.Time { return resource.RevalidateBy.Add(-time.Hour) }
 		registerSetupResources(reg, resources, now)
 		want := resolver.ServerURL(stored).String() + "/mcp/remote_login_callback"
@@ -51,7 +52,7 @@ func TestSetupResourceCallbackFailureIsSafe(t *testing.T) {
 	resource.Render = func(context.Context, string) (string, error) {
 		return "", errors.New("private SQL driver detail")
 	}
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerSetupResources(reg, []SetupResource{resource}, func() time.Time { return resource.RevalidateBy.Add(-time.Hour) })
 	for _, audience := range []Audience{AudienceExternal, AudienceAssistant} {
 		descriptor, ok := reg.ResourceFor(audience, resource.URI)

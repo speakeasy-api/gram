@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -34,7 +35,7 @@ var defaultableSetupTools = map[string]ToolMeta{
 func TestDefaultableSetupToolsKeepAuthorizationAndMakeTheProjectOptional(t *testing.T) {
 	t.Parallel()
 
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registrations := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, &recordingRegistrationStore{})
 	registerCatalogRegistrationTool(live, registrations, nil)
 	registerRemoteRegistrationTool(live, registrations, nil)
@@ -42,7 +43,7 @@ func TestDefaultableSetupToolsKeepAuthorizationAndMakeTheProjectOptional(t *test
 	registerReadinessTools(live, &ReadinessService{})
 	registerPluginTools(live, nil)
 
-	_, unavailable := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, unavailable := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	for name, want := range defaultableSetupTools {
 		for _, reg := range []*Registrar{live, unavailable} {
@@ -135,7 +136,7 @@ func TestSetupToolsActOnTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 		WithIdentityProviderAttachment(attachment).
 		WithDashboardURL(dashboardURL)
 
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerCatalogRegistrationTool(reg, registrations, nil)
 	registerRemoteRegistrationTool(reg, registrations, nil)
 	registerIdentityProviderTool(reg, registrations)
@@ -225,7 +226,7 @@ func TestInstallInstructionsUseTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 	service := NewPluginsService(conn, allowBudget(), "default-project-install-key").
 		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
 		WithInstallLinks(serverURL, serverURL)
-	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
 	registerPluginTools(reg, service)
 
 	actorCtx := func(principal Principal) context.Context {

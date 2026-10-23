@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/stretchr/testify/require"
 )
@@ -48,7 +49,7 @@ func TestSelfRemovalToolContract(t *testing.T) {
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalUnavailable())
 	}
 	for _, enabled := range []bool{false, true} {
-		reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+		reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 		reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 		registerRiskMutationHandlers(reg, catalog, enabled, &RiskMutationHandlers{ChangeAudience: nil, CreatePolicy: nil, UpdatePolicy: nil, CreateExclusion: nil, UpdateExclusion: nil, Controls: &RiskMutationControls{}, RemoveSelf: handler})
 		descriptor := descriptorByName(t, reg, operationRemoveSelfFromRiskPolicy)
@@ -94,7 +95,7 @@ func TestSelfRemovalToolRequiresOrgAdmin(t *testing.T) {
 	require.NoError(t, err)
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
 	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(denyExternalCallAuthorizer{err: &ExternalAuthorizationError{RequiredScope: "org:admin", cause: ErrForbidden}})
 	called := false
 	registerRiskMutationHandlers(reg, catalog, true, &RiskMutationHandlers{ChangeAudience: nil, CreatePolicy: nil, UpdatePolicy: nil, CreateExclusion: nil, UpdateExclusion: nil, Controls: &RiskMutationControls{}, RemoveSelf: func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/stretchr/testify/require"
@@ -29,8 +30,8 @@ func TestMCPConnectionMutationToolProjectsScopedPermissionDenials(t *testing.T) 
 func TestMCPConnectionMutationToolsHaveSameInputSchemaWhenUnavailable(t *testing.T) {
 	t.Parallel()
 
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "connection-mutation-live", Version: "0.0.1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "connection-mutation-unavailable", Version: "0.0.1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "connection-mutation-live", Version: "0.0.1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "connection-mutation-unavailable", Version: "0.0.1"}, nil))
 	registerMCPConnectionMutationTools(live, &MCPConnectionMutationService{})
 	registerMCPConnectionMutationTools(unavailable, nil)
 

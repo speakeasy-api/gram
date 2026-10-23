@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -277,7 +278,7 @@ func TestProjectLifecycleNeverReturnsDatabaseErrorText(t *testing.T) {
 	require.NoError(t, err)
 	broken.Close()
 
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "project-lifecycle-db-failure", Version: "0.0.1"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "project-lifecycle-db-failure", Version: "0.0.1"}, nil))
 	registerProjectLifecycleTools(registrar, service)
 	descriptors := map[string]Descriptor{}
 	for _, descriptor := range registrar.Descriptors() {
@@ -604,7 +605,7 @@ func TestProjectLifecycleUnavailableRegistrationMatchesLiveManifest(t *testing.T
 	require.True(t, fixture.service.valid(), "the live side must be a composed service")
 
 	describe := func(service *ProjectLifecycleService) map[string]Descriptor {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "project-lifecycle-manifest", Version: "0.0.1"}, nil))
+		registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "project-lifecycle-manifest", Version: "0.0.1"}, nil))
 		registerProjectLifecycleTools(registrar, service)
 		byName := map[string]Descriptor{}
 		for _, descriptor := range registrar.Descriptors() {

@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -68,7 +69,7 @@ func (f pluginMetadataFixture) pluginCount(t *testing.T, ctx context.Context, pr
 
 func (f pluginMetadataFixture) descriptor(t *testing.T, name string) Descriptor {
 	t.Helper()
-	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata", Version: "0.0.1"}, nil))
+	registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata", Version: "0.0.1"}, nil))
 	registerPluginMetadataTools(registrar, f.service)
 	return descriptorByName(t, registrar, name)
 }
@@ -520,7 +521,7 @@ func TestPluginMetadataUnavailableRegistrationMatchesLiveManifest(t *testing.T) 
 	require.True(t, fixture.service.metadataMutationValid(), "the live side must be a composed service")
 
 	describe := func(service *PluginsService) map[string]Descriptor {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata-manifest", Version: "0.0.1"}, nil))
+		registrar := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata-manifest", Version: "0.0.1"}, nil))
 		registerPluginMetadataTools(registrar, service)
 		byName := map[string]Descriptor{}
 		for _, descriptor := range registrar.Descriptors() {

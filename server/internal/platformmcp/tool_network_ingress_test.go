@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -20,8 +21,8 @@ import (
 
 func TestNetworkIngressToolHasSameContractWhenUnavailable(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "ingress-live", Version: "0.0.1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "ingress-unavailable", Version: "0.0.1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "ingress-live", Version: "0.0.1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "ingress-unavailable", Version: "0.0.1"}, nil))
 	registerNetworkIngressTool(live, nil)
 	registerUnavailableNetworkIngressTool(unavailable)
 	require.JSONEq(t, string(live.Descriptors()[0].InputSchema), string(unavailable.Descriptors()[0].InputSchema))
@@ -32,7 +33,7 @@ func TestNetworkIngressToolHasSameContractWhenUnavailable(t *testing.T) {
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "ingress-fallback", Version: "0.0.1"}, nil)
 	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerUnavailableNetworkIngressTool(reg)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
@@ -62,7 +63,7 @@ func TestNetworkIngressToolHidesUnexpectedErrors(t *testing.T) {
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "ingress-error", Version: "0.0.1"}, nil)
 	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerNetworkIngressTool(reg, reader.networkIngress)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()

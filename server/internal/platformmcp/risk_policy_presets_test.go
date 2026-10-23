@@ -7,6 +7,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/risk/presets"
 )
 
@@ -91,7 +92,7 @@ func TestCreateRiskPolicySchemaAcceptsPresetBranch(t *testing.T) {
 	t.Parallel()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "risk-preset-schema-test", Version: "0.0.1"}, nil)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerUnavailableRiskTools(reg)
 	create := descriptorByName(t, reg, "create_risk_policy")
 	ctx := ContextWithPrincipal(t.Context(), testRiskPrincipal("user"))
@@ -173,7 +174,7 @@ func TestRiskPresetToolsAnswerWithoutServices(t *testing.T) {
 	t.Parallel()
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "risk-preset-tools-test", Version: "0.0.1"}, nil)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	registerRiskPresetTools(reg)
 	ctx := ContextWithPrincipal(t.Context(), testRiskPrincipal("user"))
 

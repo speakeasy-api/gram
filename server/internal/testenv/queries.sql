@@ -2209,3 +2209,14 @@ UPDATE api_keys
 SET expires_at = clock_timestamp() - interval '1 minute'
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: EditProductFixture :exec
+UPDATE ai_products
+SET display_name = @display_name, deleted_at = sqlc.narg('deleted_at')
+WHERE id = @id;
+
+-- name: EditDocumentFixture :exec
+UPDATE ai_product_cimd_documents
+SET url = @url, display_name = @display_name, enabled = @enabled,
+    deleted_at = sqlc.narg('deleted_at')
+WHERE id = @id;

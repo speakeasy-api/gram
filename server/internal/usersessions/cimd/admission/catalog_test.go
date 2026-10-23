@@ -5,12 +5,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 func TestCatalogAdmits_EnabledEntries(t *testing.T) {
 	t.Parallel()
 
-	for _, preset := range Catalog() {
+	for _, preset := range aivendors.NewSnapshot(aivendors.Products()).Catalog() {
 		// Patterns are skipped: matching one against its own literal text
 		// succeeds trivially and asserts nothing. Their real coverage is in
 		// pattern_test.go, against the client_ids they are meant to admit.
@@ -54,7 +56,7 @@ func TestCatalogAdmits_GitHubCopilotCLIExactly(t *testing.T) {
 
 	const clientID = "https://github.com/copilot/cli/client-metadata.json"
 
-	reason, ok := CatalogMatch(clientID)
+	reason, ok := CatalogMatch(aivendors.NewSnapshot(aivendors.Products()), clientID)
 	require.True(t, ok)
 	require.Equal(t, AdmitCatalogExact, reason)
 
@@ -76,7 +78,7 @@ func TestCatalog_EntriesAreWellFormed(t *testing.T) {
 	t.Parallel()
 
 	seen := map[string]struct{}{}
-	for _, preset := range Catalog() {
+	for _, preset := range aivendors.NewSnapshot(aivendors.Products()).Catalog() {
 		require.NotEmpty(t, preset.VendorKey, "vendor key is required")
 		require.NotEmpty(t, preset.DisplayName, "display name is required")
 		require.True(t, strings.HasPrefix(preset.URL, "https://"), "preset %q must be https", preset.URL)
@@ -95,14 +97,16 @@ func TestCatalog_EntriesAreWellFormed(t *testing.T) {
 func TestCatalog_ReturnsCopy(t *testing.T) {
 	t.Parallel()
 
-	first := Catalog()
+	snapshot := aivendors.NewSnapshot(aivendors.Products())
+	first := snapshot.Catalog()
 	require.NotEmpty(t, first)
 	original := first[0]
 	first[0] = Preset{VendorKey: "attacker", DisplayName: "attacker", URL: unknownURL, Enabled: true}
 
-	second := Catalog()
+	second := snapshot.Catalog()
 	require.Equal(t, original, second[0])
-	require.False(t, catalogAdmits(unknownURL))
+	_, admitted := CatalogMatch(snapshot, unknownURL)
+	require.False(t, admitted)
 }
 
 // TestCatalogMatch_ReportsWhichEntryMatched: the exact/pattern split is the
@@ -111,15 +115,15 @@ func TestCatalog_ReturnsCopy(t *testing.T) {
 func TestCatalogMatch_ReportsWhichEntryMatched(t *testing.T) {
 	t.Parallel()
 
-	reason, ok := CatalogMatch(claudeCodeURL)
+	reason, ok := CatalogMatch(aivendors.NewSnapshot(aivendors.Products()), claudeCodeURL)
 	require.True(t, ok)
 	require.Equal(t, AdmitCatalogExact, reason)
 
-	reason, ok = CatalogMatch(chatGPTConnectorURL)
+	reason, ok = CatalogMatch(aivendors.NewSnapshot(aivendors.Products()), chatGPTConnectorURL)
 	require.True(t, ok)
 	require.Equal(t, AdmitCatalogPattern, reason)
 
-	reason, ok = CatalogMatch(unknownURL)
+	reason, ok = CatalogMatch(aivendors.NewSnapshot(aivendors.Products()), unknownURL)
 	require.False(t, ok)
 	require.Empty(t, reason, "a miss must carry no reason")
 }
@@ -132,11 +136,11 @@ func TestCatalogMatch_ReportsWhichEntryMatched(t *testing.T) {
 func TestCatalogMatch_OverlappedLiteralReportsAsExact(t *testing.T) {
 	t.Parallel()
 
-	reason, ok := CatalogMatch("https://chatgpt.com/oauth/codex/client.json")
+	reason, ok := CatalogMatch(aivendors.NewSnapshot(aivendors.Products()), "https://chatgpt.com/oauth/codex/client.json")
 	require.True(t, ok)
 	require.Equal(t, AdmitCatalogExact, reason)
 
-	reason, ok = CatalogMatch(chatGPTConnectorURL)
+	reason, ok = CatalogMatch(aivendors.NewSnapshot(aivendors.Products()), chatGPTConnectorURL)
 	require.True(t, ok)
 	require.Equal(t, AdmitCatalogPattern, reason, "an id only the wildcard covers still reports as a pattern")
 }
@@ -155,14 +159,14 @@ func TestCatalogPreset_OverlappedLiteralBeatsTheWildcard(t *testing.T) {
 
 	const stableDocument = "https://chatgpt.com/oauth/codex/client.json"
 
-	preset, ok := CatalogPreset(stableDocument)
+	preset, ok := aivendors.NewSnapshot(aivendors.Products()).CatalogPreset(stableDocument)
 	require.True(t, ok)
 	require.Equal(t, stableDocument, preset.URL, "the literal entry must win over the wildcard that also admits it")
 	require.Equal(t, "Codex CLI (stable document)", preset.DisplayName)
 
-	connector, ok := CatalogPreset(chatGPTConnectorURL)
+	connector, ok := aivendors.NewSnapshot(aivendors.Products()).CatalogPreset(chatGPTConnectorURL)
 	require.True(t, ok)
-	require.Equal(t, chatGPTPattern, connector.URL, "an id only the wildcard covers still resolves to the wildcard")
+	require.Equal(t, "https://chatgpt.com/oauth/*/client.json", connector.URL, "an id only the wildcard covers still resolves to the wildcard")
 }
 
 // TestCatalog_DisabledEntriesAreNotAdmitted is the guard for the failure
@@ -180,7 +184,7 @@ func TestCatalogPreset_OverlappedLiteralBeatsTheWildcard(t *testing.T) {
 func TestCatalog_DisabledEntriesAreNotAdmitted(t *testing.T) {
 	t.Parallel()
 
-	for _, preset := range Catalog() {
+	for _, preset := range aivendors.NewSnapshot(aivendors.Products()).Catalog() {
 		if preset.Enabled {
 			continue
 		}
@@ -192,7 +196,7 @@ func TestCatalog_DisabledEntriesAreNotAdmitted(t *testing.T) {
 // catalogAdmits is the bool-only view of CatalogMatch, for the many
 // assertions that care whether a URL is admitted and not by which entry.
 func catalogAdmits(clientID string) bool {
-	_, ok := CatalogMatch(clientID)
+	_, ok := CatalogMatch(aivendors.NewSnapshot(aivendors.Products()), clientID)
 	return ok
 }
 
@@ -203,17 +207,17 @@ func catalogAdmits(clientID string) bool {
 func TestCatalogPreset_NamesTheVendorBehindAClientID(t *testing.T) {
 	t.Parallel()
 
-	preset, ok := CatalogPreset(claudeCodeURL)
+	preset, ok := aivendors.NewSnapshot(aivendors.Products()).CatalogPreset(claudeCodeURL)
 	require.True(t, ok)
 	require.Equal(t, "anthropic", preset.VendorKey)
 	require.Equal(t, claudeCodeURL, preset.URL)
 
-	preset, ok = CatalogPreset(chatGPTConnectorURL)
+	preset, ok = aivendors.NewSnapshot(aivendors.Products()).CatalogPreset(chatGPTConnectorURL)
 	require.True(t, ok)
 	require.Equal(t, "openai", preset.VendorKey)
 	require.True(t, preset.IsPattern(), "a per-connector id resolves to the wildcard that admits it")
 
-	_, ok = CatalogPreset(unknownURL)
+	_, ok = aivendors.NewSnapshot(aivendors.Products()).CatalogPreset(unknownURL)
 	require.False(t, ok)
 }
 
@@ -223,12 +227,12 @@ func TestCatalogPreset_NamesTheVendorBehindAClientID(t *testing.T) {
 func TestCatalogPreset_AgreesWithCatalogMatch(t *testing.T) {
 	t.Parallel()
 
-	for _, preset := range Catalog() {
+	for _, preset := range aivendors.NewSnapshot(aivendors.Products()).Catalog() {
 		if !preset.Enabled || preset.IsPattern() {
 			continue
 		}
-		_, admitted := CatalogMatch(preset.URL)
-		resolved, named := CatalogPreset(preset.URL)
+		_, admitted := CatalogMatch(aivendors.NewSnapshot(aivendors.Products()), preset.URL)
+		resolved, named := aivendors.NewSnapshot(aivendors.Products()).CatalogPreset(preset.URL)
 		require.Equal(t, admitted, named, "catalog entry %q", preset.URL)
 		if named {
 			require.NotEmpty(t, resolved.VendorKey, "catalog entry %q", preset.URL)

@@ -8,6 +8,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -62,11 +64,46 @@ func chatgptDesktopPayload() *gen.UpsertAiScanTargetPayload {
 	}
 }
 
+// TestUpsertAiScanTargetUnlinksAProductReference: a decision-only row can
+// outlive its built-in in the registry while still referencing the catalog
+// product. Writing an organization's own definition under that id makes the
+// row the organization's target, so the reference must not survive.
+func TestUpsertAiScanTargetUnlinksAProductReference(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
+
+	// "claude" is a catalog product that is not a scanned built-in, standing
+	// in for a built-in since removed from the registry.
+	_, isBuiltin := aitargets.DefaultByID(aivendors.NewSnapshot(aivendors.Products()), "claude")
+	require.False(t, isBuiltin)
+	q := repo.New(ti.conn)
+	_, err := q.SetAIScanTargetStatus(ctx, repo.SetAIScanTargetStatusParams{
+		OrganizationID: ti.orgID,
+		ID:             "claude",
+		AiProductID:    conv.ToPGText("claude"),
+		Status:         "unreviewed",
+		Rationale:      conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	payload := chatgptDesktopPayload()
+	payload.ID = "claude"
+	_, err = ti.service.UpsertAiScanTarget(ctx, payload)
+	require.NoError(t, err)
+
+	rows, err := q.ListAIScanTargets(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.False(t, rows[0].AiProductID.Valid, "an organization's own definition carries no product reference")
+}
+
 // defaultPayload builds an upsert payload from a compiled-in default, the
 // way the dashboard writes one back.
 func defaultPayload(t *testing.T, id string) *gen.UpsertAiScanTargetPayload {
 	t.Helper()
-	for _, target := range aitargets.Defaults() {
+	for _, target := range aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products())) {
 		if target.ID != id {
 			continue
 		}
@@ -106,10 +143,10 @@ func TestGetPluginsServesTheDefaultsToAnOrganizationWithNoTargets(t *testing.T) 
 	require.False(t, poll.Configuration.IsConfigured)
 	envelope := aiScanEnvelope(t, poll)
 	require.EqualValues(t, aitargets.SchemaVersion, envelope["schema_version"])
-	require.EqualValues(t, aitargets.DefaultsVersion, envelope["list_version"])
+	require.EqualValues(t, aivendors.NewSnapshot(aivendors.Products()).Version(), envelope["list_version"])
 	require.NotEmpty(t, envelope["etag"])
 	ids := servedTargetIDs(t, envelope)
-	require.Len(t, ids, len(aitargets.Defaults()))
+	require.Len(t, ids, len(aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products()))))
 	require.Equal(t, "aider", ids[0], "targets are served ordered by id")
 }
 
@@ -146,7 +183,7 @@ func TestUpsertAiScanTargetAddsATargetAgentsReceive(t *testing.T) {
 
 	result, err := ti.service.UpsertAiScanTarget(ctx, chatgptDesktopPayload())
 	require.NoError(t, err)
-	require.EqualValues(t, aitargets.DefaultsVersion, result.ListVersion, "an edit changes the served targets and the ETag, not the version")
+	require.EqualValues(t, aivendors.NewSnapshot(aivendors.Products()).Version(), result.ListVersion, "an edit changes the served targets and the ETag, not the version")
 	require.Equal(t, "organization", result.Target.Origin)
 	require.False(t, result.Target.Customized)
 	require.NotNil(t, result.Target.CreatedAt)
@@ -156,13 +193,13 @@ func TestUpsertAiScanTargetAddsATargetAgentsReceive(t *testing.T) {
 	require.NotEqual(t, before.Etag, after.Etag, "a list change must move the poll etag")
 	require.NotEqual(t, before.Configuration.Etag, after.Configuration.Etag)
 	envelope := aiScanEnvelope(t, after)
-	require.EqualValues(t, aitargets.DefaultsVersion, envelope["list_version"])
+	require.EqualValues(t, aivendors.NewSnapshot(aivendors.Products()).Version(), envelope["list_version"])
 	require.Contains(t, servedTargetIDs(t, envelope), "chatgpt-desktop")
 
 	listed, err := ti.service.ListAiScanTargets(ctx, &gen.ListAiScanTargetsPayload{SessionToken: nil})
 	require.NoError(t, err)
-	require.Len(t, listed.Targets, len(aitargets.Defaults())+1)
-	require.EqualValues(t, aitargets.DefaultsVersion, listed.ListVersion)
+	require.Len(t, listed.Targets, len(aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products())))+1)
+	require.EqualValues(t, aivendors.NewSnapshot(aivendors.Products()).Version(), listed.ListVersion)
 
 	createdAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAiScanTargetCreate)
 	require.NoError(t, err)
@@ -202,11 +239,11 @@ func TestUpsertAiScanTargetRecordsARowForADefaultAndDeleteDropsIt(t *testing.T) 
 	require.NoError(t, err)
 	envelope := aiScanEnvelope(t, poll)
 	require.Contains(t, servedTargetIDs(t, envelope), "aider", "a built-in with a row is still in the inventory, so it is still probed for")
-	require.EqualValues(t, aitargets.DefaultsVersion, envelope["list_version"])
+	require.EqualValues(t, aivendors.NewSnapshot(aivendors.Products()).Version(), envelope["list_version"])
 
 	listed, err := ti.service.ListAiScanTargets(ctx, &gen.ListAiScanTargetsPayload{SessionToken: nil})
 	require.NoError(t, err)
-	require.Len(t, listed.Targets, len(aitargets.Defaults()), "a default carrying a decision stays in the list")
+	require.Len(t, listed.Targets, len(aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products()))), "a default carrying a decision stays in the list")
 	for _, entry := range listed.Targets {
 		if entry.ID == "aider" {
 			require.True(t, entry.Customized, "a row makes the built-in customized")
@@ -218,11 +255,11 @@ func TestUpsertAiScanTargetRecordsARowForADefaultAndDeleteDropsIt(t *testing.T) 
 
 	restored, err := ti.service.DeleteAiScanTarget(ctx, &gen.DeleteAiScanTargetPayload{SessionToken: nil, ID: "aider"})
 	require.NoError(t, err)
-	require.EqualValues(t, aitargets.DefaultsVersion, restored.ListVersion)
+	require.EqualValues(t, aivendors.NewSnapshot(aivendors.Products()).Version(), restored.ListVersion)
 
 	listed, err = ti.service.ListAiScanTargets(ctx, &gen.ListAiScanTargetsPayload{SessionToken: nil})
 	require.NoError(t, err)
-	require.Len(t, listed.Targets, len(aitargets.Defaults()))
+	require.Len(t, listed.Targets, len(aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products()))))
 	for _, entry := range listed.Targets {
 		if entry.ID == "aider" {
 			require.False(t, entry.Customized, "dropping the row leaves the built-in as it shipped")
@@ -241,7 +278,7 @@ func TestUpsertAiScanTargetRecordsARowForADefaultAndDeleteDropsIt(t *testing.T) 
 // when the vendor publishes exactly one product — so the test asks rather than
 // naming a product.
 func firstDefaultWithGatewayMatchers() (aitargets.Target, bool) {
-	for _, target := range aitargets.Defaults() {
+	for _, target := range aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products())) {
 		if !target.GatewayClient.IsZero() {
 			return target, true
 		}
@@ -328,7 +365,7 @@ func TestUpsertAiScanTargetRefusesToGrowTheServedSetPastWhatAgentsAccept(t *test
 
 	queries := repo.New(ti.conn)
 	var lastFiller string
-	for i := len(aitargets.Defaults()); i < aitargets.MaxTargets; i++ {
+	for i := len(aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products()))); i < aitargets.MaxTargets; i++ {
 		filler := aitargets.Target{
 			ID:          "filler-" + string(rune('a'+i%26)) + "-" + string(rune('a'+i/26)),
 			DisplayName: "Filler",
@@ -527,7 +564,7 @@ func TestListAiScanTargetsCarriesEachTargetsAccessDecision(t *testing.T) {
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
 
 	var decided, untouched, inert *aitargets.Target
-	for _, target := range aitargets.Defaults() {
+	for _, target := range aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products())) {
 		switch {
 		case aitargets.Enforceable(target) && decided == nil:
 			decided = &target
@@ -570,4 +607,36 @@ func TestListAiScanTargetsCarriesEachTargetsAccessDecision(t *testing.T) {
 
 	require.Equal(t, "unreviewed", byID[inert.ID].Access.State)
 	require.False(t, byID[inert.ID].Access.Enforceable, "no matcher, nothing to enforce")
+}
+
+func TestDeleteAiScanTargetCanRepairMultipleCatalogConflicts(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+	queries := repo.New(ti.conn)
+	var customIDs []string
+	// Model the organization state after a catalog refresh introduced two
+	// defaults sharing matchers with existing custom targets.
+	for _, target := range aitargets.Defaults(aivendors.NewSnapshot(aivendors.Products())) {
+		if len(target.GatewayClient.OAuthClientIDs) == 0 {
+			continue
+		}
+		target.ID = "custom-" + target.ID
+		_, err := queries.UpsertAIScanTarget(ctx, aitargets.UpsertParams(ti.orgID, target))
+		require.NoError(t, err)
+		customIDs = append(customIDs, target.ID)
+		if len(customIDs) == 2 {
+			break
+		}
+	}
+	require.Len(t, customIDs, 2)
+	for _, id := range customIDs {
+		_, err := ti.service.ListAiScanTargets(ctx, &gen.ListAiScanTargetsPayload{})
+		requireAiScanErrorCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "custom-", "admins must see the conflicting target IDs")
+		_, err = ti.service.DeleteAiScanTarget(ctx, &gen.DeleteAiScanTargetPayload{ID: id})
+		require.NoError(t, err, "another invalid entry must not prevent removing this one")
+	}
+	_, err := ti.service.ListAiScanTargets(ctx, &gen.ListAiScanTargetsPayload{})
+	require.NoError(t, err, "removing the last conflict restores the served list")
 }

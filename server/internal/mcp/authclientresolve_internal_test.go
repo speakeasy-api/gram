@@ -19,6 +19,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -218,7 +219,9 @@ func TestRefreshDecision(t *testing.T) {
 		})
 	}
 
-	reconnect, decided, err := (&Service{}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, urn.NewUserSubject("user_a"), "jti")
+	reconnect, decided, err := (&Service{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+	}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, urn.NewUserSubject("user_a"), "jti")
 	require.NoError(t, err)
 	require.False(t, reconnect)
 	require.False(t, decided, "without the flag the upstream client choice decides")
@@ -244,7 +247,9 @@ func newAuthClientFixture(t *testing.T, pool *pgxpool.Pool) *authClientFixture {
 	q := authclientbackfill.New(pool)
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
-	f := &authClientFixture{t: t, q: q, service: &Service{db: pool, enc: enc, logger: testenv.NewLogger(t), authClientPermitter: connectPermitter{}}, orgID: "org_" + uuid.NewString(), projectID: uuid.New(), registration: uuid.New(), issuerID: uuid.New()}
+	f := &authClientFixture{t: t, q: q, service: &Service{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		db:        pool, enc: enc, logger: testenv.NewLogger(t), authClientPermitter: connectPermitter{}}, orgID: "org_" + uuid.NewString(), projectID: uuid.New(), registration: uuid.New(), issuerID: uuid.New()}
 	require.NoError(t, q.SeedOrganizationFixture(ctx, f.orgID))
 	require.NoError(t, q.SeedProjectFixture(ctx, authclientbackfill.SeedProjectFixtureParams{ID: f.projectID, Slug: "p-" + f.projectID.String()[:8], OrganizationID: f.orgID}))
 	require.NoError(t, q.SeedRemoteSessionIssuerFixture(ctx, authclientbackfill.SeedRemoteSessionIssuerFixtureParams{ID: f.issuerID, ProjectID: validUUID(f.projectID), Slug: "rsi-" + f.issuerID.String()[:8], Issuer: "https://auth.example.com/" + f.issuerID.String()[:8], Name: pgtype.Text{String: "Example", Valid: true}}))
@@ -868,7 +873,9 @@ func TestReportAuthClientParity(t *testing.T) {
 			var buf bytes.Buffer
 			reader := sdkmetric.NewManualReader()
 			metrics := mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
-			s := &Service{logger: slog.New(slog.NewJSONHandler(&buf, nil)), metrics: metrics}
+			s := &Service{
+				aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+				logger:    slog.New(slog.NewJSONHandler(&buf, nil)), metrics: metrics}
 			s.reportAuthClientParity(t.Context(), "org_1", uuid.New(), tc.res, tc.choice, tc.choiceErr)
 			if tc.warn {
 				require.Contains(t, buf.String(), "auth client resolver parity mismatch")
@@ -890,7 +897,9 @@ func TestReportAuthClientParityAnnotatesTheSpan(t *testing.T) {
 
 	recorder := tracetest.NewSpanRecorder()
 	ctx, span := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).Tracer("test").Start(t.Context(), "request")
-	s := &Service{logger: testenv.NewLogger(t)}
+	s := &Service{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		logger:    testenv.NewLogger(t)}
 	s.reportAuthClientParity(ctx, "org_1", uuid.New(), gapResolution(authClientReasonClientDisabled), upstreamChoice{}, nil)
 	span.End()
 
@@ -922,11 +931,17 @@ func TestShadowAuthClientCountsResolverFailures(t *testing.T) {
 func TestAuthClientModeIsOffWithoutFlags(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, feature.AuthClientResolverOff, (&Service{}).authClientMode(t.Context(), "org_a"), "no flag provider keeps the upstream client choice")
+	require.Equal(t, feature.AuthClientResolverOff, (&Service{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+	}).authClientMode(t.Context(), "org_a"), "no flag provider keeps the upstream client choice")
 	flags := new(feature.InMemory)
 	flags.SetFlag(feature.FlagAuthClientResolverShadow, "org_a", true)
-	require.Equal(t, feature.AuthClientResolverShadow, (&Service{features: flags}).authClientMode(t.Context(), "org_a"))
-	require.Equal(t, feature.AuthClientResolverOff, (&Service{features: flags}).authClientMode(t.Context(), "org_b"))
+	require.Equal(t, feature.AuthClientResolverShadow, (&Service{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		features:  flags}).authClientMode(t.Context(), "org_a"))
+	require.Equal(t, feature.AuthClientResolverOff, (&Service{
+		aiCatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+		features:  flags}).authClientMode(t.Context(), "org_b"))
 }
 
 func TestUpstreamClientChoiceServesMappedHeadersOnlyClients(t *testing.T) {

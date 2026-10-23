@@ -9,6 +9,7 @@ import (
 
 	genskills "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -236,7 +237,7 @@ func TestSkillSuggestionReviewSurfacesServiceConflictsAsStructuredRefusals(t *te
 	t.Parallel()
 
 	skills := &recordingSkillsManagement{skill: testSkill(), err: oops.E(oops.CodeConflict, nil, "skill suggestion is not open")}
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, skills), nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, skills), nil, nil, nil, nil, CatalogDescriptor{})
 	descriptor := skillDescriptor(t, registrar, "approve_skill_suggestion")
 
 	_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testPrincipal()), json.RawMessage(fmt.Sprintf(`{"project_slug":%q,"suggestion_id":%q,"change_ids":[%q],"confirmed":true}`, testSkillProjectSlug, testSuggestionID, testChangeIDFirst)))
@@ -263,7 +264,7 @@ func TestSkillSuggestionReviewToolsRefuseWithoutConfirmation(t *testing.T) {
 			t.Parallel()
 
 			skills := &recordingSkillsManagement{skill: testSkill()}
-			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, skills), nil, nil, nil, nil, CatalogDescriptor{})
+			_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, skills), nil, nil, nil, nil, CatalogDescriptor{})
 			descriptor := skillDescriptor(t, registrar, test.tool)
 
 			_, err := descriptor.Invoke(t.Context(), json.RawMessage(test.args))
@@ -296,7 +297,7 @@ func TestSkillSuggestionReviewToolsAreExternalWritesWithAndWithoutTheirDependenc
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, nil, nil, CatalogDescriptor{})
+			_, registrar := newServer(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, nil, nil, CatalogDescriptor{})
 			for _, name := range []string{"approve_skill_suggestion", "dismiss_skill_suggestion"} {
 				descriptor := skillDescriptor(t, registrar, name)
 				require.Equal(t, externalOnly, descriptor.Meta.Audiences)

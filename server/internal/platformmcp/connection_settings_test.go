@@ -7,6 +7,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	metarepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -16,8 +17,8 @@ import (
 
 func TestMCPConnectionSettingsToolHasSameInputSchemaWhenUnavailable(t *testing.T) {
 	t.Parallel()
-	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "settings-live", Version: "0.0.1"}, nil))
-	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "settings-unavailable", Version: "0.0.1"}, nil))
+	live := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "settings-live", Version: "0.0.1"}, nil))
+	unavailable := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), mcp.NewServer(&mcp.Implementation{Name: "settings-unavailable", Version: "0.0.1"}, nil))
 	registerMCPConnectionSettingsTool(live, nil)
 	registerUnavailableMCPConnectionSettingsTool(unavailable)
 	require.JSONEq(t, string(live.Descriptors()[0].InputSchema), string(unavailable.Descriptors()[0].InputSchema))
@@ -25,7 +26,7 @@ func TestMCPConnectionSettingsToolHasSameInputSchemaWhenUnavailable(t *testing.T
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "settings-fallback", Version: "0.0.1"}, nil)
 	bindExternalTestPrincipal(server)
-	reg := newRegistrar(server)
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	registerUnavailableMCPConnectionSettingsTool(reg)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()

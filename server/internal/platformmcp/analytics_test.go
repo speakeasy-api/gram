@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
@@ -110,7 +111,7 @@ func newAnalyticsTestHarness(t *testing.T, evaluation feature.Evaluation, budget
 	service := NewAnalyticsService(slog.New(slog.NewJSONHandler(logs, nil)), engine, flags, riskMutationOrganizationResolver{slug: "org", err: nil}, projects, budget, nil)
 	require.NotNil(t, service)
 
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerAnalyticsTools(reg, service)
 	return &analyticsTestHarness{reg: reg, engine: engine, projects: projects, flags: flags, project: project, logs: logs, service: service}
 }
@@ -242,7 +243,7 @@ func TestAnalyticsToolsDeclareTheirContract(t *testing.T) {
 func TestAnalyticsToolsStubWithoutAService(t *testing.T) {
 	t.Parallel()
 
-	reg := newRegistrar(newTestMCPServer())
+	reg := newRegistrar(aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())), newTestMCPServer())
 	registerAnalyticsTools(reg, nil)
 	live := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
 	for name, arguments := range live.validArguments() {

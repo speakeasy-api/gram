@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -537,6 +538,8 @@ func newTestOAuthHTTP(t *testing.T) *OAuthHTTP {
 	base, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
 	service, err := NewOAuthHTTP(OAuthHTTPConfig{
+		AICatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+
 		BaseURL:       base,
 		Cache:         &memoryCache{values: map[string]any{}},
 		Store:         platformoauth.NewInMemoryStore(),
@@ -590,6 +593,8 @@ func TestOAuthHTTPPinsIDPCallbackToOutboundOrigin(t *testing.T) {
 			t.Parallel()
 			var callbacks []string
 			service, err := NewOAuthHTTP(OAuthHTTPConfig{
+				AICatalog: aivendors.NewStore(aivendors.NewSnapshot(aivendors.Products())),
+
 				BaseURL:            base,
 				IDPCallbackBaseURL: tc.pinned,
 				Cache:              &memoryCache{values: map[string]any{}},
