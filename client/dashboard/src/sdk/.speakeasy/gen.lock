@@ -832,10 +832,12 @@ trackedFiles:
   src/funcs/workloadIdentitiesCreateDeviceJoinToken.ts: {}
   src/funcs/workloadIdentitiesGetCustomFlows.ts: {}
   src/funcs/workloadIdentitiesList.ts: {}
+  src/funcs/workloadIdentitiesListDeviceJoinTokens.ts: {}
   src/funcs/workloadIdentitiesListPlatforms.ts: {}
   src/funcs/workloadIdentitiesListTokenEndpoints.ts: {}
   src/funcs/workloadIdentitiesRegisterDevice.ts: {}
   src/funcs/workloadIdentitiesRegisterIssuer.ts: {}
+  src/funcs/workloadIdentitiesRevokeDeviceJoinToken.ts: {}
   src/funcs/workloadIdentitiesUpdateIssuer.ts: {}
   src/funcs/workloadIdentitiesUpdateSubject.ts: {}
   src/funcs/workloadIdentitiesWithdrawIssuer.ts: {}
@@ -2083,6 +2085,8 @@ trackedFiles:
   src/models/components/workloadadmission.ts: {}
   src/models/components/workloadcustomflows.ts: {}
   src/models/components/workloaddevicejointoken.ts: {}
+  src/models/components/workloaddevicejointokenlist.ts: {}
+  src/models/components/workloaddevicejointokensummary.ts: {}
   src/models/components/workloaddeviceregistration.ts: {}
   src/models/components/workloadform.ts: {}
   src/models/components/workloadformblock.ts: {}
@@ -2644,6 +2648,7 @@ trackedFiles:
   src/models/operations/listusersessions.ts: {}
   src/models/operations/listversions.ts: {}
   src/models/operations/listwidgets.ts: {}
+  src/models/operations/listworkloaddevicejointokens.ts: {}
   src/models/operations/listworkloadidentities.ts: {}
   src/models/operations/listworkloadplatforms.ts: {}
   src/models/operations/listworkloadtokenendpoints.ts: {}
@@ -2741,6 +2746,7 @@ trackedFiles:
   src/models/operations/revokeusersession.ts: {}
   src/models/operations/revokeusersessionclient.ts: {}
   src/models/operations/revokeusersessionconsent.ts: {}
+  src/models/operations/revokeworkloaddevicejointoken.ts: {}
   src/models/operations/rotateapikey.ts: {}
   src/models/operations/rotateinternalsessionissuer.ts: {}
   src/models/operations/rotatelitellminstancekey.ts: {}
@@ -3710,6 +3716,7 @@ trackedFiles:
   src/react-query/revokeUserSession.ts: {}
   src/react-query/revokeUserSessionClient.ts: {}
   src/react-query/revokeUserSessionConsent.ts: {}
+  src/react-query/revokeWorkloadDeviceJoinToken.ts: {}
   src/react-query/riskAcknowledgePolicyChallenge.ts: {}
   src/react-query/riskAnalysisStatus.core.ts: {}
   src/react-query/riskAnalysisStatus.ts: {}
@@ -4064,6 +4071,8 @@ trackedFiles:
   src/react-query/workUnitsTrend.ts: {}
   src/react-query/workloadCustomFlows.core.ts: {}
   src/react-query/workloadCustomFlows.ts: {}
+  src/react-query/workloadDeviceJoinTokens.core.ts: {}
+  src/react-query/workloadDeviceJoinTokens.ts: {}
   src/react-query/workloadIdentities.core.ts: {}
   src/react-query/workloadIdentities.ts: {}
   src/react-query/workloadIdentitiesRegisterDevice.ts: {}
@@ -10721,6 +10730,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listWorkloadDeviceJoinTokens:
+    speakeasy-default-list-workload-device-join-tokens:
+      parameters:
+        query:
+          limit: 50
+      responses:
+        "200":
+          application/json: {"items": [{"agent_id": "a738fca6-ad7b-4aae-9507-5f7db754141b", "created_at": "2025-09-01T13:34:30.530Z", "created_by_user_id": "<id>", "expires_at": "2026-05-28T04:46:00.313Z", "id": "709ae03b-7be1-4d68-8e1d-502e0261a468", "status": "revoked"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listWorkloadIdentities:
     speakeasy-default-list-workload-identities:
       responses:
@@ -11887,6 +11908,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  revokeWorkloadDeviceJoinToken:
+    speakeasy-default-revoke-workload-device-join-token:
+      parameters:
+        query:
+          id: "88f8cca2-cc87-4024-8994-67104a63fbc6"
+      responses:
+        "200":
+          application/json: {"agent_id": "f8fa1de0-0794-4091-9248-3808cb7f0121", "created_at": "2026-04-21T00:29:32.008Z", "created_by_user_id": "<id>", "expires_at": "2025-09-03T22:52:27.518Z", "id": "d17637ef-21bf-4725-9ae7-28a7a32543c4", "status": "expired"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   rotateAPIKey:
     speakeasy-default-rotate-API-key:
       requestBody:

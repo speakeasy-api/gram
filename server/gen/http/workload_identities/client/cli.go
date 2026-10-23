@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"unicode/utf8"
 
 	workloadidentities "github.com/speakeasy-api/gram/server/gen/workload_identities"
@@ -520,6 +521,114 @@ func BuildCreateDeviceJoinTokenPayload(workloadIdentitiesCreateDeviceJoinTokenBo
 			v.ExpiresInSeconds = 3600
 		}
 	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListDeviceJoinTokensPayload builds the payload for the
+// workloadIdentities listDeviceJoinTokens endpoint from CLI flags.
+func BuildListDeviceJoinTokensPayload(workloadIdentitiesListDeviceJoinTokensAgentID string, workloadIdentitiesListDeviceJoinTokensCursor string, workloadIdentitiesListDeviceJoinTokensLimit string, workloadIdentitiesListDeviceJoinTokensSessionToken string, workloadIdentitiesListDeviceJoinTokensApikeyToken string, workloadIdentitiesListDeviceJoinTokensProjectSlugInput string) (*workloadidentities.ListDeviceJoinTokensPayload, error) {
+	var err error
+	var agentID *string
+	{
+		if workloadIdentitiesListDeviceJoinTokensAgentID != "" {
+			agentID = &workloadIdentitiesListDeviceJoinTokensAgentID
+			err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", *agentID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if workloadIdentitiesListDeviceJoinTokensCursor != "" {
+			cursor = &workloadIdentitiesListDeviceJoinTokensCursor
+		}
+	}
+	var limit int
+	{
+		if workloadIdentitiesListDeviceJoinTokensLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(workloadIdentitiesListDeviceJoinTokensLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if workloadIdentitiesListDeviceJoinTokensSessionToken != "" {
+			sessionToken = &workloadIdentitiesListDeviceJoinTokensSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesListDeviceJoinTokensApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesListDeviceJoinTokensApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesListDeviceJoinTokensProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesListDeviceJoinTokensProjectSlugInput
+		}
+	}
+	v := &workloadidentities.ListDeviceJoinTokensPayload{}
+	v.AgentID = agentID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRevokeDeviceJoinTokenPayload builds the payload for the
+// workloadIdentities revokeDeviceJoinToken endpoint from CLI flags.
+func BuildRevokeDeviceJoinTokenPayload(workloadIdentitiesRevokeDeviceJoinTokenID string, workloadIdentitiesRevokeDeviceJoinTokenSessionToken string, workloadIdentitiesRevokeDeviceJoinTokenApikeyToken string, workloadIdentitiesRevokeDeviceJoinTokenProjectSlugInput string) (*workloadidentities.RevokeDeviceJoinTokenPayload, error) {
+	var err error
+	var id string
+	{
+		id = workloadIdentitiesRevokeDeviceJoinTokenID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if workloadIdentitiesRevokeDeviceJoinTokenSessionToken != "" {
+			sessionToken = &workloadIdentitiesRevokeDeviceJoinTokenSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesRevokeDeviceJoinTokenApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesRevokeDeviceJoinTokenApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesRevokeDeviceJoinTokenProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesRevokeDeviceJoinTokenProjectSlugInput
+		}
+	}
+	v := &workloadidentities.RevokeDeviceJoinTokenPayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

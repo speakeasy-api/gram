@@ -60,6 +60,14 @@ type Client struct {
 	// createDeviceJoinToken endpoint.
 	CreateDeviceJoinTokenDoer goahttp.Doer
 
+	// ListDeviceJoinTokens Doer is the HTTP client used to make requests to the
+	// listDeviceJoinTokens endpoint.
+	ListDeviceJoinTokensDoer goahttp.Doer
+
+	// RevokeDeviceJoinToken Doer is the HTTP client used to make requests to the
+	// revokeDeviceJoinToken endpoint.
+	RevokeDeviceJoinTokenDoer goahttp.Doer
+
 	// RegisterDevice Doer is the HTTP client used to make requests to the
 	// registerDevice endpoint.
 	RegisterDeviceDoer goahttp.Doer
@@ -96,6 +104,8 @@ func NewClient(
 		UpdateSubjectDoer:         doer,
 		WithdrawSubjectDoer:       doer,
 		CreateDeviceJoinTokenDoer: doer,
+		ListDeviceJoinTokensDoer:  doer,
+		RevokeDeviceJoinTokenDoer: doer,
 		RegisterDeviceDoer:        doer,
 		RestoreResponseBody:       restoreBody,
 		scheme:                    scheme,
@@ -364,6 +374,54 @@ func (c *Client) CreateDeviceJoinToken() goa.Endpoint {
 		resp, err := c.CreateDeviceJoinTokenDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "createDeviceJoinToken", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDeviceJoinTokens returns an endpoint that makes HTTP requests to the
+// workloadIdentities service listDeviceJoinTokens server.
+func (c *Client) ListDeviceJoinTokens() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDeviceJoinTokensRequest(c.encoder)
+		decodeResponse = DecodeListDeviceJoinTokensResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDeviceJoinTokensRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDeviceJoinTokensDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "listDeviceJoinTokens", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeDeviceJoinToken returns an endpoint that makes HTTP requests to the
+// workloadIdentities service revokeDeviceJoinToken server.
+func (c *Client) RevokeDeviceJoinToken() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeDeviceJoinTokenRequest(c.encoder)
+		decodeResponse = DecodeRevokeDeviceJoinTokenResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeDeviceJoinTokenRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeDeviceJoinTokenDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "revokeDeviceJoinToken", err)
 		}
 		return decodeResponse(resp)
 	}
