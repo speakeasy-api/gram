@@ -108,10 +108,7 @@ func TestToolsetsService_ReenableDoesNotTwinExistingEntry(t *testing.T) {
 	require.NoError(t, err)
 	toolsetID := uuid.MustParse(created.ID)
 
-	disable := updateToolsetPayload(created.Slug)
-	disable.McpEnabled = new(false)
-	_, err = ti.service.UpdateToolset(ctx, disable)
-	require.NoError(t, err)
+	require.NoError(t, ti.service.DisableHostedServer(ctx, toolsetID))
 	require.NoError(t, plugins.SoftDeletePluginServers(ctx, defaultPlugin.ID))
 	_, err = plugins.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
 		PluginID: defaultPlugin.ID, McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true},
@@ -119,10 +116,7 @@ func TestToolsetsService_ReenableDoesNotTwinExistingEntry(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	enable := updateToolsetPayload(created.Slug)
-	enable.McpEnabled = new(true)
-	_, err = ti.service.UpdateToolset(ctx, enable)
-	require.NoError(t, err)
+	setHostedVisibility(t, ctx, ti, created, "private")
 
 	servers, err := plugins.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)

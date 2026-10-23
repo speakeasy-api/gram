@@ -40,11 +40,6 @@ type Service interface {
 	// present or interpret the values. This supports reviewing the exact schema
 	// contents before changing how a toolset is shared.
 	ListToolSchemaStaticValues(context.Context, *ListToolSchemaStaticValuesPayload) (res *ListToolSchemaStaticValuesResult, err error)
-	// Check if a MCP slug is taken in any scope (true means taken).
-
-	// Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped
-	// to one domain and returns true when available.
-	CheckMCPSlugAvailability(context.Context, *CheckMCPSlugAvailabilityPayload) (res bool, err error)
 	// Clone an existing toolset with a new name
 	CloneToolset(context.Context, *CloneToolsetPayload) (res *types.Toolset, err error)
 	// Associate an external OAuth server with a toolset
@@ -55,11 +50,6 @@ type Service interface {
 	UpdateExternalOAuthServer(context.Context, *UpdateExternalOAuthServerPayload) (res *types.Toolset, err error)
 	// Remove OAuth server association from a toolset
 	RemoveOAuthServer(context.Context, *RemoveOAuthServerPayload) (res *types.Toolset, err error)
-	// Link a toolset to a user_session_issuer (or pass null to unlink). The
-	// user_session_issuer must already exist in the caller's project.
-
-	// Deprecated: use mcpServers.update instead.
-	SetUserSessionIssuer(context.Context, *SetUserSessionIssuerPayload) (res *types.Toolset, err error)
 	// Assign a tool variations group to a toolset to enable MCP tool filtering (or
 	// pass null to disable). The group must already exist in the caller's project.
 	SetToolVariationsGroup(context.Context, *SetToolVariationsGroupPayload) (res *types.Toolset, err error)
@@ -85,7 +75,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [15]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "listToolFilters", "listToolSchemaStaticValues", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "updateExternalOAuthServer", "removeOAuthServer", "setUserSessionIssuer", "setToolVariationsGroup"}
+var MethodNames = [13]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "listToolFilters", "listToolSchemaStaticValues", "cloneToolset", "addExternalOAuthServer", "updateExternalOAuthServer", "removeOAuthServer", "setToolVariationsGroup"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -97,16 +87,6 @@ type AddExternalOAuthServerPayload struct {
 	// The external OAuth server data to create and associate with the toolset
 	ExternalOauthServer *types.ExternalOAuthServerForm
 	ProjectSlugInput    *string
-}
-
-// CheckMCPSlugAvailabilityPayload is the payload type of the toolsets service
-// checkMCPSlugAvailability method.
-type CheckMCPSlugAvailabilityPayload struct {
-	// The slug to check
-	Slug             types.Slug
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
 }
 
 // CloneToolsetPayload is the payload type of the toolsets service cloneToolset
@@ -238,18 +218,6 @@ type SetToolVariationsGroupPayload struct {
 	ProjectSlugInput      *string
 }
 
-// SetUserSessionIssuerPayload is the payload type of the toolsets service
-// setUserSessionIssuer method.
-type SetUserSessionIssuerPayload struct {
-	SessionToken *string
-	ApikeyToken  *string
-	// The slug of the toolset to link
-	Slug types.Slug
-	// The user_session_issuer id to link, or null to unlink.
-	UserSessionIssuerID *string
-	ProjectSlugInput    *string
-}
-
 // A literal value carried by a JSON Schema keyword.
 type ToolSchemaStaticValue struct {
 	// JSON Pointer to the schema object containing the keyword
@@ -308,18 +276,20 @@ type UpdateToolsetPayload struct {
 	ToolUrns []string
 	// List of resource URNs to include in the toolset
 	ResourceUrns []string
-	// Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP
+	// Deprecated: rejected; use mcpServers.update. Whether the toolset is enabled
+	// for MCP
 	McpEnabled *bool
-	// Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The slug of the
-	// MCP to use for the toolset
+	// Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The
+	// slug of the MCP to use for the toolset
 	McpSlug *types.Slug
-	// Deprecated: use mcpServers.update. Whether the toolset is public in MCP
+	// Deprecated: rejected; use mcpServers.update. Whether the toolset is public
+	// in MCP
 	McpIsPublic *bool
-	// Deprecated: use mcpServers.update. Where the hosted MCP is accessible:
-	// public_only, dual, or private_only
+	// Deprecated: rejected; use mcpServers.update. Where the hosted MCP is
+	// accessible: public_only, dual, or private_only
 	NetworkAccessMode *types.NetworkAccessMode
-	// Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the
-	// custom domain to use for the toolset
+	// Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The ID
+	// of the custom domain to use for the toolset
 	CustomDomainID *string
 	// The mode to use for tool selection
 	ToolSelectionMode *string

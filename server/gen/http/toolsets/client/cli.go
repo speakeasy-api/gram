@@ -416,48 +416,6 @@ func BuildListToolSchemaStaticValuesPayload(toolsetsListToolSchemaStaticValuesSl
 	return v, nil
 }
 
-// BuildCheckMCPSlugAvailabilityPayload builds the payload for the toolsets
-// checkMCPSlugAvailability endpoint from CLI flags.
-func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug string, toolsetsCheckMCPSlugAvailabilitySessionToken string, toolsetsCheckMCPSlugAvailabilityApikeyToken string, toolsetsCheckMCPSlugAvailabilityProjectSlugInput string) (*toolsets.CheckMCPSlugAvailabilityPayload, error) {
-	var err error
-	var slug string
-	{
-		slug = toolsetsCheckMCPSlugAvailabilitySlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if toolsetsCheckMCPSlugAvailabilitySessionToken != "" {
-			sessionToken = &toolsetsCheckMCPSlugAvailabilitySessionToken
-		}
-	}
-	var apikeyToken *string
-	{
-		if toolsetsCheckMCPSlugAvailabilityApikeyToken != "" {
-			apikeyToken = &toolsetsCheckMCPSlugAvailabilityApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if toolsetsCheckMCPSlugAvailabilityProjectSlugInput != "" {
-			projectSlugInput = &toolsetsCheckMCPSlugAvailabilityProjectSlugInput
-		}
-	}
-	v := &toolsets.CheckMCPSlugAvailabilityPayload{}
-	v.Slug = types.Slug(slug)
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
 // BuildCloneToolsetPayload builds the payload for the toolsets cloneToolset
 // endpoint from CLI flags.
 func BuildCloneToolsetPayload(toolsetsCloneToolsetSlug string, toolsetsCloneToolsetSessionToken string, toolsetsCloneToolsetProjectSlugInput string, toolsetsCloneToolsetApikeyToken string) (*toolsets.CloneToolsetPayload, error) {
@@ -663,63 +621,6 @@ func BuildRemoveOAuthServerPayload(toolsetsRemoveOAuthServerSlug string, toolset
 		}
 	}
 	v := &toolsets.RemoveOAuthServerPayload{}
-	v.Slug = types.Slug(slug)
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildSetUserSessionIssuerPayload builds the payload for the toolsets
-// setUserSessionIssuer endpoint from CLI flags.
-func BuildSetUserSessionIssuerPayload(toolsetsSetUserSessionIssuerBody string, toolsetsSetUserSessionIssuerSlug string, toolsetsSetUserSessionIssuerSessionToken string, toolsetsSetUserSessionIssuerApikeyToken string, toolsetsSetUserSessionIssuerProjectSlugInput string) (*toolsets.SetUserSessionIssuerPayload, error) {
-	var err error
-	var body SetUserSessionIssuerRequestBody
-	{
-		err = json.Unmarshal([]byte(toolsetsSetUserSessionIssuerBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
-		}
-		if body.UserSessionIssuerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var slug string
-	{
-		slug = toolsetsSetUserSessionIssuerSlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
-		if utf8.RuneCountInString(slug) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if toolsetsSetUserSessionIssuerSessionToken != "" {
-			sessionToken = &toolsetsSetUserSessionIssuerSessionToken
-		}
-	}
-	var apikeyToken *string
-	{
-		if toolsetsSetUserSessionIssuerApikeyToken != "" {
-			apikeyToken = &toolsetsSetUserSessionIssuerApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if toolsetsSetUserSessionIssuerProjectSlugInput != "" {
-			projectSlugInput = &toolsetsSetUserSessionIssuerProjectSlugInput
-		}
-	}
-	v := &toolsets.SetUserSessionIssuerPayload{
-		UserSessionIssuerID: body.UserSessionIssuerID,
-	}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

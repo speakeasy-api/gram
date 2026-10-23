@@ -717,7 +717,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return s.updateHostedServer(ctx, logger, authCtx.ActiveOrganizationID, unlocked, payload, ids)
 	}
 	if ids.ToolsetID.Valid && ids.ToolsetID.UUID == serverID {
-		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
+		return nil, oops.E(oops.CodeInvalid, nil, "an MCP server cannot take over its toolset's hosted MCP identity").LogWarn(ctx, logger)
 	}
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
 	if err != nil {
@@ -762,7 +762,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	if isCanonicalHostedWrapper(existing) {
-		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
+		return nil, oops.E(oops.CodeConflict, nil, "mcp server changed concurrently; retry the update").LogWarn(ctx, logger)
 	}
 	// Authorization keys on the row as it exists, not the backing the payload
 	// may switch it to.
@@ -1103,7 +1103,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
 	if isCanonicalHostedWrapper(lockedServer.Server) {
-		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
+		return oops.E(oops.CodeConflict, nil, "mcp server changed concurrently; retry the deletion").LogWarn(ctx, logger)
 	}
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(lockedServer.Server.ID, lockedServer.Server.ToolsetID), authCtx.ProjectID.String())); err != nil {
 		return err

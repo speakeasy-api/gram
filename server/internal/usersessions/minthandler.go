@@ -303,7 +303,7 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated toolsets").LogError(ctx, s.logger)
 	}
 	if toolset.McpSlug.String == "" {
-		return nil, oops.E(oops.CodeInvariantViolation, nil, "issuer-gated toolset has no mcp slug").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "the toolset's hosted MCP server has no address; add an endpoint before minting a user-session token").LogWarn(ctx, s.logger)
 	}
 
 	issuerURL, err := url.JoinPath(s.serverURL, "mcp", toolset.McpSlug.String)

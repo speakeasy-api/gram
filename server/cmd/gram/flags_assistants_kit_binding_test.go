@@ -97,7 +97,7 @@ func kitBindingURL(t *testing.T, raw string) *url.URL {
 
 func TestKitMCPAuthoritativeBinding(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"valid", "platform-host-case", "custom-host-case", "wrong-issuer-id", "wrong-issuer-url", "foreign-origin", "ungated", "disabled", "meta-private-network", "meta-invalid-network", "meta-dual-network", "private-network", "invalid-network", "dual-network", "public-tunnel", "foreign-project", "foreign-issuer-tenant", "shared", "wrong-shared-pin", "auth-host", "local-relay", "escaped-path", "legacy", "legacy-disabled", "legacy-unwrapped", "legacy-unwrapped-disabled", "legacy-drifted", "legacy-kept", "custom-domain", "inactive-domain"} {
+	for _, scenario := range []string{"valid", "platform-host-case", "custom-host-case", "wrong-issuer-id", "wrong-issuer-url", "foreign-origin", "ungated", "disabled", "meta-private-network", "meta-invalid-network", "meta-dual-network", "private-network", "invalid-network", "dual-network", "public-tunnel", "foreign-project", "foreign-issuer-tenant", "shared", "wrong-shared-pin", "auth-host", "local-relay", "escaped-path", "legacy", "legacy-disabled", "legacy-unwrapped", "legacy-unwrapped-disabled", "legacy-wrapper-governs", "legacy-kept", "custom-domain", "inactive-domain"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			project, issuer, serverID := uuid.New(), uuid.New(), uuid.New()
@@ -181,11 +181,13 @@ func TestKitMCPAuthoritativeBinding(t *testing.T) {
 				db.toolset = &toolsetsrepo.Toolset{ID: serverID, ProjectID: project, McpEnabled: scenario == "legacy-unwrapped", UserSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
 				db.noServer = true
 				good = scenario == "legacy-unwrapped"
-			case "legacy-drifted":
-				db.toolset = &toolsetsrepo.Toolset{ID: serverID, ProjectID: project, McpEnabled: true, UserSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
+			case "legacy-wrapper-governs":
+				// The frozen columns say disabled with no issuer; the canonical wrapper's state governs the alias.
+				db.toolset = &toolsetsrepo.Toolset{ID: serverID, ProjectID: project, McpEnabled: false}
 				db.server.ToolsetID = uuid.NullUUID{UUID: serverID, Valid: true}
-				db.server.Visibility = "public"
+				good = true
 			case "legacy-kept":
+				// A non-canonical server holding the toolset's id still denies the alias.
 				db.toolset = &toolsetsrepo.Toolset{ID: serverID, ProjectID: project, McpEnabled: true, UserSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
 			case "custom-domain", "inactive-domain":
 				resource = kitBindingURL(t, "https://mcp.customer.example/mcp/attached")

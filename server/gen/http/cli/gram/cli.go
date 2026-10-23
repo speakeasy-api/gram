@@ -199,7 +199,7 @@ func UsageCommands() []string {
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|update-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
+		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|clone-toolset|add-externaloauth-server|update-externaloauth-server|removeoauth-server|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
@@ -4221,12 +4221,6 @@ func ParseEndpoint(
 		toolsetsListToolSchemaStaticValuesApikeyTokenFlag      = toolsetsListToolSchemaStaticValuesFlags.String("apikey-token", "", "")
 		toolsetsListToolSchemaStaticValuesProjectSlugInputFlag = toolsetsListToolSchemaStaticValuesFlags.String("project-slug-input", "", "")
 
-		toolsetsCheckMCPSlugAvailabilityFlags                = flag.NewFlagSet("check-mcp-slug-availability", flag.ExitOnError)
-		toolsetsCheckMCPSlugAvailabilitySlugFlag             = toolsetsCheckMCPSlugAvailabilityFlags.String("slug", "REQUIRED", "")
-		toolsetsCheckMCPSlugAvailabilitySessionTokenFlag     = toolsetsCheckMCPSlugAvailabilityFlags.String("session-token", "", "")
-		toolsetsCheckMCPSlugAvailabilityApikeyTokenFlag      = toolsetsCheckMCPSlugAvailabilityFlags.String("apikey-token", "", "")
-		toolsetsCheckMCPSlugAvailabilityProjectSlugInputFlag = toolsetsCheckMCPSlugAvailabilityFlags.String("project-slug-input", "", "")
-
 		toolsetsCloneToolsetFlags                = flag.NewFlagSet("clone-toolset", flag.ExitOnError)
 		toolsetsCloneToolsetSlugFlag             = toolsetsCloneToolsetFlags.String("slug", "REQUIRED", "")
 		toolsetsCloneToolsetSessionTokenFlag     = toolsetsCloneToolsetFlags.String("session-token", "", "")
@@ -4252,13 +4246,6 @@ func ParseEndpoint(
 		toolsetsRemoveOAuthServerSessionTokenFlag     = toolsetsRemoveOAuthServerFlags.String("session-token", "", "")
 		toolsetsRemoveOAuthServerApikeyTokenFlag      = toolsetsRemoveOAuthServerFlags.String("apikey-token", "", "")
 		toolsetsRemoveOAuthServerProjectSlugInputFlag = toolsetsRemoveOAuthServerFlags.String("project-slug-input", "", "")
-
-		toolsetsSetUserSessionIssuerFlags                = flag.NewFlagSet("set-user-session-issuer", flag.ExitOnError)
-		toolsetsSetUserSessionIssuerBodyFlag             = toolsetsSetUserSessionIssuerFlags.String("body", "REQUIRED", "")
-		toolsetsSetUserSessionIssuerSlugFlag             = toolsetsSetUserSessionIssuerFlags.String("slug", "REQUIRED", "")
-		toolsetsSetUserSessionIssuerSessionTokenFlag     = toolsetsSetUserSessionIssuerFlags.String("session-token", "", "")
-		toolsetsSetUserSessionIssuerApikeyTokenFlag      = toolsetsSetUserSessionIssuerFlags.String("apikey-token", "", "")
-		toolsetsSetUserSessionIssuerProjectSlugInputFlag = toolsetsSetUserSessionIssuerFlags.String("project-slug-input", "", "")
 
 		toolsetsSetToolVariationsGroupFlags                = flag.NewFlagSet("set-tool-variations-group", flag.ExitOnError)
 		toolsetsSetToolVariationsGroupBodyFlag             = toolsetsSetToolVariationsGroupFlags.String("body", "REQUIRED", "")
@@ -6108,12 +6095,10 @@ func ParseEndpoint(
 	toolsetsGetToolsetFlags.Usage = toolsetsGetToolsetUsage
 	toolsetsListToolFiltersFlags.Usage = toolsetsListToolFiltersUsage
 	toolsetsListToolSchemaStaticValuesFlags.Usage = toolsetsListToolSchemaStaticValuesUsage
-	toolsetsCheckMCPSlugAvailabilityFlags.Usage = toolsetsCheckMCPSlugAvailabilityUsage
 	toolsetsCloneToolsetFlags.Usage = toolsetsCloneToolsetUsage
 	toolsetsAddExternalOAuthServerFlags.Usage = toolsetsAddExternalOAuthServerUsage
 	toolsetsUpdateExternalOAuthServerFlags.Usage = toolsetsUpdateExternalOAuthServerUsage
 	toolsetsRemoveOAuthServerFlags.Usage = toolsetsRemoveOAuthServerUsage
-	toolsetsSetUserSessionIssuerFlags.Usage = toolsetsSetUserSessionIssuerUsage
 	toolsetsSetToolVariationsGroupFlags.Usage = toolsetsSetToolVariationsGroupUsage
 
 	triggersFlags.Usage = triggersUsage
@@ -9030,9 +9015,6 @@ func ParseEndpoint(
 			case "list-tool-schema-static-values":
 				epf = toolsetsListToolSchemaStaticValuesFlags
 
-			case "check-mcp-slug-availability":
-				epf = toolsetsCheckMCPSlugAvailabilityFlags
-
 			case "clone-toolset":
 				epf = toolsetsCloneToolsetFlags
 
@@ -9044,9 +9026,6 @@ func ParseEndpoint(
 
 			case "removeoauth-server":
 				epf = toolsetsRemoveOAuthServerFlags
-
-			case "set-user-session-issuer":
-				epf = toolsetsSetUserSessionIssuerFlags
 
 			case "set-tool-variations-group":
 				epf = toolsetsSetToolVariationsGroupFlags
@@ -12215,9 +12194,6 @@ func ParseEndpoint(
 			case "list-tool-schema-static-values":
 				endpoint = c.ListToolSchemaStaticValues()
 				data, err = toolsetsc.BuildListToolSchemaStaticValuesPayload(*toolsetsListToolSchemaStaticValuesSlugFlag, *toolsetsListToolSchemaStaticValuesSessionTokenFlag, *toolsetsListToolSchemaStaticValuesApikeyTokenFlag, *toolsetsListToolSchemaStaticValuesProjectSlugInputFlag)
-			case "check-mcp-slug-availability":
-				endpoint = c.CheckMCPSlugAvailability()
-				data, err = toolsetsc.BuildCheckMCPSlugAvailabilityPayload(*toolsetsCheckMCPSlugAvailabilitySlugFlag, *toolsetsCheckMCPSlugAvailabilitySessionTokenFlag, *toolsetsCheckMCPSlugAvailabilityApikeyTokenFlag, *toolsetsCheckMCPSlugAvailabilityProjectSlugInputFlag)
 			case "clone-toolset":
 				endpoint = c.CloneToolset()
 				data, err = toolsetsc.BuildCloneToolsetPayload(*toolsetsCloneToolsetSlugFlag, *toolsetsCloneToolsetSessionTokenFlag, *toolsetsCloneToolsetProjectSlugInputFlag, *toolsetsCloneToolsetApikeyTokenFlag)
@@ -12230,9 +12206,6 @@ func ParseEndpoint(
 			case "removeoauth-server":
 				endpoint = c.RemoveOAuthServer()
 				data, err = toolsetsc.BuildRemoveOAuthServerPayload(*toolsetsRemoveOAuthServerSlugFlag, *toolsetsRemoveOAuthServerSessionTokenFlag, *toolsetsRemoveOAuthServerApikeyTokenFlag, *toolsetsRemoveOAuthServerProjectSlugInputFlag)
-			case "set-user-session-issuer":
-				endpoint = c.SetUserSessionIssuer()
-				data, err = toolsetsc.BuildSetUserSessionIssuerPayload(*toolsetsSetUserSessionIssuerBodyFlag, *toolsetsSetUserSessionIssuerSlugFlag, *toolsetsSetUserSessionIssuerSessionTokenFlag, *toolsetsSetUserSessionIssuerApikeyTokenFlag, *toolsetsSetUserSessionIssuerProjectSlugInputFlag)
 			case "set-tool-variations-group":
 				endpoint = c.SetToolVariationsGroup()
 				data, err = toolsetsc.BuildSetToolVariationsGroupPayload(*toolsetsSetToolVariationsGroupBodyFlag, *toolsetsSetToolVariationsGroupSlugFlag, *toolsetsSetToolVariationsGroupSessionTokenFlag, *toolsetsSetToolVariationsGroupApikeyTokenFlag, *toolsetsSetToolVariationsGroupProjectSlugInputFlag)
@@ -30452,16 +30425,10 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-toolset: Get detailed information about a toolset including full HTTP tool definitions`)
 	fmt.Fprintln(os.Stderr, `    list-tool-filters: List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.`)
 	fmt.Fprintln(os.Stderr, `    list-tool-schema-static-values: List every const, default, enum, example, and examples value in each tool input schema. The result is deliberately mechanical: clients decide how to present or interpret the values. This supports reviewing the exact schema contents before changing how a toolset is shared.`)
-	fmt.Fprintln(os.Stderr, `    check-mcp-slug-availability: Check if a MCP slug is taken in any scope (true means taken).
-	
-	Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.`)
 	fmt.Fprintln(os.Stderr, `    clone-toolset: Clone an existing toolset with a new name`)
 	fmt.Fprintln(os.Stderr, `    add-externaloauth-server: Associate an external OAuth server with a toolset`)
 	fmt.Fprintln(os.Stderr, `    update-externaloauth-server: Change an attached external OAuth server between provider-hosted and Speakeasy-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association`)
 	fmt.Fprintln(os.Stderr, `    removeoauth-server: Remove OAuth server association from a toolset`)
-	fmt.Fprintln(os.Stderr, `    set-user-session-issuer: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
-	
-	Deprecated: use mcpServers.update instead.`)
 	fmt.Fprintln(os.Stderr, `    set-tool-variations-group: Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -30655,32 +30622,6 @@ func toolsetsListToolSchemaStaticValuesUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets list-tool-schema-static-values --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func toolsetsCheckMCPSlugAvailabilityUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] toolsets check-mcp-slug-availability", os.Args[0])
-	fmt.Fprint(os.Stderr, " -slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Check if a MCP slug is taken in any scope (true means taken).
-	
-	Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets check-mcp-slug-availability --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
 func toolsetsCloneToolsetUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] toolsets clone-toolset", os.Args[0])
@@ -30779,34 +30720,6 @@ func toolsetsRemoveOAuthServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets removeoauth-server --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func toolsetsSetUserSessionIssuerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] toolsets set-user-session-issuer", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
-	
-	Deprecated: use mcpServers.update instead.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets set-user-session-issuer --body '{\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func toolsetsSetToolVariationsGroupUsage() {

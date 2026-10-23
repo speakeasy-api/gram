@@ -397,11 +397,10 @@ SELECT
     FROM toolsets AS other
     JOIN projects AS op ON op.id = other.project_id AND op.deleted IS FALSE
     LEFT JOIN mcp_servers AS ocw ON ocw.id = other.id AND ocw.toolset_id = other.id AND ocw.project_id = other.project_id AND ocw.deleted IS FALSE
-    LEFT JOIN mcp_servers AS okept ON okept.id = other.id AND okept.toolset_id IS DISTINCT FROM other.id AND okept.project_id = other.project_id AND okept.deleted IS FALSE
     WHERE COALESCE(ocw.user_session_issuer_id, CASE WHEN ocw.id IS NULL THEN other.user_session_issuer_id END) = t.user_session_issuer_id
       AND other.id <> t.id
       AND other.deleted IS FALSE
-      AND (CASE WHEN ocw.id IS NOT NULL THEN ocw.visibility <> 'disabled' WHEN okept.id IS NOT NULL THEN FALSE ELSE other.mcp_enabled END)
+      AND (CASE WHEN ocw.id IS NOT NULL THEN ocw.visibility <> 'disabled' ELSE other.mcp_enabled END)
   )::bigint AS other_toolsets_on_issuer,
   COALESCE((
     SELECT array_agg(DISTINCT rtrim(rs.resource, '/') ORDER BY rtrim(rs.resource, '/'))

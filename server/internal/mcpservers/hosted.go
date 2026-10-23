@@ -35,12 +35,11 @@ type HostedServerUpdate struct {
 	NetworkAccessMode *networkaccess.Mode
 }
 
-// HostedServerWriter applies hosted wrapper updates through the toolset row the wrapper is projected from,
-// so the toolset hosting columns and the wrapper stay identical within one transaction.
+// HostedServerWriter writes canonical hosted wrappers, whose name and tool variations group the toolset shares.
 type HostedServerWriter interface {
 	UpdateHostedServer(ctx context.Context, update HostedServerUpdate) (repo.McpServer, error)
 
-	// DisableHostedServer disables the hosted server as a toolset MCP disable does, keeping the wrapper live.
+	// DisableHostedServer disables the hosted server, keeping the wrapper and its endpoints.
 	DisableHostedServer(ctx context.Context, toolsetID uuid.UUID) error
 }
 
@@ -52,7 +51,7 @@ func (s *Service) WithHostedServerWriter(writer HostedServerWriter) *Service {
 
 func (s *Service) updateHostedServer(ctx context.Context, logger *slog.Logger, organizationID string, existing repo.McpServer, payload *gen.UpdateMcpServerPayload, ids serverIDs) (*types.McpServer, error) {
 	if s.hostedServers == nil {
-		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP servers through the toolset")
+		return nil, oops.E(oops.CodeUnexpected, nil, "hosted MCP server writer is not configured")
 	}
 	if ids.ToolsetID != existing.ToolsetID {
 		return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server keeps its toolset backend").LogWarn(ctx, logger)
@@ -101,7 +100,7 @@ func (s *Service) updateHostedServer(ctx context.Context, logger *slog.Logger, o
 // deleteHostedServer disables rather than tombstones: the wrapper id is the toolset id and cannot be reused.
 func (s *Service) deleteHostedServer(ctx context.Context, toolsetID uuid.UUID) error {
 	if s.hostedServers == nil {
-		return oops.E(oops.CodeInvalid, nil, "manage hosted MCP servers through the toolset")
+		return oops.E(oops.CodeUnexpected, nil, "hosted MCP server writer is not configured")
 	}
 	return s.hostedServers.DisableHostedServer(ctx, toolsetID) //nolint:wrapcheck // The writer returns oops errors whose codes reach the caller.
 }

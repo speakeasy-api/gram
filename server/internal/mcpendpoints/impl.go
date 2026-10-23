@@ -56,7 +56,6 @@ type Service struct {
 	pluginsGitHubEnabled  bool
 	distributionAdmission *admission.Guard
 	publicationRequests   plugins.PublicationRequests
-	hostedAddresses       HostedAddressWriter
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -85,7 +84,6 @@ func NewService(
 		pluginsGitHubEnabled:  pluginsGitHubEnabled,
 		distributionAdmission: admission.NewGuard(),
 		publicationRequests:   plugins.PublicationRequests{Enabled: false},
-		hostedAddresses:       nil,
 	}
 }
 
@@ -186,11 +184,13 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, err
 	}
 
-	if mcpServerID.Valid && mcpServer.ToolsetID.Valid && mcpServer.ToolsetID.UUID == mcpServer.ID {
-		return nil, oops.E(oops.CodeInvalid, nil, "hosted MCP endpoints are managed through the toolset")
-	}
 	if err := verifyEndpointReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, metaMcpServerID, customDomainID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
+	}
+	if mcpServerID.Valid && isCanonicalHosted(mcpServer) {
+		if err := checkHostedNewAddress(ctx, dbtx, logger, authCtx, mcpServer, slug, customDomainID); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := LockSlugScope(ctx, dbtx, customDomainID, slug); err != nil {
@@ -484,12 +484,12 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp endpoint").LogError(ctx, logger)
 	}
-	// The hosted writer checks mcp:write on the server itself, as toolsets.update did.
+	// A hosted endpoint update checks mcp:write on its server instead of the project.
 	if preexisting.McpServerID.Valid {
 		server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: preexisting.McpServerID.UUID, ProjectID: *authCtx.ProjectID})
 		switch {
-		case err == nil && server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID:
-			return s.updateHostedEndpoint(ctx, logger, preexisting, server, mcpServerID, customDomainID, slug)
+		case err == nil && server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID && mcpServerID.Valid && mcpServerID.UUID == server.ID:
+			return s.updateHostedEndpoint(ctx, logger, authCtx, preexisting, customDomainID, slug)
 		case err != nil && !errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.E(oops.CodeUnexpected, err, "get endpoint backing server").LogError(ctx, logger)
 		}
@@ -552,10 +552,18 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	if mcpServerID.Valid && targetServer == nil {
 		return nil, oops.E(oops.CodeInvalid, nil, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
 	}
-	if err := rejectHostedEndpointMutation(ctx, dbtx, *authCtx.ProjectID, existing.McpServerID, mcpServerID); err != nil {
-		return nil, err
+	// A hosted server's endpoints stay its own: create or delete them instead of moving them between backends.
+	if serverIDs := uniqueIDs(existing.McpServerID, mcpServerID); len(serverIDs) > 0 && (existing.McpServerID != mcpServerID || metaMcpServerID.Valid) {
+		lockedServers, err := mcpserversrepo.New(dbtx).LockMCPServersByIDs(ctx, mcpserversrepo.LockMCPServersByIDsParams{ProjectID: *authCtx.ProjectID, Ids: serverIDs})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp servers").LogError(ctx, logger)
+		}
+		for _, server := range lockedServers {
+			if isCanonicalHosted(server) {
+				return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's endpoints cannot move to or from another backend; create or delete endpoints instead").LogWarn(ctx, logger)
+			}
+		}
 	}
-
 	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, uniqueIDs(existing.MetaMcpServerID, metaMcpServerID), metaMcpServerID); err != nil {
 		return nil, err
 	}
@@ -744,10 +752,17 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	if existing.CustomDomainID != preexisting.CustomDomainID {
 		return oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request").LogError(ctx, logger)
 	}
-	if err := rejectHostedEndpointMutation(ctx, dbtx, *authCtx.ProjectID, existing.McpServerID); err != nil {
-		return err
+	if existing.McpServerID.Valid {
+		server, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: existing.McpServerID.UUID, ProjectID: *authCtx.ProjectID})
+		switch {
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
+		case err == nil:
+			if err := rejectLastHostedAddress(ctx, dbtx, logger, server); err != nil {
+				return err
+			}
+		}
 	}
-
 	deleted, err := txRepo.DeleteMCPEndpoint(ctx, repo.DeleteMCPEndpointParams{
 		ID:        endpointID,
 		ProjectID: *authCtx.ProjectID,
@@ -792,23 +807,6 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		}
 	}
 
-	return nil
-}
-
-// rejectHostedEndpointMutation keeps the canonical hosted address owned by its toolset.
-func rejectHostedEndpointMutation(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, serverIDs ...uuid.NullUUID) error {
-	for _, serverID := range serverIDs {
-		if !serverID.Valid {
-			continue
-		}
-		server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID.UUID, ProjectID: projectID})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "load endpoint backing server")
-		}
-		if server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID {
-			return oops.E(oops.CodeInvalid, nil, "hosted MCP endpoints are managed through the toolset")
-		}
-	}
 	return nil
 }
 

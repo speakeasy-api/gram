@@ -12,7 +12,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -39,8 +38,7 @@ func TestHostedNetworkAccessMaterializesAndDeletesCanonicalEndpoint(t *testing.T
 	require.False(t, server.NetworkAccessMode.Valid)
 
 	mode := types.NetworkAccessMode("public_only")
-	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, NetworkAccessMode: &mode})
-	require.NoError(t, err)
+	updated := setHostedMode(t, ctx, ti, created, mode)
 	require.Equal(t, &mode, updated.NetworkAccessMode)
 	server, err = servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
 	require.NoError(t, err)
@@ -58,11 +56,10 @@ func TestHostedNetworkAccessMaterializesAndDeletesCanonicalEndpoint(t *testing.T
 	_, err = mcpservers.UpdateMCPServerNetworkAccessModeInTransaction(ctx, tx, audit.NewLogger(), mcpservers.LifecycleUpdateInput{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, ActorUserID: authCtx.UserID, ServerID: serverID,
 	}, networkaccess.ModeDual, networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }))
-	require.ErrorContains(t, err, "hosted MCP network access is managed through the toolset")
+	require.ErrorContains(t, err, "change a hosted MCP server's network access with mcpServers.update")
 	require.NoError(t, tx.Rollback(ctx))
 
-	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, NetworkAccessMode: &mode})
-	require.NoError(t, err)
+	setHostedMode(t, ctx, ti, created, mode)
 	addresses, err = endpoints.ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: serverID})
 	require.NoError(t, err)
 	require.Len(t, addresses, 1)
@@ -101,8 +98,7 @@ func TestHostedNetworkAccessModeTransitions(t *testing.T) {
 
 	for _, value := range []string{"dual", "private_only", "public_only"} {
 		mode := types.NetworkAccessMode(value)
-		updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, NetworkAccessMode: &mode})
-		require.NoError(t, err)
+		updated := setHostedMode(t, ctx, ti, created, mode)
 		require.Equal(t, &mode, updated.NetworkAccessMode)
 		server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
 		require.NoError(t, err)
@@ -131,9 +127,7 @@ func TestHostedNetworkAccessCanDisableDuringIngressOutage(t *testing.T) {
 	require.NoError(t, fixtures.SetNetworkIngressObservationFixture(ctx, testrepo.SetNetworkIngressObservationFixtureParams{
 		Status: "online", OrganizationID: authCtx.ActiveOrganizationID,
 	}))
-	mode := types.NetworkAccessMode("private_only")
-	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, NetworkAccessMode: &mode})
-	require.NoError(t, err)
+	setHostedMode(t, ctx, ti, created, types.NetworkAccessMode("private_only"))
 	require.NoError(t, fixtures.SetNetworkIngressObservationFixture(ctx, testrepo.SetNetworkIngressObservationFixtureParams{
 		Status: "offline", OrganizationID: authCtx.ActiveOrganizationID,
 	}))
@@ -141,16 +135,12 @@ func TestHostedNetworkAccessCanDisableDuringIngressOutage(t *testing.T) {
 	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, Description: &description})
 	require.NoError(t, err)
 	require.Equal(t, &description, updated.Description)
-	disabled := false
-	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, McpEnabled: &disabled})
-	require.NoError(t, err)
+	require.NoError(t, ti.service.DisableHostedServer(ctx, uuid.MustParse(created.ID)))
 }
 
-func TestHostedNetworkAccessPreservesDomainRootOnSlugRename(t *testing.T) {
+func TestHostedNetworkAccessPreservesDomainRoot(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestToolsetsService(t)
-	// Renaming to a slug without the org prefix needs a paid tier.
-	ctx = withAccountType(t, ctx, string(billing.TierEnterprise))
 	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Domain Root")
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -158,35 +148,30 @@ func TestHostedNetworkAccessPreservesDomainRootOnSlugRename(t *testing.T) {
 		OrganizationID: authCtx.ActiveOrganizationID, Domain: "hosted-root-" + uuid.NewString() + ".example.test", IpAllowlist: []string{},
 	})
 	require.NoError(t, err)
-	// A legacy hosted toolset may retain a custom domain that has since been removed.
-	_, err = ti.conn.Exec(ctx, `UPDATE toolsets SET custom_domain_id = $1 WHERE id = $2`, domain.ID, uuid.MustParse(created.ID)) //nolint:glint // notestingrawsql: legacy address fixture
-	require.NoError(t, err)
-	mode := types.NetworkAccessMode("public_only")
-	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, NetworkAccessMode: &mode})
-	require.NoError(t, err)
 	serverID := uuid.MustParse(created.ID)
 	endpoints := mcpendpointsrepo.New(ti.conn)
 	addresses, err := endpoints.ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: serverID})
 	require.NoError(t, err)
 	require.Len(t, addresses, 1)
+	_, err = endpoints.UpdateMCPEndpointAddress(ctx, mcpendpointsrepo.UpdateMCPEndpointAddressParams{
+		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}, Slug: addresses[0].Slug, IsDomainRoot: pgtype.Bool{}, ID: addresses[0].ID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
 	require.NoError(t, repo.New(ti.conn).SetRootMcpEndpoint(ctx, repo.SetRootMcpEndpointParams{CustomDomainID: domain.ID, McpEndpointID: addresses[0].ID}))
-	newSlug := types.Slug("renamed-hosted-" + uuid.NewString()[:8])
-	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, McpSlug: &newSlug})
+
+	setHostedMode(t, ctx, ti, created, types.NetworkAccessMode("public_only"))
+	after, err := endpoints.ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: serverID})
 	require.NoError(t, err)
-	addresses, err = endpoints.ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: serverID})
-	require.NoError(t, err)
-	require.Len(t, addresses, 1)
-	require.True(t, addresses[0].IsDomainRoot.Bool)
-	require.Equal(t, string(newSlug), addresses[0].Slug)
+	require.Len(t, after, 1)
+	require.Equal(t, addresses[0].ID, after[0].ID)
+	require.True(t, after[0].IsDomainRoot.Bool, "a network mode change leaves the domain root alone")
 }
 
 func TestSetHostedNetworkAccessInTransaction(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestToolsetsService(t)
 	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Transaction Policy")
-	mode := types.NetworkAccessMode("public_only")
-	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, NetworkAccessMode: &mode})
-	require.NoError(t, err)
+	setHostedMode(t, ctx, ti, created, types.NetworkAccessMode("public_only"))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	serverID := uuid.MustParse(created.ID)
@@ -224,8 +209,8 @@ func TestHostedNetworkAccessRejectsPrivateModeWithoutIngress(t *testing.T) {
 	ctx, ti := newTestToolsetsService(t)
 	ti.service.WithNetworkAccessEligibility(allowHostedNetworkAccess{})
 	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Ingress Required")
-	mode := types.NetworkAccessMode("private_only")
-	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, NetworkAccessMode: &mode})
+	private := networkaccess.ModePrivateOnly
+	_, err := ti.service.UpdateHostedServer(ctx, hostedUpdate(created, "public", func(u *mcpservers.HostedServerUpdate) { u.NetworkAccessMode = &private }))
 	require.ErrorContains(t, err, "online private network ingress is required")
 	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(created.Slug)})
 	require.NoError(t, err)
@@ -235,4 +220,17 @@ func TestHostedNetworkAccessRejectsPrivateModeWithoutIngress(t *testing.T) {
 	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.False(t, server.NetworkAccessMode.Valid, "the rejected mode is not stored")
+}
+
+// setHostedMode applies an mcpServers.update network mode change to toolset's public canonical server.
+func setHostedMode(t *testing.T, ctx context.Context, ti *testInstance, toolset *types.Toolset, mode types.NetworkAccessMode) *types.Toolset {
+	t.Helper()
+
+	parsed, err := networkaccess.Parse(string(mode))
+	require.NoError(t, err)
+	_, err = ti.service.UpdateHostedServer(ctx, hostedUpdate(toolset, "public", func(u *mcpservers.HostedServerUpdate) { u.NetworkAccessMode = &parsed }))
+	require.NoError(t, err)
+	updated, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
+	require.NoError(t, err)
+	return updated
 }
