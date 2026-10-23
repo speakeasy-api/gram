@@ -884,8 +884,18 @@ WHERE ms.toolset_id = ANY(@toolset_ids::uuid[])
 ORDER BY ms.toolset_id, (ms.id = ms.toolset_id) DESC, ms.created_at, ms.id;
 
 -- name: ListMCPServerConsentConfigurations :many
--- Hash stored routing configuration in one tenant-scoped read. Header secrets
--- remain ciphertext; tool definitions are deliberately outside this boundary.
+-- Hash the stored routing configuration in one tenant-scoped read. Approved
+-- gateway connections record this hash, so a change to what it covers asks
+-- every existing connection for consent again.
+--
+-- It covers where requests go and which configuration slot supplies their
+-- credentials, not credential values: a secret header contributes its name and
+-- flags, like an environment contributes its ID and not its variables. Secret
+-- values are stored as randomized ciphertext, so rotating or re-saving one
+-- would otherwise change the hash without changing the route. Visibility is
+-- checked on every request, and so is a member's network access on derived
+-- gateways (a stored gateway serves members over its own mode), so both are
+-- left out. Tool definitions are deliberately outside this boundary.
 SELECT m.id, m.project_id,
        encode(sha256(convert_to(jsonb_build_object(
            'remote', m.remote_mcp_server_id, 'url', r.url,
@@ -894,10 +904,10 @@ SELECT m.id, m.project_id,
            'toolset', m.toolset_id, 'environment', m.environment_id,
            'variation', m.tool_variations_group_id,
            'issuer', m.remote_session_issuer_id,
-           'visibility', m.visibility, 'network', m.network_access_mode,
            'requires_auth', m.requires_upstream_auth,
            'headers', COALESCE((
-               SELECT jsonb_agg(jsonb_build_array(h.name, h.value,
+               SELECT jsonb_agg(jsonb_build_array(h.name,
+                          CASE WHEN h.is_secret THEN NULL ELSE h.value END,
                           h.value_from_request_header, h.is_required, h.is_secret)
                                 ORDER BY h.name, h.id)
                FROM remote_mcp_server_headers AS h
