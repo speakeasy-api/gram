@@ -66,3 +66,28 @@ it("refuses to confirm when the session count can't be loaded", () => {
       .hasAttribute("disabled"),
   ).toBe(true);
 });
+
+it("uses the singular for one session and lists the affected MCP servers", () => {
+  preflight.current = {
+    data: { sessionCount: 1, mcpServerNames: ["Acme Wiki", "GitHub"] },
+    isFetching: false,
+    isError: false,
+  };
+  renderDialog();
+
+  expect(screen.getByText("1 session will be revoked.")).toBeTruthy();
+  expect(screen.getByText("Acme Wiki")).toBeTruthy();
+  expect(screen.getByText("GitHub")).toBeTruthy();
+});
+
+it("holds confirmation while the session count loads", () => {
+  preflight.current = { data: undefined, isFetching: true, isError: false };
+  renderDialog();
+
+  expect(screen.queryByText(/will be revoked/)).toBeNull();
+  expect(
+    screen
+      .getByRole("button", { name: "Change client ID" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+});
