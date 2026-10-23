@@ -1827,6 +1827,31 @@ func TestProxy_Post_ToolsCallRequestInterceptor_ToolResultErrorWritesIsErrorResu
 	require.Equal(t, "Waiting for approval. Request token: apr_example", envelope.Result.Content[0].Text)
 }
 
+func TestProxy_Post_ToolsCallRequestInterceptor_ToolResultErrorWithoutIDKeepsMessage(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("upstream must not be called when an interceptor answers tools/call itself")
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsCallRequestInterceptors = []proxy.ToolsCallRequestInterceptor{
+		&mockToolsCallRequestInterceptor{name: "held", err: &proxy.ToolResultError{Message: "Waiting for approval. Request token: apr_example"}},
+	}
+
+	const idLessToolsCall = `{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_weather","arguments":{"location":"sf"}}}`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(idLessToolsCall))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusBadRequest, rr.Code, "a call without an id has no result to carry the message")
+	require.NotContains(t, rr.Body.String(), `"result"`)
+	require.Contains(t, rr.Body.String(), `"error"`)
+	require.Contains(t, rr.Body.String(), "Waiting for approval. Request token: apr_example", "the agent still gets the approval steps")
+}
+
 func TestProxy_Post_ToolsCallRequestInterceptor_RunsAfterGeneric(t *testing.T) {
 	t.Parallel()
 

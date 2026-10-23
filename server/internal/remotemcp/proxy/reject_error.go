@@ -117,6 +117,9 @@ func (e *ToolResultError) Error() string {
 //     common path for interceptors that opt into typed rejection: the
 //     interceptor's RejectError survives the run-helper's oops.E wrap and
 //     its Code/Message/Data flow through to the JSON-RPC envelope.
+//   - A *ToolResultError keeps its message as a forbidden rejection. This
+//     happens only for a tools/call sent without an id, which has no result
+//     to carry the message.
 //   - An [oops.ShareableError] is mapped to a JSON-RPC code by Speakeasy's
 //     domain-error class, mirroring the table used by the /mcp endpoint's
 //     own error-shape conversion.
@@ -126,6 +129,14 @@ func (e *ToolResultError) Error() string {
 func RejectErrorFromCause(err error) *RejectError {
 	if reject, ok := errors.AsType[*RejectError](err); ok {
 		return reject
+	}
+
+	if toolResult, ok := errors.AsType[*ToolResultError](err); ok {
+		return &RejectError{
+			Code:    RejectCodeForbidden,
+			Message: toolResult.Message,
+			Data:    nil,
+		}
 	}
 
 	if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok {

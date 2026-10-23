@@ -1715,7 +1715,8 @@ func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span 
 }
 
 // writeToolResultError answers a tools/call with a result marked isError. The
-// call did not fail at the protocol level, so the span stays unmarked.
+// call did not fail at the protocol level, so the request span stays
+// unmarked. The interceptor's own span still records the error.
 func (p *Proxy) writeToolResultError(ctx context.Context, w http.ResponseWriter, id jsonrpc.ID, result *ToolResultError) int64 {
 	payload, err := marshalToolResultError(id, result.Message)
 	if err != nil {
