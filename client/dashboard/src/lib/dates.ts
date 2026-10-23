@@ -88,7 +88,9 @@ export const dateTimeFormatters = {
     }
 
     // Full date
-    return `${dateTimeFormatters.full.format(date)}`;
+    return includeTime
+      ? `${dateTimeFormatters.full.format(date)}`
+      : `${dateTimeFormatters.fullDate.format(date)}`;
   },
   full: new Intl.DateTimeFormat(undefined, {
     year: "numeric",
@@ -96,6 +98,11 @@ export const dateTimeFormatters = {
     day: "numeric",
     hour: "numeric",
     minute: "numeric",
+  }),
+  fullDate: new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   }),
   sameYear: new Intl.DateTimeFormat(undefined, {
     month: "short",
