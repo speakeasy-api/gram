@@ -52,11 +52,16 @@ export function serverConnection(
   if (personal.length === 0) return { status: "not-required" };
   const found: RemoteSession[] = [];
   for (const client of personal) {
-    const session = sessions.find(
+    const matching = sessions.filter(
       (candidate) =>
         candidate.remoteSessionClientId === client.id &&
         candidate.userSessionIssuerId === issuerId,
     );
+    // A working connection wins over one that has ended, whatever the order.
+    const session =
+      matching.find(
+        (candidate) => connectionLifetime(candidate, now).kind !== "ended",
+      ) ?? matching[0];
     if (!session) return { status: "missing" };
     found.push(session);
   }

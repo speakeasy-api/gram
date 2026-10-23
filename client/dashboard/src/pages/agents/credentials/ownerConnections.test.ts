@@ -89,6 +89,19 @@ describe("serverConnection", () => {
     expect(connectionSelectable(elsewhere)).toBe(false);
   });
 
+  it("prefers a working connection over one that has ended", () => {
+    const ended = session({ id: "session_old", accessExpiresAt: earlier });
+    const working = session({ id: "session_new" });
+    expect(
+      serverConnection(
+        "issuer_one",
+        [client("client_one")],
+        [ended, working],
+        now,
+      ),
+    ).toEqual({ status: "ready", sessions: [working] });
+  });
+
   it("does not offer a connection that has ended", () => {
     const ended = session({ accessExpiresAt: earlier });
     const connection = serverConnection(
