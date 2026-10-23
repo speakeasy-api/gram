@@ -50,7 +50,7 @@ func AssistantCheck(scope Scope, resourceID, projectID string) Check {
 // project-wide grant ({"resource_id":"*","project_id":P}) covers every
 // environment in P, while a grant naming one environment covers only that one.
 func EnvironmentCheck(scope Scope, resourceID, projectID string) Check {
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
 }
 
 // HooksIngestCheck builds the org:hooks_ingest check for projectID. It always

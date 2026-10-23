@@ -4,6 +4,7 @@ package toolsets
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"unicode/utf8"
@@ -12,16 +13,20 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -31,9 +36,11 @@ import (
 // authorized it. The caller owns the transaction and the authorization; this
 // owns every write and every rule a new toolset is subject to.
 type ToolsetCreateInput struct {
-	OrganizationID          string
-	OrganizationSlug        string
-	ProjectID               uuid.UUID
+	OrganizationID   string
+	OrganizationSlug string
+	ProjectID        uuid.UUID
+	// Authz authorizes the default environment against the caller's grants.
+	Authz                   *authz.Engine
 	ActorUserID             string
 	ActorEmail              *string
 	Name                    string
@@ -99,7 +106,7 @@ func ToolsetSlugFromName(name string) string {
 // It returns oops errors with the same codes the management API has always
 // returned, so that handler passes them straight through.
 func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, input ToolsetCreateInput) (ToolsetCreateResult, error) {
-	if tx == nil || logger == nil || auditLogger == nil || input.OrganizationID == "" || input.OrganizationSlug == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" {
+	if tx == nil || logger == nil || auditLogger == nil || input.OrganizationID == "" || input.OrganizationSlug == "" || input.ProjectID == uuid.Nil || input.Authz == nil || input.ActorUserID == "" {
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, nil, "invalid toolset creation input")
 	}
 	// Checked here rather than left to the column CHECKs, which would turn an
@@ -146,23 +153,28 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	}
 	params.McpEnabled = enabled == 0
 
-	environments := environmentsRepo.New(tx)
+	// A toolset's default environment reaches every tool it runs, so choosing
+	// one takes environment:read on it, as linking does.
 	if input.DefaultEnvironmentSlug != nil {
-		if _, err := environments.GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
-			Slug:      conv.ToLower(*input.DefaultEnvironmentSlug),
-			ProjectID: input.ProjectID,
-		}); err != nil {
-			return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "error finding environment")
+		environment, err := environments.ResolveReadableEnvironment(ctx, logger, input.Authz, tx, input.ProjectID, toolconfig.Slug(*input.DefaultEnvironmentSlug))
+		if err != nil {
+			return ToolsetCreateResult{}, err
 		}
-		params.DefaultEnvironmentSlug = conv.ToPGText(conv.ToLower(*input.DefaultEnvironmentSlug))
+		params.DefaultEnvironmentSlug = conv.ToPGText(environment.Slug)
 	} else {
-		listed, err := environments.ListEnvironments(ctx, input.ProjectID)
+		listed, err := environmentsRepo.New(tx).ListEnvironments(ctx, input.ProjectID)
 		if err != nil {
 			return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "error listing environments")
 		}
 		for _, environment := range listed {
-			if environment.Slug == "default" { // autofill the default environment when one exists
-				params.DefaultEnvironmentSlug = conv.ToPGText(environment.Slug)
+			if environment.Slug == "default" { // autofill the default environment when one exists and the caller can read it
+				readable, err := canReadEnvironment(ctx, input.Authz, environment)
+				if err != nil {
+					return ToolsetCreateResult{}, err
+				}
+				if readable {
+					params.DefaultEnvironmentSlug = conv.ToPGText(environment.Slug)
+				}
 				break
 			}
 		}
@@ -377,4 +389,40 @@ func sameResourceURNs(existing, next []urn.Resource) bool {
 		}
 	}
 	return true
+}
+
+// canReadEnvironment reports whether the caller holds environment:read on
+// environment. Only a denial is false; any other failure is returned.
+func canReadEnvironment(ctx context.Context, engine *authz.Engine, environment environmentsRepo.Environment) (bool, error) {
+	err := engine.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, environment.ID.String(), environment.ProjectID.String()))
+	var shareable *oops.ShareableError
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden:
+		return false, nil
+	default:
+		return false, fmt.Errorf("authorize default environment: %w", err)
+	}
+}
+
+// readableDefaultEnvironmentSlug keeps a copied default environment only when
+// the caller can read it. A slug naming no live environment selects nothing
+// and is kept as is.
+func readableDefaultEnvironmentSlug(ctx context.Context, tx environmentsRepo.DBTX, engine *authz.Engine, projectID uuid.UUID, slug pgtype.Text) (pgtype.Text, error) {
+	if !slug.Valid {
+		return slug, nil
+	}
+	environment, err := environmentsRepo.New(tx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{Slug: slug.String, ProjectID: projectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return slug, nil
+	case err != nil:
+		return pgtype.Text{}, fmt.Errorf("load default environment: %w", err)
+	}
+	readable, err := canReadEnvironment(ctx, engine, environment)
+	if err != nil || !readable {
+		return pgtype.Text{}, err
+	}
+	return slug, nil
 }

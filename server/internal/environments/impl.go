@@ -84,13 +84,18 @@ func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID 
 	return s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentWrite, projectID.String(), projectID.String()))
 }
 
-// requireProjectEnvironmentRead gates on an environment:read grant confined to
-// this project via the project_id dimension. A wildcard env:read grant (or, by
-// scope expansion, env:write) satisfies it; a single-env grant does not. Used
-// by the link-removal handlers, which have no concrete environment to check.
-// Handlers that bind a specific environment use resolveLinkableEnvironment.
-func (s *Service) requireProjectEnvironmentRead(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, projectID.String(), projectID.String()))
+// requireLinkedEnvironmentRead authorizes removing a link with the same grant
+// that could have created it: environment:read on the linked environment. With
+// no link to remove it falls back to project-wide environment:read, so the
+// response does not reveal which sources or toolsets are linked.
+func (s *Service) requireLinkedEnvironmentRead(ctx context.Context, projectID uuid.UUID, linked repo.Environment, err error) error {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, projectID.String(), projectID.String()))
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load linked environment").LogError(ctx, s.logger)
+	}
+	return s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, linked.ID.String(), projectID.String()))
 }
 
 // resolveLinkableEnvironment parses and loads the environment a caller wants to
@@ -666,11 +671,16 @@ func (s *Service) DeleteSourceEnvironmentLink(ctx context.Context, payload *gen.
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
+	linked, err := s.repo.GetEnvironmentForSource(ctx, repo.GetEnvironmentForSourceParams{
+		SourceKind: string(payload.SourceKind),
+		SourceSlug: payload.SourceSlug,
+		ProjectID:  *authCtx.ProjectID,
+	})
+	if err := s.requireLinkedEnvironmentRead(ctx, *authCtx.ProjectID, linked, err); err != nil {
 		return err
 	}
 
-	err := s.repo.DeleteSourceEnvironment(ctx, repo.DeleteSourceEnvironmentParams{
+	err = s.repo.DeleteSourceEnvironment(ctx, repo.DeleteSourceEnvironmentParams{
 		SourceKind: string(payload.SourceKind),
 		SourceSlug: payload.SourceSlug,
 		ProjectID:  *authCtx.ProjectID,
@@ -751,13 +761,17 @@ func (s *Service) DeleteToolsetEnvironmentLink(ctx context.Context, payload *gen
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireProjectEnvironmentRead(ctx, *authCtx.ProjectID); err != nil {
-		return err
-	}
-
 	toolsetID, err := uuid.Parse(payload.ToolsetID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, s.logger)
+	}
+
+	linked, err := s.repo.GetEnvironmentForToolset(ctx, repo.GetEnvironmentForToolsetParams{
+		ToolsetID: toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err := s.requireLinkedEnvironmentRead(ctx, *authCtx.ProjectID, linked, err); err != nil {
+		return err
 	}
 
 	err = s.repo.DeleteToolsetEnvironment(ctx, repo.DeleteToolsetEnvironmentParams{

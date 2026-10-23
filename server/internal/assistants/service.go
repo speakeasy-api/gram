@@ -1343,6 +1343,65 @@ func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid
 // the caller cannot write.
 var errMCPEnableForbidden = errors.New("attaching a toolset with MCP disabled requires mcp:write on it")
 
+// errEnvironmentBindingForbidden rejects binding an environment the caller
+// cannot read: its values reach every tool on the bound server.
+var errEnvironmentBindingForbidden = errors.New("binding an environment to an assistant server requires environment:read on it")
+
+type environmentBinding struct {
+	serverID      uuid.UUID
+	environmentID uuid.UUID
+}
+
+// requireReadableEnvironmentBindings requires environment:read on every
+// environment this write binds to a server, except bindings the assistant
+// already has. assistantID is uuid.Nil for a new assistant.
+func (s *ServiceCore) requireReadableEnvironmentBindings(ctx context.Context, tx pgx.Tx, projectID, assistantID uuid.UUID, toolsets []resolvedToolsetInsert, servers []resolvedMcpServerInsert) error {
+	requested := make([]environmentBinding, 0, len(toolsets)+len(servers))
+	for _, ref := range toolsets {
+		if ref.EnvironmentID.Valid {
+			requested = append(requested, environmentBinding{serverID: ref.ToolsetID, environmentID: ref.EnvironmentID.UUID})
+		}
+	}
+	for _, ref := range servers {
+		if ref.EnvironmentID.Valid {
+			requested = append(requested, environmentBinding{serverID: ref.MCPServerID, environmentID: ref.EnvironmentID.UUID})
+		}
+	}
+	if len(requested) == 0 {
+		return nil
+	}
+
+	existing := map[environmentBinding]struct{}{}
+	if assistantID != uuid.Nil {
+		rows, err := assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{
+			AssistantIds: []uuid.UUID{assistantID},
+			ProjectID:    projectID,
+		})
+		if err != nil {
+			return fmt.Errorf("load assistant environment bindings: %w", err)
+		}
+		for _, row := range rows {
+			if row.EnvironmentID.Valid {
+				existing[environmentBinding{serverID: row.McpServerID, environmentID: row.EnvironmentID.UUID}] = struct{}{}
+			}
+		}
+	}
+
+	for _, binding := range requested {
+		if _, ok := existing[binding]; ok {
+			continue
+		}
+		err := s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, binding.environmentID.String(), projectID.String()))
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
+			return fmt.Errorf("%w: %w", errEnvironmentBindingForbidden, err)
+		}
+		if err != nil {
+			return fmt.Errorf("authorize assistant environment binding: %w", err)
+		}
+	}
+	return nil
+}
+
 // errToolsetNoMCPServer rejects attaching a toolset that has no canonical MCP server.
 var errToolsetNoMCPServer = errors.New(hostedmcp.NoServerMessage)
 
@@ -1607,6 +1666,9 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, err
 	}
+	if err := s.requireReadableEnvironmentBindings(ctx, tx, projectID, uuid.Nil, resolved, resolvedMcpServers); err != nil {
+		return assistantRecord{}, err
+	}
 	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true); err != nil {
 		return assistantRecord{}, err
 	}
@@ -1804,6 +1866,9 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 	if toolsets != nil || mcpServers != nil {
+		if err := s.requireReadableEnvironmentBindings(ctx, tx, projectID, record.ID, resolved, resolvedMcpServers); err != nil {
+			return assistantRecord{}, err
+		}
 		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil); err != nil {
 			return assistantRecord{}, err
 		}

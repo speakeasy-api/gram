@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -309,6 +310,7 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 		f := newHostedAttachmentFixture(t, "hosted_write_both")
 		f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
 		staging := "staging"
+		ctx := sessionContextWithGrants(t, f.projectID, authz.NewGrant(authz.ScopeEnvironmentRead, f.environmentID(t, staging).UUID.String()))
 		// An older dashboard echoes a hosted server in both arrays.
 		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil,
 			[]*types.AssistantToolsetRef{{ToolsetSlug: "billing", EnvironmentSlug: &staging}},

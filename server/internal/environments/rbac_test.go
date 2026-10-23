@@ -582,6 +582,68 @@ func TestEnvironments_RBAC_DeleteSourceLink_DeniedWithProjectWriteOnly(t *testin
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+// Removing a link takes the same grant as creating it: environment:read on the
+// linked environment.
+func TestEnvironments_RBAC_DeleteSourceLink_SingleEnvironmentGrantCoversOnlyThatEnvironment(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, envGrant(authz.ScopeEnvironmentWrite, authCtx.ProjectID.String()))
+	granted, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-unlink-granted-env",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+	other, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-unlink-other-env",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+	for slug, environmentID := range map[string]string{"rbac-unlink-granted": granted.ID, "rbac-unlink-other": other.ID} {
+		_, err = ti.service.SetSourceEnvironmentLink(ctx, &gen.SetSourceEnvironmentLinkPayload{
+			SourceKind:       gen.SourceKind("http"),
+			SourceSlug:       slug,
+			EnvironmentID:    environmentID,
+			SessionToken:     nil,
+			ProjectSlugInput: nil,
+		})
+		require.NoError(t, err)
+	}
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeEnvironmentRead, granted.ID))
+
+	err = ti.service.DeleteSourceEnvironmentLink(ctx, &gen.DeleteSourceEnvironmentLinkPayload{
+		SourceKind:       gen.SourceKind("http"),
+		SourceSlug:       "rbac-unlink-granted",
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	err = ti.service.DeleteSourceEnvironmentLink(ctx, &gen.DeleteSourceEnvironmentLinkPayload{
+		SourceKind:       gen.SourceKind("http"),
+		SourceSlug:       "rbac-unlink-other",
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestEnvironments_RBAC_SetToolsetLink_DeniedWithProjectWriteOnly(t *testing.T) {
 	t.Parallel()
 
