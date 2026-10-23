@@ -3444,6 +3444,7 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3474,6 +3475,7 @@ type toolUsageFilters struct {
 	ShadowServerNames  []string
 	MetaMcpServerIDs   []string
 	UserFilters        []*telem_gen.ToolUsageUserFilter
+	AgentIDs           []string
 	HookSources        []string
 	ClientKeys         []string
 	AccountType        *string
@@ -3547,6 +3549,8 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		})
 	}
 
+	authorizerUserIDs := s.authorizerUserIDsForUserFilters(ctx, authCtx.ActiveOrganizationID, userFilters)
+
 	hostedMCPMatchers, mcpServerMatchers, err := LoadToolUsageMatchers(ctx, s.db, *authCtx.ProjectID)
 	if err != nil {
 		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
@@ -3569,6 +3573,8 @@ func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters
 		ShadowServerNames:  f.ShadowServerNames,
 		MetaMCPServerIDs:   f.MetaMcpServerIDs,
 		UserFilters:        userFilters,
+		AuthorizerUserIDs:  authorizerUserIDs,
+		AgentIDs:           f.AgentIDs,
 		HookSources:        f.HookSources,
 		ClientKeys:         f.ClientKeys,
 		AccountType:        conv.PtrValOr(f.AccountType, ""),
@@ -3600,6 +3606,7 @@ func (s *Service) GetToolUsageTotals(ctx context.Context, payload *telem_gen.Get
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3629,6 +3636,7 @@ func (s *Service) GetToolUsageTargets(ctx context.Context, payload *telem_gen.Ge
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3658,6 +3666,7 @@ func (s *Service) GetToolUsageUsers(ctx context.Context, payload *telem_gen.GetT
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3687,6 +3696,7 @@ func (s *Service) GetToolUsageClients(ctx context.Context, payload *telem_gen.Ge
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3716,6 +3726,7 @@ func (s *Service) GetToolUsageClientToolBreakdown(ctx context.Context, payload *
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3745,6 +3756,7 @@ func (s *Service) GetToolUsageTargetTimeSeries(ctx context.Context, payload *tel
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3774,6 +3786,7 @@ func (s *Service) GetToolUsageUserTimeSeries(ctx context.Context, payload *telem
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3803,6 +3816,7 @@ func (s *Service) GetToolUsageUsersByTarget(ctx context.Context, payload *telem_
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3832,6 +3846,7 @@ func (s *Service) GetToolUsageTargetToolBreakdown(ctx context.Context, payload *
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMcpServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        payload.UserFilters,
+		AgentIDs:           payload.AgentIds,
 		HookSources:        payload.HookSources,
 		ClientKeys:         payload.ClientKeys,
 		AccountType:        payload.AccountType,
@@ -3885,6 +3900,8 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		})
 	}
 
+	authorizerUserIDs := s.authorizerUserIDsForUserFilters(ctx, authCtx.ActiveOrganizationID, userFilters)
+
 	cursorTimeUnixNano := int64(0)
 	cursorID := ""
 	if params.cursor != "" {
@@ -3920,6 +3937,8 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMCPServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        userFilters,
+		AuthorizerUserIDs:  authorizerUserIDs,
+		AgentIDs:           payload.AgentIds,
 		// Left literal: the Tool Logs page offers the user filter values this
 		// list produces (GetToolUsageFilterOptions), and those are unfolded, so
 		// folding only one side of that pair would make the page's own chips
@@ -3946,7 +3965,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		rows = rows[:params.limit]
 	}
 
-	return toToolUsageTracesResult(rows, nextCursor, gatewayNames), nil
+	return toToolUsageTracesResult(rows, nextCursor, gatewayNames, s.authorizerLabels(ctx, authCtx.ActiveOrganizationID, rows)), nil
 }
 
 // GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
@@ -3997,6 +4016,9 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
+	}
+	if _, _, _, includeUsers, _ := toolUsageFilterOptionTypeSet(payload.OptionTypes); includeUsers {
+		options.Users = s.authorizerUserOptions(ctx, authCtx.ActiveOrganizationID, options.Users, options.Authorizers)
 	}
 
 	return toToolUsageFilterOptionsResult(options, hostedMCPMatchers, gatewayNames, payload.OptionTypes), nil
@@ -4272,7 +4294,7 @@ func decodeToolUsageTraceCursor(cursor string) (int64, string, error) {
 	return startTimeUnixNano, parts[1], nil
 }
 
-func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string, gatewayNames map[string]string) *telem_gen.ListToolUsageTracesResult {
+func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string, gatewayNames map[string]string, authorizerLabels map[string]string) *telem_gen.ListToolUsageTracesResult {
 	traces := make([]*telem_gen.ToolUsageTraceSummary, 0, len(rows))
 	for _, row := range rows {
 		// Only a dispatch to a member is routed through a gateway; a call on the gateway is the gateway.
@@ -4303,6 +4325,8 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 			UserKey:              row.UserKey,
 			UserLabel:            row.UserLabel,
 			UserKind:             telem_gen.ToolUsageUserKind(row.UserKind),
+			AuthorizerUserID:     conv.PtrEmpty(row.AuthorizerUserID),
+			AuthorizerLabel:      conv.PtrEmpty(authorizerLabels[row.AuthorizerUserID]),
 			HookSource:           row.HookSource,
 			EventSource:          row.EventSource,
 			HTTPStatusCode:       row.HTTPStatusCode,

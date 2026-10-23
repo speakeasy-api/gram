@@ -91984,6 +91984,11 @@ components:
         account_type:
           type: string
           description: Optional account type filter ('team' or 'personal').
+        agent_ids:
+          type: array
+          items:
+            type: string
+          description: Agent identities to include. Combined with user_filters by AND, so an agent and a person select the calls that agent made on that person's behalf.
         client_keys:
           type: array
           items:
@@ -92055,7 +92060,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ToolUsageUserFilter'
-          description: Typed user identities to include
+          description: Typed user identities to include. An email also matches the calls an agent made on that person's behalf.
       description: Payload for target-aware MCP and tool usage metrics
       required:
         - from
@@ -96270,6 +96275,11 @@ components:
         account_type:
           type: string
           description: Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.
+        agent_ids:
+          type: array
+          items:
+            type: string
+          description: Agent identities to include. Combined with user_filters by AND, so an agent and a person select the calls that agent made on that person's behalf.
         client_keys:
           type: array
           items:
@@ -96358,7 +96368,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ToolUsageUserFilter'
-          description: Typed user identities to include
+          description: Typed user identities to include. An email also matches the calls an agent made on that person's behalf.
       description: Payload for listing target-aware MCP and tool usage traces
       required:
         - from
@@ -110414,6 +110424,12 @@ components:
         account_type:
           type: string
           description: AI account classification ('team' or 'personal'); empty/absent when unclassified
+        authorizer_label:
+          type: string
+          description: Email of the authorizer when they resolve to a known user
+        authorizer_user_id:
+          type: string
+          description: Person an agent call acted on behalf of; absent for direct calls and for agents that sign in as themselves
         block_reason:
           type: string
           description: Hook block reason when hook_status is blocked
