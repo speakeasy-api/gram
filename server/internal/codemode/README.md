@@ -168,11 +168,14 @@ because every execution runs in a fresh Monty worker process that exits with
 it, user code has no filesystem, environment, network or subprocess access, the
 runner holds no credentials or tool destinations, and Speakeasy answers every
 tool callback with the execution's own scope. Each worker is started through
-`gram-code-worker`, which sets `no_new_privs` and a seccomp filter denying
-ptrace, `process_vm_readv`/`writev`, signals and pidfd calls, so an escaped
-worker cannot inspect or signal its siblings. A same-UID worker can still open
-`/proc/<pid>/mem` of a dumpable sibling after an interpreter escape; gVisor and
-the organization boundary bound that case.
+`gram-code-worker`, which sets `no_new_privs`, enters its own Landlock domain
+limited to reading and executing system libraries and its binary's directory
+(no `/proc`), and installs a seccomp filter denying ptrace,
+`process_vm_readv`/`writev`, signals, pidfd and similar cross-process calls. An
+escaped worker therefore cannot read a sibling's memory or environment, or
+signal or trace it; `agents/code-runner/tests/worker_isolation.rs` checks both
+on Linux. Landlock is skipped on a kernel without it, such as gVisor, where the
+seccomp filter, gVisor and the organization boundary remain.
 
 An execution goes to the organization's least busy pod. When every pod is full
 the provider warms another, up to four per organization
