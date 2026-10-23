@@ -8705,12 +8705,59 @@ components:
             - gram_private
         server:
           $ref: '#/components/schemas/AdminMcpServerHealthServer'
+        upstream_auth:
+          $ref: '#/components/schemas/AdminMcpServerHealthUpstreamAuth'
         user_session_issuer:
           $ref: '#/components/schemas/AdminMcpServerHealthUserSessionIssuer'
       description: 'Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.'
       required:
         - server
         - correlation
+    AdminMcpServerHealthAuthClient:
+      type: object
+      properties:
+        client_type:
+          type: string
+          description: How the client authenticates upstream.
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+            - ema
+        enabled:
+          type: boolean
+          description: Whether the client can be used.
+        header_count:
+          type: integer
+          description: Headers the client sends upstream.
+          format: int64
+        id:
+          type: string
+          description: Auth client id.
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The OAuth registration behind an OAuth-backed client.
+          format: uuid
+        server_count:
+          type: integer
+          description: Servers offering the client, this one included.
+          format: int64
+        source:
+          type: string
+          description: backfill when created from existing configuration, admin when an administrator created it.
+          enum:
+            - backfill
+            - admin
+      description: One auth client the server offers for reaching its upstream. Never carries its name or header values.
+      required:
+        - id
+        - client_type
+        - source
+        - enabled
+        - server_count
+        - header_count
     AdminMcpServerHealthCorrelation:
       type: object
       properties:
@@ -8946,6 +8993,28 @@ components:
       required:
         - issuer_id
         - client_id
+    AdminMcpServerHealthUpstreamAuth:
+      type: object
+      properties:
+        auth_clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpServerHealthAuthClient'
+        requires_upstream_auth:
+          type: boolean
+          description: Whether the upstream needs authentication. Omitted while undecided.
+        status:
+          type: string
+          description: configured, setup_incomplete (required with no enabled client), no_auth_required or undecided.
+          enum:
+            - configured
+            - setup_incomplete
+            - no_auth_required
+            - undecided
+      description: Whether the server's upstream needs authentication and the auth clients it offers.
+      required:
+        - status
+        - auth_clients
     AdminMcpServerHealthUserSessionIssuer:
       type: object
       properties:

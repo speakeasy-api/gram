@@ -1971,6 +1971,8 @@ type DescribeMcpServerHealthResponseBody struct {
 	// issuer.
 	LegacyAuth        *string                                            `form:"legacy_auth,omitempty" json:"legacy_auth,omitempty" xml:"legacy_auth,omitempty"`
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuerResponseBody `form:"user_session_issuer,omitempty" json:"user_session_issuer,omitempty" xml:"user_session_issuer,omitempty"`
+	// How the server reaches its upstream. Omitted for toolset-only servers.
+	UpstreamAuth *AdminMcpServerHealthUpstreamAuthResponseBody `form:"upstream_auth,omitempty" json:"upstream_auth,omitempty" xml:"upstream_auth,omitempty"`
 }
 
 // GetMcpServerToolCallsResponseBody is the type of the "admin" service
@@ -21898,6 +21900,37 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 	ValidationStatusCounts map[string]int64 `form:"validation_status_counts,omitempty" json:"validation_status_counts,omitempty" xml:"validation_status_counts,omitempty"`
 }
 
+// AdminMcpServerHealthUpstreamAuthResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthUpstreamAuthResponseBody struct {
+	// configured, setup_incomplete (required with no enabled client),
+	// no_auth_required or undecided.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Whether the upstream needs authentication. Omitted while undecided.
+	RequiresUpstreamAuth *bool                                         `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	AuthClients          []*AdminMcpServerHealthAuthClientResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
+}
+
+// AdminMcpServerHealthAuthClientResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthAuthClientResponseBody struct {
+	// Auth client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// How the client authenticates upstream.
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+	// backfill when created from existing configuration, admin when an
+	// administrator created it.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Whether the client can be used.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// The OAuth registration behind an OAuth-backed client.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Servers offering the client, this one included.
+	ServerCount *int `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Headers the client sends upstream.
+	HeaderCount *int `form:"header_count,omitempty" json:"header_count,omitempty" xml:"header_count,omitempty"`
+}
+
 // AdminMcpServerToolCallOutcomesResponseBody is used to define fields on
 // response body types.
 type AdminMcpServerToolCallOutcomesResponseBody struct {
@@ -33631,6 +33664,9 @@ func NewDescribeMcpServerHealthAdminMcpServerHealthOK(body *DescribeMcpServerHea
 	if body.UserSessionIssuer != nil {
 		v.UserSessionIssuer = unmarshalAdminMcpServerHealthUserSessionIssuerResponseBodyToAdminAdminMcpServerHealthUserSessionIssuer(body.UserSessionIssuer)
 	}
+	if body.UpstreamAuth != nil {
+		v.UpstreamAuth = unmarshalAdminMcpServerHealthUpstreamAuthResponseBodyToAdminAdminMcpServerHealthUpstreamAuth(body.UpstreamAuth)
+	}
 
 	return v
 }
@@ -42118,6 +42154,11 @@ func ValidateDescribeMcpServerHealthResponseBody(body *DescribeMcpServerHealthRe
 	}
 	if body.UserSessionIssuer != nil {
 		if err2 := ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body.UserSessionIssuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.UpstreamAuth != nil {
+		if err2 := ValidateAdminMcpServerHealthUpstreamAuthResponseBody(body.UpstreamAuth); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -68581,6 +68622,70 @@ func ValidateAdminMcpServerHealthRemoteSessionsResponseBody(body *AdminMcpServer
 	}
 	if body.FirstLinkedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_linked_at", *body.FirstLinkedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthUpstreamAuthResponseBody runs the validations
+// defined on AdminMcpServerHealthUpstreamAuthResponseBody
+func ValidateAdminMcpServerHealthUpstreamAuthResponseBody(body *AdminMcpServerHealthUpstreamAuthResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.AuthClients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auth_clients", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required" || *body.Status == "undecided") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required", "undecided"}))
+		}
+	}
+	for _, e := range body.AuthClients {
+		if e != nil {
+			if err2 := ValidateAdminMcpServerHealthAuthClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthAuthClientResponseBody runs the validations
+// defined on AdminMcpServerHealthAuthClientResponseBody
+func ValidateAdminMcpServerHealthAuthClientResponseBody(body *AdminMcpServerHealthAuthClientResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ClientType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_type", "body"))
+	}
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.ServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_count", "body"))
+	}
+	if body.HeaderCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("header_count", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema"}))
+		}
+	}
+	if body.Source != nil {
+		if !(*body.Source == "backfill" || *body.Source == "admin") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"backfill", "admin"}))
+		}
+	}
+	if body.RemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
 	}
 	return
 }

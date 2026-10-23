@@ -21847,6 +21847,50 @@ func marshalAdminAdminMcpServerHealthRemoteSessionsToAdminMcpServerHealthRemoteS
 	return res
 }
 
+// marshalAdminAdminMcpServerHealthUpstreamAuthToAdminMcpServerHealthUpstreamAuthResponseBody
+// builds a value of type *AdminMcpServerHealthUpstreamAuthResponseBody from a
+// value of type *admin.AdminMcpServerHealthUpstreamAuth.
+func marshalAdminAdminMcpServerHealthUpstreamAuthToAdminMcpServerHealthUpstreamAuthResponseBody(v *admin.AdminMcpServerHealthUpstreamAuth) *AdminMcpServerHealthUpstreamAuthResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminMcpServerHealthUpstreamAuthResponseBody{
+		Status:               v.Status,
+		RequiresUpstreamAuth: v.RequiresUpstreamAuth,
+	}
+	if v.AuthClients != nil {
+		res.AuthClients = make([]*AdminMcpServerHealthAuthClientResponseBody, len(v.AuthClients))
+		for i, val := range v.AuthClients {
+			if val == nil {
+				res.AuthClients[i] = nil
+				continue
+			}
+			res.AuthClients[i] = marshalAdminAdminMcpServerHealthAuthClientToAdminMcpServerHealthAuthClientResponseBody(val)
+		}
+	} else {
+		res.AuthClients = []*AdminMcpServerHealthAuthClientResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerHealthAuthClientToAdminMcpServerHealthAuthClientResponseBody
+// builds a value of type *AdminMcpServerHealthAuthClientResponseBody from a
+// value of type *admin.AdminMcpServerHealthAuthClient.
+func marshalAdminAdminMcpServerHealthAuthClientToAdminMcpServerHealthAuthClientResponseBody(v *admin.AdminMcpServerHealthAuthClient) *AdminMcpServerHealthAuthClientResponseBody {
+	res := &AdminMcpServerHealthAuthClientResponseBody{
+		ID:                    v.ID,
+		ClientType:            v.ClientType,
+		Source:                v.Source,
+		Enabled:               v.Enabled,
+		RemoteSessionClientID: v.RemoteSessionClientID,
+		ServerCount:           v.ServerCount,
+		HeaderCount:           v.HeaderCount,
+	}
+
+	return res
+}
+
 // marshalAdminAdminMcpServerToolCallOutcomesToAdminMcpServerToolCallOutcomesResponseBody
 // builds a value of type *AdminMcpServerToolCallOutcomesResponseBody from a
 // value of type *admin.AdminMcpServerToolCallOutcomes.
