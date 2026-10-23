@@ -14,6 +14,15 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
+// processWorkOSOrganizationEventsEmptyPageRetryDelay is how long a run waits
+// before reading the events list again when its first read came back empty.
+// WorkOS can deliver a webhook before the event is visible to the Events API,
+// so a webhook-triggered run may find nothing. Without a second read the event
+// would sit unapplied until some later event for the organization arrived.
+const processWorkOSOrganizationEventsEmptyPageRetryDelay = 30 * time.Second
+
+const processWorkOSOrganizationEventsEmptyPageRetryChangeID = "workos-org-events-empty-page-retry"
+
 type ProcessWorkOSEventsParams struct {
 	WorkOSOrganizationID string `json:"workos_organization_id,omitempty"`
 }
@@ -93,12 +102,34 @@ func ProcessWorkOSOrganizationEventsWorkflow(ctx workflow.Context, params Proces
 		},
 	})
 
-	var processRes activities.ProcessWorkOSOrganizationEventsResult
-	if err := workflow.ExecuteActivity(ctx, a.ProcessWorkOSOrganizationEvents, activities.ProcessWorkOSOrganizationEventsParams{
-		WorkOSOrganizationID: params.WorkOSOrganizationID,
-		SinceEventID:         nil,
-	}).Get(ctx, &processRes); err != nil {
-		return nil, fmt.Errorf("failed to process WorkOS events: %w", err)
+	processPage := func() (activities.ProcessWorkOSOrganizationEventsResult, error) {
+		var res activities.ProcessWorkOSOrganizationEventsResult
+		if err := workflow.ExecuteActivity(ctx, a.ProcessWorkOSOrganizationEvents, activities.ProcessWorkOSOrganizationEventsParams{
+			WorkOSOrganizationID: params.WorkOSOrganizationID,
+			SinceEventID:         nil,
+		}).Get(ctx, &res); err != nil {
+			return res, fmt.Errorf("failed to process WorkOS events: %w", err)
+		}
+		return res, nil
+	}
+
+	processRes, err := processPage()
+	if err != nil {
+		return nil, err
+	}
+
+	// An empty page right after a webhook usually means the triggering event
+	// is not listable yet. Read once more after a short wait so it is applied
+	// now rather than whenever the organization's next event arrives.
+	if processRes.LastEventID == "" &&
+		workflow.GetVersion(ctx, processWorkOSOrganizationEventsEmptyPageRetryChangeID, workflow.DefaultVersion, 1) == 1 {
+		if err := workflow.Sleep(ctx, processWorkOSOrganizationEventsEmptyPageRetryDelay); err != nil {
+			return nil, fmt.Errorf("wait before re-reading WorkOS events: %w", err)
+		}
+		processRes, err = processPage()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// HasMore continuation is delegated to the Debounce wrapper via reenqueue so
