@@ -512,6 +512,12 @@ func (s *Service) callPlatformToolsetTool(
 		ToolAnnotations: desc.Annotations,
 	}, mcpriskscan.BorrowPayload(requestBodyBytes))
 	decision := s.scanEvaluator.Scan(ctx, requestSubject)
+	if decision.HeldForApproval() {
+		// A held call is an instruction, not a refusal: the agent reads the
+		// tool result, requests approval and retries.
+		rw.resultIsError = true
+		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, serverInfoPlatformToolset)
+	}
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 		recordToolCallErrorStatus(ctx, rw, failure)

@@ -1,6 +1,8 @@
 package approval
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -271,6 +273,33 @@ func TestUnusedApprovalExpiresWithItsWindow(t *testing.T) {
 func TestArgumentsPreviewKeepsExactNumbers(t *testing.T) {
 	t.Parallel()
 	require.JSONEq(t, `{"id":9007199254740993,"nested":"{\"n\":12345678901234567890}"}`, string(argumentsPreview([]byte(`{"id":9007199254740993,"nested":{"n":12345678901234567890}}`))))
+}
+
+func TestArgumentsPreviewNotesOmittedArguments(t *testing.T) {
+	t.Parallel()
+	args := make(map[string]int, maxPreviewKeys+3)
+	for i := range maxPreviewKeys + 3 {
+		args[fmt.Sprintf("k%02d", i)] = i
+	}
+	raw, err := json.Marshal(args)
+	require.NoError(t, err)
+
+	var preview map[string]any
+	require.NoError(t, json.Unmarshal(argumentsPreview(raw), &preview))
+	require.Len(t, preview, maxPreviewKeys+1)
+	require.Contains(t, preview, "k00")
+	require.NotContains(t, preview, fmt.Sprintf("k%02d", maxPreviewKeys))
+	require.Equal(t, "3 more arguments not shown", preview[omittedArgumentsKey])
+}
+
+func TestHeldCallIgnoresAChatThatIsNotInTheProject(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	call := f.call(`{"title":"unknown chat"}`)
+	call.ChatID = uuid.NewString()
+	row, err := repo.New(f.db).GetApprovalByToken(t.Context(), f.hold(t, call))
+	require.NoError(t, err)
+	require.False(t, row.ChatID.Valid)
 }
 
 func TestHeldCallRecordsTheMCPServerOnlyWhenItIsInTheProject(t *testing.T) {

@@ -103,6 +103,10 @@ const (
 
 	// maxPreviewKeys bounds how many top-level arguments the preview keeps.
 	maxPreviewKeys = 20
+
+	// omittedArgumentsKey names the preview entry that says how many
+	// top-level arguments were left out. It sorts after ASCII keys.
+	omittedArgumentsKey = "…"
 )
 
 var (
@@ -285,9 +289,9 @@ func (s *Service) HoldCall(ctx context.Context, call HoldInput) (HoldOutcome, er
 		Surface:          call.Surface,
 		SourceAdapter:    pgtype.Text{String: "", Valid: false},
 		SessionID:        pgtype.Text{String: "", Valid: false},
-		ChatID:           parseNullUUID(call.ChatID),
-		ToolsetID:        parseNullUUID(call.ToolsetID),
-		McpServerID:      parseNullUUID(call.ServerID),
+		ChatID:           conv.StringToNullUUID(call.ChatID),
+		ToolsetID:        conv.StringToNullUUID(call.ToolsetID),
+		McpServerID:      conv.StringToNullUUID(call.ServerID),
 		ServerUrl:        pgtype.Text{String: "", Valid: false},
 		ToolName:         call.ToolName,
 		CallFingerprint:  fingerprint,
@@ -625,7 +629,9 @@ func canonicalJSON(raw []byte) ([]byte, error) {
 
 // argumentsPreview keeps a bounded copy of the arguments for approvers: at
 // most maxPreviewKeys top-level keys, with long strings and nested values
-// truncated. It always returns a JSON object.
+// truncated. When keys are left out, an omittedArgumentsKey entry says how
+// many, because the approval covers every argument. It always returns a JSON
+// object.
 func argumentsPreview(raw []byte) []byte {
 	// Keep numbers as written: approvers must see the exact value the
 	// fingerprint covers, not a float rounding of a large id.
@@ -640,12 +646,14 @@ func argumentsPreview(raw []byte) []byte {
 		keys = append(keys, key)
 	}
 	slices.Sort(keys)
-	if len(keys) > maxPreviewKeys {
-		keys = keys[:maxPreviewKeys]
-	}
-	preview := make(map[string]any, len(keys))
+	omitted := max(len(keys)-maxPreviewKeys, 0)
+	keys = keys[:len(keys)-omitted]
+	preview := make(map[string]any, len(keys)+1)
 	for _, key := range keys {
 		preview[key] = previewValue(args[key])
+	}
+	if omitted > 0 {
+		preview[omittedArgumentsKey] = fmt.Sprintf("%d more arguments not shown", omitted)
 	}
 	encoded, err := json.Marshal(preview)
 	if err != nil {
@@ -675,12 +683,4 @@ func truncateRunes(value string, limit int) string {
 	}
 	runes := []rune(value)
 	return string(runes[:limit]) + "…"
-}
-
-func parseNullUUID(value string) uuid.NullUUID {
-	id, err := uuid.Parse(value)
-	if err != nil {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
-	return uuid.NullUUID{UUID: id, Valid: true}
 }

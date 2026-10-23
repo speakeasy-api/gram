@@ -272,13 +272,11 @@ func runWatcher(t *testing.T, url, tokenFile string) (string, int) {
 	require.NoError(t, os.WriteFile(script, []byte(watchScript), 0o600))
 	cmd := exec.CommandContext(t.Context(), "bash", script, url, tokenFile, "1", "5")
 	out, err := cmd.CombinedOutput()
-	exitCode := 0
 	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
-		exitCode = exitErr.ExitCode()
-	} else {
-		require.NoError(t, err)
+		return string(out), exitErr.ExitCode()
 	}
-	return string(out), exitCode
+	require.NoError(t, err)
+	return string(out), 0
 }
 
 func TestWatchScriptReportsTheDecision(t *testing.T) {
