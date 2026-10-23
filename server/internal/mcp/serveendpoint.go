@@ -272,8 +272,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
-		// Resolve already denies disabled servers; checked again before serving.
-		if mcpServer.Visibility == mcpservers.VisibilityDisabled {
+		if mcpServer.ID == mcpServer.ToolsetID.UUID && !toolset.McpEnabled {
 			return oops.E(oops.CodeNotFound, nil, "mcp server not found")
 		}
 		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpEndpoint.ID, mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
