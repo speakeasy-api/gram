@@ -38,8 +38,9 @@ export function GatewayOverviewTab({
         <Page.Section.Title>{metaMcpServer.name}</Page.Section.Title>
         <Page.Section.Description>
           Connect an AI client to one URL for tools from its permitted members.
-          Connections can list tools directly, discover them progressively, or
-          use Code Mode to discover and call them in Python.
+          Connections can list tools directly or discover them progressively.
+          Organizations with Code Mode enabled can also discover and call them
+          in Python.
         </Page.Section.Description>
         <Page.Section.Body>
           <div className="flex flex-col gap-6">

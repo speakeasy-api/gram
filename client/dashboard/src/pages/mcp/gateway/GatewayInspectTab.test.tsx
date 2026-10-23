@@ -21,13 +21,21 @@ const state = vi.hoisted(() => ({
   mint: vi.fn(),
   data: undefined as GatewayInspection | undefined,
   loading: false,
+  accessToken: undefined as string | undefined,
 }));
 vi.mock("./GatewayCodeExecution", () => ({
-  GatewayCodeExecution: ({ disabled }: { disabled: boolean }) => {
+  GatewayCodeExecution: ({
+    disabled,
+    headers,
+  }: {
+    disabled: boolean;
+    headers?: Record<string, string>;
+  }) => {
     const [source, setSource] = useState("initial");
     return (
       <input
         aria-label="Persistent source"
+        data-authorization={headers?.Authorization ?? ""}
         value={source}
         disabled={disabled}
         onChange={(event) => setSource(event.target.value)}
@@ -43,7 +51,7 @@ vi.mock("@/hooks/useUserSessionToken", () => ({
   useUserSessionToken: (input: { target: { discoveryMode?: string } }) => {
     state.mint(input);
     return {
-      accessToken: undefined,
+      accessToken: state.accessToken,
       isLoading: false,
       isError: !!input.target.discoveryMode,
       error: input.target.discoveryMode
@@ -103,6 +111,7 @@ afterEach(() => {
   cleanup();
   state.data = undefined;
   state.loading = false;
+  state.accessToken = undefined;
 });
 it("applies discovery choices to the URL and the minted connection", async () => {
   state.mint.mockClear();
@@ -200,6 +209,7 @@ it("preserves Python source while inspection reloads for a refreshed credential"
     servers: undefined,
   };
   state.data = data;
+  state.accessToken = "first-token";
   const gateway = {
     id: "gateway-test",
     discoveryMode: "code_mode",
@@ -219,6 +229,7 @@ it("preserves Python source while inspection reloads for a refreshed credential"
   });
   state.data = undefined;
   state.loading = true;
+  state.accessToken = "refreshed-token";
   rerender(view());
   expect(
     (screen.getByLabelText("Persistent source") as HTMLInputElement).value,
@@ -229,9 +240,9 @@ it("preserves Python source while inspection reloads for a refreshed credential"
   state.data = data;
   state.loading = false;
   rerender(view());
-  expect(
-    (screen.getByLabelText("Persistent source") as HTMLInputElement).value,
-  ).toBe("my Python");
+  const source = screen.getByLabelText("Persistent source") as HTMLInputElement;
+  expect(source.value).toBe("my Python");
+  expect(source.dataset.authorization).toBe("Bearer refreshed-token");
 });
 
 it("explains Progressive fallback when the saved Code runtime is unavailable", () => {
