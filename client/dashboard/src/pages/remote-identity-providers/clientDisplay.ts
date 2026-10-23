@@ -13,7 +13,14 @@ export function remoteSessionClientDisplayName(
     "id" | "clientId" | "clientIdMetadataUri" | "displayName"
   >,
 ): string {
-  if (client.displayName) return client.displayName;
-  if (client.clientIdMetadataUri) return client.id;
-  return client.clientId;
+  return client.displayName || remoteSessionClientShortId(client);
+}
+
+// remoteSessionClientShortId is the client_id as shown inline, beside or in
+// place of a name: the row id for a CIMD client, whose client_id is the long
+// metadata-document URL.
+export function remoteSessionClientShortId(
+  client: Pick<RemoteSessionClient, "id" | "clientId" | "clientIdMetadataUri">,
+): string {
+  return client.clientIdMetadataUri ? client.id : client.clientId;
 }

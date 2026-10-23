@@ -20,7 +20,10 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
-import { remoteSessionClientDisplayName } from "../../clientDisplay";
+import {
+  remoteSessionClientDisplayName,
+  remoteSessionClientShortId,
+} from "../../clientDisplay";
 import { CreateRemoteSessionClientSheet } from "../../CreateRemoteSessionClientSheet";
 import { DeleteClientDialog } from "../../clientDialogs";
 import { DuplicateClientFlow } from "../../DuplicateClient";
@@ -92,7 +95,11 @@ export function ClientsTab({
                   issuer.id,
                   item.client.id,
                 )}
-                ariaLabel={`View client ${remoteSessionClientDisplayName(item.client)}`}
+                ariaLabel={
+                  item.client.displayName
+                    ? `View client ${item.client.displayName} (${remoteSessionClientShortId(item.client)})`
+                    : `View client ${remoteSessionClientDisplayName(item.client)}`
+                }
               >
                 <td className="px-3 py-3">
                   <div className="flex min-w-0 items-center gap-2">
@@ -117,7 +124,7 @@ export function ClientsTab({
                       className="truncate font-mono"
                       title={item.client.clientId}
                     >
-                      {item.client.clientId}
+                      {remoteSessionClientShortId(item.client)}
                     </Text>
                   )}
                 </td>
