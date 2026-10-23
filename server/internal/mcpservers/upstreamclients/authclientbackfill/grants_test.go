@@ -325,6 +325,59 @@ func TestRunGrants_KeyPoliciesWaitForRecordedClients(t *testing.T) {
 	require.Zero(t, settled.PendingGrants)
 }
 
+func TestRunGrants_NeverGrantsClientsAwaitingRetirement(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	serverID := f.server()
+	registration := f.client("self")
+	association := f.associate(serverID, registration)
+	f.run(true)
+	var clientID uuid.UUID
+	for _, row := range f.authClients() {
+		if row.RemoteSessionClientID == registration {
+			clientID = row.ID
+		}
+	}
+	require.NotEqual(t, uuid.Nil, clientID)
+
+	// The configuration stops yielding the client, but nothing has retired it
+	// yet when a grants-only run comes along.
+	require.NoError(t, f.q.SoftDeleteAssociationFixture(t.Context(), association))
+	role := urn.NewPrincipal(urn.PrincipalTypeRole, "connects_stale")
+	f.grant(role, authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: serverID.String()})
+	key := f.apiKey(uuid.NullUUID{}, "consumer")
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
+	f.grant(agent, authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: serverID.String()})
+
+	report, err := RunGrants(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+	require.NoError(t, err)
+	require.True(t, report.SharedClientsWaiting)
+	require.True(t, report.APIKeysWaiting)
+	require.Zero(t, report.PendingGrantsByKind[GrantSharedClient])
+	require.Zero(t, report.PendingGrantsByKind[GrantAPIKey])
+	require.Contains(t, f.grantsOf(agent), authz.Grant{PrincipalUrn: agent.String(), Scope: authz.ScopeMCPAuth, Selector: authz.PersonalAuthClientSelector(), Inferred: true},
+		"the personal default does not depend on recorded clients")
+	for _, principal := range []urn.Principal{role, agent, urn.NewAPIKeyPrincipal(key)} {
+		for _, grant := range f.grantsOf(principal) {
+			if grant.Scope == authz.ScopeMCPAuth {
+				require.NotEqual(t, clientID.String(), grant.Selector.ResourceID(), "%s: no grant on a client awaiting retirement", principal)
+			}
+		}
+	}
+
+	// Retired, then revived under the same stable id on a server the role
+	// cannot reach: nothing granted while it was stale comes back with it.
+	f.run(true)
+	require.Empty(t, f.liveAuthClients())
+	other := f.server()
+	f.associate(other, registration)
+	f.run(true)
+	require.Equal(t, []uuid.UUID{clientID}, f.liveAuthClients(), "the client keeps its stable id")
+	for _, grant := range f.grantsOf(role) {
+		require.NotEqual(t, authz.ScopeMCPAuth, grant.Scope, "the role cannot reach the revived client's server")
+	}
+}
+
 func TestRun_UserServerGrantsKeepInheritedBlocks(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

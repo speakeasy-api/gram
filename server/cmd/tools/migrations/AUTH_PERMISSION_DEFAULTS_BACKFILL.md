@@ -28,9 +28,10 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations auth-permission-defaults \
 
 ## Output
 
-`mode=… environment=… organizations=N personal_default=N shared_client=N api_key=N written=N keys_waiting=N busy=N failed=N`
+`mode=… environment=… organizations=N personal_default=N shared_client=N api_key=N written=N keys_waiting=N shared_waiting=N busy=N failed=N`
 
 - `keys_waiting`: organizations whose legacy API key policies were held back because some auth clients are not recorded yet. Run the upstream OAuth migration for them, then rerun.
+- `shared_waiting`: organizations whose shared client grants (and key policies) were held back because some recorded auth clients or links await retirement, or an earlier phase failed, so they may not be current. Run the upstream OAuth migration for them, then rerun.
 - `failed`: organizations whose grants phase failed and rolled back. Rerun; a persistent failure needs investigation.
 - `busy`: organizations another run held, which were skipped. Rerun.
 

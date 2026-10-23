@@ -127,7 +127,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     const ok = await confirm({
       title: `Migrate ${pending.length} ${pending.length === 1 ? "organization" : "organizations"}?`,
       description:
-        "Runs the migration for every organization not yet migrated or with auth clients left to record, one at a time. Keep this tab open until it finishes; an interrupted run is safe to start again.",
+        "Runs the migration for every organization not yet migrated or with auth clients left to record, one at a time, and grants the default auth permissions for each. It only adds permissions, and never restores one an admin removed. Keep this tab open until it finishes; an interrupted run is safe to start again.",
       confirmLabel: "Migrate all",
     });
     if (!ok) return;

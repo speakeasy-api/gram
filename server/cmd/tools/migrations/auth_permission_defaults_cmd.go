@@ -69,12 +69,13 @@ type authPermissionDefaultsReport struct {
 	Granted       map[authclientbackfill.GrantKind]int
 	Written       int
 	KeysWaiting   int
+	SharedWaiting int
 	Busy          int
 	Failed        int
 }
 
 func newAuthPermissionDefaultsReport() authPermissionDefaultsReport {
-	return authPermissionDefaultsReport{Organizations: 0, Granted: map[authclientbackfill.GrantKind]int{}, Written: 0, KeysWaiting: 0, Busy: 0, Failed: 0}
+	return authPermissionDefaultsReport{Organizations: 0, Granted: map[authclientbackfill.GrantKind]int{}, Written: 0, KeysWaiting: 0, SharedWaiting: 0, Busy: 0, Failed: 0}
 }
 
 // authPermissionDefaultsProgressEvery is how many organizations pass between
@@ -113,6 +114,9 @@ func backfillAuthPermissionDefaults(organizationIDs []string, run func(organizat
 		if result.APIKeysWaiting {
 			report.KeysWaiting++
 		}
+		if result.SharedClientsWaiting {
+			report.SharedWaiting++
+		}
 	}
 	return report, nil
 }
@@ -131,19 +135,12 @@ func runAuthPermissionDefaults(args []string, stdout io.Writer, getenv func(stri
 		return 1
 	}
 	defer pool.Close()
-	organizationIDs := []string{cfg.organizationID}
-	if cfg.organizationID != "" {
-		exists, err := authclientbackfill.New(pool).OrganizationExistsForGrants(ctx, cfg.organizationID)
-		if err != nil || !exists {
-			_, _ = fmt.Fprintln(stdout, "invalid arguments: -organization names no organization")
-			return 2
-		}
-	} else {
-		organizationIDs, err = authclientbackfill.New(pool).ListOrganizationIDsForGrants(ctx)
-		if err != nil {
-			_, _ = fmt.Fprintln(stdout, "migration failed: list organizations")
-			return 1
-		}
+	q := authclientbackfill.New(pool)
+	organizationIDs, code := authPermissionDefaultsOrganizations(stdout, cfg.organizationID,
+		func(id string) (bool, error) { return q.OrganizationExistsForGrants(ctx, id) },
+		func() ([]string, error) { return q.ListOrganizationIDsForGrants(ctx) })
+	if code != 0 {
+		return code
 	}
 	report, err := backfillAuthPermissionDefaults(organizationIDs, func(organizationID string) (authclientbackfill.Report, error) {
 		result, err := authclientbackfill.RunGrants(ctx, pool, authclientbackfill.Options{OrganizationID: organizationID, Apply: cfg.apply, PageSize: 0})
@@ -158,15 +155,40 @@ func runAuthPermissionDefaults(args []string, stdout io.Writer, getenv func(stri
 	if cfg.apply {
 		mode = "apply"
 	}
-	_, _ = fmt.Fprintf(stdout, "mode=%s environment=%s organizations=%d personal_default=%d shared_client=%d api_key=%d written=%d keys_waiting=%d busy=%d failed=%d\n",
+	_, _ = fmt.Fprintf(stdout, "mode=%s environment=%s organizations=%d personal_default=%d shared_client=%d api_key=%d written=%d keys_waiting=%d shared_waiting=%d busy=%d failed=%d\n",
 		mode, cfg.environment, report.Organizations,
 		report.Granted[authclientbackfill.GrantPersonalDefault], report.Granted[authclientbackfill.GrantSharedClient], report.Granted[authclientbackfill.GrantAPIKey],
-		report.Written, report.KeysWaiting, report.Busy, report.Failed)
+		report.Written, report.KeysWaiting, report.SharedWaiting, report.Busy, report.Failed)
 	if err != nil {
 		_, _ = fmt.Fprintf(stdout, "migration failed: %v\n", err)
 		return 1
 	}
 	return authPermissionDefaultsExitCode(stdout, report)
+}
+
+// authPermissionDefaultsOrganizations returns the organizations to run, or a
+// nonzero exit code after reporting why not. A lookup that fails is a
+// migration failure (1); only a lookup that succeeds and finds no such
+// organization is an argument error (2).
+func authPermissionDefaultsOrganizations(stdout io.Writer, organizationID string, exists func(string) (bool, error), list func() ([]string, error)) ([]string, int) {
+	if organizationID == "" {
+		ids, err := list()
+		if err != nil {
+			_, _ = fmt.Fprintln(stdout, "migration failed: list organizations")
+			return nil, 1
+		}
+		return ids, 0
+	}
+	found, err := exists(organizationID)
+	if err != nil {
+		_, _ = fmt.Fprintln(stdout, "migration failed: look up organization")
+		return nil, 1
+	}
+	if !found {
+		_, _ = fmt.Fprintln(stdout, "invalid arguments: -organization names no organization")
+		return nil, 2
+	}
+	return []string{organizationID}, 0
 }
 
 // authPermissionDefaultsExitCode fails a run that left any organization

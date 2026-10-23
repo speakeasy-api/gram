@@ -365,6 +365,11 @@ type Report struct {
 	// clients are not recorded yet.
 	APIKeysWaiting bool `json:"api_keys_waiting"`
 
+	// SharedClientsWaiting means shared client grants were not planned
+	// because the recorded clients and links may not be current: a phase
+	// failed, or some await retirement.
+	SharedClientsWaiting bool `json:"shared_clients_waiting"`
+
 	// PhaseErrors names each phase that failed and why. A failed phase's
 	// writes are rolled back and its records are not retired; the other
 	// phases still run.
@@ -434,6 +439,7 @@ func newReport(apply bool) Report {
 		GrantsWritten:         0,
 		APIKeysGranted:        []string{},
 		APIKeysWaiting:        false,
+		SharedClientsWaiting:  false,
 		PhaseErrors:           map[string]string{},
 		Results:               []Result{},
 	}
@@ -484,6 +490,7 @@ func (r *Report) merge(o Report) {
 	r.GrantsWritten += o.GrantsWritten
 	r.APIKeysGranted = append(r.APIKeysGranted, o.APIKeysGranted...)
 	r.APIKeysWaiting = r.APIKeysWaiting || o.APIKeysWaiting
+	r.SharedClientsWaiting = r.SharedClientsWaiting || o.SharedClientsWaiting
 	r.Results = append(r.Results, o.Results...)
 }
 
@@ -602,12 +609,13 @@ func runGrantsPhase(ctx context.Context, conn *pgxpool.Conn, opts Options) (Repo
 	if err != nil {
 		return report, fmt.Errorf("check recorded auth clients: %w", err)
 	}
-	ready := keysReady(probe)
+	shared, ready := sharedReady(probe), keysReady(probe)
+	report.SharedClientsWaiting = !shared
 	report.APIKeysWaiting = !ready
-	// The probe's failures say why keys wait.
+	// The probe's failures say why shared clients and keys wait.
 	maps.Copy(report.PhaseErrors, probe.PhaseErrors)
 	p := phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
-		return runGrants(ctx, tx, opts, local, ready)
+		return runGrants(ctx, tx, opts, local, shared, ready)
 	}}
 	if err := runPhase(ctx, conn, opts, p, &local); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -630,11 +638,22 @@ func clientsRecorded(ctx context.Context, db TxStarter, organizationID string) (
 	return runPhases(ctx, db, Options{OrganizationID: organizationID, Apply: false, PageSize: 0}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
 }
 
+// sharedReady reports whether the recorded auth clients and links are current
+// enough to grant against: no phase before grants failed, and a dry run has
+// nothing left to retire. A client or link awaiting retirement keeps its
+// stable id, so a grant written on it now would come back if it were revived.
+func sharedReady(r Report) bool {
+	if len(r.PhaseErrors) > 0 {
+		return false
+	}
+	return r.Mode == "apply" || (r.PendingRetiredClients == 0 && r.PendingRetiredLinks == 0)
+}
+
 // keysReady reports whether the phases before grants left every auth client,
-// link and header copy recorded: none failed, no decision lacks its records,
-// and a dry run has nothing left to write.
+// link and header copy recorded and current: shared clients are ready, no
+// decision lacks its records, and a dry run has nothing left to write.
 func keysReady(r Report) bool {
-	if len(r.PhaseErrors) > 0 || r.Gaps > 0 {
+	if !sharedReady(r) || r.Gaps > 0 {
 		return false
 	}
 	return r.Mode == "apply" || (r.PendingClients == 0 && r.PendingLinks == 0 && r.PendingHeaders == 0)
@@ -690,9 +709,10 @@ func runPhases(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 	if withGrants {
 		phases = append(phases, phase{name: PhaseGrants, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			// Last, over every committed phase's auth clients.
-			ready := keysReady(report)
+			shared, ready := sharedReady(report), keysReady(report)
+			local.SharedClientsWaiting = !shared
 			local.APIKeysWaiting = !ready
-			return runGrants(ctx, tx, opts, local, ready)
+			return runGrants(ctx, tx, opts, local, shared, ready)
 		}})
 	}
 	for _, p := range phases {
