@@ -17,6 +17,14 @@ import (
 // (omitted when empty), then serves yamux so the client session stays open.
 func upgradingRunner(t *testing.T, capacityHeader string) string {
 	t.Helper()
+	return scriptedRunner(t, capacityHeader, nil, nil)
+}
+
+// scriptedRunner is upgradingRunner with hooks: upgraded runs once the
+// upgrade response is written, and serve, when set, handles each stream the
+// client opens.
+func scriptedRunner(t *testing.T, capacityHeader string, upgraded func(), serve func(net.Conn)) string {
+	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = listener.Close() })
@@ -40,12 +48,22 @@ func upgradingRunner(t *testing.T, capacityHeader string) string {
 					_ = conn.Close()
 					return
 				}
+				if upgraded != nil {
+					upgraded()
+				}
 				session, err := yamux.Server(conn, nil)
 				if err != nil {
 					_ = conn.Close()
 					return
 				}
 				t.Cleanup(func() { _ = session.Close() })
+				for serve != nil {
+					stream, err := session.Accept()
+					if err != nil {
+						return
+					}
+					go serve(stream)
+				}
 			}()
 		}
 	}()

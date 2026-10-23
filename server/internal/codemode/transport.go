@@ -266,6 +266,11 @@ func (c *RunnerClient) connect(ctx context.Context) (*yamux.Session, int, error)
 		return nil, 0, fmt.Errorf("code runner did not report its capacity")
 	}
 	capacity = min(capacity, RunnerStreams)
+	// An interrupt that already started may still set its deadline after
+	// this point, so the connection is unusable unless it is stopped first.
+	if !stopInterrupt() {
+		return nil, 0, fmt.Errorf("code runner handshake interrupted: %w", ctx.Err())
+	}
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return nil, 0, fmt.Errorf("clear code handshake deadline: %w", err)
 	}

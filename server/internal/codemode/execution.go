@@ -241,7 +241,11 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 			}
 			started = true
 		case "callback":
-			if !started || seen[message.ID] || len(seen) >= maxCallbacks {
+			if !started || seen[message.ID] {
+				fail("protocol_error", "invalid runtime callback; do not replay automatically")
+				return result
+			}
+			if len(seen) >= maxCallbacks {
 				fail("callback_limit", "execution stopped at callback boundary")
 				return result
 			}
