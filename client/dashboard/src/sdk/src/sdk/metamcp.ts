@@ -9,6 +9,7 @@ import { metaMcpGet } from "../funcs/metaMcpGet.js";
 import { metaMcpList } from "../funcs/metaMcpList.js";
 import { metaMcpListMembers } from "../funcs/metaMcpListMembers.js";
 import { metaMcpRemoveMember } from "../funcs/metaMcpRemoveMember.js";
+import { metaMcpSetBuiltinMember } from "../funcs/metaMcpSetBuiltinMember.js";
 import { metaMcpUpdate } from "../funcs/metaMcpUpdate.js";
 import { metaMcpUpdateMember } from "../funcs/metaMcpUpdateMember.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -44,6 +45,10 @@ import {
   RemoveMetaMcpMemberRequest,
   RemoveMetaMcpMemberSecurity,
 } from "../models/operations/removemetamcpmember.js";
+import {
+  SetBuiltinMetaMcpMemberRequest,
+  SetBuiltinMetaMcpMemberSecurity,
+} from "../models/operations/setbuiltinmetamcpmember.js";
 import {
   UpdateMetaMcpMemberRequest,
   UpdateMetaMcpMemberSecurity,
@@ -181,6 +186,25 @@ export class MetaMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(metaMcpRemoveMember(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setBuiltinMetaMcpMember metaMcp
+   *
+   * @remarks
+   * Add or configure a built-in MCP server in a gateway. Administrator only; membership does not grant connection access.
+   */
+  async setBuiltinMember(
+    request: SetBuiltinMetaMcpMemberRequest,
+    security?: SetBuiltinMetaMcpMemberSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<MetaMcpMember> {
+    return unwrapAsync(metaMcpSetBuiltinMember(
       this,
       request,
       security,

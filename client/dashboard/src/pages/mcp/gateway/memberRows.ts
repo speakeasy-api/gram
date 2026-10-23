@@ -10,6 +10,7 @@ import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.j
  * dispatch path and are excluded from serving.
  */
 export type MemberClassification =
+  | "builtin"
   | "hosted"
   | "proxied"
   | "disabled"
@@ -49,7 +50,13 @@ export function buildMemberRows(
   const serversById = new Map(servers.map((s) => [s.id, s]));
   return members.map((member) => {
     const server = serversById.get(member.mcpServerId);
-    return { member, server, classification: classifyMemberServer(server) };
+    return {
+      member,
+      server,
+      classification: member.builtinKey
+        ? "builtin"
+        : classifyMemberServer(server),
+    };
   });
 }
 

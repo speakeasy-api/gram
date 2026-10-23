@@ -5,6 +5,7 @@ import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 import { ModelProviderKeysSection } from "./ModelProviderKeysSection";
 import { ProjectNameSection } from "./ProjectNameSection";
+import { BuiltinMcpServersSection } from "./BuiltinMcpServersSection";
 
 export default function Settings(): JSX.Element {
   const organization = useOrganization();
@@ -19,6 +20,8 @@ export default function Settings(): JSX.Element {
       <ProjectNameSection />
 
       <ModelProviderKeysSection />
+
+      <BuiltinMcpServersSection />
 
       <SettingsDangerZone />
 

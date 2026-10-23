@@ -174,6 +174,31 @@ var _ = Service("metaMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MetaMcpMembers"}`)
 	})
 
+	Method("setBuiltinMetaMcpMember", func() {
+		Description("Add or configure a built-in MCP server in a gateway. Administrator only; membership does not grant connection access.")
+		Payload(func() {
+			Attribute("meta_mcp_server_id", String, "The gateway ID", func() { Format(FormatUUID) })
+			Attribute("builtin_key", String, "The immutable built-in server key")
+			Attribute("environment_id", String, "Project environment override; omit to use the built-in default", func() { Format(FormatUUID) })
+			Attribute("sort_order", Int, "Position in the gateway; defaults to zero")
+			Required("meta_mcp_server_id", "builtin_key")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+		Result(MetaMcpMember)
+		HTTP(func() {
+			POST("/rpc/metaMcp.setBuiltinMember")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "setBuiltinMetaMcpMember")
+		Meta("openapi:extension:x-speakeasy-name-override", "setBuiltinMember")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetBuiltinMetaMcpMember"}`)
+	})
+
 	Method("addMetaMcpMember", func() {
 		Description("Add an MCP server to a meta MCP server's member set")
 
@@ -366,6 +391,8 @@ var MetaMcpMember = Type("MetaMcpMember", func() {
 	Attribute("mcp_server_id", String, "The ID of the member MCP server", func() {
 		Format(FormatUUID)
 	})
+	Attribute("builtin_key", String, "The immutable built-in server key, absent for stored servers")
+	Attribute("environment_id", String, "The built-in member environment override", func() { Format(FormatUUID) })
 	Attribute("mcp_server_name", String, "The name of the member MCP server, when configured")
 	Attribute("mcp_server_slug", String, "The slug of the member MCP server, when configured")
 	Attribute("sort_order", Int, "The position of the member in the ordered member set")

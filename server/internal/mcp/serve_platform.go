@@ -239,6 +239,10 @@ func (s *Service) handlePlatformToolsetRequest(
 }
 
 func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, protocolVersion *mcpversions.Resolution) (json.RawMessage, error) {
+	return handleCodeOwnedInitialize(ctx, logger, telemetry, req, protocolVersion, describePlatformServer())
+}
+
+func handleCodeOwnedInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, protocolVersion *mcpversions.Resolution, description serverDescription) (json.RawMessage, error) {
 	// Malformed params must not fail the handshake, so a parse error is
 	// logged, the requested version is left unrecorded, and negotiation
 	// proceeds from an absent request — answering the unversioned default.
@@ -264,8 +268,8 @@ func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetr
 
 	result := &result[initializeResult]{
 		ID:             req.ID,
-		Result:         describePlatformServer().initializeResult(negotiated),
-		serverIdentity: serverInfoPlatformToolset,
+		Result:         description.initializeResult(negotiated),
+		serverIdentity: description.identity,
 		cacheHints:     nil,
 	}
 	bs, err := json.Marshal(result)
@@ -281,6 +285,10 @@ func (s *Service) listPlatformToolsetTools(
 	toolset platformtools.Toolset,
 	req *rawRequest,
 ) (json.RawMessage, error) {
+	return s.listCodeOwnedToolsetTools(ctx, authCtx, toolset, req, serverInfoPlatformToolset)
+}
+
+func (s *Service) listCodeOwnedToolsetTools(ctx context.Context, authCtx *contextvalues.AuthContext, toolset platformtools.Toolset, req *rawRequest, identity serverInfo) (json.RawMessage, error) {
 	// Memoize per-request: every assistant memory tool currently shares one
 	// feature flag, so a naive loop would issue N Redis lookups for the same
 	// (org, feature) pair.
@@ -311,7 +319,7 @@ func (s *Service) listPlatformToolsetTools(
 	bs, err := json.Marshal(&result[toolsListResultTools]{
 		ID:             req.ID,
 		Result:         toolsListResultTools{Tools: tools},
-		serverIdentity: serverInfoPlatformToolset,
+		serverIdentity: identity,
 		// The catalog is filtered by the active organization's product
 		// features, so two organizations receive different tool lists.
 		cacheHints: cacheHintsCallerVarying,
@@ -329,6 +337,29 @@ func (s *Service) callPlatformToolsetTool(
 	req *rawRequest,
 	chatIDHeader string,
 ) (json.RawMessage, error) {
+	return s.callPlatformToolsetToolWithConfig(ctx, authCtx, toolset, req, chatIDHeader, nil)
+}
+
+// platformCallConfig supplies the project environment and resource identity for
+// code-owned built-ins while retaining the shared execution/security pipeline.
+type platformCallConfig struct {
+	environment  toolconfig.ToolCallEnv
+	serverID     string
+	metaServerID string
+}
+
+// platformUsageAttribution preserves legacy platform usage and attributes built-in
+// usage to its synthetic server and, when present, the serving gateway. Built-ins
+// have no persisted endpoint row, matching hosted gateway member attribution.
+func platformUsageAttribution(config *platformCallConfig, event billing.ToolCallUsageEvent) billing.ToolCallUsageEvent {
+	if config != nil {
+		event.MCPServerID = conv.PtrEmpty(config.serverID)
+		event.MetaMCPServerID = conv.PtrEmpty(config.metaServerID)
+	}
+	return event
+}
+
+func (s *Service) callPlatformToolsetToolWithConfig(ctx context.Context, authCtx *contextvalues.AuthContext, toolset platformtools.Toolset, req *rawRequest, chatIDHeader string, config *platformCallConfig) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").LogError(ctx, s.logger)
@@ -360,6 +391,11 @@ func (s *Service) callPlatformToolsetTool(
 	}
 
 	desc := matched.Executor.Descriptor()
+	if config != nil {
+		if err := s.authz.RequireBuiltinConnect(ctx, config.serverID, authCtx.ProjectID.String(), authz.MCPToolCallCheck(config.serverID, authz.MCPToolCallDimensions{Tool: desc.Name, Disposition: conv.DispositionFromAnnotations(desc.Annotations), ProjectID: authCtx.ProjectID.String()})); err != nil {
+			return nil, fmt.Errorf("authorize built-in tool call: %w", err)
+		}
+	}
 	descriptor := &gateway.ToolDescriptor{
 		ID:               desc.SyntheticID(),
 		Name:             desc.Name,
@@ -403,6 +439,12 @@ func (s *Service) callPlatformToolsetTool(
 		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 	}
 
+	if config != nil {
+		toolCallEnv = config.environment
+		toolCallEnv.GramEmail = gramEmail
+		toolCallEnv.GramChatID = chatIDHeader
+	}
+
 	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		mcpURL = requestContext.Host + requestContext.ReqURL
@@ -442,7 +484,7 @@ func (s *Service) callPlatformToolsetTool(
 
 	logAttrs := tm.HTTPLogAttributes{}
 	defer func() {
-		go s.billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
+		go s.billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), platformUsageAttribution(config, billing.ToolCallUsageEvent{
 			OrganizationID:        authCtx.ActiveOrganizationID,
 			RequestBytes:          requestBytes,
 			OutputBytes:           outputBytes,
@@ -465,7 +507,7 @@ func (s *Service) callPlatformToolsetTool(
 			FunctionCPUUsage:      nil,
 			FunctionMemUsage:      nil,
 			FunctionExecutionTime: nil,
-		})
+		}))
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		logAttrs.RecordStatusCode(rw.statusCode)
@@ -497,13 +539,21 @@ func (s *Service) callPlatformToolsetTool(
 		})
 	}()
 
+	scanSurface := mcpriskscan.SurfacePlatformMCP
+	scanServerID := platformtools.PlatformToolsetID(toolset.Slug).String()
+	scanMetaServerID := ""
+	if config != nil {
+		scanSurface = mcpriskscan.SurfaceHostedMCP
+		scanServerID = config.serverID
+		scanMetaServerID = config.metaServerID
+	}
 	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
-		Surface:         mcpriskscan.SurfacePlatformMCP,
+		Surface:         scanSurface,
 		Method:          mcpriskscan.MethodToolsCall,
 		OrganizationID:  descriptor.OrganizationID,
 		ProjectID:       descriptor.ProjectID,
-		ServerID:        platformtools.PlatformToolsetID(toolset.Slug).String(),
-		MetaServerID:    "",
+		ServerID:        scanServerID,
+		MetaServerID:    scanMetaServerID,
 		ToolsetID:       "",
 		ToolName:        descriptor.Name,
 		ResourceURI:     "",
@@ -540,6 +590,10 @@ func (s *Service) callPlatformToolsetTool(
 		return nil, failure
 	}
 
+	identity := serverInfoPlatformToolset
+	if config != nil {
+		identity = serverInfoBuiltin
+	}
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
@@ -547,7 +601,7 @@ func (s *Service) callPlatformToolsetTool(
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
-		serverIdentity: serverInfoPlatformToolset,
+		serverIdentity: identity,
 		cacheHints:     nil,
 	})
 	if err != nil {

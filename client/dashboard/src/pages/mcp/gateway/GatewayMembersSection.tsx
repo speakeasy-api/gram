@@ -73,8 +73,10 @@ import {
 } from "./useGatewayMemberRows";
 import { useToolsets } from "../../toolsets/useToolsets";
 import { memberWrappers } from "./ensureToolsetWrapper";
+import { BuiltinGatewayMembersSection } from "./BuiltinGatewayMembersSection";
 
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
+  builtin: "Built-in",
   hosted: "Hosted",
   proxied: "Proxied",
   disabled: "Disabled",
@@ -117,6 +119,11 @@ const STATUS_BY_CLASSIFICATION: Record<
   MemberClassification,
   { label: string; variant: "success" | "neutral" | "warning"; why: string }
 > = {
+  builtin: {
+    label: "Restricted",
+    variant: "neutral",
+    why: "Requires an explicit machine connection grant and valid project credentials. Human connections are blocked.",
+  },
   hosted: {
     label: "Available",
     variant: "success",
@@ -185,12 +192,23 @@ function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
   const slug = row.server?.slug ?? row.member.mcpServerSlug;
   return (
     <div className="flex min-w-0 items-center gap-2.5">
-      <SourceMcpIcon
-        mcpServerId={row.member.mcpServerId}
-        className="size-6 shrink-0 object-contain"
-      />
+      {row.member.builtinKey ? (
+        <Blocks className="size-6 shrink-0 text-muted-foreground" />
+      ) : (
+        <SourceMcpIcon
+          mcpServerId={row.member.mcpServerId}
+          className="size-6 shrink-0 object-contain"
+        />
+      )}
       <div className="flex min-w-0 flex-col">
-        {row.server ? (
+        {row.member.builtinKey ? (
+          <Link
+            to={routes.mcp.builtin.href(row.member.builtinKey)}
+            className="truncate font-medium hover:underline"
+          >
+            {name}
+          </Link>
+        ) : row.server ? (
           <Link
             to={routes.mcp.x.overview.href(mcpServerRouteParam(row.server))}
             className="truncate font-medium hover:underline"
@@ -584,6 +602,13 @@ export function GatewayMembersSection({
           )}
         </Page.Section.Body>
       </Page.Section>
+
+      {!isLoading && !isError && (
+        <BuiltinGatewayMembersSection
+          gatewayId={metaMcpServer.id}
+          members={rows.map((row) => row.member)}
+        />
+      )}
 
       <AddServersSheet
         key={metaMcpServer.id}

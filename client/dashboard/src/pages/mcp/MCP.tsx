@@ -1,5 +1,10 @@
 import { RequireScope } from "@/components/require-scope";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
+import {
+  BuiltinMcpServerCard,
+  BuiltinMcpServerTableRow,
+} from "@/components/mcp/BuiltinMcpServerCard";
+import { useBuiltinMcpServers } from "@/components/mcp/useBuiltinMcpServers";
 import { OrganizationGatewayCard } from "@/components/mcp/OrganizationGatewayCard";
 import { useOrganizationGatewayEntry } from "@/components/mcp/useOrganizationGatewayEntry";
 import {
@@ -91,6 +96,8 @@ function MCPOverview() {
   // boundary and replacing the whole screen. Key them by project so a tolerated
   // failure can't leave another project's rows on screen after a switch.
   const gramProject = useProjectSlugForRequests();
+  const builtinQuery = useBuiltinMcpServers();
+  const builtins = builtinQuery.servers.filter((server) => !server.hidden);
   const {
     data: mcpServersResult,
     isLoading: isLoadingMcpServers,
@@ -134,6 +141,7 @@ function MCPOverview() {
   );
   const handleRefresh = () => {
     void refetchMcpServers();
+    if (builtinQuery.isAdmin) void builtinQuery.refetch();
     void refetchPlugins();
     // The reach reads and the member list back the "Accessible by" control, so
     // a grant, plugin assignment or membership change would otherwise stay
@@ -216,13 +224,18 @@ function MCPOverview() {
   // "Accessible by" filter and no answer yet, every row is filtered out, and
   // rendering that as "no servers match" states a result we do not have.
   const isLoading =
+    (builtinQuery.isAdmin && builtinQuery.isLoading) ||
     isLoadingMcpServers ||
     isLoadingGateways ||
     isLoadingEndpoints ||
     isLoadingReach;
 
   const hasRefreshError =
-    isMcpServersError || isGatewaysError || isEndpointsError || isReachError;
+    isMcpServersError ||
+    isGatewaysError ||
+    isEndpointsError ||
+    isReachError ||
+    (builtinQuery.isAdmin && builtinQuery.isError);
 
   // A failed reach read with the filter on leaves every row excluded for a
   // reason that is not the filter's answer, so the listing says so outright
@@ -241,6 +254,7 @@ function MCPOverview() {
   // of them, and a refresh that stopped spinning while the reach or member
   // read was still in flight would look finished before it was.
   const isRefreshing =
+    builtinQuery.isFetching ||
     isFetchingMcpServers ||
     isFetchingGateways ||
     isFetchingEndpoints ||
@@ -301,10 +315,22 @@ function MCPOverview() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [gateways, search, mcpFilters.values, reachableServerIds]);
 
+  const filteredBuiltins = builtins.filter(
+    (server) =>
+      matchesMcpFilters(
+        { source: "builtin", status: "private", pluginIds: [] },
+        mcpFilters.values,
+        reachableServerIds,
+      ) &&
+      [server.name, server.key].some((value) =>
+        value.toLowerCase().includes(search.toLowerCase()),
+      ),
+  );
+
   // Show the filter bar once there's anything to filter. Filters can drive the
   // result set to empty on their own, so the no-matches state must consider an
   // active filter, not just a search query.
-  const hasItems = mcpServers.length + gateways.length > 0;
+  const hasItems = mcpServers.length + gateways.length + builtins.length > 0;
   // Also shown when the list failed to load: the toolbar carries the retry and
   // "Add new", which are exactly what you need when nothing came back.
   const showFilters = !isLoading && (hasItems || hasRefreshError);
@@ -322,7 +348,8 @@ function MCPOverview() {
     !isLoading &&
     (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
     filteredMcpServers.length === 0 &&
-    filteredGateways.length === 0;
+    filteredGateways.length === 0 &&
+    filteredBuiltins.length === 0;
 
   const newMcpServerButton = (
     <RequireScope scope="mcp:write" level="component">
@@ -432,6 +459,9 @@ function MCPOverview() {
                 {filteredGateways.map((gateway) => (
                   <GatewayCard key={gateway.id} gateway={gateway} />
                 ))}
+                {filteredBuiltins.map((server) => (
+                  <BuiltinMcpServerCard key={server.id} server={server} />
+                ))}
                 {filteredMcpServers.map(({ server, kind }) => (
                   <MCPServerCard key={server.id} server={server} kind={kind} />
                 ))}
@@ -469,6 +499,9 @@ function MCPOverview() {
                     endpoints={endpointsByGatewayId.get(gateway.id) ?? []}
                     isLoadingEndpoints={isLoadingEndpoints}
                   />
+                ))}
+                {filteredBuiltins.map((server) => (
+                  <BuiltinMcpServerTableRow key={server.id} server={server} />
                 ))}
                 {filteredMcpServers.map(({ server, kind }) => (
                   <MCPServerTableRow

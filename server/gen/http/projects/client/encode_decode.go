@@ -19,6 +19,480 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildListBuiltinMcpServersRequest instantiates a HTTP request object with
+// method and path set to call the "projects" service "listBuiltinMcpServers"
+// endpoint
+func (c *Client) BuildListBuiltinMcpServersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListBuiltinMcpServersProjectsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("projects", "listBuiltinMcpServers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListBuiltinMcpServersRequest returns an encoder for requests sent to
+// the projects listBuiltinMcpServers server.
+func EncodeListBuiltinMcpServersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*projects.ListBuiltinMcpServersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("projects", "listBuiltinMcpServers", "*projects.ListBuiltinMcpServersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListBuiltinMcpServersResponse returns a decoder for responses returned
+// by the projects listBuiltinMcpServers endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListBuiltinMcpServersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListBuiltinMcpServersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListBuiltinMcpServersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listBuiltinMcpServers", err)
+			}
+			err = ValidateListBuiltinMcpServersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listBuiltinMcpServers", err)
+			}
+			res := NewListBuiltinMcpServersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListBuiltinMcpServersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listBuiltinMcpServers", err)
+			}
+			err = ValidateListBuiltinMcpServersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listBuiltinMcpServers", err)
+			}
+			return nil, NewListBuiltinMcpServersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListBuiltinMcpServersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listBuiltinMcpServers", err)
+			}
+			err = ValidateListBuiltinMcpServersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listBuiltinMcpServers", err)
+			}
+			return nil, NewListBuiltinMcpServersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListBuiltinMcpServersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listBuiltinMcpServers", err)
+			}
+			err = ValidateListBuiltinMcpServersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listBuiltinMcpServers", err)
+			}
+			return nil, NewListBuiltinMcpServersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListBuiltinMcpServersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listBuiltinMcpServers", err)
+			}
+			err = ValidateListBuiltinMcpServersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listBuiltinMcpServers", err)
+			}
+			return nil, NewListBuiltinMcpServersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListBuiltinMcpServersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listBuiltinMcpServers", err)
+			}
+			err = ValidateListBuiltinMcpServersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listBuiltinMcpServers", err)
+			}
+			return nil, NewListBuiltinMcpServersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListBuiltinMcpServersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listBuiltinMcpServers", err)
+			}
+			err = ValidateListBuiltinMcpServersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listBuiltinMcpServers", err)
+			}
+			return nil, NewListBuiltinMcpServersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListBuiltinMcpServersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listBuiltinMcpServers", err)
+			}
+			err = ValidateListBuiltinMcpServersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listBuiltinMcpServers", err)
+			}
+			return nil, NewListBuiltinMcpServersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListBuiltinMcpServersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "listBuiltinMcpServers", err)
+				}
+				err = ValidateListBuiltinMcpServersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "listBuiltinMcpServers", err)
+				}
+				return nil, NewListBuiltinMcpServersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListBuiltinMcpServersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "listBuiltinMcpServers", err)
+				}
+				err = ValidateListBuiltinMcpServersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "listBuiltinMcpServers", err)
+				}
+				return nil, NewListBuiltinMcpServersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("projects", "listBuiltinMcpServers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListBuiltinMcpServersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "listBuiltinMcpServers", err)
+			}
+			err = ValidateListBuiltinMcpServersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "listBuiltinMcpServers", err)
+			}
+			return nil, NewListBuiltinMcpServersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("projects", "listBuiltinMcpServers", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateBuiltinMcpServerRequest instantiates a HTTP request object with
+// method and path set to call the "projects" service "updateBuiltinMcpServer"
+// endpoint
+func (c *Client) BuildUpdateBuiltinMcpServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateBuiltinMcpServerProjectsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("projects", "updateBuiltinMcpServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateBuiltinMcpServerRequest returns an encoder for requests sent to
+// the projects updateBuiltinMcpServer server.
+func EncodeUpdateBuiltinMcpServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*projects.UpdateBuiltinMcpServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("projects", "updateBuiltinMcpServer", "*projects.UpdateBuiltinMcpServerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateBuiltinMcpServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("projects", "updateBuiltinMcpServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateBuiltinMcpServerResponse returns a decoder for responses
+// returned by the projects updateBuiltinMcpServer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeUpdateBuiltinMcpServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateBuiltinMcpServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateBuiltinMcpServerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateBuiltinMcpServer", err)
+			}
+			err = ValidateUpdateBuiltinMcpServerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateBuiltinMcpServer", err)
+			}
+			res := NewUpdateBuiltinMcpServerBuiltinMcpServerOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateBuiltinMcpServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateBuiltinMcpServer", err)
+			}
+			err = ValidateUpdateBuiltinMcpServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateBuiltinMcpServer", err)
+			}
+			return nil, NewUpdateBuiltinMcpServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateBuiltinMcpServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateBuiltinMcpServer", err)
+			}
+			err = ValidateUpdateBuiltinMcpServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateBuiltinMcpServer", err)
+			}
+			return nil, NewUpdateBuiltinMcpServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateBuiltinMcpServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateBuiltinMcpServer", err)
+			}
+			err = ValidateUpdateBuiltinMcpServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateBuiltinMcpServer", err)
+			}
+			return nil, NewUpdateBuiltinMcpServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateBuiltinMcpServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateBuiltinMcpServer", err)
+			}
+			err = ValidateUpdateBuiltinMcpServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateBuiltinMcpServer", err)
+			}
+			return nil, NewUpdateBuiltinMcpServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateBuiltinMcpServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateBuiltinMcpServer", err)
+			}
+			err = ValidateUpdateBuiltinMcpServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateBuiltinMcpServer", err)
+			}
+			return nil, NewUpdateBuiltinMcpServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateBuiltinMcpServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateBuiltinMcpServer", err)
+			}
+			err = ValidateUpdateBuiltinMcpServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateBuiltinMcpServer", err)
+			}
+			return nil, NewUpdateBuiltinMcpServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateBuiltinMcpServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateBuiltinMcpServer", err)
+			}
+			err = ValidateUpdateBuiltinMcpServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateBuiltinMcpServer", err)
+			}
+			return nil, NewUpdateBuiltinMcpServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateBuiltinMcpServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "updateBuiltinMcpServer", err)
+				}
+				err = ValidateUpdateBuiltinMcpServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "updateBuiltinMcpServer", err)
+				}
+				return nil, NewUpdateBuiltinMcpServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateBuiltinMcpServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "updateBuiltinMcpServer", err)
+				}
+				err = ValidateUpdateBuiltinMcpServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "updateBuiltinMcpServer", err)
+				}
+				return nil, NewUpdateBuiltinMcpServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("projects", "updateBuiltinMcpServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateBuiltinMcpServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "updateBuiltinMcpServer", err)
+			}
+			err = ValidateUpdateBuiltinMcpServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "updateBuiltinMcpServer", err)
+			}
+			return nil, NewUpdateBuiltinMcpServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("projects", "updateBuiltinMcpServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetProjectRequest instantiates a HTTP request object with method and
 // path set to call the "projects" service "getProject" endpoint
 func (c *Client) BuildGetProjectRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2137,6 +2611,49 @@ func DecodeSetOrganizationWhitelistResponse(decoder func(*http.Response) goahttp
 			return nil, goahttp.ErrInvalidResponse("projects", "setOrganizationWhitelist", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalBuiltinMcpServerResponseBodyToProjectsBuiltinMcpServer builds a
+// value of type *projects.BuiltinMcpServer from a value of type
+// *BuiltinMcpServerResponseBody.
+func unmarshalBuiltinMcpServerResponseBodyToProjectsBuiltinMcpServer(v *BuiltinMcpServerResponseBody) *projects.BuiltinMcpServer {
+	res := &projects.BuiltinMcpServer{
+		ID:            *v.ID,
+		Key:           *v.Key,
+		Name:          *v.Name,
+		Description:   *v.Description,
+		URL:           *v.URL,
+		Hidden:        *v.Hidden,
+		EnvironmentID: v.EnvironmentID,
+		Version:       *v.Version,
+	}
+	res.Tools = make([]*projects.BuiltinMcpTool, len(v.Tools))
+	for i, val := range v.Tools {
+		if val == nil {
+			res.Tools[i] = nil
+			continue
+		}
+		res.Tools[i] = unmarshalBuiltinMcpToolResponseBodyToProjectsBuiltinMcpTool(val)
+	}
+	res.CredentialVariables = make([]string, len(v.CredentialVariables))
+	for i, val := range v.CredentialVariables {
+		res.CredentialVariables[i] = val
+	}
+
+	return res
+}
+
+// unmarshalBuiltinMcpToolResponseBodyToProjectsBuiltinMcpTool builds a value
+// of type *projects.BuiltinMcpTool from a value of type
+// *BuiltinMcpToolResponseBody.
+func unmarshalBuiltinMcpToolResponseBodyToProjectsBuiltinMcpTool(v *BuiltinMcpToolResponseBody) *projects.BuiltinMcpTool {
+	res := &projects.BuiltinMcpTool{
+		Name:        *v.Name,
+		Description: *v.Description,
+		InputSchema: *v.InputSchema,
+	}
+
+	return res
 }
 
 // unmarshalProjectResponseBodyToProjectsProject builds a value of type

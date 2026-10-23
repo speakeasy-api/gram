@@ -312,6 +312,55 @@ func BuildListMetaMcpMembersPayload(metaMcpListMetaMcpMembersMetaMcpServerID str
 	return v, nil
 }
 
+// BuildSetBuiltinMetaMcpMemberPayload builds the payload for the metaMcp
+// setBuiltinMetaMcpMember endpoint from CLI flags.
+func BuildSetBuiltinMetaMcpMemberPayload(metaMcpSetBuiltinMetaMcpMemberBody string, metaMcpSetBuiltinMetaMcpMemberSessionToken string, metaMcpSetBuiltinMetaMcpMemberApikeyToken string, metaMcpSetBuiltinMetaMcpMemberProjectSlugInput string) (*metamcp.SetBuiltinMetaMcpMemberPayload, error) {
+	var err error
+	var body SetBuiltinMetaMcpMemberRequestBody
+	{
+		err = json.Unmarshal([]byte(metaMcpSetBuiltinMetaMcpMemberBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"builtin_key\": \"abc123\",\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"sort_order\": 1\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
+		if body.EnvironmentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if metaMcpSetBuiltinMetaMcpMemberSessionToken != "" {
+			sessionToken = &metaMcpSetBuiltinMetaMcpMemberSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if metaMcpSetBuiltinMetaMcpMemberApikeyToken != "" {
+			apikeyToken = &metaMcpSetBuiltinMetaMcpMemberApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if metaMcpSetBuiltinMetaMcpMemberProjectSlugInput != "" {
+			projectSlugInput = &metaMcpSetBuiltinMetaMcpMemberProjectSlugInput
+		}
+	}
+	v := &metamcp.SetBuiltinMetaMcpMemberPayload{
+		MetaMcpServerID: body.MetaMcpServerID,
+		BuiltinKey:      body.BuiltinKey,
+		EnvironmentID:   body.EnvironmentID,
+		SortOrder:       body.SortOrder,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildAddMetaMcpMemberPayload builds the payload for the metaMcp
 // addMetaMcpMember endpoint from CLI flags.
 func BuildAddMetaMcpMemberPayload(metaMcpAddMetaMcpMemberBody string, metaMcpAddMetaMcpMemberSessionToken string, metaMcpAddMetaMcpMemberApikeyToken string, metaMcpAddMetaMcpMemberProjectSlugInput string) (*metamcp.AddMetaMcpMemberPayload, error) {

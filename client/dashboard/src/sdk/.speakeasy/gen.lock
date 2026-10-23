@@ -393,6 +393,7 @@ trackedFiles:
   src/funcs/metaMcpList.ts: {}
   src/funcs/metaMcpListMembers.ts: {}
   src/funcs/metaMcpRemoveMember.ts: {}
+  src/funcs/metaMcpSetBuiltinMember.ts: {}
   src/funcs/metaMcpUpdate.ts: {}
   src/funcs/metaMcpUpdateMember.ts: {}
   src/funcs/modelKeysDeleteKey.ts: {}
@@ -531,10 +532,12 @@ trackedFiles:
   src/funcs/projectsDeleteById.ts: {}
   src/funcs/projectsList.ts: {}
   src/funcs/projectsListAllowedOrigins.ts: {}
+  src/funcs/projectsListBuiltinMcpServers.ts: {}
   src/funcs/projectsRead.ts: {}
   src/funcs/projectsSetLogo.ts: {}
   src/funcs/projectsSetOrganizationWhitelist.ts: {}
   src/funcs/projectsUpdate.ts: {}
+  src/funcs/projectsUpdateBuiltinMcpServer.ts: {}
   src/funcs/projectsUpsertAllowedOrigin.ts: {}
   src/funcs/registryDiscoveryDiscoverServers.ts: {}
   src/funcs/registryDiscoveryDiscoverVersion.ts: {}
@@ -961,6 +964,8 @@ trackedFiles:
   src/models/components/builtindashboard.ts: {}
   src/models/components/builtinexclusioncategory.ts: {}
   src/models/components/builtinexclusionentry.ts: {}
+  src/models/components/builtinmcpserver.ts: {}
+  src/models/components/builtinmcptool.ts: {}
   src/models/components/businessmemory.ts: {}
   src/models/components/businessmemorycontentscopenode.ts: {}
   src/models/components/canonicaltoolattributes.ts: {}
@@ -1343,6 +1348,7 @@ trackedFiles:
   src/models/components/listauditlogsresult.ts: {}
   src/models/components/listbindingsresponsebody.ts: {}
   src/models/components/listbuiltinexclusionsresult.ts: {}
+  src/models/components/listbuiltinmcpserversresponsebody.ts: {}
   src/models/components/listbusinessmemoriesresponsebody.ts: {}
   src/models/components/listbusinessmemorycontentscopesresponsebody.ts: {}
   src/models/components/listcatalogresponsebody.ts: {}
@@ -1783,6 +1789,7 @@ trackedFiles:
   src/models/components/setaitooldecisionresult.ts: {}
   src/models/components/setauthenticationhostrequestbody.ts: {}
   src/models/components/setbillingmetadatarequestbody.ts: {}
+  src/models/components/setbuiltinmetamcpmemberrequestbody.ts: {}
   src/models/components/setdirectoryrolemappingsform.ts: {}
   src/models/components/setemaprovidersrequestbody.ts: {}
   src/models/components/setenabledrequestbody.ts: {}
@@ -1978,6 +1985,7 @@ trackedFiles:
   src/models/components/updateassistantform.ts: {}
   src/models/components/updateawsiamcredentialrequestbody.ts: {}
   src/models/components/updateawskmskeyrequestbody.ts: {}
+  src/models/components/updatebuiltinmcpserverform.ts: {}
   src/models/components/updateconfigurationrequestbody.ts: {}
   src/models/components/updatecustomdetectionrulerequestbody.ts: {}
   src/models/components/updatedashboardrequestbody.ts: {}
@@ -2504,6 +2512,7 @@ trackedFiles:
   src/models/operations/listawskmskeys.ts: {}
   src/models/operations/listbindings.ts: {}
   src/models/operations/listbuiltinexclusions.ts: {}
+  src/models/operations/listbuiltinmcpservers.ts: {}
   src/models/operations/listbusinessmemories.ts: {}
   src/models/operations/listbusinessmemorycontentscopes.ts: {}
   src/models/operations/listchallengebuckets.ts: {}
@@ -2769,6 +2778,7 @@ trackedFiles:
   src/models/operations/setaitooldecision.ts: {}
   src/models/operations/setbillingemail.ts: {}
   src/models/operations/setbillingmetadata.ts: {}
+  src/models/operations/setbuiltinmetamcpmember.ts: {}
   src/models/operations/setchatpinned.ts: {}
   src/models/operations/setdeviceintegrationscheduleenabled.ts: {}
   src/models/operations/setdirectoryrolemappings.ts: {}
@@ -2829,6 +2839,7 @@ trackedFiles:
   src/models/operations/updateassistant.ts: {}
   src/models/operations/updateawsiamcredential.ts: {}
   src/models/operations/updateawskmskey.ts: {}
+  src/models/operations/updatebuiltinmcpserver.ts: {}
   src/models/operations/updatecustomdetectionrule.ts: {}
   src/models/operations/updatedashboard.ts: {}
   src/models/operations/updatedataexportdestination.ts: {}
@@ -2997,6 +3008,8 @@ trackedFiles:
   src/react-query/beginSlackDirectoryConnection.ts: {}
   src/react-query/builtinExclusions.core.ts: {}
   src/react-query/builtinExclusions.ts: {}
+  src/react-query/builtinMcpServers.core.ts: {}
+  src/react-query/builtinMcpServers.ts: {}
   src/react-query/cancelStripeSubscription.ts: {}
   src/react-query/challengeBuckets.core.ts: {}
   src/react-query/challengeBuckets.ts: {}
@@ -3831,6 +3844,7 @@ trackedFiles:
   src/react-query/setAIToolDecision.ts: {}
   src/react-query/setBillingEmail.ts: {}
   src/react-query/setBillingMetadata.ts: {}
+  src/react-query/setBuiltinMetaMcpMember.ts: {}
   src/react-query/setDeviceIntegrationScheduleEnabled.ts: {}
   src/react-query/setDirectoryRoleMappings.ts: {}
   src/react-query/setIdentityProviderConnectionSetupMethod.ts: {}
@@ -3958,6 +3972,7 @@ trackedFiles:
   src/react-query/unshareSkill.ts: {}
   src/react-query/updateAwsIamCredential.ts: {}
   src/react-query/updateAwsKmsKey.ts: {}
+  src/react-query/updateBuiltinMcpServer.ts: {}
   src/react-query/updateDashboard.ts: {}
   src/react-query/updateDataExportDestination.ts: {}
   src/react-query/updateDataExportRoute.ts: {}
@@ -9111,6 +9126,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listBuiltinMcpServers:
+    speakeasy-default-list-builtin-mcp-servers:
+      responses:
+        "200":
+          application/json: {"servers": [{"credential_variables": ["<value 1>", "<value 2>"], "description": "zowie optimal speedily", "hidden": false, "id": "8bfe066b-c084-4cc1-9d93-516def26f6ff", "key": "<key>", "name": "<value>", "tools": [], "url": "https://slow-whale.org/", "version": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listBusinessMemories:
     speakeasy-default-list-business-memories:
       parameters:
@@ -12216,6 +12240,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  setBuiltinMetaMcpMember:
+    speakeasy-default-set-builtin-meta-mcp-member:
+      requestBody:
+        application/json: {"builtin_key": "<value>", "meta_mcp_server_id": "2f5fa580-7b43-4891-bdf9-762dd5379486"}
+      responses:
+        "200":
+          application/json: {"id": "cfa56400-d7e5-43c6-bc95-c4bc54e40714", "mcp_server_id": "af722eeb-9625-41b7-a3fe-e6238d52e39a", "sort_order": 914106}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   setChatPinned:
     speakeasy-default-set-chat-pinned:
       requestBody:
@@ -12894,6 +12929,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateBuiltinMcpServer:
+    speakeasy-default-update-builtin-mcp-server:
+      requestBody:
+        application/json: {"expected_version": "<value>", "hidden": true, "key": "<key>"}
+      responses:
+        "200":
+          application/json: {"credential_variables": ["<value 1>", "<value 2>", "<value 3>"], "description": "loudly consign safely where till oh", "hidden": true, "id": "225ff58d-75b5-4933-84b6-4d043b3c332d", "key": "<key>", "name": "<value>", "tools": [{"description": "yippee far hm cruelty against friendly whether", "input_schema": "<value>", "name": "<value>"}], "url": "https://red-schedule.net", "version": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   updateCollection:
     speakeasy-default-update-collection:
       requestBody:

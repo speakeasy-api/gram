@@ -74,6 +74,9 @@ func (s *Service) handleMetaConnectionStatusCall(
 // a grant routed by its upstream resource without a derived issuer, so
 // routing runs before that shortcut.
 func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, string) {
+	if member.backend == metaMemberBackendBuiltin {
+		return metamcp.SignInNotRequired, ""
+	}
 	if member.backend == metaMemberBackendHosted {
 		if !member.remoteSessionIssuerID.Valid {
 			return metamcp.SignInNotRequired, ""

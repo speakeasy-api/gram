@@ -161,7 +161,7 @@ func UsageCommands() []string {
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"registry-discovery (discover-servers|discover-versions|discover-version)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
-		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
+		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|set-builtin-meta-mcp-member|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
 		"okta-resource-connections (list|confirm|reset)",
@@ -177,7 +177,7 @@ func UsageCommands() []string {
 		"platform-mcp (get-onboarding|start-onboarding|record-dashboard-cta-event|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
 		"plugins (list-distribution-plugins|get-distribution-plugin|list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|rotate-observability-credential|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
-		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
+		"projects (list-builtin-mcp-servers|update-builtin-mcp-server|get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|get-server-scopes|set-server-scope-pin|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delegation-status|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (prepare-ema|read-ema|unlink-ema|create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-new-client-callback-url|get-remote-session-client|delete-remote-session-client)",
@@ -2057,6 +2057,12 @@ func ParseEndpoint(
 		metaMcpListMetaMcpMembersApikeyTokenFlag      = metaMcpListMetaMcpMembersFlags.String("apikey-token", "", "")
 		metaMcpListMetaMcpMembersProjectSlugInputFlag = metaMcpListMetaMcpMembersFlags.String("project-slug-input", "", "")
 
+		metaMcpSetBuiltinMetaMcpMemberFlags                = flag.NewFlagSet("set-builtin-meta-mcp-member", flag.ExitOnError)
+		metaMcpSetBuiltinMetaMcpMemberBodyFlag             = metaMcpSetBuiltinMetaMcpMemberFlags.String("body", "REQUIRED", "")
+		metaMcpSetBuiltinMetaMcpMemberSessionTokenFlag     = metaMcpSetBuiltinMetaMcpMemberFlags.String("session-token", "", "")
+		metaMcpSetBuiltinMetaMcpMemberApikeyTokenFlag      = metaMcpSetBuiltinMetaMcpMemberFlags.String("apikey-token", "", "")
+		metaMcpSetBuiltinMetaMcpMemberProjectSlugInputFlag = metaMcpSetBuiltinMetaMcpMemberFlags.String("project-slug-input", "", "")
+
 		metaMcpAddMetaMcpMemberFlags                = flag.NewFlagSet("add-meta-mcp-member", flag.ExitOnError)
 		metaMcpAddMetaMcpMemberBodyFlag             = metaMcpAddMetaMcpMemberFlags.String("body", "REQUIRED", "")
 		metaMcpAddMetaMcpMemberSessionTokenFlag     = metaMcpAddMetaMcpMemberFlags.String("session-token", "", "")
@@ -2541,6 +2547,15 @@ func ParseEndpoint(
 		featuresSetRemoteSessionAutoRefreshPolicySessionTokenFlag = featuresSetRemoteSessionAutoRefreshPolicyFlags.String("session-token", "", "")
 
 		projectsFlags = flag.NewFlagSet("projects", flag.ContinueOnError)
+
+		projectsListBuiltinMcpServersFlags                = flag.NewFlagSet("list-builtin-mcp-servers", flag.ExitOnError)
+		projectsListBuiltinMcpServersSessionTokenFlag     = projectsListBuiltinMcpServersFlags.String("session-token", "", "")
+		projectsListBuiltinMcpServersProjectSlugInputFlag = projectsListBuiltinMcpServersFlags.String("project-slug-input", "", "")
+
+		projectsUpdateBuiltinMcpServerFlags                = flag.NewFlagSet("update-builtin-mcp-server", flag.ExitOnError)
+		projectsUpdateBuiltinMcpServerBodyFlag             = projectsUpdateBuiltinMcpServerFlags.String("body", "REQUIRED", "")
+		projectsUpdateBuiltinMcpServerSessionTokenFlag     = projectsUpdateBuiltinMcpServerFlags.String("session-token", "", "")
+		projectsUpdateBuiltinMcpServerProjectSlugInputFlag = projectsUpdateBuiltinMcpServerFlags.String("project-slug-input", "", "")
 
 		projectsGetProjectFlags            = flag.NewFlagSet("get-project", flag.ExitOnError)
 		projectsGetProjectSlugFlag         = projectsGetProjectFlags.String("slug", "REQUIRED", "")
@@ -5585,6 +5600,7 @@ func ParseEndpoint(
 	metaMcpUpdateMetaMcpServerFlags.Usage = metaMcpUpdateMetaMcpServerUsage
 	metaMcpDeleteMetaMcpServerFlags.Usage = metaMcpDeleteMetaMcpServerUsage
 	metaMcpListMetaMcpMembersFlags.Usage = metaMcpListMetaMcpMembersUsage
+	metaMcpSetBuiltinMetaMcpMemberFlags.Usage = metaMcpSetBuiltinMetaMcpMemberUsage
 	metaMcpAddMetaMcpMemberFlags.Usage = metaMcpAddMetaMcpMemberUsage
 	metaMcpUpdateMetaMcpMemberFlags.Usage = metaMcpUpdateMetaMcpMemberUsage
 	metaMcpRemoveMetaMcpMemberFlags.Usage = metaMcpRemoveMetaMcpMemberUsage
@@ -5722,6 +5738,8 @@ func ParseEndpoint(
 	featuresSetRemoteSessionAutoRefreshPolicyFlags.Usage = featuresSetRemoteSessionAutoRefreshPolicyUsage
 
 	projectsFlags.Usage = projectsUsage
+	projectsListBuiltinMcpServersFlags.Usage = projectsListBuiltinMcpServersUsage
+	projectsUpdateBuiltinMcpServerFlags.Usage = projectsUpdateBuiltinMcpServerUsage
 	projectsGetProjectFlags.Usage = projectsGetProjectUsage
 	projectsCreateProjectFlags.Usage = projectsCreateProjectUsage
 	projectsUpdateProjectFlags.Usage = projectsUpdateProjectUsage
@@ -7653,6 +7671,9 @@ func ParseEndpoint(
 			case "list-meta-mcp-members":
 				epf = metaMcpListMetaMcpMembersFlags
 
+			case "set-builtin-meta-mcp-member":
+				epf = metaMcpSetBuiltinMetaMcpMemberFlags
+
 			case "add-meta-mcp-member":
 				epf = metaMcpAddMetaMcpMemberFlags
 
@@ -8032,6 +8053,12 @@ func ParseEndpoint(
 
 		case "projects":
 			switch epn {
+			case "list-builtin-mcp-servers":
+				epf = projectsListBuiltinMcpServersFlags
+
+			case "update-builtin-mcp-server":
+				epf = projectsUpdateBuiltinMcpServerFlags
+
 			case "get-project":
 				epf = projectsGetProjectFlags
 
@@ -10786,6 +10813,9 @@ func ParseEndpoint(
 			case "list-meta-mcp-members":
 				endpoint = c.ListMetaMcpMembers()
 				data, err = metamcpc.BuildListMetaMcpMembersPayload(*metaMcpListMetaMcpMembersMetaMcpServerIDFlag, *metaMcpListMetaMcpMembersSessionTokenFlag, *metaMcpListMetaMcpMembersApikeyTokenFlag, *metaMcpListMetaMcpMembersProjectSlugInputFlag)
+			case "set-builtin-meta-mcp-member":
+				endpoint = c.SetBuiltinMetaMcpMember()
+				data, err = metamcpc.BuildSetBuiltinMetaMcpMemberPayload(*metaMcpSetBuiltinMetaMcpMemberBodyFlag, *metaMcpSetBuiltinMetaMcpMemberSessionTokenFlag, *metaMcpSetBuiltinMetaMcpMemberApikeyTokenFlag, *metaMcpSetBuiltinMetaMcpMemberProjectSlugInputFlag)
 			case "add-meta-mcp-member":
 				endpoint = c.AddMetaMcpMember()
 				data, err = metamcpc.BuildAddMetaMcpMemberPayload(*metaMcpAddMetaMcpMemberBodyFlag, *metaMcpAddMetaMcpMemberSessionTokenFlag, *metaMcpAddMetaMcpMemberApikeyTokenFlag, *metaMcpAddMetaMcpMemberProjectSlugInputFlag)
@@ -11177,6 +11207,12 @@ func ParseEndpoint(
 		case "projects":
 			c := projectsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "list-builtin-mcp-servers":
+				endpoint = c.ListBuiltinMcpServers()
+				data, err = projectsc.BuildListBuiltinMcpServersPayload(*projectsListBuiltinMcpServersSessionTokenFlag, *projectsListBuiltinMcpServersProjectSlugInputFlag)
+			case "update-builtin-mcp-server":
+				endpoint = c.UpdateBuiltinMcpServer()
+				data, err = projectsc.BuildUpdateBuiltinMcpServerPayload(*projectsUpdateBuiltinMcpServerBodyFlag, *projectsUpdateBuiltinMcpServerSessionTokenFlag, *projectsUpdateBuiltinMcpServerProjectSlugInputFlag)
 			case "get-project":
 				endpoint = c.GetProject()
 				data, err = projectsc.BuildGetProjectPayload(*projectsGetProjectSlugFlag, *projectsGetProjectApikeyTokenFlag, *projectsGetProjectSessionTokenFlag)
@@ -20797,6 +20833,7 @@ func metaMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    update-meta-mcp-server: Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility or network_access_mode preserves the respective stored value, so a caller that does not manage those policies cannot change them by saving an unrelated field.`)
 	fmt.Fprintln(os.Stderr, `    delete-meta-mcp-server: Delete a meta MCP server. Its live memberships and MCP endpoints are deleted along with it.`)
 	fmt.Fprintln(os.Stderr, `    list-meta-mcp-members: List the members of a meta MCP server, ordered by sort order`)
+	fmt.Fprintln(os.Stderr, `    set-builtin-meta-mcp-member: Add or configure a built-in MCP server in a gateway. Administrator only; membership does not grant connection access.`)
 	fmt.Fprintln(os.Stderr, `    add-meta-mcp-member: Add an MCP server to a meta MCP server's member set`)
 	fmt.Fprintln(os.Stderr, `    update-meta-mcp-member: Update a meta MCP membership's sort order`)
 	fmt.Fprintln(os.Stderr, `    remove-meta-mcp-member: Remove a member from a meta MCP server`)
@@ -20944,6 +20981,30 @@ func metaMcpListMetaMcpMembersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "meta-mcp list-meta-mcp-members --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func metaMcpSetBuiltinMetaMcpMemberUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] meta-mcp set-builtin-meta-mcp-member", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Add or configure a built-in MCP server in a gateway. Administrator only; membership does not grant connection access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "meta-mcp set-builtin-meta-mcp-member --body '{\n      \"builtin_key\": \"abc123\",\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"sort_order\": 1\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func metaMcpAddMetaMcpMemberUsage() {
@@ -23365,6 +23426,8 @@ func projectsUsage() {
 	fmt.Fprintln(os.Stderr, `Manages projects in Speakeasy.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] projects COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-builtin-mcp-servers: List code-owned MCP servers and their project preferences. Only live organization administrators may discover built-ins. Hidden servers are included for settings management; hiding never changes runtime authorization.`)
+	fmt.Fprintln(os.Stderr, `    update-builtin-mcp-server: Update visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.`)
 	fmt.Fprintln(os.Stderr, `    get-project: Get project details by slug.`)
 	fmt.Fprintln(os.Stderr, `    create-project: Create a new project.`)
 	fmt.Fprintln(os.Stderr, `    update-project: Update the display name of the current project.`)
@@ -23378,6 +23441,48 @@ func projectsUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s projects COMMAND --help\n", os.Args[0])
 }
+func projectsListBuiltinMcpServersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] projects list-builtin-mcp-servers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List code-owned MCP servers and their project preferences. Only live organization administrators may discover built-ins. Hidden servers are included for settings management; hiding never changes runtime authorization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects list-builtin-mcp-servers --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func projectsUpdateBuiltinMcpServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] projects update-builtin-mcp-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "projects update-builtin-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_version\": \"abc123\",\n      \"hidden\": false,\n      \"key\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func projectsGetProjectUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] projects get-project", os.Args[0])

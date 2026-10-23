@@ -33,11 +33,13 @@ const (
 	metaMemberBackendHosted metaMemberBackend = iota
 	// Remote/tunneled: dispatched through the member's own upstream (AIM-87).
 	metaMemberBackendProxied
+	metaMemberBackendBuiltin
 )
 
 // metaMember is one servable, authorized member in a request's snapshot.
 type metaMember struct {
-	serverID uuid.UUID
+	builtinKey string
+	serverID   uuid.UUID
 	// The member's own project. A stored gateway's members all share the
 	// gateway's project, but an agent gateway's can span several, so member
 	// dispatch keys on this rather than on the request's project.
@@ -89,6 +91,12 @@ type metaMember struct {
 // probe per listing, so it stays unknown until cached health exists.
 func (s *Service) memberStatus(ctx context.Context, member metaMember) string {
 	switch {
+	case member.backend == metaMemberBackendBuiltin:
+		supported, _, err := s.builtinMemberAuth(ctx, member)
+		if err != nil || !supported {
+			return metamcp.StatusUnavailable
+		}
+		return metamcp.StatusAvailable
 	case member.backend == metaMemberBackendHosted:
 		return metamcp.StatusAvailable
 	case member.tunneledServerID.Valid:
@@ -114,6 +122,7 @@ func (s *Service) memberStatus(ctx context.Context, member metaMember) string {
 // agent gateway enumerates the servers its delegated policy names. Admission
 // is the same for both, so it must not be reimplemented per source.
 type metaMemberCandidate struct {
+	builtinKey                 string
 	serverID                   uuid.UUID
 	projectID                  uuid.UUID
 	projectSlug                string
@@ -182,6 +191,11 @@ func (s *Service) resolveMetaMemberSnapshot(
 		})
 	}
 
+	builtins, err := s.storedBuiltinCandidates(ctx, metaServerID, projectID)
+	if err != nil {
+		return ctx, nil, err
+	}
+	candidates = append(candidates, builtins...)
 	return s.admitMetaMembers(ctx, logger, surface, organizationID, candidates)
 }
 
@@ -311,6 +325,11 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		})
 	}
 
+	builtins, err := s.derivedBuiltinCandidates(ctx, organizationID, scopeProjectID)
+	if err != nil {
+		return ctx, nil, err
+	}
+	candidates = append(candidates, builtins...)
 	ctx, members, err := s.admitMetaMembers(ctx, logger, authzSurface, organizationID, candidates)
 	if err != nil {
 		return ctx, nil, err
@@ -403,6 +422,11 @@ func (s *Service) admitMetaMembers(
 			continue
 		}
 
+		if candidate.builtinKey != "" {
+			if err := s.authz.RequireBuiltinConnect(ctx, candidate.serverID.String(), candidate.projectID.String()); err != nil {
+				continue
+			}
+		}
 		backend := metaMemberBackendProxied
 		if candidate.toolsetID.Valid {
 			backend = metaMemberBackendHosted
@@ -445,7 +469,11 @@ func (s *Service) admitMetaMembers(
 			continue
 		}
 
+		if candidate.builtinKey != "" {
+			backend = metaMemberBackendBuiltin
+		}
 		members = append(members, metaMember{
+			builtinKey:                 candidate.builtinKey,
 			serverID:                   candidate.serverID,
 			projectID:                  candidate.projectID,
 			projectSlug:                candidate.projectSlug,

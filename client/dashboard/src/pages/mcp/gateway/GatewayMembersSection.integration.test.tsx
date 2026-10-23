@@ -1,3 +1,6 @@
+vi.mock("./BuiltinGatewayMembersSection", () => ({
+  BuiltinGatewayMembersSection: () => null,
+}));
 import {
   act,
   cleanup,

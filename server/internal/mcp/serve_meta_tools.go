@@ -231,6 +231,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	if !ok {
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", serverSlug).LogWarn(ctx, logger)
 	}
+	if member.backend == metaMemberBackendBuiltin {
+		return s.executeBuiltinMember(ctx, gate, member, req, toolName, arguments, meta)
+	}
 	if member.backend != metaMemberBackendHosted {
 		return s.executeProxiedMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta)
 	}

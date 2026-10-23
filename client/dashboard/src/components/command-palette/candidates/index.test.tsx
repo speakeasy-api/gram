@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   scopes: [] as string[],
+  builtinServers: [] as unknown[],
+  goToBuiltin: vi.fn(),
   includeNewResourceFixtures: false,
   /**
    * When set, the mcp:write grant is selector-scoped to these server ids:
@@ -65,6 +67,11 @@ vi.mock("@gram/client/react-query/listToolsets.js", () => ({
     record("useListToolsets", args);
     return { data: { toolsets: mocks.toolsets } };
   },
+}));
+vi.mock("@gram/client/react-query/builtinMcpServers.js", () => ({
+  buildBuiltinMcpServersQuery: (_client: unknown, request: unknown) => ({
+    queryKey: ["builtin", request],
+  }),
 }));
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: (...args: unknown[]) => {
@@ -175,6 +182,10 @@ vi.mock("@/lib/mcp-server-visibility", async (importOriginal) => ({
   invalidateMcpServerQueries: mocks.invalidateMcpServerQueries,
 }));
 vi.mock("@tanstack/react-query", () => ({
+  useQuery: (options: unknown) => {
+    record("useBuiltinMcpServers", [undefined, undefined, options]);
+    return { data: { servers: mocks.builtinServers } };
+  },
   useQueryClient: () => ({
     fetchQuery: mocks.fetchQuery,
     clear: mocks.clearQueryCache,
@@ -278,6 +289,7 @@ vi.mock("@/routes", () => ({
     mcp: {
       goTo: vi.fn(),
       details: { goTo: mocks.goToToolsetDetails },
+      builtin: { goTo: mocks.goToBuiltin },
       x: { overview: { goTo: mocks.goToMcpServerOverview } },
       catalog: { detail: { goTo: mocks.goToCatalogDetail } },
       sources: {
@@ -386,6 +398,7 @@ function acme(projects: ReturnType<typeof project>[]) {
 
 beforeEach(() => {
   mocks.scopes = [];
+  mocks.builtinServers = [];
   mocks.includeNewResourceFixtures = false;
   mocks.mcpWriteResourceIds = null;
   mocks.inProject = true;
@@ -1718,6 +1731,54 @@ describe("new resource source wiring", () => {
     renderCandidates({ enabled: false });
     expect(useSkillCandidates).toHaveBeenLastCalledWith({ enabled: false });
     expect(useAgentIdentityCandidates).toHaveBeenLastCalledWith({
+      enabled: false,
+    });
+  });
+});
+
+describe("built-in MCP launcher registration", () => {
+  it("registers admin-only built-ins and excludes stale recent entries", () => {
+    mocks.scopes = ["org:admin"];
+    mocks.builtinServers = [
+      { id: "builtin-slack", key: "slack", name: "Slack", hidden: false },
+    ];
+    mocks.recents = [
+      {
+        href: "/acme/projects/default/mcp/builtin/slack",
+        label: "Slack",
+        visitedAt: 1,
+      },
+    ];
+    const { result } = renderCandidates();
+    const builtin = result.current.find(
+      (candidate) => candidate.id === "builtin-mcp:builtin-slack",
+    );
+    expect(builtin).toBeDefined();
+    builtin!.run("open");
+    expect(mocks.goToBuiltin).toHaveBeenCalledWith("slack");
+    expect(
+      result.current.some(
+        (candidate) =>
+          candidate.id.startsWith("recent:") &&
+          candidate.id.includes("/builtin/"),
+      ),
+    ).toBe(false);
+  });
+
+  it("does not expose cached built-ins when admin access is absent", () => {
+    mocks.scopes = ["mcp:read"];
+    mocks.builtinServers = [
+      { id: "builtin-slack", key: "slack", name: "Slack", hidden: false },
+    ];
+    const { result } = renderCandidates();
+    expect(
+      result.current.some((candidate) =>
+        candidate.id.startsWith("builtin-mcp:"),
+      ),
+    ).toBe(false);
+    expect(
+      (mocks.calls.useBuiltinMcpServers?.at(-1) as unknown[] | undefined)?.[2],
+    ).toMatchObject({
       enabled: false,
     });
   });

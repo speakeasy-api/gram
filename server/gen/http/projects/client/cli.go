@@ -17,6 +17,69 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildListBuiltinMcpServersPayload builds the payload for the projects
+// listBuiltinMcpServers endpoint from CLI flags.
+func BuildListBuiltinMcpServersPayload(projectsListBuiltinMcpServersSessionToken string, projectsListBuiltinMcpServersProjectSlugInput string) (*projects.ListBuiltinMcpServersPayload, error) {
+	var sessionToken *string
+	{
+		if projectsListBuiltinMcpServersSessionToken != "" {
+			sessionToken = &projectsListBuiltinMcpServersSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if projectsListBuiltinMcpServersProjectSlugInput != "" {
+			projectSlugInput = &projectsListBuiltinMcpServersProjectSlugInput
+		}
+	}
+	v := &projects.ListBuiltinMcpServersPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateBuiltinMcpServerPayload builds the payload for the projects
+// updateBuiltinMcpServer endpoint from CLI flags.
+func BuildUpdateBuiltinMcpServerPayload(projectsUpdateBuiltinMcpServerBody string, projectsUpdateBuiltinMcpServerSessionToken string, projectsUpdateBuiltinMcpServerProjectSlugInput string) (*projects.UpdateBuiltinMcpServerPayload, error) {
+	var err error
+	var body UpdateBuiltinMcpServerRequestBody
+	{
+		err = json.Unmarshal([]byte(projectsUpdateBuiltinMcpServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_version\": \"abc123\",\n      \"hidden\": false,\n      \"key\": \"abc123\"\n   }'")
+		}
+		if body.EnvironmentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if projectsUpdateBuiltinMcpServerSessionToken != "" {
+			sessionToken = &projectsUpdateBuiltinMcpServerSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if projectsUpdateBuiltinMcpServerProjectSlugInput != "" {
+			projectSlugInput = &projectsUpdateBuiltinMcpServerProjectSlugInput
+		}
+	}
+	v := &projects.UpdateBuiltinMcpServerPayload{
+		Key:             body.Key,
+		Hidden:          body.Hidden,
+		EnvironmentID:   body.EnvironmentID,
+		ExpectedVersion: body.ExpectedVersion,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetProjectPayload builds the payload for the projects getProject
 // endpoint from CLI flags.
 func BuildGetProjectPayload(projectsGetProjectSlug string, projectsGetProjectApikeyToken string, projectsGetProjectSessionToken string) (*projects.GetProjectPayload, error) {

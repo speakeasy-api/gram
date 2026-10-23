@@ -17,6 +17,14 @@ import (
 
 // Manages projects in Speakeasy.
 type Service interface {
+	// List code-owned MCP servers and their project preferences. Only live
+	// organization administrators may discover built-ins. Hidden servers are
+	// included for settings management; hiding never changes runtime authorization.
+	ListBuiltinMcpServers(context.Context, *ListBuiltinMcpServersPayload) (res *ListBuiltinMcpServersResult, err error)
+	// Update visual visibility and the default environment of a built-in MCP
+	// server. Only live organization administrators may update settings; humans
+	// cannot connect to built-ins. Requires the current version.
+	UpdateBuiltinMcpServer(context.Context, *UpdateBuiltinMcpServerPayload) (res *BuiltinMcpServer, err error)
 	// Get project details by slug.
 	GetProject(context.Context, *GetProjectPayload) (res *GetProjectResult, err error)
 	// Create a new project.
@@ -58,7 +66,7 @@ const ServiceName = "projects"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"getProject", "createProject", "updateProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin", "deleteProject", "setOrganizationWhitelist"}
+var MethodNames = [11]string{"listBuiltinMcpServers", "updateBuiltinMcpServer", "getProject", "createProject", "updateProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin", "deleteProject", "setOrganizationWhitelist"}
 
 type AllowedOrigin struct {
 	// The ID of the allowed origin
@@ -72,6 +80,28 @@ type AllowedOrigin struct {
 	CreatedAt string
 	// The last update date of the allowed origin.
 	UpdatedAt string
+}
+
+// BuiltinMcpServer is the result type of the projects service
+// updateBuiltinMcpServer method.
+type BuiltinMcpServer struct {
+	ID                  string
+	Key                 string
+	Name                string
+	Description         string
+	URL                 string
+	Hidden              bool
+	EnvironmentID       *string
+	Version             string
+	Tools               []*BuiltinMcpTool
+	CredentialVariables []string
+}
+
+type BuiltinMcpTool struct {
+	Name        string
+	Description string
+	// JSON input schema
+	InputSchema string
 }
 
 // CreateProjectPayload is the payload type of the projects service
@@ -130,6 +160,19 @@ type ListAllowedOriginsPayload struct {
 type ListAllowedOriginsResult struct {
 	// The list of allowed origins
 	AllowedOrigins []*AllowedOrigin
+}
+
+// ListBuiltinMcpServersPayload is the payload type of the projects service
+// listBuiltinMcpServers method.
+type ListBuiltinMcpServersPayload struct {
+	ProjectSlugInput *string
+	SessionToken     *string
+}
+
+// ListBuiltinMcpServersResult is the result type of the projects service
+// listBuiltinMcpServers method.
+type ListBuiltinMcpServersResult struct {
+	Servers []*BuiltinMcpServer
 }
 
 // ListProjectsPayload is the payload type of the projects service listProjects
@@ -198,6 +241,21 @@ type SetOrganizationWhitelistPayload struct {
 type SetProjectLogoResult struct {
 	// The updated project with the new logo
 	Project *Project
+}
+
+// UpdateBuiltinMcpServerPayload is the payload type of the projects service
+// updateBuiltinMcpServer method.
+type UpdateBuiltinMcpServerPayload struct {
+	ProjectSlugInput *string
+	SessionToken     *string
+	// Immutable built-in key
+	Key string
+	// Hide from discovery only; runtime access and gateway membership do not change
+	Hidden bool
+	// Project environment override; omit to use the project's default environment
+	EnvironmentID *string
+	// Version returned by the latest read
+	ExpectedVersion string
 }
 
 // UpdateProjectPayload is the payload type of the projects service

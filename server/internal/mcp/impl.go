@@ -214,6 +214,7 @@ type Service struct {
 	platformExtras         []platformtools.ExternalTool
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
+	builtinExecutors       map[string]platformtools.PlatformToolExecutor
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	// Short-lived, single-use install codes. Holds a live agent key, so it is
 	// cache-only and never written to the database.
@@ -524,6 +525,8 @@ func NewService(
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)
 
+	// Built-ins deliberately omit assistant trigger routing and extras.
+	builtinExecutors, _ := platformtools.BuildExecutors(platformtools.Dependencies{Logger: logger, DB: db, TelemetryService: telemSvc, Audit: auditLogger, TriggerApp: nil, SlackHTTPClient: guardianPolicy.PooledClient(), Encryption: enc, ServerURL: serverURL})
 	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
 	service := &Service{
 		assistantWorkloadTokens:   nil,
@@ -596,6 +599,7 @@ func NewService(
 		platformExtras:         platformExtras,
 		platformFeatureChecker: platformFeatureChecker,
 		platformToolsets:       platformToolsets,
+		builtinExecutors:       builtinExecutors,
 		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](
 			logger.With(attr.SlogCacheNamespace("authn_challenge")),
 			cacheImpl,
@@ -787,6 +791,7 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
+	o11y.AttachHandler(mux, "POST", BuiltinRoute, oops.MCPErrHandle(service.logger, service.ServeBuiltin).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.MCPErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", deviceagenttoken.TokenPathPattern, oops.ErrHandle(service.logger, service.HandleDeviceAgentToken).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)

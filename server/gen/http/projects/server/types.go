@@ -15,6 +15,19 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// UpdateBuiltinMcpServerRequestBody is the type of the "projects" service
+// "updateBuiltinMcpServer" endpoint HTTP request body.
+type UpdateBuiltinMcpServerRequestBody struct {
+	// Immutable built-in key
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// Hide from discovery only; runtime access and gateway membership do not change
+	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
+	// Project environment override; omit to use the project's default environment
+	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// Version returned by the latest read
+	ExpectedVersion *string `form:"expected_version,omitempty" json:"expected_version,omitempty" xml:"expected_version,omitempty"`
+}
+
 // CreateProjectRequestBody is the type of the "projects" service
 // "createProject" endpoint HTTP request body.
 type CreateProjectRequestBody struct {
@@ -53,6 +66,27 @@ type SetOrganizationWhitelistRequestBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Whether the organization should be whitelisted
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+}
+
+// ListBuiltinMcpServersResponseBody is the type of the "projects" service
+// "listBuiltinMcpServers" endpoint HTTP response body.
+type ListBuiltinMcpServersResponseBody struct {
+	Servers []*BuiltinMcpServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+}
+
+// UpdateBuiltinMcpServerResponseBody is the type of the "projects" service
+// "updateBuiltinMcpServer" endpoint HTTP response body.
+type UpdateBuiltinMcpServerResponseBody struct {
+	ID                  string                        `form:"id" json:"id" xml:"id"`
+	Key                 string                        `form:"key" json:"key" xml:"key"`
+	Name                string                        `form:"name" json:"name" xml:"name"`
+	Description         string                        `form:"description" json:"description" xml:"description"`
+	URL                 string                        `form:"url" json:"url" xml:"url"`
+	Hidden              bool                          `form:"hidden" json:"hidden" xml:"hidden"`
+	EnvironmentID       *string                       `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	Version             string                        `form:"version" json:"version" xml:"version"`
+	Tools               []*BuiltinMcpToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	CredentialVariables []string                      `form:"credential_variables" json:"credential_variables" xml:"credential_variables"`
 }
 
 // GetProjectResponseBody is the type of the "projects" service "getProject"
@@ -102,6 +136,386 @@ type ListAllowedOriginsResponseBody struct {
 type UpsertAllowedOriginResponseBody struct {
 	// The upserted allowed origin
 	AllowedOrigin *AllowedOriginResponseBody `form:"allowed_origin" json:"allowed_origin" xml:"allowed_origin"`
+}
+
+// ListBuiltinMcpServersUnauthorizedResponseBody is the type of the "projects"
+// service "listBuiltinMcpServers" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListBuiltinMcpServersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinMcpServersForbiddenResponseBody is the type of the "projects"
+// service "listBuiltinMcpServers" endpoint HTTP response body for the
+// "forbidden" error.
+type ListBuiltinMcpServersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinMcpServersBadRequestResponseBody is the type of the "projects"
+// service "listBuiltinMcpServers" endpoint HTTP response body for the
+// "bad_request" error.
+type ListBuiltinMcpServersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinMcpServersNotFoundResponseBody is the type of the "projects"
+// service "listBuiltinMcpServers" endpoint HTTP response body for the
+// "not_found" error.
+type ListBuiltinMcpServersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinMcpServersConflictResponseBody is the type of the "projects"
+// service "listBuiltinMcpServers" endpoint HTTP response body for the
+// "conflict" error.
+type ListBuiltinMcpServersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinMcpServersUnsupportedMediaResponseBody is the type of the
+// "projects" service "listBuiltinMcpServers" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListBuiltinMcpServersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinMcpServersInvalidResponseBody is the type of the "projects"
+// service "listBuiltinMcpServers" endpoint HTTP response body for the
+// "invalid" error.
+type ListBuiltinMcpServersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinMcpServersInvariantViolationResponseBody is the type of the
+// "projects" service "listBuiltinMcpServers" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListBuiltinMcpServersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinMcpServersUnexpectedResponseBody is the type of the "projects"
+// service "listBuiltinMcpServers" endpoint HTTP response body for the
+// "unexpected" error.
+type ListBuiltinMcpServersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListBuiltinMcpServersGatewayErrorResponseBody is the type of the "projects"
+// service "listBuiltinMcpServers" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListBuiltinMcpServersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateBuiltinMcpServerUnauthorizedResponseBody is the type of the "projects"
+// service "updateBuiltinMcpServer" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateBuiltinMcpServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateBuiltinMcpServerForbiddenResponseBody is the type of the "projects"
+// service "updateBuiltinMcpServer" endpoint HTTP response body for the
+// "forbidden" error.
+type UpdateBuiltinMcpServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateBuiltinMcpServerBadRequestResponseBody is the type of the "projects"
+// service "updateBuiltinMcpServer" endpoint HTTP response body for the
+// "bad_request" error.
+type UpdateBuiltinMcpServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateBuiltinMcpServerNotFoundResponseBody is the type of the "projects"
+// service "updateBuiltinMcpServer" endpoint HTTP response body for the
+// "not_found" error.
+type UpdateBuiltinMcpServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateBuiltinMcpServerConflictResponseBody is the type of the "projects"
+// service "updateBuiltinMcpServer" endpoint HTTP response body for the
+// "conflict" error.
+type UpdateBuiltinMcpServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateBuiltinMcpServerUnsupportedMediaResponseBody is the type of the
+// "projects" service "updateBuiltinMcpServer" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateBuiltinMcpServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateBuiltinMcpServerInvalidResponseBody is the type of the "projects"
+// service "updateBuiltinMcpServer" endpoint HTTP response body for the
+// "invalid" error.
+type UpdateBuiltinMcpServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateBuiltinMcpServerInvariantViolationResponseBody is the type of the
+// "projects" service "updateBuiltinMcpServer" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateBuiltinMcpServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateBuiltinMcpServerUnexpectedResponseBody is the type of the "projects"
+// service "updateBuiltinMcpServer" endpoint HTTP response body for the
+// "unexpected" error.
+type UpdateBuiltinMcpServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateBuiltinMcpServerGatewayErrorResponseBody is the type of the "projects"
+// service "updateBuiltinMcpServer" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateBuiltinMcpServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // GetProjectUnauthorizedResponseBody is the type of the "projects" service
@@ -1759,6 +2173,28 @@ type SetOrganizationWhitelistGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// BuiltinMcpServerResponseBody is used to define fields on response body types.
+type BuiltinMcpServerResponseBody struct {
+	ID                  string                        `form:"id" json:"id" xml:"id"`
+	Key                 string                        `form:"key" json:"key" xml:"key"`
+	Name                string                        `form:"name" json:"name" xml:"name"`
+	Description         string                        `form:"description" json:"description" xml:"description"`
+	URL                 string                        `form:"url" json:"url" xml:"url"`
+	Hidden              bool                          `form:"hidden" json:"hidden" xml:"hidden"`
+	EnvironmentID       *string                       `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	Version             string                        `form:"version" json:"version" xml:"version"`
+	Tools               []*BuiltinMcpToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	CredentialVariables []string                      `form:"credential_variables" json:"credential_variables" xml:"credential_variables"`
+}
+
+// BuiltinMcpToolResponseBody is used to define fields on response body types.
+type BuiltinMcpToolResponseBody struct {
+	Name        string `form:"name" json:"name" xml:"name"`
+	Description string `form:"description" json:"description" xml:"description"`
+	// JSON input schema
+	InputSchema string `form:"input_schema" json:"input_schema" xml:"input_schema"`
+}
+
 // ProjectResponseBody is used to define fields on response body types.
 type ProjectResponseBody struct {
 	// The ID of the project
@@ -1800,6 +2236,61 @@ type AllowedOriginResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the allowed origin.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// NewListBuiltinMcpServersResponseBody builds the HTTP response body from the
+// result of the "listBuiltinMcpServers" endpoint of the "projects" service.
+func NewListBuiltinMcpServersResponseBody(res *projects.ListBuiltinMcpServersResult) *ListBuiltinMcpServersResponseBody {
+	body := &ListBuiltinMcpServersResponseBody{}
+	if res.Servers != nil {
+		body.Servers = make([]*BuiltinMcpServerResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalProjectsBuiltinMcpServerToBuiltinMcpServerResponseBody(val)
+		}
+	} else {
+		body.Servers = []*BuiltinMcpServerResponseBody{}
+	}
+	return body
+}
+
+// NewUpdateBuiltinMcpServerResponseBody builds the HTTP response body from the
+// result of the "updateBuiltinMcpServer" endpoint of the "projects" service.
+func NewUpdateBuiltinMcpServerResponseBody(res *projects.BuiltinMcpServer) *UpdateBuiltinMcpServerResponseBody {
+	body := &UpdateBuiltinMcpServerResponseBody{
+		ID:            res.ID,
+		Key:           res.Key,
+		Name:          res.Name,
+		Description:   res.Description,
+		URL:           res.URL,
+		Hidden:        res.Hidden,
+		EnvironmentID: res.EnvironmentID,
+		Version:       res.Version,
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*BuiltinMcpToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalProjectsBuiltinMcpToolToBuiltinMcpToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*BuiltinMcpToolResponseBody{}
+	}
+	if res.CredentialVariables != nil {
+		body.CredentialVariables = make([]string, len(res.CredentialVariables))
+		for i, val := range res.CredentialVariables {
+			body.CredentialVariables[i] = val
+		}
+	} else {
+		body.CredentialVariables = []string{}
+	}
+	return body
 }
 
 // NewGetProjectResponseBody builds the HTTP response body from the result of
@@ -1886,6 +2377,306 @@ func NewUpsertAllowedOriginResponseBody(res *projects.UpsertAllowedOriginResult)
 	body := &UpsertAllowedOriginResponseBody{}
 	if res.AllowedOrigin != nil {
 		body.AllowedOrigin = marshalProjectsAllowedOriginToAllowedOriginResponseBody(res.AllowedOrigin)
+	}
+	return body
+}
+
+// NewListBuiltinMcpServersUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listBuiltinMcpServers" endpoint of the
+// "projects" service.
+func NewListBuiltinMcpServersUnauthorizedResponseBody(res *goa.ServiceError) *ListBuiltinMcpServersUnauthorizedResponseBody {
+	body := &ListBuiltinMcpServersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinMcpServersForbiddenResponseBody builds the HTTP response body
+// from the result of the "listBuiltinMcpServers" endpoint of the "projects"
+// service.
+func NewListBuiltinMcpServersForbiddenResponseBody(res *goa.ServiceError) *ListBuiltinMcpServersForbiddenResponseBody {
+	body := &ListBuiltinMcpServersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinMcpServersBadRequestResponseBody builds the HTTP response body
+// from the result of the "listBuiltinMcpServers" endpoint of the "projects"
+// service.
+func NewListBuiltinMcpServersBadRequestResponseBody(res *goa.ServiceError) *ListBuiltinMcpServersBadRequestResponseBody {
+	body := &ListBuiltinMcpServersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinMcpServersNotFoundResponseBody builds the HTTP response body
+// from the result of the "listBuiltinMcpServers" endpoint of the "projects"
+// service.
+func NewListBuiltinMcpServersNotFoundResponseBody(res *goa.ServiceError) *ListBuiltinMcpServersNotFoundResponseBody {
+	body := &ListBuiltinMcpServersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinMcpServersConflictResponseBody builds the HTTP response body
+// from the result of the "listBuiltinMcpServers" endpoint of the "projects"
+// service.
+func NewListBuiltinMcpServersConflictResponseBody(res *goa.ServiceError) *ListBuiltinMcpServersConflictResponseBody {
+	body := &ListBuiltinMcpServersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinMcpServersUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listBuiltinMcpServers" endpoint of the
+// "projects" service.
+func NewListBuiltinMcpServersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListBuiltinMcpServersUnsupportedMediaResponseBody {
+	body := &ListBuiltinMcpServersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinMcpServersInvalidResponseBody builds the HTTP response body
+// from the result of the "listBuiltinMcpServers" endpoint of the "projects"
+// service.
+func NewListBuiltinMcpServersInvalidResponseBody(res *goa.ServiceError) *ListBuiltinMcpServersInvalidResponseBody {
+	body := &ListBuiltinMcpServersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinMcpServersInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listBuiltinMcpServers" endpoint of the
+// "projects" service.
+func NewListBuiltinMcpServersInvariantViolationResponseBody(res *goa.ServiceError) *ListBuiltinMcpServersInvariantViolationResponseBody {
+	body := &ListBuiltinMcpServersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinMcpServersUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listBuiltinMcpServers" endpoint of the "projects"
+// service.
+func NewListBuiltinMcpServersUnexpectedResponseBody(res *goa.ServiceError) *ListBuiltinMcpServersUnexpectedResponseBody {
+	body := &ListBuiltinMcpServersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListBuiltinMcpServersGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listBuiltinMcpServers" endpoint of the
+// "projects" service.
+func NewListBuiltinMcpServersGatewayErrorResponseBody(res *goa.ServiceError) *ListBuiltinMcpServersGatewayErrorResponseBody {
+	body := &ListBuiltinMcpServersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateBuiltinMcpServerUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "updateBuiltinMcpServer" endpoint of the
+// "projects" service.
+func NewUpdateBuiltinMcpServerUnauthorizedResponseBody(res *goa.ServiceError) *UpdateBuiltinMcpServerUnauthorizedResponseBody {
+	body := &UpdateBuiltinMcpServerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateBuiltinMcpServerForbiddenResponseBody builds the HTTP response body
+// from the result of the "updateBuiltinMcpServer" endpoint of the "projects"
+// service.
+func NewUpdateBuiltinMcpServerForbiddenResponseBody(res *goa.ServiceError) *UpdateBuiltinMcpServerForbiddenResponseBody {
+	body := &UpdateBuiltinMcpServerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateBuiltinMcpServerBadRequestResponseBody builds the HTTP response
+// body from the result of the "updateBuiltinMcpServer" endpoint of the
+// "projects" service.
+func NewUpdateBuiltinMcpServerBadRequestResponseBody(res *goa.ServiceError) *UpdateBuiltinMcpServerBadRequestResponseBody {
+	body := &UpdateBuiltinMcpServerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateBuiltinMcpServerNotFoundResponseBody builds the HTTP response body
+// from the result of the "updateBuiltinMcpServer" endpoint of the "projects"
+// service.
+func NewUpdateBuiltinMcpServerNotFoundResponseBody(res *goa.ServiceError) *UpdateBuiltinMcpServerNotFoundResponseBody {
+	body := &UpdateBuiltinMcpServerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateBuiltinMcpServerConflictResponseBody builds the HTTP response body
+// from the result of the "updateBuiltinMcpServer" endpoint of the "projects"
+// service.
+func NewUpdateBuiltinMcpServerConflictResponseBody(res *goa.ServiceError) *UpdateBuiltinMcpServerConflictResponseBody {
+	body := &UpdateBuiltinMcpServerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateBuiltinMcpServerUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "updateBuiltinMcpServer" endpoint of
+// the "projects" service.
+func NewUpdateBuiltinMcpServerUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateBuiltinMcpServerUnsupportedMediaResponseBody {
+	body := &UpdateBuiltinMcpServerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateBuiltinMcpServerInvalidResponseBody builds the HTTP response body
+// from the result of the "updateBuiltinMcpServer" endpoint of the "projects"
+// service.
+func NewUpdateBuiltinMcpServerInvalidResponseBody(res *goa.ServiceError) *UpdateBuiltinMcpServerInvalidResponseBody {
+	body := &UpdateBuiltinMcpServerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateBuiltinMcpServerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "updateBuiltinMcpServer" endpoint of
+// the "projects" service.
+func NewUpdateBuiltinMcpServerInvariantViolationResponseBody(res *goa.ServiceError) *UpdateBuiltinMcpServerInvariantViolationResponseBody {
+	body := &UpdateBuiltinMcpServerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateBuiltinMcpServerUnexpectedResponseBody builds the HTTP response
+// body from the result of the "updateBuiltinMcpServer" endpoint of the
+// "projects" service.
+func NewUpdateBuiltinMcpServerUnexpectedResponseBody(res *goa.ServiceError) *UpdateBuiltinMcpServerUnexpectedResponseBody {
+	body := &UpdateBuiltinMcpServerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateBuiltinMcpServerGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "updateBuiltinMcpServer" endpoint of the
+// "projects" service.
+func NewUpdateBuiltinMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateBuiltinMcpServerGatewayErrorResponseBody {
+	body := &UpdateBuiltinMcpServerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -3176,6 +3967,31 @@ func NewSetOrganizationWhitelistGatewayErrorResponseBody(res *goa.ServiceError) 
 	return body
 }
 
+// NewListBuiltinMcpServersPayload builds a projects service
+// listBuiltinMcpServers endpoint payload.
+func NewListBuiltinMcpServersPayload(sessionToken *string, projectSlugInput *string) *projects.ListBuiltinMcpServersPayload {
+	v := &projects.ListBuiltinMcpServersPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewUpdateBuiltinMcpServerPayload builds a projects service
+// updateBuiltinMcpServer endpoint payload.
+func NewUpdateBuiltinMcpServerPayload(body *UpdateBuiltinMcpServerRequestBody, sessionToken *string, projectSlugInput *string) *projects.UpdateBuiltinMcpServerPayload {
+	v := &projects.UpdateBuiltinMcpServerPayload{
+		Key:             *body.Key,
+		Hidden:          *body.Hidden,
+		EnvironmentID:   body.EnvironmentID,
+		ExpectedVersion: *body.ExpectedVersion,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewGetProjectPayload builds a projects service getProject endpoint payload.
 func NewGetProjectPayload(slug string, apikeyToken *string, sessionToken *string) *projects.GetProjectPayload {
 	v := &projects.GetProjectPayload{}
@@ -3285,6 +4101,24 @@ func NewSetOrganizationWhitelistPayload(body *SetOrganizationWhitelistRequestBod
 	v.ApikeyToken = apikeyToken
 
 	return v
+}
+
+// ValidateUpdateBuiltinMcpServerRequestBody runs the validations defined on
+// UpdateBuiltinMcpServerRequestBody
+func ValidateUpdateBuiltinMcpServerRequestBody(body *UpdateBuiltinMcpServerRequestBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.Hidden == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hidden", "body"))
+	}
+	if body.ExpectedVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expected_version", "body"))
+	}
+	if body.EnvironmentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+	}
+	return
 }
 
 // ValidateCreateProjectRequestBody runs the validations defined on

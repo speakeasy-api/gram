@@ -12,6 +12,7 @@ import { useDeploymentCandidates } from "./useDeploymentCandidates";
 import { useEnvironmentCandidates } from "./useEnvironmentCandidates";
 import { useMarketplaceCandidate } from "./useMarketplaceCandidate";
 import { useMcpServerCandidates } from "./useMcpServerCandidates";
+import { useBuiltinMcpCandidates } from "./useBuiltinMcpCandidates";
 import { usePersonCandidates } from "./usePersonCandidates";
 import { usePluginCandidates } from "./usePluginCandidates";
 import { usePolicyCandidates } from "./usePolicyCandidates";
@@ -92,6 +93,9 @@ export function useLauncherCandidates({
   const mcpServers = useMcpServerCandidates({
     enabled: projectEnabled && canListMcp,
   });
+  const builtinMcps = useBuiltinMcpCandidates({
+    enabled: projectEnabled && isAdmin,
+  });
   const catalog = useCatalogCandidates({
     enabled: projectEnabled && canBrowseCatalog,
   });
@@ -128,9 +132,11 @@ export function useLauncherCandidates({
       inProject && isAdmin ? list : [];
     return [
       ...actions,
-      ...recents,
+      // Built-ins use their live candidate, not recents that may outlive hiding or admin access.
+      ...recents.filter((candidate) => !/\/mcp\/builtin\//.test(candidate.id)),
       ...marketplace,
       ...(inProject && canListMcp ? mcpServers : []),
+      ...adminOnly(builtinMcps),
       // Directly below the project's own servers: when a name matches both,
       // what you already run should read first and the catalog offer second.
       ...(inProject && canBrowseCatalog ? catalog : []),
@@ -163,6 +169,7 @@ export function useLauncherCandidates({
     recents,
     marketplace,
     mcpServers,
+    builtinMcps,
     catalog,
     plugins,
     assistants,

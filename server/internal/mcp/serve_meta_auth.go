@@ -21,6 +21,9 @@ import (
 // capability, not whether a person has connected yet: an OAuth member stays
 // supported so they can connect it.
 func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, member metaMember) (supported bool, needsOAuth bool, err error) {
+	if member.backend == metaMemberBackendBuiltin {
+		return s.builtinMemberAuth(ctx, member)
+	}
 	oauth := memberNeedsSignIn(member)
 	if member.backend != metaMemberBackendHosted {
 		if !member.remoteServerID.Valid {

@@ -1103,6 +1103,34 @@ type BillingMetadatum struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type BuiltinMcpServerMember struct {
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	BuiltinKey      string
+	EnvironmentID   uuid.NullUUID
+	SortOrder       int32
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type BuiltinMcpSetting struct {
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: shared
+	BuiltinKey string
+	// @access: shared
+	Hidden bool
+	// @access: confidential
+	EnvironmentID uuid.NullUUID
+	// @access: shared
+	Version int64
+	// @access: shared
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+}
+
 type BusinessMemory struct {
 	// @access: confidential
 	ID uuid.UUID

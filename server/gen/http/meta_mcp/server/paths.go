@@ -37,6 +37,11 @@ func ListMetaMcpMembersMetaMcpPath() string {
 	return "/rpc/metaMcp.listMembers"
 }
 
+// SetBuiltinMetaMcpMemberMetaMcpPath returns the URL path to the metaMcp service setBuiltinMetaMcpMember HTTP endpoint.
+func SetBuiltinMetaMcpMemberMetaMcpPath() string {
+	return "/rpc/metaMcp.setBuiltinMember"
+}
+
 // AddMetaMcpMemberMetaMcpPath returns the URL path to the metaMcp service addMetaMcpMember HTTP endpoint.
 func AddMetaMcpMemberMetaMcpPath() string {
 	return "/rpc/metaMcp.addMember"

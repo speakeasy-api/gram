@@ -600,3 +600,31 @@ SELECT id, name
 FROM meta_mcp_servers
 WHERE project_id = @project_id
 ORDER BY deleted ASC, created_at DESC;
+
+-- name: ListBuiltinMetaMCPMembers :many
+SELECT id, builtin_key, environment_id, sort_order
+FROM builtin_mcp_server_members
+WHERE meta_mcp_server_id = @meta_mcp_server_id AND project_id = @project_id
+ORDER BY sort_order, created_at, id;
+
+-- name: GetBuiltinMetaMCPMember :one
+SELECT * FROM builtin_mcp_server_members
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SetBuiltinMetaMCPMember :one
+INSERT INTO builtin_mcp_server_members (project_id, meta_mcp_server_id, builtin_key, environment_id, sort_order)
+VALUES (@project_id, @meta_mcp_server_id, @builtin_key, sqlc.narg(environment_id), @sort_order)
+ON CONFLICT (meta_mcp_server_id, builtin_key) DO UPDATE
+SET environment_id = excluded.environment_id, sort_order = excluded.sort_order, updated_at = clock_timestamp()
+WHERE builtin_mcp_server_members.project_id = @project_id
+RETURNING *;
+
+-- name: DeleteBuiltinMetaMCPMember :one
+DELETE FROM builtin_mcp_server_members
+WHERE id = @id AND project_id = @project_id AND meta_mcp_server_id = @meta_mcp_server_id
+RETURNING *;
+
+-- name: LockBuiltinMemberEnvironment :one
+SELECT id FROM environments
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
