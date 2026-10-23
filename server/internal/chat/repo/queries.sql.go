@@ -1435,6 +1435,8 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 const getMessagesForPublication = `-- name: GetMessagesForPublication :many
 WITH messages AS MATERIALIZED (
   SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model, m.seq,
+    m.generation, m.original_message_id,
+    COALESCE(m.capture_kind, CASE WHEN m.generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind,
     COALESCE(m.user_id, '') AS actor_id, COALESCE(input.email, '') AS email
   FROM ROWS FROM (UNNEST($1::uuid[]), UNNEST($2::text[])) AS input(id, email)
   JOIN chat_messages m ON m.id = input.id AND m.project_id = $3::uuid
@@ -1475,7 +1477,8 @@ WITH messages AS MATERIALIZED (
       AND (identity.actor_id = '' OR email_candidate.user_id IS NULL OR email_candidate.user_id = identity.actor_id)
   ) fallback ON TRUE
 )
-SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model, d.department
+SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model,
+  m.generation, m.seq, m.original_message_id, m.capture_kind, d.department
 FROM messages m
 JOIN departments d ON d.actor_id = m.actor_id AND d.email = m.email
 ORDER BY m.seq
@@ -1489,14 +1492,18 @@ type GetMessagesForPublicationParams struct {
 }
 
 type GetMessagesForPublicationRow struct {
-	ID         uuid.UUID
-	ChatID     uuid.UUID
-	Role       string
-	CreatedAt  pgtype.Timestamptz
-	Source     pgtype.Text
-	Replayed   bool
-	Model      pgtype.Text
-	Department string
+	ID                uuid.UUID
+	ChatID            uuid.UUID
+	Role              string
+	CreatedAt         pgtype.Timestamptz
+	Source            pgtype.Text
+	Replayed          bool
+	Model             pgtype.Text
+	Generation        int32
+	Seq               int64
+	OriginalMessageID uuid.NullUUID
+	CaptureKind       string
+	Department        string
 }
 
 // Read authoritative identity and attribution in the write transaction.
@@ -1526,6 +1533,10 @@ func (q *Queries) GetMessagesForPublication(ctx context.Context, arg GetMessages
 			&i.Source,
 			&i.Replayed,
 			&i.Model,
+			&i.Generation,
+			&i.Seq,
+			&i.OriginalMessageID,
+			&i.CaptureKind,
 			&i.Department,
 		); err != nil {
 			return nil, err
@@ -2504,7 +2515,8 @@ func (q *Queries) ListChatMessagesByGeneration(ctx context.Context, arg ListChat
 }
 
 const listChatMessagesForMatch = `-- name: ListChatMessagesForMatch :many
-SELECT id, role, content, tool_call_id, tool_calls
+SELECT id, role, content, tool_call_id, tool_calls, original_message_id,
+  COALESCE(capture_kind, CASE WHEN generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind
 FROM chat_messages
 WHERE chat_id = $1
   AND project_id = $2::uuid
@@ -2519,11 +2531,13 @@ type ListChatMessagesForMatchParams struct {
 }
 
 type ListChatMessagesForMatchRow struct {
-	ID         uuid.UUID
-	Role       string
-	Content    string
-	ToolCallID pgtype.Text
-	ToolCalls  []byte
+	ID                uuid.UUID
+	Role              string
+	Content           string
+	ToolCallID        pgtype.Text
+	ToolCalls         []byte
+	OriginalMessageID uuid.NullUUID
+	CaptureKind       string
 }
 
 func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMessagesForMatchParams) ([]ListChatMessagesForMatchRow, error) {
@@ -2541,6 +2555,8 @@ func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMess
 			&i.Content,
 			&i.ToolCallID,
 			&i.ToolCalls,
+			&i.OriginalMessageID,
+			&i.CaptureKind,
 		); err != nil {
 			return nil, err
 		}
@@ -4634,6 +4650,34 @@ func (q *Queries) SetKitCompletionRuntimeFixture(ctx context.Context, arg SetKit
 		arg.EndedAt,
 		arg.RuntimeID,
 		arg.ProjectID,
+	)
+	return err
+}
+
+const setMessageCaptureLineage = `-- name: SetMessageCaptureLineage :exec
+UPDATE chat_messages m
+SET capture_kind = ($1::text[])[input.ordinality],
+    original_message_id = NULLIF(($2::uuid[])[input.ordinality], '00000000-0000-0000-0000-000000000000'::uuid)
+FROM UNNEST($5::uuid[]) WITH ORDINALITY AS input(id, ordinality)
+WHERE m.project_id = $3::uuid AND m.id = input.id
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = m.project_id AND p.organization_id = $4::text)
+`
+
+type SetMessageCaptureLineageParams struct {
+	Kinds          []string
+	OriginalIds    []uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+func (q *Queries) SetMessageCaptureLineage(ctx context.Context, arg SetMessageCaptureLineageParams) error {
+	_, err := q.db.Exec(ctx, setMessageCaptureLineage,
+		arg.Kinds,
+		arg.OriginalIds,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Ids,
 	)
 	return err
 }

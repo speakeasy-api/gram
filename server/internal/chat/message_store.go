@@ -58,6 +58,9 @@ type MessageWrite struct {
 	// service. Empty means unknown, independently of the account provider.
 	InferenceProvider string
 
+	// Lineage identifies transcript copies and generated history. Nil is original.
+	Lineage *MessageLineage
+
 	// HookHostname is the device hostname explicitly reported by hook ingestion.
 	HookHostname string
 
