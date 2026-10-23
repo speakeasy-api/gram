@@ -272,6 +272,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
+		// Resolve already denies disabled servers; checked again before serving.
 		if mcpServer.Visibility == mcpservers.VisibilityDisabled {
 			return oops.E(oops.CodeNotFound, nil, "mcp server not found")
 		}

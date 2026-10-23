@@ -2,7 +2,6 @@ package assistants
 
 import (
 	"context"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/url"
 	"testing"
 	"time"
@@ -24,6 +23,7 @@ import (
 	remotemcpRepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsRepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"

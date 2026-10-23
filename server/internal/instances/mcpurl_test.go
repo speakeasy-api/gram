@@ -2,7 +2,6 @@ package instances
 
 import (
 	"context"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
 
 	"github.com/google/uuid"
@@ -17,6 +16,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 

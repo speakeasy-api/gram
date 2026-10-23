@@ -3,7 +3,6 @@ package mcpmetadata_test
 import (
 	"context"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -40,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -2987,7 +2987,7 @@ func installTargetTemplateHTML(t *testing.T, body, target string) string {
 	}
 }
 
-// Legacy install pages follow the canonical wrapper's visibility, as serving does.
+// Legacy install pages must enforce the same canonical-wrapper gate as serving.
 func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
 	t.Parallel()
 	for _, visibility := range []string{mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate, mcpservers.VisibilityDisabled} {
@@ -3028,12 +3028,9 @@ func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
 			req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
 			rr := httptest.NewRecorder()
 			require.NoError(t, ti.service.ServeInstallPage(rr, req))
-			switch visibility {
-			case mcpservers.VisibilityPublic:
+			if visibility == mcpservers.VisibilityPublic {
 				require.Equal(t, http.StatusOK, rr.Code)
-			case mcpservers.VisibilityPrivate:
-				require.Equal(t, http.StatusFound, rr.Code, "private install page asks the visitor to sign in")
-			default:
+			} else {
 				require.Equal(t, http.StatusNotFound, rr.Code)
 			}
 		})

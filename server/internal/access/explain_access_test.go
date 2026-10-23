@@ -3,17 +3,19 @@ package access
 import (
 	"context"
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -466,6 +468,28 @@ func TestService_ExplainResourceAccess_ToolsetVisibilityFollowsItsMCPEndpoint(t 
 
 	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: id, ProjectID: projectID}))
 	require.Equal(t, "public", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
+}
+
+func TestService_ExplainResourceAccess_ToolsetVisibilityFollowsItsCanonicalServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_viewer", "viewer@test.com", "Viewer", "user_viewer", "membership_viewer")
+	toolsetID := seedMCPServer(t, ctx, ti.conn, orgID)
+	id := uuid.MustParse(toolsetID)
+	projectID, err := accessrepo.New(ti.conn).FindMCPResourceProject(ctx, accessrepo.FindMCPResourceProjectParams{OrganizationID: orgID, ResourceID: id})
+	require.NoError(t, err)
+
+	// The toolset columns still say disabled; the canonical server owns the state.
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: id, ProjectID: projectID, Name: pgtype.Text{String: "Audience", Valid: true}, Slug: pgtype.Text{String: "audience-" + toolsetID[:8], Valid: true},
+		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{}, RemoteMcpServerID: uuid.NullUUID{}, TunneledMcpServerID: uuid.NullUUID{},
+		ToolsetID: uuid.NullUUID{UUID: id, Valid: true}, UnproxiedMcpServerID: uuid.NullUUID{}, ToolVariationsGroupID: uuid.NullUUID{},
+		Visibility: "private", NetworkAccessMode: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "private", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
 }
 
 func TestService_ExplainResourceAccess_RejectsGateway(t *testing.T) {

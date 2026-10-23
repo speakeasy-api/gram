@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -189,12 +190,16 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, input R
 		return deniedResult(&endpoint, &server, nil, mode), nil
 	}
 	if server.ToolsetID.Valid && server.ID == server.ToolsetID.UUID {
-		// The wrapper owns hosting state; only a missing backing toolset denies here.
-		if _, err := toolsetsrepo.New(db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ToolsetID.UUID, ProjectID: endpoint.ProjectID}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return deniedResult(&endpoint, &server, nil, mode), nil
-			}
+		toolset, err := toolsetsrepo.New(db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ToolsetID.UUID, ProjectID: endpoint.ProjectID})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return deniedResult(&endpoint, &server, nil, mode), nil
+		case err != nil:
 			return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load hosted MCP toolset").LogError(ctx, logger)
+		}
+		// Drifted pairs stay denied until the wrapper becomes the only writer.
+		if !hostedmcp.InSync(toolset, &server) {
+			return deniedResult(&endpoint, &server, nil, mode), nil
 		}
 	}
 	return ResolutionResult{Endpoint: &endpoint, Server: &server, MetaServer: nil, Mode: mode, Found: true, Allowed: true}, nil

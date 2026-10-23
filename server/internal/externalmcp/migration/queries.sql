@@ -217,10 +217,11 @@ SELECT
     SELECT count(*)
     FROM toolsets AS other
     JOIN projects AS op ON op.id = other.project_id AND op.deleted IS FALSE
-    WHERE other.user_session_issuer_id = t.user_session_issuer_id
+    LEFT JOIN mcp_servers AS ocw ON ocw.id = other.id AND ocw.toolset_id = other.id AND ocw.project_id = other.project_id AND ocw.deleted IS FALSE
+    WHERE COALESCE(ocw.user_session_issuer_id, CASE WHEN ocw.id IS NULL THEN other.user_session_issuer_id END) = t.user_session_issuer_id
       AND other.id <> t.id
       AND other.deleted IS FALSE
-      AND other.mcp_enabled
+      AND (CASE WHEN ocw.id IS NOT NULL THEN ocw.visibility <> 'disabled' ELSE other.mcp_enabled END)
   )::bigint AS other_toolsets_on_issuer,
   COALESCE((
     SELECT array_agg(DISTINCT rtrim(rs.resource, '/') ORDER BY rtrim(rs.resource, '/'))

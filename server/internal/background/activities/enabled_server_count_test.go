@@ -74,8 +74,7 @@ func TestEnabledServerCountMatchesToolsetFlagCount(t *testing.T) {
 
 	metrics := collectOrgMetrics(t, db, orgID)
 	require.Equal(t, int64(want), metrics.TotalEnabledServers)
-	// A wrapped server counts by its wrapper's visibility, so the disabled one is neither.
-	require.Equal(t, int64(1), metrics.PublicMCPServers)
+	require.Equal(t, int64(2), metrics.PublicMCPServers)
 	require.Equal(t, int64(4), metrics.PrivateMCPServers)
 }
 

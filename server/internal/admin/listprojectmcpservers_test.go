@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/url"
 	"testing"
 
@@ -16,6 +15,7 @@ import (
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 

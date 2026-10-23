@@ -54,7 +54,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 	case err != nil:
 		return false, false, fmt.Errorf("load member auth toolset: %w", err)
 	}
-	toolset, _, err = hostedmcp.LoadEffective(ctx, s.db, toolset)
+	toolset, _, err = hostedmcp.LoadServerState(ctx, s.db, toolset)
 	if err != nil {
 		return false, false, fmt.Errorf("load member auth hosting state: %w", err)
 	}

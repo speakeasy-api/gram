@@ -500,8 +500,9 @@ func (s *Service) buildMemberDispatch(
 		attributionServerID:   nil,
 		// Meta members keep their toolset-keyed per-tool checks; the meta
 		// surface's RBAC model is outside the wrapper-governance cutover.
+		// Publicness is the hosting state the member was admitted under.
 		wrapperRBACResourceID:    "",
-		wrapperIsPublic:          nil,
+		wrapperIsPublic:          new(toolset.McpIsPublic),
 		metaMcpServerID:          gate.metaServerID.String(),
 		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
 		skipProxyTools:           true,
@@ -562,7 +563,7 @@ func (s *Service) loadMemberToolset(
 	case err != nil:
 		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
 	}
-	toolset, _, err = hostedmcp.LoadEffective(ctx, s.db, toolset)
+	toolset, _, err = hostedmcp.LoadServerState(ctx, s.db, toolset)
 	if err != nil {
 		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member hosting state").LogError(ctx, logger)
 	}

@@ -1831,11 +1831,11 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 	if err != nil {
 		return nil, noWrapper, fmt.Errorf("lookup hosted MCP network policy: %w", err)
 	}
-	if !hostedmcp.IsCanonical(&wrapper, toolset.ID) {
+	if !hostedmcp.InSync(toolset, &wrapper) {
 		return nil, noWrapper, errToolsetNotFound
 	}
 	// The canonical wrapper owns hosting state; the toolset slug is only the legacy alias.
-	toolset = hostedmcp.Effective(toolset, &wrapper)
+	toolset = hostedmcp.WithServerState(toolset, &wrapper)
 	if !toolset.McpEnabled {
 		return nil, noWrapper, errToolsetNotFound
 	}

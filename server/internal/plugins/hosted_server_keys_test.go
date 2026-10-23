@@ -177,6 +177,11 @@ func TestPluginsService_AddPluginServer_StoresToolsetsUnderTheirServer(t *testin
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(disabled.ID.String()), Policy: "required"})
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeBadRequest, shareable.Code, "the canonical wrapper owns hosting state, so a disabled server cannot be added through its toolset")
+
+	aliasOnly := createUnwrappedTestToolset(t, ctx, ti.conn, "alias-only")
+	createCanonicalWrapper(t, ctx, ti, aliasOnly, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(aliasOnly.ID.String()), Policy: "required"})
+	require.NoError(t, err, "an enabled server without an endpoint still serves on its legacy slug")
 }
 
 // A server that holds a toolset's id without being its canonical wrapper does not lend its metadata to the toolset environment.

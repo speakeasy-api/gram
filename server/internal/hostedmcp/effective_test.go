@@ -11,7 +11,7 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-func TestEffective(t *testing.T) {
+func TestWithServerState(t *testing.T) {
 	t.Parallel()
 
 	toolsetID := uuid.New()
@@ -31,8 +31,8 @@ func TestEffective(t *testing.T) {
 		{name: "no wrapper keeps toolset columns", wrapper: nil, enabled: true, public: true, issuer: stale.UserSessionIssuerID},
 		{name: "public wrapper", wrapper: canonical(visibility.Public), enabled: true, public: true, issuer: issuer},
 		{name: "private wrapper", wrapper: canonical(visibility.Private), enabled: true, public: false, issuer: issuer},
-		{name: "disabled wrapper", wrapper: canonical(visibility.Disabled), enabled: false, public: false, issuer: issuer},
-		{name: "unknown visibility fails closed", wrapper: canonical("unexpected"), enabled: false, public: false, issuer: issuer},
+		{name: "disabled wrapper keeps the toolset public flag", wrapper: canonical(visibility.Disabled), enabled: false, public: true, issuer: issuer},
+		{name: "unknown visibility fails closed", wrapper: canonical("unexpected"), enabled: false, public: true, issuer: issuer},
 		{
 			name:    "other server for the toolset is ignored",
 			wrapper: &mcpserversrepo.McpServer{ID: uuid.New(), ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: visibility.Disabled},
@@ -46,7 +46,7 @@ func TestEffective(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := Effective(stale, tt.wrapper)
+			got := WithServerState(stale, tt.wrapper)
 			require.Equal(t, tt.enabled, got.McpEnabled)
 			require.Equal(t, tt.public, got.McpIsPublic)
 			require.Equal(t, tt.issuer, got.UserSessionIssuerID)

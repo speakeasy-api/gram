@@ -322,7 +322,7 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 		return nil, nil, fmt.Errorf("endpoint is not toolset-backed")
 	}
 
-	// Wrapper visibility, or the canonical wrapper's on the legacy slug path.
+	// The resolved endpoint carries the server's visibility on both addressing paths.
 	private := !endpoint.IsPublic
 	connectResourceID := endpoint.connectResourceID().String()
 	tools = []consentInventoryTool{}

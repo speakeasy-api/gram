@@ -18,20 +18,34 @@ func IsCanonical(server *mcpserversrepo.McpServer, toolsetID uuid.UUID) bool {
 	return server != nil && server.ID == toolsetID && server.ToolsetID.Valid && server.ToolsetID.UUID == toolsetID
 }
 
-// Effective returns toolset with its hosting state (enabled, public, session issuer) read from its
+// WithServerState returns toolset with its hosting state (enabled, public, session issuer) read from its
 // canonical wrapper, which owns that state; without a canonical wrapper the toolset columns stand.
-func Effective(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) toolsetsrepo.Toolset {
+// A disabled wrapper keeps the toolset's public flag, which is all that records it.
+func WithServerState(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) toolsetsrepo.Toolset {
 	if !IsCanonical(wrapper, toolset.ID) {
 		return toolset
 	}
-	toolset.McpEnabled = wrapper.Visibility == visibility.Public || wrapper.Visibility == visibility.Private
-	toolset.McpIsPublic = wrapper.Visibility == visibility.Public
+	switch wrapper.Visibility {
+	case visibility.Public:
+		toolset.McpEnabled, toolset.McpIsPublic = true, true
+	case visibility.Private:
+		toolset.McpEnabled, toolset.McpIsPublic = true, false
+	default:
+		toolset.McpEnabled = false
+	}
 	toolset.UserSessionIssuerID = wrapper.UserSessionIssuerID
 	return toolset
 }
 
-// LoadEffective loads toolset's canonical wrapper and applies Effective; wrapper is nil when there is none.
-func LoadEffective(ctx context.Context, db mcpserversrepo.DBTX, toolset toolsetsrepo.Toolset) (toolsetsrepo.Toolset, *mcpserversrepo.McpServer, error) {
+// InSync reports whether a canonical wrapper still matches its toolset's hosting columns.
+// Serving denies drifted pairs until the wrapper becomes the only writer.
+func InSync(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) bool {
+	return IsCanonical(wrapper, toolset.ID) && wrapper.Visibility == Visibility(toolset) && wrapper.UserSessionIssuerID == toolset.UserSessionIssuerID
+}
+
+// LoadServerState loads toolset's canonical wrapper and applies WithServerState; wrapper is nil when there is none.
+// A server that kept the toolset's id but no longer serves it leaves the toolset disabled.
+func LoadServerState(ctx context.Context, db mcpserversrepo.DBTX, toolset toolsetsrepo.Toolset) (toolsetsrepo.Toolset, *mcpserversrepo.McpServer, error) {
 	wrapper, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -40,7 +54,8 @@ func LoadEffective(ctx context.Context, db mcpserversrepo.DBTX, toolset toolsets
 		return toolset, nil, fmt.Errorf("load canonical hosted MCP server: %w", err)
 	}
 	if !IsCanonical(&wrapper, toolset.ID) {
+		toolset.McpEnabled = false
 		return toolset, nil, nil
 	}
-	return Effective(toolset, &wrapper), &wrapper, nil
+	return WithServerState(toolset, &wrapper), &wrapper, nil
 }

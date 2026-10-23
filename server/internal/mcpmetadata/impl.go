@@ -607,7 +607,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 		return nil, err
 	}
 
-	toolset, wrapper, err := hostedmcp.LoadEffective(ctx, s.db, toolset)
+	toolset, wrapper, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
@@ -672,9 +672,9 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 		s.logger.WarnContext(ctx, "failed to load MCP metadata", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(metadataErr))
 	}
 
-	// Build MCP URL: the wrapper's endpoint, else the legacy toolset address.
+	// Build MCP URL: the legacy toolset address while it has one, else the wrapper's endpoint.
 	mcpURL := ""
-	if wrapper != nil {
+	if wrapper != nil && toolset.McpSlug.String == "" {
 		mcpURL, err = endpointaddr.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, toolset.ProjectID, wrapper.ID, s.serverURL.String())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve MCP URL").LogError(ctx, s.logger)
@@ -930,7 +930,7 @@ func resolveMetadataBackend(
 		wrapper, err := mcpServerQueries.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: projectID})
 		switch {
 		case err == nil:
-			toolset = hostedmcp.Effective(toolset, &wrapper)
+			toolset = hostedmcp.WithServerState(toolset, &wrapper)
 		case !errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.E(oops.CodeUnexpected, err, "fetch toolset mcp server").LogError(ctx, logger, attr.SlogToolsetSlug(slug))
 		}
@@ -2150,11 +2150,11 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 		return &toolset, false, nil
 	case err != nil:
 		return nil, false, fmt.Errorf("load hosted MCP network policy: %w", err)
-	case !hostedmcp.IsCanonical(&server, toolset.ID):
-		return nil, false, fmt.Errorf("%w: hosted MCP identity belongs to another server", errToolsetNotFound)
+	case !hostedmcp.InSync(toolset, &server):
+		return nil, false, fmt.Errorf("%w: hosted MCP server does not match its toolset", errToolsetNotFound)
 	}
 	// The canonical wrapper owns hosting state; the toolset slug is only the legacy alias.
-	toolset = hostedmcp.Effective(toolset, &server)
+	toolset = hostedmcp.WithServerState(toolset, &server)
 	if !toolset.McpEnabled {
 		return nil, false, fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
 	}

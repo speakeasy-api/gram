@@ -89,7 +89,7 @@ func validateKitMCPBinding(ctx context.Context, db toolsetsrepo.DBTX, request as
 		if err != nil {
 			return fmt.Errorf("resolve Kit MCP toolset: %w", err)
 		}
-		toolset, _, err = hostedmcp.LoadEffective(ctx, db, toolset)
+		toolset, _, err = hostedmcp.LoadServerState(ctx, db, toolset)
 		if err != nil {
 			return fmt.Errorf("resolve Kit MCP toolset server: %w", err)
 		}

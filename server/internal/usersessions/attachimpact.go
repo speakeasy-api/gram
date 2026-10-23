@@ -106,13 +106,9 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantID.String(), projectID.String())); err != nil {
 			return none, err
 		}
-		endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{OrganizationID: organizationID, ProjectID: projectID, McpServerID: server.ID})
+		customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, server.ID)
 		if err != nil {
-			return none, oops.E(oops.CodeUnexpected, err, "list MCP server endpoints").LogError(ctx, logger)
-		}
-		customDomainIDs := make([]uuid.NullUUID, 0, len(endpoints))
-		for _, endpoint := range endpoints {
-			customDomainIDs = append(customDomainIDs, endpoint.McpEndpoint.CustomDomainID)
+			return none, err
 		}
 		return attachTarget{issuerID: server.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 	case payload.ToolsetID != nil:
@@ -127,23 +123,23 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolset.ID.String(), projectID.String())); err != nil {
 			return none, err
 		}
-		toolset, wrapper, err := hostedmcp.LoadEffective(ctx, s.db, toolset)
+		toolset, wrapper, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "load toolset MCP server").LogError(ctx, logger)
 		}
 		if wrapper == nil {
 			return attachTarget{issuerID: toolset.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
 		}
-		// The canonical wrapper owns the issuer and the addresses.
-		endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{OrganizationID: organizationID, ProjectID: projectID, McpServerID: wrapper.ID})
+		// The canonical wrapper owns the issuer; without a live endpoint only the legacy alias serves.
+		customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
 		if err != nil {
-			return none, oops.E(oops.CodeUnexpected, err, "list MCP server endpoints").LogError(ctx, logger)
+			return none, err
 		}
-		customDomainIDs := make([]uuid.NullUUID, 0, len(endpoints))
-		for _, endpoint := range endpoints {
-			customDomainIDs = append(customDomainIDs, endpoint.McpEndpoint.CustomDomainID)
+		onPlatformHost := !toolset.CustomDomainID.Valid
+		if len(customDomainIDs) > 0 {
+			onPlatformHost = anyOnPlatformHost(customDomainIDs)
 		}
-		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
+		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: onPlatformHost}, nil
 	default:
 		id, err := uuid.Parse(*payload.MetaMcpServerID)
 		if err != nil {
@@ -171,6 +167,19 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 // anyOnPlatformHost reports whether any of a server's endpoints, by their
 // custom domains, is on the platform host. A server without endpoints counts as
 // on the platform host, so its preview errs toward warning.
+// liveEndpointDomains lists the custom domain of each endpoint the server serves on.
+func (s *Service) liveEndpointDomains(ctx context.Context, logger *slog.Logger, organizationID string, projectID, serverID uuid.UUID) ([]uuid.NullUUID, error) {
+	endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{OrganizationID: organizationID, ProjectID: projectID, McpServerID: serverID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list MCP server endpoints").LogError(ctx, logger)
+	}
+	customDomainIDs := make([]uuid.NullUUID, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		customDomainIDs = append(customDomainIDs, endpoint.McpEndpoint.CustomDomainID)
+	}
+	return customDomainIDs, nil
+}
+
 func anyOnPlatformHost(customDomainIDs []uuid.NullUUID) bool {
 	if len(customDomainIDs) == 0 {
 		return true
