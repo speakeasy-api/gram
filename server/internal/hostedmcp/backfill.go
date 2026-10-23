@@ -26,9 +26,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// BackfillSync projects a locked toolset's frozen hosting columns onto its canonical wrapper and single endpoint,
-// creating them when missing. Only the hosted MCP backfill tool and fixtures for legacy rows may call it: the wrapper
-// owns hosting state everywhere else.
+// BackfillSync projects a locked toolset's hosting columns onto its canonical wrapper and single endpoint, creating
+// them when missing. It is a pinned copy of the toolset-to-server Sync that pods from before this change run, kept
+// as the oracle tests use to prove that sync writes nothing on mirrored rows; do not edit it. Only the hosted MCP
+// backfill tool and fixtures for legacy rows may call it: the wrapper owns hosting state everywhere else.
 func BackfillSync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) ([]uuid.UUID, error) {
 	principal, ok := actor.Principal(ctx)
 	if auditLogger == nil || !ok {

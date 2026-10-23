@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -48,8 +49,8 @@ func syncMigrationWrapper(t *testing.T, ctx context.Context, ti *testInstance, t
 	require.NoError(t, tx.Commit(ctx))
 }
 
-// Hosted wrappers move with the bulk server update; their toolset issuer column is a frozen alias and stays put.
-func TestOrganizationUserSessionIssuerMigrateMovesHostedWrappersNotToolsetColumns(t *testing.T) {
+// Hosted wrappers and their mirrored toolset issuer columns move together.
+func TestOrganizationUserSessionIssuerMigrateMovesHostedWrappersAndToolsetColumns(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -80,7 +81,8 @@ func TestOrganizationUserSessionIssuerMigrateMovesHostedWrappersNotToolsetColumn
 	require.Equal(t, conv.ToNullUUID(targetID), wrapper.UserSessionIssuerID)
 	hostedAfter, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: hosted.ID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.Equal(t, conv.ToNullUUID(sourceID), hostedAfter.UserSessionIssuerID, "the frozen toolset alias is not written")
+	require.Equal(t, conv.ToNullUUID(targetID), hostedAfter.UserSessionIssuerID, "the toolset column mirrors its server")
+	hostedmcptest.RequireMirrored(t, ctx, ti.conn, projectID, hosted.ID)
 	effective, _, err := hostedmcp.LoadServerState(ctx, ti.conn, hostedAfter)
 	require.NoError(t, err)
 	require.Equal(t, conv.ToNullUUID(targetID), effective.UserSessionIssuerID, "readers take the issuer from the wrapper")
@@ -156,4 +158,35 @@ func TestOrganizationUserSessionIssuerMigrateResyncsHostedWrapperRemoteIssuers(t
 	for _, got := range remoteIssuers {
 		require.Equal(t, conv.ToNullUUID(remoteIssuerID), got)
 	}
+}
+
+// A deleted hosted server on the source issuer does not stop the migration; live consumers still move.
+func TestOrganizationUserSessionIssuerMigrateSkipsDeletedHostedServerAudit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+
+	sourceID := seedIssuer(t, ctx, ti, "deleted-migrate-source")
+	target, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "deleted-migrate-target", AuthnChallengeMode: "chain", SessionDurationHours: 24})
+	require.NoError(t, err)
+	targetID := uuid.MustParse(target.ID)
+
+	deleted := seedMigrationToolset(t, ctx, ti, "deleted-migrate", "deleted-migrate-mcp", sourceID)
+	syncMigrationWrapper(t, ctx, ti, deleted)
+	_, err = mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: deleted.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	live := seedMigrationToolset(t, ctx, ti, "live-migrate", "live-migrate-mcp", sourceID)
+	syncMigrationWrapper(t, ctx, ti, live)
+
+	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID})
+	require.NoError(t, err)
+
+	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: live.ID, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(targetID), server.UserSessionIssuerID)
+	hostedmcptest.RequireMirrored(t, ctx, ti.conn, projectID, live.ID)
 }

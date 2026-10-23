@@ -1001,7 +1001,8 @@ WHERE binding.user_session_issuer_id = @source_issuer_id
       )
   );
 
--- name: UpdateMCPServersToUserSessionIssuer :execrows
+-- name: UpdateMCPServersToUserSessionIssuer :many
+-- Returns each moved server so live hosted ones can be audited as their own update.
 UPDATE mcp_servers AS server
 SET user_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
@@ -1019,7 +1020,8 @@ WHERE server.user_session_issuer_id = @source_issuer_id
         (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
         OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = @organization_id::text AND issuer_project.deleted IS FALSE)
       )
-  );
+  )
+RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id AND server.deleted IS FALSE)::boolean AS canonical;
 
 -- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
 -- Every affected project must recompute its denormalized remote-session issuer
@@ -1034,7 +1036,7 @@ WHERE server.user_session_issuer_id IN (@source_issuer_id, @target_issuer_id)
 ORDER BY server.project_id;
 
 -- name: UpdateToolsetsToUserSessionIssuer :execrows
--- Toolsets without a canonical wrapper still serve from their issuer column; wrapped ones keep it frozen.
+-- Wrapped toolsets keep their issuer column equal to their canonical server's for pods that still read it.
 UPDATE toolsets AS toolset
 SET user_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
@@ -1042,14 +1044,6 @@ FROM projects AS project
 WHERE toolset.user_session_issuer_id = @source_issuer_id
   AND project.id = toolset.project_id
   AND project.organization_id = @organization_id::text
-  AND NOT EXISTS (
-    SELECT 1
-    FROM mcp_servers AS wrapper
-    WHERE wrapper.id = toolset.id
-      AND wrapper.toolset_id = toolset.id
-      AND wrapper.project_id = toolset.project_id
-      AND wrapper.deleted IS FALSE
-  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer

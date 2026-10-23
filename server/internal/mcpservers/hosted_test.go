@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -73,13 +74,13 @@ func (f *hostedFixture) payload(visibility types.McpServerVisibility, mutate fun
 }
 
 // requireProjected asserts the wrapper shares the toolset's name and tool variations group, keeps its single
-// platform endpoint, and that the toolset hosting columns stay unset.
+// platform endpoint, and that the toolset hosting columns mirror it.
 func (f *hostedFixture) requireProjected(t *testing.T, ctx context.Context) (toolsetsrepo.Toolset, mcpserversrepo.McpServer) {
 	t.Helper()
 
 	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
-	require.False(t, toolset.McpSlug.Valid || toolset.McpEnabled || toolset.McpIsPublic || toolset.UserSessionIssuerID.Valid || toolset.CustomDomainID.Valid, "hosting writes never touch the toolset hosting columns")
+	hostedmcptest.RequireMirrored(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
 	server, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	require.Equal(t, toolset.Name, server.Name.String)

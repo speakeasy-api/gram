@@ -9,6 +9,13 @@ FROM toolsets
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 FOR UPDATE;
 
+-- name: LockToolsetByIDAndProject :one
+-- Hosting writes lock the toolset before domains, endpoints and the server.
+SELECT *
+FROM toolsets
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+FOR NO KEY UPDATE;
+
 -- name: GetToolsetByIDAndProject :one
 SELECT *
 FROM toolsets
@@ -96,7 +103,7 @@ WHERE project_id = @project_id
 ORDER BY created_at DESC;
 
 -- name: UpdateToolsetDetails :one
--- Leaves the MCP hosting columns alone: they are a frozen alias, and the canonical wrapper owns hosting state.
+-- Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state and MirrorToolsetHosting writes them.
 UPDATE toolsets
 SET
     name = COALESCE(@name, name)
@@ -108,7 +115,7 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: UpdateToolset :one
--- Test fixture: also writes the frozen MCP hosting alias columns, which production code never writes.
+-- Test fixture: also writes the MCP hosting columns, which production code writes only through MirrorToolsetHosting.
 UPDATE toolsets
 SET
     name = COALESCE(@name, name)
@@ -276,7 +283,7 @@ WHERE slug = @slug
 RETURNING *;
 
 -- name: UpdateToolsetUserSessionIssuer :one
--- Test fixture: production code never writes the frozen issuer alias column.
+-- Test fixture: production code writes the issuer column only through MirrorToolsetHosting and the issuer migration.
 UPDATE toolsets
 SET
     user_session_issuer_id = @user_session_issuer_id
@@ -454,3 +461,18 @@ LEFT JOIN LATERAL (
 ) address ON TRUE
 WHERE s.id = ANY(@toolset_ids::uuid[])
   AND s.deleted IS FALSE;
+
+-- name: MirrorToolsetHosting :one
+-- Writes a hosted toolset's hosting columns from its canonical server so pods that still read them stay consistent.
+UPDATE toolsets
+SET
+    name = @name
+  , mcp_slug = @mcp_slug
+  , mcp_enabled = @mcp_enabled
+  , mcp_is_public = @mcp_is_public
+  , custom_domain_id = @custom_domain_id
+  , user_session_issuer_id = @user_session_issuer_id
+  , tool_variations_group_id = @tool_variations_group_id
+  , updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;

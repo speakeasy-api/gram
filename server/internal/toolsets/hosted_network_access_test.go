@@ -109,6 +109,7 @@ func TestHostedNetworkAccessModeTransitions(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, addresses, 1)
 		require.Equal(t, string(*created.McpSlug), addresses[0].Slug)
+		requireHostingColumnsMirrored(t, ctx, ti, created.ID)
 	}
 }
 
@@ -136,6 +137,7 @@ func TestHostedNetworkAccessCanDisableDuringIngressOutage(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, &description, updated.Description)
 	require.NoError(t, ti.service.DisableHostedServer(ctx, uuid.MustParse(created.ID)))
+	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
 }
 
 func TestHostedNetworkAccessPreservesDomainRoot(t *testing.T) {
@@ -165,6 +167,14 @@ func TestHostedNetworkAccessPreservesDomainRoot(t *testing.T) {
 	require.Len(t, after, 1)
 	require.Equal(t, addresses[0].ID, after[0].ID)
 	require.True(t, after[0].IsDomainRoot.Bool, "a network mode change leaves the domain root alone")
+	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
+
+	require.NoError(t, ti.service.DisableHostedServer(ctx, serverID))
+	after, err = endpoints.ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: serverID})
+	require.NoError(t, err)
+	require.Len(t, after, 1)
+	require.False(t, after[0].IsDomainRoot.Valid && after[0].IsDomainRoot.Bool, "a disabled server holds no domain root")
+	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
 }
 
 func TestSetHostedNetworkAccessInTransaction(t *testing.T) {
@@ -186,7 +196,8 @@ func TestSetHostedNetworkAccessInTransaction(t *testing.T) {
 
 	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction tests atomicity
 	require.NoError(t, err)
-	require.NoError(t, toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, audit.NewLogger(), authCtx, serverID, networkaccess.ModeDual))
+	_, err = toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, audit.NewLogger(), authCtx, serverID, networkaccess.ModeDual)
+	require.NoError(t, err)
 	require.NoError(t, tx.Rollback(ctx))
 	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
@@ -194,7 +205,8 @@ func TestSetHostedNetworkAccessInTransaction(t *testing.T) {
 
 	tx, err = ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction tests commit
 	require.NoError(t, err)
-	require.NoError(t, toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, audit.NewLogger(), authCtx, serverID, networkaccess.ModeDual))
+	_, err = toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, audit.NewLogger(), authCtx, serverID, networkaccess.ModeDual)
+	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 	server, err = mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
@@ -202,6 +214,7 @@ func TestSetHostedNetworkAccessInTransaction(t *testing.T) {
 	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(created.Slug)})
 	require.NoError(t, err)
 	require.Equal(t, types.NetworkAccessMode("dual"), *stored.NetworkAccessMode)
+	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
 }
 
 func TestHostedNetworkAccessRejectsPrivateModeWithoutIngress(t *testing.T) {
@@ -233,4 +246,20 @@ func setHostedMode(t *testing.T, ctx context.Context, ti *testInstance, toolset 
 	updated, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 	require.NoError(t, err)
 	return updated
+}
+
+// A disabled public server reads back as public, so the dashboard re-enables it public.
+func TestDisabledPublicHostedServerReadsPublic(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Disabled Public")
+	require.NoError(t, ti.service.DisableHostedServer(ctx, uuid.MustParse(created.ID)))
+
+	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(created.Slug)})
+	require.NoError(t, err)
+	require.NotNil(t, stored.McpEnabled)
+	require.False(t, *stored.McpEnabled)
+	require.NotNil(t, stored.McpIsPublic)
+	require.True(t, *stored.McpIsPublic, "the mirrored public flag survives disabling")
+	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
 }

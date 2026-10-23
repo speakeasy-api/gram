@@ -268,7 +268,7 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return row, fmt.Errorf("load canonical identity: %w", err)
 	case err == nil:
-		// An existing canonical wrapper owns its hosting state; the frozen toolset columns never overwrite it.
+		// An existing canonical wrapper owns its hosting state; the toolset columns never overwrite it.
 		row.Outcome = OutcomeAlreadyComplete
 		return row, nil
 	}

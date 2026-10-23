@@ -1534,6 +1534,113 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 	return items, nil
 }
 
+const lockToolsetByIDAndProject = `-- name: LockToolsetByIDAndProject :one
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+FROM toolsets
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+FOR NO KEY UPDATE
+`
+
+type LockToolsetByIDAndProjectParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Hosting writes lock the toolset before domains, endpoints and the server.
+func (q *Queries) LockToolsetByIDAndProject(ctx context.Context, arg LockToolsetByIDAndProjectParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, lockToolsetByIDAndProject, arg.ID, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const mirrorToolsetHosting = `-- name: MirrorToolsetHosting :one
+UPDATE toolsets
+SET
+    name = $1
+  , mcp_slug = $2
+  , mcp_enabled = $3
+  , mcp_is_public = $4
+  , custom_domain_id = $5
+  , user_session_issuer_id = $6
+  , tool_variations_group_id = $7
+  , updated_at = clock_timestamp()
+WHERE id = $8 AND project_id = $9 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+`
+
+type MirrorToolsetHostingParams struct {
+	Name                  string
+	McpSlug               pgtype.Text
+	McpEnabled            bool
+	McpIsPublic           bool
+	CustomDomainID        uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+// Writes a hosted toolset's hosting columns from its canonical server so pods that still read them stay consistent.
+func (q *Queries) MirrorToolsetHosting(ctx context.Context, arg MirrorToolsetHostingParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, mirrorToolsetHosting,
+		arg.Name,
+		arg.McpSlug,
+		arg.McpEnabled,
+		arg.McpIsPublic,
+		arg.CustomDomainID,
+		arg.UserSessionIssuerID,
+		arg.ToolVariationsGroupID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const toolsetHasExternalMCPProxy = `-- name: ToolsetHasExternalMCPProxy :one
 WITH latest_toolset_version AS (
   SELECT tv.tool_urns
@@ -1609,7 +1716,7 @@ type UpdateToolsetParams struct {
 	ProjectID              uuid.UUID
 }
 
-// Test fixture: also writes the frozen MCP hosting alias columns, which production code never writes.
+// Test fixture: also writes the MCP hosting columns, which production code writes only through MirrorToolsetHosting.
 func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolset,
 		arg.Name,
@@ -1670,7 +1777,7 @@ type UpdateToolsetDetailsParams struct {
 	ProjectID              uuid.UUID
 }
 
-// Leaves the MCP hosting columns alone: they are a frozen alias, and the canonical wrapper owns hosting state.
+// Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state and MirrorToolsetHosting writes them.
 func (q *Queries) UpdateToolsetDetails(ctx context.Context, arg UpdateToolsetDetailsParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolsetDetails,
 		arg.Name,
@@ -1810,7 +1917,7 @@ type UpdateToolsetUserSessionIssuerParams struct {
 	ProjectID           uuid.UUID
 }
 
-// Test fixture: production code never writes the frozen issuer alias column.
+// Test fixture: production code writes the issuer column only through MirrorToolsetHosting and the issuer migration.
 func (q *Queries) UpdateToolsetUserSessionIssuer(ctx context.Context, arg UpdateToolsetUserSessionIssuerParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolsetUserSessionIssuer, arg.UserSessionIssuerID, arg.Slug, arg.ProjectID)
 	var i Toolset

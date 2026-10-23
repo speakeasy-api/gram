@@ -194,6 +194,9 @@ func CreateCanonical(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, 
 	}); err != nil {
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "audit hosted MCP endpoint")
 	}
+	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
+		return mcpserversrepo.McpServer{}, err //nolint:wrapcheck // oops errors pass through.
+	}
 	return server, nil
 }
 
@@ -227,7 +230,22 @@ func LockServer(ctx context.Context, tx pgx.Tx, organizationID string, projectID
 	return endpoints, server, nil
 }
 
-// Enable re-enables a toolset's disabled canonical wrapper as its frozen columns last described it: public when
+// RequireLiveAddress rejects enabling a hosted server with no endpoint that can serve; an address on a deleted
+// domain does not count.
+func RequireLiveAddress(ctx context.Context, tx pgx.Tx, organizationID string, server mcpserversrepo.McpServer) error {
+	live, err := mcpendpointsrepo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+		OrganizationID: organizationID, ProjectID: server.ProjectID, McpServerID: server.ID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list hosted MCP addresses")
+	}
+	if len(live) == 0 {
+		return oops.E(oops.CodeInvalid, nil, "hosted MCP server has no address; add one before enabling it")
+	}
+	return nil
+}
+
+// Enable re-enables a toolset's disabled canonical wrapper as its mirrored columns last described it: public when
 // the toolset was public or carries external OAuth (which a private server cannot), else private. A private network
 // mode needs a live ingress for the server's endpoints. It reports false when there is no disabled wrapper to enable.
 func Enable(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) (bool, error) {
@@ -240,8 +258,8 @@ func Enable(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Act
 	case !IsCanonical(&canonical, toolset.ID) || canonical.Visibility != visibility.Disabled:
 		return false, nil
 	}
-	if len(endpoints) == 0 && (!toolset.McpSlug.Valid || toolset.McpSlug.String == "") {
-		return false, oops.E(oops.CodeInvalid, nil, "hosted MCP server has no address to serve")
+	if err := RequireLiveAddress(ctx, tx, toolset.OrganizationID, canonical); err != nil {
+		return false, err
 	}
 	target := visibility.Private
 	if toolset.McpIsPublic || toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid {
@@ -266,6 +284,9 @@ func Enable(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Act
 	}
 	if err := LogUpdate(ctx, tx, auditLogger, actor, toolset.OrganizationID, canonical, updated); err != nil {
 		return false, err
+	}
+	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
+		return false, err //nolint:wrapcheck // oops errors pass through.
 	}
 	return true, nil
 }

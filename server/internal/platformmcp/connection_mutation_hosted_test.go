@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -102,6 +103,7 @@ func TestSetMCPNetworkAccessHostedToolsetUsesCanonicalPolicy(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "dual", stored.NetworkAccessMode.String)
 	require.Len(t, output.Settings.Endpoints, 1)
+	hostedmcptest.RequireMirrored(t, ctx, conn, project.ID, toolset.ID)
 
 	replay, err := service.SetNetworkAccess(ctx, principal, input)
 	require.NoError(t, err)

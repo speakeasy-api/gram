@@ -20,7 +20,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -526,12 +529,19 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		name string
 		fn   func() (int64, error)
 	}{
-		// Only toolsets without a canonical wrapper: a wrapper owns its toolset's issuer.
+		// Toolsets before mcp_servers; wrapped toolsets mirror their server's issuer.
 		{name: "toolsets", fn: func() (int64, error) {
 			return q.UpdateToolsetsToUserSessionIssuer(ctx, repo.UpdateToolsetsToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
 		}},
 		{name: "MCP servers", fn: func() (int64, error) {
-			return q.UpdateMCPServersToUserSessionIssuer(ctx, repo.UpdateMCPServersToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
+			moved, err := q.UpdateMCPServersToUserSessionIssuer(ctx, repo.UpdateMCPServersToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
+			if err != nil {
+				return 0, fmt.Errorf("move MCP servers: %w", err)
+			}
+			if err := auditHostedIssuerMoves(ctx, dbtx, s.audit, authCtx, moved, source.ID); err != nil {
+				return 0, err
+			}
+			return int64(len(moved)), nil
 		}},
 		{name: "meta MCP servers", fn: func() (int64, error) {
 			return q.UpdateMetaMCPServersToUserSessionIssuer(ctx, repo.UpdateMetaMCPServersToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
@@ -575,4 +585,24 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	return &orggen.MigrateOrganizationUserSessionIssuerResult{
 		Issuer: s.organizationIssuerView(ctx, surviving.UserSessionIssuer, surviving.ProjectName), ClientsMigrated: int(clientsMigrated), SessionsMigrated: int(sessionsMigrated), ConsentsMigrated: int(consentsMigrated), CimdClientsMigrated: int(cimdClientsMigrated), RemoteSessionsMigrated: int(remoteSessionsMigrated), SourceDeleted: true,
 	}, nil
+}
+
+// auditHostedIssuerMoves records each hosted server the bulk issuer move changed as its own update.
+func auditHostedIssuerMoves(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, moved []repo.UpdateMCPServersToUserSessionIssuerRow, sourceID uuid.UUID) error {
+	actor := hostedmcp.Actor{UserID: authCtx.UserID, Email: authCtx.Email, System: ""}
+	for _, row := range moved {
+		if !row.Canonical {
+			continue
+		}
+		after, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: row.ID, ProjectID: row.ProjectID})
+		if err != nil {
+			return fmt.Errorf("load moved hosted MCP server: %w", err)
+		}
+		before := after
+		before.UserSessionIssuerID = conv.ToNullUUID(sourceID)
+		if err := hostedmcp.LogUpdate(ctx, tx, auditLogger, actor, authCtx.ActiveOrganizationID, before, after); err != nil {
+			return fmt.Errorf("audit hosted MCP issuer move: %w", err)
+		}
+	}
+	return nil
 }

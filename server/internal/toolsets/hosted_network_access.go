@@ -18,19 +18,23 @@ import (
 
 // SetHostedNetworkAccessInTransaction changes only the network mode of a toolset's canonical wrapper
 // within a caller-owned transaction. The caller must authorize the target and
-// hold the organization's ingress and project admission locks first.
-func SetHostedNetworkAccessInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor *contextvalues.AuthContext, toolsetID uuid.UUID, mode networkaccess.Mode) error {
+// hold the organization's ingress and project admission locks first, and reconcile
+// the returned custom domains, whose root was cleared, after commit.
+func SetHostedNetworkAccessInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor *contextvalues.AuthContext, toolsetID uuid.UUID, mode networkaccess.Mode) ([]uuid.UUID, error) {
 	if actor == nil || actor.ProjectID == nil || auditLogger == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
+		return nil, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
 	}
 	locked, err := lockHostedToolset(ctx, tx, actor, toolsetID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = applyHostedServerChange(ctx, tx, auditLogger, hostedActor(actor), locked, hostedServerChange{
+	written, err := applyHostedServerChange(ctx, tx, auditLogger, hostedActor(actor), locked, hostedServerChange{
 		Name: nil, Visibility: nil, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ToolVariationsGroupID: nil, NetworkAccessMode: &mode,
 	})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	return written.ClearedRootDomainIDs, nil
 }
 
 func (s *Service) deleteHostedServer(ctx context.Context, tx pgx.Tx, actor *contextvalues.AuthContext, toolset repo.Toolset) (hostedmcp.DeleteResult, error) {

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -53,22 +54,16 @@ func loadCanonical(t *testing.T, ctx context.Context, ti *testInstance, toolset 
 	return canonicalState{server: server, endpoints: endpoints}
 }
 
-// requireHostingColumnsUnset asserts no toolset write has touched the frozen hosting columns.
-func requireHostingColumnsUnset(t *testing.T, ctx context.Context, ti *testInstance, toolsetID string) {
+// requireHostingColumnsMirrored asserts the toolset columns mirror the canonical server and an older pod's sync is a no-op.
+func requireHostingColumnsMirrored(t *testing.T, ctx context.Context, ti *testInstance, toolsetID string) {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	row, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: uuid.MustParse(toolsetID), ProjectID: *authCtx.ProjectID})
-	require.NoError(t, err)
-	require.False(t, row.McpSlug.Valid)
-	require.False(t, row.McpEnabled)
-	require.False(t, row.McpIsPublic)
-	require.False(t, row.CustomDomainID.Valid)
-	require.False(t, row.UserSessionIssuerID.Valid)
+	hostedmcptest.RequireMirrored(t, ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(toolsetID))
 }
 
 // requireCanonicalMatches checks the toolset view reports its canonical wrapper's state and single
-// endpoint, and that the toolset hosting columns stay unset.
+// endpoint, and that the toolset hosting columns mirror it.
 func requireCanonicalMatches(t *testing.T, ctx context.Context, ti *testInstance, toolset *types.Toolset) canonicalState {
 	t.Helper()
 	state := loadCanonical(t, ctx, ti, toolset)
@@ -87,7 +82,7 @@ func requireCanonicalMatches(t *testing.T, ctx context.Context, ti *testInstance
 	require.NotNil(t, toolset.McpSlug)
 	require.Equal(t, string(*toolset.McpSlug), state.endpoints[0].Slug)
 	require.Equal(t, conv.PtrValOrEmpty(toolset.CustomDomainID, ""), nullUUIDString(state.endpoints[0].CustomDomainID))
-	requireHostingColumnsUnset(t, ctx, ti, toolset.ID)
+	requireHostingColumnsMirrored(t, ctx, ti, toolset.ID)
 	return state
 }
 
@@ -143,7 +138,7 @@ func TestCanonicalWrapperForClonedToolsetStartsDisabled(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestToolsetWritesNeverTouchHostingColumns(t *testing.T) {
+func TestToolsetWritesKeepHostingColumnsMirrored(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestToolsetsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -167,7 +162,7 @@ func TestToolsetWritesNeverTouchHostingColumns(t *testing.T) {
 
 	clone, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{Slug: toolset.Slug})
 	require.NoError(t, err)
-	requireHostingColumnsUnset(t, ctx, ti, clone.ID)
+	requireHostingColumnsMirrored(t, ctx, ti, clone.ID)
 
 	require.NoError(t, ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: toolset.Slug}))
 	_, err = mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(toolset.ID), ProjectID: *authCtx.ProjectID})
@@ -247,7 +242,7 @@ func TestHostedServerUpdateKeepsValidationRules(t *testing.T) {
 	require.Error(t, err, "private access needs an eligible organization and a live ingress")
 
 	require.Equal(t, before.server, loadCanonical(t, ctx, ti, toolset).server, "rejected writes leave the wrapper untouched")
-	requireHostingColumnsUnset(t, ctx, ti, toolset.ID)
+	requireHostingColumnsMirrored(t, ctx, ti, toolset.ID)
 }
 
 func TestUpdateToolsetRejectsHostingFields(t *testing.T) {
@@ -276,7 +271,7 @@ func TestUpdateToolsetRejectsHostingFields(t *testing.T) {
 	after := getToolset(t, ctx, ti, toolset.Slug)
 	require.Equal(t, toolset.Name, after.Name, "a rejected update writes nothing")
 	require.Equal(t, before, loadCanonical(t, ctx, ti, toolset))
-	requireHostingColumnsUnset(t, ctx, ti, toolset.ID)
+	requireHostingColumnsMirrored(t, ctx, ti, toolset.ID)
 }
 
 // hostedUpdate is an mcpServers.update on toolset's canonical wrapper that keeps its tool variations group.
@@ -561,10 +556,10 @@ func TestToolsetViewsDeriveAddressFromCanonicalServer(t *testing.T) {
 	require.Equal(t, onDomain.Slug, string(*entry.McpSlug))
 	require.Equal(t, domain.ID.String(), *entry.CustomDomainID)
 
-	// A domain that no longer serves leaves the toolset's frozen address, unset for a new toolset.
+	// A domain that no longer serves leaves the toolset's own address, mirrored from its platform endpoint.
 	require.NoError(t, cdrepo.New(ti.conn).DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID))
 	view = getToolset(t, ctx, ti, toolset.Slug)
-	require.Nil(t, view.McpSlug)
+	require.Equal(t, platform.Slug, string(*view.McpSlug))
 	require.True(t, *view.McpIsPublic, "visibility still comes from the server")
 }
 

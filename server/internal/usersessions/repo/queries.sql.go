@@ -6028,7 +6028,7 @@ func (q *Queries) TouchUserSessionLastUsed(ctx context.Context, arg TouchUserSes
 	return err
 }
 
-const updateMCPServersToUserSessionIssuer = `-- name: UpdateMCPServersToUserSessionIssuer :execrows
+const updateMCPServersToUserSessionIssuer = `-- name: UpdateMCPServersToUserSessionIssuer :many
 UPDATE mcp_servers AS server
 SET user_session_issuer_id = $1,
     updated_at = clock_timestamp()
@@ -6047,6 +6047,7 @@ WHERE server.user_session_issuer_id = $2
         OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = $3::text AND issuer_project.deleted IS FALSE)
       )
   )
+RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id AND server.deleted IS FALSE)::boolean AS canonical
 `
 
 type UpdateMCPServersToUserSessionIssuerParams struct {
@@ -6055,12 +6056,31 @@ type UpdateMCPServersToUserSessionIssuerParams struct {
 	OrganizationID string
 }
 
-func (q *Queries) UpdateMCPServersToUserSessionIssuer(ctx context.Context, arg UpdateMCPServersToUserSessionIssuerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateMCPServersToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+type UpdateMCPServersToUserSessionIssuerRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Canonical bool
+}
+
+// Returns each moved server so live hosted ones can be audited as their own update.
+func (q *Queries) UpdateMCPServersToUserSessionIssuer(ctx context.Context, arg UpdateMCPServersToUserSessionIssuerParams) ([]UpdateMCPServersToUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, updateMCPServersToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []UpdateMCPServersToUserSessionIssuerRow
+	for rows.Next() {
+		var i UpdateMCPServersToUserSessionIssuerRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.Canonical); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateMetaMCPServersToUserSessionIssuer = `-- name: UpdateMetaMCPServersToUserSessionIssuer :execrows
@@ -6276,14 +6296,6 @@ FROM projects AS project
 WHERE toolset.user_session_issuer_id = $2
   AND project.id = toolset.project_id
   AND project.organization_id = $3::text
-  AND NOT EXISTS (
-    SELECT 1
-    FROM mcp_servers AS wrapper
-    WHERE wrapper.id = toolset.id
-      AND wrapper.toolset_id = toolset.id
-      AND wrapper.project_id = toolset.project_id
-      AND wrapper.deleted IS FALSE
-  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -6303,7 +6315,7 @@ type UpdateToolsetsToUserSessionIssuerParams struct {
 	OrganizationID string
 }
 
-// Toolsets without a canonical wrapper still serve from their issuer column; wrapped ones keep it frozen.
+// Wrapped toolsets keep their issuer column equal to their canonical server's for pods that still read it.
 func (q *Queries) UpdateToolsetsToUserSessionIssuer(ctx context.Context, arg UpdateToolsetsToUserSessionIssuerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateToolsetsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {

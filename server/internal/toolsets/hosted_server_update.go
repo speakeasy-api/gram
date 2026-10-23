@@ -289,8 +289,10 @@ func applyHostedServerChange(ctx context.Context, tx pgx.Tx, auditLogger *audit.
 		return hostedServerWrite{}, oops.E(oops.CodeBadRequest, nil, "invalid visibility")
 	}
 	enabled := visibility != mcpservers.VisibilityDisabled
-	if enabled && len(endpoints) == 0 && (!toolset.McpSlug.Valid || toolset.McpSlug.String == "") {
-		return hostedServerWrite{}, oops.E(oops.CodeInvalid, nil, "hosted MCP server has no address to serve")
+	if enabled && canonical.Visibility == mcpservers.VisibilityDisabled {
+		if err := hostedmcp.RequireLiveAddress(ctx, tx, toolset.OrganizationID, canonical); err != nil {
+			return hostedServerWrite{}, err //nolint:wrapcheck // oops errors pass through.
+		}
 	}
 	// External OAuth is only allowed on public servers; disabling keeps it for a later re-enable.
 	if visibility == mcpservers.VisibilityPrivate && canonical.Visibility != mcpservers.VisibilityPrivate && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid) {
@@ -376,6 +378,9 @@ func applyHostedServerChange(ctx context.Context, tx pgx.Tx, auditLogger *audit.
 			return hostedServerWrite{}, oops.E(oops.CodeUnexpected, err, "audit hosted MCP root cleanup")
 		}
 		result.ClearedRootDomainIDs = tombstone.RootDomainIDs(cleared)
+	}
+	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
+		return hostedServerWrite{}, err //nolint:wrapcheck // oops errors pass through.
 	}
 	return result, nil
 }
