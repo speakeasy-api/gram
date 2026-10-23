@@ -122,6 +122,14 @@ var Agent = Type("ManagedAgent", func() {
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })
 })
 
+var ListAgentsResult = Type("ListAgentsResult", func() {
+	Description("A page of managed agents, ordered by name.")
+
+	Attribute("items", ArrayOf(Agent), "The agents in this page.")
+	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
+	Required("items")
+})
+
 var _ = Service("agents", func() {
 	Description("Human-only management of first-class agent principals.")
 	Security(security.Session)
@@ -129,14 +137,46 @@ var _ = Service("agents", func() {
 	sessionMethods()
 
 	Method("list", func() {
+		shared.CursorPagination()
 		Meta("openapi:operationId", "listAgents")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Agents"}`)
-		Payload(func() { security.SessionPayload() })
-		Result(ArrayOf(Agent))
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("cursor", String, "Cursor for the next page of agents.")
+			Attribute("limit", Int, "The number of agents to return per page.", func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Attribute("search", String, "Case-insensitive substring match on the agent name.")
+			Attribute("lifecycle", ArrayOf(String), "Keep only agents in these lifecycle states.", func() {
+				Elem(func() { Enum("active", "suspended", "revoked") })
+			})
+			Attribute("owner_user_ids", ArrayOf(String), "Keep only agents owned by these users.")
+			Attribute("registered_after", String, "Keep only agents registered at or after this moment.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("registered_before", String, "Keep only agents registered before this moment.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("name_order", String, "Name order for the page.", func() {
+				Enum("asc", "desc")
+				Default("asc")
+			})
+		})
+		Result(ListAgentsResult)
 		HTTP(func() {
 			GET("/rpc/agents.list")
 			security.SessionHeader()
+			Param("cursor")
+			Param("limit")
+			Param("search")
+			Param("name_order")
+			Param("lifecycle")
+			Param("owner_user_ids")
+			Param("registered_after")
+			Param("registered_before")
 			Response(StatusOK)
 		})
 	})

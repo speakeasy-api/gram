@@ -289,12 +289,11 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 // could still roll back.
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer) (bool, bool, error) {
 	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       *authCtx.ProjectID,
-		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
-		DisplayName:     mcpservers.ServerDisplayName(server),
-		HostedServerKey: false,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
+		DisplayName:    mcpservers.ServerDisplayName(server),
 	}, s.distributionAdmission)
 	if err != nil {
 		return false, false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)

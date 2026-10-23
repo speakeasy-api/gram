@@ -1,3 +1,4 @@
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -153,6 +154,8 @@ function RemoveSourceDialogBody({
         invalidateAllListTools(queryClient),
         // Toolsets carry the tool URNs the "Used in MCP" facet reads.
         invalidateAllListToolsets(queryClient),
+        // Hosted servers' tool counts on the MCP list.
+        invalidateAllMcpServers(queryClient),
       ]);
       if (settled.status === "failed") {
         toast.error(

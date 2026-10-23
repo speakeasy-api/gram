@@ -10,12 +10,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
+
+// createMCPServerAndEndpointForToolset creates the MCP server and endpoint that toolset creation would.
+func createMCPServerAndEndpointForToolset(t *testing.T, f pipelineFixture, toolset toolsetsrepo.Toolset) {
+	t.Helper()
+	ctx := t.Context()
+	_, err := mcpserversrepo.New(f.db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: toolset.ID, ProjectID: toolset.ProjectID, Name: pgtype.Text{String: toolset.Name, Valid: true}, Slug: toolset.McpSlug,
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(f.db).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: toolset.ProjectID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: toolset.McpSlug.String,
+	})
+	require.NoError(t, err)
+}
 
 // Extend the existing setup pipeline seam: fixture repositories arrange grants
 // predating setup, and the real handler runs the setup transaction.
@@ -29,6 +46,7 @@ func TestRoleDistributionSetup_PopulatesExistingGrants(t *testing.T) {
 		McpSlug: pgtype.Text{String: "existing-server", Valid: true},
 	})
 	require.NoError(t, err)
+	createMCPServerAndEndpointForToolset(t, f, backing)
 	serverID := backing.ID
 	principal, err := urn.ParsePrincipal(f.roleURN)
 	require.NoError(t, err)
@@ -54,7 +72,7 @@ func TestRoleDistributionSetup_PopulatesExistingGrants(t *testing.T) {
 		servers, err := pluginsrepo.New(f.db).ListPluginServers(ctx, pluginID)
 		require.NoError(t, err)
 		require.Len(t, servers, 1, "setup populates every matching plugin")
-		require.Equal(t, serverID, servers[0].ToolsetID.UUID)
+		require.Equal(t, serverID, servers[0].McpServerID.UUID)
 	}
 	// Redelivery leaves stable membership identities intact.
 	before, err := pluginsrepo.New(f.db).ListPluginServers(ctx, manual.ID)
@@ -65,8 +83,8 @@ func TestRoleDistributionSetup_PopulatesExistingGrants(t *testing.T) {
 	require.Len(t, before, 1)
 	require.Len(t, after, 1)
 	require.Equal(t, before[0].ID, after[0].ID, "replay preserves the membership identity")
-	require.True(t, after[0].ToolsetID.Valid)
-	require.Equal(t, serverID, after[0].ToolsetID.UUID, "replay preserves the granted server")
+	require.True(t, after[0].McpServerID.Valid)
+	require.Equal(t, serverID, after[0].McpServerID.UUID, "replay preserves the granted server")
 	_, err = pluginsrepo.New(f.db).RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{PluginID: manual.ID, ID: before[0].ID})
 	require.NoError(t, err)
 	require.NoError(t, f.handler.HandleRoleDistributionSetupRequested(ctx, f.event, gcp.MessageMetadata{ID: "after-removal"}))
@@ -90,6 +108,7 @@ func TestRoleDistributionSetup_PopulatesOtherProject(t *testing.T) {
 	require.NoError(t, err)
 	backing, err := toolsetsrepo.New(f.db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: org, ProjectID: projectID, Name: "Other server", Slug: "other-server", McpEnabled: true, McpSlug: pgtype.Text{String: "other-server", Valid: true}})
 	require.NoError(t, err)
+	createMCPServerAndEndpointForToolset(t, f, backing)
 	principal, err := urn.ParsePrincipal(f.roleURN)
 	require.NoError(t, err)
 	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, backing.ID.String()).MarshalJSON()
@@ -104,7 +123,7 @@ func TestRoleDistributionSetup_PopulatesOtherProject(t *testing.T) {
 	contents, err := pluginsrepo.New(f.db).ListPluginServers(ctx, plugin.ID)
 	require.NoError(t, err)
 	require.Len(t, contents, 1)
-	require.Equal(t, backing.ID, contents[0].ToolsetID.UUID)
+	require.Equal(t, backing.ID, contents[0].McpServerID.UUID)
 	automatic, err := testrepo.New(f.db).PipelineEngineeringPlugin(ctx, f.project)
 	require.NoError(t, err)
 	contents, err = pluginsrepo.New(f.db).ListPluginServers(ctx, automatic)

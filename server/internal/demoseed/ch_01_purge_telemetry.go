@@ -780,6 +780,10 @@ func (s *seeder) chSkillRows() []chTelemetryRow {
 	return rows
 }
 
+// demoProjectSlug is the slug the org phase gives the tenant's one project
+// (OrgInsertProject), the authority of its skill:// URIs.
+const demoProjectSlug = "default"
+
 // chMCPSkillLoadRows are skill:// reads served over the support server, one
 // in every third chat, shaped like the rows the hosted MCP skill read path
 // writes: a resource_read named Skill with the skill name as its argument, so
@@ -817,7 +821,7 @@ func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
 			attributes: `{"gram.event.source":"resource_read"` +
 				`,"gram.tool.name":"Skill"` +
 				`,"gen_ai.tool.call.arguments":"{\"skill\":\"` + name + `\"}"` +
-				`,"gram.resource.uri":"` + mcpskills.SkillURI(name) + `"` +
+				`,"gram.resource.uri":"` + mcpskills.SkillURI(demoProjectSlug, name) + `"` +
 				`,"gram.mcp.skill.id":"` + s.skillID(pos).String() + `"` +
 				`,"gram.mcp.skill.version_id":"` + versionID.String() + `"` +
 				`,"gram.mcp.skill.digest":"sha256:` + hex.EncodeToString(digest[:]) + `"` +

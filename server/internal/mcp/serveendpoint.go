@@ -21,6 +21,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -147,7 +148,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
-	slug, mcpRouteBase string,
+	slug string, mcpRouteBase mcproute.Base,
 ) error {
 	ctx := r.Context()
 
@@ -232,10 +233,11 @@ func (s *Service) serveResolvedMCPEndpoint(
 				return err
 			}
 		}
+		buildOptions := authClientBuildOptions(pendingIssuerGate)
 		if mcpServer.RemoteMcpServerID.Valid {
-			return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)
+			return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection, buildOptions...)
 		}
-		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamResource, upstreamToken, wwwAuthenticate, sessionToolSelection)
+		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamResource, upstreamToken, wwwAuthenticate, sessionToolSelection, buildOptions...)
 	case mcpServer.ToolsetID.Valid:
 		// Wrapper-governed dispatch (AIS-633): visibility, issuer gating, the
 		// RBAC resource id, and the variation-group override come from the
@@ -437,17 +439,6 @@ func grantRoutesToUpstream(resource, upstream string, tunneled bool) bool {
 	return want != "" && strings.TrimRight(resource, "/") == want
 }
 
-// tunneledBackendIssuer yields the identity a resourceless tunneled backend's
-// subject grants route by: the server's own derived remote_session_issuer,
-// and only for tunneled backends — a remote backend routes subject grants
-// strictly by recorded resource.
-func tunneledBackendIssuer(mcpServer *mcpserversrepo.McpServer) uuid.NullUUID {
-	if !mcpServer.TunneledMcpServerID.Valid {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
-	return mcpServer.RemoteSessionIssuerID
-}
-
 // upstreamRoutingError is a fail-closed routing outcome: the endpoint's
 // credentials are ambiguous for this backend, which is a configuration state
 // an operator must resolve rather than a runtime fault. Call sites map it to a
@@ -567,16 +558,16 @@ func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
 // mcpRouteBase propagates into the resolved endpoint's
 // URL building on both the primary and fallback paths.
 //
-// mcpRouteBase "mcp/gateway" resolves slug as an organization slug to that
+// mcpRouteBase mcproute.OrganizationGateway resolves slug as an organization slug to that
 // organization's gateway instead.
-func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
+func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug string, mcpRouteBase mcproute.Base) (*ResolvedMcpEndpoint, error) {
 	return s.loadResolvedMcpEndpointBySlug(ctx, logger, slug, mcpRouteBase, mcpmetrics.LegacyFallbackOAuth)
 }
 
 // loadResolvedMcpEndpointBySlug is LoadResolvedMcpEndpointBySlug with the
 // entry point its legacy fallback is attributed to.
-func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string, fallbackEntryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
-	if mcpRouteBase == organizationGatewayRouteBase {
+func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug string, mcpRouteBase mcproute.Base, fallbackEntryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
+	if mcpRouteBase == mcproute.OrganizationGateway {
 		gateway, err := s.loadOrganizationGateway(ctx, slug)
 		if err != nil {
 			return nil, err
@@ -589,7 +580,7 @@ func (s *Service) loadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 		if metaServer != nil {
 			// Meta-backed endpoints expose OAuth handlers only on the
 			// canonical /mcp surface, and only when issuer-gated.
-			if mcpRouteBase != "mcp" || !metaServer.UserSessionIssuerID.Valid {
+			if mcpRouteBase != mcproute.MCP || !metaServer.UserSessionIssuerID.Valid {
 				return nil, oops.E(oops.CodeNotFound, nil, "not found")
 			}
 			return s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, mcpRouteBase)
@@ -626,7 +617,7 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
-	mcpRouteBase string,
+	mcpRouteBase mcproute.Base,
 ) (*ResolvedMcpEndpoint, error) {
 	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID)
 	switch {
@@ -713,6 +704,7 @@ func (s *Service) serveRemoteBackend(
 	upstream remotesessions.UpstreamToken,
 	wwwAuthenticate string,
 	selection *toolfilter.SessionSelection,
+	buildOptions ...remotemcp.BuildOption,
 ) error {
 	ctx := r.Context()
 	logger = logger.With(attr.SlogRemoteMCPServerID(mcpServer.RemoteMcpServerID.UUID.String()))
@@ -722,7 +714,7 @@ func (s *Service) serveRemoteBackend(
 		return err
 	}
 
-	build, err := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, organizationID, mcpServer, upstream.Token, wwwAuthenticate, selection)
+	build, err := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, organizationID, mcpServer, upstream.Token, wwwAuthenticate, selection, buildOptions...)
 	if err != nil {
 		return err
 	}
@@ -734,6 +726,16 @@ func (s *Service) serveRemoteBackend(
 	rejectSurvivingClientCredentialRejection(w, p, logger, upstream, renewal)
 
 	return serveProxyBackend(w, r.WithContext(ctx), p)
+}
+
+// authClientBuildOptions sends the resolved typed auth client's headers in
+// place of the server's credential headers; none when the upstream client
+// choice governs the request.
+func authClientBuildOptions(authentication *issuerGateAuthentication) []remotemcp.BuildOption {
+	if authentication == nil || authentication.authClient == nil {
+		return nil
+	}
+	return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.authClient.headers)}
 }
 
 // remoteBackendProxyBuilder loads a remote-backed server once and yields fresh one-request proxies for it.
@@ -806,6 +808,7 @@ func (s *Service) serveTunneledBackend(
 	upstream remotesessions.UpstreamToken,
 	wwwAuthenticate string,
 	selection *toolfilter.SessionSelection,
+	buildOptions ...remotemcp.BuildOption,
 ) error {
 	ctx := r.Context()
 	logger = logger.With(attr.SlogTunneledMCPServerID(mcpServer.TunneledMcpServerID.UUID.String()))
@@ -835,7 +838,7 @@ func (s *Service) serveTunneledBackend(
 		UpstreamAuth:       upstream.Token,
 		WWWAuthenticate:    wwwAuthenticate,
 		Selection:          selection,
-	})
+	}, buildOptions...)
 	if err != nil {
 		return err
 	}
@@ -1023,7 +1026,7 @@ func (s *Service) BuildResolvedMcpEndpointForMetaServer(
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
 	metaServer *metamcprepo.MetaMcpServer,
-	mcpRouteBase string,
+	mcpRouteBase mcproute.Base,
 ) (*ResolvedMcpEndpoint, error) {
 	resolved := NewResolvedMcpEndpointFromMetaMcpServer(mcpEndpoint, metaServer, metaServer.OrganizationID, mcpRouteBase)
 	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {

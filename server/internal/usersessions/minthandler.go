@@ -24,8 +24,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/signins"
@@ -174,7 +176,13 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "link sign-in").LogError(ctx, s.logger)
 	}
-	if _, err := repo.New(s.db).CreateUserSession(ctx, repo.CreateUserSessionParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	txRepo := repo.New(dbtx)
+	session, err := txRepo.CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: target.issuerID,
 		// No registration row. The refresh-token sentinel is what the session
 		// list reads to label the connection as the dashboard.
@@ -196,7 +204,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		Resource:     pgtype.Text{String: "", Valid: false},
 		SignInID:     signInID,
 		SignInUserID: conv.ToPGText(authCtx.UserID),
-	}); err != nil {
+		CredentialID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			revoked, lookupErr := s.signInRevoked(ctx, authCtx.ActiveOrganizationID, signInID)
 			switch {
@@ -208,6 +218,20 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
+	}
+	if _, err := txRepo.RecordUpstreamClientSelections(ctx, repo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: target.issuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        session.ID,
+		Source:              upstreamclients.SelectionSourceIssuance,
+		// A dashboard mint has no consent page, so it picks nothing.
+		PickedMcpServerIds: []uuid.UUID{},
+		PickedClientIds:    []uuid.UUID{},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit user session").LogError(ctx, s.logger)
 	}
 
 	// Spread the attrs (incl. the per-target audience attr) so loggercheck
@@ -330,6 +354,7 @@ func (s *Service) serverMintTarget(ctx context.Context, server *mcpserversrepo.M
 
 // wrapperMintTarget binds a toolset's wrapper only when an endpoint addresses
 // it; a nil target means the legacy toolset route is the one that serves.
+// Endpoints on a domain that cannot serve yet still bind the wrapper.
 func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (*mintTarget, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -340,8 +365,24 @@ func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
 	}
-	if issuerURL == "" {
+	if issuerURL != "" {
+		return serverMintTargetAt(server, issuerURL), nil
+	}
+
+	endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		McpServerID:    server.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mint wrapper endpoints").LogError(ctx, s.logger)
+	}
+	if len(endpoints) == 0 {
 		return nil, nil
+	}
+	issuerURL, err = s.serverSlugIssuerURL(ctx, server)
+	if err != nil {
+		return nil, err
 	}
 	return serverMintTargetAt(server, issuerURL), nil
 }
@@ -371,11 +412,14 @@ func (s *Service) serverMintIssuerURL(ctx context.Context, server *mcpserversrep
 	if issuerURL != "" {
 		return issuerURL, nil
 	}
+	return s.serverSlugIssuerURL(ctx, server)
+}
 
+func (s *Service) serverSlugIssuerURL(ctx context.Context, server *mcpserversrepo.McpServer) (string, error) {
 	if server.Slug.String == "" {
 		return "", oops.E(oops.CodeInvariantViolation, nil, "issuer-gated mcp server has no addressable endpoint or slug").LogError(ctx, s.logger)
 	}
-	issuerURL, err = url.JoinPath(s.serverURL, "mcp", server.Slug.String)
+	issuerURL, err := url.JoinPath(s.serverURL, "mcp", server.Slug.String)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
 	}

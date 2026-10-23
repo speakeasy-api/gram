@@ -96,7 +96,7 @@ func TestDeleteToolsetRequestsPublicationForWrapperBackedToolset(t *testing.T) {
 	_, err = servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolsetID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err, "creation materializes the hosted wrapper and its platform endpoint")
 	_, err = plugins.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
-		PluginID: defaultPlugin.ID, ToolsetID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true},
+		PluginID: defaultPlugin.ID, McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true},
 		DisplayName: "Wrapped toolset", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)

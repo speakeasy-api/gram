@@ -126,7 +126,7 @@ func (e *EnvironmentEntries) LoadMCPAttachedEnvironment(
 	projectID uuid.UUID,
 	toolsetID uuid.UUID,
 ) (map[string]string, error) {
-	mcpMetadata, err := e.mcpMetadataRepo.GetMetadataByBackendID(ctx, mcpmetadata_repo.GetMetadataByBackendIDParams{ProjectID: projectID, BackendID: toolsetID})
+	mcpMetadata, err := e.mcpMetadataRepo.GetMetadataByBackendID(ctx, mcpmetadata_repo.GetMetadataByBackendIDParams{ProjectID: projectID, BackendID: toolsetID, ToolsetBackend: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return map[string]string{}, nil

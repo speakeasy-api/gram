@@ -6937,6 +6937,7 @@ WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
   AND rtrim(resource, '/') = $4::text
   AND ($5::uuid IS NULL OR remote_session_issuer_id = $5::uuid)
+  AND ($6::uuid IS NULL OR remote_session_client_id = $6::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
 ORDER BY id
 LIMIT 2
@@ -6948,6 +6949,7 @@ type ListEMAChainingBindingsParams struct {
 	UserSessionIssuerID   uuid.UUID
 	UpstreamResource      string
 	RemoteSessionIssuerID uuid.NullUUID
+	RemoteSessionClientID uuid.NullUUID
 }
 
 // Ready bindings whose canonical resource names an endpoint's upstream.
@@ -6955,8 +6957,9 @@ type ListEMAChainingBindingsParams struct {
 // keeps the exact RFC 9728 identifier, so both compare under the routing trim.
 // Unlinked tombstones and unfinished preparations never select or conflict.
 // A tunneled upstream passes its own derived issuer: its resource identifier is
-// operator supplied, so only a binding for that issuer may serve it. Two rows
-// are enough to prove the selection ambiguous.
+// operator supplied, so only a binding for that issuer may serve it. A caller
+// that chose a client passes it, so only that client's bindings select or
+// conflict. Two rows are enough to prove the selection ambiguous.
 func (q *Queries) ListEMAChainingBindings(ctx context.Context, arg ListEMAChainingBindingsParams) ([]RemoteSessionEmaBinding, error) {
 	rows, err := q.db.Query(ctx, listEMAChainingBindings,
 		arg.ProjectID,
@@ -6964,6 +6967,7 @@ func (q *Queries) ListEMAChainingBindings(ctx context.Context, arg ListEMAChaini
 		arg.UserSessionIssuerID,
 		arg.UpstreamResource,
 		arg.RemoteSessionIssuerID,
+		arg.RemoteSessionClientID,
 	)
 	if err != nil {
 		return nil, err
@@ -7004,6 +7008,7 @@ SELECT resource FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
   AND ($4::uuid IS NULL OR remote_session_issuer_id = $4::uuid)
+  AND ($5::uuid IS NULL OR remote_session_client_id = $5::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
 `
 
@@ -7012,16 +7017,19 @@ type ListEMAChainingResourceCandidatesParams struct {
 	OrganizationID        string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionIssuerID uuid.NullUUID
+	RemoteSessionClientID uuid.NullUUID
 }
 
 // Diagnostic candidates only: an origin match can retain a configuration error
 // after invalid discovery, but never authorizes an alias or selects a token.
+// A caller that chose a client passes it, so only that client's bindings count.
 func (q *Queries) ListEMAChainingResourceCandidates(ctx context.Context, arg ListEMAChainingResourceCandidatesParams) ([]string, error) {
 	rows, err := q.db.Query(ctx, listEMAChainingResourceCandidates,
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionIssuerID,
+		arg.RemoteSessionClientID,
 	)
 	if err != nil {
 		return nil, err

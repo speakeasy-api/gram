@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const RevealState = {
 /**
  * Whether the payload was revealed or its evidence is unavailable or expired.
  */
-export type RevealState = ClosedEnum<typeof RevealState>;
+export type RevealState = OpenEnum<typeof RevealState>;
 
 export type RiskRevealPayloadResult = {
   /**
@@ -49,8 +50,8 @@ export type RiskRevealPayloadResult = {
 };
 
 /** @internal */
-export const RevealState$inboundSchema: z.ZodMiniEnum<typeof RevealState> = z
-  .enum(RevealState);
+export const RevealState$inboundSchema: z.ZodMiniType<RevealState, unknown> =
+  openEnums.inboundSchema(RevealState);
 
 /** @internal */
 export const RiskRevealPayloadResult$inboundSchema: z.ZodMiniType<

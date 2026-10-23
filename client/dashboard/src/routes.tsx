@@ -34,7 +34,6 @@ import EventFeed from "./pages/data/EventFeed";
 import DataExports from "./pages/data-exports/DataExports";
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
-import AgentsPage from "./pages/agents/Agents";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -55,6 +54,7 @@ import { RedirectToDeployments } from "./pages/mcp/add/LegacyRedirects";
 import Sources, { SourcesRoot } from "./pages/mcp/sources/Sources";
 import SourceDetailRoute from "./pages/mcp/sources/SourceDetail";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
+import OrganizationGatewayPage from "./pages/mcp/OrganizationGateway";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
@@ -66,7 +66,10 @@ import {
 } from "./pages/explore/Dashboards";
 import Explore from "./pages/explore/Explore";
 import SignalsIntelligenceRoute from "./components/signals-intelligence-route";
-import IdentitiesIndex, {
+import {
+  AgentsIndex,
+  PeopleIndex,
+  PeopleIndexRedirect,
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
 } from "./pages/identities/IdentitiesIndex";
@@ -80,6 +83,10 @@ import IdentityCost from "./pages/identities/IdentityCost";
 import IdentityDevices from "./pages/identities/IdentityDevices";
 import IdentityConnections from "./pages/identities/IdentityConnections";
 import IdentityActivity from "./pages/identities/IdentityActivity";
+import IdentityAgentSection from "./pages/identities/IdentityAgentSection";
+import NewAgentIdentity from "./pages/agents/NewAgentIdentity";
+import EditAgentIdentity from "./pages/agents/EditAgentIdentity";
+import AgentManagementRedirect from "./pages/agents/AgentManagementRedirect";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
@@ -121,13 +128,6 @@ import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
-import {
-  WorkloadIssuersPage,
-  WorkloadIssuersRoot,
-} from "./pages/workload-identities/WorkloadIssuers";
-import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
-import { CatalogPlatformPage } from "./pages/workload-identities/setup/CatalogPlatformPage";
-import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -547,6 +547,15 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
+      // The Organization Gateway. A static segment beside `add`,
+      // `catalog` and `sources`, with the same latent toolset-slug collision.
+      // It lives under MCP rather than the organization settings because it
+      // is opened from the head of the MCP Servers list.
+      organizationGateway: {
+        title: "Organization Gateway",
+        url: "organization-gateway",
+        component: OrganizationGatewayPage,
+      },
       // Gateway Endpoints (meta MCP servers). Addressed by id: a gateway has
       // no slug of its own — routing identity lives on its mcp_endpoints.
       gateway: {
@@ -699,27 +708,14 @@ const ROUTE_STRUCTURE = {
     },
   },
 
-  // Legacy project-scoped URLs for the Access Hub and the Workload Identities
-  // page redirect to the organization-level Access Hub.
-  legacyWorkloadIdentities: {
-    title: "Workload Identities",
-    url: "workload-identities",
-    legacyRedirect: true,
-    component: AccessHubRedirect,
-  },
-  legacyAccessHub: {
-    title: "Access Hub",
-    url: "access-hub/*",
-    legacyRedirect: true,
-    component: AccessHubRedirect,
-  },
-
+  // Kept as a redirect only: agents live under Identities now. Links minted
+  // before that, and anything a reader bookmarked, still resolve.
   agents: {
     title: "Agent Identity",
     url: "agent-management",
     icon: "bot",
-    stage: "preview",
-    component: AgentsPage,
+    legacyRedirect: true,
+    component: AgentManagementRedirect,
   },
   // One page per person, reached from every surface that renders a human. The
   // URL segment is an identity URN (`user:...`, `email:...`, `external:...`),
@@ -736,8 +732,38 @@ const ROUTE_STRUCTURE = {
     url: "identities",
     icon: "users",
     component: IdentitiesRoot,
-    indexComponent: IdentitiesIndex,
+    // The bare URL holds no roster of its own: people and agents are two
+    // rosters, and this sends you to the people.
+    indexComponent: PeopleIndexRedirect,
     subPages: {
+      people: {
+        title: "People",
+        url: "people",
+        icon: "users",
+        component: PeopleIndex,
+      },
+      agents: {
+        title: "Agents",
+        url: "agents",
+        icon: "bot",
+        stage: "preview",
+        // indexComponent, not component: a route with children renders its
+        // component as their layout, and the roster has no outlet, so it
+        // would render in place of every child.
+        indexComponent: AgentsIndex,
+        subPages: {
+          new: {
+            title: "New Agent Identity",
+            url: "new",
+            component: NewAgentIdentity,
+          },
+          edit: {
+            title: "Edit Agent Identity",
+            url: ":agentId/edit",
+            component: EditAgentIdentity,
+          },
+        },
+      },
       detail: {
         title: "Identity",
         url: ":identityUrn",
@@ -788,6 +814,39 @@ const ROUTE_STRUCTURE = {
             title: "Identity Activity",
             url: "activity",
             component: IdentityActivity,
+          },
+          // An agent is a different subject from a person, and its sections
+          // are named for what an agent holds. They are their own segments so
+          // the address, the breadcrumb and the tab agree: an agent's keys
+          // served at /devices read as "Devices" in the crumb bar whatever
+          // the tab was labelled. The person segments above are unchanged.
+          permissions: {
+            title: "Agent Permissions",
+            url: "permissions",
+            component: IdentityAgentSection,
+          },
+          credentials: {
+            title: "Agent Credentials",
+            url: "credentials",
+            component: IdentityAgentSection,
+          },
+          // The section this one was renamed from. Kept so the links and
+          // bookmarks that name it still resolve: the page itself sends the
+          // old segment on to the new one.
+          provisioning: {
+            title: "Agent Credentials",
+            url: "provisioning",
+            component: IdentityAgentSection,
+          },
+          sessions: {
+            title: "Agent Sessions",
+            url: "sessions",
+            component: IdentityAgentSection,
+          },
+          controls: {
+            title: "Agent Controls",
+            url: "controls",
+            component: IdentityAgentSection,
           },
         },
       },
@@ -1452,28 +1511,6 @@ const ORG_ROUTE_STRUCTURE = {
           keys: { title: "Keys", url: "keys" },
           settings: { title: "Settings", url: "settings" },
         },
-      },
-    },
-  },
-  // The trust policy is configured for the organization as a whole, so the
-  // Access Hub names no project.
-  workloadIssuers: {
-    title: "Access Hub",
-    url: "access-hub",
-    icon: "cpu",
-    stage: "preview",
-    component: WorkloadIssuersRoot,
-    indexComponent: WorkloadIssuersPage,
-    subPages: {
-      issuerDetail: {
-        title: "Trusted Platform",
-        url: ":issuerId",
-        component: WorkloadIssuerDetailPage,
-      },
-      catalogPlatform: {
-        title: "Catalog Platform",
-        url: "catalog/:platformKey",
-        component: CatalogPlatformPage,
       },
     },
   },

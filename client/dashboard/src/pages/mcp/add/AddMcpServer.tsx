@@ -4,11 +4,9 @@ import { Card } from "@/components/ui/Card";
 import { useIconDither } from "@/components/icon-dither";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { createDefaultGatewayEndpoint } from "@/lib/mcpEndpoints";
-import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { useRoutes } from "@/routes";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
@@ -129,7 +127,6 @@ function AddOptionGrid({ options }: { options: AddOption[] }): JSX.Element {
  */
 export default function AddMcpServer(): JSX.Element {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const client = useSdkClient();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
@@ -140,10 +137,6 @@ export default function AddMcpServer(): JSX.Element {
   // mcp:write regardless.
   const gatewaysEnabled =
     useFeatureFlag(FEATURE_FLAGS.gatewayEndpoints).status === "enabled";
-  const isFunctionsEnabled =
-    telemetry.isFeatureEnabled("gram-functions") ?? false;
-  const isTunneledMcpEnabled =
-    telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG) ?? false;
 
   // Creation is two calls: the gateway, then its default address. The address
   // is best-effort (createDefaultGatewayEndpoint warns rather than throwing),
@@ -185,19 +178,13 @@ export default function AddMcpServer(): JSX.Element {
       description:
         "Add a server that already runs elsewhere by its URL, proxied or not.",
     },
-    ...(isTunneledMcpEnabled
-      ? [
-          {
-            href: routes.mcp.add.tunneled.href(),
-            icon: (
-              <Cable className="text-foreground size-10" strokeWidth={1.25} />
-            ),
-            title: "Reachable through a tunnel",
-            description:
-              "Connect a server running inside your own network through a tunnel.",
-          },
-        ]
-      : []),
+    {
+      href: routes.mcp.add.tunneled.href(),
+      icon: <Cable className="text-foreground size-10" strokeWidth={1.25} />,
+      title: "Reachable through a tunnel",
+      description:
+        "Connect a server running inside your own network through a tunnel.",
+    },
   ];
 
   const gatewayOptions: AddOption[] = [
@@ -224,18 +211,12 @@ export default function AddMcpServer(): JSX.Element {
       description:
         "Build a server from an OpenAPI document or function this project already has.",
     },
-    ...(isFunctionsEnabled
-      ? [
-          {
-            href: routes.mcp.add.function.href(),
-            icon: (
-              <Code className="text-foreground size-10" strokeWidth={1.25} />
-            ),
-            title: "Write custom code",
-            description: "Create tools with TypeScript functions.",
-          },
-        ]
-      : []),
+    {
+      href: routes.mcp.add.function.href(),
+      icon: <Code className="text-foreground size-10" strokeWidth={1.25} />,
+      title: "Write custom code",
+      description: "Create tools with TypeScript functions.",
+    },
   ];
 
   return (

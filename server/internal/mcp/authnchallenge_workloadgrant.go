@@ -542,6 +542,8 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		DesiredSessionDuration: &lifetime,
 		Replayable:             false,
 		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UpstreamClientPicks:    nil,
 	}
 }
 
