@@ -97,14 +97,16 @@ func TestCatalog_EntriesAreWellFormed(t *testing.T) {
 func TestCatalog_ReturnsCopy(t *testing.T) {
 	t.Parallel()
 
-	first := aivendors.NewSnapshot(aivendors.Products()).Catalog()
+	snapshot := aivendors.NewSnapshot(aivendors.Products())
+	first := snapshot.Catalog()
 	require.NotEmpty(t, first)
 	original := first[0]
 	first[0] = Preset{VendorKey: "attacker", DisplayName: "attacker", URL: unknownURL, Enabled: true}
 
-	second := aivendors.NewSnapshot(aivendors.Products()).Catalog()
+	second := snapshot.Catalog()
 	require.Equal(t, original, second[0])
-	require.False(t, catalogAdmits(unknownURL))
+	_, admitted := CatalogMatch(snapshot, unknownURL)
+	require.False(t, admitted)
 }
 
 // TestCatalogMatch_ReportsWhichEntryMatched: the exact/pattern split is the

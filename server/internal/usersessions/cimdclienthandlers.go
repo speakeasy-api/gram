@@ -39,8 +39,8 @@ const (
 	verifyRateBurst  = 5
 )
 
-// Lists Speakeasy's curated CIMD preset catalog. The catalog is a compile-time
-// constant with no tenant data, but the endpoint still carries the standard
+// Lists Speakeasy's curated CIMD preset catalog. The catalog is a periodically
+// refreshed database snapshot with no tenant data, but the endpoint still carries the standard
 // project auth: it is only meaningful next to the issuer configuration it
 // accompanies, and an unauthenticated surface would be a needless addition
 // to the public attack area.

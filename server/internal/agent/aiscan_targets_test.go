@@ -632,7 +632,8 @@ func TestDeleteAiScanTargetCanRepairMultipleCatalogConflicts(t *testing.T) {
 	require.Len(t, customIDs, 2)
 	for _, id := range customIDs {
 		_, err := ti.service.ListAiScanTargets(ctx, &gen.ListAiScanTargetsPayload{})
-		require.Error(t, err, "the remaining conflict must still prevent serving the list")
+		requireAiScanErrorCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "custom-", "admins must see the conflicting target IDs")
 		_, err = ti.service.DeleteAiScanTarget(ctx, &gen.DeleteAiScanTargetPayload{ID: id})
 		require.NoError(t, err, "another invalid entry must not prevent removing this one")
 	}

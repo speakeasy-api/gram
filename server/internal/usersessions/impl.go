@@ -124,6 +124,9 @@ var (
 // need the surface). sharedHosts must match the hosts the MCP service serves
 // shared authorization servers on.
 func NewService(aiCatalog *aivendors.Store, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, signer *Signer, serverURL string, sharedHosts authserver.Hosts, verifyStore ratelimit.Store, assertionSigners ...remotesessions.TokenEndpointAssertionSigner) *Service {
+	if aiCatalog == nil {
+		panic("AI client catalog store is required")
+	}
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{

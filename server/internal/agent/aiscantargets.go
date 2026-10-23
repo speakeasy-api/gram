@@ -50,6 +50,9 @@ func (s *Service) ListAiScanTargets(ctx context.Context, _ *gen.ListAiScanTarget
 	}
 	list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID, catalog)
 	if err != nil {
+		if errors.Is(err, aitargets.ErrInvalidTarget) {
+			return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogWarn(ctx, s.logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "list ai scan targets").LogError(ctx, s.logger)
 	}
 	return mv.BuildAiScanTargetListView(list), nil
@@ -272,7 +275,7 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 // customizes; else nothing.
 //
 // A built-in's row carries only the organization's choice about it, so the row
-// is resolved back against the compiled-in definition. Both callers read the
+// is resolved back against the current global catalog definition. Both callers read the
 // definition off this: the omitted-gateway_client carry-over above, which
 // would otherwise unlink a built-in from the caller it blocks and then fail
 // the read-only check, and the update audit's before-snapshot.

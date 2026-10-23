@@ -32,49 +32,6 @@ func (q *Queries) BackfillDecisions(ctx context.Context, ids []string) error {
 	return err
 }
 
-const editDocumentFixture = `-- name: EditDocumentFixture :exec
-UPDATE ai_product_cimd_documents
-SET url = $1, display_name = $2, enabled = $3,
-    deleted_at = $4
-WHERE id = $5
-`
-
-type EditDocumentFixtureParams struct {
-	Url         string
-	DisplayName string
-	Enabled     bool
-	DeletedAt   pgtype.Timestamptz
-	ID          uuid.UUID
-}
-
-func (q *Queries) EditDocumentFixture(ctx context.Context, arg EditDocumentFixtureParams) error {
-	_, err := q.db.Exec(ctx, editDocumentFixture,
-		arg.Url,
-		arg.DisplayName,
-		arg.Enabled,
-		arg.DeletedAt,
-		arg.ID,
-	)
-	return err
-}
-
-const editProductFixture = `-- name: EditProductFixture :exec
-UPDATE ai_products
-SET display_name = $1, deleted_at = $2
-WHERE id = $3
-`
-
-type EditProductFixtureParams struct {
-	DisplayName string
-	DeletedAt   pgtype.Timestamptz
-	ID          string
-}
-
-func (q *Queries) EditProductFixture(ctx context.Context, arg EditProductFixtureParams) error {
-	_, err := q.db.Exec(ctx, editProductFixture, arg.DisplayName, arg.DeletedAt, arg.ID)
-	return err
-}
-
 const insertDocument = `-- name: InsertDocument :exec
 INSERT INTO ai_product_cimd_documents (
   id, ai_product_id, url, display_name, enabled, is_pattern

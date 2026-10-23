@@ -1384,7 +1384,7 @@ WHERE user_session_client_id = @user_session_client_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: IssuerAdmitsCimdClientURI :one
--- Admission check for a presented CIMD client_id that missed the compile-time
+-- Admission check for a presented CIMD client_id that missed the current global
 -- preset catalog. Runs on the unauthenticated /authorize surface, so project
 -- scoping is intentionally NOT applied — the issuer_id is the authoritative
 -- scope, matching GetUserSessionClientByClientID. Served by the partial

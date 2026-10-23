@@ -17,6 +17,7 @@ import (
 	catalogseedrepo "github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -226,7 +227,7 @@ func TestChatGPTRecognitionFollowsCatalogRefresh(t *testing.T) {
 	require.NoError(t, err)
 	for _, d := range docs {
 		if d.Url == "https://chatgpt.com/oauth/*/client.json" {
-			require.NoError(t, q.EditDocumentFixture(t.Context(), catalogseedrepo.EditDocumentFixtureParams{ID: d.ID, Url: "https://clients.example.com/connectors/*/client.json", DisplayName: d.DisplayName, Enabled: true, DeletedAt: pgtype.Timestamptz{}}))
+			require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: d.ID, Url: "https://clients.example.com/connectors/*/client.json", DisplayName: d.DisplayName, Enabled: true, DeletedAt: pgtype.Timestamptz{}}))
 		}
 	}
 	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))

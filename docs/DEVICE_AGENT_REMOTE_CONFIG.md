@@ -75,8 +75,9 @@ stores them, and rejects any update that tries to set them.
   derived from catalog content: stable across replicas and restarts, but not
   monotonic or guaranteed unique. Clients must use `etag` to detect changes.
   The ETag includes the full catalog fingerprint and the organization's served
-  targets, so version-label collisions cannot hide changes. Organization edits
-  change the ETag without changing the global catalog's version identifier.
+  targets, so version-label collisions cannot hide changes. Organization edits to
+  the served target list change the ETag without changing the global catalog's
+  version identifier.
   Organization admins manage their targets through
   `agent.listAiScanTargets`, `agent.upsertAiScanTarget`, and
   `agent.deleteAiScanTarget`; every change lands in the organization's audit

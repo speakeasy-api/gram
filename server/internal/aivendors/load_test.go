@@ -16,6 +16,7 @@ import (
 	seedrepo "github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,9 +60,8 @@ func TestRefreshPublishesEditsWithoutTimestampChanges(t *testing.T) {
 	store := aivendors.NewStore(initial)
 	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
 	require.Same(t, initial, store.Snapshot(), "unchanged snapshots are retained")
-	q := seedrepo.New(db)
 	// This fixture deliberately does not update updated_at.
-	require.NoError(t, q.EditProductFixture(t.Context(), seedrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed Updated", DeletedAt: pgtype.Timestamptz{}}))
+	require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed Updated", DeletedAt: pgtype.Timestamptz{}}))
 	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
 	next := store.Snapshot()
 	require.NotEqual(t, initial.Fingerprint(), next.Fingerprint())
@@ -98,10 +98,10 @@ func TestLoadOmitsInvalidPatternsAndDeletedProducts(t *testing.T) {
 	require.NoError(t, err)
 	for _, d := range docs {
 		if d.Url == "https://chatgpt.com/oauth/*/client.json" {
-			require.NoError(t, q.EditDocumentFixture(t.Context(), seedrepo.EditDocumentFixtureParams{ID: d.ID, Url: "https://*.example.com/client.json", DisplayName: d.DisplayName, Enabled: true, DeletedAt: pgtype.Timestamptz{}}))
+			require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: d.ID, Url: "https://*.example.com/client.json", DisplayName: d.DisplayName, Enabled: true, DeletedAt: pgtype.Timestamptz{}}))
 		}
 	}
-	require.NoError(t, q.EditProductFixture(t.Context(), seedrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed", DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}}))
+	require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed", DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}}))
 	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
 	require.NoError(t, err)
 	_, ok := snapshot.CatalogPreset("https://chatgpt.com/oauth/fixture-connector/client.json")
@@ -114,6 +114,34 @@ func TestLoadOmitsInvalidPatternsAndDeletedProducts(t *testing.T) {
 	for _, p := range snapshot.Products() {
 		for _, d := range p.Documents {
 			require.NotEqual(t, "https://*.example.com/client.json", d.URL)
+		}
+	}
+}
+
+func TestLoadOmitsPatternsWithoutRealPath(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	patterns := []string{
+		"https://example.com?redirect=/oauth/*/client.json",
+		"https://example.com#/oauth/*/client.json",
+	}
+	for _, pattern := range patterns {
+		require.NoError(t, seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
+			ID: uuid.New(), AiProductID: "zed", Url: pattern, DisplayName: "Malformed pattern", Enabled: true, IsPattern: true,
+		}))
+	}
+	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.Len(t, snapshot.Catalog(), 24)
+	for _, pattern := range patterns {
+		_, admitted := snapshot.CatalogPreset(strings.ReplaceAll(pattern, "*", "connector"))
+		require.False(t, admitted)
+		for _, product := range snapshot.Products() {
+			for _, document := range product.Documents {
+				require.NotEqual(t, pattern, document.URL)
+			}
 		}
 	}
 }
@@ -131,7 +159,7 @@ func TestRefreshAcceptsIntentionallyEmptyCatalog(t *testing.T) {
 	rows, err := q.ListProducts(t.Context())
 	require.NoError(t, err)
 	for _, p := range rows {
-		require.NoError(t, q.EditProductFixture(t.Context(), seedrepo.EditProductFixtureParams{ID: p.ID, DisplayName: p.DisplayName, DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}}))
+		require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: p.ID, DisplayName: p.DisplayName, DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}}))
 	}
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db), "startup does not restore soft-deleted products")
 	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
@@ -150,7 +178,7 @@ func TestLoadListsDisabledDocumentsWithoutAdmittingThem(t *testing.T) {
 	require.NoError(t, err)
 	for _, d := range docs {
 		if d.AiProductID == "zed" {
-			require.NoError(t, q.EditDocumentFixture(t.Context(), seedrepo.EditDocumentFixtureParams{ID: d.ID, Url: d.Url, DisplayName: d.DisplayName, Enabled: false, DeletedAt: pgtype.Timestamptz{}}))
+			require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: d.ID, Url: d.Url, DisplayName: d.DisplayName, Enabled: false, DeletedAt: pgtype.Timestamptz{}}))
 		}
 	}
 	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
