@@ -63,6 +63,9 @@ export function ResultChart({
   grain,
   height,
   onRangeSelect,
+  connectGaps = true,
+  colorByIndex = false,
+  timeZone,
 }: {
   seriesSet: SeriesSet;
   /** The unit every series shares; the axis and tooltips format by it. */
@@ -73,11 +76,17 @@ export function ResultChart({
   height?: number;
   /** Dragging across the chart selects the buckets under the drag. */
   onRangeSelect?: ((from: Date, to: Date) => void) | undefined;
+  /** False when an unobserved bucket is unknown rather than an interpolated line. */
+  connectGaps?: boolean;
+  /** Give each selected series its own palette entry, avoiding label-hash collisions. */
+  colorByIndex?: boolean;
+  /** Fix calendar labels to UTC when required by the measurement contract. */
+  timeZone?: "UTC";
 }): JSX.Element {
   const colors = useSeriesColors();
   const otherColor = useOtherSeriesColor();
   const isDark = useIsDarkTheme();
-  const { buckets, series } = seriesSet;
+  const { buckets, series, partialBuckets } = seriesSet;
   const stacked = isStacked(chartType);
   const bars = chartType === "bar" || chartType === "stacked_bar";
 
@@ -107,10 +116,14 @@ export function ResultChart({
 
   const datasets = useMemo<TimeseriesDataset[]>(
     () =>
-      series.map((one) => {
+      series.map((one, i) => {
         const color = one.other
           ? otherColor
-          : colors[paletteIndex(one.label, colors.length)]!;
+          : colors[
+              colorByIndex
+                ? i % colors.length
+                : paletteIndex(one.label, colors.length)
+            ]!;
         // A stacked band contributes nothing where its series had no row;
         // Chart.js breaks a stacked line at a null and leaves a bar gap, so
         // a stack draws the missing bucket as zero.
@@ -138,13 +151,33 @@ export function ResultChart({
           type: "line",
           backgroundColor: chartType === "area" ? withAlpha(color, 0.2) : color,
           borderWidth: 1.5,
-          pointRadius: isSparse(one.points) ? 4 : 0,
+          pointRadius:
+            !connectGaps ||
+            isSparse(one.points) ||
+            (partialBuckets?.size ?? 0) > 0
+              ? 3
+              : 0,
+          pointStyle: (context) =>
+            partialBuckets?.has(buckets[context.dataIndex] ?? "")
+              ? "triangle"
+              : "circle",
           pointHoverRadius: 4,
           fill: chartType === "area",
-          spanGaps: true,
+          spanGaps: connectGaps,
         };
       }),
-    [series, chartType, stacked, bars, colors, otherColor, buckets.length],
+    [
+      series,
+      chartType,
+      stacked,
+      bars,
+      colors,
+      otherColor,
+      buckets,
+      connectGaps,
+      colorByIndex,
+      partialBuckets,
+    ],
   );
 
   const options = useMemo<ChartOptions<"line" | "bar">>(
@@ -167,7 +200,11 @@ export function ResultChart({
           callbacks: {
             title: (items) => {
               const iso = items[0]?.label;
-              return iso ? bucketTitle(iso, grain) : "";
+              if (!iso) return "";
+              const partial = partialBuckets?.has(iso)
+                ? " · Partial interval"
+                : "";
+              return bucketTitle(iso, grain, timeZone) + partial;
             },
             label: (context) =>
               `${context.dataset.label}: ${formatMeasureValue(Number(context.parsed.y ?? 0), unit)}`,
@@ -186,7 +223,7 @@ export function ResultChart({
             maxTicksLimit: 10,
             callback: (value) => {
               const iso = buckets[Number(value)];
-              return iso === undefined ? "" : bucketTick(iso, grain);
+              return iso === undefined ? "" : bucketTick(iso, grain, timeZone);
             },
           },
         },
@@ -201,7 +238,17 @@ export function ResultChart({
         },
       },
     }),
-    [datasets.length, unit, isDark, buckets, grain, zoomPluginOptions, stacked],
+    [
+      datasets.length,
+      unit,
+      isDark,
+      buckets,
+      grain,
+      zoomPluginOptions,
+      stacked,
+      timeZone,
+      partialBuckets,
+    ],
   );
 
   return (

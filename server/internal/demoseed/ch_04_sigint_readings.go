@@ -96,8 +96,20 @@ func (s *seeder) sigintReadingRows() ([]chrepo.ReadingRow, error) {
 		if err != nil {
 			return nil, err
 		}
-		for n := range sigintReadingDays {
-			rows = append(rows, s.sigintReading(sensor, members, definitionHash, n))
+		for n := range signalMessageCount {
+			row := s.sigintReading(sensor, members, definitionHash, n)
+			switch {
+			case n%43 == 0:
+				row.Status, row.FailureReason = chrepo.StatusFailed, "demo_evaluation_failure"
+			case n%37 == 0:
+				row.Status = chrepo.StatusNotApplicable
+			case n%31 == 0:
+				row.Status = chrepo.StatusDraft
+			}
+			if row.Status != chrepo.StatusAnswered {
+				row.ResultType, row.Probabilities, row.SelectedSignalID, row.SelectedSignalSlug, row.ExpectedIndex, row.Confidence = "", nil, nil, "", nil, nil
+			}
+			rows = append(rows, row)
 		}
 		for run := range sigintManualRuns {
 			request := readings.Context{
@@ -106,7 +118,7 @@ func (s *seeder) sigintReadingRows() ([]chrepo.ReadingRow, error) {
 				RequestedAt: s.now.UTC().Add(-time.Duration(sigintManualRuns-run) * time.Hour),
 			}
 			for target := range sigintManualMessages {
-				row := s.sigintReading(sensor, members, definitionHash, sigintReadingDays-sigintManualMessages+target)
+				row := s.sigintReading(sensor, members, definitionHash, signalRecentMessages+target)
 				row.TriggerKind, row.RunID, row.EvaluationRequestedAt = string(request.TriggerKind), request.RunID, request.RequestedAt
 				row.ID = request.ReadingID(row.OrganizationID, row.ProjectID.String(), row.EventKind, row.EventID, row.SensorID.String())
 				row.EvaluationAttemptID = s.det("sigint-manual-attempt-" + strconv.Itoa(run) + "-" + strconv.Itoa(target))
@@ -119,7 +131,8 @@ func (s *seeder) sigintReadingRows() ([]chrepo.ReadingRow, error) {
 }
 
 func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMembership, definitionHash string, n int) chrepo.ReadingRow {
-	day := float64(n)
+	conversationID, messageID, sourceTime := s.signalSource(n)
+	day := s.now.UTC().Sub(sourceTime).Hours() / 24
 	probability := 0.5 + 0.3*math.Sin(day*2*math.Pi/365) + 0.1*math.Sin(day*2*math.Pi/7)
 	remainderShare := 0.5 + 0.3*math.Sin(day*2*math.Pi/7+1)
 	distribution := [sigintReadingMembers]float64{probability, (1 - probability) * remainderShare, (1 - probability) * (1 - remainderShare)}
@@ -197,12 +210,11 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		}
 		attributes["inference_provider"] = providers[(n/2)%len(providers)]
 	}
-	sourceTime := s.now.UTC().AddDate(0, 0, -n).Add(-time.Hour)
 	request := readings.Context{TriggerKind: readings.TriggerStream, RunID: uuid.Nil, RequestedAt: sourceTime.Add(time.Second)}
-	eventID := s.name("sigint-source-" + strconv.Itoa(n))
+	eventID := messageID.String()
 	sensorID := s.det("sigint-sensor-" + sensor.key)
 	return chrepo.ReadingRow{
-		ID:                            request.ReadingID(s.orgID(), s.projectID().String(), "demo.event", eventID, sensorID.String()),
+		ID:                            request.ReadingID(s.orgID(), s.projectID().String(), "conversation.message", eventID, sensorID.String()),
 		EvaluationAttemptID:           s.det("sigint-attempt-" + strconv.Itoa(n)),
 		OrganizationID:                s.orgID(),
 		ProjectID:                     s.projectID(),
@@ -211,7 +223,7 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		EvaluationRequestedAt:         request.RequestedAt,
 		SensorID:                      sensorID,
 		SensorSlug:                    sensor.slug,
-		EventKind:                     "demo.event",
+		EventKind:                     "conversation.message",
 		EventID:                       eventID,
 		EventOccurredAt:               sourceTime,
 		EvaluatedAt:                   request.RequestedAt.Add(time.Second),
@@ -227,12 +239,12 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		InputRequestedMessageCount:    requested,
 		InputMessageCount:             supplied,
 		InputTruncated:                false,
-		EventContextType:              "",
-		ConversationID:                nil,
-		ConversationRole:              "",
+		EventContextType:              "conversation_message",
+		ConversationID:                &conversationID,
+		ConversationRole:              []string{"assistant", "user"}[n%2],
 		ConversationGeneration:        0,
-		ConversationSequence:          0,
-		ConversationCaptureKind:       "",
+		ConversationSequence:          s.signalSequences[n],
+		ConversationCaptureKind:       "original",
 		ConversationOriginalMessageID: nil,
 		ToolName:                      "",
 		ToolCallID:                    "",
@@ -241,7 +253,7 @@ func (s *seeder) sigintReading(sensor demoSigintSensor, members []demoSigintMemb
 		ActorExternalUserID:           "",
 		ActorUserEmail:                "",
 		BillingUserID:                 "",
-		Source:                        "",
+		Source:                        "claude-code",
 		UserAccountID:                 nil,
 		AccountType:                   "",
 		BillingMode:                   "",
