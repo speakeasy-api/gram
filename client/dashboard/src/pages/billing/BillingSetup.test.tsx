@@ -510,7 +510,7 @@ it.each(["free", "base"])(
     expect(mocks.createCheckout).not.toHaveBeenCalled();
   },
 );
-it("shows the setup heading and organization-scoped Overview tab", () => {
+it("shows the setup heading and organization-scoped Overview tab", async () => {
   mocks.org = "another-org";
   render(<Harness path="/another-org/billing/setup" />);
   expect(screen.getByRole("heading", { name: "Billing setup" })).toBeTruthy();
@@ -522,13 +522,14 @@ it("shows the setup heading and organization-scoped Overview tab", () => {
   expect(
     screen.getByText("Add a payment method to activate pay as you go."),
   ).toBeTruthy();
-  fireEvent.mouseDown(screen.getByRole("tab", { name: "Overview" }), {
+  fireEvent.mouseDown(await screen.findByRole("tab", { name: "Overview" }), {
     button: 0,
     ctrlKey: false,
   });
   expect(screen.getByText("Billing overview")).toBeTruthy();
 });
-it("shows the selected Payment method tab on payment management", () => {
+it("shows the selected Payment method tab on payment management", async () => {
+  mocks.fetchSubscription.mockResolvedValue(success({ status: "active" }));
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/test-org/billing/payment-method"]}>
@@ -537,9 +538,9 @@ it("shows the selected Payment method tab on payment management", () => {
     </QueryClientProvider>,
   );
   expect(
-    screen
-      .getByRole("tab", { name: "Payment method" })
-      .getAttribute("data-state"),
+    (await screen.findByRole("tab", { name: "Payment method" })).getAttribute(
+      "data-state",
+    ),
   ).toBe("active");
   expect(screen.getByRole("heading", { name: "Pricing" })).toBeTruthy();
   expect(screen.getByText("$0.35")).toBeTruthy();

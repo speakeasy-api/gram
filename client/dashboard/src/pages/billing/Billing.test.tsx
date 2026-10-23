@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -404,6 +404,93 @@ describe("Billing", () => {
       expect(cta()).toBeNull();
     },
   );
+
+  it.each(["free", "base"])(
+    "keeps the %s setup banner and tabs on the same resolved decision",
+    (tier) => {
+      mocks.session.mockReturnValue({
+        trial: null,
+        rawGramAccountType: tier,
+        hasActiveSubscription: false,
+      });
+      mocks.subscription.mockReturnValue({
+        data: undefined,
+        error: null,
+        isFetching: true,
+      });
+      const view = renderBilling();
+      expect(cta()).toBeNull();
+      expect(screen.queryByRole("tablist")).toBeNull();
+
+      mocks.subscription.mockReturnValue({
+        error: { statusCode: 404 },
+        isError: true,
+        isFetching: false,
+      });
+      view.refresh();
+      expect(cta()?.getAttribute("href")).toBe("/test-org/billing/setup");
+      expect(screen.getByRole("tab", { name: "Billing setup" })).toBeTruthy();
+      expect(
+        screen.getByText("Add a payment method to start using Speakeasy."),
+      ).toBeTruthy();
+
+      mocks.subscription.mockReturnValue({
+        data: { status: "active" },
+        error: null,
+        isError: false,
+      });
+      view.refresh();
+      expect(cta()).toBeNull();
+      expect(screen.queryByRole("tab", { name: "Billing setup" })).toBeNull();
+      expect(screen.getByRole("tab", { name: "Payment method" })).toBeTruthy();
+    },
+  );
+
+  it("retries an overview subscription failure without offering setup and disables retry in flight", () => {
+    const refetch = vi.fn();
+    mocks.session.mockReturnValue({
+      trial: null,
+      rawGramAccountType: "free",
+      hasActiveSubscription: false,
+    });
+    const failed = {
+      data: undefined,
+      error: new Error("unavailable"),
+      isError: true,
+      isFetching: false,
+      refetch,
+    };
+    mocks.subscription.mockReturnValue(failed);
+    const view = renderBilling();
+    expect(
+      screen
+        .getByText("Could not load your subscription.")
+        .getAttribute("role"),
+    ).toBe("alert");
+    expect(cta()).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalledOnce();
+
+    mocks.subscription.mockReturnValue({ ...failed, isFetching: true });
+    view.refresh();
+    expect(
+      screen.getByRole("button", { name: "Retry" }).hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalledOnce();
+
+    mocks.subscription.mockReturnValue({
+      error: { statusCode: 404 },
+      isError: true,
+      isFetching: false,
+      refetch,
+    });
+    view.refresh();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(cta()).not.toBeNull();
+    expect(screen.getByRole("tab", { name: "Billing setup" })).toBeTruthy();
+  });
 
   // Billing notifications are a pay-as-you-go concern: enterprise orgs are
   // billed through their contract, and the pre-checkout tiers have no bill.

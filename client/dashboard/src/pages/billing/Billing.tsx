@@ -1,4 +1,4 @@
-import { showPaymentMethods } from "@/components/billing/payment-method-visibility";
+import { useBillingState } from "@/components/billing/use-billing-state";
 import { BillingTabs } from "@/components/billing/billing-tabs";
 import { Link, Navigate, useLocation } from "react-router";
 import { useSession } from "@/contexts/Auth";
@@ -37,10 +37,6 @@ import { Alert } from "@/components/ui/Alert";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { MeterUsageSection } from "@/components/billing/meter-usage-section";
 import { SpendBreakdownSection } from "@/components/billing/spend-breakdown-section";
-import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
-import { paygPlanState } from "@/components/billing/payg-plan-state";
-import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
-import { isNotFoundError } from "@/lib/route-errors";
 
 export default function Billing(): JSX.Element {
   const location = useLocation();
@@ -84,49 +80,25 @@ export default function Billing(): JSX.Element {
 function BillingInner() {
   const { organization } = useSession();
   const productTier = useProductTier();
-  const { eligible: canStartCheckout, trialLifecycle } = usePaygCheckoutAccess(
-    productTier === "payg" ? "unsubscribed-payg" : "active-trial",
-  );
-  const activeTrial = trialLifecycle === "active";
-  const { eligible: canStartBaseCheckout } =
-    usePaygCheckoutAccess("unsubscribed-base");
-  const subscription = useStripeSubscription({
-    enabled:
-      (activeTrial && canStartCheckout) ||
-      (!activeTrial &&
-        (productTier === "payg" ||
-          (productTier === "base" && canStartBaseCheckout))),
-  });
-
-  let paymentRequired = activeTrial && canStartCheckout;
-  if (productTier === "payg" && !activeTrial) {
-    // Confirmed absence outranks stale data. An outage alone is not evidence
-    // that payment is required, but it must not hide a known payment failure.
-    if (isNotFoundError(subscription.error)) {
-      paymentRequired = canStartCheckout;
-    } else if (subscription.data) {
-      paymentRequired =
-        subscription.data.paymentFailed === true ||
-        paygPlanState(subscription.data).kind === "inactive";
-    }
-  }
-
-  if (productTier === "base" && !activeTrial) {
-    paymentRequired =
-      canStartBaseCheckout &&
-      !subscription.isFetching &&
-      !subscription.data &&
-      subscription.isError &&
-      isNotFoundError(subscription.error);
-  }
-
-  // A live subscription (including a Stripe trial) already has billing setup.
-  // Unknown status must not offer checkout; confirmed absence retains the
-  // existing PAYG recovery precedence over stale cached subscription data.
-  const needsSetup = paymentRequired && isNotFoundError(subscription.error);
+  const billing = useBillingState();
+  const activeTrial = billing.trialLifecycle === "active";
+  const needsSetup = billing.status === "needs-setup";
 
   const content = (
     <Stack gap={6}>
+      {billing.status === "error" && (
+        <Alert variant="error">
+          <Text role="alert">Could not load your subscription.</Text>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={billing.subscription.isFetching}
+            onClick={() => void billing.subscription.refetch()}
+          >
+            Retry
+          </Button>
+        </Alert>
+      )}
       {needsSetup && (
         <Alert
           variant="warning"
@@ -157,11 +129,7 @@ function BillingInner() {
       {productTier === "payg" && <BillingEmailSection />}
     </Stack>
   );
-  return showPaymentMethods(productTier, trialLifecycle, canStartCheckout) ? (
-    <BillingTabs value="overview">{content}</BillingTabs>
-  ) : (
-    content
-  );
+  return <BillingTabs value="overview">{content}</BillingTabs>;
 }
 
 function BillingUsage({ productTier }: { productTier: ProductTier }) {

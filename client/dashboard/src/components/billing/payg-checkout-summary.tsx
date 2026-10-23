@@ -71,13 +71,16 @@ export function PaygCheckoutSummary({
           const amount = Number(
             `${coefficient}e${Number(exponent) + (perToken ? 6 : 0) - Math.log10(checkout.minorUnitsAmountDivisor)}`,
           );
-          // Byte rates have limited Stripe precision: show a currency-sized GiB
-          // rate, not conversion noise. Keep fractional cents for token rates.
+          const perGiBAmount = amount * 2 ** 30;
+          // Keep the existing fractional precision for positive subcent GiB rates.
+          // Ordinary GiB rates use currency precision to hide conversion noise.
           const rate = perByte
             ? new Intl.NumberFormat(undefined, {
                 style: "currency",
                 currency: checkout.currency,
-              }).format(amount * 2 ** 30)
+                maximumFractionDigits:
+                  perGiBAmount > 0 && perGiBAmount < 0.01 ? 20 : undefined,
+              }).format(perGiBAmount)
             : currency.format(amount);
           const rateUnit = perToken
             ? `million ${unitLabel === "tokens scanned" ? "tokens scanned" : "tokens"}`

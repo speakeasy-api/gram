@@ -188,6 +188,11 @@ it.each([
     "$0.0001 per million tokens scanned",
   ],
   ["Sandbox MCP egress", null, 0.000002, "$21.47 per GiB of egress"],
+  ["Sandbox MCP egress", null, 1e-12, "$0.00001073741824 per GiB of egress"],
+  ["Usage", "bytes", 1e-10, "$0.001073741824 per GiB of egress"],
+  ["Usage", "bytes", 0, "$0.00 per GiB of egress"],
+  ["Usage", "tokens", 0, "$0.00 per million tokens"],
+  ["Usage", "request", 0, "$0.00 per request"],
 ])(
   "uses Stripe's rate and explicit units for %s (%s)",
   (name, unitLabel, minorUnitsAmount, expected) => {
