@@ -114,9 +114,8 @@ export function OverviewTab({
       // For tunneled servers the marketplace banner sits above the tunnel
       // status, so the usage dashboard must not show it a second time.
       showPluginBanner={!tunneled}
-      // Tool Logs cannot currently filter a tunneled target by id. Treating
-      // it as hosted or shadow would silently show the wrong server's calls.
-      logsTarget={tunneled ? null : { type: "hosted", id: mcpServer.slug }}
+      // Tool Logs lists no tunneled servers as filter options yet.
+      logsTarget={tunneled ? null : { type: "mcp_server", id: mcpServer.id }}
     />
   ) : null;
 

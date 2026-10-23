@@ -265,9 +265,7 @@ export function MCPOverviewTab({
             </div>
           </div>
 
-          {server.kind === "toolset" && (
-            <TopUsersTable toolsetSlug={server.slug} from={from} to={to} />
-          )}
+          <TopUsersTable server={server} from={from} to={to} />
         </>
       )}
     </Stack>
