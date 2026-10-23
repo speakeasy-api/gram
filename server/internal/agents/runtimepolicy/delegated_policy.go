@@ -163,7 +163,7 @@ func DecodeDelegatedPolicy(version DelegatedPolicyVersion, raw []byte) (Delegate
 func (p DelegatedPolicy) RuntimeGrants() []authz.Grant {
 	grants := make([]authz.Grant, len(p.runtimeGrants))
 	for i, grant := range p.runtimeGrants {
-		grants[i] = authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector)}
+		grants[i] = authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector), Inferred: false}
 	}
 	return grants
 }
@@ -271,7 +271,7 @@ func runtimeGrants(version DelegatedPolicyVersion, effective []DelegatedPolicyGr
 		if !known || definition.lifecycle != RuntimeScopeLifecycleActive || definition.safeSince == 0 || definition.safeSince > RuntimeScopeRegistryVersion(version) {
 			continue
 		}
-		grants = append(grants, authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector)})
+		grants = append(grants, authz.Grant{PrincipalUrn: "", Scope: grant.Scope, Selector: cloneSelector(grant.Selector), Inferred: false})
 	}
 	return grants
 }

@@ -32,6 +32,10 @@ const (
 
 	// AuthClientBackfillWrittenKey counts records a typed auth client backfill wrote.
 	AuthClientBackfillWrittenKey = attribute.Key("gram.auth_client_backfill.written")
+	// AuthClientBackfillPendingGrantsKey counts default auth permissions not yet granted.
+	AuthClientBackfillPendingGrantsKey = attribute.Key("gram.auth_client_backfill.pending_grants")
+	// AuthClientBackfillAPIKeysKey lists the API keys a run added policy grants to.
+	AuthClientBackfillAPIKeysKey = attribute.Key("gram.auth_client_backfill.api_keys")
 
 	// AuthClientBackfillRetiredKey counts records a typed auth client backfill retired.
 	AuthClientBackfillRetiredKey = attribute.Key("gram.auth_client_backfill.retired")
@@ -1142,6 +1146,16 @@ func SlogAuthClientBackfillDecided(v int) slog.Attr {
 // SlogAuthClientBackfillWritten counts records written.
 func SlogAuthClientBackfillWritten(v int) slog.Attr {
 	return slog.Int(string(AuthClientBackfillWrittenKey), v)
+}
+
+// SlogAuthClientBackfillPendingGrants counts default auth permissions not yet granted.
+func SlogAuthClientBackfillPendingGrants(v int) slog.Attr {
+	return slog.Int(string(AuthClientBackfillPendingGrantsKey), v)
+}
+
+// SlogAuthClientBackfillAPIKeys lists the API keys a run added policy grants to.
+func SlogAuthClientBackfillAPIKeys(v []string) slog.Attr {
+	return slog.Any(string(AuthClientBackfillAPIKeysKey), v)
 }
 
 // SlogAuthClientBackfillRetired counts records retired.
