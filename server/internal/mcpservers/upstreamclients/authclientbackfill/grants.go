@@ -507,6 +507,9 @@ func lockAttachment(ctx context.Context, q *Queries, organizationID string, bind
 		{"owner", func(ctx context.Context) error {
 			return q.LockAttachmentOwner(ctx, LockAttachmentOwnerParams{BindingID: bindingID, OrganizationID: organizationID})
 		}},
+		{"upstream issuer", func(ctx context.Context) error {
+			return q.LockAttachmentUpstreamIssuer(ctx, LockAttachmentUpstreamIssuerParams{BindingID: bindingID, OrganizationID: organizationID})
+		}},
 		{"configuration", func(ctx context.Context) error {
 			return q.LockAttachmentConfiguration(ctx, LockAttachmentConfigurationParams{BindingID: bindingID, OrganizationID: organizationID})
 		}},

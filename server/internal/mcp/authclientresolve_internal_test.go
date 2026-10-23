@@ -1225,9 +1225,9 @@ func TestAuthClientConsentUsesSharedResolver(t *testing.T) {
 		choices.apply(t.Context(), testenv.NewLogger(t), members, true)
 		require.Len(t, gateway.asked, 1)
 		require.Equal(t, validUUID(f.registration), gateway.asked[0].RegistrationID, "a gateway member's fallback is permitted on it too")
-		if members[0].authClient != nil {
-			require.Equal(t, authClientLegacy, members[0].authClient.outcome, "the fallback is still served the old way")
-		}
+		require.NotNil(t, members[0].authClient)
+		require.Equal(t, authClientLegacy, members[0].authClient.outcome, "the fallback is still served the old way")
+		require.Equal(t, authClientReasonHeadersStale, members[0].authClient.reason)
 
 		f.service.authClientPermitter = denyPermitter{}
 		require.Equal(t, authClientNoAccess, f.serve(selector).outcome)

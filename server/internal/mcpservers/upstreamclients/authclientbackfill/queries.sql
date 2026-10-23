@@ -2160,17 +2160,29 @@ JOIN organization_user_relationships AS membership
 WHERE b.id = @binding_id AND b.organization_id = @organization_id
 FOR SHARE OF owner, membership;
 
+-- name: LockAttachmentUpstreamIssuer :exec
+-- The upstream client's issuer, before the client itself, as issuer
+-- migration takes them.
+SELECT issuer.id
+FROM remote_session_issuers AS issuer
+WHERE issuer.id = (
+  SELECT c.remote_session_issuer_id
+  FROM principal_remote_session_bindings AS b
+  JOIN remote_session_clients AS c ON c.id = b.remote_session_client_id
+  WHERE b.id = @binding_id AND b.organization_id = @organization_id
+)
+FOR SHARE;
+
 -- name: LockAttachmentConfiguration :exec
 SELECT c.id
 FROM principal_remote_session_bindings AS b
 JOIN remote_session_clients AS c ON c.id = b.remote_session_client_id
-JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
 JOIN projects AS p ON p.id = b.project_id
 JOIN remote_session_client_user_session_issuers AS link
   ON link.remote_session_client_id = c.id
  AND link.user_session_issuer_id = b.user_session_issuer_id
 WHERE b.id = @binding_id AND b.organization_id = @organization_id
-FOR SHARE OF c, issuer, p, link;
+FOR SHARE OF c, p, link;
 
 -- name: LockAttachmentAuthClients :exec
 SELECT ac.id

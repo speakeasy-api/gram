@@ -3018,13 +3018,12 @@ const lockAttachmentConfiguration = `-- name: LockAttachmentConfiguration :exec
 SELECT c.id
 FROM principal_remote_session_bindings AS b
 JOIN remote_session_clients AS c ON c.id = b.remote_session_client_id
-JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
 JOIN projects AS p ON p.id = b.project_id
 JOIN remote_session_client_user_session_issuers AS link
   ON link.remote_session_client_id = c.id
  AND link.user_session_issuer_id = b.user_session_issuer_id
 WHERE b.id = $1 AND b.organization_id = $2
-FOR SHARE OF c, issuer, p, link
+FOR SHARE OF c, p, link
 `
 
 type LockAttachmentConfigurationParams struct {
@@ -3120,6 +3119,30 @@ type LockAttachmentSessionParams struct {
 // The connection may be gone; then the subquery is NULL and nothing is locked.
 func (q *Queries) LockAttachmentSession(ctx context.Context, arg LockAttachmentSessionParams) error {
 	_, err := q.db.Exec(ctx, lockAttachmentSession, arg.BindingID, arg.OrganizationID)
+	return err
+}
+
+const lockAttachmentUpstreamIssuer = `-- name: LockAttachmentUpstreamIssuer :exec
+SELECT issuer.id
+FROM remote_session_issuers AS issuer
+WHERE issuer.id = (
+  SELECT c.remote_session_issuer_id
+  FROM principal_remote_session_bindings AS b
+  JOIN remote_session_clients AS c ON c.id = b.remote_session_client_id
+  WHERE b.id = $1 AND b.organization_id = $2
+)
+FOR SHARE
+`
+
+type LockAttachmentUpstreamIssuerParams struct {
+	BindingID      uuid.UUID
+	OrganizationID string
+}
+
+// The upstream client's issuer, before the client itself, as issuer
+// migration takes them.
+func (q *Queries) LockAttachmentUpstreamIssuer(ctx context.Context, arg LockAttachmentUpstreamIssuerParams) error {
+	_, err := q.db.Exec(ctx, lockAttachmentUpstreamIssuer, arg.BindingID, arg.OrganizationID)
 	return err
 }
 
