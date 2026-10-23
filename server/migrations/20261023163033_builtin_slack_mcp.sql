@@ -40,12 +40,15 @@ CREATE TABLE "builtin_mcp_settings" (
   "builtin_key" text NOT NULL,
   "hidden" boolean NOT NULL DEFAULT false,
   "environment_id" uuid NULL,
+  "user_session_issuer_id" uuid NULL,
+  "user_session_issuer_bound" boolean NOT NULL DEFAULT false,
   "version" bigint NOT NULL DEFAULT 1,
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   PRIMARY KEY ("id"),
   CONSTRAINT "builtin_mcp_settings_environment_id_fkey" FOREIGN KEY ("environment_id") REFERENCES "environments" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "builtin_mcp_settings_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "builtin_mcp_settings_user_session_issuer_id_fkey" FOREIGN KEY ("user_session_issuer_id") REFERENCES "user_session_issuers" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "builtin_mcp_settings_builtin_key_check" CHECK (builtin_key <> ''::text)
 );
 -- Create index "builtin_mcp_settings_project_key_idx" to table: "builtin_mcp_settings"
@@ -58,6 +61,11 @@ COMMENT ON COLUMN "builtin_mcp_settings"."builtin_key" IS '@access: confidential
 COMMENT ON COLUMN "builtin_mcp_settings"."hidden" IS '@access: confidential';
 -- Set comment to column: "environment_id" on table: "builtin_mcp_settings"
 COMMENT ON COLUMN "builtin_mcp_settings"."environment_id" IS '@access: confidential';
+-- Set comment to column: "user_session_issuer_id" on table: "builtin_mcp_settings"
+COMMENT ON COLUMN "builtin_mcp_settings"."user_session_issuer_id" IS '@access: confidential';
+-- Set comment to column: "user_session_issuer_bound" on table: "builtin_mcp_settings"
+COMMENT ON COLUMN "builtin_mcp_settings"."user_session_issuer_bound" IS 'Records an explicit issuer binding even after issuer deletion, preventing implicit fallback.
+@access: confidential';
 -- Set comment to column: "version" on table: "builtin_mcp_settings"
 COMMENT ON COLUMN "builtin_mcp_settings"."version" IS '@access: confidential';
 -- Set comment to column: "updated_at" on table: "builtin_mcp_settings"

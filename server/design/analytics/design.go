@@ -8,7 +8,6 @@ import (
 
 var analyticsOps = []any{"count", "count_distinct", "sum", "avg", "min", "max", "p50", "p95", "p99"}
 var analyticsOperators = []any{"equals", "in"}
-var analyticsGrains = []any{"none", "hour", "day", "week", "month"}
 
 var Measure = Type("AnalyticsMeasure", func() {
 	Description("A composed measure: an op over a field, or count alone.")
@@ -50,6 +49,7 @@ var OrderBy = Type("AnalyticsOrderBy", func() {
 var QueryPayload = Type("AnalyticsQueryPayload", func() {
 	Description("A query against one dataset, in catalog vocabulary. Organization comes from the session and project from the project header; neither is a field.")
 	Attribute("dataset", String, "Dataset to query, per describe", func() { Example("tool_calls") })
+	Attribute("signal_query", SignalQuery, "Required for dataset signals; uses semantic metrics and its own group/point budgets instead of composed measures")
 	Attribute("from", String, "Start of the half-open window [from, to), ISO 8601", func() {
 		Format(FormatDateTime)
 		Example("2026-09-01T00:00:00Z")
@@ -58,9 +58,7 @@ var QueryPayload = Type("AnalyticsQueryPayload", func() {
 		Format(FormatDateTime)
 		Example("2026-09-08T00:00:00Z")
 	})
-	Attribute("grain", String, "Time bucket width for a grouped query. Absent means none.", func() {
-		Enum(analyticsGrains...)
-	})
+	Attribute("grain", String, "Time interval from the analytics catalog. Composed queries admit none, minute, hour, day, week or month. Signal measurements also admit auto.")
 	Attribute("dimensions", ArrayOf(String), "Group-by key when grouped; projected columns when ungrouped. At most 3.")
 	Attribute("measures", ArrayOf(Measure), "Composed measures. Required when grouped, forbidden when ungrouped.")
 	Attribute("filters", ArrayOf(Filter), "Filters, ANDed. At most 100 values per filter.")
@@ -77,10 +75,11 @@ var QueryPayload = Type("AnalyticsQueryPayload", func() {
 })
 
 var QueryResult = Type("AnalyticsQueryResult", func() {
-	Description("One shape for both modes. Row keys are the requested dimension names plus each measure's alias; time_bucket is present only when grain is set, and time on ungrouped rows.")
+	Description("Composed queries return requested dimensions and measure aliases, with time_bucket for grouped intervals or time for ungrouped rows. The signals dataset instead returns fixed time-series rows: time_bucket, bucket_end, series_id, observed, partial, matched_messages, answered, match_share, matched_sessions, evaluated_sessions, session_breadth, and outcome/definition companions. series_id joins each row to signal_result.groups; signal_result.metadata and signal_result.summary describe the scope and whole-window population. Signal rows remain in the top-level rows field.")
 	Attribute("dataset", String, "The dataset queried")
 	Attribute("plan", String, "A stable diagnostic identifier for how the query was answered. Deliberately not a table name.")
 	Attribute("rows", ArrayOf(MapOf(String, Any)), "Result rows")
+	Attribute("signal_result", SignalResult, "Measurement semantics and complete-series metadata for dataset signals")
 	Required("dataset", "plan", "rows")
 })
 
@@ -118,6 +117,7 @@ var DatasetType = Type("AnalyticsDataset", func() {
 var DescribeResult = Type("AnalyticsDescribeResult", func() {
 	Attribute("datasets", ArrayOf(DatasetType), "The datasets the caller can read")
 	Attribute("restricted_datasets", ArrayOf(String), "Names of the datasets the caller cannot read, such as one only organization administrators can read, so a saved widget over one can say why it shows nothing rather than reading as broken")
+	Attribute("signal_metrics", SignalCatalog, "Signal measurement contract and current sensor/signal names, when entitled")
 	Required("datasets")
 })
 
@@ -130,8 +130,9 @@ var DimensionValuesResult = Type("AnalyticsDimensionValuesResult", func() {
 })
 
 var DimensionValue = Type("AnalyticsDimensionValue", func() {
-	Attribute("value", String, "A non-empty value of the dimension")
+	Attribute("value", String, "A recorded dimension value. Signal attributes may be empty; present distinguishes an absent label.")
 	Attribute("count", Int64, "Rows at the dataset's grain carrying this value inside the window")
+	Attribute("present", Boolean, "For signal attributes, false distinguishes absent labels from present empty strings")
 	Required("value", "count")
 })
 
@@ -140,6 +141,8 @@ var _ = Service("analytics", func() {
 
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
+	signalDefinitionMethod()
+	signalFindingsMethod()
 
 	Method("query", func() {
 		Description("Run a query against one dataset. Grouped: aggregate over dimensions, optionally bucketed by time. Ungrouped: rows at the dataset's grain, newest first.")
@@ -191,6 +194,8 @@ var _ = Service("analytics", func() {
 		Payload(func() {
 			Attribute("dataset", String, "Dataset to look in", func() { Example("tool_calls") })
 			Attribute("dimension", String, "Dimension to list values of", func() { Example("tool_name") })
+			Attribute("signal_scope", SignalScope, "Required for dataset signals")
+			Attribute("attribute", String, "With dimension=attribute, the exact signal attribute key. dimension=attribute_keys discovers keys.", func() { MinLength(1); MaxLength(256) })
 			Attribute("from", String, "Start of the half-open window [from, to), ISO 8601", func() {
 				Format(FormatDateTime)
 			})

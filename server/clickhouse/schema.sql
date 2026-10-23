@@ -1606,6 +1606,10 @@ CREATE TABLE IF NOT EXISTS sigint_readings_v2 (
     event_context_type LowCardinality(String) DEFAULT '' COMMENT 'Source-context variant.\n@access: confidential',
     conversation_id Nullable(UUID) COMMENT 'Associated Speakeasy conversation identity.\n@access: confidential',
     conversation_role LowCardinality(String) DEFAULT '' COMMENT 'Source message role.\n@access: confidential',
+    conversation_generation Int32 DEFAULT 0 COMMENT 'Captured transcript generation.\n@access: confidential',
+    conversation_sequence Int64 DEFAULT 0 COMMENT 'Captured source message sequence.\n@access: confidential',
+    conversation_capture_kind LowCardinality(String) DEFAULT '' COMMENT 'Original, reobserved, synthetic or unknown source lineage. Empty means unavailable.\n@access: confidential',
+    conversation_original_message_id Nullable(UUID) COMMENT 'Original source message for an exact transcript copy.\n@access: confidential',
     tool_name String DEFAULT '' COMMENT 'Producer-defined tool name.\n@access: opaque-confidential',
     tool_call_id String DEFAULT '' COMMENT 'Producer protocol call identifier.\n@access: opaque-confidential',
     mcp_server_id Nullable(UUID) COMMENT 'Associated Speakeasy MCP server identity.\n@access: confidential',
@@ -1625,7 +1629,8 @@ CREATE TABLE IF NOT EXISTS sigint_readings_v2 (
     selected_signal_id Nullable(UUID) COMMENT 'Selected signal identity for choice results.\n@access: confidential',
     selected_signal_slug String DEFAULT '' COMMENT 'Customer-defined slug of the selected signal.\n@access: opaque-confidential',
     expected_index Nullable(Float64) COMMENT 'Probability-weighted ordered-score index.\n@access: confidential',
-    confidence Nullable(Float64) COMMENT 'Optional classifier confidence.\n@access: confidential'
+    confidence Nullable(Float64) COMMENT 'Optional classifier confidence.\n@access: confidential',
+    INDEX event_occurred_at_minmax_idx event_occurred_at TYPE minmax GRANULARITY 1
 ) ENGINE = ReplacingMergeTree(evaluated_at)
 PARTITION BY toYYYYMM(evaluation_requested_at)
 PRIMARY KEY (organization_id, project_id, trigger_kind, run_id, sensor_id, event_occurred_at)

@@ -9664,6 +9664,8 @@ func marshalTelemetryToolUsageTraceSummaryToToolUsageTraceSummaryResponseBody(v 
 		UserKey:              v.UserKey,
 		UserLabel:            v.UserLabel,
 		UserKind:             string(v.UserKind),
+		AuthorizerUserID:     v.AuthorizerUserID,
+		AuthorizerLabel:      v.AuthorizerLabel,
 		HookSource:           v.HookSource,
 		EventSource:          v.EventSource,
 		HTTPStatusCode:       v.HTTPStatusCode,

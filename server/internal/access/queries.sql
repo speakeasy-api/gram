@@ -80,6 +80,30 @@ WHERE organization_id = @organization_id
   AND selectors = @selectors
   AND taken_over_at IS NULL;
 
+-- name: LockAuthPermissionBackfill :exec
+-- Takes the organization's auth client backfill lock for the transaction's
+-- life; the key must match authclientbackfill's LockOrganizationBackfill.
+SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || @organization_id::text));
+
+-- name: MarkPrincipalAuthPermissionsTakenOver :exec
+-- An explicit write of a principal's whole policy takes every grant the
+-- backfill provisioned for it over, including ones since removed.
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND taken_over_at IS NULL;
+
+-- name: RecordAuthPermissionPolicyTakeover :exec
+-- Records that an explicit write owns the principal's policy even when it
+-- leaves no grant to mark, so the backfill never treats the principal as
+-- untouched.
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind, taken_over_at)
+VALUES (@organization_id, @principal_urn, @scope, @selectors, @kind, clock_timestamp())
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO UPDATE
+SET taken_over_at = COALESCE(auth_permission_provisions.taken_over_at, EXCLUDED.taken_over_at),
+    updated_at = clock_timestamp();
+
 -- name: RecordAuthPermissionDefault :exec
 -- Records a default grant written at organization creation.
 INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
