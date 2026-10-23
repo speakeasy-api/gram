@@ -40,16 +40,26 @@ func (d serverDescription) initializeResult(version string) initializeResult {
 	}
 }
 
-// describePlatformServer keeps discovery caller-varying even though the payload
-// is static today: the surface answers only assistant-token callers, so a
-// shared cache must not serve its description to anyone else.
-func describePlatformServer() serverDescription {
-	return serverDescription{
+// describePlatformServer keeps discovery caller-varying: the surface answers
+// only assistant-token callers, so a shared cache must not serve its
+// description to anyone else, and the capabilities depend on the caller's
+// organization.
+//
+// skillsEnabled adds the Skills extension together with the resources
+// capability it depends on: the platform toolset has no resources of its own,
+// so resources exist on this surface only to carry skill reads.
+func describePlatformServer(skillsEnabled bool) serverDescription {
+	description := serverDescription{
 		capabilities: map[string]json.RawMessage{"tools": json.RawMessage("{}")},
 		identity:     serverInfoPlatformToolset,
 		instructions: "",
 		cacheHints:   cacheHintsCallerVarying,
 	}
+	if skillsEnabled {
+		description.capabilities["resources"] = json.RawMessage("{}")
+		description.capabilities[capabilityExtensions] = skillsExtensionCapability
+	}
+	return description
 }
 
 func describeMetaServer(meta *metamcprepo.MetaMcpServer, mode metamcp.DiscoveryMode) serverDescription {

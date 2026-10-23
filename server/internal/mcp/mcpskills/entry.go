@@ -68,8 +68,9 @@ type Entry struct {
 	// returns and the digest covers.
 	Content string
 
-	// RawSHA256 is the lowercase hex SHA-256 of Content as recorded on the
-	// version.
+	// RawSHA256 is the lowercase hex SHA-256 of Content: as recorded on the
+	// version for a stored skill, or computed from the embedded bytes for an
+	// entry of the EmbeddedCatalog.
 	RawSHA256 string
 
 	// Frontmatter is the parsed YAML frontmatter of Content.

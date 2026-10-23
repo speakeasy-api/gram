@@ -1,4 +1,4 @@
-package mcp
+package mcpskills_test
 
 import (
 	"context"
@@ -8,11 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // recordingFlagProvider counts which evaluation path a flag check takes. The
-// hosted handshake must only ever take the local one.
+// handshake must only ever take the local one.
 type recordingFlagProvider struct {
 	localCalls  int
 	remoteCalls int
@@ -36,43 +37,43 @@ func (p *recordingFlagProvider) FlagPayload(context.Context, feature.Flag, strin
 	return nil, nil
 }
 
-func TestEvaluateSkillsOverMCPFlag_UsesOnlyLocalEvaluation(t *testing.T) {
+func TestFlagEnabled_UsesOnlyLocalEvaluation(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingFlagProvider{localResult: true}
-	on := evaluateSkillsOverMCPFlag(t.Context(), testenv.NewLogger(t), provider, "org_1", "acme")
+	on := mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, "org_1", "acme")
 	require.True(t, on)
 	require.Equal(t, 1, provider.localCalls)
 	require.Zero(t, provider.remoteCalls, "the handshake must never wait on a remote flag evaluation")
 	require.Equal(t, map[string]string{"organization": "acme"}, provider.lastGroups)
 }
 
-func TestEvaluateSkillsOverMCPFlag_FailsClosed(t *testing.T) {
+func TestFlagEnabled_FailsClosed(t *testing.T) {
 	t.Parallel()
 
 	t.Run("provider error", func(t *testing.T) {
 		t.Parallel()
 		provider := &recordingFlagProvider{localResult: true, localErr: errors.New("definitions unavailable")}
-		require.False(t, evaluateSkillsOverMCPFlag(t.Context(), testenv.NewLogger(t), provider, "org_1", "acme"))
+		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, "org_1", "acme"))
 		require.Zero(t, provider.remoteCalls)
 	})
 
 	t.Run("no provider", func(t *testing.T) {
 		t.Parallel()
-		require.False(t, evaluateSkillsOverMCPFlag(t.Context(), testenv.NewLogger(t), nil, "org_1", "acme"))
+		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), nil, "org_1", "acme"))
 	})
 
 	t.Run("no organization", func(t *testing.T) {
 		t.Parallel()
 		provider := &recordingFlagProvider{localResult: true}
-		require.False(t, evaluateSkillsOverMCPFlag(t.Context(), testenv.NewLogger(t), provider, "", "acme"))
+		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, "", "acme"))
 		require.Zero(t, provider.localCalls)
 	})
 
 	t.Run("unknown slug evaluates by id alone", func(t *testing.T) {
 		t.Parallel()
 		provider := &recordingFlagProvider{localResult: true}
-		require.True(t, evaluateSkillsOverMCPFlag(t.Context(), testenv.NewLogger(t), provider, "org_1", ""))
+		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, "org_1", ""))
 		require.Nil(t, provider.lastGroups)
 	})
 }
