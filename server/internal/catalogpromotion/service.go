@@ -83,7 +83,8 @@ func New(db *pgxpool.Pool, registry *mcpregistry.Service, features *productfeatu
 	return &Service{db: db, registry: registry, features: features, health: health, delivery: delivery, policy: policy, now: time.Now, effectTimeout: DocsRecordTimeout}
 }
 
-// GetCandidate refreshes a canonical source without disclosing its endpoint or headers.
+// GetCandidate refreshes a canonical source and supplies editable staff-only drafts.
+// Suggestions exclude credentials and unsafe endpoints.
 func (s *Service) GetCandidate(ctx context.Context, target Target) (Candidate, error) {
 	source, err := repo.New(s.db).GetSource(ctx, repo.GetSourceParams{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.MCPServerID})
 	if errors.Is(err, pgx.ErrNoRows) {

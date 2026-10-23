@@ -64,7 +64,7 @@ func catalogPromotionRequest(input PrepareCatalogPromotionInput) (catalogpromoti
 		return catalogpromotion.Request{}, err
 	}
 	if !validRegistryUUID(input.ProjectID) || !validRegistryUUID(input.MCPServerID) || input.SourceRevision == "" || len(input.SourceRevision) > maxRegistryText || !input.PublicMetadataConfirmed || !validRegistryUUID(input.CurationRevision) {
-		return catalogpromotion.Request{}, errors.New("provide exact project and server UUIDs, a current source revision, and confirm the public metadata")
+		return catalogpromotion.Request{}, errors.New("provide exact project and server UUIDs, current source_revision and curation_revision values, and confirm the public metadata")
 	}
 	return catalogpromotion.Request{
 		Target:         catalogpromotion.Target{OrganizationID: input.OrganizationID, ProjectID: uuid.MustParse(input.ProjectID), MCPServerID: uuid.MustParse(input.MCPServerID)},

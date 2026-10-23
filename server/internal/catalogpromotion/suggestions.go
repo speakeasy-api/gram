@@ -11,14 +11,13 @@ import (
 // suggestedMetadata supplies editable staff-only drafts from observed metadata.
 // It neither establishes public suitability nor substitutes for staff confirmation.
 func suggestedMetadata(source repo.GetSourceRow) *PublicMetadata {
-	title := source.ResourceName
-	if title == "" {
-		title = source.RemoteName
+	title := ""
+	for _, candidate := range []string{source.ResourceName, source.RemoteName, source.SourceName} {
+		if normalized := strings.Join(strings.Fields(candidate), " "); normalized != "" {
+			title = normalized
+			break
+		}
 	}
-	if title == "" {
-		title = source.SourceName
-	}
-	title = strings.Join(strings.Fields(title), " ")
 	// Public titles have a 200-byte limit; retain only complete UTF-8 characters.
 	if len(title) > 200 {
 		title = title[:200]
@@ -26,6 +25,7 @@ func suggestedMetadata(source repo.GetSourceRow) *PublicMetadata {
 			title = title[:len(title)-1]
 		}
 	}
+	title = strings.TrimSpace(title)
 	result := &PublicMetadata{Name: "", Title: title, Description: "", URL: "", DocumentationURL: "", DocsSlug: "", AuthMode: ""}
 	if source.RemoteSessionIssuerID.Valid {
 		result.AuthMode = "oauth"
@@ -40,7 +40,7 @@ func suggestedMetadata(source repo.GetSourceRow) *PublicMetadata {
 		switch parsed.EscapedPath() {
 		case "", "/", "/mcp", "/mcp/", "/sse", "/sse/", "/api/mcp", "/api/mcp/", "/v1/mcp", "/v1/mcp/", "/v1/sse", "/v1/sse/":
 			result.URL = parsed.String()
-			parts := strings.Split(parsed.Hostname(), ".")
+			parts := strings.Split(strings.TrimSuffix(parsed.Hostname(), "."), ".")
 			for left, right := 0, len(parts)-1; left < right; left, right = left+1, right-1 {
 				parts[left], parts[right] = parts[right], parts[left]
 			}

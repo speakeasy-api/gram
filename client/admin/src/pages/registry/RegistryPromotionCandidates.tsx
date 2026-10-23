@@ -34,7 +34,6 @@ import { promotionTimestamp, promotionReason } from "./registryPromotionLabels";
 const STATUS_FILTERS = [
   ["active", "Active"],
   ["all", "All statuses"],
-  ["candidate", "Candidates"],
   ["rejected", "Rejected"],
   ["archived", "Archived"],
   ["promoted", "Published"],

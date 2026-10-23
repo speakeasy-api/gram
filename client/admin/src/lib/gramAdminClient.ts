@@ -1190,7 +1190,7 @@ function createRegistryPromotionCandidatesQuery(
 ) {
   const generated = buildAdminListRegistryPromotionCandidatesQuery(
     redirectingClient,
-    params,
+    { ...params, status: params.status ?? "active" },
   );
   return queryOptions({
     ...generated,

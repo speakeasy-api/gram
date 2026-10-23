@@ -64,7 +64,8 @@ type Request struct {
 	RetryKey string `json:"retry_key"`
 }
 
-// Candidate exposes identifiers and aggregate evidence, never source URLs or credentials.
+// Candidate exposes identifiers and aggregate evidence, with untrusted URL drafts
+// in staff-only SuggestedMetadata. It never includes source credentials.
 type Candidate struct {
 	// ID identifies the durable candidate and its delivery receipts.
 	ID string `json:"id"`

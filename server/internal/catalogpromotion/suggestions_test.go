@@ -54,3 +54,25 @@ func TestSuggestedMetadataLeavesUnknownAuthenticationUnset(t *testing.T) {
 	result := suggestedMetadata(repo.GetSourceRow{RemoteName: "Example", Url: "https://mcp.example.com/mcp"})
 	require.Empty(t, result.AuthMode)
 }
+
+func TestSuggestedMetadataNormalizesTitleFallbacks(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct{ name, resource, remote, source, want string }{
+		{name: "resource whitespace", resource: " \t\n", remote: " Example  MCP ", source: "Fallback", want: "Example MCP"},
+		{name: "remote whitespace", resource: " ", remote: "\t", source: " Example Source ", want: "Example Source"},
+		{name: "truncated space", resource: strings.Repeat("a", 199) + " more", want: strings.Repeat("a", 199)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			result := suggestedMetadata(repo.GetSourceRow{ResourceName: test.resource, RemoteName: test.remote, SourceName: test.source})
+			require.Equal(t, test.want, result.Title)
+		})
+	}
+}
+
+func TestSuggestedMetadataNormalizesTrailingDotNamespace(t *testing.T) {
+	t.Parallel()
+	result := suggestedMetadata(repo.GetSourceRow{ResourceName: "Example MCP", Url: "https://mcp.example.com./mcp"})
+	require.Equal(t, "com.example.mcp/example-mcp", result.Name)
+	require.Equal(t, "https://mcp.example.com./mcp", result.URL)
+}
