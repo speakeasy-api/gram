@@ -576,7 +576,18 @@ open their effective assignments; the dropdown always offers compact member sear
     - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
     - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
     - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
-    - Connect a client to the organization gateway (`<server>/mcp/gateway/<org>`), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
+    - Connect a client to the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
+
+32. **Gateway tool picker**
+    - Confirm All tools (live), All tools (frozen), and Specific tools are offered. The server list and picker must agree on connected, reconnect, setup, no-access, and unavailable states, including row actions. A failed discovery never enables an unrestricted fallback.
+    - Check an identity-provider-managed server: consent performs its exchange and discovers its tools before marking it connected. A failed exchange must not produce a misleading reconnect action.
+    - With a custom-domain allowlist enabled, the platform-host consent page must refuse approval, link to the custom domain, and make no upstream discovery or identity-provider exchanges. Approval from the admitted custom domain may capture tools. The page must show usable connection status before JavaScript loads.
+    - Choose All tools (frozen), approve, then reconnect the MCP client without new browser consent: listing and schema discovery must work without contacting upstream servers. Calls still reach the upstream and enforce current access.
+    - Choose All tools (live), approve, then add a new gateway member or connect one that was unavailable. Neither may appear or execute until the person consents again. New tools on an already approved member may appear in live mode.
+    - Connect an MCP client to the Acme Agent Gateway. On the consent screen, choose Specific tools: tools are grouped under each member server and show their tool names without the server prefix.
+    - Select one server's heading, then a single tool from another server, and approve. The connection's tools list, Progressive `describe_tools`, and `execute_tool` only reach the chosen tools; calls to the others are refused.
+    - Reconnect: the consent screen opens with the previous choice selected.
+    - Repeat on the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it): its picker groups tools from every project you can reach, and the chosen tools are the only ones listed, described or callable.
 
 ## On failure
 

@@ -15,45 +15,51 @@ import (
 
 // Client is the "agents" service client.
 type Client struct {
-	ListSessionsEndpoint        goa.Endpoint
-	RevokeSessionEndpoint       goa.Endpoint
-	ListEndpoint                goa.Endpoint
-	CreateEndpoint              goa.Endpoint
-	GetEndpoint                 goa.Endpoint
-	RenameEndpoint              goa.Endpoint
-	ListDelegableGrantsEndpoint goa.Endpoint
-	ListPolicyGrantsEndpoint    goa.Endpoint
-	CreatePolicyGrantEndpoint   goa.Endpoint
-	UpdatePolicyGrantEndpoint   goa.Endpoint
-	DeletePolicyGrantEndpoint   goa.Endpoint
-	TransferEndpoint            goa.Endpoint
-	ReassignEndpoint            goa.Endpoint
-	SuspendEndpoint             goa.Endpoint
-	ResumeEndpoint              goa.Endpoint
-	RevokeEndpoint              goa.Endpoint
-	DeleteEndpoint              goa.Endpoint
+	ListSessionsEndpoint           goa.Endpoint
+	RevokeSessionEndpoint          goa.Endpoint
+	ListEndpoint                   goa.Endpoint
+	CreateEndpoint                 goa.Endpoint
+	GetEndpoint                    goa.Endpoint
+	RenameEndpoint                 goa.Endpoint
+	ListDelegableGrantsEndpoint    goa.Endpoint
+	ListPolicyGrantsEndpoint       goa.Endpoint
+	CreatePolicyGrantEndpoint      goa.Endpoint
+	UpdatePolicyGrantEndpoint      goa.Endpoint
+	DeletePolicyGrantEndpoint      goa.Endpoint
+	ListConnectionBlocksEndpoint   goa.Endpoint
+	BlockAgentOnConnectionEndpoint goa.Endpoint
+	RemoveConnectionBlockEndpoint  goa.Endpoint
+	TransferEndpoint               goa.Endpoint
+	ReassignEndpoint               goa.Endpoint
+	SuspendEndpoint                goa.Endpoint
+	ResumeEndpoint                 goa.Endpoint
+	RevokeEndpoint                 goa.Endpoint
+	DeleteEndpoint                 goa.Endpoint
 }
 
 // NewClient initializes a "agents" service client given the endpoints.
-func NewClient(listSessions, revokeSession, list, create, get, rename, listDelegableGrants, listPolicyGrants, createPolicyGrant, updatePolicyGrant, deletePolicyGrant, transfer, reassign, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
+func NewClient(listSessions, revokeSession, list, create, get, rename, listDelegableGrants, listPolicyGrants, createPolicyGrant, updatePolicyGrant, deletePolicyGrant, listConnectionBlocks, blockAgentOnConnection, removeConnectionBlock, transfer, reassign, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
 	return &Client{
-		ListSessionsEndpoint:        listSessions,
-		RevokeSessionEndpoint:       revokeSession,
-		ListEndpoint:                list,
-		CreateEndpoint:              create,
-		GetEndpoint:                 get,
-		RenameEndpoint:              rename,
-		ListDelegableGrantsEndpoint: listDelegableGrants,
-		ListPolicyGrantsEndpoint:    listPolicyGrants,
-		CreatePolicyGrantEndpoint:   createPolicyGrant,
-		UpdatePolicyGrantEndpoint:   updatePolicyGrant,
-		DeletePolicyGrantEndpoint:   deletePolicyGrant,
-		TransferEndpoint:            transfer,
-		ReassignEndpoint:            reassign,
-		SuspendEndpoint:             suspend,
-		ResumeEndpoint:              resume,
-		RevokeEndpoint:              revoke,
-		DeleteEndpoint:              delete_,
+		ListSessionsEndpoint:           listSessions,
+		RevokeSessionEndpoint:          revokeSession,
+		ListEndpoint:                   list,
+		CreateEndpoint:                 create,
+		GetEndpoint:                    get,
+		RenameEndpoint:                 rename,
+		ListDelegableGrantsEndpoint:    listDelegableGrants,
+		ListPolicyGrantsEndpoint:       listPolicyGrants,
+		CreatePolicyGrantEndpoint:      createPolicyGrant,
+		UpdatePolicyGrantEndpoint:      updatePolicyGrant,
+		DeletePolicyGrantEndpoint:      deletePolicyGrant,
+		ListConnectionBlocksEndpoint:   listConnectionBlocks,
+		BlockAgentOnConnectionEndpoint: blockAgentOnConnection,
+		RemoveConnectionBlockEndpoint:  removeConnectionBlock,
+		TransferEndpoint:               transfer,
+		ReassignEndpoint:               reassign,
+		SuspendEndpoint:                suspend,
+		ResumeEndpoint:                 resume,
+		RevokeEndpoint:                 revoke,
+		DeleteEndpoint:                 delete_,
 	}
 }
 
@@ -293,6 +299,71 @@ func (c *Client) UpdatePolicyGrant(ctx context.Context, p *UpdatePolicyGrantPayl
 //   - error: internal error
 func (c *Client) DeletePolicyGrant(ctx context.Context, p *DeletePolicyGrantPayload) (err error) {
 	_, err = c.DeletePolicyGrantEndpoint(ctx, p)
+	return
+}
+
+// ListConnectionBlocks calls the "listConnectionBlocks" endpoint of the
+// "agents" service.
+// ListConnectionBlocks may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListConnectionBlocks(ctx context.Context, p *ListConnectionBlocksPayload) (res *ListAgentConnectionBlocksResult, err error) {
+	var ires any
+	ires, err = c.ListConnectionBlocksEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAgentConnectionBlocksResult), nil
+}
+
+// BlockAgentOnConnection calls the "blockAgentOnConnection" endpoint of the
+// "agents" service.
+// BlockAgentOnConnection may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) BlockAgentOnConnection(ctx context.Context, p *BlockAgentOnConnectionPayload) (res *AgentConnectionBlock, err error) {
+	var ires any
+	ires, err = c.BlockAgentOnConnectionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AgentConnectionBlock), nil
+}
+
+// RemoveConnectionBlock calls the "removeConnectionBlock" endpoint of the
+// "agents" service.
+// RemoveConnectionBlock may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RemoveConnectionBlock(ctx context.Context, p *RemoveConnectionBlockPayload) (err error) {
+	_, err = c.RemoveConnectionBlockEndpoint(ctx, p)
 	return
 }
 

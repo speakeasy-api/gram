@@ -42,6 +42,15 @@ VALUES (@id, @chat_id, @project_id::uuid, @role, @content,
 UPDATE chats SET session_surface = 'claude-tag', slack_team_id = 'T0DEMO0001', slack_channel_id = 'DEMO_CHANNEL', slack_channel_name = 'demo-releases'
 WHERE id = @chat_id AND project_id = @project_id;
 
+-- name: ActivityInsertSignalMessage :one
+INSERT INTO chat_messages (id, chat_id, project_id, role, content, source, model, capture_kind, created_at, risk_analyzed_at)
+VALUES (@id, @chat_id, @project_id::uuid, @role, @content, 'claude-code', 'demo-model', 'original', @created_at, now())
+RETURNING seq;
+
+-- name: ActivityCountSignalMessages :one
+SELECT count(*) FROM chat_messages
+WHERE project_id = @project_id AND id = ANY(@message_ids::uuid[]) AND capture_kind = 'original';
+
 -- Each delivered turn names its Slack sender: owner-1 and the wake prompt came
 -- from Slack member 1, owner-2 from member 3.
 -- name: ActivityInsertClaudeTagParticipants :exec

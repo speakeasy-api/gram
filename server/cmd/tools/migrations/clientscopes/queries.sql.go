@@ -60,7 +60,7 @@ WHERE id = $1
   AND (organization_id IS NULL OR organization_id = $4::text)
   AND deleted IS FALSE
   AND identity_provider_connection_id IS NULL
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, created_at, updated_at, deleted_at, deleted
 `
 
 type ClearClientScopeParams struct {
@@ -105,6 +105,7 @@ func (q *Queries) ClearClientScope(ctx context.Context, arg ClearClientScopePara
 		&i.UpstreamRejectedAt,
 		&i.IdentityProviderConnectionID,
 		&i.CredentialOwner,
+		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -459,7 +460,7 @@ func (q *Queries) ListClientScopeCandidates(ctx context.Context, arg ListClientS
 }
 
 const lockClientForScopeWrite = `-- name: LockClientForScopeWrite :one
-SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
 WHERE id = $1
   AND project_id IS NOT DISTINCT FROM $2::uuid
@@ -504,6 +505,7 @@ func (q *Queries) LockClientForScopeWrite(ctx context.Context, arg LockClientFor
 		&i.UpstreamRejectedAt,
 		&i.IdentityProviderConnectionID,
 		&i.CredentialOwner,
+		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -523,7 +525,7 @@ WHERE id = $2
   AND scope IS NULL
   AND deleted IS FALSE
   AND identity_provider_connection_id IS NULL
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, created_at, updated_at, deleted_at, deleted
 `
 
 type RestoreClientScopeParams struct {
@@ -570,6 +572,7 @@ func (q *Queries) RestoreClientScope(ctx context.Context, arg RestoreClientScope
 		&i.UpstreamRejectedAt,
 		&i.IdentityProviderConnectionID,
 		&i.CredentialOwner,
+		&i.DisplayName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

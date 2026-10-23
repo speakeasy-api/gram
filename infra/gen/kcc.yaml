@@ -100,6 +100,10 @@ pubsub:
           string message_created_at = 9;
           IngestionContext ingestion = 10;
           repeated string attachment_ids = 11;
+          int32 generation = 12;
+          int64 sequence = 13;
+          string capture_kind = 14;
+          string original_message_id = 15;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1451,6 +1455,10 @@ pubsub:
             }
             string conversation_id = 1;
             Role role = 2;
+            int32 generation = 3;
+            int64 sequence = 4;
+            string capture_kind = 5;
+            string original_message_id = 6;
           }
           message ToolCall {
             string tool_name = 1;
@@ -1533,6 +1541,10 @@ pubsub:
             }
             string conversation_id = 1;
             Role role = 2;
+            int32 generation = 3;
+            int64 sequence = 4;
+            string capture_kind = 5;
+            string original_message_id = 6;
           }
           message ToolCall {
             string tool_name = 1;

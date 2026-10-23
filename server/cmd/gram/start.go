@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
@@ -74,6 +75,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
 	"github.com/speakeasy-api/gram/server/internal/externalkeys"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
@@ -803,6 +805,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			posthogClient, featureFlags := identityDeps.Posthog, identityDeps.Features
+			authz.SetUpstreamSelectorWriteGate(feature.UpstreamSelectorWrites(featureFlags))
 			workosClient, stripeClient := identityDeps.WorkOS, identityDeps.Stripe
 			billingRepo, billingTracker := identityDeps.Billing, identityDeps.BillingTracker
 			productFeatures, siteURL := identityDeps.ProductFeatures, identityDeps.SiteURL
@@ -1026,7 +1029,7 @@ func newStartCommand() *cli.Command {
 			telemetryLoggerShutdown = shutdown
 
 			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
-			analyticsSvc := analytics.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine)
+			analyticsSvc := analytics.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, productFeatures)
 
 			// Wrap cache for hooks service in local development
 			var hooksCache cache.Cache = cache.NewRedisCacheAdapter(redisClient)
@@ -1663,7 +1666,8 @@ func newStartCommand() *cli.Command {
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags).
+					WithOrganizationHosts(orgHosts)
 				if localPublisher != nil {
 					if err := restoreLocalPluginRepositories(ctx, logger, db, localPublisher, pluginPublisher); err != nil {
 						return fmt.Errorf("restore local plugin repositories: %w", err)
@@ -1684,11 +1688,12 @@ func newStartCommand() *cli.Command {
 				publishSignaler := &background.TemporalPluginPublisher{TemporalEnv: temporalEnv}
 				pluginsPublishSignaler, skillsPublishSignaler = publishSignaler, publishSignaler
 			}
+			roleManager.WithPluginPublisher(pluginsPublishSignaler)
 			if pluginPublisher != nil {
 				pluginPublisher.WithDistributionAdmission(distributionAdmission)
 			}
 			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler).
-				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit)
+				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithOrganizationHosts(orgHosts)
 			plugins.Attach(mux, pluginsSvc)
 			launcher.Attach(mux, launcher.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, openRouter, typesafe.NewClient(guardianPolicy.PooledClient(), logger, typesafe.WithTracerProvider(tracerProvider))))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
@@ -1735,6 +1740,7 @@ func newStartCommand() *cli.Command {
 			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger, mcpCatalog)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
+			authclients.Attach(mux, authclients.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			// Hoisted so the services that authenticate as a customer's GCP identity
 			// share one identity: they then agree on which impersonation targets are
 			// refused, and probe for Speakeasy's own service account once between them
@@ -1933,6 +1939,7 @@ func newStartCommand() *cli.Command {
 				ToolCallSearch:            telemetryrepo.New(chDB),
 				TelemetryDrilldown:        telemetryrepo.New(chDB),
 				Analytics:                 analyticsSvc.Engine(),
+				ConversationAccess:        chatService,
 				Widgets:                   widgetsSvc,
 				Dashboards:                dashboardsSvc,
 				WorkflowRun:               posthogClient,
@@ -1954,6 +1961,7 @@ func newStartCommand() *cli.Command {
 			mcp.Attach(mux, mcpRuntime.MCP, mcpRuntime.Metadata)
 			mcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.MCP)
 
+			analyticsSvc.WithConversationAccess(chatService)
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			customdomains.Attach(mux, customdomains.NewService(

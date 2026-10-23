@@ -1056,7 +1056,7 @@ func (a chatAccess) check(chatID string) authz.Check {
 // belonged to the caller's project, which let an embedded chat-session token
 // watch any other user's chat in that project.
 func (s *Service) authorizeChatRead(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) error {
-	return s.authorizeChatAccess(ctx, authCtx, chat, chatAccessRead)
+	return s.authorizeChatAccess(ctx, authCtx, chat, chatAccessRead, nil)
 }
 
 // authorizeChatAccess is the shared gate behind every per-chat endpoint.
@@ -1064,7 +1064,7 @@ func (s *Service) authorizeChatRead(ctx context.Context, authCtx *contextvalues.
 // Project scoping lives here as well as in the SQL so it cannot be dropped by
 // one call site, and so the turn stream (which keeps its own lookup) answers
 // the ownership question identically.
-func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow, access chatAccess) error {
+func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow, access chatAccess, filteredGrant *bool) error {
 	// older chat_messages may not have project_id in the model, but it will
 	// always exist on the chat
 	if chat.ProjectID != *authCtx.ProjectID {
@@ -1090,7 +1090,12 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	isDirectPrincipalAPIKey := hasAPIKeyAuthorization && apiKeyMode == contextvalues.APIKeyAuthorizationModePrincipal
 	isDirectAPIKeyCall := authCtx.APIKeyID != "" && (isDirectLegacyAPIKey || isDirectPrincipalAPIKey)
 	isAPIKeyChatSession := authCtx.APIKeyID != "" && !isDirectAPIKeyCall
-	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
+	surface, _ := contextvalues.GetActingSurface(ctx)
+	actor, authenticated := contextvalues.AuthenticatedActor(ctx)
+	isPlatformMember := surface == contextvalues.ActingSurfacePlatformMCP && authenticated && authCtx.UserID != "" && actor.Type == urn.PrincipalTypeUser && actor.ID == authCtx.UserID
+	// OAuth-authenticated Platform members use the owner/grant gate below, just
+	// like dashboard members, rather than an embedded external-user token gate.
+	if authCtx.SessionID == nil && !isDirectAPIKeyCall && !isPlatformMember {
 		if !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
 				return oops.C(oops.CodeUnauthorized)
@@ -1114,6 +1119,12 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// programmatically, not as a reviewer.
 	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
 	if !isAssistantCall && !isOwner {
+		if filteredGrant != nil {
+			if !*filteredGrant {
+				return oops.C(oops.CodeForbidden)
+			}
+			return nil
+		}
 		if err := s.authz.Require(ctx, access.check(chat.ID.String())); err != nil {
 			return err
 		}
@@ -1134,15 +1145,11 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID, access chatAccess) (repo.GetChatRow, error) {
 	var none repo.GetChatRow
 
-	// A Speakeasy admin impersonating an org via the dev-tools override holds
-	// every scope (see authz.Engine), so RBAC cannot stop them — refuse before
-	// any session data is read. Covers the mutations too: an impersonating
-	// admin has no reason to pin, rename or delete a customer's sessions, and
-	// one rule for every endpoint avoids the per-endpoint bookkeeping that let
-	// the gate drift in the first place. The shared demo org is exempt: its
-	// transcripts are fabricated by seed/demo/ and exist to be read.
-	if contextvalues.IsSupportSession(ctx) && authCtx.ActiveOrganizationID != constants.DemoOrganizationID {
-		return none, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be accessed while impersonating an organization")
+	// Impersonation bypasses RBAC, so enforce the shared sensitive-content
+	// restriction before reading any session data, for reads and mutations.
+	// The shared policy preserves access to the fabricated demo organization.
+	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
+		return none, fmt.Errorf("authorize chat session access: %w", err)
 	}
 
 	chat, err := s.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
@@ -1153,7 +1160,7 @@ func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues
 		return none, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
 	}
 
-	if err := s.authorizeChatAccess(ctx, authCtx, chat, access); err != nil {
+	if err := s.authorizeChatAccess(ctx, authCtx, chat, access, nil); err != nil {
 		return none, err
 	}
 
@@ -3124,6 +3131,7 @@ type chatMessageRow struct {
 	totalTokens      int64
 
 	generation int32
+	lineage    *MessageLineage
 
 	metadata httpMetadata
 }
@@ -3341,6 +3349,7 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 			UserEmail:         row.userEmail,
 			Provider:          "",
 			InferenceProvider: "",
+			Lineage:           row.lineage,
 			HookHostname:      "",
 			AccountType:       "",
 			BillingMode:       "",

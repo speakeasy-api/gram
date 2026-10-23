@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
@@ -422,7 +423,7 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			return
 		}
 		if !clientRedirectAllowed(client, request.RedirectURI) {
-			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id or redirect_uri")
+			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id or redirect_uri")
 			return
 		}
 		if err := request.ValidatePostRedirect(); err != nil {
@@ -457,7 +458,7 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 		if err != nil {
-			writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
 			return
 		}
 		if idpError := r.URL.Query().Get("error"); idpError != "" {
@@ -471,7 +472,7 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 		}
 		idpUser, err := s.identity.ExchangeCodeForTokens(r.Context(), idpCode)
 		if err != nil {
-			writeOAuthError(w, http.StatusUnauthorized, "access_denied", "login could not be completed")
+			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "login could not be completed")
 			return
 		}
 		login, err := s.identity.CompleteIDPLogin(r.Context(), idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
@@ -510,12 +511,12 @@ func (s *OAuthHTTP) OrganizationSelectionHandler() http.Handler {
 func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Request) {
 	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 	if err != nil || challenge.Subject == "" {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
 		return
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
-		writeOAuthError(w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid")
 		return
 	}
 	organizations, err := s.organizations.EligibleOrganizations(r.Context(), subject.ID)
@@ -533,7 +534,7 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 	// since become unreachable.
 	client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 	if err != nil {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable")
 		return
 	}
 	if len(organizations) == 0 {
@@ -567,16 +568,16 @@ func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Req
 	}
 	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.Subject == "" {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
 		return
 	}
 	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "organization selection is invalid")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "organization selection is invalid")
 		return
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
-		writeOAuthError(w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid")
 		return
 	}
 	organizations, err := s.organizations.EligibleOrganizations(r.Context(), subject.ID)
@@ -845,7 +846,7 @@ func (s *OAuthHTTP) ConnectHandler() http.Handler {
 func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID == "" {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or incomplete")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or incomplete")
 		return
 	}
 	// Lookup only: authorize already resolved and persisted any CIMD row,
@@ -853,7 +854,7 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 	// since become unreachable.
 	client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 	if err != nil {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable")
 		return
 	}
 	organization, err := s.selectedOrganization(r.Context(), challenge)
@@ -891,11 +892,11 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 	}
 	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID == "" {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or incomplete")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or incomplete")
 		return
 	}
 	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization confirmation is invalid")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization confirmation is invalid")
 		return
 	}
 	if r.PostForm.Get("action") != "approve" {
@@ -905,7 +906,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
-		writeOAuthError(w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid")
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid")
 		return
 	}
 	principal := Principal{UserID: subject.ID, OrganizationID: challenge.OrganizationID, ConnectionID: "pending", Generation: "pending", ClientID: challenge.ClientID}
@@ -956,18 +957,26 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse token request")
 			return
 		}
+		if r.PostForm.Get(oauthwire.ParamGrantType) == "" {
+			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
+			return
+		}
 		operation, ok := tokenOperation(r.PostForm.Get("grant_type"))
 		if ok {
 			defer func() {
 				s.oauthTelemetry().Record(r.Context(), OAuthEvent{Operation: operation, Outcome: recorded.outcome(), Reason: recorded.reason})
 			}()
 		}
+		clientID, clientSecret, code := clientCredentials(r)
+		if code != "" {
+			writeClientAuthenticationError(w, r, code)
+			return
+		}
 		now := s.now()
 		resource := s.resource(r.Context())
-		clientID, clientSecret := clientCredentials(r)
 		client, err := s.authenticateClient(r.Context(), clientID, clientSecret, now)
 		if err != nil {
-			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
+			s.writeClientAuthenticationFailure(w, r, err)
 			return
 		}
 		switch r.PostForm.Get("grant_type") {
@@ -1031,22 +1040,39 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 func (s *OAuthHTTP) RevokeHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
-		if r.ParseForm() == nil {
-			clientID, secret := clientCredentials(r)
-			if client, err := s.authenticateClient(r.Context(), clientID, secret, s.now()); err == nil {
-				token := r.PostForm.Get("token")
-				switch r.PostForm.Get("token_type_hint") {
-				case "access_token":
-					s.revokeAccessToken(r.Context(), token, client.ID)
-				default:
-					if organizationID, decodeErr := s.credentials.OrganizationID(refreshTokenCredential, token); decodeErr == nil {
-						if _, err := s.store.RevokeSession(r.Context(), organizationID, opaqueHash(token), client.ID, time.Now()); err == nil {
-							break
-						}
-					}
-					s.revokeAccessToken(r.Context(), token, client.ID)
+		if err := r.ParseForm(); err != nil {
+			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "could not parse revocation request")
+			return
+		}
+		clientID, secret, code := clientCredentials(r)
+		if code != "" {
+			writeClientAuthenticationError(w, r, code)
+			return
+		}
+		now := s.now()
+		client, err := s.authenticateClient(r.Context(), clientID, secret, now)
+		if err != nil {
+			s.writeClientAuthenticationFailure(w, r, err)
+			return
+		}
+		token := r.PostForm.Get(oauthwire.ParamToken)
+		var revokeErr error
+		switch r.PostForm.Get(oauthwire.ParamTokenTypeHint) {
+		case "access_token":
+			revokeErr = s.revokeAccessToken(r.Context(), token, client.ID, now)
+		default:
+			if organizationID, decodeErr := s.credentials.OrganizationID(refreshTokenCredential, token); decodeErr == nil {
+				_, revokeErr = s.store.RevokeSession(r.Context(), organizationID, opaqueHash(token), client.ID, now)
+				if !errors.Is(revokeErr, platformoauth.ErrNotFound) {
+					break
 				}
 			}
+			revokeErr = s.revokeAccessToken(r.Context(), token, client.ID, now)
+		}
+		if revokeErr != nil && !errors.Is(revokeErr, platformoauth.ErrNotFound) {
+			s.logger.ErrorContext(r.Context(), "revoke OAuth token", attr.SlogError(revokeErr))
+			writeOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "token revocation is temporarily unavailable")
+			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Pragma", "no-cache")
@@ -1054,16 +1080,19 @@ func (s *OAuthHTTP) RevokeHandler() http.Handler {
 	})
 }
 
-func (s *OAuthHTTP) revokeAccessToken(ctx context.Context, token, clientID string) {
+func (s *OAuthHTTP) revokeAccessToken(ctx context.Context, token, clientID string, now time.Time) error {
 	jti, err := s.signer.VerifiedJTI(token)
 	if err != nil {
-		return
+		return nil
 	}
 	organizationID, err := s.credentials.OrganizationID(accessJTICredential, jti)
 	if err != nil {
-		return
+		return nil
 	}
-	_, _ = s.store.RevokeAccessSession(ctx, organizationID, jti, clientID, time.Now())
+	if _, err := s.store.RevokeAccessSession(ctx, organizationID, jti, clientID, now); err != nil {
+		return fmt.Errorf("revoke access token session: %w", err)
+	}
+	return nil
 }
 
 func (s *OAuthHTTP) mintAndExchangeGrant(w http.ResponseWriter, r *http.Request, input platformoauth.ConsumeGrantInput, grant platformoauth.Grant, clientID, resource string, now time.Time) {
@@ -1307,7 +1336,7 @@ func writeTokenGateError(w http.ResponseWriter, err error) {
 		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "organization access could not be verified")
 		return
 	}
-	writeOAuthError(w, http.StatusForbidden, "access_denied", "organization access is not available")
+	writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidGrant, "organization access is not available")
 }
 
 // ProviderSetupCompletionURL is the only callback landing page accepted for
@@ -1363,7 +1392,7 @@ func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx contex
 	if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 		// Policy, not a spec violation, and it carries its own actionable
 		// description. Already logged inside admitCIMDClient.
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", admissionErr.Description())
+		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, admissionErr.Description())
 		return
 	}
 	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
@@ -1383,14 +1412,49 @@ func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx contex
 		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
 		return
 	}
-	writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id")
+	if !errors.Is(err, platformoauth.ErrNotFound) && !errors.Is(err, platformoauth.ErrRevoked) {
+		s.logger.ErrorContext(ctx, "resolve OAuth client", attr.SlogError(err))
+		writeOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "client lookup is temporarily unavailable")
+		return
+	}
+	writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id")
 }
 
-func clientCredentials(r *http.Request) (string, string) {
-	if id, secret, ok := r.BasicAuth(); ok {
-		return id, secret
+func (s *OAuthHTTP) writeClientAuthenticationFailure(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, platformoauth.ErrNotFound) || errors.Is(err, platformoauth.ErrExpired) || errors.Is(err, platformoauth.ErrRevoked) || errors.Is(err, platformoauth.ErrClientMismatch) {
+		writeClientAuthenticationError(w, r, oautherr.CodeInvalidClient)
+		return
 	}
-	return r.PostForm.Get("client_id"), r.PostForm.Get("client_secret")
+	s.logger.ErrorContext(r.Context(), "authenticate OAuth client", attr.SlogError(err))
+	writeOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "client lookup is temporarily unavailable")
+}
+
+func writeClientAuthenticationError(w http.ResponseWriter, r *http.Request, code string) {
+	status := http.StatusBadRequest
+	description := "invalid client authentication request"
+	if code == oautherr.CodeInvalidClient {
+		var challenge string
+		status, challenge = oauthwire.InvalidClientResponse(r.Header)
+		if challenge != "" {
+			w.Header().Set("WWW-Authenticate", challenge)
+		}
+		description = "client authentication failed"
+	}
+	writeOAuthError(w, status, code, description)
+}
+
+func clientCredentials(r *http.Request) (id, secret, code string) {
+	if code := oauthwire.ClientAuthenticationError(r); code != "" {
+		return "", "", code
+	}
+	// Platform clients support secrets or public authentication, not assertions.
+	if r.PostForm.Get(oauthwire.ParamClientAssertion) != "" || r.PostForm.Get(oauthwire.ParamClientAssertionType) != "" {
+		return "", "", oautherr.CodeInvalidClient
+	}
+	if id, secret, ok := r.BasicAuth(); ok {
+		return id, secret, ""
+	}
+	return r.PostForm.Get(oauthwire.ParamClientID), r.PostForm.Get(oauthwire.ParamClientSecret), ""
 }
 
 func requireJSON(w http.ResponseWriter, r *http.Request, maxBytes int64) bool {

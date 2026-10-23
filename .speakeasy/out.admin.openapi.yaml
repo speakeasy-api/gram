@@ -9967,7 +9967,7 @@ components:
           type: array
           items:
             type: string
-          description: 'Phases whose check failed: oauth, headers, ema, reconcile or mark. The counts cover the other phases.'
+          description: 'Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile, mark, selections or grants. The counts cover the other phases.'
         in_progress:
           type: boolean
           description: Whether a run is recording typed auth clients for the organization right now. The other counts are then empty; check again when it finishes.
@@ -9996,6 +9996,27 @@ components:
           type: integer
           description: Backfilled auth clients and server links the configuration no longer yields, not yet retired.
           format: int64
+        pending_selection_mappings:
+          type: integer
+          description: Live credential choices with exactly one auth client to name, not yet named.
+          format: int64
+        selection_classes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationSelectionClass'
+          description: Credential choice coverage for each credential class.
+        selection_gap_count:
+          type: integer
+          description: Every live credential choice left without a usable auth client, including those beyond selection_gaps.
+          format: int64
+        selection_gaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationSelectionGap'
+          description: The first live credential choices left without a usable auth client.
+        selections_complete:
+          type: boolean
+          description: Whether every live credential choice names a usable auth client or is an explicit no-auth choice, and the selections check did not fail.
         unresolved:
           type: integer
           description: Configured identities that cannot be recorded without a guess and need attention.
@@ -10025,6 +10046,49 @@ components:
         - warnings
         - kinds
         - failed_phases
+    AdminUpstreamOAuthMigrationExecutionProfileGap:
+      type: object
+      properties:
+        execution_context:
+          type: string
+          description: user_backed for turns run for a user the event identified, userless for turns run as the trigger's workload.
+        reason:
+          type: string
+          description: 'Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client), setup_incomplete (it needs upstream authentication and offers no auth client) or upstream_auth_undecided (it offers no auth client and an administrator has not decided whether it needs upstream authentication).'
+        servers:
+          type: integer
+          description: Profile and server pairs with no choice for this reason.
+          format: int64
+      description: MCP servers execution-selection profiles hold no choice for, for one execution context and reason.
+      required:
+        - execution_context
+        - reason
+        - servers
+    AdminUpstreamOAuthMigrationExecutionProfiles:
+      type: object
+      properties:
+        complete:
+          type: boolean
+          description: Whether every profile is recorded and holds a choice for every server its assistant reaches.
+        gaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationExecutionProfileGap'
+          description: 'Servers the profiles hold no choice for, by execution context and reason. They are never guessed: configure the server''s auth clients.'
+        pending_versions:
+          type: integer
+          description: Profile versions not yet recorded.
+          format: int64
+        targets:
+          type: integer
+          description: Assistant and trigger pairs, each with a profile per execution context.
+          format: int64
+      description: Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.
+      required:
+        - complete
+        - targets
+        - pending_versions
+        - gaps
     AdminUpstreamOAuthMigrationOrganization:
       type: object
       properties:
@@ -10079,6 +10143,18 @@ components:
           type: integer
           description: Typed auth clients recorded.
           format: int64
+        auth_permission_grants_written:
+          type: integer
+          description: 'Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.'
+          format: int64
+        execution_profile_versions_written:
+          type: integer
+          description: Execution-selection profile versions this run recorded.
+          format: int64
+        selections_mapped:
+          type: integer
+          description: Credential choices this run named a typed auth client on.
+          format: int64
         selections_written:
           type: integer
           description: Credential choices recorded.
@@ -10095,6 +10171,88 @@ components:
         - associations_skipped
         - selections_written
         - status
+    AdminUpstreamOAuthMigrationSelectionClass:
+      type: object
+      properties:
+        ambiguous:
+          type: integer
+          description: 'Choices several auth clients could serve. They are never guessed: configure the server or ask the credential to reconnect.'
+          format: int64
+        credential_class:
+          type: string
+          description: 'The class: interactive, id_jag, dashboard_mint, workload or agent.'
+        mapped:
+          type: integer
+          description: Choices that already name a usable auth client.
+          format: int64
+        no_auth:
+          type: integer
+          description: Explicit no-auth choices on servers with no auth client.
+          format: int64
+        no_client:
+          type: integer
+          description: Choices whose upstream OAuth client has no live, enabled auth client linked to the server.
+          format: int64
+        pending:
+          type: integer
+          description: Choices with exactly one auth client to name, not yet named.
+          format: int64
+        selections:
+          type: integer
+          description: Live credential choices of this class.
+          format: int64
+        stale_no_auth:
+          type: integer
+          description: No-auth choices, and choices naming the server's headers, on servers that now offer an OAuth-backed client; the credential reconnects.
+          format: int64
+        unusable:
+          type: integer
+          description: Choices naming an auth client that is no longer usable for the server; the credential reconnects.
+          format: int64
+      description: How the live credential choices of one credential class map onto typed auth clients.
+      required:
+        - credential_class
+        - selections
+        - mapped
+        - pending
+        - no_auth
+        - ambiguous
+        - no_client
+        - stale_no_auth
+        - unusable
+    AdminUpstreamOAuthMigrationSelectionGap:
+      type: object
+      properties:
+        credential_class:
+          type: string
+          description: The class of the credential the choice belongs to.
+        credential_id:
+          type: string
+          description: The credential.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The server the choice is for.
+          format: uuid
+        outcome:
+          type: string
+          description: 'Why the choice has no usable auth client: ambiguous, no_client, stale_no_auth, unusable or skipped_race.'
+        project_id:
+          type: string
+          description: The server's project.
+          format: uuid
+        selection_id:
+          type: string
+          description: The choice.
+          format: uuid
+      description: One live credential choice left without a usable typed auth client.
+      required:
+        - selection_id
+        - credential_class
+        - credential_id
+        - mcp_server_id
+        - project_id
+        - outcome
     AdminUpstreamOAuthMigrationServer:
       type: object
       properties:
@@ -10119,6 +10277,8 @@ components:
           type: integer
           description: Live user session credentials scanned.
           format: int64
+        execution_profiles:
+          $ref: '#/components/schemas/AdminUpstreamOAuthMigrationExecutionProfiles'
         migrated:
           type: boolean
           description: Whether the organization has nothing left to write and no server needing configuration.

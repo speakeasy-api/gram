@@ -1264,47 +1264,6 @@ func (m *ChallengeManager) mintAuthorization(
 		return "", fmt.Errorf("remote_session_issuer %s missing token_endpoint", client.IssuerSlug)
 	}
 
-	// A registration the issuer has stopped recognizing would send the user to
-	// an authorize page that errors without ever redirecting back. Replace it
-	// first, so the login proceeds under a client_id the issuer knows.
-	client = m.rotateRejectedRegistration(ctx, parent.OrganizationID, client)
-
-	stateID, err := randomToken(32)
-	if err != nil {
-		return "", fmt.Errorf("generate state: %w", err)
-	}
-	verifier, err := randomToken(32)
-	if err != nil {
-		return "", fmt.Errorf("generate code verifier: %w", err)
-	}
-	nonce, err := randomToken(16)
-	if err != nil {
-		return "", fmt.Errorf("generate nonce: %w", err)
-	}
-	codeChallenge := s256Challenge(verifier)
-	origin := m.origins.ForClient(client.CallbackBaseURL)
-	redirectURI := RemoteLoginCallbackURL(origin)
-	stateParam := stateID
-	if client.LegacyCallbackUrl {
-		// Upstream was registered against the legacy oauth_proxy_servers
-		// callback, so keep that exact redirect_uri — the upstream's
-		// strict-match check still requires it. /oauth/callback forwards the
-		// response into the canonical remote-login callback. The state is the
-		// bare stateID, same as the non-legacy path: with the proxy gone,
-		// /oauth/callback serves only these forwards, so there is nothing to
-		// tell them apart from and no envelope is needed.
-		redirectURI = LegacyProxyCallbackURL(origin)
-	}
-
-	// Parse the upstream authorize URL before the cache write so a malformed
-	// endpoint can't leave an orphaned RemoteLoginState in Redis (its key is
-	// keyed on the random stateID — nothing else can reach it to clean up,
-	// it just expires after TTL).
-	u, err := url.Parse(client.AuthorizationEndpoint)
-	if err != nil {
-		return "", fmt.Errorf("parse authorization_endpoint: %w", err)
-	}
-
 	var (
 		scopes      []string
 		omitScope   bool
@@ -1366,6 +1325,48 @@ func (m *ChallengeManager) mintAuthorization(
 			attr.SlogOAuthScopeAdded(strings.Join(resolution.Widened, " ")),
 		)
 	}
+
+	// A registration the issuer has stopped recognizing would send the user to
+	// an authorize page that errors without ever redirecting back. Replace it
+	// first, so the login proceeds under a client_id the issuer knows.
+	client = m.rotateRejectedRegistration(ctx, parent.OrganizationID, client, scopes)
+
+	stateID, err := randomToken(32)
+	if err != nil {
+		return "", fmt.Errorf("generate state: %w", err)
+	}
+	verifier, err := randomToken(32)
+	if err != nil {
+		return "", fmt.Errorf("generate code verifier: %w", err)
+	}
+	nonce, err := randomToken(16)
+	if err != nil {
+		return "", fmt.Errorf("generate nonce: %w", err)
+	}
+	codeChallenge := s256Challenge(verifier)
+	origin := m.origins.ForClient(client.CallbackBaseURL)
+	redirectURI := RemoteLoginCallbackURL(origin)
+	stateParam := stateID
+	if client.LegacyCallbackUrl {
+		// Upstream was registered against the legacy oauth_proxy_servers
+		// callback, so keep that exact redirect_uri — the upstream's
+		// strict-match check still requires it. /oauth/callback forwards the
+		// response into the canonical remote-login callback. The state is the
+		// bare stateID, same as the non-legacy path: with the proxy gone,
+		// /oauth/callback serves only these forwards, so there is nothing to
+		// tell them apart from and no envelope is needed.
+		redirectURI = LegacyProxyCallbackURL(origin)
+	}
+
+	// Parse the upstream authorize URL before the cache write so a malformed
+	// endpoint can't leave an orphaned RemoteLoginState in Redis (its key is
+	// keyed on the random stateID — nothing else can reach it to clean up,
+	// it just expires after TTL).
+	u, err := url.Parse(client.AuthorizationEndpoint)
+	if err != nil {
+		return "", fmt.Errorf("parse authorization_endpoint: %w", err)
+	}
+
 	// The resource stays on the session: a grant without one is unroutable.
 	omitResource := parent.Resource != "" && client.IssuerResourceIndicatorSupported != nil && !*client.IssuerResourceIndicatorSupported
 	expectedIssuer := ""

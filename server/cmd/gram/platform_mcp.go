@@ -63,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
@@ -176,6 +177,8 @@ type platformMCPConfig struct {
 	// Analytics is the engine behind the three analytics tools, shared with
 	// the analytics RPC. Nil keeps them visible as unavailable.
 	Analytics platformmcp.AnalyticsEngine
+	// ConversationAccess is the exact-resource gate shared with transcript reads.
+	ConversationAccess analytics.ConversationAccess
 	// Widgets is the widgets service behind the five widget tools, shared
 	// with the widgets RPC. Nil keeps them visible as unavailable.
 	Widgets *widgets.Service
@@ -450,6 +453,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
+		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
 		WithMetadataMutations(config.Logger, plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), platformMCPPluginMetadataBudget(config, limitStore)).
 		WithPublicationRequests(config.PublicationRequests).
@@ -474,7 +478,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if config.DirectoryReview != nil {
 		accessReads.WithDirectoryReview(config.DirectoryReview)
 	}
-	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission))
+	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission).WithPluginPublisher(config.PluginPublishSignaler))
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
 	}
@@ -525,13 +529,13 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey).
 			WithRiskFindingsClickHouse(chatfindings.New(config.DB, config.ChatRiskFindings), config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
-		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
+		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	platformReader.WithDeploymentRedeploy(newPlatformMCPDeploymentRedeploy(config, platformReader, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
-	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
+	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
 	platformReader.WithDashboards(platformmcp.NewDashboardsService(config.Logger, config.Dashboards, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
@@ -1160,6 +1164,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
+		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger).
 		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
 		WithMetadataMutations(config.Logger, plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), platformMCPPluginMetadataBudget(config, limitStore)).
 		WithPublicationRequests(config.PublicationRequests).
@@ -1184,7 +1189,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if config.DirectoryReview != nil {
 		accessReads.WithDirectoryReview(config.DirectoryReview)
 	}
-	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission))
+	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger, config.PublicationRequests, config.DistributionAdmission).WithPluginPublisher(config.PluginPublishSignaler))
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
 	}
@@ -1216,13 +1221,13 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey).
 			WithRiskFindingsClickHouse(chatfindings.New(config.DB, config.ChatRiskFindings), config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
-		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
+		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	platformReader.WithDeploymentRedeploy(newPlatformMCPDeploymentRedeploy(config, platformReader, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
-	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
+	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
 	platformReader.WithDashboards(platformmcp.NewDashboardsService(config.Logger, config.Dashboards, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)

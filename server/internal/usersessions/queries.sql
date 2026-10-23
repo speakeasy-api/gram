@@ -2493,6 +2493,17 @@ WHERE s.jti = @jti AND s.subject_urn = @subject_urn
 -- credential reconnects and records the client. A server whose associated
 -- clients the credential's issuer binds none of is left without a row, a gap
 -- that coverage reports and that a reconnection resolves; nothing is guessed.
+-- While the upstream client choice stays authoritative, each choice recorded
+-- here also names the typed auth client that serves it, when exactly one does
+-- (see mapped below). That is how choices made between the auth client
+-- backfill and enabling the typed resolver stay covered: issuance captures
+-- them as it records them, and configuration changed since a run is picked up
+-- by running the backfill again, which maps whatever is still unmapped.
+-- An explicit typed pick on the consent page (picked_auth_client_ids) takes
+-- precedence over the mapped client and is validated as before; the mapped
+-- client only fills choices recorded without one. A recorded choice naming
+-- any auth client, explicit or mapped, is never replaced here: only an
+-- untyped no-auth choice is.
 WITH session_issuer AS (
     SELECT usi.id,
            usi.project_id,
@@ -2530,7 +2541,8 @@ reachable AS (
 picked AS (
     -- The consent page's pick for each server, as parallel arrays.
     SELECT unnest(@picked_mcp_server_ids::uuid[]) AS mcp_server_id,
-           unnest(@picked_client_ids::uuid[]) AS remote_session_client_id
+           unnest(@picked_client_ids::uuid[]) AS remote_session_client_id,
+           NULLIF(unnest(@picked_auth_client_ids::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
 ),
 eligible AS (
     SELECT a.mcp_server_id,
@@ -2549,7 +2561,10 @@ eligible AS (
 decided AS (
     SELECT r.id AS mcp_server_id,
            r.project_id,
-           COALESCE(
+           CASE WHEN pick.auth_client_id IS NOT NULL
+                     AND pick.remote_session_client_id = '00000000-0000-0000-0000-000000000000'::uuid
+                THEN NULL
+                ELSE COALESCE(
              (
                SELECT CASE WHEN count(*) = 1 THEN (array_agg(e.remote_session_client_id))[1] END
                FROM eligible AS e
@@ -2564,7 +2579,7 @@ decided AS (
                WHERE e.mcp_server_id = r.id
                LIMIT 1
              )
-           ) AS remote_session_client_id,
+           ) END AS remote_session_client_id,
            NOT EXISTS (
              SELECT 1
              FROM mcp_server_remote_session_clients AS a
@@ -2572,6 +2587,88 @@ decided AS (
                AND a.deleted IS FALSE
            ) AS no_auth
     FROM reachable AS r
+    LEFT JOIN picked AS pick ON pick.mcp_server_id = r.id
+),
+-- The typed auth client each decided choice names, by the rule the auth
+-- client backfill maps recorded choices with, so a choice recorded now is the
+-- choice the backfill would map: a client choice names the live, enabled
+-- remote_session or service_account auth client of its registration linked
+-- to the server, and a no-auth choice the server's linked, enabled
+-- static_credential or pass_through client that carries exactly the server
+-- source's current credential headers, while the server links no enabled
+-- OAuth-backed client. A header client whose headers no longer match was
+-- derived from a configuration since changed, so it is not the server's
+-- headers: the choice is recorded unmapped, and the backfill maps it once it
+-- has reconciled the clients. A choice is mapped only when exactly one such
+-- client exists; otherwise it is recorded unmapped, as before, and coverage
+-- reports it.
+mapped AS (
+    SELECT d.mcp_server_id,
+           CASE WHEN count(ac.id) = 1 THEN (array_agg(ac.id))[1] END AS auth_client_id
+    FROM decided AS d
+    CROSS JOIN session_issuer AS si
+    JOIN mcp_server_auth_clients AS l
+      ON l.mcp_server_id = d.mcp_server_id
+     AND l.deleted IS FALSE
+    JOIN mcp_auth_clients AS ac
+      ON ac.id = l.auth_client_id
+     AND ac.organization_id = si.organization_id
+     AND ac.deleted IS FALSE
+     AND ac.enabled
+    WHERE (d.remote_session_client_id IS NOT NULL
+           AND ac.remote_session_client_id = d.remote_session_client_id
+           AND ac.client_type IN ('remote_session', 'service_account'))
+       OR (d.remote_session_client_id IS NULL
+           AND d.no_auth
+           AND ac.client_type IN ('static_credential', 'pass_through')
+           -- The client carries the source's current credential headers,
+           -- compared as stored. authclientbackfill.ListSelectionMappings
+           -- repeats this comparison; the two must stay identical.
+           AND (
+             SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
+             FROM mcp_auth_client_headers AS h
+             WHERE h.auth_client_id = ac.id
+               AND h.deleted IS FALSE
+           ) = (
+             SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+             FROM (
+               SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
+               FROM mcp_servers AS s
+               JOIN remote_mcp_servers AS r
+                 ON r.id = s.remote_mcp_server_id
+                AND r.project_id = s.project_id
+                AND r.deleted IS FALSE
+               JOIN remote_mcp_server_headers AS rh
+                 ON rh.remote_mcp_server_id = r.id
+                AND rh.deleted IS FALSE
+               WHERE s.id = d.mcp_server_id
+               UNION ALL
+               SELECT th.name, th.value, th.value_from_request_header, th.is_secret
+               FROM mcp_servers AS s
+               JOIN tunneled_mcp_servers AS t
+                 ON t.id = s.tunneled_mcp_server_id
+                AND t.project_id = s.project_id
+                AND t.deleted IS FALSE
+               JOIN tunneled_mcp_server_headers AS th
+                 ON th.tunneled_mcp_server_id = t.id
+                AND th.deleted IS FALSE
+               WHERE s.id = d.mcp_server_id
+             ) AS src
+             WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM mcp_server_auth_clients AS ol
+             JOIN mcp_auth_clients AS other
+               ON other.id = ol.auth_client_id
+              AND other.organization_id = si.organization_id
+              AND other.deleted IS FALSE
+              AND other.enabled
+             WHERE ol.mcp_server_id = d.mcp_server_id
+               AND ol.deleted IS FALSE
+               AND other.client_type IN ('remote_session', 'service_account', 'ema')
+           ))
+    GROUP BY d.mcp_server_id
 )
 INSERT INTO upstream_client_selections (
     project_id,
@@ -2582,6 +2679,8 @@ INSERT INTO upstream_client_selections (
     remote_session_client_id,
     client_attachment_scope,
     no_auth,
+    auth_client_id,
+    auth_client_attachment_scope,
     source
 )
 SELECT d.project_id,
@@ -2591,7 +2690,9 @@ SELECT d.project_id,
        d.mcp_server_id,
        d.remote_session_client_id,
        chosen.attachment_scope,
-       d.remote_session_client_id IS NULL,
+       d.remote_session_client_id IS NULL AND auth_client.id IS NULL AND named.id IS NULL,
+       COALESCE(auth_client.id, named.id),
+       COALESCE(auth_client.attachment_scope, named.attachment_scope),
        @source::text
 FROM decided AS d
 CROSS JOIN session_issuer AS si
@@ -2603,15 +2704,41 @@ LEFT JOIN remote_session_clients AS chosen
  AND (chosen.project_id = server_project.id
       OR (chosen.project_id IS NULL AND chosen.organization_id = server_project.organization_id)
       OR (chosen.project_id IS NULL AND chosen.organization_id IS NULL))
-WHERE chosen.id IS NOT NULL
-   OR (d.remote_session_client_id IS NULL AND d.no_auth)
+LEFT JOIN picked AS pick ON pick.mcp_server_id = d.mcp_server_id
+LEFT JOIN mcp_auth_clients AS auth_client
+  ON auth_client.id = pick.auth_client_id
+ AND auth_client.organization_id = si.organization_id
+ AND (auth_client.project_id IS NULL OR auth_client.project_id = d.project_id)
+ AND auth_client.deleted IS FALSE
+ AND auth_client.enabled
+ AND auth_client.remote_session_client_id IS NOT DISTINCT FROM d.remote_session_client_id
+ AND auth_client.remote_session_client_id IS NOT DISTINCT FROM NULLIF(pick.remote_session_client_id, '00000000-0000-0000-0000-000000000000'::uuid)
+ AND EXISTS (
+   SELECT 1 FROM mcp_server_auth_clients AS link
+   WHERE link.mcp_server_id = d.mcp_server_id
+     AND link.auth_client_id = auth_client.id
+     AND link.organization_id = si.organization_id
+     AND link.deleted IS FALSE
+ )
+LEFT JOIN mapped AS m
+  ON m.mcp_server_id = d.mcp_server_id
+ AND pick.auth_client_id IS NULL
+LEFT JOIN mcp_auth_clients AS named
+  ON named.id = m.auth_client_id
+WHERE (chosen.id IS NOT NULL
+       OR (d.remote_session_client_id IS NULL AND (auth_client.id IS NOT NULL OR d.no_auth)))
+  AND (pick.auth_client_id IS NULL OR auth_client.id IS NOT NULL)
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO UPDATE
 SET remote_session_client_id = EXCLUDED.remote_session_client_id,
     client_attachment_scope = EXCLUDED.client_attachment_scope,
     no_auth = FALSE,
+    auth_client_id = EXCLUDED.auth_client_id,
+    auth_client_attachment_scope = EXCLUDED.auth_client_attachment_scope,
     source = EXCLUDED.source,
     updated_at = clock_timestamp()
 WHERE upstream_client_selections.no_auth
+  AND upstream_client_selections.auth_client_id IS NULL
+  AND upstream_client_selections.remote_session_client_id IS NULL
   AND EXCLUDED.remote_session_client_id IS NOT NULL;
 
 -- name: GetUpstreamClientSelection :one

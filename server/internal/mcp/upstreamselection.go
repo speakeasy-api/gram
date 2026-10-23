@@ -33,6 +33,7 @@ import (
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -223,8 +224,14 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 		}
 	}
 	choice, err := selector.forServer(ctx, endpoint.McpServerID.UUID)
-	if mode == feature.AuthClientResolverShadow {
-		s.shadowAuthClient(ctx, selector, endpoint.McpServerID.UUID, choice, err)
+	switch mode {
+	case feature.AuthClientResolverShadow:
+		s.shadowAuthClient(ctx, selector, endpoint.McpServerID.UUID, endpoint.ProjectID, authentication.subject, choice, err)
+	case feature.AuthClientResolverOff:
+		if err == nil {
+			s.newMandatoryShadow(ctx, endpoint.OrganizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, true, mandatoryReasonResolverOff, endpoint.McpServerID.UUID.String(), endpoint.ProjectID.String())
+		}
+	case feature.AuthClientResolverEnforced:
 	}
 	switch {
 	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
@@ -289,6 +296,7 @@ func (s *Service) resolveAccessTokens(ctx context.Context, authentication *issue
 // per member per request. Hosted members keep the issuer-derived path.
 type memberChoices struct {
 	selector *upstreamSelector
+	subject  urn.SessionSubject
 	resolve  func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error)
 
 	mu       sync.Mutex
@@ -314,6 +322,7 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 	endpoint := authentication.endpoint
 	return &memberChoices{
 		selector: selector,
+		subject:  authentication.subject,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			tokens, err := s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, member.chosenClientID.UUID, true)
 			switch {
@@ -332,9 +341,9 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 // apply rewrites each proxied member's routing identity from the credential's
 // choice: the chosen client's issuer, none for no-auth, or the reason the
 // member cannot be reached. A missing or unusable choice degrades that member
-// alone; the choices are read in one query, so a failure to read them
-// degrades every proxied member, while hosted members keep serving.
-func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members []metaMember) {
+// alone. Choices are read in batches; a read failure degrades proxied members
+// while hosted members keep serving.
+func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members []metaMember, typed bool) {
 	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {
 		if member.backend == metaMemberBackendProxied {
@@ -344,26 +353,97 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	if len(ids) == 0 {
 		return
 	}
-	choices, err := c.selector.forServers(ctx, ids)
+	var resolved map[uuid.UUID]authClientResolution
+	var err error
+	if typed {
+		resolved, err = c.selector.resolveAuthClients(ctx, ids)
+		ids = ids[:0]
+		for id, res := range resolved {
+			if res.outcome == authClientLegacy {
+				ids = append(ids, id)
+			}
+		}
+	}
+	var choices serverChoices
+	if err == nil && len(ids) > 0 {
+		choices, err = c.selector.forServers(ctx, ids)
+	}
+	if err != nil {
+		logger.ErrorContext(ctx, "load gateway member upstream client choices", attr.SlogError(err))
+	}
+	memberErrors := make(map[uuid.UUID]error)
+	var headerIDs []uuid.UUID
+	if typed && err == nil {
+		for id, res := range resolved {
+			prepared, prepareErr := c.selector.service.checkAuthClientPermission(ctx, authClientPermitRequest{
+				OrganizationID: c.selector.organizationID, ServerID: id, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
+				CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: c.selector.credentialID, Subject: c.subject,
+			}, res, nil)
+			resolved[id] = prepared
+			memberErrors[id] = prepareErr
+			if prepareErr == nil && prepared.outcome == authClientResolved && !prepared.tunneled {
+				headerIDs = append(headerIDs, prepared.clientID)
+			}
+		}
+	}
+	headers, headerErr := c.selector.service.loadAuthClientHeaders(ctx, c.selector.organizationID, headerIDs)
 	for i := range members {
 		member := &members[i]
 		if member.backend != metaMemberBackendProxied {
 			continue
 		}
-		if err != nil {
-			logger.ErrorContext(ctx, "load gateway member upstream client choices", attr.SlogError(err))
-			member.upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
-			continue
+		res := gapResolution(authClientReasonMissingChoice)
+		memberErr := err
+		if memberErr == nil {
+			if typed {
+				if choice, ok := resolved[member.serverID]; ok {
+					res = choice
+				}
+				memberErr = memberErrors[member.serverID]
+				if memberErr == nil && res.outcome == authClientResolved && !res.tunneled {
+					memberErr = headerErr
+					if memberErr == nil {
+						clientHeaders := headers[res.clientID]
+						memberErr = clientHeaders.err
+						if memberErr == nil {
+							res = applyAuthClientHeaders(res, clientHeaders.headers)
+						}
+					}
+				}
+				annotateAuthClient(ctx, c.selector.service.logger, res)
+			} else {
+				res.outcome = authClientLegacy
+			}
+			if memberErr == nil && res.outcome == authClientLegacy {
+				res.choice, memberErr = choices.forServer(member.serverID)
+			}
 		}
-		choice, cerr := choices.forServer(member.serverID)
-		if cerr != nil {
-			member.upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
-			continue
-		}
-		member.chosenClientID = choice.clientID
-		member.remoteSessionIssuerID = choice.remoteSessionIssuerID
-		member.upstreamNoAuth = choice.noAuth()
+		c.selector.service.applyMemberAuthClient(ctx, member, res, memberErr)
 	}
+}
+
+func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember, res authClientResolution, err error) {
+	member.authClient = &res
+	if errors.Is(err, errUpstreamSelectionMissing) || errors.Is(err, errUpstreamSelectionUnusable) {
+		member.upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
+		return
+	}
+	if err != nil {
+		member.upstreamUnavailable = &metaMemberError{message: "This server's connection could not be checked; try again later."}
+		return
+	}
+	switch res.outcome {
+	case authClientNoAccess:
+		member.upstreamUnavailable = s.authClientNoAccessError(ctx, member.serverID, res)
+		return
+	case authClientGap:
+		member.upstreamUnavailable = memberCredentialError{&metaMemberError{message: "This server's authentication needs setup or a new sign-in."}}
+		return
+	case authClientResolved, authClientNoAuth, authClientLegacy:
+	}
+	member.chosenClientID = res.choice.clientID
+	member.remoteSessionIssuerID = res.choice.remoteSessionIssuerID
+	member.upstreamNoAuth = res.outcome == authClientNoAuth || res.headersOnly() || (res.outcome == authClientLegacy && res.choice.noAuth())
 }
 
 // tokens is the token map a chosen member routes from: empty for no-auth,

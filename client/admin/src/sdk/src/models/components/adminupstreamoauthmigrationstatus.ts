@@ -12,6 +12,10 @@ import {
   AdminUpstreamOAuthMigrationAuthClients$inboundSchema,
 } from "./adminupstreamoauthmigrationauthclients.js";
 import {
+  AdminUpstreamOAuthMigrationExecutionProfiles,
+  AdminUpstreamOAuthMigrationExecutionProfiles$inboundSchema,
+} from "./adminupstreamoauthmigrationexecutionprofiles.js";
+import {
   AdminUpstreamOAuthMigrationServer,
   AdminUpstreamOAuthMigrationServer$inboundSchema,
 } from "./adminupstreamoauthmigrationserver.js";
@@ -28,6 +32,10 @@ export type AdminUpstreamOAuthMigrationStatus = {
    * Live user session credentials scanned.
    */
   credentials: number;
+  /**
+   * Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.
+   */
+  executionProfiles?: AdminUpstreamOAuthMigrationExecutionProfiles | undefined;
   /**
    * Whether the organization has nothing left to write and no server needing configuration.
    */
@@ -68,6 +76,9 @@ export const AdminUpstreamOAuthMigrationStatus$inboundSchema: z.ZodMiniType<
       AdminUpstreamOAuthMigrationAuthClients$inboundSchema,
     ),
     credentials: z.int(),
+    execution_profiles: z.optional(
+      AdminUpstreamOAuthMigrationExecutionProfiles$inboundSchema,
+    ),
     migrated: z.boolean(),
     organization_id: z.string(),
     pending_associations: z.int(),
@@ -81,6 +92,7 @@ export const AdminUpstreamOAuthMigrationStatus$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "auth_clients": "authClients",
+      "execution_profiles": "executionProfiles",
       "organization_id": "organizationId",
       "pending_associations": "pendingAssociations",
       "pending_selections": "pendingSelections",

@@ -3307,7 +3307,6 @@ SELECT
     ps.policy,
     ps.sort_order,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    (ps.mcp_server_id IS NULL AND ps.meta_mcp_server_id IS NULL)::boolean AS unresolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
     COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
@@ -3380,12 +3379,7 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    CASE
-      WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
-      WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
-      -- A live toolset-only row lands here until AIM-581 drops plugin_servers.toolset_id.
-      ELSE 'unresolved'
-    END::text AS target_kind,
+    CASE WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server' ELSE 'gateway' END::text AS target_kind,
     COALESCE(ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
     COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
@@ -3465,6 +3459,25 @@ LIMIT @result_limit;
 -- required for the optimistic-concurrency version; no principal leaves this
 -- internal query boundary.
 SELECT pa.principal_urn
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = @plugin_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id
+ORDER BY pa.principal_urn;
+
+-- name: ListPlatformMCPPluginAssignmentsWithModes :many
+-- The same exact-plugin assignment set as ListPlatformMCPPluginAssignments,
+-- with each assignment's install mode, which the optimistic-concurrency version
+-- also covers.
+SELECT pa.principal_urn, pa.install_mode
 FROM plugin_assignments pa
 JOIN plugins p
   ON p.id = pa.plugin_id

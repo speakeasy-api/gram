@@ -814,7 +814,8 @@ WHERE id = @id
 -- endpoint to probe and the registration endpoint to re-register at, both as
 -- discovery last refreshed them on the issuer, and the issuer's transport
 -- binding, since both of those endpoints are only reachable over the tunnel
--- when one is set. Not locked: the rotation talks to the issuer between this
+-- when one is set, and the issuer's scope inputs for a client that stores no
+-- scope. Not locked: the rotation talks to the issuer between this
 -- read and its write, and the write compares the client_id it read here so a
 -- concurrent rotation is detected rather than blocked. The ID comes from an
 -- authorized client selection, not a caller-supplied issuer ID. Restrict the
@@ -829,7 +830,10 @@ SELECT
     i.updated_at             AS issuer_updated_at,
     i.project_id             AS issuer_project_id,
     i.organization_id        AS issuer_organization_id,
-    i.tunneled_mcp_server_id AS issuer_tunneled_mcp_server_id
+    i.tunneled_mcp_server_id AS issuer_tunneled_mcp_server_id,
+    i.scopes_supported       AS issuer_scopes_supported,
+    i.scope_override         AS issuer_scope_override,
+    i.omit_scope_fallback    AS issuer_omit_scope_fallback
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
@@ -1380,6 +1384,26 @@ VALUES (
     @audience,
     sqlc.narg('callback_base_url')
 )
+RETURNING *;
+
+-- name: SetDuplicatedCIMDRemoteSessionClientAuthentication :one
+-- Gives a duplicated client metadata document client the authentication
+-- settings of the client it copies. CreateRemoteSessionClientCIMD always
+-- creates a public client, while a document client may sign private_key_jwt
+-- assertions with a key set, which its document then publishes. Scoped to the
+-- caller's organization like the other organization-surface client writes, and
+-- matches only a document client.
+UPDATE remote_session_clients
+SET
+    token_endpoint_auth_method = @token_endpoint_auth_method,
+    token_endpoint_auth_audience_format = @token_endpoint_auth_audience_format,
+    json_web_key_set_id = sqlc.narg('json_web_key_set_id')::uuid,
+    grant_types = sqlc.narg('grant_types')::text[],
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: DeleteRemoteSessionClient :one
@@ -6132,7 +6156,7 @@ WHERE organization_id = @organization_id::text AND project_id = @project_id::uui
 -- session issuer that no grant adopted, when the user denies consent.
 UPDATE remote_session_ema_credentials
 SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid
+WHERE organization_id = @organization_id::text
   AND user_session_issuer_id = @user_session_issuer_id::uuid
   AND subject_urn = @subject_urn::text AND sign_in_id = @sign_in_id::uuid
   AND ema_provider = 'speakeasy' AND user_session_id IS NULL

@@ -162,6 +162,11 @@ type Service struct {
 	// provider: the posthog client in production, the CSV-backed in-memory
 	// provider in local development, feature.InMemory in tests.
 	features feature.Provider
+	// mandatoryShadowLog dedupes mandatory authz shadow disagreement logs.
+	mandatoryShadowLog *mandatoryShadowLog
+	// prepareMandatory replaces authz PrepareMandatory for the shadow when
+	// set; tests use it to observe admissions.
+	prepareMandatory func(context.Context) (authz.MandatoryAuthorization, error)
 	// cimdResolver fetches + validates Client ID Metadata Documents for
 	// URL-shaped client_ids and owns the cimd.fetch.* telemetry.
 	cimdResolver *cimd.Resolver
@@ -224,9 +229,11 @@ type Service struct {
 	// userSessionRefreshReplayCoordination elects the database rotation winner.
 	userSessionRefreshReplayCoordination cache.Cache
 	sessionPolicyCache                   cache.TypedCacheObject[sessionPolicyEntry]
-	// consentToolInventoryCache holds per-(state, attempt) tool inventory
-	// snapshots captured by the consent MCP transport.
+	// consentToolInventoryCache holds bounded gateway challenge captures and
+	// single-server attempt snapshots captured by the consent MCP transport.
 	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
+	// connectionCatalogCache retains immutable approved catalogs for a grant's lifetime.
+	connectionCatalogCache cache.Cache
 	// sessionClientInfo holds the MCP client identity captured at initialize
 	// so tools/call on the same session can resolve it. Always usable: without
 	// Redis it records nothing and every caller resolves as unknown.
@@ -553,6 +560,8 @@ func NewService(
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
+		mandatoryShadowLog:        newMandatoryShadowLog(),
+		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
@@ -622,20 +631,21 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		sessionClientInfo:    sessionClientInfo,
-		tunnelClientFamilies: newTunnelClientFamilies(sessionClientInfo),
-		identityResolver:     identityResolver,
-		identityValidator:    mcpidentity.NewValidatorBoundary(),
-		userSessionSigner:    userSessionSigner,
-		remoteChallengeMgr:   remoteChallengeMgr,
-		validationMetrics:    remotesessionmetrics.NewValidation(logger, meterProvider),
-		validationLimiter:    newValidationLimiter(redisClient, meterProvider),
-		autoVerifications:    newAutoVerifications(),
-		remoteSessionRecheck: newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
-		remoteProxyManager:   remoteProxyManager,
-		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
-		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
-		metaRuntime:          metaRuntimeConfig.withDefaults(),
+		connectionCatalogCache: cacheImpl,
+		sessionClientInfo:      sessionClientInfo,
+		tunnelClientFamilies:   newTunnelClientFamilies(sessionClientInfo),
+		identityResolver:       identityResolver,
+		identityValidator:      mcpidentity.NewValidatorBoundary(),
+		userSessionSigner:      userSessionSigner,
+		remoteChallengeMgr:     remoteChallengeMgr,
+		validationMetrics:      remotesessionmetrics.NewValidation(logger, meterProvider),
+		validationLimiter:      newValidationLimiter(redisClient, meterProvider),
+		autoVerifications:      newAutoVerifications(),
+		remoteSessionRecheck:   newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
+		remoteProxyManager:     remoteProxyManager,
+		tunnelManager:          newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
+		tunnelPublic:           newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
+		metaRuntime:            metaRuntimeConfig.withDefaults(),
 	}
 	// Discovery and token dispatch share this production issuer. Only explicitly
 	// provisioned, live assistant workload registrations can obtain tokens.
@@ -750,9 +760,9 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 		case netingress.RouteConsentToolsScript:
 			handler = oops.ErrHandle(service.logger, service.ServeConsentToolsScript)
 		case netingress.RouteToken:
-			handler = oops.ErrHandle(service.logger, service.HandleToken)
+			handler = oops.OAuthErrHandle(service.logger, service.HandleToken)
 		case netingress.RouteRevoke:
-			handler = oops.ErrHandle(service.logger, service.HandleRevoke)
+			handler = oops.OAuthErrHandle(service.logger, service.HandleRevoke)
 		}
 		if handler == nil {
 			panic(fmt.Sprintf("private MCP route %s %s has no handler", route.Method, route.Path))
@@ -781,7 +791,7 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.MCPErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", deviceagenttoken.TokenPathPattern, oops.ErrHandle(service.logger, service.HandleDeviceAgentToken).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", deviceagenttoken.TokenPathPattern, oops.OAuthErrHandle(service.logger, service.HandleDeviceAgentToken).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback/{clientID}", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
@@ -831,8 +841,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-page-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentScript).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-tools-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentToolsScript).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-fonts/{file}", oops.ErrHandle(service.logger, service.ServeConsentFont).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/token", oops.OAuthErrHandle(service.logger, service.HandleToken).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/revoke", oops.OAuthErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 
 	attachSharedAuthorizationServers(mux, service)
@@ -1310,12 +1320,14 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// re-reject the JWT it doesn't recognise.
 	runInToolsetGate := cfg.runInToolsetGate
 	callerAlreadyGated := cfg.callerGated
+	connect := authz.MCPCheck(authz.ScopeMCPConnect, cfg.rbacResourceID.String(), toolset.ProjectID.String())
 	if runInToolsetGate {
 		// The WWW-Authenticate URL, issuer URL, and consent action follow
 		// the surface the request arrived under.
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcpRouteBase)
 		newCtx, authentication, gateToolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
 		if err != nil {
+			s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
 			return err
 		}
 		ctx = newCtx
@@ -1367,87 +1379,26 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		case !cfg.isPublic:
 			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, toolset.ID, oauthProtectedResourceURL)
 			if err != nil {
+				s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
 				return err
 			}
 		default:
 			ctx, err = s.TryPublicIdentityAuth(ctx, r, false, toolset.ID)
 			if err != nil {
+				s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
 				return err
 			}
 		}
 	}
 
 	var selectedEnvironment string
-	var authenticated bool
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
-		projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return oops.E(oops.CodeForbidden, nil, "no projects found").LogError(ctx, s.logger)
-		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "error checking project access").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-		}
-
-		projectInOrg := false
-		for _, project := range projects {
-			if project.ID == toolset.ProjectID {
-				projectInOrg = true
-				break
-			}
-		}
-
-		if projectInOrg {
-			authenticated = true
-		} else if !cfg.isPublic {
-			// Only return 401 for non-public MCPs when the user is not in the owning org
-			return oops.C(oops.CodeUnauthorized)
-		}
-		// For public MCPs accessed from outside the owning org, authenticated stays false
-		// so they get public access without environment/secrets
+	ctx = withMandatoryAdmission(ctx)
+	authorizedCtx, authenticated, err := s.authorizeHostedRequest(ctx, toolset, cfg, connect)
+	s.newMandatoryShadow(authorizedCtx, toolset.OrganizationID).shadowRequire(authorizedCtx, mandatorySurfaceHostedConnect, err, connect)
+	if err != nil {
+		return err
 	}
-
-	if !cfg.isPublic && !authenticated {
-		return oops.C(oops.CodeNotFound)
-	}
-
-	if authenticated {
-		// Private MCPs require mcp:connect on the specific server (the
-		// wrapper's id when one fronts the request, else the toolset's).
-		// Public MCPs are open to everyone — no RBAC enforcement.
-		if !cfg.isPublic {
-			// Ensure grants are loaded — not all auth strategies in authenticateToken
-			// go through auth.Authorize (which calls PrepareContext). Principal
-			// credentials repeat live admission even when grants are already loaded.
-			ctx, err = s.authz.PrepareContext(ctx)
-			if err != nil {
-				var shareable *oops.ShareableError
-				if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
-					return fmt.Errorf("principal credential admission: %w", err)
-				}
-				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
-			}
-			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, cfg.rbacResourceID.String(), toolset.ProjectID.String())); err != nil {
-				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name)))
-			}
-		}
-
-		if err := requirePrincipalCredentialProject(ctx, toolset.ProjectID); err != nil {
-			return err
-		}
-		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
-			if authCtx.ProjectID != nil && *authCtx.ProjectID != toolset.ProjectID {
-				return oops.E(oops.CodeForbidden, nil, "api key project does not match toolset project")
-			}
-			if authCtx.ProjectID == nil {
-				// Organization-wide keys gain execution context only after project
-				// access is authorized. Copy the context so sibling calls cannot
-				// inherit this request's project binding.
-				projectAuth := *authCtx
-				projectAuth.ProjectID = &toolset.ProjectID
-				ctx = contextvalues.SetAuthContext(ctx, &projectAuth)
-			}
-		}
-	}
+	ctx = authorizedCtx
 	if prepared.empty() {
 		return nil
 	}
@@ -1615,6 +1566,85 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	return nil
+}
+
+// authorizeHostedRequest applies today's access decision for a hosted
+// server: organization membership, mcp:connect on private servers, and the
+// caller's project binding. It reports whether the caller is in the server's
+// organization.
+func (s *Service) authorizeHostedRequest(ctx context.Context, toolset *toolsets_repo.Toolset, cfg *hostedServing, connect authz.Check) (context.Context, bool, error) {
+	var authenticated bool
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
+		projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return ctx, false, oops.E(oops.CodeForbidden, nil, "no projects found").LogError(ctx, s.logger)
+		case err != nil:
+			return ctx, false, oops.E(oops.CodeUnexpected, err, "error checking project access").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		}
+
+		projectInOrg := false
+		for _, project := range projects {
+			if project.ID == toolset.ProjectID {
+				projectInOrg = true
+				break
+			}
+		}
+
+		if projectInOrg {
+			authenticated = true
+		} else if !cfg.isPublic {
+			// Only return 401 for non-public MCPs when the user is not in the owning org
+			return ctx, false, oops.C(oops.CodeUnauthorized)
+		}
+		// For public MCPs accessed from outside the owning org, authenticated stays false
+		// so they get public access without environment/secrets
+	}
+
+	if !cfg.isPublic && !authenticated {
+		return ctx, false, oops.C(oops.CodeNotFound)
+	}
+
+	if authenticated {
+		// Private MCPs require mcp:connect on the specific server (the
+		// wrapper's id when one fronts the request, else the toolset's).
+		// Public MCPs are open to everyone — no RBAC enforcement.
+		if !cfg.isPublic {
+			// Ensure grants are loaded — not all auth strategies in authenticateToken
+			// go through auth.Authorize (which calls PrepareContext). Principal
+			// credentials repeat live admission even when grants are already loaded.
+			prepared, err := s.authz.PrepareContext(ctx)
+			if err != nil {
+				var shareable *oops.ShareableError
+				if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
+					return ctx, false, fmt.Errorf("principal credential admission: %w", err)
+				}
+				return ctx, false, oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
+			}
+			ctx = prepared
+			if err := s.authz.Require(ctx, connect); err != nil {
+				return ctx, false, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name)))
+			}
+		}
+
+		if err := requirePrincipalCredentialProject(ctx, toolset.ProjectID); err != nil {
+			return ctx, false, err
+		}
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
+			if authCtx.ProjectID != nil && *authCtx.ProjectID != toolset.ProjectID {
+				return ctx, false, oops.E(oops.CodeForbidden, nil, "api key project does not match toolset project")
+			}
+			if authCtx.ProjectID == nil {
+				// Organization-wide keys gain execution context only after project
+				// access is authorized. Copy the context so sibling calls cannot
+				// inherit this request's project binding.
+				projectAuth := *authCtx
+				projectAuth.ProjectID = &toolset.ProjectID
+				ctx = contextvalues.SetAuthContext(ctx, &projectAuth)
+			}
+		}
+	}
+	return ctx, authenticated, nil
 }
 
 func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID string, mcpServerID *uuid.UUID) error {

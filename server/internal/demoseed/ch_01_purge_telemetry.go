@@ -111,6 +111,8 @@ var chPurgeOrgTables = []string{
 	// Target of authz_challenge_bucket_summaries_mv.
 	"authz_challenge_bucket_summaries",
 	"risk_findings",
+	// Target of risk_finding_states_mv.
+	"risk_finding_states",
 	"skill_session_versions",
 	"skill_efficacy_scores",
 	"billing_meter_daily_summaries",
@@ -447,8 +449,12 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
 				}
 			}
-			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"` +
-				`,"http.response.status_code":` + chIf(failed, "500", "200") +
+			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"`
+			// The serving wrapper's id; every seventh chat models calls recorded before stamping.
+			if i%7 != 0 {
+				attrs += `,"gram.mcp_server.id":"` + chIf(i%5 == 0, s.det("mcpserver-ops").String(), s.toolset1().String()) + `"`
+			}
+			attrs += `,"http.response.status_code":` + chIf(failed, "500", "200") +
 				`,"gram.outcome":"` + chIf(failed || toolError, "error", "ok") + `"` +
 				`,"http.server.request.duration":` + chRound(0.05+float64(hash64(i, k)%200)/100, 3) +
 				// The arguments and the result, as a real tool call records
