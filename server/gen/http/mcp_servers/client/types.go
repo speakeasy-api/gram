@@ -2858,6 +2858,10 @@ type McpServerToolsetSummaryResponseBody struct {
 	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
 	// The registry specifier the toolset originated from, if any
 	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
+	// The ID of the MCP server that stands in for the toolset: its canonical
+	// server, whose ID is the toolset's, or when it has none, its oldest live
+	// server with a live endpoint. Absent when it has neither.
+	HostingMcpServerID *string `form:"hosting_mcp_server_id,omitempty" json:"hosting_mcp_server_id,omitempty" xml:"hosting_mcp_server_id,omitempty"`
 }
 
 // McpServerResponseBody is used to define fields on response body types.
@@ -8845,6 +8849,9 @@ func ValidateMcpServerToolsetSummaryResponseBody(body *McpServerToolsetSummaryRe
 	}
 	if body.ExternalOauthServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_oauth_server_id", *body.ExternalOauthServerID, goa.FormatUUID))
+	}
+	if body.HostingMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.hosting_mcp_server_id", *body.HostingMcpServerID, goa.FormatUUID))
 	}
 	return
 }

@@ -10412,7 +10412,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments
 
 CREATE TABLE IF NOT EXISTS mcp_metadata (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
-  mcp_server_id UUID,
+  mcp_server_id UUID NOT NULL,
   project_id UUID NOT NULL,
   external_documentation_url TEXT,
   external_documentation_text TEXT,
@@ -10429,8 +10429,7 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   CONSTRAINT mcp_metadata_logo_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE SET NULL,
   CONSTRAINT mcp_metadata_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
   CONSTRAINT mcp_metadata_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_metadata_default_environment_id_fkey FOREIGN KEY (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_metadata_mcp_server_id_check CHECK (mcp_server_id IS NOT NULL)
+  CONSTRAINT mcp_metadata_default_environment_id_fkey FOREIGN KEY (default_environment_id) REFERENCES environments (id) ON DELETE SET NULL
 );
 
 COMMENT ON COLUMN mcp_metadata.id IS '@access: confidential';

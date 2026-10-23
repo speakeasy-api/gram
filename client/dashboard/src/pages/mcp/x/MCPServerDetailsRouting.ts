@@ -1,8 +1,10 @@
 import type { useRoutes } from "@/routes";
-import type { TabValue as ToolsetTabValue } from "../MCPDetailsRouting";
 
 const VALID_TABS = [
   "overview",
+  "tools",
+  "resources",
+  "prompts",
   "inspect",
   "team-access",
   "guardrails",
@@ -10,7 +12,8 @@ const VALID_TABS = [
   "settings",
 ] as const;
 const LEGACY_AUTHENTICATION_TAB = "authentication";
-const LEGACY_TOOLS_TAB = "tools";
+// Hosted servers manage their toolset on these tabs; every other server inspects its live tools.
+const HOSTED_ONLY_TABS: readonly TabValue[] = ["tools", "resources", "prompts"];
 
 // Breadcrumb `skipSegments` source. Derived from VALID_TABS rather than
 // hand-maintained alongside it, so adding a tab can't leave a stray crumb.
@@ -70,18 +73,9 @@ export function isLegacyAuthenticationTabPath(
   );
 }
 
-/** The Inspect tab was called Tools until AGE-2876; keep old links working. */
-export function isLegacyToolsTabPath(
-  pathname: string,
-  mcpServerSlug: string,
-): boolean {
-  return tabSegmentFromPath(pathname, mcpServerSlug) === LEGACY_TOOLS_TAB;
-}
-
 export function initialTabFromHash(hash: string): TabValue {
   const hashValue = hash.replace("#", "");
   if (hashValue === LEGACY_AUTHENTICATION_TAB) return "settings";
-  if (hashValue === LEGACY_TOOLS_TAB) return "inspect";
   if (!isValidTab(hashValue)) return "overview";
   return hashValue;
 }
@@ -94,6 +88,12 @@ export function mcpServerTabHref(
   switch (tab) {
     case "overview":
       return routes.mcp.x.overview.href(mcpServerSlug);
+    case "tools":
+      return routes.mcp.x.tools.href(mcpServerSlug);
+    case "resources":
+      return routes.mcp.x.resources.href(mcpServerSlug);
+    case "prompts":
+      return routes.mcp.x.prompts.href(mcpServerSlug);
     case "inspect":
       return routes.mcp.x.inspect.href(mcpServerSlug);
     case "team-access":
@@ -107,7 +107,7 @@ export function mcpServerTabHref(
   }
 }
 
-// A hosted toolset's canonical wrapper shares the toolset's id; it is managed on the toolset page.
+// A hosted toolset's canonical wrapper shares the toolset's id; toolset writes sync onto it.
 export function isCanonicalHostedWrapper(server: {
   id: string;
   toolsetId?: string | undefined;
@@ -115,33 +115,23 @@ export function isCanonicalHostedWrapper(server: {
   return server.toolsetId !== undefined && server.id === server.toolsetId;
 }
 
-export function toolsetTabForServerPath(
-  pathname: string,
-  mcpServerSlug: string,
-  hash: string,
-): ToolsetTabValue | undefined {
-  const segment =
-    tabSegmentFromPath(pathname, mcpServerSlug) ?? hash.replace("#", "");
-  switch (segment) {
-    case "inspect":
-    case LEGACY_TOOLS_TAB:
-      return "tools";
-    case LEGACY_AUTHENTICATION_TAB:
-      return "authentication";
-    case "team-access":
-      return "team-access";
-    case "sessions":
-      return "sessions";
-    case "settings":
-      if (hash === `#${LEGACY_AUTHENTICATION_TAB}`) return "authentication";
-      // Other settings sections have no anchor on the toolset page. Keep their
-      // deep links on the server page, where the section can render and scroll.
-      if (hash && hash !== "#settings") return undefined;
-      return "settings";
-    // The toolset page has no guardrails tab.
-    case "guardrails":
-      return undefined;
-    default:
-      return "overview";
-  }
+/** The canonical wrapper, or the server the API names as host of a toolset without one. */
+export function standsInForToolset(server: {
+  id: string;
+  toolsetId?: string | undefined;
+  toolset?: { hostingMcpServerId?: string | undefined } | undefined;
+}): boolean {
+  if (server.toolsetId === undefined) return false;
+  const hostingId = server.toolset?.hostingMcpServerId;
+  // Older servers omit the field; the canonical rule still holds there.
+  return hostingId === undefined
+    ? isCanonicalHostedWrapper(server)
+    : hostingId === server.id;
+}
+
+/** The tab to show instead of `tab` for this kind of server, or `tab` itself. */
+export function tabForServer(tab: TabValue, hosted: boolean): TabValue {
+  if (hosted) return tab === "inspect" ? "tools" : tab;
+  if (tab === "tools") return "inspect";
+  return HOSTED_ONLY_TABS.includes(tab) ? "overview" : tab;
 }

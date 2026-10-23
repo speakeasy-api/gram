@@ -84,6 +84,17 @@ func TestKitCompositionRequiresExplicitAttachedResource(t *testing.T) {
 	require.Error(t, err)
 }
 
+// A custom-domain attachment matches its own host, never the platform alias.
+func TestKitCompositionCustomDomainResource(t *testing.T) {
+	t.Parallel()
+	origin, _ := url.Parse("https://platform.example")
+	a := assistantRecord{MCPServers: []assistantMCPServerRow{{EndpointSlug: "attached", EndpointDomain: "mcp.customer.example", Visibility: "private"}}}
+	onDomain, _ := url.Parse("https://mcp.customer.example/mcp/attached")
+	require.True(t, kitResourceAttached(a, origin, onDomain))
+	onPlatform, _ := url.Parse("https://platform.example/mcp/attached")
+	require.False(t, kitResourceAttached(a, origin, onPlatform))
+}
+
 func TestKitCompositionPrivateKeyUsesProtectedFile(t *testing.T) {
 	t.Parallel()
 	resource, _ := url.Parse("https://mcp.example/mcp/resource")

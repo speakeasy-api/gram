@@ -102,7 +102,7 @@ func seedServerKeyedRow(t *testing.T, ctx context.Context, ti *testInstance, too
 
 	queries := repo.New(ti.conn)
 	row, err := queries.UpsertMetadataByMcpServerID(ctx, repo.UpsertMetadataByMcpServerIDParams{
-		McpServerID:               uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		McpServerID:               toolset.ID,
 		ProjectID:                 toolset.ProjectID,
 		ExternalDocumentationUrl:  pgtype.Text{String: "", Valid: false},
 		ExternalDocumentationText: pgtype.Text{String: "", Valid: false},

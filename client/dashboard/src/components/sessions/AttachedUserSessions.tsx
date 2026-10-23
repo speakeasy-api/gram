@@ -1,8 +1,5 @@
 import { sessionAccountLabel } from "./session-account-identity";
 import { useEffect, useRef, useState } from "react";
-import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
-import { firstPartyConnectUrl } from "@/lib/utils";
-import type { Toolset } from "@/lib/toolTypes";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   useIsPlatformAdmin,
@@ -319,18 +316,4 @@ function OwnedSessionBindings({
       />
     </>
   );
-}
-
-export function ToolsetAttachedUserSessions({
-  toolset,
-}: {
-  toolset: Toolset;
-}): JSX.Element | null {
-  const target = useToolsetMcpTarget(toolset);
-  return target.userSessionIssuerId ? (
-    <AttachedUserSessions
-      issuerId={target.userSessionIssuerId}
-      connectUrl={firstPartyConnectUrl(target.url)}
-    />
-  ) : null;
 }

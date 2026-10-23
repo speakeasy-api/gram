@@ -60,7 +60,7 @@ func TestPluginsService_PublishPlugins_HostedEntryPublishesDomainAndUserHeaders(
 	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true}, toolset.McpSlug.String)
 
 	metadata, err := mcpmetarepo.New(ti.conn).UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
-		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
+		McpServerID: toolset.ID, ProjectID: *ac.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
 		LogoID: uuid.NullUUID{Valid: false}, Instructions: pgtype.Text{Valid: false}, DefaultEnvironmentID: uuid.NullUUID{Valid: false},
 		InstallationOverrideUrl: pgtype.Text{Valid: false},
@@ -203,7 +203,7 @@ func TestPluginsService_ToolsetEntryIgnoresMetadataOfNonCanonicalServerWithItsID
 	require.NoError(t, err)
 	meta := mcpmetarepo.New(ti.conn)
 	held, err := meta.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
-		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
+		McpServerID: toolset.ID, ProjectID: *ac.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
 		LogoID: uuid.NullUUID{Valid: false}, Instructions: pgtype.Text{Valid: false}, DefaultEnvironmentID: uuid.NullUUID{Valid: false},
 		InstallationOverrideUrl: pgtype.Text{Valid: false},
