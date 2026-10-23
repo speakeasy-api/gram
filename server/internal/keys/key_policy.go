@@ -201,8 +201,9 @@ func policyAuditPayload(grants []*authz.RoleGrant) (json.RawMessage, error) {
 // validatedKeyPolicy checks a requested policy against the key and the
 // caller's organization: every project and auth client it names must belong
 // to the organization, so no grant is stored that reaches another tenant or
-// can never match.
-func (s *Service) validatedKeyPolicy(ctx context.Context, organizationID string, forms []*gen.APIKeyPolicyGrant, keyProject uuid.NullUUID) ([]*authz.RoleGrant, error) {
+// can never match. It reads through db, so a caller holding a transaction
+// validates against what that transaction sees.
+func (s *Service) validatedKeyPolicy(ctx context.Context, db repo.DBTX, organizationID string, forms []*gen.APIKeyPolicyGrant, keyProject uuid.NullUUID) ([]*authz.RoleGrant, error) {
 	policy, policyProjects, err := keyPolicyGrants(forms, keyProject)
 	if err != nil {
 		return nil, err
@@ -212,7 +213,7 @@ func (s *Service) validatedKeyPolicy(ctx context.Context, organizationID string,
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid project ID in key policy")
 		}
-		if _, err := s.projectRepo.GetProjectByIDAndOrganizationID(ctx, project_repo.GetProjectByIDAndOrganizationIDParams{ID: id, OrganizationID: organizationID}); errors.Is(err, pgx.ErrNoRows) {
+		if _, err := project_repo.New(db).GetProjectByIDAndOrganizationID(ctx, project_repo.GetProjectByIDAndOrganizationIDParams{ID: id, OrganizationID: organizationID}); errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "key policy names a project outside this organization")
 		} else if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "load key policy project").LogError(ctx, s.logger)
@@ -231,7 +232,7 @@ func (s *Service) validatedKeyPolicy(ctx context.Context, organizationID string,
 		}
 	}
 	if len(clientIDs) > 0 {
-		live, err := s.repo.CountLiveAuthClientsInOrganization(ctx, repo.CountLiveAuthClientsInOrganizationParams{OrganizationID: organizationID, Ids: clientIDs})
+		live, err := repo.New(db).CountLiveAuthClientsInOrganization(ctx, repo.CountLiveAuthClientsInOrganizationParams{OrganizationID: organizationID, Ids: clientIDs})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "load key policy auth clients").LogError(ctx, s.logger)
 		}

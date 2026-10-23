@@ -180,7 +180,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		projectID = uuid.NullUUID{UUID: project.ID, Valid: true}
 	}
 
-	policy, err := s.validatedKeyPolicy(ctx, authCtx.ActiveOrganizationID, payload.PolicyGrants, projectID)
+	policy, err := s.validatedKeyPolicy(ctx, s.db, authCtx.ActiveOrganizationID, payload.PolicyGrants, projectID)
 	if err != nil {
 		return nil, err
 	}
