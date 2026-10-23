@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -77,6 +78,9 @@ type SkillsManagement interface {
 	DismissSuggestion(context.Context, *genskills.DismissSuggestionPayload) (*types.SkillEditSuggestion, error)
 	Distribute(context.Context, *genskills.DistributePayload) (*types.SkillDistribution, error)
 	Undistribute(context.Context, *genskills.UndistributePayload) error
+	Link(context.Context, *genskills.LinkPayload) (*types.SkillLink, error)
+	Unlink(context.Context, *genskills.UnlinkPayload) error
+	ListLinks(context.Context, *genskills.ListLinksPayload) (*genskills.ListSkillLinksResult, error)
 }
 
 // SkillTargetInventory names the plugins and assistants a skill may be
@@ -144,13 +148,24 @@ type SkillSummary struct {
 	VersionCount    int64    `json:"version_count"`
 	HasValidVersion bool     `json:"has_valid_version"`
 	UpdatedAt       string   `json:"updated_at"`
+	// LastLoadedOverMcpAt is when an agent last loaded the skill over a hosted
+	// MCP server. Absent when it never has, or when the response was built
+	// from a skill write that does not compute it.
+	LastLoadedOverMcpAt *string `json:"last_loaded_over_mcp_at,omitempty"`
 }
 
 // SkillVersionSummary is one immutable version. Content appears only when the
 // caller opted in.
 type SkillVersionSummary struct {
-	ID               string   `json:"id"`
-	CanonicalSHA256  string   `json:"canonical_sha256"`
+	ID              string `json:"id"`
+	CanonicalSHA256 string `json:"canonical_sha256"`
+	// ServedDigest is the digest an agent sees for this version when a hosted
+	// MCP server serves it: the SHA-256 of the exact SKILL.md bytes as
+	// "sha256:<hex>". Only valid versions are ever served, so it is absent on
+	// an invalid one. Servers also skip a version whose frontmatter name is not
+	// the skill's current name (after a rename, say), so its presence does not
+	// prove the version is served; it identifies the bytes when it is.
+	ServedDigest     string   `json:"served_digest,omitempty" jsonschema:"digest agents see for this version when a hosted MCP server serves it, as sha256:<hex> of the exact SKILL.md bytes; match it against agent logs to tell which version an agent read; absent on invalid versions, which are never served; a version whose frontmatter name differs from the skill's current name (for example after a rename) is not served either, so a digest here does not by itself mean the version is served"`
 	SpecValid        bool     `json:"spec_valid"`
 	ValidationErrors []string `json:"validation_errors,omitempty"`
 	CreatedAt        string   `json:"created_at"`
@@ -182,9 +197,15 @@ type SkillsService struct {
 	skills   SkillsManagement
 	targets  SkillTargetInventory
 	projects SkillProjectResolver
-	grants   SkillAuthorizer
-	gate     CatalogRegistrationGateChecker
-	budget   OperationBudget
+
+	// mcpTargets resolves the MCP servers and gateways a skill is linked to.
+	// It is taken from targets when that inventory also lists them; without
+	// it the link tools refuse as unavailable.
+	mcpTargets SkillMCPTargetInventory
+
+	grants SkillAuthorizer
+	gate   CatalogRegistrationGateChecker
+	budget OperationBudget
 
 	// insights and insightsBudget back the skill insight tools. Both are attached by
 	// WithInsights; a nil reader keeps those tools registered as stubs.
@@ -195,10 +216,12 @@ type SkillsService struct {
 }
 
 func NewSkillsService(skills SkillsManagement, targets SkillTargetInventory, projects SkillProjectResolver, grants SkillAuthorizer, gate CatalogRegistrationGateChecker, budget OperationBudget) *SkillsService {
+	mcpTargets, _ := targets.(SkillMCPTargetInventory)
 	return &SkillsService{
 		skills:         skills,
 		targets:        targets,
 		projects:       projects,
+		mcpTargets:     mcpTargets,
 		grants:         grants,
 		gate:           gate,
 		budget:         budget,
@@ -1008,12 +1031,28 @@ type SkillDistributionSummary struct {
 	ResolvedVersionID string `json:"resolved_version_id"`
 	CreatedAt         string `json:"created_at"`
 	UpdatedAt         string `json:"updated_at"`
+
+	// LastLoadedOverMcpAt is when an agent last read this skill over one of
+	// the project's hosted MCP servers. It is a per-skill value, so every
+	// distribution of one skill reports the same time, and it says nothing
+	// about which plugin served the read. Absent when the skill was never
+	// loaded over MCP; loads reported by coding-agent hooks do not move it.
+	LastLoadedOverMcpAt *string `json:"last_loaded_over_mcp_at,omitempty" jsonschema:"RFC 3339 time an agent last read this skill over a hosted MCP server; per skill, so every distribution of the same skill carries the same value; absent when never loaded over MCP"`
 }
 
 type ListSkillDistributionsOutput struct {
 	ProjectSlug   string                     `json:"project_slug"`
 	Distributions []SkillDistributionSummary `json:"distributions"`
 	NextCursor    string                     `json:"next_cursor,omitempty"`
+
+	// ServedBy is the MCP surfaces that serve the listed skill — or every
+	// skill in the project when none is named — over MCP, from the skill's
+	// live links. It is read on the first page only, and is empty when
+	// serving skills over MCP is off for the organization.
+	ServedBy []SkillMCPLinkSummary `json:"served_by"`
+
+	// ServedByTruncated is true when more links exist than ServedBy holds.
+	ServedByTruncated bool `json:"served_by_truncated,omitempty"`
 }
 
 // ListSkillDistributions reads the active plugin distributions in a project.
@@ -1074,17 +1113,28 @@ func (s *SkillsService) ListSkillDistributions(ctx context.Context, principal Pr
 				Slug:      "",
 				IsDefault: false,
 			},
-			PinnedVersionID:   stringOrEmpty(row.PinnedVersionID),
-			FollowsLatest:     row.PinnedVersionID == nil,
-			ResolvedVersionID: row.ResolvedVersionID,
-			CreatedAt:         row.CreatedAt,
-			UpdatedAt:         row.UpdatedAt,
+			PinnedVersionID:     stringOrEmpty(row.PinnedVersionID),
+			FollowsLatest:       row.PinnedVersionID == nil,
+			ResolvedVersionID:   row.ResolvedVersionID,
+			CreatedAt:           row.CreatedAt,
+			UpdatedAt:           row.UpdatedAt,
+			LastLoadedOverMcpAt: row.LastLoadedOverMcpAt,
 		})
 	}
+	servedBy := []SkillMCPLinkSummary{}
+	servedByTruncated := false
+	if strings.TrimSpace(input.Cursor) == "" {
+		servedBy, servedByTruncated, err = s.servedBy(ctx, skillID)
+		if err != nil {
+			return ListSkillDistributionsOutput{}, err
+		}
+	}
 	return ListSkillDistributionsOutput{
-		ProjectSlug:   project.Slug,
-		Distributions: distributions,
-		NextCursor:    stringOrEmpty(result.NextCursor),
+		ProjectSlug:       project.Slug,
+		Distributions:     distributions,
+		NextCursor:        stringOrEmpty(result.NextCursor),
+		ServedBy:          servedBy,
+		ServedByTruncated: servedByTruncated,
 	}, nil
 }
 
@@ -1238,7 +1288,7 @@ func (s *SkillsService) authoringResult(ctx context.Context, principal Principal
 		CreatedSkill:        result.CreatedSkill,
 		CreatedVersion:      result.CreatedVersion,
 		Distributed:         false,
-		InertMessage:        "This skill is saved, but no agent loads it yet. Give it to a plugin or an assistant with distribute_skill for it to take effect.",
+		InertMessage:        "This skill is saved, but no agent loads it yet. Give it to a plugin or an assistant with distribute_skill, or serve it from an MCP server or gateway with link_skill_to_mcp, for it to take effect.",
 		NextAction:          "distribute_skill",
 		DistributionTargets: targets,
 	}
@@ -1253,15 +1303,16 @@ func buildSkillSummary(skill *types.Skill) SkillSummary {
 		return SkillSummary{}
 	}
 	return SkillSummary{
-		ID:              skill.ID,
-		Name:            skill.Name,
-		DisplayName:     skill.DisplayName,
-		Summary:         stringOrEmpty(skill.Summary),
-		Tags:            skill.Tags,
-		LatestVersionID: stringOrEmpty(skill.LatestVersionID),
-		VersionCount:    skill.VersionCount,
-		HasValidVersion: skill.HasValidVersion,
-		UpdatedAt:       skill.UpdatedAt,
+		ID:                  skill.ID,
+		Name:                skill.Name,
+		DisplayName:         skill.DisplayName,
+		Summary:             stringOrEmpty(skill.Summary),
+		Tags:                skill.Tags,
+		LatestVersionID:     stringOrEmpty(skill.LatestVersionID),
+		VersionCount:        skill.VersionCount,
+		HasValidVersion:     skill.HasValidVersion,
+		UpdatedAt:           skill.UpdatedAt,
+		LastLoadedOverMcpAt: skill.LastLoadedOverMcpAt,
 	}
 }
 
@@ -1272,11 +1323,15 @@ func buildSkillVersionSummary(version *types.SkillVersion, includeContent bool) 
 	summary := SkillVersionSummary{
 		ID:               version.ID,
 		CanonicalSHA256:  version.CanonicalSha256,
+		ServedDigest:     "",
 		SpecValid:        version.SpecValid,
 		ValidationErrors: nil,
 		CreatedAt:        version.CreatedAt,
 		Content:          "",
 		ContentTruncated: false,
+	}
+	if version.SpecValid && version.RawSha256 != "" {
+		summary.ServedDigest = mcpskills.Digest(version.RawSha256)
 	}
 	for _, validationError := range version.ValidationErrors {
 		if validationError == nil {

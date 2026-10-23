@@ -62633,6 +62633,115 @@ paths:
       x-speakeasy-name-override: getShared
       x-speakeasy-react-hook:
         name: SharedSkill
+  /rpc/skills.link:
+    post:
+      description: Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills-over-mcp rollout for the organization.
+      operationId: linkSkill
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: 550e8400-e29b-41d4-a716-446655440000
+              mcp_server_id: 550e8400-e29b-41d4-a716-446655440001
+              target_kind: mcp_server
+            schema:
+              $ref: '#/components/schemas/LinkSkillRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillLink'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: link skills
+      tags:
+        - skills
+      x-speakeasy-name-override: link
+      x-speakeasy-react-hook:
+        name: LinkSkill
   /rpc/skills.list:
     get:
       description: List active skills in the project. The implementation requires the skills product feature and skill read scope.
@@ -63095,6 +63204,166 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: SkillFeedback
+  /rpc/skills.listLinks:
+    get:
+      description: List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.
+      operationId: listSkillLinks
+      parameters:
+        - allowEmptyValue: true
+          description: Only return links of this skill.
+          in: query
+          name: skill_id
+          schema:
+            description: Only return links of this skill.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Only return links to this MCP server.
+          in: query
+          name: mcp_server_id
+          schema:
+            description: Only return links to this MCP server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Only return links to this gateway.
+          in: query
+          name: meta_mcp_server_id
+          schema:
+            description: Only return links to this gateway.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Only return links to this kind of MCP surface.
+          in: query
+          name: target_kind
+          schema:
+            description: Only return links to this kind of MCP surface.
+            enum:
+              - mcp_server
+              - meta_mcp_server
+              - organization_gateway
+            type: string
+        - allowEmptyValue: true
+          description: Cursor for the next page of skill links.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of skill links.
+            type: string
+        - allowEmptyValue: true
+          description: The number of skill links to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: The number of skill links to return per page.
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSkillLinksResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listLinks skills
+      tags:
+        - skills
+      x-speakeasy-name-override: listLinks
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: SkillLinks
   /rpc/skills.listSuggestionFeedback:
     get:
       description: List the agent feedback cited as the reason for one proposed change, newest first.
@@ -64121,6 +64390,109 @@ paths:
       x-speakeasy-name-override: undistribute
       x-speakeasy-react-hook:
         name: UndistributeSkill
+  /rpc/skills.unlink:
+    post:
+      description: Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills-over-mcp rollout for the organization.
+      operationId: unlinkSkill
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              link_id: 550e8400-e29b-41d4-a716-446655440000
+            schema:
+              $ref: '#/components/schemas/UnlinkSkillRequestBody'
+        required: true
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: unlink skills
+      tags:
+        - skills
+      x-speakeasy-name-override: unlink
+      x-speakeasy-react-hook:
+        name: UnlinkSkill
   /rpc/skills.unshare:
     post:
       description: Revoke a skill's active public share link. Repeated requests are a no-op.
@@ -93884,6 +94256,39 @@ components:
       description: Probability distributions over the supplied candidates and verbs.
       required:
         - disabled
+    LinkSkillRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The skill ID.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The MCP server that serves the skill. Required when target_kind is mcp_server.
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: The gateway that serves the skill. Required when target_kind is meta_mcp_server.
+          format: uuid
+        pinned_version_id:
+          type: string
+          description: An optional valid version to pin instead of serving the latest valid version.
+          format: uuid
+        target_kind:
+          type: string
+          description: The kind of MCP surface that serves the skill.
+          enum:
+            - mcp_server
+            - meta_mcp_server
+            - organization_gateway
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440000
+        mcp_server_id: 550e8400-e29b-41d4-a716-446655440001
+        target_kind: mcp_server
+      required:
+        - id
+        - target_kind
     ListAIDetectionUsersResult:
       type: object
       properties:
@@ -95542,6 +95947,20 @@ components:
         - metrics
         - timeline
         - feedback
+    ListSkillLinksResult:
+      type: object
+      properties:
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillLink'
+          description: The live skill links in this page.
+        next_cursor:
+          type: string
+          description: Cursor for the next page; absent when exhausted.
+      description: A page of live skill links for the current project.
+      required:
+        - links
     ListSkillSuggestionFeedbackResult:
       type: object
       properties:
@@ -99768,6 +100187,10 @@ components:
           type: string
           description: The distribution ID.
           format: uuid
+        last_loaded_over_mcp_at:
+          type: string
+          description: When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Loads are counted per skill, not per distribution.
+          format: date-time
         pinned_version_id:
           type: string
           description: The pinned version, absent when tracking the latest valid version.
@@ -106655,6 +107078,10 @@ components:
           type: string
           description: The skill ID.
           format: uuid
+        last_loaded_over_mcp_at:
+          type: string
+          description: When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Returned by list and get only.
+          format: date-time
         last_seen_at:
           type: string
           description: When this skill was most recently activated.
@@ -106780,6 +107207,10 @@ components:
           type: string
           description: The distribution ID.
           format: uuid
+        last_loaded_over_mcp_at:
+          type: string
+          description: When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Loads are counted per skill, not per distribution.
+          format: date-time
         pinned_version_id:
           type: string
           description: The pinned version, absent when tracking the latest valid version.
@@ -107444,6 +107875,57 @@ components:
         - session_cost_usd
         - scored_sessions
         - estimated_minutes_saved
+    SkillLink:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the link was created.
+          format: date-time
+        id:
+          type: string
+          description: The link ID.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The MCP server that serves the skill, for an mcp_server link.
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: The gateway that serves the skill, for a meta_mcp_server link.
+          format: uuid
+        pinned_version_id:
+          type: string
+          description: The pinned version, absent when serving the latest valid version.
+          format: uuid
+        skill_display_name:
+          type: string
+          description: The display name of the linked skill.
+        skill_id:
+          type: string
+          description: The linked skill ID.
+          format: uuid
+        skill_name:
+          type: string
+          description: The canonical name of the linked skill.
+        target_kind:
+          type: string
+          description: The kind of MCP surface that serves the skill.
+          enum:
+            - mcp_server
+            - meta_mcp_server
+            - organization_gateway
+        target_name:
+          type: string
+          description: The name of the MCP server or gateway, absent for the organization gateway.
+      description: A live link from a project skill to the MCP surface that serves it over MCP.
+      required:
+        - id
+        - skill_id
+        - skill_name
+        - skill_display_name
+        - target_kind
+        - created_at
     SkillPromptInjectionFinding:
       type: object
       properties:
@@ -111204,6 +111686,17 @@ components:
         - user_session_issuer_id
         - remote_session_issuer_id
         - resource
+    UnlinkSkillRequestBody:
+      type: object
+      properties:
+        link_id:
+          type: string
+          description: The skill link ID.
+          format: uuid
+      example:
+        link_id: 550e8400-e29b-41d4-a716-446655440000
+      required:
+        - link_id
     UnmarkRiskResultsFalsePositiveRequestBody:
       type: object
       properties:

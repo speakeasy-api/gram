@@ -2721,6 +2721,58 @@ WHERE plugins.project_id = @project_id
 ORDER BY plugins.is_default DESC NULLS LAST, plugins.name ASC
 LIMIT @result_limit;
 
+-- name: ListPlatformMCPProjectSkillLinkServers :many
+-- The live MCP servers or gateways of one kind in one project that an exact
+-- identifier names: the id, the slug, or the name, ignoring case. A server is
+-- named by its own name, falling back to its toolset's name and then its slug.
+-- Matching here, rather than over a capped list of every server, means a
+-- target the project has is never refused as not found because it sorted past
+-- the cap.
+SELECT
+    candidates.kind,
+    candidates.id,
+    candidates.name,
+    candidates.slug
+FROM (
+    SELECT
+        'mcp_server'::text AS kind,
+        mcp_servers.id,
+        COALESCE(mcp_servers.name, toolsets.name, mcp_servers.slug, mcp_servers.id::text)::text AS name,
+        COALESCE(mcp_servers.slug, '')::text AS slug
+    FROM mcp_servers
+    JOIN projects
+      ON projects.id = mcp_servers.project_id
+    LEFT JOIN toolsets
+      ON toolsets.id = mcp_servers.toolset_id
+      AND toolsets.project_id = mcp_servers.project_id
+      AND toolsets.deleted IS FALSE
+    WHERE @kind::text = 'mcp_server'
+      AND mcp_servers.project_id = @project_id
+      AND projects.organization_id = @organization_id
+      AND projects.deleted IS FALSE
+      AND mcp_servers.deleted IS FALSE
+    UNION ALL
+    SELECT
+        'meta_mcp_server'::text AS kind,
+        meta_mcp_servers.id,
+        meta_mcp_servers.name,
+        ''::text AS slug
+    FROM meta_mcp_servers
+    JOIN projects
+      ON projects.id = meta_mcp_servers.project_id
+    WHERE @kind::text = 'meta_mcp_server'
+      AND meta_mcp_servers.project_id = @project_id
+      AND meta_mcp_servers.organization_id = @organization_id
+      AND projects.organization_id = @organization_id
+      AND projects.deleted IS FALSE
+      AND meta_mcp_servers.deleted IS FALSE
+) AS candidates
+WHERE candidates.id::text = @wanted::text
+   OR (candidates.slug <> '' AND lower(candidates.slug) = lower(@wanted::text))
+   OR lower(candidates.name) = lower(@wanted::text)
+ORDER BY candidates.name ASC, candidates.id ASC
+LIMIT @result_limit;
+
 -- name: ListPlatformMCPProjectAssistants :many
 SELECT
     assistants.id,
