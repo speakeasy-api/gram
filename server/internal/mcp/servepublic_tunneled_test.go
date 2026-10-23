@@ -406,10 +406,14 @@ func TestServePublic_Tunneled_MetricsAttributeSessionToReportedClient(t *testing
 	require.NotEmpty(t, sid)
 	serve([]byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}`), sid)
 
+	// Flush publishes from several goroutines at once.
+	var mu sync.Mutex
 	families := map[string]string{}
 	collector.Flush(t.Context(), func(_ context.Context, s metrics.Snapshot) error {
 		if s.Kind == "requests" {
+			mu.Lock()
 			families[s.Method] = s.ClientFamily
+			mu.Unlock()
 		}
 		return nil
 	})

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -142,9 +143,13 @@ func TestTunnelManagerRecordsRequestsWithNoConnectedAgent(t *testing.T) {
 	// An initialize is attributed to the client it reports, as when routed.
 	require.Error(t, build(`{"jsonrpc":"2.0","id":3,"method":"initialize","params":{"clientInfo":{"name":"cursor-vscode","version":"1.0"}}}`))
 
+	// Flush publishes from several goroutines at once.
+	var mu sync.Mutex
 	var rows []metrics.Snapshot
 	initializeFamily := ""
 	proxyManager.TunnelMetrics.Flush(t.Context(), func(_ context.Context, s metrics.Snapshot) error {
+		mu.Lock()
+		defer mu.Unlock()
 		switch {
 		case s.Kind == "requests" && s.Method == "initialize":
 			initializeFamily = s.ClientFamily
