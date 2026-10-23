@@ -144,6 +144,8 @@ trackedFiles:
   src/funcs/analyticsDescribe.ts: {}
   src/funcs/analyticsDimensionValues.ts: {}
   src/funcs/analyticsQuery.ts: {}
+  src/funcs/analyticsSignalDefinition.ts: {}
+  src/funcs/analyticsSignalFindings.ts: {}
   src/funcs/assetsCreateSignedChatAttachmentURL.ts: {}
   src/funcs/assetsFetchImageFromURL.ts: {}
   src/funcs/assetsFetchOpenAPIv3FromURL.ts: {}
@@ -921,6 +923,19 @@ trackedFiles:
   src/models/components/analyticsorderby.ts: {}
   src/models/components/analyticsquerypayload.ts: {}
   src/models/components/analyticsqueryresult.ts: {}
+  src/models/components/analyticssignalcatalog.ts: {}
+  src/models/components/analyticssignalcomparison.ts: {}
+  src/models/components/analyticssignaldefinition.ts: {}
+  src/models/components/analyticssignaldimension.ts: {}
+  src/models/components/analyticssignalfilter.ts: {}
+  src/models/components/analyticssignalfindings.ts: {}
+  src/models/components/analyticssignalmetadata.ts: {}
+  src/models/components/analyticssignalname.ts: {}
+  src/models/components/analyticssignalquery.ts: {}
+  src/models/components/analyticssignalresult.ts: {}
+  src/models/components/analyticssignalscope.ts: {}
+  src/models/components/analyticssignalselection.ts: {}
+  src/models/components/analyticssignalsensor.ts: {}
   src/models/components/anthropicinferenceconfig.ts: {}
   src/models/components/apikeypolicygrant.ts: {}
   src/models/components/apikeypolicyselector.ts: {}
@@ -1826,6 +1841,7 @@ trackedFiles:
   src/models/components/shareskillrequestbody.ts: {}
   src/models/components/sigintsensor.ts: {}
   src/models/components/sigintsignal.ts: {}
+  src/models/components/signalfindingsrequestbody.ts: {}
   src/models/components/skill.ts: {}
   src/models/components/skilladoption.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
@@ -2123,6 +2139,8 @@ trackedFiles:
   src/models/operations/analyticsdescribe.ts: {}
   src/models/operations/analyticsdimensionvalues.ts: {}
   src/models/operations/analyticsquery.ts: {}
+  src/models/operations/analyticssignaldefinition.ts: {}
+  src/models/operations/analyticssignalfindings.ts: {}
   src/models/operations/applydirectoryrolesetup.ts: {}
   src/models/operations/approveallskillsuggestions.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
@@ -2966,6 +2984,9 @@ trackedFiles:
   src/react-query/analyticsDimensionValues.ts: {}
   src/react-query/analyticsQuery.core.ts: {}
   src/react-query/analyticsQuery.ts: {}
+  src/react-query/analyticsSignalDefinition.core.ts: {}
+  src/react-query/analyticsSignalDefinition.ts: {}
+  src/react-query/analyticsSignalFindings.ts: {}
   src/react-query/anthropicInferenceConfig.core.ts: {}
   src/react-query/anthropicInferenceConfig.ts: {}
   src/react-query/applyDirectoryRoleSetup.ts: {}
@@ -4364,6 +4385,30 @@ examples:
       responses:
         "200":
           application/json: {"dataset": "<value>", "plan": "<value>", "rows": [{"key": "<value>", "key1": "<value>", "key2": "<value>"}, {"key": "<value>", "key1": "<value>", "key2": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  analyticsSignalDefinition:
+    speakeasy-default-analytics-signal-definition:
+      parameters:
+        query:
+          sensor_id: "37468269-d164-4db4-8e1b-367a3b1ced47"
+          definition_hash: "<value>"
+      responses:
+        "200":
+          application/json: {"captured_at": "2025-11-25T02:41:14.255Z", "definition": {"key": "<value>", "key1": "<value>"}, "definition_hash": "<value>", "sensor_id": "<id>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  analyticsSignalFindings:
+    speakeasy-default-analytics-signal-findings:
+      requestBody:
+        application/json: {"compare_previous": false, "evidence": false, "from": "2025-02-06T05:03:07.954Z", "signal_query": {"groups": 5, "points": 2000, "selection": {"sensor_id": "ffde47ba-de20-4670-83e4-04e0bc405fb1", "threshold": 1487.25}, "trigger": "stream"}, "to": "2026-05-03T21:24:19.853Z"}
+      responses:
+        "200":
+          application/json: {"concentration": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "cooccurrence": [], "evidence": [{"key": "<value>"}, {"key": "<value>", "key1": "<value>", "key2": "<value>"}, {}], "evidence_scope": "<value>", "measurement": {"groups": [{}, {}, {"key": "<value>"}], "metadata": {"coverage": "<value>", "exact": true, "filters": [{"dimension": {}, "operator": "<value>"}], "from": "2024-07-19T00:44:56.120Z", "group_by": [], "groups_truncated": true, "physical_resolution": "<value>", "point_budget": 849296, "population": "<value>", "queried_at": "2024-09-02T05:18:14.495Z", "selection": {"sensor_id": "ffde47ba-de20-4670-83e4-04e0bc405fb1", "threshold": 1487.25}, "series_complete": true, "snapshot": "<value>", "step": "<value>", "time_axis": "<value>", "to": "2024-08-15T09:20:19.502Z", "trigger": "<value>", "unit": "steradian"}, "summary": {}}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

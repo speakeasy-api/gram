@@ -587,8 +587,11 @@ func (s *PluginsService) WithInstallLinks(dashboardURL, serverURL *url.URL) *Plu
 // WithOrganizationHosts makes member links use the platform host stored as the
 // organization's default host, the host the dashboard serves it on. logger
 // records failed reads of that host, after which links fall back to the
-// request's platform origin.
+// request's platform origin. A nil logger discards those records.
 func (s *PluginsService) WithOrganizationHosts(resolver *orghost.Resolver, logger *slog.Logger) *PluginsService {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	if s != nil {
 		s.orgHosts = resolver
 		s.orgHostsLogger = logger

@@ -10765,6 +10765,208 @@ paths:
       x-speakeasy-react-hook:
         name: AnalyticsQuery
         type: query
+  /rpc/analytics.signalDefinition:
+    get:
+      description: Inspect the immutable semantic definition used by a signal reading. Requires signals_intelligence and project:read.
+      operationId: analyticsSignalDefinition
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: sensor_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: definition_hash
+          required: true
+          schema:
+            maxLength: 64
+            minLength: 64
+            pattern: ^[a-f0-9]{64}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsSignalDefinition'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: signalDefinition analytics
+      tags:
+        - analytics
+      x-speakeasy-name-override: signalDefinition
+      x-speakeasy-react-hook:
+        name: AnalyticsSignalDefinition
+  /rpc/analytics.signalFindings:
+    post:
+      description: Find cross-session signal patterns, joint-answer co-occurrence and guarded previous-window changes. Aggregate reads require project:read and Signals Intelligence; each evidence reference additionally passes the underlying conversation access checks.
+      operationId: analyticsSignalFindings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignalFindingsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsSignalFindings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: signalFindings analytics
+      tags:
+        - analytics
+      x-speakeasy-name-override: signalFindings
+      x-speakeasy-react-hook:
+        name: AnalyticsSignalFindings
   /rpc/assets.createSignedChatAttachmentURL:
     post:
       description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -83062,6 +83264,8 @@ components:
           items:
             type: string
           description: Names of the datasets the caller cannot read, such as one only organization administrators can read, so a saved widget over one can say why it shows nothing rather than reading as broken
+        signal_metrics:
+          $ref: '#/components/schemas/AnalyticsSignalCatalog'
       required:
         - datasets
     AnalyticsDimensionValue:
@@ -83071,9 +83275,12 @@ components:
           type: integer
           description: Rows at the dataset's grain carrying this value inside the window
           format: int64
+        present:
+          type: boolean
+          description: For signal attributes, false distinguishes absent labels from present empty strings
         value:
           type: string
-          description: A non-empty value of the dimension
+          description: A recorded dimension value. Signal attributes may be empty; present distinguishes an absent label.
       required:
         - value
         - count
@@ -83239,13 +83446,7 @@ components:
           format: date-time
         grain:
           type: string
-          description: Time bucket width for a grouped query. Absent means none.
-          enum:
-            - none
-            - hour
-            - day
-            - week
-            - month
+          description: Time interval from the analytics catalog. Composed queries admit none, minute, hour, day, week or month. Signal measurements also admit auto.
         limit:
           type: integer
           description: Maximum rows. Defaults to 100; at most 1000 for a grouped result and 200 for ungrouped rows.
@@ -83263,6 +83464,8 @@ components:
           items:
             $ref: '#/components/schemas/AnalyticsOrderBy'
           description: Sort for a grouped result, by measure alias. Ungrouped rows are always newest first.
+        signal_query:
+          $ref: '#/components/schemas/AnalyticsSignalQuery'
         to:
           type: string
           description: End of the half-open window [from, to), ISO 8601
@@ -83292,11 +83495,375 @@ components:
             type: object
             additionalProperties: true
           description: Result rows
-      description: One shape for both modes. Row keys are the requested dimension names plus each measure's alias; time_bucket is present only when grain is set, and time on ungrouped rows.
+        signal_result:
+          $ref: '#/components/schemas/AnalyticsSignalResult'
+      description: 'Composed queries return requested dimensions and measure aliases, with time_bucket for grouped intervals or time for ungrouped rows. The signals dataset instead returns fixed time-series rows: time_bucket, bucket_end, series_id, observed, partial, matched_messages, answered, match_share, matched_sessions, evaluated_sessions, session_breadth, and outcome/definition companions. series_id joins each row to signal_result.groups; signal_result.metadata and signal_result.summary describe the scope and whole-window population. Signal rows remain in the top-level rows field.'
       required:
         - dataset
         - plan
         - rows
+    AnalyticsSignalCatalog:
+      type: object
+      properties:
+        dataset:
+          type: string
+        initial_attributes:
+          type: array
+          items:
+            type: string
+        max_groups:
+          type: integer
+          format: int64
+        max_points:
+          type: integer
+          format: int64
+        max_span_days:
+          type: integer
+          format: int64
+        operators:
+          type: array
+          items:
+            type: string
+        population:
+          type: string
+        sensors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalSensor'
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalName'
+        steps:
+          type: array
+          items:
+            type: string
+        system_dimensions:
+          type: array
+          items:
+            type: string
+        unit:
+          type: string
+      required:
+        - dataset
+        - unit
+        - population
+        - steps
+        - operators
+        - system_dimensions
+        - initial_attributes
+        - max_span_days
+        - max_groups
+        - max_points
+        - sensors
+        - signals
+    AnalyticsSignalComparison:
+      type: object
+      properties:
+        comparable:
+          type: boolean
+        delta_share:
+          type: number
+          description: Descriptive difference in observed answer shares, never a significance test
+          format: double
+        from:
+          type: string
+          format: date-time
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Failed comparison gates. Coverage remains unknown even when the observed measurements are comparable.
+        summary:
+          type: object
+          additionalProperties: true
+        to:
+          type: string
+          format: date-time
+      required:
+        - from
+        - to
+        - summary
+        - comparable
+        - reasons
+    AnalyticsSignalDefinition:
+      type: object
+      properties:
+        captured_at:
+          type: string
+          format: date-time
+        definition:
+          type: object
+          additionalProperties: true
+        definition_hash:
+          type: string
+        sensor_id:
+          type: string
+      required:
+        - sensor_id
+        - definition_hash
+        - definition
+        - captured_at
+    AnalyticsSignalDimension:
+      type: object
+      properties:
+        attribute:
+          type: string
+          description: Exact label key, at most 256 UTF-8 bytes; the shared query engine enforces the byte limit.
+          minLength: 1
+        field:
+          type: string
+          description: 'System dimension from the analytics catalog: source, role, actor, assistant or definition'
+      description: Exactly one system field or arbitrary attribute key.
+    AnalyticsSignalFilter:
+      type: object
+      properties:
+        dimension:
+          $ref: '#/components/schemas/AnalyticsSignalDimension'
+        operator:
+          type: string
+          description: 'Comparison from the analytics catalog: equals, in, exists or missing'
+        values:
+          type: array
+          items:
+            type: string
+          maxItems: 100
+      required:
+        - dimension
+        - operator
+    AnalyticsSignalFindings:
+      type: object
+      properties:
+        comparison:
+          $ref: '#/components/schemas/AnalyticsSignalComparison'
+        concentration:
+          type: object
+          additionalProperties: true
+        cooccurrence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Separate same_message and same_session joint-answer counts and shares
+        evidence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Permitted recent conversation references without transcript content
+        evidence_scope:
+          type: string
+        measurement:
+          $ref: '#/components/schemas/AnalyticsSignalResult'
+        peer:
+          $ref: '#/components/schemas/AnalyticsSignalSelection'
+        peer_summary:
+          type: object
+          additionalProperties: true
+      required:
+        - measurement
+        - concentration
+        - cooccurrence
+        - evidence
+        - evidence_scope
+    AnalyticsSignalMetadata:
+      type: object
+      properties:
+        coverage:
+          type: string
+        exact:
+          type: boolean
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalFilter'
+        from:
+          type: string
+          format: date-time
+        group_by:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalDimension'
+        groups_truncated:
+          type: boolean
+        physical_resolution:
+          type: string
+        point_budget:
+          type: integer
+          format: int64
+        population:
+          type: string
+        queried_at:
+          type: string
+          format: date-time
+        run_id:
+          type: string
+        selection:
+          $ref: '#/components/schemas/AnalyticsSignalSelection'
+        series_complete:
+          type: boolean
+        snapshot:
+          type: string
+          description: Live, not a replayable historical snapshot
+        step:
+          type: string
+        time_axis:
+          type: string
+        to:
+          type: string
+          format: date-time
+        trigger:
+          type: string
+        unit:
+          type: string
+      required:
+        - selection
+        - trigger
+        - step
+        - physical_resolution
+        - time_axis
+        - unit
+        - population
+        - coverage
+        - queried_at
+        - from
+        - to
+        - filters
+        - snapshot
+        - exact
+        - series_complete
+        - groups_truncated
+        - group_by
+        - point_budget
+    AnalyticsSignalName:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+      required:
+        - id
+        - name
+    AnalyticsSignalQuery:
+      type: object
+      properties:
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalFilter'
+          maxItems: 20
+        group_by:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalDimension'
+          maxItems: 3
+        groups:
+          type: integer
+          description: Top groups selected over the whole window
+          default: 5
+          format: int64
+          minimum: 1
+          maximum: 20
+        points:
+          type: integer
+          description: Budget across complete selected series
+          default: 2000
+          format: int64
+          minimum: 1
+          maximum: 10000
+        run_id:
+          type: string
+          format: uuid
+        selection:
+          $ref: '#/components/schemas/AnalyticsSignalSelection'
+        trigger:
+          type: string
+          description: 'Evaluation population: stream or manual'
+          default: stream
+      required:
+        - selection
+    AnalyticsSignalResult:
+      type: object
+      properties:
+        groups:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Whole-window totals for selected groups; group_values follows metadata.group_by
+        metadata:
+          $ref: '#/components/schemas/AnalyticsSignalMetadata'
+        summary:
+          type: object
+          description: Exact whole-window measures, including groups outside the selected top groups
+          additionalProperties: true
+      required:
+        - metadata
+        - summary
+        - groups
+    AnalyticsSignalScope:
+      type: object
+      properties:
+        run_id:
+          type: string
+          description: Required for manual; absent for stream
+          format: uuid
+        sensor_id:
+          type: string
+          format: uuid
+        trigger:
+          type: string
+          description: 'Evaluation population: stream or manual'
+          default: stream
+      required:
+        - sensor_id
+    AnalyticsSignalSelection:
+      type: object
+      properties:
+        minimum_level:
+          type: integer
+          description: Zero-based ordered level; matches cumulative probability at or above this level
+          format: int64
+          minimum: 0
+          maximum: 9
+        sensor_id:
+          type: string
+          format: uuid
+        signal_id:
+          type: string
+          description: For multi-label or exclusive results; omit when minimum_level is set
+          format: uuid
+        threshold:
+          type: number
+          description: Explicit probability threshold greater than zero. Exclusive results use the selected signal instead.
+          format: double
+          exclusiveMinimum: 0
+          maximum: 1
+      required:
+        - sensor_id
+        - threshold
+    AnalyticsSignalSensor:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        id:
+          type: string
+        mode:
+          type: string
+        name:
+          type: string
+        signal_ids:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - name
+        - mode
+        - enabled
+        - signal_ids
     AnthropicInferenceConfig:
       type: object
       properties:
@@ -88791,6 +89358,11 @@ components:
     DimensionValuesRequestBody:
       type: object
       properties:
+        attribute:
+          type: string
+          description: With dimension=attribute, the exact signal attribute key. dimension=attribute_keys discovers keys.
+          minLength: 1
+          maxLength: 256
         dataset:
           type: string
           description: Dataset to look in
@@ -88810,6 +89382,8 @@ components:
           format: int64
           minimum: 1
           maximum: 200
+        signal_scope:
+          $ref: '#/components/schemas/AnalyticsSignalScope'
         to:
           type: string
           description: End of the half-open window [from, to), ISO 8601
@@ -107218,6 +107792,29 @@ components:
         - slug
         - created_at
         - updated_at
+    SignalFindingsRequestBody:
+      type: object
+      properties:
+        compare_previous:
+          type: boolean
+          default: false
+        evidence:
+          type: boolean
+          default: false
+        from:
+          type: string
+          format: date-time
+        peer:
+          $ref: '#/components/schemas/AnalyticsSignalSelection'
+        signal_query:
+          $ref: '#/components/schemas/AnalyticsSignalQuery'
+        to:
+          type: string
+          format: date-time
+      required:
+        - from
+        - to
+        - signal_query
     Skill:
       type: object
       properties:
