@@ -21,6 +21,7 @@ var All = []outbox.EventRegistration{
 	AssistantToolCallV1,
 	AssistantWakeV1,
 	AuditLogCreated,
+	AuthClientV1,
 	AwsIamCredentialV1,
 	AwsKmsKeyV1,
 	BillingMetadataV1,

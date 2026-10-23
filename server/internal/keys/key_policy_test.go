@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -33,6 +34,20 @@ func keyProject(t *testing.T, ctx context.Context) string {
 
 var clientA = uuid.NewString()
 
+// seedAuthClient creates a live auth client in the caller's organization, so
+// a policy naming it passes the tenant check.
+func seedAuthClient(t *testing.T, ctx context.Context, ti *testInstance) string {
+	t.Helper()
+	id, err := testrepo.New(ti.conn).CreateAuthClientFixture(ctx, testrepo.CreateAuthClientFixtureParams{
+		OrganizationID: testAuthContext(t, ctx).ActiveOrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClientType:     authz.AuthClientTypeServiceAccount,
+		Name:           "service account " + randstr(6),
+	})
+	require.NoError(t, err)
+	return id.String()
+}
+
 func TestKeysService_KeyPolicy(t *testing.T) {
 	t.Parallel()
 
@@ -40,9 +55,10 @@ func TestKeysService_KeyPolicy(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
 		project := keyProject(t, ctx)
+		client := seedAuthClient(t, ctx, ti)
 		policy := []*gen.APIKeyPolicyGrant{
 			keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &project),
-			keyGrant(string(authz.ScopeMCPAuth), authz.ResourceKindMCPAuthClient, clientA, nil),
+			keyGrant(string(authz.ScopeMCPAuth), authz.ResourceKindMCPAuthClient, client, nil),
 		}
 
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "policy" + randstr(6), Scopes: []string{"consumer"}, PolicyGrants: policy})

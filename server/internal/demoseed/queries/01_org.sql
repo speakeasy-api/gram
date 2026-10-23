@@ -1,6 +1,17 @@
 -- Preflight isolation asserts, org metadata and onboarding, the scoped purge,
 -- the project, features, users, and memberships.
 
+-- name: OrgDeleteSigintDefinitionSnapshots :exec
+DELETE FROM sigint_definition_snapshots
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
+
+-- name: OrgInsertSigintDefinitionSnapshot :exec
+INSERT INTO sigint_definition_snapshots (project_id, sensor_id, definition_hash, definition)
+VALUES (@project_id::uuid, @sensor_id::uuid, @definition_hash, @definition::jsonb);
+
+-- name: OrgCountSigintDefinitionSnapshots :one
+SELECT count(*) FROM sigint_definition_snapshots WHERE project_id = @project_id::uuid;
+
 -- name: OrgForeignOrgExists :one
 -- workos_id is compared against this tenant's expected link rather than merely
 -- tested for NULL: the shared demo org never links to WorkOS (its constant is

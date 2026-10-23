@@ -2,6 +2,7 @@ package authclientbackfill
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"log"
 	"os"
 	"testing"
@@ -22,6 +23,8 @@ func TestMain(m *testing.M) {
 		log.Fatalf("launch test infrastructure: %v", err)
 	}
 	testInfra = res
+	// Tests carry attachments over unless they turn the write gate off.
+	authz.SetUpstreamSelectorWriteGate(func(context.Context, string) (bool, error) { return true, nil })
 	code := m.Run()
 	if err := cleanup(); err != nil {
 		log.Fatalf("cleanup test infrastructure: %v", err)
@@ -35,6 +38,9 @@ type fixture struct {
 	q         *Queries
 	orgID     string
 	projectID uuid.UUID
+	// sessionIssuerID is the user session issuer of seeded credentials, set
+	// on first use.
+	sessionIssuerID uuid.UUID
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -47,7 +53,7 @@ func newFixture(t *testing.T) *fixture {
 // newFixtureIn adds another organization and project to pool.
 func newFixtureIn(t *testing.T, pool *pgxpool.Pool) *fixture {
 	t.Helper()
-	f := &fixture{t: t, pool: pool, q: New(pool), orgID: "org_" + uuid.NewString(), projectID: uuid.New()}
+	f := &fixture{t: t, pool: pool, q: New(pool), orgID: "org_" + uuid.NewString(), projectID: uuid.New(), sessionIssuerID: uuid.Nil}
 	require.NoError(t, f.q.SeedOrganizationFixture(t.Context(), f.orgID))
 	require.NoError(t, f.q.SeedProjectFixture(t.Context(), SeedProjectFixtureParams{ID: f.projectID, Slug: "p-" + f.projectID.String()[:8], OrganizationID: f.orgID}))
 	return f

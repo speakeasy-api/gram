@@ -37,11 +37,9 @@ import { toast } from "sonner";
 import { AddVariableSheet } from "./AddVariableSheet";
 import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
 import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
-import {
-  ConnectOAuthModal,
-  OAuthDetailsModal,
-  PageSection,
-} from "./MCPDetails";
+import { OAuthDetailsModal } from "./OAuthDetailsModal";
+import { ConnectOAuthModal } from "./oauth-wizard";
+import { PageSection } from "./PageSection";
 import {
   EnvVarState,
   EnvironmentVariable,
@@ -68,8 +66,11 @@ const EMPTY_ENVIRONMENTS: never[] = [];
 
 export function MCPAuthenticationTab({
   toolset,
+  showOAuth = true,
 }: {
   toolset: Toolset;
+  /** Off on the MCP server page, whose Authentication section replaces it. */
+  showOAuth?: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
@@ -685,7 +686,7 @@ export function MCPAuthenticationTab({
 
   return (
     <Stack className="mb-4">
-      <OAuthSection toolset={toolset} />
+      {showOAuth && <ToolsetOAuthSection toolset={toolset} />}
 
       <PageSection
         heading="Environment Variables"
@@ -945,7 +946,9 @@ type OAuthSectionProps = {
  * clean slate gets the shared section; External OAuth keeps its configuration
  * UI plus a convert path.
  */
-function OAuthSection({ toolset }: OAuthSectionProps) {
+export function ToolsetOAuthSection({
+  toolset,
+}: OAuthSectionProps): JSX.Element {
   const oauthParadigm = getOAuthParadigm(toolset);
   const surface = toolsetAuthSurface({
     userSessionIssuerWired: isUserSessionIssuerWired(toolset),

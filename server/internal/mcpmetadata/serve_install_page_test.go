@@ -1381,7 +1381,7 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 	})
 	require.NoError(t, err)
 	metadata, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetadata_repo.UpsertMetadataByMcpServerIDParams{
-		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		McpServerID: toolset.ID,
 		ProjectID:   projectID,
 	})
 	require.NoError(t, err)

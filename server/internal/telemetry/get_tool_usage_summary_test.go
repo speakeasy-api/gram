@@ -449,6 +449,8 @@ type hostedToolEventParams struct {
 	userID         string
 	// outcome is gram.outcome; error on a 2xx models an isError result.
 	outcome string
+	// mcpServerID is gram.mcp_server.id; empty models rows recorded before hosted servers stamped it.
+	mcpServerID string
 }
 
 func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, p hostedToolEventParams) {
@@ -481,6 +483,9 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 	}
 	if p.outcome != "" {
 		attrs["gram.outcome"] = p.outcome
+	}
+	if p.mcpServerID != "" {
+		attrs["gram.mcp_server.id"] = p.mcpServerID
 	}
 	attrs["gram.external_user.id"] = p.externalUserID
 	attrs["user.id"] = p.userID

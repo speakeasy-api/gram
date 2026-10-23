@@ -25401,15 +25401,18 @@ func unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpst
 		return nil
 	}
 	res := &admin.AdminUpstreamOAuthMigrationAuthClients{
-		Complete:             *v.Complete,
-		InProgress:           *v.InProgress,
-		PendingMarkedServers: *v.PendingMarkedServers,
-		Associations:         *v.Associations,
-		PendingClients:       *v.PendingClients,
-		PendingLinks:         *v.PendingLinks,
-		PendingHeaders:       *v.PendingHeaders,
-		PendingRetirements:   *v.PendingRetirements,
-		Unresolved:           *v.Unresolved,
+		Complete:                 *v.Complete,
+		InProgress:               *v.InProgress,
+		PendingMarkedServers:     *v.PendingMarkedServers,
+		Associations:             *v.Associations,
+		PendingClients:           *v.PendingClients,
+		PendingLinks:             *v.PendingLinks,
+		PendingHeaders:           *v.PendingHeaders,
+		PendingRetirements:       *v.PendingRetirements,
+		Unresolved:               *v.Unresolved,
+		SelectionsComplete:       v.SelectionsComplete,
+		PendingSelectionMappings: v.PendingSelectionMappings,
+		SelectionGapCount:        v.SelectionGapCount,
 	}
 	res.UnresolvedAssociations = make([]*admin.AdminUpstreamOAuthMigrationUnresolvedAssociation, len(v.UnresolvedAssociations))
 	for i, val := range v.UnresolvedAssociations {
@@ -25438,6 +25441,26 @@ func unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpst
 	res.FailedPhases = make([]string, len(v.FailedPhases))
 	for i, val := range v.FailedPhases {
 		res.FailedPhases[i] = val
+	}
+	if v.SelectionClasses != nil {
+		res.SelectionClasses = make([]*admin.AdminUpstreamOAuthMigrationSelectionClass, len(v.SelectionClasses))
+		for i, val := range v.SelectionClasses {
+			if val == nil {
+				res.SelectionClasses[i] = nil
+				continue
+			}
+			res.SelectionClasses[i] = unmarshalAdminUpstreamOAuthMigrationSelectionClassResponseBodyToAdminAdminUpstreamOAuthMigrationSelectionClass(val)
+		}
+	}
+	if v.SelectionGaps != nil {
+		res.SelectionGaps = make([]*admin.AdminUpstreamOAuthMigrationSelectionGap, len(v.SelectionGaps))
+		for i, val := range v.SelectionGaps {
+			if val == nil {
+				res.SelectionGaps[i] = nil
+				continue
+			}
+			res.SelectionGaps[i] = unmarshalAdminUpstreamOAuthMigrationSelectionGapResponseBodyToAdminAdminUpstreamOAuthMigrationSelectionGap(val)
+		}
 	}
 
 	return res
@@ -25486,6 +25509,47 @@ func unmarshalAdminUpstreamOAuthMigrationAuthClientKindResponseBodyToAdminAdminU
 		PendingHeaders:     *v.PendingHeaders,
 		PendingRetirements: *v.PendingRetirements,
 		Unresolved:         *v.Unresolved,
+	}
+
+	return res
+}
+
+// unmarshalAdminUpstreamOAuthMigrationSelectionClassResponseBodyToAdminAdminUpstreamOAuthMigrationSelectionClass
+// builds a value of type *admin.AdminUpstreamOAuthMigrationSelectionClass from
+// a value of type *AdminUpstreamOAuthMigrationSelectionClassResponseBody.
+func unmarshalAdminUpstreamOAuthMigrationSelectionClassResponseBodyToAdminAdminUpstreamOAuthMigrationSelectionClass(v *AdminUpstreamOAuthMigrationSelectionClassResponseBody) *admin.AdminUpstreamOAuthMigrationSelectionClass {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminUpstreamOAuthMigrationSelectionClass{
+		CredentialClass: *v.CredentialClass,
+		Selections:      *v.Selections,
+		Mapped:          *v.Mapped,
+		Pending:         *v.Pending,
+		NoAuth:          *v.NoAuth,
+		Ambiguous:       *v.Ambiguous,
+		NoClient:        *v.NoClient,
+		StaleNoAuth:     *v.StaleNoAuth,
+		Unusable:        *v.Unusable,
+	}
+
+	return res
+}
+
+// unmarshalAdminUpstreamOAuthMigrationSelectionGapResponseBodyToAdminAdminUpstreamOAuthMigrationSelectionGap
+// builds a value of type *admin.AdminUpstreamOAuthMigrationSelectionGap from a
+// value of type *AdminUpstreamOAuthMigrationSelectionGapResponseBody.
+func unmarshalAdminUpstreamOAuthMigrationSelectionGapResponseBodyToAdminAdminUpstreamOAuthMigrationSelectionGap(v *AdminUpstreamOAuthMigrationSelectionGapResponseBody) *admin.AdminUpstreamOAuthMigrationSelectionGap {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminUpstreamOAuthMigrationSelectionGap{
+		SelectionID:     *v.SelectionID,
+		CredentialClass: *v.CredentialClass,
+		CredentialID:    *v.CredentialID,
+		McpServerID:     *v.McpServerID,
+		ProjectID:       *v.ProjectID,
+		Outcome:         *v.Outcome,
 	}
 
 	return res

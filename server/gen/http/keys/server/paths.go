@@ -27,6 +27,11 @@ func RevokeKeyKeysPath() string {
 	return "/rpc/keys.revoke"
 }
 
+// UpdateKeyPolicyKeysPath returns the URL path to the keys service updateKeyPolicy HTTP endpoint.
+func UpdateKeyPolicyKeysPath() string {
+	return "/rpc/keys.updatePolicy"
+}
+
 // VerifyKeyKeysPath returns the URL path to the keys service verifyKey HTTP endpoint.
 func VerifyKeyKeysPath() string {
 	return "/rpc/keys.verify"

@@ -187,22 +187,28 @@ func isAccessDenial(err error) bool {
 // shadowAuthClientUse records the check for using a resolved client. A
 // personal client a non-user session uses has no connection owner to check
 // yet, so it is recorded as skipped rather than as an invalid check.
-func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, clientType string, subject urn.SessionSubject) {
+func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, subject urn.SessionSubject) {
 	if clientType == authClientTypeRemoteSession && subject.Kind != urn.SessionSubjectKindUser {
 		s.newMandatoryShadow(ctx, organizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, legacyAllowed, mandatoryReasonNoConnectionOwner, clientID.String(), projectID.String())
 		return
 	}
-	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, clientType, subject))
+	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, registrationID, clientType, subject))
 }
 
 // mandatoryAuthClientCheck is the check for using a resolved client. A
-// personal client is checked against the connection's stored owner.
-func mandatoryAuthClientCheck(projectID, clientID uuid.UUID, clientType string, subject urn.SessionSubject) authz.Check {
-	owner := ""
-	if clientType == authClientTypeRemoteSession && subject.Kind == urn.SessionSubjectKindUser {
-		owner = subject.ID
+// personal client is checked against the connection's stored owner and the
+// upstream OAuth client the connection uses.
+func mandatoryAuthClientCheck(projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, subject urn.SessionSubject) authz.Check {
+	owner, upstream := "", ""
+	if clientType == authClientTypeRemoteSession {
+		if subject.Kind == urn.SessionSubjectKindUser {
+			owner = subject.ID
+		}
+		if registrationID.Valid {
+			upstream = registrationID.UUID.String()
+		}
 	}
-	return authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: clientType, ProjectID: projectID.String(), ConnectionOwner: owner})
+	return authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: clientType, ProjectID: projectID.String(), ConnectionOwner: owner, UpstreamClient: upstream})
 }
 
 func (m *mandatoryShadow) callerClass() string {
@@ -270,9 +276,11 @@ func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowe
 		Caller:         m.callerClass(),
 		Principal:      string(m.authorization.Caller()),
 		LegacyAllowed:  legacyAllowed,
-		Outcome:        outcome,
-		Source:         source,
-		Reason:         reason,
+
+		LegacyAuthCeiling: m.authorization.LegacyAuthCeiling(),
+		Outcome:           outcome,
+		Source:            source,
+		Reason:            reason,
 	}
 	s.metrics.RecordMandatoryAuthzShadow(ctx, shadow)
 	trace.SpanFromContext(ctx).AddEvent("mandatory_authz_shadow", trace.WithAttributes(
@@ -280,6 +288,7 @@ func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowe
 		attr.MandatoryAuthzCaller(shadow.Caller),
 		attr.MandatoryAuthzPrincipal(shadow.Principal),
 		attr.MandatoryAuthzLegacyAllowed(legacyAllowed),
+		attr.MandatoryAuthzLegacyAuthCeiling(shadow.LegacyAuthCeiling),
 		attr.MandatoryAuthzOutcome(outcome),
 		attr.MandatoryAuthzSource(source),
 		attr.MandatoryAuthzReason(reason),
@@ -294,6 +303,7 @@ func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowe
 		attr.SlogMandatoryAuthzPrincipal(shadow.Principal),
 		attr.SlogMandatoryAuthzPrincipalID(m.authorization.PrincipalID()),
 		attr.SlogMandatoryAuthzLegacyAllowed(legacyAllowed),
+		attr.SlogMandatoryAuthzLegacyAuthCeiling(shadow.LegacyAuthCeiling),
 		attr.SlogMandatoryAuthzOutcome(outcome),
 		attr.SlogMandatoryAuthzSource(source),
 		attr.SlogMandatoryAuthzReason(reason),

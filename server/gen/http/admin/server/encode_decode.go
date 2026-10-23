@@ -22904,15 +22904,18 @@ func marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigra
 		return nil
 	}
 	res := &AdminUpstreamOAuthMigrationAuthClientsResponseBody{
-		Complete:             v.Complete,
-		InProgress:           v.InProgress,
-		PendingMarkedServers: v.PendingMarkedServers,
-		Associations:         v.Associations,
-		PendingClients:       v.PendingClients,
-		PendingLinks:         v.PendingLinks,
-		PendingHeaders:       v.PendingHeaders,
-		PendingRetirements:   v.PendingRetirements,
-		Unresolved:           v.Unresolved,
+		Complete:                 v.Complete,
+		InProgress:               v.InProgress,
+		PendingMarkedServers:     v.PendingMarkedServers,
+		Associations:             v.Associations,
+		PendingClients:           v.PendingClients,
+		PendingLinks:             v.PendingLinks,
+		PendingHeaders:           v.PendingHeaders,
+		PendingRetirements:       v.PendingRetirements,
+		Unresolved:               v.Unresolved,
+		SelectionsComplete:       v.SelectionsComplete,
+		PendingSelectionMappings: v.PendingSelectionMappings,
+		SelectionGapCount:        v.SelectionGapCount,
 	}
 	if v.UnresolvedAssociations != nil {
 		res.UnresolvedAssociations = make([]*AdminUpstreamOAuthMigrationUnresolvedAssociationResponseBody, len(v.UnresolvedAssociations))
@@ -22957,6 +22960,26 @@ func marshalAdminAdminUpstreamOAuthMigrationAuthClientsToAdminUpstreamOAuthMigra
 		}
 	} else {
 		res.FailedPhases = []string{}
+	}
+	if v.SelectionClasses != nil {
+		res.SelectionClasses = make([]*AdminUpstreamOAuthMigrationSelectionClassResponseBody, len(v.SelectionClasses))
+		for i, val := range v.SelectionClasses {
+			if val == nil {
+				res.SelectionClasses[i] = nil
+				continue
+			}
+			res.SelectionClasses[i] = marshalAdminAdminUpstreamOAuthMigrationSelectionClassToAdminUpstreamOAuthMigrationSelectionClassResponseBody(val)
+		}
+	}
+	if v.SelectionGaps != nil {
+		res.SelectionGaps = make([]*AdminUpstreamOAuthMigrationSelectionGapResponseBody, len(v.SelectionGaps))
+		for i, val := range v.SelectionGaps {
+			if val == nil {
+				res.SelectionGaps[i] = nil
+				continue
+			}
+			res.SelectionGaps[i] = marshalAdminAdminUpstreamOAuthMigrationSelectionGapToAdminUpstreamOAuthMigrationSelectionGapResponseBody(val)
+		}
 	}
 
 	return res
@@ -23018,6 +23041,48 @@ func marshalAdminAdminUpstreamOAuthMigrationAuthClientKindToAdminUpstreamOAuthMi
 		PendingHeaders:     v.PendingHeaders,
 		PendingRetirements: v.PendingRetirements,
 		Unresolved:         v.Unresolved,
+	}
+
+	return res
+}
+
+// marshalAdminAdminUpstreamOAuthMigrationSelectionClassToAdminUpstreamOAuthMigrationSelectionClassResponseBody
+// builds a value of type
+// *AdminUpstreamOAuthMigrationSelectionClassResponseBody from a value of type
+// *admin.AdminUpstreamOAuthMigrationSelectionClass.
+func marshalAdminAdminUpstreamOAuthMigrationSelectionClassToAdminUpstreamOAuthMigrationSelectionClassResponseBody(v *admin.AdminUpstreamOAuthMigrationSelectionClass) *AdminUpstreamOAuthMigrationSelectionClassResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminUpstreamOAuthMigrationSelectionClassResponseBody{
+		CredentialClass: v.CredentialClass,
+		Selections:      v.Selections,
+		Mapped:          v.Mapped,
+		Pending:         v.Pending,
+		NoAuth:          v.NoAuth,
+		Ambiguous:       v.Ambiguous,
+		NoClient:        v.NoClient,
+		StaleNoAuth:     v.StaleNoAuth,
+		Unusable:        v.Unusable,
+	}
+
+	return res
+}
+
+// marshalAdminAdminUpstreamOAuthMigrationSelectionGapToAdminUpstreamOAuthMigrationSelectionGapResponseBody
+// builds a value of type *AdminUpstreamOAuthMigrationSelectionGapResponseBody
+// from a value of type *admin.AdminUpstreamOAuthMigrationSelectionGap.
+func marshalAdminAdminUpstreamOAuthMigrationSelectionGapToAdminUpstreamOAuthMigrationSelectionGapResponseBody(v *admin.AdminUpstreamOAuthMigrationSelectionGap) *AdminUpstreamOAuthMigrationSelectionGapResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminUpstreamOAuthMigrationSelectionGapResponseBody{
+		SelectionID:     v.SelectionID,
+		CredentialClass: v.CredentialClass,
+		CredentialID:    v.CredentialID,
+		McpServerID:     v.McpServerID,
+		ProjectID:       v.ProjectID,
+		Outcome:         v.Outcome,
 	}
 
 	return res
