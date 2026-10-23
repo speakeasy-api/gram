@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { getPresetRange } from "@/elements";
+import { getPresetRange, type DateRangePreset } from "@/elements";
 import type { DateRangeValue } from "@/components/filters/filter-schema";
 
 /** Keep cursor bounds stable until filters change or the user refreshes. */
@@ -23,7 +23,9 @@ export function useSessionDateRange(value: DateRangeValue): {
     refreshDates: (): boolean => {
       if (value.customRange || !value.preset) return false;
       // A new upper bound changes the query key and starts at page one.
-      setResolvePreset(() => (preset) => getPresetRange(preset));
+      setResolvePreset(
+        () => (preset: DateRangePreset) => getPresetRange(preset),
+      );
       return true;
     },
   };
