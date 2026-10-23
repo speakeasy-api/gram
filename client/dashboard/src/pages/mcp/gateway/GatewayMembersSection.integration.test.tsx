@@ -2,7 +2,8 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
 }));
 vi.mock("./BuiltinGatewayMembersSection", () => ({
-  BuiltinGatewayMembersSection: () => null,
+  BuiltinGatewayAddSection: () => null,
+  BuiltinMemberEnvironmentCell: () => null,
 }));
 import {
   act,
@@ -103,7 +104,9 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
       catalog: { href: () => "/catalog" },
-      builtin: { href: (key: string) => `/builtin/${key}` },
+      builtin: {
+        overview: { href: (key: string) => `/builtin/${key}/overview` },
+      },
       x: { overview: { href: () => "/server" } },
       add: Object.fromEntries(
         ["remote", "tunneled", "openapi", "fromSource", "function"].map(

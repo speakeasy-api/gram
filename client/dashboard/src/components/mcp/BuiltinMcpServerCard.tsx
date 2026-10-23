@@ -5,8 +5,10 @@ import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import type { BuiltinMcpServer } from "@gram/client/models/components/builtinmcpserver.js";
 import { ArrowRight, Blocks } from "lucide-react";
+import { Link } from "react-router";
 import { McpEntityCard } from "./McpEntityCard";
 
+/** One card per built-in server in the /mcp grid, beside your own servers. */
 export function BuiltinMcpServerCard({
   server,
 }: {
@@ -14,27 +16,38 @@ export function BuiltinMcpServerCard({
 }): JSX.Element | null {
   const routes = useRoutes();
   return (
-    <McpEntityCard
-      className="cursor-pointer"
-      onClick={() => routes.mcp.builtin.goTo(server.key)}
-      icon={<Blocks className="size-8 text-muted-foreground" />}
+    <Link
+      to={routes.mcp.builtin.overview.href(server.key)}
+      className="focus-visible:ring-ring block h-full no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
-      <Text variant="subheading" as="div" className="truncate">
-        {server.name}
-      </Text>
-      <Text small muted className="mt-1 line-clamp-2">
-        {server.description}
-      </Text>
-      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        <Badge variant="neutral">
-          <Badge.Text>Built-in</Badge.Text>
-        </Badge>
-        <div className="text-muted-foreground flex items-center gap-1 text-sm">
-          <span>Open</span>
-          <ArrowRight className="size-3.5" />
+      <McpEntityCard icon={<Blocks className="text-muted-foreground size-8" />}>
+        <Text
+          variant="subheading"
+          as="div"
+          className="text-md group-hover:text-primary truncate transition-colors"
+          title={server.name}
+        >
+          {server.name}
+        </Text>
+        <Text small muted className="mt-1 line-clamp-2">
+          {server.description}
+        </Text>
+        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Badge variant="neutral">
+              <Badge.Text>Built-in</Badge.Text>
+            </Badge>
+            <Text small muted className="truncate">
+              {server.tools.length} tools
+            </Text>
+          </div>
+          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+            <span>Open</span>
+            <ArrowRight className="size-3.5" />
+          </div>
         </div>
-      </div>
-    </McpEntityCard>
+      </McpEntityCard>
+    </Link>
   );
 }
 
@@ -46,9 +59,9 @@ export function BuiltinMcpServerTableRow({
   const routes = useRoutes();
   return (
     <DotRow
-      href={routes.mcp.builtin.href(server.key)}
-      ariaLabel={`Open built-in ${server.name}`}
-      icon={<Blocks className="size-5 text-muted-foreground" />}
+      href={routes.mcp.builtin.overview.href(server.key)}
+      ariaLabel={`Open ${server.name}`}
+      icon={<Blocks className="text-muted-foreground size-5" />}
     >
       <td className="px-3 py-3">
         <Text variant="subheading" as="div" className="text-sm">
@@ -56,7 +69,9 @@ export function BuiltinMcpServerTableRow({
         </Text>
       </td>
       <td className="px-3 py-3">
-        <Badge variant="neutral">Built-in</Badge>
+        <Badge variant="neutral">
+          <Badge.Text>Built-in</Badge.Text>
+        </Badge>
       </td>
       <td className="max-w-xs px-3 py-3">
         <div
@@ -66,7 +81,7 @@ export function BuiltinMcpServerTableRow({
           <Text small muted className="truncate font-mono text-xs">
             {server.url.replace(/^https?:\/\//, "")}
           </Text>
-          <CopyButton text={server.url} size="sm" tooltip="Copy MCP URL" />
+          <CopyButton text={server.url} size="sm" tooltip="Copy URL" />
         </div>
       </td>
       <td className="px-3 py-3">

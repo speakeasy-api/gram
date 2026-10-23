@@ -5,8 +5,6 @@ import type { ReactNode } from "react";
 const state = vi.hoisted(() => ({
   admin: true,
   canWrite: true,
-  isError: false,
-  refetch: vi.fn(),
   invalidateQueries: vi.fn(),
   onSuccess: undefined as undefined | (() => Promise<void>),
   mutate: vi.fn(),
@@ -15,20 +13,46 @@ const state = vi.hoisted(() => ({
 vi.mock("@/components/mcp/useBuiltinMcpServers", () => ({
   useBuiltinMcpServers: () => ({
     isAdmin: state.admin,
-    isError: state.isError,
-    refetch: state.refetch,
-    servers: [{ id: "builtin-one", key: "slack", name: "Slack", hidden: true }],
+    isError: false,
+    isLoading: false,
+    servers: [
+      {
+        id: "builtin-one",
+        key: "slack",
+        name: "Slack",
+        hidden: true,
+        tools: [{ name: "slack_send_message" }],
+      },
+    ],
   }),
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-one" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: (scope: string, id: string) =>
-      scope === "mcp:write" && id === "gateway-one" && state.canWrite,
+      (scope === "mcp:write" && id === "gateway-one" && state.canWrite) ||
+      (scope === "org:admin" && id === "org-one" && state.admin),
     isLoading: false,
   }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project-one",
+}));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    mcp: {
+      builtin: {
+        overview: { href: (key: string) => `/mcp/builtin/${key}/overview` },
+      },
+    },
+  }),
+}));
+vi.mock("react-router", () => ({
+  Link: ({ to, children }: { to: string; children: ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
 }));
 vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
   useListEnvironments: (...args: unknown[]) => {
@@ -85,59 +109,82 @@ vi.mock("@/components/ui/Select", () => ({
   ),
 }));
 
-import { BuiltinGatewayMembersSection } from "./BuiltinGatewayMembersSection";
+import {
+  BuiltinGatewayAddSection,
+  BuiltinMemberEnvironmentCell,
+} from "./BuiltinGatewayMembersSection";
+
+const slackMember = {
+  id: "member-one",
+  mcpServerId: "builtin-one",
+  mcpServerName: "Slack",
+  builtinKey: "slack",
+  environmentId: "env-one",
+  sortOrder: 7,
+};
+
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   state.admin = true;
   state.canWrite = true;
-  state.isError = false;
 });
 
-it("adds a built-in using the selected project environment without granting connection access", () => {
-  render(<BuiltinGatewayMembersSection gatewayId="gateway-one" members={[]} />);
-  fireEvent.change(screen.getByRole("combobox"), {
-    target: { value: "env-one" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Add to gateway" }));
-  expect(state.mutate).toHaveBeenCalledWith({
+it("adds a built-in on the project default, after the existing members", () => {
+  render(
+    <BuiltinGatewayAddSection
+      gatewayId="gateway-one"
+      members={[{ ...slackMember, builtinKey: undefined, sortOrder: 4 }]}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Add" }));
+  expect(state.mutate.mock.calls[0]?.[0]).toEqual({
     request: {
       gramProject: "project-one",
       setBuiltinMetaMcpMemberRequestBody: {
         metaMcpServerId: "gateway-one",
         builtinKey: "slack",
-        environmentId: "env-one",
-        sortOrder: 0,
+        environmentId: undefined,
+        sortOrder: 5,
       },
     },
   });
-  expect(
-    screen.getByText(/Membership does not grant connection access/),
-  ).toBeTruthy();
-  expect(state.query.mock.calls[0]?.[0]).toEqual({
-    gramProject: "project-one",
-  });
 });
-it("can clear an override without removing or reordering an existing hidden built-in membership", () => {
+
+it("stops offering a built-in once it is already a member", () => {
   render(
-    <BuiltinGatewayMembersSection
+    <BuiltinGatewayAddSection
       gatewayId="gateway-one"
-      members={[
-        {
-          id: "member-one",
-          mcpServerId: "builtin-one",
-          builtinKey: "slack",
-          environmentId: "env-one",
-          sortOrder: 7,
-        },
-      ]}
+      members={[slackMember]}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
+});
+
+it("does not offer built-in membership to non-admins", () => {
+  state.admin = false;
+  render(<BuiltinGatewayAddSection gatewayId="gateway-one" members={[]} />);
+  expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
+});
+
+it("does not offer built-in membership without gateway write", () => {
+  state.canWrite = false;
+  render(<BuiltinGatewayAddSection gatewayId="gateway-one" members={[]} />);
+  expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
+});
+
+it("clears an override without removing or reordering the membership", () => {
+  render(
+    <BuiltinMemberEnvironmentCell
+      gatewayId="gateway-one"
+      member={slackMember}
+      canWrite
     />,
   );
   fireEvent.change(screen.getByRole("combobox"), {
-    target: { value: "default" },
+    target: { value: "server-default" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Save override" }));
-  expect(state.mutate).toHaveBeenCalledWith({
+  expect(state.mutate.mock.calls[0]?.[0]).toEqual({
     request: {
       gramProject: "project-one",
       setBuiltinMetaMcpMemberRequestBody: {
@@ -148,26 +195,25 @@ it("can clear an override without removing or reordering an existing hidden buil
       },
     },
   });
-});
-it("does not offer built-in membership controls or environment reads to non-admins", () => {
-  state.admin = false;
-  render(<BuiltinGatewayMembersSection gatewayId="gateway-one" members={[]} />);
-  expect(screen.queryByText("Built-in servers")).toBeNull();
-  expect(state.query).not.toHaveBeenCalled();
+  expect(state.query.mock.calls[0]?.[0]).toEqual({
+    gramProject: "project-one",
+  });
 });
 
-it("shows discovery failures and lets administrators retry", () => {
-  state.isError = true;
-  render(<BuiltinGatewayMembersSection gatewayId="gateway-one" members={[]} />);
-  expect(screen.getByRole("alert").textContent).toContain(
-    "Could not load built-in servers",
+it("reads the override without a control when the viewer cannot write", () => {
+  render(
+    <BuiltinMemberEnvironmentCell
+      gatewayId="gateway-one"
+      member={slackMember}
+      canWrite={false}
+    />,
   );
   expect(screen.queryByRole("combobox")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-  expect(state.refetch).toHaveBeenCalledOnce();
+  expect(screen.getByText("Production")).toBeTruthy();
 });
+
 it("refreshes inspection caches after a membership write", async () => {
-  render(<BuiltinGatewayMembersSection gatewayId="gateway-one" members={[]} />);
+  render(<BuiltinGatewayAddSection gatewayId="gateway-one" members={[]} />);
   await state.onSuccess!();
   expect(state.invalidateQueries).toHaveBeenCalledWith({
     queryKey: ["gatewayInspection"],
@@ -175,17 +221,4 @@ it("refreshes inspection caches after a membership write", async () => {
   expect(state.invalidateQueries).toHaveBeenCalledWith({
     queryKey: ["gatewayDescribeServer"],
   });
-});
-
-it("keeps administrator configuration visible but read-only without gateway write", () => {
-  state.canWrite = false;
-  render(<BuiltinGatewayMembersSection gatewayId="gateway-one" members={[]} />);
-  expect(screen.getByText("Built-in servers")).toBeTruthy();
-  expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(
-    true,
-  );
-  const add = screen.getByRole("button", { name: "Add to gateway" });
-  expect((add as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.click(add);
-  expect(state.mutate).not.toHaveBeenCalled();
 });

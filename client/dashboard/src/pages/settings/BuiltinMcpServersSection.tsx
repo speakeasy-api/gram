@@ -2,11 +2,17 @@ import { SettingsSection } from "@/components/detail/settings-section";
 import { useBuiltinMcpServers } from "@/components/mcp/useBuiltinMcpServers";
 import { useUpdateBuiltinMcpServer } from "@/components/mcp/useUpdateBuiltinMcpServer";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { Link } from "react-router";
 
+/**
+ * Which Speakeasy-maintained servers this project lists. Hiding one is a
+ * view preference — it stays reachable at its own address and keeps whatever
+ * gateway membership it has — so the switch applies as soon as it is flipped.
+ */
 export function BuiltinMcpServersSection(): JSX.Element | null {
   const { servers, isAdmin, isLoading, isError, refetch } =
     useBuiltinMcpServers();
@@ -18,22 +24,25 @@ export function BuiltinMcpServersSection(): JSX.Element | null {
       <SettingsSection.Header>
         <SettingsSection.Title>Built-in MCP servers</SettingsSection.Title>
         <SettingsSection.Description>
-          Show or hide built-in servers in project discovery. Hiding is visual
-          only: addresses, permissions, and gateway membership do not change.
+          Speakeasy maintains these servers in every project. Hide the ones this
+          project does not use to keep them out of its MCP server list and
+          search results.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
           {isLoading ? (
-            <Text muted>Loading built-in servers…</Text>
+            <Skeleton className="h-9 w-full" />
           ) : isError ? (
             <div
               role="alert"
               className="flex items-center justify-between gap-4"
             >
-              <Text muted>Could not load built-in servers.</Text>
+              <Text muted>
+                Couldn&rsquo;t load built-in servers. Nothing has changed.
+              </Text>
               <Button variant="secondary" onClick={() => void refetch()}>
-                Retry
+                <Button.Text>Try again</Button.Text>
               </Button>
             </div>
           ) : (
@@ -42,15 +51,15 @@ export function BuiltinMcpServersSection(): JSX.Element | null {
                 key={server.id}
                 className="flex items-center justify-between gap-4"
               >
-                <div>
+                <div className="min-w-0">
                   <Link
-                    to={routes.mcp.builtin.href(server.key)}
+                    to={routes.mcp.builtin.overview.href(server.key)}
                     className="font-medium hover:underline"
                   >
                     {server.name}
                   </Link>
                   <Text small muted>
-                    Show in MCP Servers and Command K
+                    {server.tools.length} tools
                   </Text>
                 </div>
                 <Switch

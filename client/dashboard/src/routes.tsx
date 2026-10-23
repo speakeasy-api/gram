@@ -548,15 +548,33 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
-      // The Organization Gateway. A static segment beside `add`,
-      // `catalog` and `sources`, with the same latent toolset-slug collision.
-      // It lives under MCP rather than the organization settings because it
-      // is opened from the head of the MCP Servers list.
+      // Servers Speakeasy maintains, which exist in every project. A static
+      // segment beside `add`, `catalog` and `sources`: static segments outrank
+      // `:toolsetSlug`, so a project's own server named "builtin" cannot
+      // shadow this route.
       builtin: {
         title: "Built-in MCP Server",
         url: "builtin/:builtinKey",
         component: BuiltinMcpServerPage,
+        subPages: {
+          overview: {
+            title: "Built-in MCP Server Overview",
+            url: "overview",
+          },
+          tools: {
+            title: "Built-in MCP Server Tools",
+            url: "tools",
+          },
+          authentication: {
+            title: "Built-in MCP Server Authentication",
+            url: "authentication",
+          },
+        },
       },
+      // The Organization Gateway. A static segment beside `add`,
+      // `catalog` and `sources`, with the same latent toolset-slug collision.
+      // It lives under MCP rather than the organization settings because it
+      // is opened from the head of the MCP Servers list.
       organizationGateway: {
         title: "Organization Gateway",
         url: "organization-gateway",

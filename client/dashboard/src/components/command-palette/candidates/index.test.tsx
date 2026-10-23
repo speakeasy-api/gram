@@ -289,7 +289,7 @@ vi.mock("@/routes", () => ({
     mcp: {
       goTo: vi.fn(),
       details: { goTo: mocks.goToToolsetDetails },
-      builtin: { goTo: mocks.goToBuiltin },
+      builtin: { overview: { goTo: mocks.goToBuiltin } },
       x: { overview: { goTo: mocks.goToMcpServerOverview } },
       catalog: { detail: { goTo: mocks.goToCatalogDetail } },
       sources: {

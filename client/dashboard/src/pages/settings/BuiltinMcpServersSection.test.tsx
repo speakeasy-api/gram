@@ -22,6 +22,7 @@ vi.mock("@/components/mcp/useBuiltinMcpServers", () => ({
         hidden: state.hidden,
         environmentId: "environment-one",
         version: "3",
+        tools: [{ name: "slack_send_message" }],
       },
     ],
   }),
@@ -31,7 +32,11 @@ vi.mock("@/components/mcp/useUpdateBuiltinMcpServer", () => ({
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
-    mcp: { builtin: { href: (key: string) => `/mcp/builtin/${key}` } },
+    mcp: {
+      builtin: {
+        overview: { href: (key: string) => `/mcp/builtin/${key}/overview` },
+      },
+    },
   }),
 }));
 vi.mock("react-router", () => ({
@@ -90,7 +95,7 @@ describe("built-in project settings", () => {
     render(<BuiltinMcpServersSection />);
     expect(
       screen.getByRole("link", { name: "Slack" }).getAttribute("href"),
-    ).toBe("/mcp/builtin/slack");
+    ).toBe("/mcp/builtin/slack/overview");
     const toggle = screen.getByRole("switch", {
       name: "Show Slack in MCP Servers",
     });
@@ -104,7 +109,7 @@ describe("built-in project settings", () => {
     state.isError = true;
     render(<BuiltinMcpServersSection />);
     expect(screen.queryByRole("switch")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(state.refetch).toHaveBeenCalled();
   });
 });

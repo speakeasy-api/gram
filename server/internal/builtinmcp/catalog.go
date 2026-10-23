@@ -122,7 +122,7 @@ func Lookup(key string) (Definition, bool) {
 		}
 		tools = append(tools, tool)
 	}
-	return Definition{Key: Slack, Name: "Slack", Description: "Built-in Slack tools for authorized machine clients.", Tools: tools, CredentialVariables: []string{"SLACK_BOT_TOKEN", "SLACK_USER_TOKEN", "SLACK_TOKEN"}}, true
+	return Definition{Key: Slack, Name: "Slack", Description: "Send messages, manage channels, and read conversations in your Slack workspace.", Tools: tools, CredentialVariables: []string{"SLACK_BOT_TOKEN", "SLACK_USER_TOKEN", "SLACK_TOKEN"}}, true
 }
 
 func All() []Definition {

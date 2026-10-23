@@ -34,7 +34,9 @@ vi.mock("@tanstack/react-query", () => ({
   },
 }));
 vi.mock("@/routes", () => ({
-  useRoutes: () => ({ mcp: { builtin: { goTo: state.goTo } } }),
+  useRoutes: () => ({
+    mcp: { builtin: { overview: { goTo: state.goTo } } },
+  }),
 }));
 
 import { useBuiltinMcpCandidates } from "./useBuiltinMcpCandidates";

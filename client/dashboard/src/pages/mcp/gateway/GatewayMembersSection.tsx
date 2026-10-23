@@ -49,7 +49,14 @@ import {
   Server,
   Trash2,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
@@ -74,7 +81,10 @@ import {
 } from "./useGatewayMemberRows";
 import { useToolsets } from "../../toolsets/useToolsets";
 import { memberWrappers } from "./ensureToolsetWrapper";
-import { BuiltinGatewayMembersSection } from "./BuiltinGatewayMembersSection";
+import {
+  BuiltinGatewayAddSection,
+  BuiltinMemberEnvironmentCell,
+} from "./BuiltinGatewayMembersSection";
 
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
   builtin: "Built-in",
@@ -96,6 +106,11 @@ const BACKEND_KIND_PRESENTATION = {
 } as const;
 
 function BackendKindTag({ row }: { row: MemberRow }): JSX.Element {
+  // A built-in has no mcp_servers row to read a backend off, but it is as
+  // much a kind as the others and reads as one in this column.
+  if (row.member.builtinKey) {
+    return <BackendTag label="Built-in" Icon={Blocks} />;
+  }
   const kind = memberBackendKind(row.server);
   if (!kind) {
     return (
@@ -105,6 +120,16 @@ function BackendKindTag({ row }: { row: MemberRow }): JSX.Element {
     );
   }
   const { label, Icon } = BACKEND_KIND_PRESENTATION[kind];
+  return <BackendTag label={label} Icon={Icon} />;
+}
+
+function BackendTag({
+  label,
+  Icon,
+}: {
+  label: string;
+  Icon: ComponentType<{ className?: string }>;
+}): JSX.Element {
   return (
     <span className="text-muted-foreground inline-flex items-center gap-1.5 font-mono text-xs tracking-wide uppercase">
       <Icon className="size-3.5" aria-hidden />
@@ -121,9 +146,9 @@ const STATUS_BY_CLASSIFICATION: Record<
   { label: string; variant: "success" | "neutral" | "warning"; why: string }
 > = {
   builtin: {
-    label: "Restricted",
-    variant: "neutral",
-    why: "Requires an explicit machine connection grant and valid project credentials. Human connections are blocked.",
+    label: "Available",
+    variant: "success",
+    why: "Serves through this gateway. An agent reaches it with an agent key whose permissions cover it.",
   },
   hosted: {
     label: "Available",
@@ -190,7 +215,11 @@ function MemberStatusBadge({
 function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
   const routes = useRoutes();
   const name = row.server?.name || row.member.mcpServerName || "MCP server";
-  const slug = row.server?.slug ?? row.member.mcpServerSlug;
+  // A built-in's stored slug is an internal handle ("builtin_slack"), and the
+  // Backend column already names what it is, so the row shows only its name.
+  const slug = row.member.builtinKey
+    ? undefined
+    : (row.server?.slug ?? row.member.mcpServerSlug);
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       {row.member.builtinKey ? (
@@ -204,7 +233,7 @@ function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
       <div className="flex min-w-0 flex-col">
         {row.member.builtinKey ? (
           <Link
-            to={routes.mcp.builtin.href(row.member.builtinKey)}
+            to={routes.mcp.builtin.overview.href(row.member.builtinKey)}
             className="truncate font-medium hover:underline"
           >
             {name}
@@ -483,6 +512,28 @@ export function GatewayMembersSection({
           },
         ];
 
+  // Only built-in members read their credentials from a per-gateway
+  // environment, so the column appears with the first one and not before.
+  const environmentColumn: Column<MemberRow>[] = rows.some(
+    (row) => row.member.builtinKey,
+  )
+    ? [
+        {
+          key: "environment",
+          header: "Environment",
+          width: "220px",
+          render: (row) =>
+            row.member.builtinKey ? (
+              <BuiltinMemberEnvironmentCell
+                gatewayId={metaMcpServer.id}
+                member={row.member}
+                canWrite={canWrite && isAdmin}
+              />
+            ) : null,
+        },
+      ]
+    : [];
+
   const columns: Column<MemberRow>[] = [
     ...reorderColumn,
     {
@@ -504,6 +555,7 @@ export function GatewayMembersSection({
       ),
       width: "140px",
     },
+    ...environmentColumn,
     {
       key: "actions",
       header: "",
@@ -608,15 +660,14 @@ export function GatewayMembersSection({
               )}
             </Table>
           )}
+          {!isLoading && !isError && (
+            <BuiltinGatewayAddSection
+              gatewayId={metaMcpServer.id}
+              members={rows.map((row) => row.member)}
+            />
+          )}
         </Page.Section.Body>
       </Page.Section>
-
-      {!isLoading && !isError && (
-        <BuiltinGatewayMembersSection
-          gatewayId={metaMcpServer.id}
-          members={rows.map((row) => row.member)}
-        />
-      )}
 
       <AddServersSheet
         key={metaMcpServer.id}
