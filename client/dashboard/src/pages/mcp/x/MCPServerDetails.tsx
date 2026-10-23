@@ -10,6 +10,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { platformEndpointSlug } from "@/hooks/useToolsetUrl";
 import {
@@ -20,8 +21,6 @@ import {
 } from "@/lib/utils";
 import { getMcpServerArgs, mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import type {
   McpServer,
   McpServerVisibility,
@@ -38,6 +37,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Switch } from "@/components/ui/Switch";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check, ChevronDown } from "lucide-react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
@@ -46,14 +49,19 @@ import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
   activeTabFromPath,
   initialTabFromHash,
-  isCanonicalHostedWrapper,
   isLegacyAuthenticationTabPath,
-  isLegacyToolsTabPath,
   mcpServerTabHref,
   MCP_SERVER_TAB_URLS,
-  toolsetTabForServerPath,
+  standsInForToolset,
+  tabForServer,
 } from "./MCPServerDetailsRouting";
-import { mcpDetailTabHref } from "../MCPDetailsRouting";
+import {
+  HostedPromptsTab,
+  HostedResourcesTab,
+} from "./hosted/HostedContentTabs";
+import { HostedToolsTab } from "./hosted/HostedToolsTab";
+import { useHostedToolset } from "./hosted/useHostedToolset";
+import { useHostedVisibilityGuard } from "./hosted/useHostedVisibilityGuard";
 import { InspectTab } from "./tabs/InspectTab";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { MCP_AGENT_SETUP_SECTION_ID } from "./tabs/settings/sections/AgentSetupSection";
@@ -65,7 +73,7 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { GuardrailsTab } from "./tabs/guardrails/GuardrailsTab";
 
-export default function MCPServerDetails(): JSX.Element {
+export default function MCPServerDetails(): JSX.Element | null {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
   const routes = useRoutes();
@@ -78,7 +86,6 @@ export default function MCPServerDetails(): JSX.Element {
     location.pathname,
     idOrSlug,
   );
-  const legacyToolsPath = isLegacyToolsTabPath(location.pathname, idOrSlug);
 
   const {
     data: mcpServer,
@@ -89,25 +96,13 @@ export default function MCPServerDetails(): JSX.Element {
   });
 
   const mcpServerId = mcpServer?.id ?? "";
-
-  const toolsetTab = toolsetTabForServerPath(
-    location.pathname,
-    idOrSlug,
-    location.hash,
-  );
-  const canonicalWrapper =
-    mcpServer !== undefined &&
-    toolsetTab !== undefined &&
-    isCanonicalHostedWrapper(mcpServer);
-  const gramProject = useProjectSlugForRequests();
-  const { data: toolsetsResult, isLoading: isLoadingToolsets } =
-    useListToolsets({ gramProject }, undefined, {
-      enabled: canonicalWrapper,
-      throwOnError: false,
-    });
-  const wrappedToolsetSlug = canonicalWrapper
-    ? toolsetsResult?.toolsets.find((t) => t.id === mcpServer?.toolsetId)?.slug
-    : undefined;
+  const hosted = mcpServer !== undefined && standsInForToolset(mcpServer);
+  const {
+    toolset: hostedToolset,
+    isLoading: isLoadingToolset,
+    isError: toolsetFailed,
+    refetch: refetchToolset,
+  } = useHostedToolset(hosted ? mcpServer : undefined);
 
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId }, undefined, {
@@ -132,25 +127,14 @@ export default function MCPServerDetails(): JSX.Element {
   if (isError || (!isLoading && !mcpServer)) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
-  if (wrappedToolsetSlug && toolsetTab) {
-    return (
-      <Navigate
-        to={mcpDetailTabHref(routes, wrappedToolsetSlug, toolsetTab)}
-        replace
-      />
-    );
-  }
+  // Which tabs exist depends on the server's kind, so route only once it loads.
+  if (!mcpServer) return null;
   if (legacyAuthenticationPath) {
     return (
       <Navigate
         to={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
         replace
       />
-    );
-  }
-  if (legacyToolsPath) {
-    return (
-      <Navigate to={mcpServerTabHref(routes, idOrSlug, "inspect")} replace />
     );
   }
   // Inspect and Clients and Sessions are hidden from the nav for unproxied
@@ -165,8 +149,16 @@ export default function MCPServerDetails(): JSX.Element {
       <Navigate to={mcpServerTabHref(routes, idOrSlug, "overview")} replace />
     );
   }
+  if (activeTab && mcpServer && tabForServer(activeTab, hosted) !== activeTab) {
+    return (
+      <Navigate
+        to={`${mcpServerTabHref(routes, idOrSlug, tabForServer(activeTab, hosted))}${location.search}`}
+        replace
+      />
+    );
+  }
   if (!activeTab) {
-    const initialTab = initialTabFromHash(location.hash);
+    const initialTab = tabForServer(initialTabFromHash(location.hash), hosted);
     const hash =
       location.hash === `#${MCP_AUTHENTICATION_SECTION_ID}`
         ? `#${MCP_AUTHENTICATION_SECTION_ID}`
@@ -180,13 +172,64 @@ export default function MCPServerDetails(): JSX.Element {
     );
   }
   const renderTabContent = () => {
-    if (canonicalWrapper && isLoadingToolsets) return null;
+    // Hosted tabs and settings need the toolset; never fall back to another layout.
+    // Overview needs the loaded toolset only when the read's summary is missing.
+    const needsToolset =
+      activeTab === "overview"
+        ? !mcpServer.toolset
+        : activeTab !== "sessions" && activeTab !== "guardrails";
+    if (hosted && needsToolset && !hostedToolset) {
+      if (isLoadingToolset) return null;
+      return (
+        <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+          <Alert variant="error" dismissible={false}>
+            <Stack gap={2}>
+              <Text small>
+                {toolsetFailed
+                  ? "This server's tools could not be loaded."
+                  : "This server's tools are no longer available."}
+              </Text>
+              <div>
+                <Button variant="secondary" size="sm" onClick={refetchToolset}>
+                  <Button.Text>Retry</Button.Text>
+                </Button>
+              </div>
+            </Stack>
+          </Alert>
+        </div>
+      );
+    }
     switch (activeTab) {
+      case "tools":
+        return (
+          hostedToolset && (
+            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+              <HostedToolsTab toolset={hostedToolset} />
+            </div>
+          )
+        );
+      case "resources":
+        return (
+          hostedToolset && (
+            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+              <HostedResourcesTab toolset={hostedToolset} />
+            </div>
+          )
+        );
+      case "prompts":
+        return (
+          hostedToolset && (
+            <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+              <HostedPromptsTab toolset={hostedToolset} />
+            </div>
+          )
+        );
       case "overview":
         return (
           mcpServer && (
             <OverviewTab
               mcpServer={mcpServer}
+              hostedToolset={hostedToolset}
               agentSetupHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`}
             />
           )
@@ -207,18 +250,14 @@ export default function MCPServerDetails(): JSX.Element {
             <RequireScope scope="org:read" level="page">
               <RequireScope
                 scope="mcp:read"
-                resourceId={mcpServer.id}
+                resourceId={mcpServer.toolsetId ?? mcpServer.id}
                 level="page"
               >
-                {/* mcp_servers-backed servers grant under the same `mcp:*`
-                  scope kind as toolset-backed ones (see selector.go), so
-                  MCPTeamAccessTab is reused as-is with the mcp_server's
-                  id as the resource id. No `tools` prop because the
-                  Remote MCP backend doesn't expose a Speakeasy-side tool
-                  catalog. */}
+                {/* Reads gate on the toolset id like the API; grants key on the server id that endpoint calls check. */}
                 <MCPTeamAccessTab
                   resourceId={mcpServer.id}
                   serverName={mcpServer.name ?? undefined}
+                  tools={hostedToolset?.tools}
                 />
               </RequireScope>
             </RequireScope>
@@ -263,6 +302,7 @@ export default function MCPServerDetails(): JSX.Element {
               mcpServer={mcpServer}
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
+              hostedToolset={hosted ? hostedToolset : undefined}
             />
           )
         );
@@ -324,8 +364,8 @@ const VISIBILITY_OPTIONS: VisibilityOption[] = [
   },
 ];
 
-// Public visibility is only offered for tunneled-backed servers, and only
-// once the tunnel source owner has consented (double opt-in).
+// Public visibility is offered for hosted servers, and for tunneled-backed
+// servers once the tunnel source owner has consented (double opt-in).
 const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
   value: "public",
   label: "Public",
@@ -334,6 +374,9 @@ const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
   dotClass: "bg-green-400",
   hoverDotClass: "group-hover:bg-green-400",
 };
+
+const HOSTED_PUBLIC_DESCRIPTION =
+  "Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools.";
 
 const ALL_VISIBILITY_OPTIONS = [
   ...VISIBILITY_OPTIONS,
@@ -347,6 +390,13 @@ export function MCPServerStatusDropdown({
 }): JSX.Element {
   const { canWrite, updateVisibility, updating } =
     useMcpServerVisibilityUpdate(server);
+  const hosted = standsInForToolset(server);
+  const guard = useHostedVisibilityGuard({
+    server,
+    hosted,
+    apply: updateVisibility,
+    isApplying: updating,
+  });
   const isTunneled = Boolean(server.tunneledMcpServerId);
   const { data: tunneledSource } = useGetTunneledMcpServer(
     getTunneledMcpServerArgs(server.tunneledMcpServerId ?? ""),
@@ -354,7 +404,8 @@ export function MCPServerStatusDropdown({
     { enabled: isTunneled },
   );
   const sourceAllowsPublic = tunneledSource?.allowPublic ?? false;
-  const options = isTunneled ? ALL_VISIBILITY_OPTIONS : VISIBILITY_OPTIONS;
+  const options =
+    isTunneled || hosted ? ALL_VISIBILITY_OPTIONS : VISIBILITY_OPTIONS;
   const currentLabel = visibilityLabel(server.visibility);
   const currentDotClass =
     ALL_VISIBILITY_OPTIONS.find((option) => option.value === server.visibility)
@@ -382,88 +433,98 @@ export function MCPServerStatusDropdown({
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={!canWrite || updating}>
-        <button
-          type="button"
-          title={
-            isKnownEnumValue(
-              KnownUpdateMcpServerFormVisibility,
-              server.visibility,
-            )
-              ? undefined
-              : "Refresh the page before changing this server’s availability."
-          }
-          disabled={!canWrite || updating}
-          className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <span
-            className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
-          />
-          {currentLabel}
-          <ChevronDown className="text-muted-foreground h-3 w-3" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[320px] p-1">
-        {options.map((option) => {
-          const optionBlocked = option.value === "public" && publicBlocked;
-          return (
-            <DropdownMenuItem
-              key={option.value}
-              disabled={optionBlocked}
-              onSelect={() => {
-                if (optionBlocked) return;
-                updateVisibility(option.value);
-              }}
-              className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
-            >
-              {option.value === server.visibility ? (
-                <span
-                  className={cn(
-                    "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",
-                    option.dotClass,
-                  )}
-                >
-                  <Check
-                    className="text-background h-2.5 w-2.5"
-                    strokeWidth={4}
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={!canWrite || updating}>
+          <button
+            type="button"
+            title={
+              isKnownEnumValue(
+                KnownUpdateMcpServerFormVisibility,
+                server.visibility,
+              )
+                ? undefined
+                : "Refresh the page before changing this server’s availability."
+            }
+            disabled={!canWrite || updating}
+            className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span
+              className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
+            />
+            {currentLabel}
+            <ChevronDown className="text-muted-foreground h-3 w-3" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-[320px] p-1">
+          {options.map((option) => {
+            const optionBlocked =
+              option.value === "public" &&
+              (publicBlocked || guard.publicUnavailable);
+            return (
+              <DropdownMenuItem
+                key={option.value}
+                disabled={optionBlocked}
+                onSelect={() => {
+                  if (optionBlocked) return;
+                  if (hosted) guard.request(option.value);
+                  else updateVisibility(option.value);
+                }}
+                className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+              >
+                {option.value === server.visibility ? (
+                  <span
+                    className={cn(
+                      "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",
+                      option.dotClass,
+                    )}
+                  >
+                    <Check
+                      className="text-background h-2.5 w-2.5"
+                      strokeWidth={4}
+                    />
+                  </span>
+                ) : (
+                  <span
+                    className={cn(
+                      "mt-1 size-3.5 shrink-0 rounded-full transition-colors",
+                      "bg-muted",
+                      option.hoverDotClass,
+                    )}
                   />
-                </span>
-              ) : (
-                <span
-                  className={cn(
-                    "mt-1 size-3.5 shrink-0 rounded-full transition-colors",
-                    "bg-muted",
-                    option.hoverDotClass,
-                  )}
-                />
-              )}
-              <div className="flex-1">
-                <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
-                  {option.label}
-                </span>
-                <span className="text-muted-foreground text-xs">
-                  {optionBlocked
-                    ? "Enable public access on the tunnel source first to allow anonymous serving."
-                    : option.description}
-                </span>
-              </div>
+                )}
+                <div className="flex-1">
+                  <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
+                    {option.label}
+                  </span>
+                  <span className="text-muted-foreground text-xs">
+                    {optionBlocked
+                      ? publicBlocked
+                        ? "Enable public access on the tunnel source first to allow anonymous serving."
+                        : "Loading environment data…"
+                      : hosted && option.value === "public"
+                        ? HOSTED_PUBLIC_DESCRIPTION
+                        : option.description}
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            );
+          })}
+          {publicBlocked && (
+            <DropdownMenuItem asChild className="mt-1 border-t">
+              <Link
+                to={publicAccessHref}
+                className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 px-2 py-2 text-xs hover:no-underline"
+              >
+                Enable public access in Settings
+                <ArrowRight className="size-3" />
+              </Link>
             </DropdownMenuItem>
-          );
-        })}
-        {publicBlocked && (
-          <DropdownMenuItem asChild className="mt-1 border-t">
-            <Link
-              to={publicAccessHref}
-              className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 px-2 py-2 text-xs hover:no-underline"
-            >
-              Enable public access in Settings
-              <ArrowRight className="size-3" />
-            </Link>
-          </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {guard.dialogs}
+    </>
   );
 }
 
@@ -493,7 +554,8 @@ export function MCPServerAvailabilityToggle({
     >
       <Switch
         checked={available}
-        disabled={!canWrite || updating}
+        // Hosted servers change availability through the dropdown's confirmations.
+        disabled={!canWrite || updating || standsInForToolset(server)}
         aria-label={label}
         onCheckedChange={(checked) => {
           updateVisibility(checked ? "private" : "disabled");
@@ -521,17 +583,28 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
   updating: boolean;
 } {
   const { hasScope } = useRBAC();
-  // These controls offer no public state for hosted servers; their visibility stays on the toolset page.
   const canWrite =
     hasScope("mcp:write") &&
-    !isCanonicalHostedWrapper(server) &&
     isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
   const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
   const update = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {
       await invalidateMcpServerQueries(queryClient);
       const next = variables.request.updateMcpServerForm.visibility;
       toast.success(mcpServerVisibilityToast(next));
+      // Keeps the toolset page's visibility events for hosted servers.
+      if (standsInForToolset(server)) {
+        telemetry.capture("mcp_event", {
+          action:
+            next === "disabled"
+              ? "mcp_disabled"
+              : next === "public"
+                ? "mcp_made_public"
+                : "mcp_made_private",
+          slug: server.toolset?.slug,
+        });
+      }
     },
     onError: (error) => {
       toast.error(

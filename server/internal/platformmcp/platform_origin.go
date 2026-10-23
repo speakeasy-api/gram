@@ -48,12 +48,11 @@ func platformBaseURL(ctx context.Context, fallback *url.URL) *url.URL {
 // The stored dashboard URL is nil when the stored host is the server host and
 // no dashboard URL is configured.
 func organizationBaseURLs(ctx context.Context, orgHosts *orghost.Resolver, defaultHost pgtype.Text, serverURL, dashboardURL *url.URL) (*url.URL, *url.URL) {
-	if orgHosts != nil && storedHostApplies(ctx) {
-		if storedServerURL, storedDashboardURL, ok := orgHosts.StoredPlatformBaseURLs(defaultHost); ok {
-			return storedServerURL, storedDashboardURL
-		}
+	requestServerURL, requestDashURL := platformBaseURL(ctx, serverURL), requestDashboardURL(ctx, dashboardURL, serverURL)
+	if !storedHostApplies(ctx) {
+		return requestServerURL, requestDashURL
 	}
-	return platformBaseURL(ctx, serverURL), requestDashboardURL(ctx, dashboardURL, serverURL)
+	return orgHosts.StoredPlatformBaseURLsOr(defaultHost, requestServerURL, requestDashURL)
 }
 
 // storedHostApplies reports whether links built for this request may use an

@@ -169,3 +169,35 @@ func TestStoredPlatformHostServerHostWithoutSiteURL(t *testing.T) {
 	require.Equal(t, "https://ai.example.com", serverURL.String())
 	require.Nil(t, siteURL)
 }
+
+func TestStoredPlatformBaseURLsOr(t *testing.T) {
+	t.Parallel()
+
+	resolver := orghost.New(orghost.Config{
+		ServerURL:                  mustParse(t, "https://ai.example.com"),
+		SiteURL:                    mustParse(t, "https://ai.example.com"),
+		PlatformHosts:              map[string]string{"app.example.com": "https://app.example.com"},
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
+	fallbackServer := mustParse(t, "https://fallback.example.com")
+	fallbackSite := mustParse(t, "https://fallback-site.example.com")
+
+	serverURL, siteURL := resolver.StoredPlatformBaseURLsOr(stored("https://app.example.com"), fallbackServer, fallbackSite)
+	require.Equal(t, "https://app.example.com", serverURL.String())
+	require.Equal(t, "https://app.example.com", siteURL.String())
+
+	for name, defaultHost := range map[string]pgtype.Text{
+		"null":    {String: "", Valid: false},
+		"unknown": stored("https://unknown.example.com"),
+	} {
+		serverURL, siteURL := resolver.StoredPlatformBaseURLsOr(defaultHost, fallbackServer, fallbackSite)
+		require.Same(t, fallbackServer, serverURL, name)
+		require.Same(t, fallbackSite, siteURL, name)
+	}
+
+	var nilResolver *orghost.Resolver
+	serverURL, siteURL = nilResolver.StoredPlatformBaseURLsOr(stored("https://app.example.com"), fallbackServer, fallbackSite)
+	require.Same(t, fallbackServer, serverURL)
+	require.Same(t, fallbackSite, siteURL)
+}

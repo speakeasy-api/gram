@@ -7,6 +7,7 @@ import {
   selectedHookSources,
   selectedTargetValues,
   selectedUserEmails,
+  splitHostedTargets,
   toTargetTypes,
 } from "@/components/observe/observeTargetFilters";
 import { useSlugs } from "@/contexts/Sdk";
@@ -63,11 +64,8 @@ export function useToolUsagePayload({
     () => selectedTargetValues(activeFilters).map(parseTargetFilter),
     [activeFilters],
   );
-  const hostedToolsetSlugs = useMemo(
-    () =>
-      serverFilters
-        .filter((filter) => filter.type === "hosted")
-        .map((filter) => filter.id),
+  const { mcpServerIds, hostedToolsetSlugs } = useMemo(
+    () => splitHostedTargets(serverFilters),
     [serverFilters],
   );
   const shadowServerNames = useMemo(
@@ -107,6 +105,7 @@ export function useToolUsagePayload({
     () => ({
       from,
       to,
+      mcpServerIds: mcpServerIds.length > 0 ? mcpServerIds : undefined,
       hostedToolsetSlugs:
         hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
       shadowServerNames:
@@ -122,6 +121,7 @@ export function useToolUsagePayload({
     [
       from,
       to,
+      mcpServerIds,
       hostedToolsetSlugs,
       shadowServerNames,
       metaMcpServerIds,
@@ -139,6 +139,7 @@ export function useToolUsagePayload({
       projectSlug,
       from.toISOString(),
       to.toISOString(),
+      mcpServerIds,
       hostedToolsetSlugs,
       shadowServerNames,
       metaMcpServerIds,
@@ -153,6 +154,7 @@ export function useToolUsagePayload({
       projectSlug,
       from,
       to,
+      mcpServerIds,
       hostedToolsetSlugs,
       shadowServerNames,
       metaMcpServerIds,

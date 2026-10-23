@@ -2556,7 +2556,10 @@ var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 		Example("2025-12-19T11:00:00Z")
 	})
 	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
-	Attribute("hosted_toolset_slugs", ArrayOf(String), "Hosted MCP toolset slugs to include")
+	Attribute("hosted_toolset_slugs", ArrayOf(String), "Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include")
+	Attribute("mcp_server_ids", ArrayOf(String, func() { Format(FormatUUID) }), "MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.", func() {
+		MaxLength(100)
+	})
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include. An email also matches the calls an agent made on that person's behalf.")
@@ -2658,7 +2661,10 @@ var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 		Example("2025-12-19T11:00:00Z")
 	})
 	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
-	Attribute("hosted_toolset_slugs", ArrayOf(String), "Hosted MCP toolset slugs to include")
+	Attribute("hosted_toolset_slugs", ArrayOf(String), "Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include")
+	Attribute("mcp_server_ids", ArrayOf(String, func() { Format(FormatUUID) }), "MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.", func() {
+		MaxLength(100)
+	})
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include. An email also matches the calls an agent made on that person's behalf.")
@@ -2706,6 +2712,7 @@ var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
 	Attribute("target_kind", ToolUsageTargetKind, "Display grouping for the target")
 	Attribute("target_id", String, "Stable target identifier used by filters")
 	Attribute("target_label", String, "User-facing target label")
+	Attribute("mcp_server_id", String, "MCP server id for hosted and tunneled targets; absent for other targets")
 	Attribute("user_key", String, "Stable user identity value")
 	Attribute("user_label", String, "User-facing user identity label")
 	Attribute("user_kind", ToolUsageUserKind, "Type of user identity represented by the row")
@@ -2775,6 +2782,7 @@ var ToolUsageHostedServerFilterOption = Type("ToolUsageHostedServerFilterOption"
 
 	Attribute("toolset_slug", String, "Hosted MCP toolset slug")
 	Attribute("toolset_name", String, "Hosted MCP toolset display name")
+	Attribute("mcp_server_id", String, "MCP server id to filter by; absent when the server has no mcp_servers row")
 	Attribute("event_count", Int64, "Number of tool usage events observed for the hosted MCP server")
 
 	Required("toolset_slug", "toolset_name", "event_count")
@@ -2843,6 +2851,7 @@ var ToolUsageTargetSummary = Type("ToolUsageTargetSummary", func() {
 	Attribute("target_kind", ToolUsageTargetKind, "Display grouping for the target")
 	Attribute("target_id", String, "Stable target identifier used by filters and chart grouping")
 	Attribute("target_label", String, "User-facing label for the target")
+	Attribute("mcp_server_id", String, "MCP server id for hosted and tunneled targets; absent for other targets")
 	Attribute("event_count", Int64, "Total number of tool usage events for the target")
 	Attribute("unique_tools", Int64, "Number of distinct tools observed for the target")
 	Attribute("success_count", Int64, "Number of successful tool usage events for the target")

@@ -196,7 +196,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	assistant := assistantRecordFromGetRow(row)
 	attachments, err := q.LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: r.ProjectID, AssistantIds: []uuid.UUID{r.AssistantID}})
 	for _, attached := range attachments {
-		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: pgtype.Text{String: "", Valid: false}, ToolsetSlug: pgtype.Text{String: "", Valid: false}, DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, EnvironmentSlug: pgtype.Text{String: "", Valid: false}, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug})
+		assistant.MCPServers = append(assistant.MCPServers, assistantMCPServerRow{ServerSlug: pgtype.Text{String: "", Valid: false}, ToolsetSlug: pgtype.Text{String: "", Valid: false}, DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, EnvironmentSlug: pgtype.Text{String: "", Valid: false}, MCPServerID: attached.McpServerID, Visibility: attached.Visibility, EndpointSlug: attached.EndpointSlug, EndpointDomain: attached.EndpointDomain})
 	}
 	if err != nil {
 		return zero, fmt.Errorf("load Kit assistant MCP servers: %w", err)
@@ -269,7 +269,7 @@ func kitResourceAttached(a assistantRecord, serverURL, resource *url.URL) bool {
 	slug := strings.TrimPrefix(resource.Path, "/mcp/")
 	for _, attached := range a.MCPServers {
 		if attached.EndpointSlug == slug && attached.Visibility != "disabled" &&
-			resource.String() == serverURL.JoinPath("mcp", attached.EndpointSlug).String() {
+			resource.String() == attached.endpointURL(serverURL).String() {
 			return true
 		}
 	}

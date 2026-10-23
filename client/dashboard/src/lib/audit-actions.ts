@@ -40,11 +40,13 @@ export const AUDIT_ACTIONS = [
   "ai_tool_decision:set",
   "api_key:create",
   "api_key:revoke",
+  "api_key:update_policy",
   "asset:create",
   "auth-client:detach-mcp-server",
   "auth-client:disable",
   "auth-client:enable",
   "auth-client:update",
+  "auth-client:update-audience",
   "assistant:identity_provision",
   "assistant:tool_call",
   "aws_iam_credential:create",
@@ -424,6 +426,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "created API key";
     case "api_key:revoke":
       return "revoked API key";
+    case "api_key:update_policy":
+      return "changed the access policy of API key";
 
     case "asset:create":
       return "uploaded asset";
@@ -436,6 +440,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled auth client";
     case "auth-client:detach-mcp-server":
       return "removed an MCP server from auth client";
+    case "auth-client:update-audience":
+      return "changed who can use auth client";
     case "assistant:identity_provision":
       return "gave a dedicated agent to assistant";
     case "assistant:tool_call":

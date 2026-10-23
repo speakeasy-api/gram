@@ -498,7 +498,7 @@ func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = metadataRepo.UpsertMetadataByMcpServerID(ctx, metadata_repo.UpsertMetadataByMcpServerIDParams{
-		McpServerID:              uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		McpServerID:              toolset.ID,
 		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
 		LogoID:                   uuid.NullUUID{Valid: false},
