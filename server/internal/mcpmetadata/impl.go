@@ -493,7 +493,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 
 	result, err := mcpr.UpsertMetadataByMcpServerID(ctx, repo.UpsertMetadataByMcpServerIDParams{
-		McpServerID:               uuid.NullUUID{UUID: backend.backendID(), Valid: true},
+		McpServerID:               backend.backendID(),
 		ProjectID:                 *authCtx.ProjectID,
 		ExternalDocumentationUrl:  externalDocURL,
 		ExternalDocumentationText: externalDocText,
@@ -996,7 +996,7 @@ func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 	metadata := &types.McpMetadata{
 		ID:                        record.ID.String(),
 		ToolsetID:                 nil,
-		McpServerID:               conv.FromNullableUUID(record.McpServerID),
+		McpServerID:               new(record.McpServerID.String()),
 		CreatedAt:                 record.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                 record.UpdatedAt.Time.Format(time.RFC3339),
 		ExternalDocumentationURL:  conv.FromPGText[string](record.ExternalDocumentationUrl),
