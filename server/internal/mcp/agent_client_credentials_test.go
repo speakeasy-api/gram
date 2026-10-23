@@ -7,6 +7,7 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -84,7 +85,7 @@ func TestAgentClientCredentialsPublicRegistrationRenewalAndRevocation(t *testing
 
 func TestRuntimeBuiltinToolsAcceptOrdinaryAgentKey(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
 	fx, _, _, session := seedAgentRefreshSession(t, ctx, ti)
 	raw, hash, prefix, err := auth.GenerateAPIKeyMaterial(auth.APIKeyPrefix("test"))
 	require.NoError(t, err)
@@ -96,4 +97,9 @@ func TestRuntimeBuiltinToolsAcceptOrdinaryAgentKey(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	}
+	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, fx.orgID, feature.VariantAssistantToolsPlatformMCP)
+	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), raw)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
 }

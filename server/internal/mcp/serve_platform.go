@@ -152,9 +152,9 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 
 // authorizePlatformToolset gates entry to a platform toolset before any work
 // runs. The managed-assistant toolset carries the dashboard egress tool and is
-// reserved for a project's managed assistant; any other assistant token for the
-// project is rejected as if the toolset did not exist, rather than relying on
-// downstream tools to refuse the call.
+// legacy assistant tokens remain restricted to the managed assistant. Ordinary
+// agent credentials instead use live agent policy and per-tool authorization;
+// neither runtime variant requires a managed-assistant row for those callers.
 func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
 	switch slug {
 	case platformtools.ResearchToolsetSlug:
@@ -171,24 +171,25 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		return nil
 	}
 
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent && slug == platformtools.ManagedAssistantPlatformToolsetSlug {
-		return nil
-	}
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
-	if !ok {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	}
+	actor, agent := contextvalues.AuthenticatedActor(ctx)
+	if !agent || actor.Type != urn.PrincipalTypeAgent {
+		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+		if !ok {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
 
-	managed, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, *authCtx.ProjectID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger)
-	}
+		managed, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, *authCtx.ProjectID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger)
+		}
 
-	if managed.ID != principal.AssistantID {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		if managed.ID != principal.AssistantID {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+
 	}
 
 	// The two managed-only toolsets are rollout variants of each other: an org
