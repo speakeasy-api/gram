@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -216,10 +217,7 @@ func (s *RegistrationStore) ResolveRegistrationDashboardSetup(ctx context.Contex
 	if !server.RemoteMcpServerID.Valid || server.RemoteMcpServerID.UUID != registration.RemoteMcpServerID.UUID || !server.UserSessionIssuerID.Valid || server.UserSessionIssuerID.UUID != registration.UserSessionIssuerID.UUID {
 		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
 	}
-	mcpServerRoute := server.Slug.String
-	if !server.Slug.Valid || mcpServerRoute == "" {
-		mcpServerRoute = server.ID.String()
-	}
+	mcpServerRoute := mcpservers.DashboardRouteParam(server.Slug.String, server.ID)
 	if organization.Slug == "" || mcpServerRoute == "" {
 		return RegistrationDashboardSetup{}, ErrRegistrationInvalid
 	}
