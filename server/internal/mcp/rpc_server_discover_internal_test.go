@@ -63,7 +63,7 @@ func TestServerDiscoverPreservesZeroAndEmptyStringIDs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			body, err := handleServerDiscover(t.Context(), testenv.NewLogger(t), tc.id,
-				describePlatformServer(), mcpversions.SupportedPlatformToolset())
+				describePlatformServer(false), mcpversions.SupportedPlatformToolset())
 			require.NoError(t, err)
 			var response struct {
 				ID json.RawMessage `json:"id"`

@@ -497,6 +497,7 @@ func (s *Service) buildMemberDispatch(
 		protocolVersion:          gate.protocolVersion,
 		identityCoverageRecorded: false,
 		toolSelection:            gate.toolSelection,
+		skillsOverMCP:            nil,
 	}
 	return toolset, inputs, nil
 }
