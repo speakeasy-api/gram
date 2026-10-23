@@ -1,0 +1,155 @@
+package platformmcp
+
+import (
+	"context"
+	"crypto/hmac"
+	"errors"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	accessgen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/access"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+const operationConfigureInferenceAccessRole = "configure_inference_access_role"
+
+type ConfigureInferenceAccessRoleInput struct {
+	ProjectID       string `json:"project_id" jsonschema:"explicit project ID for the inference permission"`
+	RoleReference   string `json:"role_reference" jsonschema:"fresh opaque custom role reference from list_access_roles"`
+	ExpectedVersion string `json:"expected_version" jsonschema:"version from the fresh role read"`
+	Enabled         bool   `json:"enabled" jsonschema:"true adds the exact project inference grant; false removes only that exact grant, not broader grants"`
+	IdempotencyKey  string `json:"idempotency_key" jsonschema:"stable unique key for this exact mutation and retries"`
+	Confirmed       bool   `json:"confirmed" jsonschema:"true only after explicit confirmation of the project, role, grant change and impact on all role holders"`
+}
+
+type ConfigureInferenceAccessRoleOutput struct {
+	Role              AccessRoleMutationSummary `json:"role" jsonschema:"historical committed role snapshot; read roles again before another change"`
+	ProjectID         string                    `json:"project_id"`
+	Scope             string                    `json:"scope"`
+	ExactGrantPresent bool                      `json:"exact_grant_present" jsonschema:"fresh read of the exact project inference grant on this role, not effective agent or owner access; broader grants may still permit inference"`
+	Receipt           RiskMutationToolReceipt   `json:"receipt"`
+}
+
+func inferenceAccessRoleGrant(projectID uuid.UUID) *accessgen.RoleGrant {
+	project := projectID.String()
+	return &accessgen.RoleGrant{Scope: string(authz.ScopeInferenceExecute), Selectors: []*accessgen.Selector{{ResourceKind: "inference", ResourceID: "*", ProjectID: &project, Tool: nil, Disposition: nil, ServerURL: nil, ClientType: nil, ConnectionOwner: nil, UpstreamClient: nil}}}
+}
+
+func hasInferenceAccessRoleGrant(role *accessgen.Role, projectID uuid.UUID) bool {
+	for _, grant := range role.Grants {
+		if grant.Scope != string(authz.ScopeInferenceExecute) {
+			continue
+		}
+		for _, selector := range grant.Selectors {
+			if selector.ResourceKind == "inference" && selector.ResourceID == "*" && selector.ProjectID != nil && *selector.ProjectID == projectID.String() && selector.Tool == nil && selector.Disposition == nil && selector.ServerURL == nil && selector.ClientType == nil && selector.ConnectionOwner == nil && selector.UpstreamClient == nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, principal Principal, input ConfigureInferenceAccessRoleInput) (ConfigureInferenceAccessRoleOutput, error) {
+	if principal.surface() != SurfacePlatformMCP {
+		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationInvalid("Inference access configuration requires the external Platform MCP.")
+	}
+	if !input.Confirmed {
+		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationConfirmationRequired()
+	}
+	if !s.valid() {
+		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationUnavailable(nil)
+	}
+	input.ProjectID = strings.TrimSpace(input.ProjectID)
+	input.RoleReference = strings.TrimSpace(input.RoleReference)
+	input.ExpectedVersion = strings.TrimSpace(input.ExpectedVersion)
+	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
+	if principal.UserID == "" || input.RoleReference == "" || !validAccessRoleVersion(input.ExpectedVersion) || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 128 {
+		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationInvalid("The access role update request is invalid.")
+	}
+	project, workosOrgID, err := s.admit(ctx, principal, input.ProjectID)
+	if err != nil {
+		return ConfigureInferenceAccessRoleOutput{}, err
+	}
+	roleID, err := s.reads.references.Decode(input.RoleReference, principal, subjectKindAccessRole, s.reads.now().UTC())
+	if err != nil {
+		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationNotFound()
+	}
+	normalized := struct {
+		ProjectID       string `json:"project_id"`
+		RoleID          string `json:"role_id"`
+		ExpectedVersion string `json:"expected_version"`
+		Enabled         bool   `json:"enabled"`
+	}{project.ID.String(), roleID, input.ExpectedVersion, input.Enabled}
+	var addGrants, removeGrants []*accessgen.RoleGrant
+	grant := inferenceAccessRoleGrant(project.ID)
+	if input.Enabled {
+		addGrants = []*accessgen.RoleGrant{grant}
+	} else {
+		removeGrants = []*accessgen.RoleGrant{grant}
+	}
+	// A replayed receipt must not repeat the role write or reconciliation.
+	var delivery access.RoleReconciliation
+	receipt, err := s.receipts.execute(ctx, principal, project, operationConfigureInferenceAccessRole, input.IdempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
+		roleUUID, parseErr := uuid.Parse(roleID)
+		if parseErr != nil || roleUUID == uuid.Nil {
+			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
+		}
+		if _, lockErr := accessrepo.New(tx).LockOrganizationRoleByID(ctx, accessrepo.LockOrganizationRoleByIDParams{OrganizationID: principal.OrganizationID, ID: roleUUID}); errors.Is(lockErr, pgx.ErrNoRows) {
+			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
+		} else if lockErr != nil {
+			return AccessRoleMutationReceiptResult{}, accessRoleMutationUnavailable(lockErr)
+		}
+		current, readErr := s.backend.GetRoleByIDTx(ctx, tx, principal.OrganizationID, roleID)
+		if readErr != nil {
+			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(readErr)
+		}
+		if current == nil || current.IsSystem {
+			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
+		}
+		version, versionErr := s.roleVersion(current)
+		if versionErr != nil || !hmac.Equal([]byte(version), []byte(input.ExpectedVersion)) {
+			return AccessRoleMutationReceiptResult{}, accessRoleMutationConflict("The access role changed after it was read. Read it again and retry with the new version.")
+		}
+		result, reconciliation, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: addGrants, RemoveGrants: removeGrants, MemberIds: nil, AgentIds: nil})
+		if err != nil {
+			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(err)
+		}
+		if result.After == nil {
+			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
+		}
+		delivery = reconciliation
+		return s.receiptResult(result.After, result.Slug, "updated", "complete")
+	})
+	if err != nil {
+		return ConfigureInferenceAccessRoleOutput{}, err
+	}
+	if !receipt.Replayed {
+		s.backend.ReconcileRoleDelivery(ctx, delivery)
+	}
+	result, err := decodeAccessRoleMutationReceipt(operationConfigureInferenceAccessRole, receipt.ResultPayload)
+	if err != nil {
+		return ConfigureInferenceAccessRoleOutput{}, err
+	}
+	summary, err := s.outputSummary(principal, result)
+	if err != nil {
+		return ConfigureInferenceAccessRoleOutput{}, err
+	}
+	// Verify current state separately: receipt replay is a historical write, not live access.
+	tx, err := s.reads.db.Begin(ctx)
+	if err != nil {
+		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationUnavailable(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	current, err := s.backend.GetRoleByIDTx(ctx, tx, principal.OrganizationID, roleID)
+	if err != nil {
+		return ConfigureInferenceAccessRoleOutput{}, classifyAccessRoleBackendError(err)
+	}
+	if current == nil {
+		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationNotFound()
+	}
+	return ConfigureInferenceAccessRoleOutput{Role: summary, ProjectID: project.ID.String(), Scope: string(authz.ScopeInferenceExecute), ExactGrantPresent: hasInferenceAccessRoleGrant(current, project.ID), Receipt: riskMutationToolReceipt(receipt)}, nil
+}

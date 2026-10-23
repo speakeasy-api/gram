@@ -89,6 +89,8 @@ type Service struct {
 	// disables streaming — turns still complete and the dashboard falls back
 	// to loading the reply once it lands.
 	turnStream *TurnStream
+
+	workloadInference WorkloadInferenceAuthorizer
 }
 
 // WithTurnStream enables streaming assistant turn frames to subscribers.
@@ -171,6 +173,8 @@ func NewService(
 		featureFlags:     nil,
 		riskFindings:     nil,
 		turnStream:       nil, // opt in via WithTurnStream
+
+		workloadInference: nil, // opt in via WithWorkloadInference
 	}
 }
 
@@ -1872,6 +1876,10 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	// Extract HTTP metadata for message tracking
 	metadata := extractHTTPMetadata(r)
+	if isWorkloadInference(ctx) {
+		metadata.Source = string(workloadInferenceSource)
+		keySlot = workloadInferenceSource
+	}
 
 	orgID := authCtx.ActiveOrganizationID
 	userID := authCtx.UserID
@@ -1904,6 +1912,10 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// customer key. No other slot value ever comes from the header.
 	if source == billing.ModelUsageSourceAssistants {
 		keySlot = billing.ModelUsageSourceAssistants
+	}
+	if isWorkloadInference(ctx) {
+		source = workloadInferenceSource
+		keySlot = workloadInferenceSource
 	}
 	sourceName := string(source)
 
@@ -3643,6 +3655,9 @@ func clampUint64ToInt64(value uint64) int64 {
 // work only: directAuthorize also serves transcript APIs, which keep their own
 // authentication.
 func (s *Service) authorizeCompletion(r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
+	if ctx, authCtx, handled, err := s.authorizeWorkloadCompletion(r); handled || err != nil {
+		return ctx, authCtx, workloadInferenceSource, err
+	}
 	if !assistanttokens.IsRuntimeCredential(r.Header.Get("Authorization")) {
 		return s.directAuthorizeWithKitAdmission(r.Context(), r, true)
 	}

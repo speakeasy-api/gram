@@ -13,7 +13,11 @@ import {
 } from "./CustomSetupInstructions";
 import { platformSetup } from "./platformSetups";
 import { ComputedStatus } from "./SetupFields";
-import type { SetupContext, SetupStep } from "./setupInstructions";
+import type {
+  PlatformSetup,
+  SetupContext,
+  SetupStep,
+} from "./setupInstructions";
 import {
   connectedIssuer,
   duplicateRuleMessage,
@@ -68,7 +72,10 @@ export function useWorkloadSetup({
   initialValues,
   connectedSubject,
   settled = false,
+  setupOverride,
 }: {
+  /** Reuses issuer registration and admission for non-MCP setup. */
+  setupOverride?: PlatformSetup;
   /** The catalog's policy for the platform, absent for a custom one. */
   entry: CatalogEntry | undefined;
   /** The chosen platform, which may be the custom one. Null until chosen. */
@@ -133,11 +140,12 @@ export function useWorkloadSetup({
   // The catalog's platforms come from the same map the picker offers tiles
   // from, plus the custom flow for everything the catalog does not know.
   const setup =
-    platformKey === CUSTOM_PLATFORM_KEY
+    setupOverride ??
+    (platformKey === CUSTOM_PLATFORM_KEY
       ? customSetupInstructions()
       : entry === undefined
         ? undefined
-        : platformSetup(entry);
+        : platformSetup(entry));
 
   const connection = setup?.connection(values) ?? null;
   const platformName = entry?.displayName ?? "this platform";

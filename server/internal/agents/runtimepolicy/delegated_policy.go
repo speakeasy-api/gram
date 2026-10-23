@@ -23,7 +23,9 @@ const (
 	DelegatedPolicyVersion4 DelegatedPolicyVersion = 4
 	DelegatedPolicyVersion5 DelegatedPolicyVersion = 5
 
-	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion5
+	DelegatedPolicyVersion6 DelegatedPolicyVersion = 6
+
+	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion6
 
 	// IssuedDelegatedPolicyVersion is the newest version any credential is
 	// issued at. It trails CurrentDelegatedPolicyVersion until every replica

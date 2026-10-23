@@ -92,9 +92,7 @@ export function GrantRuleDrawerContent({
   const organization = useOrganization();
   const inventory = useOrgMcpServers(resourceType === "mcp");
   const mcpServers = inventory.groups;
-  const assistantInventory = useOrgAssistants(
-    isProjectFilteredResourceType(resourceType),
-  );
+  const assistantInventory = useOrgAssistants(resourceType === "assistant");
   // Project slug per id, so the tool picker can name each remote server's
   // project when fetching its (project-scoped) stored tool metadata.
   const projectSlugById = useMemo(
@@ -424,8 +422,16 @@ export function GrantRuleDrawerContent({
     <div className="border-border divide-border shrink-0 divide-y border">
       {!isDenyProp && isPanelAllowed("all") && (
         <ScopeOption
-          label={allScopeLabel(projectSelectable, projectFiltered)}
-          description={allScopeDescription(projectSelectable, projectFiltered)}
+          label={
+            resourceType === "inference"
+              ? "All projects"
+              : allScopeLabel(projectSelectable, projectFiltered)
+          }
+          description={
+            resourceType === "inference"
+              ? "Run inference in every project"
+              : allScopeDescription(projectSelectable, projectFiltered)
+          }
           selected={activePanel === "all"}
           onClick={() => switchPanel("all")}
         />
@@ -435,15 +441,17 @@ export function GrantRuleDrawerContent({
           <ScopeOption
             label="Specific projects"
             description={
-              projectFiltered
-                ? "Give access to assistants within specific projects in your org"
-                : "Give access to servers within specific projects in your org"
+              resourceType === "inference"
+                ? "Run inference within specific projects in your org"
+                : projectFiltered
+                  ? "Give access to assistants within specific projects in your org"
+                  : "Give access to servers within specific projects in your org"
             }
             selected={activePanel === "projects"}
             onClick={() => switchPanel("projects")}
           />
         )}
-      {isPanelAllowed("servers") && (
+      {resourceType !== "inference" && isPanelAllowed("servers") && (
         <ScopeOption
           label={
             projectFiltered
@@ -842,11 +850,13 @@ export function GrantRuleDrawerContent({
           <div className="border-border text-muted-foreground flex flex-1 items-center justify-center border px-6 text-center text-sm">
             {isDenyProp
               ? "This exception covers everything the allow rule permits."
-              : projectFiltered
-                ? "This role reaches every assistant in every project."
-                : projectSelectable
-                  ? "This role reaches every project in the organization."
-                  : "This role reaches every server in every project."}
+              : resourceType === "inference"
+                ? "This role can run inference in every project."
+                : projectFiltered
+                  ? "This role reaches every assistant in every project."
+                  : projectSelectable
+                    ? "This role reaches every project in the organization."
+                    : "This role reaches every server in every project."}
           </div>
         ) : (
           <>

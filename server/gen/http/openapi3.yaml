@@ -94023,7 +94023,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).
+                    description: Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -94039,6 +94039,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - mcp_auth_client
                         - '*'
@@ -108481,6 +108482,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -108537,6 +108539,7 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - inference:execute
                             - log:read
                             - agent:read
                             - agent:write
@@ -115581,6 +115584,7 @@ components:
                         - risk_policy:bypass
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -117714,6 +117718,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -118080,6 +118085,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - workload
                         - mcp_auth_client
@@ -118122,6 +118128,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -118616,7 +118623,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
+                    description: Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -118632,6 +118639,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - workload
                         - mcp_auth_client

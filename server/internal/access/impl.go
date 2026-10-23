@@ -318,6 +318,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeChatRead, description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.", resourceType: "chat"},
 		{scope: authz.ScopeChatWrite, description: "Rename, delete, and give feedback on other members' agent sessions. Everyone keeps their own.", resourceType: "chat"},
+		{scope: authz.ScopeInferenceExecute, description: "Run model inference without accessing chat transcripts.", resourceType: "inference"},
 		{scope: authz.ScopeLogRead, description: "View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.", resourceType: "project"},
 		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},

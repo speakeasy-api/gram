@@ -54,6 +54,7 @@ export const Scope = {
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  InferenceExecute: "inference:execute",
   LogRead: "log:read",
   AgentRead: "agent:read",
   AgentWrite: "agent:write",

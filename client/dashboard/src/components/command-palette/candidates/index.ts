@@ -4,6 +4,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useMemo } from "react";
 import type { LauncherCandidate } from "./types";
 import { useAccessRequestCandidates } from "./useAccessRequestCandidates";
+import { useInferenceSetupCandidate } from "./useInferenceSetupCandidate";
 import { useActionCandidates } from "./useActionCandidates";
 import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useAssistantCandidates } from "./useAssistantCandidates";
@@ -104,6 +105,9 @@ export function useLauncherCandidates({
   const skills = useSkillCandidates({
     enabled: projectEnabled && canReadSkills,
   });
+  const inferenceSetup = useInferenceSetupCandidate({
+    enabled: projectEnabled,
+  });
   const agentIdentities = useAgentIdentityCandidates({ enabled });
   const environments = useEnvironmentCandidates({ enabled: projectEnabled });
   const sources = useSourceCandidates({
@@ -138,6 +142,7 @@ export function useLauncherCandidates({
       ...(inProject && canReadAssistants ? assistants : []),
       ...(inProject && canReadSkills ? skills : []),
       ...agentIdentities,
+      ...inferenceSetup,
       ...projectOnly(environments),
       ...(inProject && canListMcp ? sources : []),
       ...projectOnly(deployments),
@@ -159,6 +164,7 @@ export function useLauncherCandidates({
     canReadSkills,
     skills,
     agentIdentities,
+    inferenceSetup,
     actions,
     recents,
     marketplace,

@@ -115,7 +115,9 @@ describe("Agent profile permissions", () => {
       agent.id,
     );
     expect(await screen.findByText("project:read")).toBeTruthy();
-    expect(screen.getByText("Example project")).toBeTruthy();
+    expect(
+      screen.getByText("Example project", { selector: "span" }),
+    ).toBeTruthy();
     expect(
       screen.queryByText("No permissions configured for this agent."),
     ).toBeNull();

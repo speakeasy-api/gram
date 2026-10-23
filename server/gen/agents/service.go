@@ -155,8 +155,8 @@ type AgentPolicySelector struct {
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
-	// scopes).
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
 	ProjectID *string
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string

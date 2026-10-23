@@ -180,3 +180,21 @@ describe("grant rule assistant list", () => {
     ]);
   });
 });
+
+it("limits inference grants to projects rather than assistants or MCP servers", () => {
+  const onChangeSelectors = vi.fn<() => void>();
+  render(
+    <GrantRuleDrawerContent
+      resourceType="inference"
+      scope="inference:execute"
+      selectors={[]}
+      onChangeSelectors={onChangeSelectors}
+    />,
+  );
+  expect(screen.queryByText("Specific assistants")).toBeNull();
+  expect(screen.queryByText("Specific servers")).toBeNull();
+  fireEvent.click(screen.getByText("Project one"));
+  expect(onChangeSelectors).toHaveBeenCalledWith([
+    { resourceKind: "inference", resourceId: "*", projectId: "project_one" },
+  ]);
+});
