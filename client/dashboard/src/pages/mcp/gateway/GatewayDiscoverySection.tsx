@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/Select";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useOrganization } from "@/contexts/Auth";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
 export function GatewayDiscoverySection({
   metaMcpServer,
@@ -31,6 +33,15 @@ export function GatewayDiscoverySection({
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
   const [mode, setMode] = useState(metaMcpServer.discoveryMode);
+  const organization = useOrganization();
+  const features = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  // Code Mode is rolled out per organization by Speakeasy; organizations
+  // without it are never offered it.
+  const entitled = features.data?.codeModeEnabled === true;
   // Code Mode is never offered to anonymous callers.
   const requiresSignIn = !metaMcpServer.userSessionIssuerId;
   const supportsEditing = isKnownEnumValue(
@@ -94,7 +105,7 @@ export function GatewayDiscoverySection({
                 <SelectItem value="progressive">Progressive</SelectItem>
                 <SelectItem value="direct">Direct</SelectItem>
                 {(metaMcpServer.codeModeEnabled ||
-                  requiresSignIn ||
+                  (entitled && requiresSignIn) ||
                   metaMcpServer.discoveryMode === "code_mode") && (
                   <SelectItem
                     value="code_mode"
@@ -110,9 +121,11 @@ export function GatewayDiscoverySection({
             {metaMcpServer.discoveryMode === "code_mode" &&
               !metaMcpServer.codeModeEnabled && (
                 <p className="text-muted-foreground text-sm">
-                  {requiresSignIn
-                    ? "Code Mode requires sign-in, and this gateway allows anonymous callers."
-                    : "The code runtime is unavailable."}{" "}
+                  {!entitled
+                    ? "Code Mode is not enabled for your organization."
+                    : requiresSignIn
+                      ? "Code Mode requires sign-in, and this gateway allows anonymous callers."
+                      : "The code runtime is unavailable."}{" "}
                   Connections currently use Progressive discovery; the saved
                   default remains Code Mode.
                 </p>

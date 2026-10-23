@@ -816,7 +816,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	gatewayDefaultMode := ""
-	codeModeUnavailable := prefillDiscoveryMode == metamcp.DiscoveryModeCode && !s.CodeModeAvailable()
+	codeModeAvailable := showDiscoveryMode && s.CodeModeAvailable(ctx, endpoint.OrganizationID)
+	codeModeUnavailable := prefillDiscoveryMode == metamcp.DiscoveryModeCode && !codeModeAvailable
 	if codeModeUnavailable {
 		prefillDiscoveryMode = metamcp.DiscoveryModeProgressive
 	}
@@ -833,8 +834,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		switch metaServer.DiscoveryMode {
 		case "code_mode":
 			gatewayDefaultMode = "Code Mode"
-			// admitMetaGate serves Code Mode gateways as Progressive while the runtime is off.
-			if !s.CodeModeAvailable() {
+			// admitMetaGate serves Code Mode gateways as Progressive while the
+			// runtime is off or the organization is not entitled to Code Mode.
+			if !s.CodeModeAvailable(ctx, endpoint.OrganizationID) {
 				gatewayDefaultMode = "Progressive"
 				codeModeUnavailable = true
 			}
@@ -873,7 +875,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		GatewayInventory:        gatewayInventory,
 		ShowDiscoveryMode:       showDiscoveryMode,
 		PrefillDiscoveryMode:    prefillDiscoveryMode,
-		ShowCodeMode:            showDiscoveryMode && s.CodeModeAvailable(),
+		ShowCodeMode:            codeModeAvailable,
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,

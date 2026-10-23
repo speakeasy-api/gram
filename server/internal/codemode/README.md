@@ -351,11 +351,17 @@ The organization gateway has no stored default: its connections choose Code
 Mode on the consent page, the default stays Progressive, and agent gateways
 never use Code Mode.
 
-New choices require a configured code runtime. Gateway responses expose
-`code_mode_enabled` to authorized project readers.
+Code Mode is rolled out per organization. It is off for every organization
+until Speakeasy staff enable the `code_mode` product feature on the admin
+dashboard's organization Features page; organization admins cannot set it.
+New choices require that entitlement and a configured code runtime. Gateway
+responses expose `code_mode_enabled` to authorized project readers, and
+Settings, consent and Inspect never offer Code Mode to an organization without
+it. Setting the feature refreshes its cache entry, so enabling or disabling it
+takes effect on the next request.
 
-A disabled or unavailable runtime, or a gateway without sign-in, prevents new
-explicit choices. Existing Code Mode
+A disabled or unavailable runtime, a missing entitlement, or a gateway without
+sign-in prevents new explicit choices. Existing Code Mode
 connections use Progressive discovery with their original consent catalogue;
 the stored default and issued policy are unchanged. A configured runtime that
 cannot admit a run returns a structured execution refusal without submitting a

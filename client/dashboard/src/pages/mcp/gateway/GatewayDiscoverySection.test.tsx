@@ -13,6 +13,7 @@ import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
 
 const state = vi.hoisted(() => ({
   codeEnabled: false,
+  entitled: true,
   canWrite: true,
   pending: false,
   mutate: vi.fn(),
@@ -32,6 +33,12 @@ vi.mock("@/components/require-scope", () => ({
     state.scope(props);
     return props.children;
   },
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-test" }),
+}));
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => ({ data: { codeModeEnabled: state.entitled } }),
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: state.invalidate }),
@@ -75,6 +82,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   state.codeEnabled = false;
+  state.entitled = true;
   state.canWrite = true;
   state.pending = false;
 });
@@ -267,4 +275,39 @@ it("disables Code Mode for a gateway that allows anonymous callers", () => {
     name: "Code Mode (requires sign-in)",
   });
   expect(option.getAttribute("aria-disabled")).toBe("true");
+});
+
+it("never offers Code Mode to an organization without it", () => {
+  state.entitled = false;
+  render(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{
+          ...gateway,
+          userSessionIssuerId: undefined,
+          codeModeEnabled: false,
+        }}
+      />
+    </TooltipProvider>,
+  );
+  fireEvent.click(screen.getByRole("combobox"));
+  expect(screen.queryByRole("option", { name: /Code Mode/ })).toBeNull();
+});
+
+it("explains a saved Code gateway in an organization without Code Mode", () => {
+  state.entitled = false;
+  render(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{
+          ...gateway,
+          discoveryMode: "code_mode",
+          codeModeEnabled: false,
+        }}
+      />
+    </TooltipProvider>,
+  );
+  expect(
+    screen.getByText(/Code Mode is not enabled for your organization/i),
+  ).toBeTruthy();
 });

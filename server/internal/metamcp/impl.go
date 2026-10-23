@@ -216,7 +216,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return s.withGatewayCapabilities(mv.BuildMetaMcpServerView(created)), nil
+	return withGatewayCapabilities(mv.BuildMetaMcpServerView(created), s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)), nil
 }
 
 func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpServerPayload) (*types.MetaMcpServer, error) {
@@ -246,7 +246,7 @@ func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpS
 		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, s.logger)
 	}
 
-	return s.withGatewayCapabilities(mv.BuildMetaMcpServerView(row)), nil
+	return withGatewayCapabilities(mv.BuildMetaMcpServerView(row), s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)), nil
 }
 
 func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaMcpServersPayload) (*gen.ListMetaMcpServersResult, error) {
@@ -268,8 +268,9 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 	}
 
 	views := mv.BuildMetaMcpServerListView(rows)
+	codeModeAllowed := s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)
 	for _, view := range views {
-		s.withGatewayCapabilities(view)
+		withGatewayCapabilities(view, codeModeAllowed)
 	}
 	return &gen.ListMetaMcpServersResult{MetaMcpServers: views}, nil
 }
@@ -319,7 +320,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	preflightDiscovery := gatewaymcp.ResolveDiscoveryMode(unlocked.DiscoveryMode)
 	// Evaluate external gates before taking project/row locks or a transaction connection.
 	if payload.DiscoveryMode != nil && *payload.DiscoveryMode != string(preflightDiscovery) &&
-		*payload.DiscoveryMode == string(gatewaymcp.DiscoveryModeCode) && !s.codeModeSelection.Allows() {
+		*payload.DiscoveryMode == string(gatewaymcp.DiscoveryModeCode) && !s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID) {
 		return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
 	}
 
@@ -488,7 +489,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, false)
 
-	return s.withGatewayCapabilities(afterView), nil
+	return withGatewayCapabilities(afterView, s.codeModeAllowed(ctx, authCtx.ActiveOrganizationID)), nil
 }
 
 // UpdateMetaMCPServerNetworkAccessModeInTransaction changes only an existing

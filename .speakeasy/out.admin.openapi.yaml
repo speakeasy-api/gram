@@ -11042,6 +11042,9 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
+        code_mode_enabled:
+          type: boolean
+          description: Whether the organization has the staff-managed gateway Code Mode entitlement
         custom_model_keys_enabled:
           type: boolean
           description: Whether the organization can supply its own model provider API keys (BYOK)
@@ -11120,6 +11123,7 @@ components:
         - network_ingress_enabled
         - signals_intelligence_enabled
         - organization_gateway_disabled
+        - code_mode_enabled
         - device_agent
     RearmTrialRequestBody:
       type: object
@@ -11623,6 +11627,7 @@ components:
             - network_ingress
             - signals_intelligence
             - organization_gateway_disabled
+            - code_mode
           maxLength: 60
         organization_id:
           type: string

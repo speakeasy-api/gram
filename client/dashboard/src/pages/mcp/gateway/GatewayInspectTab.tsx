@@ -253,8 +253,8 @@ function GatewayInspectConnection({
             metaMcpServer.discoveryMode === "code_mode")) &&
           !metaMcpServer.codeModeEnabled && (
             <Text muted small>
-              The code runtime is unavailable. This connection uses Progressive
-              discovery.
+              Code Mode is not available for this gateway. This connection uses
+              Progressive discovery.
             </Text>
           )}
         {connection.mode === "code_mode" && !metaMcpServer.codeModeEnabled && (

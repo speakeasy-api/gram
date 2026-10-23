@@ -368,6 +368,7 @@ func TestConnectionCatalogCachedDiscoveryNeverContactsUpstream(t *testing.T) {
 			}
 			if tc.discovery == metamcp.DiscoveryModeCode {
 				mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(ctx context.Context, code string, host codemode.Host) (*codemode.ExecutionResult, error) {
+					enableCodeMode(t, ctx, ti)
 					if code == "discover" {
 						servers, err := host.Servers(ctx, codemode.PageArgs{})
 						require.NoError(t, err)
@@ -755,6 +756,7 @@ func TestConnectionCatalogProtocolLoadCost(t *testing.T) {
 			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
 			if mode == metamcp.DiscoveryModeCode {
 				mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(ctx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
+					enableCodeMode(t, ctx, ti)
 					_, err := host.Servers(ctx, codemode.PageArgs{})
 					require.NoError(t, err)
 					page, err := host.Search(ctx, codemode.SearchArgs{Query: "tool_000"})
@@ -912,6 +914,7 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	// instead of silently dropping it.
 	var codeChecked atomic.Bool
 	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil, run: func(ctx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
+		enableCodeMode(t, ctx, ti)
 		servers, err := host.Servers(ctx, codemode.PageArgs{})
 		require.NoError(t, err)
 		require.Equal(t, []codemode.Server{{Slug: "source", Name: "Source"}}, servers.Items)
@@ -1097,6 +1100,7 @@ func TestGatewayConsentPreselectsProgressiveWhenSavedCodeModeUnavailable(t *test
 	upstream := newCatalogUpstream(t, 1)
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 0, upstream.url)
 	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{})
+	enableCodeMode(t, ctx, ti)
 	approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeCode, nil)
 	mcp.SetTestCodeExecutor(ti.service.Service, codemode.Disabled{})
 	state, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)

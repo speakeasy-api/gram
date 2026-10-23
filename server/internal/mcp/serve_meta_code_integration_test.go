@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func configureCodeRunner(t *testing.T, ti *testInstance) *codemode.Coordinator {
+func configureCodeRunner(t *testing.T, ctx context.Context, ti *testInstance) *codemode.Coordinator {
 	t.Helper()
 	endpoint, token := testenv.LaunchCodeRunner(t)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
@@ -44,6 +44,7 @@ func configureCodeRunner(t *testing.T, ti *testInstance) *codemode.Coordinator {
 	coordinator, err := codemode.NewCoordinator(&codemode.StaticProvider{Runner: client}, store, codemode.Limits{})
 	require.NoError(t, err)
 	mcp.SetTestCodeExecutor(ti.service.Service, coordinator)
+	enableCodeMode(t, ctx, ti)
 	return coordinator
 }
 
@@ -79,7 +80,7 @@ func codeUpstreamWithCallHook(t *testing.T, hook func(*http.Request)) string {
 func TestCodeModeLiveSessionRevocationStopsNextCall(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
-	configureCodeRunner(t, ti)
+	configureCodeRunner(t, ctx, ti)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
 	slug := "code-" + uuid.NewString()
@@ -117,7 +118,7 @@ await tools.call("remote--ping", {})`}}), token, nil)
 func TestCodeModeSessionlessCancellationThroughAnotherCoordinator(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
-	configureCodeRunner(t, ti)
+	configureCodeRunner(t, ctx, ti)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
 	slug := "code-" + uuid.NewString()
@@ -152,6 +153,7 @@ func TestCodeModeSessionlessCancellationThroughAnotherCoordinator(t *testing.T) 
 	other, err := codemode.NewCoordinator(&codemode.StaticProvider{}, store, codemode.Limits{})
 	require.NoError(t, err)
 	mcp.SetTestCodeExecutor(ti.service.Service, other)
+	enableCodeMode(t, ctx, ti)
 	otherToken := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
 	for _, attempt := range []struct {
 		token   string
@@ -187,7 +189,7 @@ func TestCodeModeSessionlessCancellationThroughAnotherCoordinator(t *testing.T) 
 func TestCodeModeEndToEndDiscoveryRemoteAndTunnel(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
-	configureCodeRunner(t, ti)
+	configureCodeRunner(t, ctx, ti)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
 	slug := "code-" + uuid.NewString()
@@ -245,7 +247,7 @@ remote, tunnel = await asyncio.gather(tools.call("remote--ping", {}), tools.call
 func TestCodeModeSessionNarrowsHelpers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
-	configureCodeRunner(t, ti)
+	configureCodeRunner(t, ctx, ti)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
 	slug := "code-" + uuid.NewString()
@@ -272,7 +274,7 @@ func TestCodeModeConsentCatalogRestrictsDiscoveryAndCall(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/specific=%t", tc.mode, tc.specific), func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPService(t)
-			configureCodeRunner(t, ti)
+			configureCodeRunner(t, ctx, ti)
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 			slug := "code-" + uuid.NewString()
@@ -327,7 +329,7 @@ func TestCodeModeConsentCatalogRestrictsDiscoveryAndCall(t *testing.T) {
 func TestCodeModeOrganizationGatewaySearchesAndCallsAcrossProjects(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
-	configureCodeRunner(t, ti)
+	configureCodeRunner(t, ctx, ti)
 	fx := seedOrganizationGateway(t, ctx, ti)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	otherProject, err := projectsrepo.New(ti.conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
@@ -371,9 +373,9 @@ func TestCodeModeAvailableFollowsRuntime(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	require.False(t, ti.service.CodeModeAvailable(), "no runtime")
-	configureCodeRunner(t, ti)
-	require.True(t, ti.service.CodeModeAvailable())
+	require.False(t, ti.service.CodeModeAvailable(ctx, auth.ActiveOrganizationID), "no runtime")
+	configureCodeRunner(t, ctx, ti)
+	require.True(t, ti.service.CodeModeAvailable(ctx, auth.ActiveOrganizationID))
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
 	slug := "code-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)

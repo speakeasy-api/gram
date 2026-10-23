@@ -135,7 +135,7 @@ func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker users
 	}
 
 	codeModeEnabled := &atomic.Bool{}
-	codeModeSelection := func() bool { return codeModeEnabled.Load() }
+	codeModeSelection := func(context.Context, string) bool { return codeModeEnabled.Load() }
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,

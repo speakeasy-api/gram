@@ -131,7 +131,10 @@ type testInstance struct {
 	// features is the injectable flag provider wired into the service; tests
 	// enable flag-gated behavior (e.g. the Platform MCP assistant toolset
 	// variant) with SetFlagVariant.
-	features         *feature.InMemory
+	features *feature.InMemory
+
+	// productFeatures writes organization entitlements such as Code Mode.
+	productFeatures  *productfeatures.Client
 	efficacySignaler *background.ThrottledSignaler
 	// clientCredentials serves self clients from the production minter;
 	// tests replace it to control the upstream credential.
@@ -742,6 +745,7 @@ func buildTestMCPService(
 		audit:                auditLogger,
 		tunnelRoutes:         tunnelRoutes,
 		features:             features,
+		productFeatures:      featClient,
 		efficacySignaler:     efficacySignaler,
 		clientCredentials:    clientCredentials,
 		toolCallRecords:      toolCallRecords,
@@ -1001,4 +1005,21 @@ func createTestUser(t *testing.T, ctx context.Context, ti *testInstance, id stri
 	})
 	require.NoError(t, err)
 	return urn.NewUserSubject(id)
+}
+
+// enableCodeMode grants the test context's organization the Code Mode
+// entitlement, which Code Mode requires besides an available runtime.
+func enableCodeMode(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+	setCodeModeEntitlement(t, ctx, ti, true)
+}
+
+// setCodeModeEntitlement writes the Code Mode entitlement for the test
+// context's organization. Every test shares one mock organization and one
+// Redis keyspace, so the cached value is visible to concurrent tests.
+func setCodeModeEntitlement(t *testing.T, ctx context.Context, ti *testInstance, enabled bool) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureCodeMode, enabled))
 }

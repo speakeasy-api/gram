@@ -809,6 +809,11 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		case !s.codeExecutor.Available():
 			logger.WarnContext(ctx, "code mode runtime is unavailable, serving gateway in progressive mode")
 			gate.discoveryMode = metamcp.DiscoveryModeProgressive
+		case !s.CodeModeAvailable(ctx, gate.organizationID):
+			// Code Mode is rolled out per organization; a gateway kept in Code
+			// Mode after its organization lost the entitlement keeps working.
+			logger.DebugContext(ctx, "organization is not entitled to code mode, serving gateway in progressive mode")
+			gate.discoveryMode = metamcp.DiscoveryModeProgressive
 		}
 	}
 

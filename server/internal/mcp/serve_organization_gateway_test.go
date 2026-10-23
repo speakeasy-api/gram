@@ -492,6 +492,7 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 	}
 	if mode == metamcp.DiscoveryModeCode {
 		mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(ctx context.Context, code string, host codemode.Host) (*codemode.ExecutionResult, error) {
+			enableCodeMode(t, ctx, ti)
 			if code != "discover" {
 				result, err := host.Call(ctx, code, json.RawMessage(`{}`))
 				if err != nil {

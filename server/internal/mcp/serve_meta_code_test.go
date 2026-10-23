@@ -117,6 +117,7 @@ func TestCodeModeOrganizationGatewayRunsOrganizationWide(t *testing.T) {
 	fx := seedOrganizationGateway(t, ctx, ti)
 	executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil}
 	mcp.SetTestCodeExecutor(ti.service.Service, executor)
+	enableCodeMode(t, ctx, ti)
 	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
 
 	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/list", map[string]any{}))
@@ -135,6 +136,36 @@ func TestCodeModeOrganizationGatewayRunsOrganizationWide(t *testing.T) {
 	require.NotEqual(t, uuid.Nil, executor.scopes[0].Gateway)
 }
 
+// TestCodeModeRequiresOrganizationEntitlement pins the per-organization
+// rollout: with the runtime available, a Code Mode connection in an
+// organization without the entitlement is served Progressive discovery and
+// never reaches the runtime, and granting the entitlement takes effect at once.
+//
+// It runs before the parallel tests: they share this test's mock
+// organization and cached entitlement, and grant it Code Mode.
+func TestCodeModeRequiresOrganizationEntitlement(t *testing.T) { //nolint:paralleltest // Parallel tests grant the shared mock organization Code Mode through a shared Redis cache.
+	ctx, ti := newTestMCPService(t)
+	setCodeModeEntitlement(t, ctx, ti, false)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil}
+	mcp.SetTestCodeExecutor(ti.service.Service, executor)
+	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
+
+	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/list", map[string]any{}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), `"name":"list_servers"`)
+	require.NotContains(t, w.Body.String(), `"name":"execute"`)
+	_, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
+	require.NoError(t, err)
+	require.Empty(t, executor.callers(), "an organization without Code Mode never reaches the runtime")
+
+	enableCodeMode(t, ctx, ti)
+	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/list", map[string]any{}))
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), `"name":"execute"`, "granting the entitlement takes effect without a deploy")
+}
+
 // An organization gateway's Code Mode catalog omits a hosted member whose
 // private toolset the caller cannot connect to: derived membership drops it
 // (derivedMemberAuth), so no prefix is advertised whose every call would be
@@ -149,6 +180,7 @@ func TestCodeModeOrganizationGatewayHidesUnconnectableToolsets(t *testing.T) {
 	closed := seedHostedMetaMember(t, ctx, ti, decoy.ID, "closed hosted", 1, mcpservers.VisibilityPublic, "closed_tool")
 	setToolsetMcpPrivate(t, ctx, ti, closed.toolsetID, *auth.ProjectID)
 	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil})
+	enableCodeMode(t, ctx, ti)
 	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
 
 	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/list", map[string]any{}))
@@ -172,6 +204,7 @@ func TestCodeModeNeverServesAnonymousCallers(t *testing.T) {
 	setGatewayMode(t, ctx, ti, gateway.ID, "code_mode")
 	executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil}
 	mcp.SetTestCodeExecutor(ti.service.Service, executor)
+	enableCodeMode(t, ctx, ti)
 
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
 	require.NoError(t, err)
@@ -194,6 +227,7 @@ func TestCodeModeRefusalIsStructured(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	fx := seedOrganizationGateway(t, ctx, ti)
 	mcp.SetTestCodeExecutor(ti.service.Service, &refusingCodeExecutor{err: fmt.Errorf("admit: %w", codemode.ErrCapacity)})
+	enableCodeMode(t, ctx, ti)
 	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
 
 	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
@@ -243,6 +277,7 @@ func TestCodeModeReportsServerTiming(t *testing.T) {
 		return &codemode.ExecutionResult{Value: json.RawMessage("2"), ToolCalls: []codemode.CallOutcome{}, Timing: codemode.ExecutionTiming{Admission: 3 * time.Millisecond, Run: 12 * time.Millisecond}}, nil
 	}}
 	mcp.SetTestCodeExecutor(ti.service.Service, executor)
+	enableCodeMode(t, ctx, ti)
 	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
 
 	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1+1"}}))
@@ -277,6 +312,7 @@ func TestCodeModeRunnerRefusalIsStructured(t *testing.T) {
 		return &codemode.ExecutionResult{Value: json.RawMessage("null"), ToolCalls: []codemode.CallOutcome{}, Error: &codemode.ExecutionError{Code: "capacity_exceeded", Message: "full"}}, nil
 	}}
 	mcp.SetTestCodeExecutor(ti.service.Service, executor)
+	enableCodeMode(t, ctx, ti)
 	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
 
 	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
@@ -300,6 +336,7 @@ func TestCodeModeDescriptionOmitsMembersWithNoPermittedTools(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil})
+	enableCodeMode(t, ctx, ti)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	slug := "code-" + uuid.NewString()
