@@ -194,6 +194,9 @@ func CreateCanonical(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, 
 	}); err != nil {
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "audit hosted MCP endpoint")
 	}
+	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
+		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "mirror hosted MCP state to toolset")
+	}
 	return server, nil
 }
 
@@ -266,6 +269,9 @@ func Enable(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Act
 	}
 	if err := LogUpdate(ctx, tx, auditLogger, actor, toolset.OrganizationID, canonical, updated); err != nil {
 		return false, err
+	}
+	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "mirror hosted MCP state to toolset")
 	}
 	return true, nil
 }

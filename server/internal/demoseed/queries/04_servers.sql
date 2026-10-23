@@ -81,6 +81,21 @@ FROM mcp_servers s
 JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
 WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
 
+-- Hosted toolsets mirror their canonical server's hosting state for pods that still read the toolset columns.
+-- name: ServersMirrorHostedToolsets :exec
+UPDATE toolsets AS t
+SET
+    mcp_slug = e.slug
+  , custom_domain_id = e.custom_domain_id
+  , mcp_enabled = s.visibility <> 'disabled'
+  , mcp_is_public = s.visibility = 'public'
+  , user_session_issuer_id = s.user_session_issuer_id
+  , tool_variations_group_id = s.tool_variations_group_id
+FROM mcp_servers AS s
+JOIN mcp_endpoints AS e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
+WHERE s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
+  AND t.project_id = @project_id::uuid AND t.deleted IS FALSE;
+
 -- Check Access scenarios on GitHub. Contractors blocks connecting, which
 -- wins over every other role's grant: Mateo (a contractor through the
 -- directory) is blocked even though Engineer reaches every server, and his

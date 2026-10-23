@@ -52,6 +52,7 @@ import { usePrivateMcpServerUrls } from "@/hooks/usePrivateMcpServerUrls";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
+import { isCanonicalHostedWrapper } from "../../../MCPServerDetailsRouting";
 
 const ADDRESS_INPUT_GROUP_CLASSNAME = "";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
@@ -94,6 +95,8 @@ export function ServerUrlSection({
   const orgRoutes = useOrgRoutes();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
+  // Canonical hosted servers keep exactly one address: edit only.
+  const singleAddress = !!mcpServer && isCanonicalHostedWrapper(mcpServer);
   const privateMode =
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
@@ -121,7 +124,7 @@ export function ServerUrlSection({
   const [addingCustom, setAddingCustom] = useState(false);
 
   let customAddressEmptyState: React.ReactNode = null;
-  if (!addingCustom && customDomainEndpoints.length === 0) {
+  if (!singleAddress && !addingCustom && customDomainEndpoints.length === 0) {
     if (availableDomains.length === 0) {
       let description =
         "Ask an organization administrator to add and verify a custom domain.";
@@ -176,76 +179,83 @@ export function ServerUrlSection({
           ) : (
             <FieldGroup className="gap-6">
               {/* Hosted (platform) address: at most one. */}
-              <Field>
-                <FieldLabel>Hosted Address</FieldLabel>
-                {platformEndpoint ? (
-                  <AddressRow
-                    backend={backend}
-                    endpoint={platformEndpoint}
-                    isLastEndpoint={endpoints.length === 1}
-                  />
-                ) : addingPlatform ? (
-                  <NewPlatformAddressRow
-                    backend={backend}
-                    onClose={() => setAddingPlatform(false)}
-                  />
-                ) : (
-                  <RequireScope scope="mcp:write" level="component">
-                    <SettingsInlineEmptyState
-                      title="No hosted address"
-                      description={`Create the default Speakeasy-hosted URL for this ${subject}.`}
-                      actionLabel="Add"
-                      onAction={() => setAddingPlatform(true)}
+              {(!singleAddress || platformEndpoint) && (
+                <Field>
+                  <FieldLabel>Hosted Address</FieldLabel>
+                  {platformEndpoint ? (
+                    <AddressRow
+                      backend={backend}
+                      endpoint={platformEndpoint}
+                      isLastEndpoint={endpoints.length === 1}
+                      canRemove={!singleAddress}
                     />
-                  </RequireScope>
-                )}
-                <FieldDescription>
-                  Hosted under a Speakeasy domain. Configured here even when
-                  private-only access stops it from serving clients.
-                </FieldDescription>
-              </Field>
-
-              {/* Custom-domain addresses: zero or more. */}
-              <Field>
-                <div className="flex items-center gap-2">
-                  <FieldLabel>Custom Address</FieldLabel>
-                </div>
-                {customDomainEndpoints.map((endpoint) => (
-                  <AddressRow
-                    key={endpoint.id}
-                    backend={backend}
-                    endpoint={endpoint}
-                    domains={availableDomains}
-                    isLastEndpoint={endpoints.length === 1}
-                    canManageDomainRoot={canManageDomains}
-                  />
-                ))}
-                {addingCustom && (
-                  <NewCustomAddressRow
-                    backend={backend}
-                    domains={availableDomains}
-                    onClose={() => setAddingCustom(false)}
-                  />
-                )}
-                {customAddressEmptyState}
-                {!addingCustom &&
-                  customDomainEndpoints.length > 0 &&
-                  availableDomains.length > 0 && (
+                  ) : addingPlatform ? (
+                    <NewPlatformAddressRow
+                      backend={backend}
+                      onClose={() => setAddingPlatform(false)}
+                    />
+                  ) : (
                     <RequireScope scope="mcp:write" level="component">
-                      <div>
-                        <Button
-                          variant="secondary"
-                          onClick={() => setAddingCustom(true)}
-                        >
-                          <Button.LeftIcon>
-                            <Plus className="size-4" />
-                          </Button.LeftIcon>
-                          <Button.Text>Add</Button.Text>
-                        </Button>
-                      </div>
+                      <SettingsInlineEmptyState
+                        title="No hosted address"
+                        description={`Create the default Speakeasy-hosted URL for this ${subject}.`}
+                        actionLabel="Add"
+                        onAction={() => setAddingPlatform(true)}
+                      />
                     </RequireScope>
                   )}
-              </Field>
+                  <FieldDescription>
+                    Hosted under a Speakeasy domain. Configured here even when
+                    private-only access stops it from serving clients.
+                  </FieldDescription>
+                </Field>
+              )}
+
+              {/* Custom-domain addresses: zero or more. */}
+              {(!singleAddress || customDomainEndpoints.length > 0) && (
+                <Field>
+                  <div className="flex items-center gap-2">
+                    <FieldLabel>Custom Address</FieldLabel>
+                  </div>
+                  {customDomainEndpoints.map((endpoint) => (
+                    <AddressRow
+                      key={endpoint.id}
+                      backend={backend}
+                      endpoint={endpoint}
+                      domains={availableDomains}
+                      isLastEndpoint={endpoints.length === 1}
+                      canManageDomainRoot={canManageDomains}
+                      canRemove={!singleAddress}
+                    />
+                  ))}
+                  {addingCustom && (
+                    <NewCustomAddressRow
+                      backend={backend}
+                      domains={availableDomains}
+                      onClose={() => setAddingCustom(false)}
+                    />
+                  )}
+                  {customAddressEmptyState}
+                  {!singleAddress &&
+                    !addingCustom &&
+                    customDomainEndpoints.length > 0 &&
+                    availableDomains.length > 0 && (
+                      <RequireScope scope="mcp:write" level="component">
+                        <div>
+                          <Button
+                            variant="secondary"
+                            onClick={() => setAddingCustom(true)}
+                          >
+                            <Button.LeftIcon>
+                              <Plus className="size-4" />
+                            </Button.LeftIcon>
+                            <Button.Text>Add</Button.Text>
+                          </Button>
+                        </div>
+                      </RequireScope>
+                    )}
+                </Field>
+              )}
 
               {mcpServer &&
                 canManageDomains &&
@@ -324,12 +334,14 @@ function AddressRow({
   domains,
   isLastEndpoint,
   canManageDomainRoot = false,
+  canRemove = true,
 }: {
   backend: EndpointBackendRef;
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
   isLastEndpoint: boolean;
   canManageDomainRoot?: boolean;
+  canRemove?: boolean;
 }) {
   const { orgSlug } = useSlugs();
   // Platform endpoints must carry the `${orgSlug}-` prefix. It's folded into
@@ -440,22 +452,25 @@ function AddressRow({
               )}
             </Button.Icon>
           </Button>
-          <Button
-            variant="destructive-secondary"
-            className="border border-destructive/40 bg-transparent hover:border-destructive"
-            disabled={remove.isPending}
-            onClick={() => {
-              if (isLastEndpoint) {
-                setConfirmRemoveOpen(true);
-                return;
-              }
-              remove.mutate({ request: { id: endpoint.id } });
-            }}
-          >
-            <Button.LeftIcon>
-              <Trash2 className="size-4" />
-            </Button.LeftIcon>
-          </Button>
+          {canRemove && (
+            <Button
+              variant="destructive-secondary"
+              className="border border-destructive/40 bg-transparent hover:border-destructive"
+              disabled={remove.isPending}
+              aria-label="Remove address"
+              onClick={() => {
+                if (isLastEndpoint) {
+                  setConfirmRemoveOpen(true);
+                  return;
+                }
+                remove.mutate({ request: { id: endpoint.id } });
+              }}
+            >
+              <Button.LeftIcon>
+                <Trash2 className="size-4" />
+              </Button.LeftIcon>
+            </Button>
+          )}
         </RequireScope>
       </Stack>
       {slugError && <FieldError className="text-xs">{slugError}</FieldError>}
@@ -499,12 +514,14 @@ function AddressRow({
           }
         }}
       />
-      <RemoveLastAddressDialog
-        isOpen={confirmRemoveOpen}
-        isLoading={remove.isPending}
-        onClose={() => setConfirmRemoveOpen(false)}
-        onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
-      />
+      {canRemove && (
+        <RemoveLastAddressDialog
+          isOpen={confirmRemoveOpen}
+          isLoading={remove.isPending}
+          onClose={() => setConfirmRemoveOpen(false)}
+          onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
+        />
+      )}
     </Field>
   );
 }

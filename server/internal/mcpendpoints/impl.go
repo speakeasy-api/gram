@@ -188,9 +188,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
 	if mcpServerID.Valid && isCanonicalHosted(mcpServer) {
-		if err := checkHostedNewAddress(ctx, dbtx, logger, authCtx, mcpServer, slug, customDomainID); err != nil {
-			return nil, err
-		}
+		return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server keeps a single address; change that address instead").LogWarn(ctx, logger)
 	}
 
 	if err := LockSlugScope(ctx, dbtx, customDomainID, slug); err != nil {
@@ -758,8 +756,8 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		case err != nil && !errors.Is(err, pgx.ErrNoRows):
 			return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 		case err == nil:
-			if err := rejectLastHostedAddress(ctx, dbtx, logger, server); err != nil {
-				return err
+			if isCanonicalHosted(server) {
+				return oops.E(oops.CodeInvalid, nil, "a hosted MCP server keeps its address; disable the server instead").LogWarn(ctx, logger)
 			}
 		}
 	}

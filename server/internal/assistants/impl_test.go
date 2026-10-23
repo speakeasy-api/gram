@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -263,7 +264,7 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	require.False(t, reloaded.McpEnabled, "the toolset column is a frozen alias; the wrapper owns MCP state")
+	require.True(t, reloaded.McpEnabled, "the toolset column mirrors the wrapper")
 	server, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, "private", server.Visibility, "assistant attachment must also enable the hosted wrapper")
@@ -532,7 +533,7 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	require.False(t, reloaded.McpEnabled, "the toolset column is a frozen alias; the wrapper owns MCP state")
+	require.True(t, reloaded.McpEnabled, "the toolset column mirrors the wrapper")
 	server, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, "private", server.Visibility, "updating assistant toolsets must also enable the hosted wrapper")
@@ -570,7 +571,8 @@ func TestServiceAssistantEnableTurnsCanonicalWrapperPrivate(t *testing.T) {
 	require.Contains(t, string(record.AfterSnapshot), `"private"`)
 	reloaded, err := toolsetsRepo.New(conn).GetToolsetByIDAndProject(t.Context(), toolsetsRepo.GetToolsetByIDAndProjectParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.False(t, reloaded.McpEnabled, "the toolset column is not written")
+	require.True(t, reloaded.McpEnabled, "the toolset column mirrors the wrapper")
+	hostedmcptest.RequireMirrored(t, t.Context(), conn, projectID, ts.ID)
 }
 
 func TestServiceAssistantEnableRestoresPublicAndChecksIngress(t *testing.T) {
