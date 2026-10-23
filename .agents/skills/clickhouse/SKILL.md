@@ -41,6 +41,26 @@ ClickHouse migrations can fail after earlier statements have taken effect. Editi
 - Reconcile the database to that artifact deliberately. Rewinding with `atlas migrate set` changes revision bookkeeping; it does **not** undo SQL. Only consider rewinding to the preceding revision and applying one migration after proving **every** statement is safe to replay and accounting for existing effects. `IF NOT EXISTS` alone does not prove existing objects have the intended definition.
 - Verify database state and migration status before resuming automated reconciliation. Never blindly rewind, mark a failed migration applied, or clear its error to bypass unfinished work.
 
+**Diagnosing `driver: bad connection`.** That text from Atlas means the ClickHouse Go driver lost the socket: the server process died, something between client and server cut the connection, or the driver's per-statement read deadline passed. It is never the real reason. Read the primary's own logs, since the read replica shares storage but not system tables:
+
+```sql
+SELECT hostName(), event_time, type, query_duration_ms, written_rows, exception_code, exception
+FROM clusterAllReplicas(default, system.query_log)
+WHERE event_date >= yesterday() AND query LIKE 'INSERT INTO %<target>%' ORDER BY event_time;
+SELECT hostName(), uptime() FROM clusterAllReplicas(default, system.one);
+```
+
+A lone `QueryStart` row with no finish or exception, plus an `uptime()` of minutes on that replica, means the statement killed the replica. Re-running the migration kills another one: Atlas resumes a partially applied file at the first unapplied statement, so a retry is right only when that statement can succeed.
+
+**Operator repair when a statement cannot succeed.** Perform its effect by hand in small pieces (for a backfill, one source partition per `INSERT`, see below), verify the result against the source, then record the file as applied from `server/`:
+
+```sh
+atlas migrate set <version> --dir file://clickhouse/migrations --config file://atlas.hcl -u "$CLICKHOUSE_URL"
+atlas migrate status --dir file://clickhouse/migrations --config file://atlas.hcl -u "$CLICKHOUSE_URL"
+```
+
+Leave the migration file untouched; it is published and hashed, and the local golang-migrate flavor still replays it on small data.
+
 ## Schema design and evolution
 
 The ClickHouse schema is defined in `server/clickhouse/schema.sql`, with marts views in `server/clickhouse/mart.sql`. Edit the relevant desired schema file and generate a migration:
@@ -61,6 +81,12 @@ This produces migrations in **two flavors** that must always stay in sync:
 **Keep `CHECK` constraints minimal.** ClickHouse evaluates `CONSTRAINT ... CHECK` on every insert and rejects the whole batch on a violation. Use only simple single-column shape checks: `notEmpty(col)` or a length bound (`length(col) <= 64`). Do not encode enums (`status IN (...)`, `has([...], status)`), numeric ranges, or rules that relate columns (`(status = 'failed') = notEmpty(failure_reason)`). Each rule change would need an `ALTER TABLE ... DROP CONSTRAINT` / `ADD CONSTRAINT` migration in both flavors, while the Go parser or writer that builds the rows changes with the code. Validate there, drop or log rows that fail before the insert, and test it there. Decline reviewer suggestions to add or rely on such constraints, and do not describe their absence as a gap.
 
 **No semicolons in `COMMENT '...'` strings.** golang-migrate splits statements naively, so a semicolon inside a column/table comment breaks its parser and the local migrations fail to replay. Rephrase the comment instead.
+
+**Never backfill a materialized view with one whole-table statement.** A new view only folds rows that arrive after it exists, so history needs a backfill. On 2026-10-22 a single `INSERT INTO ... SELECT ... GROUP BY` over 2.7M `risk_findings` rows killed the production replica executing it on three consecutive attempts, while the identical SELECT finished in 30 seconds on the read replica. Atlas reported only `driver: bad connection`, left the file partially applied, and blocked every later release until the operator repair above. Instead:
+
+- Ship only the DDL in the migration (target table, then the view) and run the backfill as an operator step with `clickhouse client` against the primary, one source partition per statement (`WHERE toYYYYMMDD(created_at) = <day>` for a table partitioned by day) and `--max_memory_usage` set so a bad chunk throws instead of taking the replica down. The same backfill split into 91 daily chunks took 1 to 3 seconds per chunk.
+- If the data must ship in the migration, write one `INSERT` per partition rather than one statement. Each Atlas statement also has to finish inside the driver's read deadline, which is set once per statement (300s by default, `read_timeout=<duration>` on the connection URL raises it).
+- Chunking and re-running chunks is always safe for an `AggregatingMergeTree` target: partial states from different chunks and from the live view merge to the same answer. Create the view before the backfill when the aggregates are idempotent (`argMax`, `min`, `max`, `any`), so no row lands in the gap. When they are not (`sum`, `count`), create the view last and split the backfill at a fixed timestamp as `20260709200000_tum-breakdown-summaries.sql` documents, or rows ingested during the backfill count twice.
 
 Three CI checks guard this on every PR:
 
