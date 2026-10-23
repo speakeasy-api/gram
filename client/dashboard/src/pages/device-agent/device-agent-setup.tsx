@@ -46,7 +46,8 @@ const STABLE_MSI_PATH = "/rpc/install/device-agent-windows.msi";
 function stableInstallerURL(path: string): string | null {
   const serverURL = getServerURL();
   if (!serverURL.startsWith("https:")) return null;
-  return `${serverURL}${path}`;
+  // A configured server URL may end in "/", and path starts with one.
+  return `${serverURL.replace(/\/+$/, "")}${path}`;
 }
 
 // Public docs: what the device agent is, and the MDM rollout guide.
@@ -168,8 +169,9 @@ curl -fSL -o speakeasy  "$BASE/speakeasy_\${VERSION}_linux_amd64"`;
 }
 // macInstall downloads and installs the pkg. The stable link needs no version,
 // so the snippet never goes stale. Without it (a non-HTTPS server URL) it
-// builds the versioned bucket URL; like linuxDownload, with a resolved version
-// that snippet uses no shell variables, so every form also runs in fish.
+// builds the versioned bucket URL. Like linuxDownload, the stable link and a
+// resolved version give a snippet with no shell variables, which also runs in
+// fish; only the self-resolving fallback needs bash.
 function macInstall(version: string | null, stablePkgURL: string | null) {
   if (stablePkgURL) {
     return `curl -fSL -o speakeasy-agent.pkg ${stablePkgURL} && \\
@@ -1034,26 +1036,32 @@ const MANAGED_CONFIG_PATHS = [
   },
 ];
 
-// MacInstallerDownload / WinInstallerDownload are the direct installer
-// buttons, shared by the setup sheet's install step and onboarding's inline
-// box. While the manifest loads they say so; a failed lookup offers the
+// InstallerDownload is the direct installer button (the macOS pkg or the
+// Windows msi), shared by the setup sheet's install step and onboarding's
+// inline box. While the manifest loads it says so; a failed lookup offers the
 // server's stable link, or how to build the URL by hand when there is none.
-function MacInstallerDownload() {
+function InstallerDownload({
+  ext,
+  stablePath,
+}: {
+  ext: "pkg" | "msi";
+  stablePath: string;
+}) {
   const { data, isLoading } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
-  const stablePkgURL = stableInstallerURL(STABLE_PKG_PATH);
+  const stableURL = stableInstallerURL(stablePath);
 
   if (version) {
-    // The pkg ships from the same bucket/version layout as the raw binaries
-    // (device-agent's release-pkg-macos job), but isn't itself listed in
-    // releases.json — it's the manual/MDM on-ramp, not something the
-    // auto-update client discovers — so its URL is built directly rather
-    // than read off the manifest the way ManualDownload reads the binaries.
+    // The installers ship from the same bucket/version layout as the raw
+    // binaries but aren't listed in releases.json: they're the manual/MDM
+    // on-ramp, not something the auto-update client discovers. So the URL is
+    // built directly rather than read off the manifest the way ManualDownload
+    // reads the binaries.
     return (
       <BinaryDownloadButton
-        href={`${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.pkg`}
+        href={`${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.${ext}`}
         role="Installer"
-        name="speakeasy-agent.pkg"
+        name={`speakeasy-agent.${ext}`}
         version={version}
       />
     );
@@ -1065,46 +1073,14 @@ function MacInstallerDownload() {
       </Text>
     );
   }
-  if (!stablePkgURL) {
+  if (!stableURL) {
     return (
       <ReleaseLookupError>
-        <code>speakeasy-agent_&lt;version&gt;.pkg</code>
+        <code>speakeasy-agent_&lt;version&gt;.{ext}</code>
       </ReleaseLookupError>
     );
   }
-  return <StableInstallerFallback href={stablePkgURL} />;
-}
-
-function WinInstallerDownload() {
-  const { data, isLoading } = useAgentReleases();
-  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
-  const stableMsiUrl = stableInstallerURL(STABLE_MSI_PATH);
-
-  if (version) {
-    return (
-      <BinaryDownloadButton
-        href={`${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`}
-        role="Installer"
-        name="speakeasy-agent.msi"
-        version={version}
-      />
-    );
-  }
-  if (isLoading) {
-    return (
-      <Text small muted>
-        Loading the latest release…
-      </Text>
-    );
-  }
-  if (!stableMsiUrl) {
-    return (
-      <ReleaseLookupError>
-        <code>speakeasy-agent_&lt;version&gt;.msi</code>
-      </ReleaseLookupError>
-    );
-  }
-  return <StableInstallerFallback href={stableMsiUrl} />;
+  return <StableInstallerFallback href={stableURL} />;
 }
 
 // StableInstallerFallback replaces a download button whose version lookup
@@ -1137,13 +1113,14 @@ function MacInstallStep() {
   const { data } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
   const stablePkgURL = stableInstallerURL(STABLE_PKG_PATH);
+  const needsBash = !stablePkgURL && !inlinableVersion(version);
 
   return (
     <div className="flex flex-col gap-6">
       <AgentIntro />
       <div className="flex flex-col gap-3">
         <SubLabel>Deploy the pkg with your MDM</SubLabel>
-        <MacInstallerDownload />
+        <InstallerDownload ext="pkg" stablePath={STABLE_PKG_PATH} />
         <Text small muted>
           Upload <code>speakeasy-agent.pkg</code> to Jamf, Iru (formerly
           Kandji), Intune or another MDM as a{" "}
@@ -1180,7 +1157,7 @@ function MacInstallStep() {
             For a personal or proof-of-concept install, open the pkg above, or
             run:
           </Text>
-          {!inlinableVersion(version) && (
+          {needsBash && (
             <StepNote>
               Uses bash syntax: in fish or another shell, run <code>bash</code>{" "}
               first.
@@ -1322,7 +1299,7 @@ msiexec /i speakeasy-agent.msi`;
       <AgentIntro />
       <div className="flex flex-col gap-3">
         <SubLabel>Deploy the msi with your MDM</SubLabel>
-        <WinInstallerDownload />
+        <InstallerDownload ext="msi" stablePath={STABLE_MSI_PATH} />
         <Text small muted>
           Upload the msi to Intune or another MDM as a{" "}
           <strong className="font-medium">Win32 / line-of-business app</strong>{" "}
@@ -1890,8 +1867,12 @@ export function DeviceAgentInstallStep({
         <SubLabel>
           {os === "linux" ? "Download the binaries" : "Download the installer"}
         </SubLabel>
-        {os === "macos" && <MacInstallerDownload />}
-        {os === "windows" && <WinInstallerDownload />}
+        {os === "macos" && (
+          <InstallerDownload ext="pkg" stablePath={STABLE_PKG_PATH} />
+        )}
+        {os === "windows" && (
+          <InstallerDownload ext="msi" stablePath={STABLE_MSI_PATH} />
+        )}
         {os === "linux" && (
           <>
             <ManualDownload os="linux" />
