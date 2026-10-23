@@ -13,7 +13,7 @@ import {
 
 export type GetMyConnectionsResult = {
   /**
-   * One entry per distinct MCP server in the plugins delivered to the user, in plugin order. Servers the user holds no access to are omitted.
+   * One entry per distinct MCP server in the plugins delivered to the user, in plugin order. Servers the user can neither read nor connect to are omitted; a server the user can read but not connect to is reported as no_access.
    */
   servers: Array<AgentServerConnection>;
 };

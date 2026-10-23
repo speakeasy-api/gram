@@ -433,7 +433,8 @@ type GetMyConnectionsPayload struct {
 // getMyConnections method.
 type GetMyConnectionsResult struct {
 	// One entry per distinct MCP server in the plugins delivered to the user, in
-	// plugin order. Servers the user holds no access to are omitted.
+	// plugin order. Servers the user can neither read nor connect to are omitted;
+	// a server the user can read but not connect to is reported as no_access.
 	Servers []*AgentServerConnection
 }
 

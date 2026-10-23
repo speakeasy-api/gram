@@ -967,8 +967,6 @@ func (w platformMCPWorkspaces) JoinInvitedWorkspace(ctx context.Context, userID,
 	return platformmcp.OrganizationOption{ID: joined.OrganizationID, Name: joined.OrganizationName}, nil
 }
 
-// platformMCPIdentityChaining builds the identity chaining governor
-// authenticated status surfaces consult, or nil when remote sessions are off.
 // newAgentConnectionStatuses builds the reader behind the device agent's
 // getMyConnections from the Platform MCP's sign-in status logic. The agent
 // endpoint is not metered by the Platform MCP operation budget.
@@ -982,6 +980,8 @@ func newAgentConnectionStatuses(config platformMCPConfig) *platformmcp.PluginsSe
 		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger)
 }
 
+// platformMCPIdentityChaining builds the identity chaining governor
+// authenticated status surfaces consult, or nil when remote sessions are off.
 func platformMCPIdentityChaining(config platformMCPConfig) platformmcp.IdentityChainingGovernor {
 	if config.RemoteChallengeManager == nil {
 		return nil

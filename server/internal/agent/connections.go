@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -83,9 +85,13 @@ func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnec
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin set").LogError(ctx, s.logger)
 	}
-	pluginIDs := make([]uuid.UUID, 0, len(pluginRows))
-	for _, row := range pluginRows {
+	// Only plugins the device receives, in the order it receives them.
+	delivered := mv.DeliveredAgentPluginRows(pluginRows)
+	pluginIDs := make([]uuid.UUID, 0, len(delivered))
+	pluginOrder := make(map[uuid.UUID]int, len(delivered))
+	for _, row := range delivered {
 		if row.PluginID.Valid {
+			pluginOrder[row.PluginID.UUID] = len(pluginIDs)
 			pluginIDs = append(pluginIDs, row.PluginID.UUID)
 		}
 	}
@@ -99,6 +105,9 @@ func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnec
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing plugin servers").LogError(ctx, s.logger)
 	}
+	slices.SortStableFunc(serverRows, func(a, b repo.ListAgentPluginServersRow) int {
+		return pluginOrder[a.PluginID] - pluginOrder[b.PluginID]
+	})
 	grants, err := authz.LoadGrants(ctx, s.db, organizationID, grantPrincipals(principals))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading member grants").LogError(ctx, s.logger)

@@ -11,6 +11,7 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
@@ -86,6 +87,36 @@ func TestGetMyConnections_ReportsEachServerOnceWithConnectLinks(t *testing.T) {
 	for _, user := range stub.users {
 		require.Equal(t, mockidp.MockUserID, user, "status is read for the vouched member")
 	}
+	ids := make([]string, 0, len(res.Servers))
+	for _, c := range res.Servers {
+		ids = append(ids, c.ID)
+	}
+	require.Equal(t, []string{linear.String(), datadog.String(), gateway.String()}, ids, "servers follow the delivered plugin order")
+}
+
+func TestGetMyConnections_SkipsUndeliveredPlugins(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	delivered := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "engineering")
+	assignPlugin(t, ctx, ti.conn, delivered, ti.orgID, "*")
+	linear, _ := seedPluginMCPServer(t, ctx, ti.conn, ti.orgID, ti.projectID, delivered, "Linear", 1)
+	// A second project with no published marketplace delivers nothing.
+	other := seedProject(t, ctx, ti.conn, ti.orgID, "unpublished")
+	hidden := seedPlugin(t, ctx, ti.conn, ti.orgID, other, "hidden")
+	assignPlugin(t, ctx, ti.conn, hidden, ti.orgID, "*")
+	unseen, _ := seedPluginMCPServer(t, ctx, ti.conn, ti.orgID, other, hidden, "Unseen", 1)
+	ti.service.WithConnectionStatuses(&stubConnectionStatuses{})
+
+	res, err := ti.service.GetMyConnections(ctx, &gen.GetMyConnectionsPayload{Email: new(mockidp.MockUserEmail)})
+	require.NoError(t, err)
+	ids := make([]string, 0, len(res.Servers))
+	for _, c := range res.Servers {
+		ids = append(ids, c.ID)
+	}
+	require.Contains(t, ids, linear.String())
+	require.NotContains(t, ids, unseen.String(), "a plugin the device doesn't receive reports no servers")
 }
 
 func TestGetMyConnections_MapsStates(t *testing.T) {
@@ -121,7 +152,7 @@ func TestGetMyConnections_OrgKeyRequiresVouchedEmail(t *testing.T) {
 	ctx, ti := newTestAgentService(t)
 
 	_, err := ti.service.GetMyConnections(ctx, &gen.GetMyConnectionsPayload{Email: nil})
-	require.Error(t, err)
+	requireCode(t, err, oops.CodeBadRequest)
 }
 
 func TestGetMyConnections_PerUserKeyReadsKeyOwner(t *testing.T) {

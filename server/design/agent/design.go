@@ -114,8 +114,10 @@ var _ = Service("agent", func() {
 
 		// The org install key is accepted with a vouched email, unlike
 		// getSessionMeta: this exposes only whether a member has signed in to
-		// each server, never a credential or any content, and MDM fleets that
-		// cannot mint per-user keys would otherwise show no sign-in state.
+		// each server and whether they may connect to it (getPlugins already
+		// reveals mcp:read through dashboard links), never a credential or any
+		// content. MDM fleets that cannot mint per-user keys would otherwise
+		// show no sign-in state.
 		Security(security.ByKey, func() {
 			Scope("agent_user")
 		})
@@ -704,7 +706,7 @@ var CreateSessionHandoffResult = Type("CreateSessionHandoffResult", func() {
 
 var GetMyConnectionsResult = Type("GetMyConnectionsResult", func() {
 	Required("servers")
-	Attribute("servers", ArrayOf(AgentServerConnectionModel), "One entry per distinct MCP server in the plugins delivered to the user, in plugin order. Servers the user holds no access to are omitted.")
+	Attribute("servers", ArrayOf(AgentServerConnectionModel), "One entry per distinct MCP server in the plugins delivered to the user, in plugin order. Servers the user can neither read nor connect to are omitted; a server the user can read but not connect to is reported as no_access.")
 })
 
 var AgentServerConnectionModel = Type("AgentServerConnection", func() {
