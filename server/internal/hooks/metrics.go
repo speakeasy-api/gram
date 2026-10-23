@@ -15,6 +15,16 @@ import (
 
 const (
 	meterHooksEventDuration = "hooks.event.duration"
+	// meterHooksDeliveryFailure counts device-side delivery failure reports
+	// (client.delivery_failed) as they arrive. Reports are spooled on the
+	// device and drained once it reconnects, so the series lags the failures
+	// it counts; the telemetry row carries the device-side attempt time.
+	meterHooksDeliveryFailure = "hooks.delivery_failure"
+
+	// hookMetricDimensionUnknown fills a delivery failure dimension the report
+	// left empty, so a missing value is still a bucket rather than an absent
+	// tag that would make per-dimension totals disagree with the overall one.
+	hookMetricDimensionUnknown = "unknown"
 
 	hookMetricOutcomeAccepted        = "accepted"
 	hookMetricOutcomeFailure         = "failure"
@@ -37,7 +47,34 @@ const (
 )
 
 type metrics struct {
-	eventDuration metric.Float64Histogram
+	eventDuration    metric.Float64Histogram
+	deliveryFailures metric.Int64Counter
+}
+
+// deliveryFailureMetricParams are the dimensions of one delivery failure
+// report. Arch is left off the metric: it adds little beyond OS for
+// alerting and the telemetry row keeps it for investigation.
+type deliveryFailureMetricParams struct {
+	// EventType is the canonical type of the event whose delivery failed.
+	EventType string
+
+	// Phase is live or drain.
+	Phase string
+
+	// Cause is the failure class the client observed.
+	Cause string
+
+	// Harness is the coding agent harness the hook ran under.
+	Harness string
+
+	// OS is the device operating system.
+	OS string
+
+	// BinaryVersion is the speakeasy-hooks build that made the attempt.
+	BinaryVersion string
+
+	// OrgSlug is the reporting organization; omitted when empty.
+	OrgSlug string
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -54,9 +91,38 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterHooksEventDuration), attr.SlogError(err))
 	}
 
-	return &metrics{
-		eventDuration: eventDuration,
+	deliveryFailures, err := meter.Int64Counter(
+		meterHooksDeliveryFailure,
+		metric.WithDescription("Device-side hook delivery failures reported by the speakeasy-hooks binary"),
+		metric.WithUnit("{failure}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterHooksDeliveryFailure), attr.SlogError(err))
 	}
+
+	return &metrics{
+		eventDuration:    eventDuration,
+		deliveryFailures: deliveryFailures,
+	}
+}
+
+func (m *metrics) RecordDeliveryFailure(ctx context.Context, params deliveryFailureMetricParams) {
+	if m == nil || m.deliveryFailures == nil {
+		return
+	}
+
+	attrs := []attribute.KeyValue{
+		attr.HookDeliveryEventType(conv.Default(params.EventType, hookMetricDimensionUnknown)),
+		attr.HookDeliveryPhase(conv.Default(params.Phase, hookMetricDimensionUnknown)),
+		attr.HookDeliveryCause(conv.Default(params.Cause, hookMetricDimensionUnknown)),
+		attr.HookDeviceHarness(conv.Default(params.Harness, hookMetricDimensionUnknown)),
+		attr.HookDeviceOS(conv.Default(params.OS, hookMetricDimensionUnknown)),
+		attr.HookDeviceBinaryVersion(conv.Default(params.BinaryVersion, hookMetricDimensionUnknown)),
+	}
+	if params.OrgSlug != "" {
+		attrs = append(attrs, attr.OrganizationSlug(params.OrgSlug))
+	}
+	m.deliveryFailures.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
 
 func (m *metrics) RecordHookEventDuration(ctx context.Context, source string, eventName string, outcome string, decision string, orgSlug string, riskScanned bool, duration time.Duration) {

@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
+  HookDeliveryFailureData,
+  HookDeliveryFailureData$Outbound,
+  HookDeliveryFailureData$outboundSchema,
+} from "./hookdeliveryfailuredata.js";
+import {
   HookMCPAttributionEntry,
   HookMCPAttributionEntry$Outbound,
   HookMCPAttributionEntry$outboundSchema,
@@ -55,6 +60,10 @@ import {
  */
 export type HookIngestData = {
   /**
+   * Device-side delivery failure report, sent with event type client.delivery_failed. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
+   */
+  deliveryFailure?: HookDeliveryFailureData | undefined;
+  /**
    * MCP feature payload.
    */
   mcp?: HookMCPData | undefined;
@@ -102,6 +111,7 @@ export type HookIngestData = {
 
 /** @internal */
 export type HookIngestData$Outbound = {
+  delivery_failure?: HookDeliveryFailureData$Outbound | undefined;
   mcp?: HookMCPData$Outbound | undefined;
   mcp_attribution?: Array<HookMCPAttributionEntry$Outbound> | undefined;
   mcp_inventory?: Array<HookMCPData$Outbound> | undefined;
@@ -121,6 +131,7 @@ export const HookIngestData$outboundSchema: z.ZodMiniType<
   HookIngestData
 > = z.pipe(
   z.object({
+    deliveryFailure: z.optional(HookDeliveryFailureData$outboundSchema),
     mcp: z.optional(HookMCPData$outboundSchema),
     mcpAttribution: z.optional(z.array(HookMCPAttributionEntry$outboundSchema)),
     mcpInventory: z.optional(z.array(HookMCPData$outboundSchema)),
@@ -137,6 +148,7 @@ export const HookIngestData$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      deliveryFailure: "delivery_failure",
       mcpAttribution: "mcp_attribution",
       mcpInventory: "mcp_inventory",
       mcpInventoryCollected: "mcp_inventory_collected",
