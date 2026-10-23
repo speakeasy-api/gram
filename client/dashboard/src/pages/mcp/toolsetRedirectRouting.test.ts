@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vitest";
-import {
-  serverTabForToolsetTab,
-  toolsetTabSegment,
-} from "./toolsetRedirectRouting";
+import { serverTabForToolsetTab } from "./toolsetRedirectRouting";
+import { tabSegmentFromPath } from "./x/MCPServerDetailsRouting";
 
-describe("toolsetTabSegment", () => {
+describe("tabSegmentFromPath for toolset slugs", () => {
   it("reads the tab after the toolset slug", () => {
     expect(
-      toolsetTabSegment(
+      tabSegmentFromPath(
         "/acme/projects/default/mcp/my-tools/team-access",
         "my-tools",
       ),
@@ -16,13 +14,13 @@ describe("toolsetTabSegment", () => {
 
   it("reads no tab from the bare toolset URL", () => {
     expect(
-      toolsetTabSegment("/acme/projects/default/mcp/my-tools", "my-tools"),
+      tabSegmentFromPath("/acme/projects/default/mcp/my-tools", "my-tools"),
     ).toBeUndefined();
   });
 
   it("matches a toolset slug that equals a tab name", () => {
     expect(
-      toolsetTabSegment(
+      tabSegmentFromPath(
         "/acme/projects/default/mcp/settings/tools",
         "settings",
       ),

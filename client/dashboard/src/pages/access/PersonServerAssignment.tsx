@@ -1,3 +1,4 @@
+import { mcpServerRouteParam } from "@/lib/sources";
 import { Ban } from "lucide-react";
 import { Link } from "react-router";
 import { useRoutes } from "@/routes";
@@ -115,7 +116,7 @@ export function ServerAssignment({
               "break-words text-sm font-medium hover:underline",
               blocked && "text-destructive",
             )}
-            to={routes.mcp.x.overview.href(server.slug || server.id)}
+            to={routes.mcp.details.overview.href(mcpServerRouteParam(server))}
           >
             {server.name || "Unnamed server"}
           </Link>

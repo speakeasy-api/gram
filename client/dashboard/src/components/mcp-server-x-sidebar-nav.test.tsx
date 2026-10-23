@@ -73,7 +73,7 @@ describe("RemoteIdentitySummary", () => {
           unavailable={props.unavailable ?? false}
           loading={props.loading ?? false}
           settingsHref={
-            props.settingsHref ?? "/mcp/x/example/settings#authentication"
+            props.settingsHref ?? "/mcp/example/settings#authentication"
           }
         />
       </MemoryRouter>,
@@ -90,7 +90,7 @@ describe("RemoteIdentitySummary", () => {
     // The pill reports the setting and opens it; there is no separate link.
     const pill = screen.getByRole("link", { name: new RegExp(label) });
     expect(pill.getAttribute("href")).toBe(
-      "/mcp/x/example/settings#authentication",
+      "/mcp/example/settings#authentication",
     );
     expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
   });

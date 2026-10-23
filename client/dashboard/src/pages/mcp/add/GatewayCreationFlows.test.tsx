@@ -45,11 +45,11 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
       add: { goTo: state.navigate },
-      x: {
+      details: {
         overview: { goTo: state.navigate },
-        settings: { href: () => "/mcp/x/server/settings" },
+        settings: { href: () => "/mcp/server/settings" },
+        tools: { goTo: state.navigate },
       },
-      details: { tools: { goTo: state.navigate } },
     },
   }),
 }));

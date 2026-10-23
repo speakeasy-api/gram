@@ -167,7 +167,7 @@ export function AppSidebar({
         </SidebarMenuItem>
       </SidebarMenu>
     );
-  } else if (routes.mcp.x.active) {
+  } else if (routes.mcp.details.active) {
     sidebarContent = <McpServerXSidebarNav />;
   } else if (routes.mcp.gateway.active) {
     sidebarContent = <GatewaySidebarNav />;

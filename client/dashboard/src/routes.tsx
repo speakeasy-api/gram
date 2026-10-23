@@ -46,7 +46,6 @@ import Login from "./pages/login/Login";
 import ExploreDemo from "./pages/demo/ExploreDemo";
 import SignUp from "./pages/login/SignUp";
 import { LogsRoot } from "./pages/logs/Logs";
-import { ToolsetRedirectPage } from "./pages/mcp/ToolsetRedirect";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import AddMcpServer, { AddMcpServerRoot } from "./pages/mcp/add/AddMcpServer";
 import CreateFromSource from "./pages/mcp/add/CreateFromSource";
@@ -422,12 +421,9 @@ const ROUTE_STRUCTURE = {
       // the backend that stores it, and OpenAPI and functions sit under
       // "advanced" on the same page instead of in the navigation.
       //
-      // `add`, `catalog` and `sources` are static segments under `mcp`, so they
-      // rank above the `details` `:toolsetSlug` route and are not swallowed by
-      // it. The cost is that a toolset slugged "add", "catalog" or "sources"
-      // becomes unreachable in the dashboard. Nothing reserves those slugs
-      // server-side, so this is the same latent collision the sibling `x` and
-      // `gateway` segments already carry.
+      // `add`, `catalog`, `sources` and the other static segments under `mcp`
+      // rank above the `details` `:mcpServerSlug` route. Links to a server
+      // whose slug equals one of them use its id instead (mcpServerRouteParam).
       add: {
         title: "Add MCP Server",
         url: "add",
@@ -499,56 +495,6 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
-      // Every MCP server's details page; legacy `:toolsetSlug` links redirect here.
-      x: {
-        title: "MCP Server Details",
-        url: "x/:mcpServerSlug",
-        component: MCPServerDetails,
-        subPages: {
-          overview: {
-            title: "MCP Server Overview",
-            url: "overview",
-          },
-          inspect: {
-            title: "MCP Server Inspect",
-            url: "inspect",
-          },
-          // Legacy: redirects to settings#authentication.
-          authentication: {
-            title: "MCP Server Authentication",
-            url: "authentication",
-          },
-          // Hosted servers' tools; on other servers this redirects to Inspect.
-          tools: {
-            title: "MCP Server Tools",
-            url: "tools",
-          },
-          resources: {
-            title: "MCP Server Resources",
-            url: "resources",
-          },
-          prompts: {
-            title: "MCP Server Prompts",
-            url: "prompts",
-          },
-          teamAccess: {
-            title: "MCP Server Team Access",
-            url: "team-access",
-          },
-          guardrails: {
-            title: "MCP Server Guardrails",
-            url: "guardrails",
-          },
-          sessions: {
-            title: "MCP Server Clients and Sessions",
-            url: "sessions",
-          },
-          settings: {
-            title: "MCP Server Settings",
-            url: "settings",
-          },
-        },
-      },
       // The Organization Gateway. A static segment beside `add`,
       // `catalog` and `sources`, with the same latent toolset-slug collision.
       // It lives under MCP rather than the organization settings because it
@@ -594,47 +540,61 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
-      // Legacy toolset URLs: every tab redirects to the hosting MCP server's page.
+      // Every MCP server's page, keyed by server slug (or id). A path that is
+      // no server's slug resolves as a legacy toolset slug, then as a legacy
+      // `/mcp/x/<tab>` link; see resolveMcpServerPath. `/mcp/x/<slug>/...`
+      // redirects here from App.tsx.
       details: {
-        title: "MCP Details",
-        url: ":toolsetSlug",
-        component: ToolsetRedirectPage,
+        title: "MCP Server Details",
+        url: ":mcpServerSlug",
+        component: MCPServerDetails,
         subPages: {
           overview: {
-            title: "MCP Overview",
+            title: "MCP Server Overview",
             url: "overview",
           },
+          inspect: {
+            title: "MCP Server Inspect",
+            url: "inspect",
+          },
+          // Hosted servers' tools; on other servers this redirects to Inspect.
           tools: {
-            title: "MCP Tools",
+            title: "MCP Server Tools",
             url: "tools",
           },
           resources: {
-            title: "MCP Resources",
+            title: "MCP Server Resources",
             url: "resources",
           },
           prompts: {
-            title: "MCP Prompts",
+            title: "MCP Server Prompts",
             url: "prompts",
           },
-          authentication: {
-            title: "MCP Authentication",
-            url: "authentication",
-          },
-          performance: {
-            title: "MCP Performance",
-            url: "performance",
-          },
           teamAccess: {
-            title: "MCP Team Access",
+            title: "MCP Server Team Access",
             url: "team-access",
           },
+          guardrails: {
+            title: "MCP Server Guardrails",
+            url: "guardrails",
+          },
           sessions: {
-            title: "MCP Clients and Sessions",
+            title: "MCP Server Clients and Sessions",
             url: "sessions",
           },
           settings: {
-            title: "MCP Settings",
+            title: "MCP Server Settings",
             url: "settings",
+          },
+          // Legacy: redirects to settings#authentication.
+          authentication: {
+            title: "MCP Server Authentication",
+            url: "authentication",
+          },
+          // Legacy toolset tab: redirects to settings#performance.
+          performance: {
+            title: "MCP Server Performance",
+            url: "performance",
           },
         },
       },
@@ -1275,7 +1235,7 @@ export const useRoutes = (overrides?: {
       : undefined;
 
     // A dynamic route must not claim the current URL when a static sibling
-    // owns it. `/mcp/:toolsetSlug` and `/mcp/add` have the same segment count
+    // owns it. `/mcp/:mcpServerSlug` and `/mcp/add` have the same segment count
     // and matchesCurrent treats `:param` as a wildcard, so without this the
     // detail route reads as active on `/mcp/add` — which is what selects the
     // sidebar variant. The router already ranks static above dynamic; this
@@ -1288,9 +1248,12 @@ export const useRoutes = (overrides?: {
         ] ?? "",
       );
 
+    // A shadowed route's sub-pages are inactive too: `/mcp/catalog/overview`
+    // is a catalog entry, not the Overview tab of a server slugged "catalog".
     const active =
-      (matchesCurrent(urlWithParent) && !shadowedByStaticSibling) ||
-      !!Object.values(subPages ?? {}).some((subPage) => subPage.active);
+      !shadowedByStaticSibling &&
+      (matchesCurrent(urlWithParent) ||
+        !!Object.values(subPages ?? {}).some((subPage) => subPage.active));
 
     const newRoute: AppRoute = {
       ...route,

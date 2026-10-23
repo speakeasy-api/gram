@@ -26,6 +26,7 @@ import type {
   McpServerVisibility,
 } from "@gram/client/models/components/mcpserver.js";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { isNotNotFound } from "@/lib/query-errors";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
@@ -49,12 +50,15 @@ import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
   activeTabFromPath,
   initialTabFromHash,
-  isLegacyAuthenticationTabPath,
   mcpServerTabHref,
   MCP_SERVER_TAB_URLS,
   standsInForToolset,
   tabForServer,
+  tabSegmentFromPath,
 } from "./MCPServerDetailsRouting";
+import { ToolsetRedirectPage } from "../ToolsetRedirect";
+import { serverTabForToolsetTab } from "../toolsetRedirectRouting";
+import { isNotFoundError } from "@/lib/route-errors";
 import {
   HostedPromptsTab,
   HostedResourcesTab,
@@ -82,17 +86,16 @@ export default function MCPServerDetails(): JSX.Element | null {
   const idOrSlug = mcpServerSlug ?? "";
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const tabContentRef = useTabScrollReset(activeTab);
-  const legacyAuthenticationPath = isLegacyAuthenticationTabPath(
-    location.pathname,
-    idOrSlug,
-  );
+  const tabSegment = tabSegmentFromPath(location.pathname, idOrSlug);
 
   const {
     data: mcpServer,
+    error: mcpServerError,
     isLoading,
     isError,
   } = useGetMcpServer(getMcpServerArgs(idOrSlug), undefined, {
     enabled: idOrSlug !== "",
+    throwOnError: isNotNotFound,
   });
 
   const mcpServerId = mcpServer?.id ?? "";
@@ -124,15 +127,21 @@ export default function MCPServerDetails(): JSX.Element | null {
   if (!idOrSlug) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
+  // Server slugs win; anything else may be a legacy toolset or `/mcp/x` link.
+  if (isNotFoundError(mcpServerError)) {
+    return <ToolsetRedirectPage toolsetSlug={idOrSlug} />;
+  }
   if (isError || (!isLoading && !mcpServer)) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
   // Which tabs exist depends on the server's kind, so route only once it loads.
   if (!mcpServer) return null;
-  if (legacyAuthenticationPath) {
+  // Retired tab segments (`authentication`, the toolset page's `performance`).
+  if (tabSegment !== undefined && !activeTab) {
+    const target = serverTabForToolsetTab(tabSegment, location.hash);
     return (
       <Navigate
-        to={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
+        to={`${mcpServerTabHref(routes, idOrSlug, tabForServer(target.tab, hosted))}${location.search}${target.hash}`}
         replace
       />
     );
@@ -316,14 +325,11 @@ export default function MCPServerDetails(): JSX.Element | null {
           substitutions={{
             [idOrSlug]: mcpServer?.name || "MCP Server",
           }}
-          skipSegments={[
-            "x",
-            // skipSegments matches by literal value, not position — if the
-            // server's own slug happens to collide with a tab name (e.g. a
-            // server slugged "settings"), guard against also skipping the
-            // server's own breadcrumb crumb.
-            ...MCP_SERVER_TAB_URLS.filter((tab) => tab !== idOrSlug),
-          ]}
+          // skipSegments matches by literal value, not position — if the
+          // server's own slug happens to collide with a tab name (e.g. a
+          // server slugged "settings"), guard against also skipping the
+          // server's own breadcrumb crumb.
+          skipSegments={MCP_SERVER_TAB_URLS.filter((tab) => tab !== idOrSlug)}
         />
       </Page.Header>
 

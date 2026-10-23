@@ -6,7 +6,8 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import { useUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
-import { Navigate, useParams } from "react-router";
+import { Navigate, useLocation, useParams } from "react-router";
+import { withoutMcpXSegment } from "../x/MCPServerDetailsRouting";
 import {
   legacySourceKindLookups,
   parseLegacySourceKind,
@@ -46,7 +47,7 @@ function legacySourceTargetHref(
     case "source":
       return routes.mcp.sources.detail.href(target.assetId);
     case "mcp-server":
-      return routes.mcp.x.overview.href(target.routeParam);
+      return routes.mcp.details.overview.href(target.routeParam);
     case "toolset":
       return routes.mcp.details.href(target.slug);
     case "sources-list":
@@ -58,7 +59,7 @@ function legacySourceTargetHref(
 
 // The per-kind source pages are gone, but what they showed still has a home:
 // OpenAPI and function sources at /mcp/sources/:sourceId, remote, tunneled and
-// unproxied sources on the /mcp/x page of the server fronting them, and an
+// unproxied sources on the page of the server fronting them, and an
 // external MCP on the toolset carrying its tools. The old URL carried a slug,
 // so the new address has to be looked up before redirecting.
 export function RedirectToSourceDetail(): JSX.Element {
@@ -178,6 +179,24 @@ export function RedirectToCatalogDetail(): JSX.Element {
   return (
     <Navigate
       to={routes.mcp.catalog.detail.href(encodeURIComponent(serverSpecifier))}
+      replace
+    />
+  );
+}
+
+// `/mcp/x/<slug>/...` is the retired address of every server page. Dropping
+// the segment keeps the slug's encoding, the tab, the query and the hash.
+export function RedirectFromMcpXNamespace(): JSX.Element {
+  const routes = useRoutes();
+  const location = useLocation();
+  const target = withoutMcpXSegment(location.pathname);
+  return (
+    <Navigate
+      to={
+        target
+          ? `${target}${location.search}${location.hash}`
+          : routes.mcp.href()
+      }
       replace
     />
   );

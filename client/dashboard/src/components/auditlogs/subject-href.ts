@@ -1,5 +1,6 @@
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { agentSessionHref } from "@/pages/chatLogs/agentSessionLink";
+import { mcpServerRouteParam } from "@/lib/sources";
 
 // Builds the dashboard path to an audit subject's detail page, or null when the
 // subject has no navigable page (or is missing the slug/id needed to route to
@@ -23,7 +24,7 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
         : null;
     case "mcp_server":
       return projectBase && log.subjectSlug
-        ? `${projectBase}/mcp/x/${log.subjectSlug}`
+        ? `${projectBase}/mcp/${mcpServerRouteParam({ id: log.subjectId, slug: log.subjectSlug })}`
         : null;
     case "environment":
       return projectBase && log.subjectSlug

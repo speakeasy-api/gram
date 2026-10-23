@@ -3,15 +3,16 @@ import {
   activeTabFromPath,
   initialTabFromHash,
   isCanonicalHostedWrapper,
-  isLegacyAuthenticationTabPath,
   standsInForToolset,
   tabForServer,
+  tabSegmentFromPath,
+  withoutMcpXSegment,
 } from "./MCPServerDetailsRouting";
 
 describe("activeTabFromPath", () => {
   it("returns no tab for the server details route without a tab segment", () => {
     expect(
-      activeTabFromPath("/acme/projects/default/mcp/x/overview", "overview"),
+      activeTabFromPath("/acme/projects/default/mcp/overview", "overview"),
     ).toBeUndefined();
   });
 
@@ -25,57 +26,57 @@ describe("activeTabFromPath", () => {
     "reads the %s tab when the server slug has the same value",
     (tab) => {
       expect(
-        activeTabFromPath(`/acme/projects/default/mcp/x/${tab}/${tab}`, tab),
+        activeTabFromPath(`/acme/projects/default/mcp/${tab}/${tab}`, tab),
       ).toBe(tab);
     },
   );
 
-  it("reads the tab segment after the matching server slug", () => {
+  it("reads the tab by position, not by searching for mcp", () => {
+    expect(activeTabFromPath("/mcp/projects/mcp/mcp/mcp/settings", "mcp")).toBe(
+      "settings",
+    );
     expect(
       activeTabFromPath(
-        "/acme/projects/default/mcp/x/overview/settings",
-        "overview",
-      ),
-    ).toBe("settings");
-  });
-
-  it("ignores route segments before x/:mcpServerSlug", () => {
-    expect(
-      activeTabFromPath(
-        "/overview/projects/default/mcp/x/default/settings",
+        "/overview/projects/default/mcp/default/settings",
         "default",
       ),
     ).toBe("settings");
   });
 
-  it("matches the mcp/x route marker instead of any x-prefixed segment", () => {
-    expect(
-      activeTabFromPath("/acme/projects/x/mcp/x/mcp/settings", "mcp"),
-    ).toBe("settings");
+  it("reads a server slugged x like any other", () => {
+    expect(activeTabFromPath("/acme/projects/x/mcp/x/inspect", "x")).toBe(
+      "inspect",
+    );
   });
 
-  it("does not treat the legacy authentication path as an active tab", () => {
+  it("returns no tab when the slug is not the server segment", () => {
     expect(
       activeTabFromPath(
-        "/acme/projects/default/mcp/x/my-server/authentication",
+        "/acme/projects/default/mcp/x/my-server/settings",
         "my-server",
       ),
     ).toBeUndefined();
   });
 
-  it("detects the legacy authentication path for redirects", () => {
+  it("does not treat a retired tab segment as an active tab", () => {
     expect(
-      isLegacyAuthenticationTabPath(
-        "/acme/projects/default/mcp/x/my-server/authentication",
+      activeTabFromPath(
+        "/acme/projects/default/mcp/my-server/authentication",
         "my-server",
       ),
-    ).toBe(true);
+    ).toBeUndefined();
+    expect(
+      tabSegmentFromPath(
+        "/acme/projects/default/mcp/my-server/authentication",
+        "my-server",
+      ),
+    ).toBe("authentication");
   });
 
   it("matches decoded server slug segments", () => {
     expect(
       activeTabFromPath(
-        "/acme/projects/default/mcp/x/my%20server/settings",
+        "/acme/projects/default/mcp/my%20server/settings",
         "my server",
       ),
     ).toBe("settings");
@@ -84,10 +85,38 @@ describe("activeTabFromPath", () => {
   it("returns no tab for an invalid tab segment", () => {
     expect(
       activeTabFromPath(
-        "/acme/projects/default/mcp/x/my-server/nope",
+        "/acme/projects/default/mcp/my-server/nope",
         "my-server",
       ),
     ).toBeUndefined();
+  });
+});
+
+describe("withoutMcpXSegment", () => {
+  it.each([
+    [
+      "/acme/projects/default/mcp/x/my-server",
+      "/acme/projects/default/mcp/my-server",
+    ],
+    [
+      "/acme/projects/default/mcp/x/my-server/settings",
+      "/acme/projects/default/mcp/my-server/settings",
+    ],
+    [
+      "/acme/projects/default/mcp/x/my%20server/inspect",
+      "/acme/projects/default/mcp/my%20server/inspect",
+    ],
+    ["/acme/projects/x/mcp/x/x/overview", "/acme/projects/x/mcp/x/overview"],
+  ])("rewrites %s", (from, to) => {
+    expect(withoutMcpXSegment(from)).toBe(to);
+  });
+
+  it.each([
+    "/acme/projects/default/mcp/x",
+    "/acme/projects/default/mcp/my-server/x",
+    "/acme/projects/x/insights",
+  ])("leaves %s alone", (path) => {
+    expect(withoutMcpXSegment(path)).toBeUndefined();
   });
 });
 

@@ -33,7 +33,17 @@ function decodePathSegment(segment: string): string {
   }
 }
 
-function tabSegmentFromPath(
+// Project pages live at /:orgSlug/projects/:projectSlug/..., so the MCP
+// section is always the fourth segment. Reading by position, not by searching
+// for "mcp", keeps an org, project or server slugged "mcp" or "x" unambiguous.
+const MCP_SECTION_INDEX = 3;
+
+function pathSegments(pathname: string): string[] {
+  return pathname.split("/").filter(Boolean);
+}
+
+/** The segment after `/mcp/<slug>`, whether or not it names a server tab. */
+export function tabSegmentFromPath(
   pathname: string,
   mcpServerSlug: string,
 ): string | undefined {
@@ -41,19 +51,32 @@ function tabSegmentFromPath(
     return undefined;
   }
 
-  const segments = pathname.split("/").filter(Boolean).map(decodePathSegment);
-  const serverSlugIndex = segments.findIndex(
-    (segment, index) =>
-      segment === mcpServerSlug &&
-      segments[index - 1] === "x" &&
-      segments[index - 2] === "mcp",
-  );
-
-  if (serverSlugIndex === -1) {
+  const segments = pathSegments(pathname).map(decodePathSegment);
+  if (
+    segments[MCP_SECTION_INDEX] !== "mcp" ||
+    segments[MCP_SECTION_INDEX + 1] !== mcpServerSlug
+  ) {
     return undefined;
   }
 
-  return segments[serverSlugIndex + 1];
+  return segments[MCP_SECTION_INDEX + 2];
+}
+
+/**
+ * The same path without the retired `x` segment: `/mcp/x/<slug>/<tab>` becomes
+ * `/mcp/<slug>/<tab>`. Undefined when the path has no `/mcp/x/` prefix.
+ */
+export function withoutMcpXSegment(pathname: string): string | undefined {
+  const segments = pathSegments(pathname);
+  if (
+    segments[MCP_SECTION_INDEX] !== "mcp" ||
+    segments[MCP_SECTION_INDEX + 1] !== "x" ||
+    segments.length <= MCP_SECTION_INDEX + 2
+  ) {
+    return undefined;
+  }
+  segments.splice(MCP_SECTION_INDEX + 1, 1);
+  return `/${segments.join("/")}`;
 }
 
 export function activeTabFromPath(
@@ -62,15 +85,6 @@ export function activeTabFromPath(
 ): TabValue | undefined {
   const tabSegment = tabSegmentFromPath(pathname, mcpServerSlug);
   return tabSegment && isValidTab(tabSegment) ? tabSegment : undefined;
-}
-
-export function isLegacyAuthenticationTabPath(
-  pathname: string,
-  mcpServerSlug: string,
-): boolean {
-  return (
-    tabSegmentFromPath(pathname, mcpServerSlug) === LEGACY_AUTHENTICATION_TAB
-  );
 }
 
 export function initialTabFromHash(hash: string): TabValue {
@@ -87,23 +101,23 @@ export function mcpServerTabHref(
 ): string {
   switch (tab) {
     case "overview":
-      return routes.mcp.x.overview.href(mcpServerSlug);
+      return routes.mcp.details.overview.href(mcpServerSlug);
     case "tools":
-      return routes.mcp.x.tools.href(mcpServerSlug);
+      return routes.mcp.details.tools.href(mcpServerSlug);
     case "resources":
-      return routes.mcp.x.resources.href(mcpServerSlug);
+      return routes.mcp.details.resources.href(mcpServerSlug);
     case "prompts":
-      return routes.mcp.x.prompts.href(mcpServerSlug);
+      return routes.mcp.details.prompts.href(mcpServerSlug);
     case "inspect":
-      return routes.mcp.x.inspect.href(mcpServerSlug);
+      return routes.mcp.details.inspect.href(mcpServerSlug);
     case "team-access":
-      return routes.mcp.x.teamAccess.href(mcpServerSlug);
+      return routes.mcp.details.teamAccess.href(mcpServerSlug);
     case "guardrails":
-      return routes.mcp.x.guardrails.href(mcpServerSlug);
+      return routes.mcp.details.guardrails.href(mcpServerSlug);
     case "sessions":
-      return routes.mcp.x.sessions.href(mcpServerSlug);
+      return routes.mcp.details.sessions.href(mcpServerSlug);
     case "settings":
-      return routes.mcp.x.settings.href(mcpServerSlug);
+      return routes.mcp.details.settings.href(mcpServerSlug);
   }
 }
 

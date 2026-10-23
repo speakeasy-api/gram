@@ -1,27 +1,5 @@
 import type { TabValue as ServerTabValue } from "./x/MCPServerDetailsRouting";
 
-function decodePathSegment(segment: string): string {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
-}
-
-/** The segment after `/mcp/<toolsetSlug>` in a legacy toolset page URL. */
-export function toolsetTabSegment(
-  pathname: string,
-  toolsetSlug: string,
-): string | undefined {
-  if (!toolsetSlug) return undefined;
-  const segments = pathname.split("/").filter(Boolean).map(decodePathSegment);
-  const slugIndex = segments.findIndex(
-    (segment, index) =>
-      segment === toolsetSlug && segments[index - 1] === "mcp",
-  );
-  return slugIndex === -1 ? undefined : segments[slugIndex + 1];
-}
-
 /** Where a legacy toolset page tab (path segment or `#tab` hash) lives on the MCP server page. */
 export function serverTabForToolsetTab(
   segment: string | undefined,

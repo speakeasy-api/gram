@@ -309,7 +309,7 @@ export function StepServers({
                             navigating away then coming back loses all of it. */}
                         <Button size="sm" variant="secondary" asChild>
                           <Link
-                            to={`${routes.mcp.x.settings.href(
+                            to={`${routes.mcp.details.settings.href(
                               server.slug || server.id,
                             )}#${MCP_AUTHENTICATION_SECTION_ID}`}
                             target="_blank"

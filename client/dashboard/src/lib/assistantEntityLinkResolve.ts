@@ -74,7 +74,7 @@ export function resolveEntityLink(
   if (!proj) return UNRESOLVABLE;
   switch (type) {
     case "mcp_server":
-      return newTab(`${proj}/mcp/x/${enc(rest)}`);
+      return newTab(`${proj}/mcp/${enc(rest)}`);
     case "toolset":
       return newTab(`${proj}/mcp/${enc(rest)}`);
     case "deployment":

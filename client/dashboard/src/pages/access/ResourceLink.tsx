@@ -91,7 +91,7 @@ export function ResourceLink({
       const proj = projectMap.get(mcpServer.projectId);
       // The route accepts the row id or slug, so a slugless row still links.
       to = proj
-        ? `/${orgSlug}/projects/${proj.slug}/mcp/x/${mcpServerRouteParam({ id: resourceId, slug: mcpServer.slug })}`
+        ? `/${orgSlug}/projects/${proj.slug}/mcp/${mcpServerRouteParam({ id: resourceId, slug: mcpServer.slug })}`
         : null;
     } else {
       label = resourceId;

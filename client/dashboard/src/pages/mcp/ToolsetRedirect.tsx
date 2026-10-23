@@ -9,19 +9,31 @@ import { isNotFoundError } from "@/lib/route-errors";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
-import { Navigate, useLocation, useParams } from "react-router";
-import {
-  serverTabForToolsetTab,
-  toolsetTabSegment,
-} from "./toolsetRedirectRouting";
+import { Navigate, useLocation } from "react-router";
+import { serverTabForToolsetTab } from "./toolsetRedirectRouting";
 import {
   mcpServerTabHref,
   standsInForToolset,
+  tabSegmentFromPath,
+  withoutMcpXSegment,
 } from "./x/MCPServerDetailsRouting";
 
-/** Old `/mcp/<toolsetSlug>/...` links open the matching tab of the toolset's MCP server page. */
-export function ToolsetRedirectPage(): React.JSX.Element | null {
-  const { toolsetSlug = "" } = useParams<{ toolsetSlug: string }>();
+/**
+ * How `/mcp/<param>[/<tab>]` resolves once `param` is not a server slug (or
+ * id) in this project. MCPServerDetails tries that first, so a server always
+ * wins over a toolset with the same slug. Then, in order:
+ *
+ * 1. `param` is a toolset slug: open the matching tab of the server hosting
+ *    that toolset (old `/mcp/<toolsetSlug>/...` bookmarks).
+ * 2. `param` is `x`: the path is a retired `/mcp/x/<slug>` link whose slug
+ *    happens to be a tab name, so drop the `x` and resolve again.
+ * 3. Otherwise: not found.
+ */
+export function ToolsetRedirectPage({
+  toolsetSlug,
+}: {
+  toolsetSlug: string;
+}): React.JSX.Element | null {
   const location = useLocation();
   const routes = useRoutes();
   const gramProject = useProjectSlugForRequests();
@@ -40,6 +52,16 @@ export function ToolsetRedirectPage(): React.JSX.Element | null {
     throwOnError: false,
   });
 
+  const legacyXTarget =
+    toolsetSlug === "x" ? withoutMcpXSegment(location.pathname) : undefined;
+  if (legacyXTarget && isNotFoundError(toolsetError)) {
+    return (
+      <Navigate
+        to={`${legacyXTarget}${location.search}${location.hash}`}
+        replace
+      />
+    );
+  }
   if (!toolsetSlug || isNotFoundError(toolsetError)) {
     return <ToolsetNotFound title="MCP server not found" />;
   }
@@ -68,8 +90,13 @@ export function ToolsetRedirectPage(): React.JSX.Element | null {
     );
   }
 
+  // The server lookup already missed this slug; redirecting to it would loop.
+  if (mcpServerRouteParam(host) === toolsetSlug) {
+    return <ToolsetNotFound title="MCP server not found" />;
+  }
+
   const target = serverTabForToolsetTab(
-    toolsetTabSegment(location.pathname, toolsetSlug),
+    tabSegmentFromPath(location.pathname, toolsetSlug),
     location.hash,
   );
   return (

@@ -236,12 +236,12 @@ function AttachedServerRow({
         <code className="truncate text-xs">{serverRef.slug}</code>
       </routes.mcp.details.Link>
     ) : (
-      <routes.mcp.x.Link
+      <routes.mcp.details.Link
         params={[serverRef.slug]}
         className="min-w-0 hover:no-underline"
       >
         <code className="truncate text-xs">{serverRef.slug}</code>
-      </routes.mcp.x.Link>
+      </routes.mcp.details.Link>
     );
 
   return (
