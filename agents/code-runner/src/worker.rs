@@ -9,7 +9,10 @@
 //!   cannot open a sibling's `mem`, `environ` or `maps`, and a separate
 //!   domain per worker also denies ptrace between siblings;
 //! - installs a seccomp filter that fails ptrace, `process_vm_readv`/`writev`,
-//!   signals, pidfd and similar cross-process calls with `EPERM`.
+//!   signals, pidfd and similar cross-process calls with `EPERM`;
+//! - caps the worker's CPU time. Each worker serves one execution, so this is
+//!   a per-execution budget that neighbours cannot spend: a busy pod slows a
+//!   program down instead of failing it, as a wall-clock limit would.
 //!
 //! All of these survive exec and bind every process the worker could start.
 //! Landlock is skipped on a kernel without it, such as gVisor, whose sandbox
@@ -44,6 +47,11 @@ mod linux {
         os::unix::ffi::OsStrExt,
         path::Path,
     };
+
+    /// CPU seconds one execution may use before `SIGXCPU` ends it. Twelve
+    /// CPU-bound executions sharing about 1.3 effective CPUs still finish
+    /// within the 30-second execution deadline (12 × 2 / 1.3 ≈ 18 s).
+    pub const CPU_SECONDS: libc::rlim_t = 2;
 
     // Classic BPF opcodes and seccomp constants from linux/filter.h and
     // linux/seccomp.h.
@@ -212,6 +220,16 @@ mod linux {
             return Err(Error::last_os_error());
         }
         confine_filesystem(binary_dir)?;
+        // The hard limit kills a worker that raised its soft limit to it; the
+        // seccomp filter below already denies prlimit64 on other processes.
+        let cpu = libc::rlimit {
+            rlim_cur: CPU_SECONDS,
+            rlim_max: CPU_SECONDS + 1,
+        };
+        // SAFETY: setrlimit reads the struct, which outlives the call.
+        if unsafe { libc::setrlimit(libc::RLIMIT_CPU, &cpu) } != 0 {
+            return Err(Error::last_os_error());
+        }
         let mut program = vec![
             stmt(BPF_LD_W_ABS, SECCOMP_DATA_ARCH),
             // A foreign syscall ABI could bypass the numbers below.

@@ -29,9 +29,12 @@ Python or process arguments. Linux startup disables parent process inspection.
 In the image, `GRAM_CODE_RUNNER_MONTY_BIN` points at `gram-code-worker`, which
 confines each worker before exec'ing the `monty` binary beside it: its own
 Landlock domain limited to reading and executing system libraries and its
-directory, and a seccomp filter denying cross-process syscalls. An escaped
-worker cannot read, trace or signal a sibling (`tests/worker_isolation.rs`,
-Linux only). Point `--monty-bin` straight at `monty` for local development on
+directory, a seccomp filter denying cross-process syscalls, and a two-second
+CPU-time limit (`RLIMIT_CPU`). An escaped worker cannot read, trace or signal a
+sibling (`tests/worker_isolation.rs`, Linux only). Each worker serves one
+execution, so the CPU limit is a per-execution budget: a program that uses it
+fails with `Python CPU time limit exceeded`, while CPU contention on a busy pod
+only slows programs down. Point `--monty-bin` straight at `monty` for local development on
 macOS, where the shim does not run.
 The default listen address is `127.0.0.1:8081`. The dedicated Docker image
 listens on port 8081 and runs as UID 65532. Build it from the repository root:
@@ -81,7 +84,8 @@ be at least 35 seconds to cover execution, terminal-frame and connection drainin
 
 ## Initial bounds
 
-- 64 KiB source; 30 seconds wall time; 2 seconds active Monty execution.
+- 64 KiB source; 30 seconds wall time; 2 CPU-seconds per execution through the
+  worker shim, with Monty's 25-second active-execution limit as a backstop.
 - 64 MiB interpreter allocation; recursion depth 128; 256 suspensions.
 - 64 helper attempts and at most eight unresolved callbacks per execution.
 - 1 MiB per helper result; 8 MiB cumulative callback arguments and results.

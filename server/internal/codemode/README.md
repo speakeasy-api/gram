@@ -173,8 +173,10 @@ runner holds no credentials or tool destinations, and Speakeasy answers every
 tool callback with the execution's own scope. Each worker is started through
 `gram-code-worker`, which sets `no_new_privs`, enters its own Landlock domain
 limited to reading and executing system libraries and its binary's directory
-(no `/proc`), and installs a seccomp filter denying ptrace,
-`process_vm_readv`/`writev`, signals, pidfd and similar cross-process calls. An
+(no `/proc`), installs a seccomp filter denying ptrace,
+`process_vm_readv`/`writev`, signals, pidfd and similar cross-process calls, and
+caps the worker at two CPU-seconds. Because the cap is CPU time rather than wall
+time, twelve executions sharing a pod's CPU slow down instead of failing. An
 escaped worker therefore cannot read a sibling's memory or environment, or
 signal or trace it; `agents/code-runner/tests/worker_isolation.rs` checks both
 on Linux. Landlock is skipped on a kernel without it, such as gVisor, where the

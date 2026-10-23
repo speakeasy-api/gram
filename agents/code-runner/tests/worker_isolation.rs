@@ -5,7 +5,13 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Child, Command},
+    sync::Mutex,
 };
+
+/// Serialises writing fake executables with spawning them. A child forked
+/// while another test holds a script open for writing inherits that handle
+/// until it execs, so exec'ing the script meanwhile fails with `ETXTBSY`.
+static EXECUTABLES: Mutex<()> = Mutex::new(());
 
 /// A directory holding the worker shim beside a fake `monty` script, which
 /// the shim confines and runs in place of the interpreter.
@@ -15,6 +21,7 @@ struct Worker {
 
 impl Worker {
     fn new(script: &str) -> Self {
+        let _executables = EXECUTABLES.lock().unwrap();
         let dir = std::env::temp_dir().join(format!("gram-code-worker-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         fs::copy(
@@ -37,14 +44,20 @@ impl Worker {
     }
 
     fn run(&self, confined: bool, target: u32) -> String {
-        let output = Command::new(self.program(confined))
-            .arg(target.to_string())
-            .output()
-            .unwrap();
+        let child = {
+            let _executables = EXECUTABLES.lock().unwrap();
+            Command::new(self.program(confined))
+                .arg(target.to_string())
+                .stdout(std::process::Stdio::piped())
+                .spawn()
+                .unwrap()
+        };
+        let output = child.wait_with_output().unwrap();
         String::from_utf8(output.stdout).unwrap().trim().to_owned()
     }
 
     fn spawn(&self, confined: bool, secret: &str) -> Child {
+        let _executables = EXECUTABLES.lock().unwrap();
         Command::new(self.program(confined))
             .env("WORKER_SECRET", secret)
             .spawn()
@@ -116,5 +129,23 @@ fn worker_cannot_read_another_workers_memory() {
         probe(mem, true),
         "refused",
         "a confined worker cannot open a sibling's mem"
+    );
+}
+
+#[test]
+fn worker_cpu_time_is_capped() {
+    use std::os::unix::process::ExitStatusExt;
+
+    let worker = Worker::new("while :; do :; done");
+    let started = std::time::Instant::now();
+    let status = worker.spawn(true, "").wait().unwrap();
+    assert_eq!(
+        status.signal(),
+        Some(libc::SIGXCPU),
+        "a CPU-bound worker ends at its CPU budget: {status:?}"
+    );
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "the budget is seconds of CPU, not an unbounded run"
     );
 }

@@ -55,7 +55,10 @@ pub async fn execute(
         script_name: "execute.py".into(),
         limits: Some(
             ResourceLimits::default()
-                .max_feed_duration(Duration::from_secs(2))
+                // The worker shim's CPU budget bounds work; this wall-clock
+                // limit is only a backstop below the execution deadline, so
+                // CPU contention on a busy pod does not fail a program.
+                .max_feed_duration(Duration::from_secs(25))
                 .max_memory(64 << 20)
                 .max_recursion_depth(128)
                 .max_suspensions(256),
@@ -217,6 +220,10 @@ pub async fn execute(
 pub fn public_error(error: &anyhow::Error) -> ServerFrame {
     let message = match error.downcast_ref::<PoolError>() {
         Some(PoolError::Runtime(exception)) => exception.to_string(),
+        Some(PoolError::Crashed {
+            status: Some(status),
+            ..
+        }) if cpu_limit_exceeded(status) => "Python CPU time limit exceeded".into(),
         Some(PoolError::Timeout { .. }) => "Python execution time limit exceeded".into(),
         Some(_) => "Python runtime unavailable; execution was not replayed".into(),
         None => error.to_string(),
@@ -229,4 +236,16 @@ pub fn public_error(error: &anyhow::Error) -> ServerFrame {
         code: "execution_failed".into(),
         message: message[..end].to_owned(),
     }
+}
+
+/// Whether a worker was ended by the shim's CPU budget (`SIGXCPU`).
+#[cfg(target_os = "linux")]
+fn cpu_limit_exceeded(status: &std::process::ExitStatus) -> bool {
+    use std::os::unix::process::ExitStatusExt;
+    status.signal() == Some(libc::SIGXCPU)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn cpu_limit_exceeded(_: &std::process::ExitStatus) -> bool {
+    false
 }

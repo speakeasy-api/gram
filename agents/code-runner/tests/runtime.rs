@@ -252,6 +252,31 @@ async fn memory_and_active_execution_limits_are_enforced() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn the_worker_cpu_budget_ends_a_busy_program() {
+    // Only the Linux worker shim applies the CPU budget.
+    if !std::env::var("GRAM_MONTY_TEST_BIN")
+        .is_ok_and(|binary| binary.ends_with("gram-code-worker"))
+    {
+        return;
+    }
+    let mut busy = Run::new(
+        state(1).await,
+        Uuid::new_v4().to_string(),
+        "while True:\n    pass",
+        20_000,
+    )
+    .await;
+    busy.started().await;
+    let started = std::time::Instant::now();
+    assert!(
+        matches!(busy.next().await, ServerFrame::Error { code, message } if code == "execution_failed" && message == "Python CPU time limit exceeded"),
+        "the CPU budget, not the wall deadline, ends the program"
+    );
+    assert!(started.elapsed() < Duration::from_secs(10));
+    busy.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn cancelled_and_disconnected_executions_release_capacity() {
     let state = state(1).await;
     for explicit in [true, false] {
