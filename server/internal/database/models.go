@@ -5389,6 +5389,8 @@ type RemoteSessionClient struct {
 	IdentityProviderConnectionID uuid.NullUUID
 	// @access: confidential
 	CredentialOwner string
+	// @access: opaque-confidential
+	DisplayName pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

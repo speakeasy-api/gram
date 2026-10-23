@@ -2530,7 +2530,8 @@ reachable AS (
 picked AS (
     -- The consent page's pick for each server, as parallel arrays.
     SELECT unnest(@picked_mcp_server_ids::uuid[]) AS mcp_server_id,
-           unnest(@picked_client_ids::uuid[]) AS remote_session_client_id
+           unnest(@picked_client_ids::uuid[]) AS remote_session_client_id,
+           NULLIF(unnest(@picked_auth_client_ids::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
 ),
 eligible AS (
     SELECT a.mcp_server_id,
@@ -2549,7 +2550,10 @@ eligible AS (
 decided AS (
     SELECT r.id AS mcp_server_id,
            r.project_id,
-           COALESCE(
+           CASE WHEN pick.auth_client_id IS NOT NULL
+                     AND pick.remote_session_client_id = '00000000-0000-0000-0000-000000000000'::uuid
+                THEN NULL
+                ELSE COALESCE(
              (
                SELECT CASE WHEN count(*) = 1 THEN (array_agg(e.remote_session_client_id))[1] END
                FROM eligible AS e
@@ -2564,7 +2568,7 @@ decided AS (
                WHERE e.mcp_server_id = r.id
                LIMIT 1
              )
-           ) AS remote_session_client_id,
+           ) END AS remote_session_client_id,
            NOT EXISTS (
              SELECT 1
              FROM mcp_server_remote_session_clients AS a
@@ -2572,6 +2576,7 @@ decided AS (
                AND a.deleted IS FALSE
            ) AS no_auth
     FROM reachable AS r
+    LEFT JOIN picked AS pick ON pick.mcp_server_id = r.id
 )
 INSERT INTO upstream_client_selections (
     project_id,
@@ -2582,6 +2587,8 @@ INSERT INTO upstream_client_selections (
     remote_session_client_id,
     client_attachment_scope,
     no_auth,
+    auth_client_id,
+    auth_client_attachment_scope,
     source
 )
 SELECT d.project_id,
@@ -2591,7 +2598,9 @@ SELECT d.project_id,
        d.mcp_server_id,
        d.remote_session_client_id,
        chosen.attachment_scope,
-       d.remote_session_client_id IS NULL,
+       d.remote_session_client_id IS NULL AND auth_client.id IS NULL,
+       auth_client.id,
+       auth_client.attachment_scope,
        @source::text
 FROM decided AS d
 CROSS JOIN session_issuer AS si
@@ -2603,12 +2612,31 @@ LEFT JOIN remote_session_clients AS chosen
  AND (chosen.project_id = server_project.id
       OR (chosen.project_id IS NULL AND chosen.organization_id = server_project.organization_id)
       OR (chosen.project_id IS NULL AND chosen.organization_id IS NULL))
-WHERE chosen.id IS NOT NULL
-   OR (d.remote_session_client_id IS NULL AND d.no_auth)
+LEFT JOIN picked AS pick ON pick.mcp_server_id = d.mcp_server_id
+LEFT JOIN mcp_auth_clients AS auth_client
+  ON auth_client.id = pick.auth_client_id
+ AND auth_client.organization_id = si.organization_id
+ AND (auth_client.project_id IS NULL OR auth_client.project_id = d.project_id)
+ AND auth_client.deleted IS FALSE
+ AND auth_client.enabled
+ AND auth_client.remote_session_client_id IS NOT DISTINCT FROM d.remote_session_client_id
+ AND auth_client.remote_session_client_id IS NOT DISTINCT FROM NULLIF(pick.remote_session_client_id, '00000000-0000-0000-0000-000000000000'::uuid)
+ AND EXISTS (
+   SELECT 1 FROM mcp_server_auth_clients AS link
+   WHERE link.mcp_server_id = d.mcp_server_id
+     AND link.auth_client_id = auth_client.id
+     AND link.organization_id = si.organization_id
+     AND link.deleted IS FALSE
+ )
+WHERE (chosen.id IS NOT NULL
+       OR (d.remote_session_client_id IS NULL AND (auth_client.id IS NOT NULL OR d.no_auth)))
+  AND (pick.auth_client_id IS NULL OR auth_client.id IS NOT NULL)
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO UPDATE
 SET remote_session_client_id = EXCLUDED.remote_session_client_id,
     client_attachment_scope = EXCLUDED.client_attachment_scope,
     no_auth = FALSE,
+    auth_client_id = EXCLUDED.auth_client_id,
+    auth_client_attachment_scope = EXCLUDED.auth_client_attachment_scope,
     source = EXCLUDED.source,
     updated_at = clock_timestamp()
 WHERE upstream_client_selections.no_auth

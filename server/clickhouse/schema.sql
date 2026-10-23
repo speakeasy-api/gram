@@ -200,6 +200,7 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     user_id SimpleAggregateFunction(max, String) COMMENT '@access: confidential-pii',
     -- Managed runtime actor, not the credential owner or approving human.
     agent_id SimpleAggregateFunction(max, String) COMMENT '@access: confidential',
+    authorizer_user_id SimpleAggregateFunction(max, String) COMMENT 'Person an agent call acted on behalf of. Empty for direct calls and for agents that sign in as themselves.\n@access: confidential-pii',
     mcp_match SimpleAggregateFunction(max, String) COMMENT '@access: opaque-restricted',
     mcp_server_url SimpleAggregateFunction(max, String) COMMENT '@access: opaque-restricted',
 
@@ -285,6 +286,7 @@ SELECT
     anyIf(external_user_id, external_user_id != '') AS external_user_id,
     anyIf(user_id, user_id != '') AS user_id,
     max(if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')) AS agent_id,
+    max(if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.authorizer_user_id), '')) AS authorizer_user_id,
     anyIf(toString(attributes.gram.mcp.match), toString(attributes.gram.mcp.match) != '') AS mcp_match,
     anyIf(toString(attributes.gram.mcp.server_url), toString(attributes.gram.mcp.server_url) != '') AS mcp_server_url,
     min(time_unix_nano) AS start_time_unix_nano,

@@ -1,4 +1,4 @@
-h1:VpOv2ZTLsvZNreEA4RnVvlL9LLyD+Z50qoqiD07ErDU=
+h1:zJtrhRWqLiT4Z3JM914TfQUZexRSwp0AB48w6yKGfcM=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -125,3 +125,4 @@ h1:VpOv2ZTLsvZNreEA4RnVvlL9LLyD+Z50qoqiD07ErDU=
 20261017144335_sigint-readings-v2.up.sql h1:60lHUm5k8HJuVmUp4jsHQBgmSiuLFgVQb5eJq60qA6U=
 20261021180407_tunnel_metrics.up.sql h1:I/+tM7j3SWqlsSi87WgZd11QFpQBzi0qo2axP9lDn8E=
 20261022152929_add_risk_finding_states.up.sql h1:LFLVE1kHq4FLQh8TpSdJyYx7CvVd4iUrXG+bjWPR4lQ=
+20261023083310_agent_authorizer.up.sql h1:/i5rvRWH7LkW0BBXDkDGCmOShDmAKo25Bp3AFQcaNLI=

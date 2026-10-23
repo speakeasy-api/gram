@@ -39,6 +39,8 @@ export function visiblePermissionCount(
     (grant) =>
       grant.scope !== undefined &&
       !grant.scope.startsWith("risk_policy:") &&
+      // Auth client permissions are provisioned, not edited in the role dialog.
+      grant.scope !== "mcp:auth" &&
       !grant.scope.includes(":blocked_"),
   ).length;
 }

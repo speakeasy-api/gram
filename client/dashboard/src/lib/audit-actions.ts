@@ -225,6 +225,7 @@ export const AUDIT_ACTIONS = [
   "remote-session-client:detach-mcp-server",
   "remote-session-client:detach-user-session-issuer",
   "remote-session-client:disable-identity-chaining",
+  "remote-session-client:duplicate",
   "remote-session-client:enable-identity-chaining",
   "remote-session-client:revoke-sessions",
   "remote-session-client:update",
@@ -821,6 +822,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "deleted remote session";
     case "remote-session-client:create":
       return "created remote session client";
+    case "remote-session-client:duplicate":
+      return "duplicated remote session client";
     case "remote-session-client:update":
       return "updated remote session client";
     case "remote-session-client:delete":

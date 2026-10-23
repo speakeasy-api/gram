@@ -45554,6 +45554,101 @@ paths:
             x-speakeasy-name-override: detachKeySet
             x-speakeasy-react-hook:
                 name: DetachOrganizationRemoteSessionClientKeySet
+    /rpc/organizationRemoteSessionClients.duplicate:
+        post:
+            description: Create a new standalone remote_session_client with a copy of an existing client's configuration in the caller's organization. The copy keeps the source's issuer, project, credential owner, authentication settings, key set, scopes, audience, and callback, and by default reuses its client_id and stored secret, so no secret is re-entered. A client metadata document (CIMD) client gets a new hosted document and client_id. To give the copy its own upstream registration instead, register one through /oauth/proxy-register and pass the returned credentials; this is refused for credential_owner self clients. A private_key_jwt client that is not a CIMD client cannot be duplicated, because the provider knows only the source's key set URL. The source is unchanged and the copy has no user_session_issuer attachments. Clients managed by an identity provider connection cannot be duplicated. Requires org:admin.
+            operationId: duplicateOrganizationRemoteSessionClient
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DuplicateOrganizationRemoteSessionClientForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: duplicateClient organizationRemoteSessionClients
+            tags:
+                - organizationRemoteSessionClients
+            x-speakeasy-name-override: duplicate
+            x-speakeasy-react-hook:
+                name: DuplicateOrganizationRemoteSessionClient
     /rpc/organizationRemoteSessionClients.get:
         get:
             description: Get a remote_session_client in the caller's organization by id. Requires org:read.
@@ -92186,6 +92281,10 @@ components:
                     type: integer
                     description: Typed auth clients recorded.
                     format: int64
+                auth_permission_grants_written:
+                    type: integer
+                    description: 'Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.'
+                    format: int64
                 selections_written:
                     type: integer
                     description: Credential choices recorded.
@@ -99710,6 +99809,37 @@ components:
                     type: string
                     description: The dashboard to copy
                     format: uuid
+            required:
+                - id
+        DuplicateOrganizationRemoteSessionClientForm:
+            type: object
+            properties:
+                client_id:
+                    type: string
+                    description: client_id of a fresh upstream registration, e.g. from /oauth/proxy-register. Omit to copy the source's client_id and secret.
+                client_id_issued_at:
+                    type: string
+                    description: When the issuer reported issuing the client_id (RFC 7591 client_id_issued_at). Omit to record the time of this call.
+                    format: date-time
+                client_secret:
+                    type: string
+                    description: client_secret of the fresh registration. Only with client_id. Speakeasy encrypts before persisting; the plaintext is never returned.
+                client_secret_expires_at:
+                    type: string
+                    description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
+                    format: date-time
+                id:
+                    type: string
+                    description: The remote_session_client id to duplicate.
+                    format: uuid
+                token_endpoint_auth_method:
+                    type: string
+                    description: How the fresh registration authenticates at the issuer's token endpoint. Only with client_id; omit to keep the source's method.
+                    enum:
+                        - client_secret_basic
+                        - client_secret_post
+                        - none
+            description: Form for an org admin to duplicate a remote_session_client. Omit client_id to copy the source's client_id and stored secret; supply it, with the rest of a Dynamic Client Registration response, to give the copy its own upstream registration.
             required:
                 - id
         DuplicateWidgetRequestBody:

@@ -45,7 +45,7 @@ func TestRequireBuiltinConnect(t *testing.T) {
 			require.True(t, canonical)
 			ctx = GrantsToContext(ctx, []Grant{exact})
 			if tc.admitted {
-				ctx = admittedPoliciesToContext(ctx, RepresentedUserPolicy{}, []Grant{broad}, tc.agent, tc.owner)
+				ctx = admittedPoliciesToContext(ctx, RepresentedUserPolicy{}, false, []Grant{broad}, tc.agent, tc.owner)
 			}
 			err := engine.RequireBuiltinConnect(ctx, "builtin", "project")
 			if tc.allow {

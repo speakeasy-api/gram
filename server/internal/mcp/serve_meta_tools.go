@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -227,9 +228,30 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 	}
+	if gate.catalog != nil && gate.catalogMode == toolfilter.CatalogModeCached {
+		found := false
+		for _, tool := range gate.catalog.Tools {
+			if tool.Name == qualified {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
+		}
+	}
 	member, ok := findMetaMember(members, serverSlug)
 	if !ok {
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", serverSlug).LogWarn(ctx, logger)
+	}
+	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
+		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
+			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
+		}
+		if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
+			return nil, err
+		}
+		return nil, oops.E(oops.CodeUnavailable, err, "could not verify the approved server; retry shortly").LogError(ctx, logger)
 	}
 	if member.backend == metaMemberBackendBuiltin {
 		return s.executeBuiltinMember(ctx, gate, member, req, toolName, arguments, meta)
@@ -307,7 +329,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	return body, nil
 }
 
-// memberCatalog is one hosted member's described tool inventory.
+// memberCatalog is one member's permission-filtered tool inventory.
 type memberCatalog struct {
 	entries    []*toolListEntry
 	byName     map[string]*toolListEntry
@@ -340,13 +362,6 @@ func (s *Service) describeMemberToolset(
 	described, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(conv.ToLower(toolset.Slug)), &s.toolsetCache, variationsGroupID, s.platformExtras...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "describe member toolset").LogError(ctx, logger)
-	}
-
-	// The consent-screen tool selection narrows describe exactly as
-	// buildMemberDispatch narrows execute, so the two surfaces agree on the
-	// session's visible tools (parity with rpc_tools_list.go).
-	if gate.toolSelection != nil {
-		described.Tools = toolfilter.FilterToolsBySelection(described.Tools, gate.toolSelection)
 	}
 
 	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
@@ -497,7 +512,7 @@ func (s *Service) buildMemberDispatch(
 		tags:                     nil,
 		protocolVersion:          gate.protocolVersion,
 		identityCoverageRecorded: false,
-		toolSelection:            gate.toolSelection,
+		toolSelection:            nil,
 	}
 	return toolset, inputs, nil
 }

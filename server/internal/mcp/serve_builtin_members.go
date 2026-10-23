@@ -10,11 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/builtinmcp"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
-	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -90,9 +88,6 @@ func (s *Service) describeBuiltinMember(ctx context.Context, gate *metaGateConte
 	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(tools.Tools)), byName: map[string]*toolListEntry{}, incomplete: false}
 	for _, tool := range tools.Tools {
 		model := tool.Executor.Descriptor().ToTool(member.projectID)
-		if gate.toolSelection != nil && len(toolfilter.FilterToolsBySelection([]*types.Tool{model}, gate.toolSelection)) == 0 {
-			continue
-		}
 		entry := toolToListEntry(model)
 		if entry == nil {
 			continue
