@@ -1,4 +1,4 @@
-h1:yuFynuZdRnfQOia1qLPcrEmx66JrPVFnjSFdoNWzu+8=
+h1:zZW3hYsMOk7QO/9Y5ltJPF0wsiQssvjkQymXM5xuGC8=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -495,3 +495,4 @@ h1:yuFynuZdRnfQOia1qLPcrEmx66JrPVFnjSFdoNWzu+8=
 20261022182656_auth-permission-provisions.sql h1:Vp8G+xrUrMeNfZphB3fuC7ltMsNc/pCskB+qLXLY67Y=
 20261022221644_remote-session-clients-add-display-name.sql h1:hVyrJ+grcTc6STdriE5LJjcDybutGZK7VS5Be8JLsks=
 20261023120206_builtin_slack_mcp.sql h1:JWh+ZfV/ATLUPqsmbA5DY23w3BZuUy4A7iNGRdgs06w=
+20261023151108_builtin_mcp_user_session_issuer_binding.sql h1:OhMOkUxG2n9tIca+clkKVOMAIPzgO0iYZ/n6K8sYvnA=
