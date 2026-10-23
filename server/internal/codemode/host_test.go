@@ -350,6 +350,8 @@ func TestMissingOrNullContentIsAnUnavailableResult(t *testing.T) {
 		_, err := NormalizeResult(json.RawMessage(raw))
 		require.ErrorContains(t, err, "invalid MCP tool result", raw)
 	}
+	_, err := NormalizeResult(json.RawMessage(`{"content":[null]}`))
+	require.ErrorContains(t, err, "invalid MCP content block")
 	result, err := NormalizeResult(json.RawMessage(`{"content":[]}`))
 	require.NoError(t, err)
 	require.JSONEq(t, `[]`, string(result.Content))

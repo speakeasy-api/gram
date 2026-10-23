@@ -23,6 +23,9 @@ func NormalizeResult(raw json.RawMessage) (*ToolResult, error) {
 	}
 	blocks := *result.Content
 	for _, block := range blocks {
+		if block == nil {
+			return nil, fmt.Errorf("invalid MCP content block")
+		}
 		delete(block, "_meta")
 		if rawResource, ok := block["resource"]; ok {
 			var resource map[string]json.RawMessage
