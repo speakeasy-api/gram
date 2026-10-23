@@ -256,10 +256,9 @@ function PluginDetailContent({
   // Remote MCP-backed and built-in mcp_servers for this project. All of
   // them back the cards of already-attached plugin servers (an attached
   // server that's been disabled or lost its endpoints must still resolve for
-  // display), while
-  // only non-disabled servers with at least one endpoint are publishable —
-  // mirroring the backend's AddPluginServer check, so the picker never
-  // offers a server the API would reject.
+  // display), while only non-disabled servers with at least one endpoint are
+  // publishable, mirroring the backend's AddPluginServer check, so the picker
+  // never offers a server the API would reject.
   const { data: mcpServersData, isLoading: isLoadingMcpServers } = serversQuery;
   const { data: mcpEndpointsData, isLoading: isLoadingMcpEndpoints } =
     endpointsQuery;
