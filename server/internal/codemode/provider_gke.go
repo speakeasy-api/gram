@@ -943,6 +943,7 @@ func validImageReference(image string) bool {
 }
 
 // validTaggedImageReference accepts repository:tag, admitted only for previews.
+// It rejects latest, which names whatever was pushed last rather than one build.
 func validTaggedImageReference(image string) bool {
 	if image == "" || strings.ContainsAny(image, " \t\n@") {
 		return false
@@ -953,5 +954,5 @@ func validTaggedImageReference(image string) bool {
 		return false
 	}
 	tag := image[colon+1:]
-	return len(tag) <= 128 && strings.Trim(tag, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") == "" && tag[0] != '.' && tag[0] != '-'
+	return tag != "latest" && len(tag) <= 128 && strings.Trim(tag, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") == "" && tag[0] != '.' && tag[0] != '-'
 }

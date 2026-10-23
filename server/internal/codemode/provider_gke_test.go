@@ -110,6 +110,7 @@ func TestValidTaggedImageReference(t *testing.T) {
 		"gcr.io/project/code:":           false,
 		"gcr.io/project/code:-bad":       false,
 		"gcr.io/project/code:has space":  false,
+		"gcr.io/project/code:latest":     false,
 	} {
 		require.Equal(t, want, validTaggedImageReference(image), image)
 	}
