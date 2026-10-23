@@ -210,32 +210,6 @@ consent page shows, so the person recognizes the flow they started. */ -}}
 
       <p class="text-xs text-muted-foreground">Secured by Speakeasy.</p>
     </main>
-    <script nonce="{{.ScriptNonce}}">
-      {
-        const button = document.querySelector("[data-copy-details]");
-        const copyIcon = button.querySelector("[data-copy-icon]");
-        const copiedIcon = button.querySelector("[data-copied-icon]");
-        const status = document.querySelector("[data-copy-status]");
-        let reset;
-        button.hidden = false;
-        button.addEventListener("click", async () => {
-          try {
-            await navigator.clipboard.writeText(button.dataset.copyText);
-          } catch {
-            status.textContent = "Couldn't copy. Select the details and copy them instead.";
-            return;
-          }
-          copyIcon.hidden = true;
-          copiedIcon.hidden = false;
-          status.textContent = "Technical details copied";
-          clearTimeout(reset);
-          reset = setTimeout(() => {
-            copyIcon.hidden = false;
-            copiedIcon.hidden = true;
-            status.textContent = "";
-          }, 1000);
-        });
-      }
-    </script>
+    <script nonce="{{.ScriptNonce}}">{{.Script}}</script>
   </body>
 </html>

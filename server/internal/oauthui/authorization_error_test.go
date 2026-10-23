@@ -79,14 +79,17 @@ func TestAuthorizationErrorPageExplainsErrorForEndUsers(t *testing.T) {
 			traceID := trace.TraceID{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19}
 			ctx := trace.ContextWithSpanContext(t.Context(), trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: trace.SpanID{1}, TraceFlags: trace.FlagsSampled, TraceState: trace.TraceState{}, Remote: false}))
 			response := httptest.NewRecorder()
-			require.NoError(t, oauthui.WriteAuthorizationError(ctx, response, oauthui.AuthorizationError{CallbackURL: "https://client.example/cb?error=" + tc.code, Code: tc.code, Description: "developer description", ClientName: "Example Client", ClientID: "client-id", ClientIDOrigin: "client.example", ServerName: "acme-server"}))
+			require.NoError(t, oauthui.WriteAuthorizationError(ctx, response, oauthui.AuthorizationError{CallbackURL: "https://client.example/cb?error=" + tc.code, Code: tc.code, Description: "developer description", ClientName: "Example Client", ClientID: "client-id", ClientIDOrigin: "metadata.example", ServerName: "acme-server"}))
 			body := response.Body.String()
 			require.Contains(t, body, tc.explanation)
 			require.Contains(t, body, "Example Client")
 			require.Contains(t, body, "acme-server")
 			require.Contains(t, body, traceID.String())
 			require.Contains(t, body, "developer description")
+			require.Contains(t, body, "Returns to")
 			require.Contains(t, body, "client.example")
+			require.Contains(t, body, "Client verified from")
+			require.Contains(t, body, "metadata.example")
 		})
 	}
 }
@@ -106,7 +109,7 @@ func TestAuthorizationErrorPageCopiesTechnicalDetailsAsPlainText(t *testing.T) {
 	traceID := trace.TraceID{0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19}
 	ctx := trace.ContextWithSpanContext(t.Context(), trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: trace.SpanID{1}, TraceFlags: trace.FlagsSampled, TraceState: trace.TraceState{}, Remote: false}))
 	response := httptest.NewRecorder()
-	require.NoError(t, oauthui.WriteAuthorizationError(ctx, response, oauthui.AuthorizationError{CallbackURL: "https://client.example/cb?state=secret-state", Code: oautherr.CodeInvalidRequest, Description: `code_challenge is required <b>`, ClientName: "Example Client", ClientID: "client-id", ClientIDOrigin: "", ServerName: "acme-server"}))
+	require.NoError(t, oauthui.WriteAuthorizationError(ctx, response, oauthui.AuthorizationError{CallbackURL: "https://client.example/cb?state=secret-state", Code: oautherr.CodeInvalidRequest, Description: `code_challenge is required <b>`, ClientName: "Example Client", ClientID: "client-id", ClientIDOrigin: "metadata.example", ServerName: "acme-server"}))
 	oauthtest.RequireAuthorizationErrorCallback(t, response, http.StatusBadRequest)
 
 	doc, err := html.Parse(strings.NewReader(response.Body.String()))
@@ -127,6 +130,7 @@ func TestAuthorizationErrorPageCopiesTechnicalDetailsAsPlainText(t *testing.T) {
 		"Error description: code_challenge is required <b>",
 		"MCP client: Example Client",
 		"MCP client ID: client-id",
+		"Client verified from: metadata.example",
 		"MCP server: acme-server",
 		"Returns to: client.example",
 	}, "\n"), copied)

@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/html"
+
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 )
 
 // RequireAuthorizationErrorCallback checks whether an error automatically
@@ -52,9 +54,10 @@ func RequireAuthorizationErrorCallback(t *testing.T, response *httptest.Response
 	return parsed
 }
 
-// requireNonNavigatingScript allows only inline scripts admitted by the
-// response's CSP nonce that cannot move the browser to the callback. The page
-// must leave that step to the person.
+// requireNonNavigatingScript allows only the reviewed copy button script,
+// admitted by the response's CSP nonce. Matching the exact text is an allowlist:
+// a script that could move the browser to the callback cannot slip past it, so
+// the page leaves that step to the person.
 func requireNonNavigatingScript(t *testing.T, script *html.Node, csp string) {
 	t.Helper()
 	nonce := ""
@@ -72,7 +75,5 @@ func requireNonNavigatingScript(t *testing.T, script *html.Node, csp string) {
 			body.WriteString(child.Data)
 		}
 	}
-	for _, navigation := range []string{"location", "window.open", ".href", ".submit(", ".click("} {
-		require.NotContains(t, body.String(), navigation)
-	}
+	require.Equal(t, oauthui.Script, body.String(), "authorization error pages may only run the reviewed oauthui.Script")
 }

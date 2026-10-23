@@ -25,6 +25,13 @@ import (
 //go:embed authorization_error.html
 var authorizationErrorHTML string
 
+// Script is the authorization error page's only script, the technical details
+// copy button. Tests allowlist this exact text to prove the page never
+// navigates on its own.
+//
+//go:embed authorization_error_copy.js
+var Script string
+
 var authorizationErrorTemplate = template.Must(template.Must(template.New("authorization-error").Parse(authorizationErrorHTML)).Parse(consentpage.LogoTemplate))
 
 // AuthorizationError describes an authorization request that stopped before
@@ -131,6 +138,9 @@ type authorizationErrorView struct {
 
 	// ScriptNonce allows the page's one inline script, the copy button.
 	ScriptNonce string
+
+	// Script is the copy button script, embedded from a reviewed file.
+	Script template.JS
 }
 
 func technicalDetailsText(view authorizationErrorView) string {
@@ -202,6 +212,7 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 		// Built from the other fields below.
 		TechnicalDetails: "",
 		ScriptNonce:      base64.RawURLEncoding.EncodeToString(nonce),
+		Script:           template.JS(Script), //nolint:gosec // G203: embedded at build time from a reviewed file; no request data reaches it.
 	}
 	view.TechnicalDetails = technicalDetailsText(view)
 	var body bytes.Buffer
