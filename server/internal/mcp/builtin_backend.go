@@ -1,20 +1,25 @@
 package mcp
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // BuiltinBackend serves a first-party MCP server.
@@ -35,8 +40,9 @@ func (s *Service) SetBuiltinBackend(name string, backend BuiltinBackend) {
 
 // serveBuiltinBackend authenticates the caller and hands the request to the
 // backend's handler. A key (an API key, an agent key, or a principal
-// credential) authenticates as on any private server: the backend authorizes
-// each call itself, so it needs no mcp:connect grant. Any other caller signs in
+// credential) authenticates as on any private server, and only in the
+// server's organization and project: the backend authorizes each call itself,
+// so it needs no mcp:connect grant. Any other caller signs in
 // through the server's issuer, which answers a request without a credential
 // with the OAuth challenge. A server whose backend this process does not serve
 // is not found.
@@ -61,6 +67,9 @@ func (s *Service) serveBuiltinBackend(
 		if err != nil {
 			return err
 		}
+		if err := s.requireKeyInEndpointProject(authCtx, logger, mcpEndpoint.ProjectID); err != nil {
+			return err
+		}
 		backend.Handler.ServeHTTP(w, r.WithContext(authCtx))
 		return nil
 	}
@@ -75,4 +84,25 @@ func (s *Service) serveBuiltinBackend(
 	}
 	backend.Handler.ServeHTTP(w, r.WithContext(signedIn))
 	return nil
+}
+
+// requireKeyInEndpointProject admits a key only in the organization that owns
+// the endpoint's project and, when the key is bound to a project, only in that
+// project.
+func (s *Service) requireKeyInEndpointProject(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) error {
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load mcp server project").LogError(ctx, logger)
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID != project.OrganizationID {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	if authCtx.ProjectID != nil && *authCtx.ProjectID != projectID {
+		return oops.E(oops.CodeForbidden, nil, "key project does not match the mcp server project")
+	}
+	return requirePrincipalCredentialProject(ctx, projectID)
 }

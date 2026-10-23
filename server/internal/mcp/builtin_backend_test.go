@@ -18,6 +18,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	approvalrepo "github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -134,6 +135,44 @@ func TestServePublic_BuiltinBackend_AcceptsKeysWithoutTheIssuer(t *testing.T) {
 	seen := calls.seen()
 	require.Len(t, seen, 1)
 	require.Equal(t, mcpidentity.KindAPIKey, seen[0].Kind())
+}
+
+// A key reaches the backend only in the server's project: an organization-wide
+// key is admitted, a key bound to another project is not.
+func TestServePublic_BuiltinBackend_AdmitsKeysOnlyInItsProject(t *testing.T) {
+	t.Parallel()
+
+	for _, binding := range []string{"organization", "other project"} {
+		t.Run(binding, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			endpointSlug, _, calls := createBuiltinServer(t, ctx, ti, *authCtx.ProjectID, createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID))
+
+			keyOwner := *authCtx
+			keyOwner.ProjectID = nil
+			keyOwner.ProjectSlug = nil
+			if binding == "other project" {
+				other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+					Name: "Other project", Slug: "other-project", OrganizationID: authCtx.ActiveOrganizationID,
+				})
+				require.NoError(t, err)
+				keyOwner.ProjectID = &other.ID
+			}
+			key := ti.createTestAPIKey(contextvalues.SetAuthContext(ctx, &keyOwner), t)
+
+			w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), key, nil)
+			if binding == "other project" {
+				require.ErrorContains(t, err, "key project does not match the mcp server project")
+				require.Empty(t, calls.seen(), "a key from another project must not reach the backend")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+			require.Len(t, calls.seen(), 1)
+		})
+	}
 }
 
 // The consent screen lists a first-party backend's tools before the user signs
