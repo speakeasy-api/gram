@@ -8,7 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"path"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -200,4 +204,72 @@ func TestKitCompositionUnavailableDiscoveryDoesNotGateTurn(t *testing.T) {
 	protocol := &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: &KitRuntimeProtocol{}}
 	err := protocol.RunTurn(t.Context(), assistantRuntimeRecord{RuntimeVersion: 3}, runTurnRequest{MCPServers: nil})
 	require.ErrorContains(t, err, "kit turn requires the persisted assistant model")
+}
+
+func TestKitMachineMCPConfigMultipleConnectionsWithoutHTTP(t *testing.T) {
+	t.Parallel()
+	var requests atomic.Int32
+	endpoint := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer endpoint.Close()
+	resource, err := url.Parse(endpoint.URL + "/mcp/unavailable")
+	require.NoError(t, err)
+	issuer, err := url.Parse(endpoint.URL + "/oauth")
+	require.NoError(t, err)
+	clients := map[string]KitMCPProvisionResult{
+		"platform":       {Resource: resource, Issuer: issuer, ClientID: "platform-client", AuthMethod: "private_key_jwt", PrivateKeyPEM: []byte("platform-key")},
+		"../../attached": {Resource: resource, Issuer: issuer, ClientID: "attached-client", AuthMethod: "private_key_jwt", PrivateKeyPEM: []byte("attached-key")},
+	}
+	raw, files, err := kitMachineMCPConfig(clients)
+	require.NoError(t, err)
+	require.Zero(t, requests.Load(), "configuration must not discover or authenticate MCP endpoints")
+	var document struct {
+		Servers map[string]struct {
+			URL  string `json:"url"`
+			Auth struct {
+				Resource string `json:"resource"`
+				Issuer   string `json:"expected_issuer"`
+				Method   struct {
+					Type string `json:"type"`
+					File string `json:"private_key_file"`
+				} `json:"method"`
+			} `json:"auth"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &document))
+	require.Len(t, document.Servers, 2)
+	require.Len(t, files, 2)
+	for name, client := range clients {
+		server := document.Servers[name]
+		require.Equal(t, resource.String(), server.URL)
+		require.Equal(t, resource.String(), server.Auth.Resource)
+		require.Equal(t, issuer.String(), server.Auth.Issuer)
+		require.Equal(t, "private_key_jwt", server.Auth.Method.Type)
+		require.Equal(t, "/home/kit/.kit/credentials", path.Dir(server.Auth.Method.File))
+		require.Equal(t, client.PrivateKeyPEM, files[path.Base(server.Auth.Method.File)])
+		require.NotContains(t, string(raw), string(client.PrivateKeyPEM))
+	}
+	// Neither zero connections nor nil input requires a singleton attachment.
+	for _, clients := range []map[string]KitMCPProvisionResult{nil, {}} {
+		raw, files, err := kitMachineMCPConfig(clients)
+		require.NoError(t, err)
+		require.JSONEq(t, `{"mcpServers":{}}`, string(raw))
+		require.Empty(t, files)
+	}
+}
+
+func TestKitMachineMCPConfigRejectsInvalidLocalAddresses(t *testing.T) {
+	t.Parallel()
+	valid, err := url.Parse("https://example.invalid/mcp")
+	require.NoError(t, err)
+	for _, raw := range []string{"", "http://example.invalid/mcp", "https://user:password@example.invalid/mcp", "https://example.invalid/mcp#fragment", "https:///mcp"} {
+		invalid, err := url.Parse(raw)
+		require.NoError(t, err)
+		for _, addresses := range [][2]*url.URL{{nil, valid}, {valid, nil}, {invalid, valid}, {valid, invalid}} {
+			_, _, err := kitMachineMCPConfig(map[string]KitMCPProvisionResult{"connection": {Resource: addresses[0], Issuer: addresses[1], ClientID: "client", AuthMethod: "private_key_jwt", PrivateKeyPEM: []byte("private-key")}})
+			require.Error(t, err)
+		}
+	}
 }

@@ -3,6 +3,7 @@ package assistants
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -234,9 +235,48 @@ func kitResourceAttached(a assistantRecord, serverURL, resource *url.URL) bool {
 	}
 	return false
 }
+
+// kitMachineMCPConfig uses only locally supplied URLs and credentials. Kit owns
+// discovery, authentication, token renewal, and individual connection failures.
+func kitMachineMCPConfig(clients map[string]KitMCPProvisionResult) ([]byte, map[string][]byte, error) {
+	servers := make(map[string]any, len(clients))
+	files := make(map[string][]byte, len(clients))
+	for name, client := range clients {
+		if strings.TrimSpace(name) == "" {
+			return nil, nil, errors.New("Kit MCP connection requires a name")
+		}
+		// Hash names instead of embedding untrusted connection names in paths.
+		prefix := fmt.Sprintf("mcp-%x", sha256.Sum256([]byte(name)))
+		if name == "workload" {
+			prefix = "mcp-workload"
+		}
+		server, filename, credential, err := kitMachineMCPServer(client, prefix)
+		if err != nil {
+			return nil, nil, err
+		}
+		servers[name] = server
+		files[filename] = credential
+	}
+	data, err := json.Marshal(map[string]any{"mcpServers": servers})
+	if err != nil {
+		return nil, nil, fmt.Errorf("encode kit MCP configuration: %w", err)
+	}
+	return data, files, nil
+}
+
 func kitCompositionMCP(c KitLocalCompositionConfig, client KitMCPProvisionResult) ([]byte, map[string][]byte, error) {
+	client.Resource, client.Issuer = c.MCPResource, c.MCPIssuer
+	return kitMachineMCPConfig(map[string]KitMCPProvisionResult{"workload": client})
+}
+
+func kitMachineMCPServer(client KitMCPProvisionResult, prefix string) (map[string]any, string, []byte, error) {
+	for _, address := range []*url.URL{client.Resource, client.Issuer} {
+		if address == nil || address.Scheme != "https" || address.Host == "" || address.User != nil || address.Fragment != "" {
+			return nil, "", nil, errors.New("Kit machine MCP requires HTTPS resource and issuer URLs without credentials or fragments")
+		}
+	}
 	if client.ClientID == "" {
-		return nil, nil, errors.New("kit MCP provisioning returned no confidential client")
+		return nil, "", nil, errors.New("kit MCP provisioning returned no confidential client")
 	}
 	var filename string
 	var credential []byte
@@ -244,31 +284,28 @@ func kitCompositionMCP(c KitLocalCompositionConfig, client KitMCPProvisionResult
 	switch client.AuthMethod {
 	case "", "client_secret_basic":
 		if client.Secret == "" || len(client.PrivateKeyPEM) != 0 {
-			return nil, nil, errors.New("invalid Kit shared-secret credentials")
+			return nil, "", nil, errors.New("invalid Kit shared-secret credentials")
 		}
-		filename = "mcp-workload-secret"
+		filename = prefix + "-secret"
 		credential = []byte(client.Secret)
 		method = map[string]string{"type": "client_secret", "client_secret_file": "/home/kit/.kit/credentials/" + filename}
 	case "private_key_jwt":
 		if len(client.PrivateKeyPEM) == 0 || client.Secret != "" {
-			return nil, nil, errors.New("invalid Kit private-key credentials")
+			return nil, "", nil, errors.New("invalid Kit private-key credentials")
 		}
-		filename = "mcp-workload-private-key.pem"
+		filename = prefix + "-private-key.pem"
 		credential = client.PrivateKeyPEM
 		method = map[string]string{"type": "private_key_jwt", "private_key_file": "/home/kit/.kit/credentials/" + filename, "signing_algorithm": "ES256"}
 	default:
-		return nil, nil, errors.New("unsupported Kit MCP authentication method")
+		return nil, "", nil, errors.New("unsupported Kit MCP authentication method")
 	}
-	data, err := json.Marshal(map[string]any{"mcpServers": map[string]any{"workload": map[string]any{
-		"type": "streamable-http", "url": c.MCPResource.String(), "auth": map[string]any{
-			"type": "client_credentials", "client_id": client.ClientID, "resource": c.MCPResource.String(), "expected_issuer": c.MCPIssuer.String(), "scopes": []string{"mcp:connect"},
+	server := map[string]any{
+		"type": "streamable-http", "url": client.Resource.String(), "auth": map[string]any{
+			"type": "client_credentials", "client_id": client.ClientID, "resource": client.Resource.String(), "expected_issuer": client.Issuer.String(), "scopes": []string{"mcp:connect"},
 			"method": method,
 		},
-	}}})
-	if err != nil {
-		return nil, nil, fmt.Errorf("encode kit MCP configuration: %w", err)
 	}
-	return data, map[string][]byte{filename: credential}, nil
+	return server, filename, credential, nil
 }
 
 // These helpers deliberately do not acquire an advisory lock on a second
