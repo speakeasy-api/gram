@@ -27,9 +27,10 @@ type grantAuthorization struct {
 	// representedUser binds $represented_user in every policy, so an agent
 	// owner's grants resolve to the user the agent acts for.
 	representedUser string
-	// representedPolicy is the represented user's own live policy when that
-	// user is not the caller. Auth-client checks must also pass it.
-	representedPolicy []Grant
+	// representedPolicies are the represented user's own policies when that
+	// user is not the caller: the live policy, plus the admitted one under an
+	// admission boundary. Auth-client checks must pass every one.
+	representedPolicies [][]Grant
 }
 
 // RepresentedUserPolicy is the trusted represented-user binding of an admission.
@@ -89,12 +90,12 @@ func (b AdmissionBoundary) Apply(ctx context.Context) context.Context {
 
 func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserPolicy, sets ...[]Grant) context.Context {
 	policies := grantAuthorization{
-		policies:          make([][]Grant, 0, len(sets)),
-		representedUser:   represented.UserID,
-		representedPolicy: nil,
+		policies:            make([][]Grant, 0, len(sets)),
+		representedUser:     represented.UserID,
+		representedPolicies: nil,
 	}
 	if represented.UserID != "" {
-		policies.representedPolicy = append([]Grant{}, represented.Policy...)
+		policies.representedPolicies = [][]Grant{append([]Grant{}, represented.Policy...)}
 	}
 	for _, set := range sets {
 		policies.policies = append(policies.policies, append([]Grant(nil), set...))
@@ -111,9 +112,10 @@ func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, boo
 		policies := make([][]Grant, 0, len(current.policies)+len(boundary.policies))
 		policies = append(policies, current.policies...)
 		policies = append(policies, boundary.policies...)
-		// The represented user's live policy is refreshed with the caller's;
-		// the boundary only adds the admitted policies.
-		return grantAuthorization{policies: policies, representedUser: current.representedUser, representedPolicy: current.representedPolicy}, true
+		representedPolicies := make([][]Grant, 0, len(current.representedPolicies)+len(boundary.representedPolicies))
+		representedPolicies = append(representedPolicies, current.representedPolicies...)
+		representedPolicies = append(representedPolicies, boundary.representedPolicies...)
+		return grantAuthorization{policies: policies, representedUser: current.representedUser, representedPolicies: representedPolicies}, true
 	}
 	return current, true
 }
@@ -123,16 +125,16 @@ func currentGrantAuthorizationFromContext(ctx context.Context) (grantAuthorizati
 		return policies, true
 	}
 	if _, principalCredential := contextvalues.PrincipalCredentialAuthorization(ctx); principalCredential {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil}, false
 	}
 	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil}, false
 	}
 	grants, ok := GrantsFromContext(ctx)
 	if !ok {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil}, false
 	}
-	return grantAuthorization{policies: [][]Grant{grants}, representedUser: loadedGrantsUser(ctx), representedPolicy: nil}, true
+	return grantAuthorization{policies: [][]Grant{grants}, representedUser: loadedGrantsUser(ctx), representedPolicies: nil}, true
 }
 
 // loadedGrantsUser is the user whose own grants PrepareContext loaded. API
@@ -150,7 +152,7 @@ func loadedGrantsUser(ctx context.Context) string {
 }
 
 func loadedGrantAuthorization(grants []Grant) grantAuthorization {
-	return grantAuthorization{policies: [][]Grant{grants}, representedUser: "", representedPolicy: nil}
+	return grantAuthorization{policies: [][]Grant{grants}, representedUser: "", representedPolicies: nil}
 }
 
 // bind applies the trusted represented-user binding to an auth-client check,
@@ -165,10 +167,10 @@ func (a grantAuthorization) bind(check Check) Check {
 // policiesFor returns every policy check must pass. An agent acting for a user
 // may use an auth client only if that user may use it too.
 func (a grantAuthorization) policiesFor(check Check) [][]Grant {
-	if a.representedPolicy == nil || !check.isAuthClientCheck() {
+	if len(a.representedPolicies) == 0 || !check.isAuthClientCheck() {
 		return a.policies
 	}
-	return append(append([][]Grant{}, a.policies...), a.representedPolicy)
+	return append(append([][]Grant{}, a.policies...), a.representedPolicies...)
 }
 
 func (a grantAuthorization) grantCount() int {

@@ -128,7 +128,7 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		principalID:     "",
 		source:          MandatoryPolicySourceNone,
 		decided:         nil,
-		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicy: nil},
+		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil},
 		key:             nil,
 		narrowedProject: nil,
 	}
