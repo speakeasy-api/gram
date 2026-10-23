@@ -10,7 +10,9 @@
 // replaced by another client.
 //
 // Credentials without a session row (principal credentials, agent keys,
-// assistant tokens) and hosted toolsets keep the issuer-derived path.
+// assistant tokens) and hosted toolsets keep the issuer-derived path, except
+// that once the organization enforces upstream auth a principal credential is
+// served only through the execution-selection profile version it binds.
 
 package mcp
 

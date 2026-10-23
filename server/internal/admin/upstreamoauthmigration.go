@@ -211,10 +211,7 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 		PendingSelections:    pendingSelections,
 		ReconnectCredentials: int64(len(reconnect)),
 	}
-	status.Enforcement, err = s.upstreamAuthEnforcement(ctx, status)
-	if err != nil {
-		return nil, err
-	}
+	status.Enforcement = s.upstreamAuthEnforcement(ctx, status)
 	return status, nil
 }
 

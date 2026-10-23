@@ -171,10 +171,10 @@ func (connectPermitter) Permitted(context.Context, authClientPermitRequest) (boo
 // mandatoryPermitter decides use of a resolved client with the mandatory
 // mcp:auth check, for organizations with upstream auth enforcement enabled.
 // It admits the caller on its own path, including callers the generic check
-// skips, and a check it cannot evaluate is a refusal, never an allow. A
-// personal client is checked against the user the request represents, whose
-// connection is the only one the resolver loads, and the upstream OAuth client
-// that connection uses.
+// skips, and a check it cannot evaluate is a refusal, never an allow. It
+// makes the same check the shadow records: a personal client is checked
+// against the user whose connection the resolver loaded and the upstream
+// OAuth client that connection uses.
 type mandatoryPermitter struct {
 	engine *authz.Engine
 }
@@ -184,19 +184,7 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 	if err != nil {
 		return false, fmt.Errorf("admit caller for auth client: %w", err)
 	}
-	owner, upstream := "", ""
-	if req.ClientType == authClientTypeRemoteSession {
-		owner = authorization.RepresentedUserID()
-		if req.RegistrationID.Valid {
-			upstream = req.RegistrationID.UUID.String()
-		}
-	}
-	decision, err := authorization.Decide(req.OrganizationID, authz.MCPAuthClientCheck(req.ClientID.String(), authz.MCPAuthClientDimensions{
-		ClientType:      req.ClientType,
-		ProjectID:       req.ProjectID.String(),
-		ConnectionOwner: owner,
-		UpstreamClient:  upstream,
-	}))
+	decision, err := authorization.Decide(req.OrganizationID, mandatoryAuthClientCheck(req.ProjectID, req.ClientID, req.RegistrationID, req.ClientType, req.Subject))
 	if err != nil {
 		return false, fmt.Errorf("evaluate auth client check: %w", err)
 	}
@@ -495,15 +483,17 @@ func (s *Service) authClientPermitFor(ctx context.Context, organizationID string
 	if s.authClientPermitter != nil {
 		return s.authClientPermitter, nil
 	}
-	if s.authz == nil {
-		return connectPermitter{}, nil
-	}
 	mode, err := s.authClientMode(ctx, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	if mode != feature.AuthClientResolverEnforced {
 		return connectPermitter{}, nil
+	}
+	// An enforcing organization never falls back to the connect-equivalent
+	// rule: without the engine its clients are refused.
+	if s.authz == nil {
+		return nil, errors.New("upstream auth enforcement needs the authorization engine")
 	}
 	return mandatoryPermitter{engine: s.authz}, nil
 }

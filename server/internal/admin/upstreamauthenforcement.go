@@ -30,7 +30,8 @@ func (s *Service) EnableUpstreamAuthEnforcement(ctx context.Context, p *gen.Enab
 	if blockers := status.Enforcement.Blockers; len(blockers) > 0 {
 		return nil, oops.E(oops.CodeInvalid, nil, "enforcement can't be enabled yet: %s", strings.Join(blockers, " "))
 	}
-	if err := s.productFeatures.SetFeatureEnabled(ctx, organizationID, productfeatures.FeatureUpstreamAuthEnforced, true); err != nil {
+	actor, displayName, _ := adminActor(ctx)
+	if err := productfeatures.NewMutator(s.productFeatures, s.audit).SetFeature(ctx, organizationID, productfeatures.FeatureUpstreamAuthEnforced, true, productfeatures.MutationActor{Principal: actor, DisplayName: displayName, Slug: nil}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enable upstream auth enforcement").LogError(ctx, s.logger)
 	}
 	if !status.Enforcement.Enabled {
@@ -57,7 +58,8 @@ func (s *Service) DisableUpstreamAuthEnforcement(ctx context.Context, p *gen.Dis
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, s.logger)
 	}
-	if err := s.productFeatures.SetFeatureEnabled(ctx, organizationID, productfeatures.FeatureUpstreamAuthEnforced, false); err != nil {
+	actor, displayName, _ := adminActor(ctx)
+	if err := productfeatures.NewMutator(s.productFeatures, s.audit).SetFeature(ctx, organizationID, productfeatures.FeatureUpstreamAuthEnforced, false, productfeatures.MutationActor{Principal: actor, DisplayName: displayName, Slug: nil}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "disable upstream auth enforcement").LogError(ctx, s.logger)
 	}
 	if enabled {
@@ -76,7 +78,7 @@ func (s *Service) DisableUpstreamAuthEnforcement(ctx context.Context, p *gen.Dis
 // status. Choices left ambiguous and profile gaps do not block it: those
 // credentials and turns fail with an actionable error under enforcement,
 // never falling back to another client.
-func (s *Service) upstreamAuthEnforcement(ctx context.Context, status *gen.AdminUpstreamOAuthMigrationStatus) (*gen.AdminUpstreamAuthEnforcement, error) {
+func (s *Service) upstreamAuthEnforcement(ctx context.Context, status *gen.AdminUpstreamOAuthMigrationStatus) *gen.AdminUpstreamAuthEnforcement {
 	blockers := []string{}
 	if !status.Migrated {
 		blockers = append(blockers, "The upstream OAuth migration is incomplete.")
@@ -113,7 +115,10 @@ func (s *Service) upstreamAuthEnforcement(ctx context.Context, status *gen.Admin
 	}
 	enabled, err := s.productFeatures.IsFeatureEnabledUncached(ctx, status.OrganizationID, productfeatures.FeatureUpstreamAuthEnforced)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, s.logger)
+		// The status, and a run that already committed, still answer; the
+		// blocker keeps enforcement from being turned on meanwhile.
+		s.logger.ErrorContext(ctx, "read upstream auth enforcement", attr.SlogOrganizationID(status.OrganizationID), attr.SlogError(err))
+		blockers = append(blockers, "Whether enforcement is on couldn't be read.")
 	}
-	return &gen.AdminUpstreamAuthEnforcement{Enabled: enabled, Ready: len(blockers) == 0, Blockers: blockers}, nil
+	return &gen.AdminUpstreamAuthEnforcement{Enabled: enabled, Ready: len(blockers) == 0, Blockers: blockers}
 }

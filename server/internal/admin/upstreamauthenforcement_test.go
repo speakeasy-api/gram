@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -61,6 +63,10 @@ func TestUpstreamAuthEnforcement_EnablesOnceCoveredAndRollsBack(t *testing.T) {
 	enforced, err := authenforcement.NewGate(db).Enforced(ctx, org.id)
 	require.NoError(t, err)
 	require.True(t, enforced)
+	enabledLog, err := audittest.LatestAuditLogByActionAndSubject(ctx, db, audit.ActionOrganizationProductFeatureEnabled, org.id)
+	require.NoError(t, err, "enabling is audited")
+	require.Equal(t, "staff-test", enabledLog.ActorID)
+	require.Equal(t, org.id, enabledLog.OrganizationID)
 
 	disabled, err := svc.DisableUpstreamAuthEnforcement(ctx, &gen.DisableUpstreamAuthEnforcementPayload{OrganizationID: org.id})
 	require.NoError(t, err)
@@ -68,6 +74,9 @@ func TestUpstreamAuthEnforcement_EnablesOnceCoveredAndRollsBack(t *testing.T) {
 	enforced, err = authenforcement.NewGate(db).Enforced(ctx, org.id)
 	require.NoError(t, err)
 	require.False(t, enforced, "disabling is the organization's rollback")
+	disabledLog, err := audittest.LatestAuditLogByActionAndSubject(ctx, db, audit.ActionOrganizationProductFeatureDisabled, org.id)
+	require.NoError(t, err, "disabling is audited")
+	require.Equal(t, "staff-test", disabledLog.ActorID)
 }
 
 func TestUpstreamAuthEnforcement_RequiresStaff(t *testing.T) {
@@ -98,8 +107,7 @@ func TestUpstreamAuthEnforcement_EachCoverageGapBlocks(t *testing.T) {
 			ExecutionProfiles: &gen.AdminUpstreamOAuthMigrationExecutionProfiles{Complete: true, Gaps: nil},
 		}
 	}
-	enforcement, err := svc.upstreamAuthEnforcement(ctx, covered())
-	require.NoError(t, err)
+	enforcement := svc.upstreamAuthEnforcement(ctx, covered())
 	require.True(t, enforcement.Ready, enforcement.Blockers)
 
 	for name, tc := range map[string]struct {
@@ -117,8 +125,7 @@ func TestUpstreamAuthEnforcement_EachCoverageGapBlocks(t *testing.T) {
 	} {
 		status := covered()
 		tc.change(status)
-		enforcement, err := svc.upstreamAuthEnforcement(ctx, status)
-		require.NoError(t, err, name)
+		enforcement := svc.upstreamAuthEnforcement(ctx, status)
 		require.False(t, enforcement.Ready, name)
 		require.Equal(t, []string{tc.blocker}, enforcement.Blockers, name)
 	}
