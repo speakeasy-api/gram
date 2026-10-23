@@ -541,17 +541,6 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
-      // In-app links that name a toolset; redirects to its hosting server.
-      toolset: {
-        title: "MCP Toolset",
-        url: "toolset/:toolsetSlug",
-        component: ToolsetSlugRedirectPage,
-        legacyRedirect: true,
-        subPages: {
-          overview: { title: "MCP Toolset Overview", url: "overview" },
-          tools: { title: "MCP Toolset Tools", url: "tools" },
-        },
-      },
       // Every MCP server's page, by slug or id; ToolsetRedirectPage resolves misses.
       details: {
         title: "MCP Server Details",
@@ -608,6 +597,29 @@ const ROUTE_STRUCTURE = {
           },
         },
       },
+    },
+  },
+  // In-app links that know a toolset, not its server; redirects to the hosting server.
+  toolset: {
+    title: "Toolset",
+    url: "toolsets/:toolsetSlug",
+    component: ToolsetSlugRedirectPage,
+    legacyRedirect: true,
+    subPages: {
+      overview: { title: "Toolset Overview", url: "overview" },
+      tools: { title: "Toolset Tools", url: "tools" },
+      resources: { title: "Toolset Resources", url: "resources" },
+      prompts: { title: "Toolset Prompts", url: "prompts" },
+      inspect: { title: "Toolset Inspect", url: "inspect" },
+      teamAccess: { title: "Toolset Team Access", url: "team-access" },
+      guardrails: { title: "Toolset Guardrails", url: "guardrails" },
+      sessions: { title: "Toolset Sessions", url: "sessions" },
+      settings: { title: "Toolset Settings", url: "settings" },
+      authentication: {
+        title: "Toolset Authentication",
+        url: "authentication",
+      },
+      performance: { title: "Toolset Performance", url: "performance" },
     },
   },
   environments: {

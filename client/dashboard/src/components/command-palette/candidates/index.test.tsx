@@ -271,13 +271,13 @@ vi.mock("../recentlyVisited", () => ({
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
+    toolset: { goTo: mocks.goToToolsetDetails },
     plugins: {
       goTo: mocks.goToPlugins,
       href: () => "/acme/projects/default/plugins",
     },
     mcp: {
       goTo: vi.fn(),
-      toolset: { goTo: mocks.goToToolsetDetails },
       details: { overview: { goTo: mocks.goToMcpServerOverview } },
       catalog: { detail: { goTo: mocks.goToCatalogDetail } },
       sources: {

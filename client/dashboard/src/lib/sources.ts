@@ -163,7 +163,6 @@ export function mcpServerRouteParam(server: {
 // Static /mcp segments; servers slugged like one are linked by id. Mirrored in server/internal/mcpservers/slug.go.
 export const RESERVED_MCP_SEGMENTS: ReadonlySet<string> = new Set([
   "add",
-  "toolset",
   "catalog",
   "deployments",
   "sources",

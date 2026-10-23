@@ -282,7 +282,7 @@ function LogDetailContent({
             {toolsetSlug && (
               <span className="text-muted-foreground">
                 <Link
-                  to={routes.mcp.toolset.overview.href(toolsetSlug)}
+                  to={routes.toolset.overview.href(toolsetSlug)}
                   className="hover:text-foreground hover:underline"
                 >
                   {toolsetSlug}

@@ -219,13 +219,13 @@ function AuthWarningBanner({
       <span>
         {missingCount} authentication{" "}
         {missingCount === 1 ? "variable" : "variables"} not configured.{" "}
-        <routes.mcp.toolset.Link
+        <routes.toolset.Link
           params={[toolsetSlug]}
           hash="authentication"
           className="hover:text-foreground font-medium underline"
         >
           Configure now
-        </routes.mcp.toolset.Link>
+        </routes.toolset.Link>
       </span>
     </div>
   );

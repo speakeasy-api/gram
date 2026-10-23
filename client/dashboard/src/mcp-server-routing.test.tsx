@@ -127,6 +127,18 @@ describe("MCP server routes", () => {
   });
 
   it.each([
+    "/toolsets/my-tools",
+    "/toolsets/my-tools/settings",
+    "/toolsets/my-tools/authentication",
+    "/toolsets/my-tools/performance",
+  ])("sends the explicit toolset link %s to the toolset resolver", (path) => {
+    const matches = matchRoutes(projectRouteObjects(), `${BASE}${path}`) ?? [];
+    expect(matches.map((match) => match.route.path)).toContain(
+      "toolsets/:toolsetSlug",
+    );
+  });
+
+  it.each([
     "/mcp/add",
     "/mcp/add/remote",
     "/mcp/catalog",

@@ -106,6 +106,10 @@ describe("withoutMcpXSegment", () => {
       "/acme/projects/default/mcp/my%20server/inspect",
     ],
     ["/acme/projects/x/mcp/x/x/overview", "/acme/projects/x/mcp/x/overview"],
+    [
+      "/acme/projects/default/mcp/%78/my-server",
+      "/acme/projects/default/mcp/my-server",
+    ],
   ])("rewrites %s", (from, to) => {
     expect(withoutMcpXSegment(from)).toBe(to);
   });

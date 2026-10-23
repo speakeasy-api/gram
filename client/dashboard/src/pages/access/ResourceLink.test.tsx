@@ -100,7 +100,9 @@ describe("ResourceLink", () => {
       ]),
     );
     const link = screen.getByRole("link", { name: /CRM/ });
-    expect(link.getAttribute("href")).toBe("/acme/projects/default/mcp/crm");
+    expect(link.getAttribute("href")).toBe(
+      "/acme/projects/default/toolsets/crm",
+    );
   });
 
   it("links mcp_servers grants by slug", () => {

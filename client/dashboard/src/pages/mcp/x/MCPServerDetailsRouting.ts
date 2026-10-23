@@ -59,16 +59,11 @@ export function tabSegmentFromPath(
   return segments[MCP_SECTION_INDEX + 2];
 }
 
-/** The tab segment of `/mcp/toolset/<toolsetSlug>/<tab>`. */
+/** The tab segment of `/toolsets/<toolsetSlug>/<tab>`. */
 export function toolsetRouteTabSegment(pathname: string): string | undefined {
   const segments = pathSegments(pathname).map(decodePathSegment);
-  if (
-    segments[MCP_SECTION_INDEX] !== "mcp" ||
-    segments[MCP_SECTION_INDEX + 1] !== "toolset"
-  ) {
-    return undefined;
-  }
-  return segments[MCP_SECTION_INDEX + 3];
+  if (segments[MCP_SECTION_INDEX] !== "toolsets") return undefined;
+  return segments[MCP_SECTION_INDEX + 2];
 }
 
 /** `/mcp/x/<slug>/...` as `/mcp/<slug>/...`, or undefined for other paths. */
@@ -76,7 +71,7 @@ export function withoutMcpXSegment(pathname: string): string | undefined {
   const segments = pathSegments(pathname);
   if (
     segments[MCP_SECTION_INDEX] !== "mcp" ||
-    segments[MCP_SECTION_INDEX + 1] !== "x" ||
+    decodePathSegment(segments[MCP_SECTION_INDEX + 1] ?? "") !== "x" ||
     segments.length <= MCP_SECTION_INDEX + 2
   ) {
     return undefined;

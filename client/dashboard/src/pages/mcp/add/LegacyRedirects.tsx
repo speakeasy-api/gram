@@ -51,7 +51,7 @@ function legacySourceTargetHref(
     case "mcp-server":
       return routes.mcp.details.overview.href(target.routeParam);
     case "toolset":
-      return routes.mcp.toolset.href(target.slug);
+      return routes.toolset.href(target.slug);
     case "sources-list":
       return routes.mcp.sources.href();
     case "mcp-list":

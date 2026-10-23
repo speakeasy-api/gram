@@ -84,7 +84,7 @@ export function ResourceLink({
       label = toolset.name;
       const proj = projectMap.get(toolset.projectId);
       to = proj
-        ? `/${orgSlug}/projects/${proj.slug}/mcp/${toolset.slug}`
+        ? `/${orgSlug}/projects/${proj.slug}/toolsets/${toolset.slug}`
         : null;
     } else if (mcpServer) {
       label = mcpServer.name ?? mcpServer.slug ?? resourceId;

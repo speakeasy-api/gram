@@ -99,7 +99,7 @@ function visit(url: string) {
     <MemoryRouter initialEntries={[url]}>
       <Routes>
         <Route
-          path="/acme/projects/default/mcp/toolset/:toolsetSlug/*"
+          path="/acme/projects/default/toolsets/:toolsetSlug/*"
           element={<ToolsetSlugRedirectPage />}
         />
         <Route
@@ -247,7 +247,7 @@ describe("ToolsetRedirectPage", () => {
     ["/tools?q=1", "/landed/my-server/tools?q=1"],
     ["#performance", "/landed/my-server/settings#performance"],
   ])("resolves the explicit toolset route %s", (suffix, target) => {
-    visit(`/acme/projects/default/mcp/toolset/my-tools${suffix}`);
+    visit(`/acme/projects/default/toolsets/my-tools${suffix}`);
     expect(screen.getByTestId("landed").textContent).toBe(target);
   });
 
@@ -260,7 +260,7 @@ describe("ToolsetRedirectPage", () => {
         toolset: { hostingMcpServerId: "toolset-1" },
       },
     ];
-    visit("/acme/projects/default/mcp/toolset/my-tools/tools");
+    visit("/acme/projects/default/toolsets/my-tools/tools");
     expect(screen.getByTestId("landed").textContent).toBe(
       "/landed/my-tools/tools",
     );

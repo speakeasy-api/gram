@@ -20,7 +20,7 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
       return projectBase ? `${projectBase}/deployments/${log.subjectId}` : null;
     case "toolset":
       return projectBase && log.subjectSlug
-        ? `${projectBase}/mcp/toolset/${log.subjectSlug}`
+        ? `${projectBase}/toolsets/${log.subjectSlug}`
         : null;
     case "mcp_server":
       return projectBase && log.subjectSlug

@@ -14,6 +14,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { RESERVED_MCP_SEGMENTS, mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useToolsets } from "@/pages/toolsets/useToolsets";
 import { Assistant } from "@gram/client/models/components/assistant.js";
@@ -226,18 +227,32 @@ function AttachedServerRow({
 }): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
+  const gramProject = useProjectSlugForRequests();
+  // Refs carry only a slug; a slug a static /mcp segment claims needs the id.
+  const reservedSlug =
+    serverRef.kind === "mcpServer" && RESERVED_MCP_SEGMENTS.has(serverRef.slug);
+  const { data: serversResult } = useMcpServers({ gramProject }, undefined, {
+    enabled: reservedSlug,
+    throwOnError: false,
+  });
+  const reservedServer = serversResult?.mcpServers.find(
+    (server) => server.slug === serverRef.slug,
+  );
+  const serverParam = reservedServer
+    ? mcpServerRouteParam(reservedServer)
+    : serverRef.slug;
 
   const link =
     serverRef.kind === "toolset" ? (
-      <routes.mcp.toolset.Link
+      <routes.toolset.Link
         params={[serverRef.slug]}
         className="min-w-0 hover:no-underline"
       >
         <code className="truncate text-xs">{serverRef.slug}</code>
-      </routes.mcp.toolset.Link>
+      </routes.toolset.Link>
     ) : (
       <routes.mcp.details.Link
-        params={[serverRef.slug]}
+        params={[serverParam]}
         className="min-w-0 hover:no-underline"
       >
         <code className="truncate text-xs">{serverRef.slug}</code>

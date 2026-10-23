@@ -152,7 +152,7 @@ function AffectedServers({
             className="flex items-center justify-between gap-3 py-2"
           >
             <Link
-              to={routes.mcp.toolset.href(toolset.slug)}
+              to={routes.toolset.href(toolset.slug)}
               className="min-w-0 truncate underline-offset-2 hover:underline"
               title={toolset.name}
             >

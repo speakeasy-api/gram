@@ -103,7 +103,7 @@ export function ToolsetRedirectPage({
   );
 }
 
-/** `/mcp/toolset/<toolsetSlug>[/<tab>]`: in-app links that name a toolset, not a server. */
+/** `/toolsets/<toolsetSlug>[/<tab>]`: in-app links that know a toolset, not its server. */
 export function ToolsetSlugRedirectPage(): React.JSX.Element | null {
   const { toolsetSlug = "" } = useParams<{ toolsetSlug: string }>();
   const location = useLocation();

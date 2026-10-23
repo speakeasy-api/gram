@@ -43,13 +43,13 @@ vi.mock("@/components/page-templates", () => ({
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
+    toolset: { tools: { goTo: state.navigate } },
     mcp: {
       add: { goTo: state.navigate },
       details: {
         overview: { goTo: state.navigate },
         settings: { href: () => "/mcp/server/settings" },
       },
-      toolset: { tools: { goTo: state.navigate } },
     },
   }),
 }));
