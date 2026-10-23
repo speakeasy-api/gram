@@ -2882,7 +2882,7 @@ LEFT JOIN agents agent ON s.subject_urn::text = 'agent:' || agent.id::text AND a
 WHERE s.organization_id = $1
  AND iss.organization_id = $1 AND iss.deleted IS FALSE
  AND s.user_session_issuer_id = ANY($2::uuid[])
- AND (s.resource IS NULL OR rtrim(s.resource, '/') = ANY($3::text[]))
+ AND (s.resource IS NULL OR s.resource = ANY($3::text[]))
  AND CASE $4::text
    WHEN 'active' THEN s.deleted IS FALSE AND s.refresh_expires_at > now()
    WHEN 'expired' THEN s.deleted IS FALSE AND s.refresh_expires_at <= now()
@@ -5748,38 +5748,6 @@ func (q *Queries) RevokeUserSessionConsentGroup(ctx context.Context, arg RevokeU
 		return nil, err
 	}
 	return items, nil
-}
-
-const setGatewaySessionListFixture = `-- name: SetGatewaySessionListFixture :exec
-UPDATE user_sessions
-SET resource = $1, created_at = $2,
-    last_used_at = $3, refresh_expires_at = $4,
-    deleted_at = $5
-WHERE id = $6 AND organization_id = $7
-`
-
-type SetGatewaySessionListFixtureParams struct {
-	Resource         pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-	LastUsedAt       pgtype.Timestamptz
-	RefreshExpiresAt pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	ID               uuid.UUID
-	OrganizationID   pgtype.Text
-}
-
-// Test fixture for endpoint, ordering, and expiry boundaries.
-func (q *Queries) SetGatewaySessionListFixture(ctx context.Context, arg SetGatewaySessionListFixtureParams) error {
-	_, err := q.db.Exec(ctx, setGatewaySessionListFixture,
-		arg.Resource,
-		arg.CreatedAt,
-		arg.LastUsedAt,
-		arg.RefreshExpiresAt,
-		arg.DeletedAt,
-		arg.ID,
-		arg.OrganizationID,
-	)
-	return err
 }
 
 const setOrganizationManagedUserSessionIssuerAuthenticationHost = `-- name: SetOrganizationManagedUserSessionIssuerAuthenticationHost :one

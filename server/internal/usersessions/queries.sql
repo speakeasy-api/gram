@@ -2933,7 +2933,7 @@ LEFT JOIN agents agent ON s.subject_urn::text = 'agent:' || agent.id::text AND a
 WHERE s.organization_id = @organization_id
  AND iss.organization_id = @organization_id AND iss.deleted IS FALSE
  AND s.user_session_issuer_id = ANY(@issuer_ids::uuid[])
- AND (s.resource IS NULL OR rtrim(s.resource, '/') = ANY(@resources::text[]))
+ AND (s.resource IS NULL OR s.resource = ANY(@resources::text[]))
  AND CASE @status::text
    WHEN 'active' THEN s.deleted IS FALSE AND s.refresh_expires_at > now()
    WHEN 'expired' THEN s.deleted IS FALSE AND s.refresh_expires_at <= now()
@@ -3042,14 +3042,6 @@ JOIN remote_session_issuers ri ON ri.id = rc.remote_session_issuer_id AND ri.del
 WHERE (rc.project_id = ANY(@project_ids::uuid[]) OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id)))
  AND (ri.project_id = ANY(@project_ids::uuid[]) OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = @organization_id)))
 ORDER BY members.name, members.id, ri.slug, ri.id;
-
--- name: SetGatewaySessionListFixture :exec
--- Test fixture for endpoint, ordering, and expiry boundaries.
-UPDATE user_sessions
-SET resource = sqlc.narg('resource'), created_at = @created_at,
-    last_used_at = sqlc.narg('last_used_at'), refresh_expires_at = @refresh_expires_at,
-    deleted_at = sqlc.narg('deleted_at')
-WHERE id = @id AND organization_id = @organization_id;
 
 -- name: ListGatewaySessionIssuers :many
 -- Keep existing organization authorizations visible even when several issuers

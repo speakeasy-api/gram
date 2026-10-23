@@ -1284,12 +1284,13 @@ type ServersInsertOrganizationGatewaySessionParams struct {
 	UserID           string
 	Jti              string
 	RefreshTokenHash string
-	ExpiresIn        string
+	RefreshExpiresIn string
 	LastUsedAgo      string
 	CreatedAgo       string
 }
 
 // Inert authorizations remain visible while the gateway is disabled.
+// Access tokens expired one hour ago; refresh authorization has its own deadline.
 func (q *Queries) ServersInsertOrganizationGatewaySession(ctx context.Context, arg ServersInsertOrganizationGatewaySessionParams) error {
 	_, err := q.db.Exec(ctx, serversInsertOrganizationGatewaySession,
 		arg.ID,
@@ -1299,7 +1300,7 @@ func (q *Queries) ServersInsertOrganizationGatewaySession(ctx context.Context, a
 		arg.UserID,
 		arg.Jti,
 		arg.RefreshTokenHash,
-		arg.ExpiresIn,
+		arg.RefreshExpiresIn,
 		arg.LastUsedAgo,
 		arg.CreatedAgo,
 	)

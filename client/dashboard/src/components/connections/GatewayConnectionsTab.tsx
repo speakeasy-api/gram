@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAllUserSessionClients } from "@gram/client/react-query/userSessionClients.js";
@@ -18,7 +18,7 @@ import {
   useFilterState,
   type FilterValue,
 } from "@/components/filters";
-import { getPresetRange } from "@/elements";
+import { useSessionDateRange } from "@/hooks/useSessionDateRange";
 import { Page } from "@/components/page-layout";
 import { IdentityLink } from "@/components/identity-link";
 import { InlineEmptyState } from "@/components/inline-empty-state";
@@ -108,11 +108,7 @@ export function GatewayConnectionsTab({
       },
       { replace: true },
     );
-  const dates = useMemo(() => {
-    if (values.date.customRange) return values.date.customRange;
-    if (values.date.preset) return getPresetRange(values.date.preset);
-    return { from: undefined, to: undefined };
-  }, [values.date]);
+  const { dates, refreshDates } = useSessionDateRange(values.date);
   const sessions = useGatewaySessionsInfinite({
     gatewayId,
     search: search || undefined,
@@ -135,7 +131,10 @@ export function GatewayConnectionsTab({
     void invalidateAllUserSessionClients(queryClient, { refetchType: "all" });
     void invalidateAllUserSessions(queryClient, { refetchType: "all" });
   };
-  const [registrationId, setRegistrationId] = useState<string | null>(null);
+  const registrationId =
+    gatewayId && projectId ? params.get("registration") : null;
+  const setRegistrationId = (id: string | null) =>
+    setParam("registration", id ?? "");
   const badges = useKillswitchUserBadges(
     items.flatMap((session) => {
       const userId = canonicalUserId(session.subjectUrn);
@@ -226,7 +225,7 @@ export function GatewayConnectionsTab({
     },
     {
       key: "refreshExpiresAt",
-      header: "Authorization expires",
+      header: "Session authorization expires",
       render: (session) => timestamp(session.refreshExpiresAt),
     },
     {
@@ -313,7 +312,9 @@ export function GatewayConnectionsTab({
           options={SORT_OPTIONS}
         />
         <Page.Toolbar.Refresh
-          onRefresh={() => void sessions.refetch()}
+          onRefresh={() => {
+            if (!refreshDates()) void sessions.refetch();
+          }}
           isRefreshing={sessions.isFetching}
         />
       </Page.Toolbar>

@@ -14208,41 +14208,6 @@ func (q *Queries) SetRemoteSessionIssuerURLFixture(ctx context.Context, arg SetR
 	return result.RowsAffected(), nil
 }
 
-const setRemoteSessionListFixture = `-- name: SetRemoteSessionListFixture :exec
-UPDATE remote_sessions s
-SET created_at = $1, last_used_at = $2,
-    access_expires_at = $3, refresh_expires_at = $4,
-    authorization_expires_at = $5, refresh_token_encrypted = $6
-FROM remote_session_clients c
-WHERE s.id = $7 AND c.id = s.remote_session_client_id AND c.organization_id = $8
-`
-
-type SetRemoteSessionListFixtureParams struct {
-	CreatedAt              pgtype.Timestamptz
-	LastUsedAt             pgtype.Timestamptz
-	AccessExpiresAt        pgtype.Timestamptz
-	RefreshExpiresAt       pgtype.Timestamptz
-	AuthorizationExpiresAt pgtype.Timestamptz
-	RefreshTokenEncrypted  pgtype.Text
-	ID                     uuid.UUID
-	OrganizationID         pgtype.Text
-}
-
-// Test fixture for effective expiry and timestamp pagination.
-func (q *Queries) SetRemoteSessionListFixture(ctx context.Context, arg SetRemoteSessionListFixtureParams) error {
-	_, err := q.db.Exec(ctx, setRemoteSessionListFixture,
-		arg.CreatedAt,
-		arg.LastUsedAt,
-		arg.AccessExpiresAt,
-		arg.RefreshExpiresAt,
-		arg.AuthorizationExpiresAt,
-		arg.RefreshTokenEncrypted,
-		arg.ID,
-		arg.OrganizationID,
-	)
-	return err
-}
-
 const setRemoteSessionRefreshExpiresAtIfUnknown = `-- name: SetRemoteSessionRefreshExpiresAtIfUnknown :execrows
 UPDATE remote_sessions AS s
 SET refresh_expires_at = $1

@@ -1,7 +1,7 @@
+import { useSearchParams } from "react-router";
 import { useState } from "react";
 import type { UserSessionClient } from "@gram/client/models/components/usersessionclient.js";
 import { useUserSessionClientsInfinite } from "@gram/client/react-query/userSessionClients.js";
-import { ClientDetailSheet } from "@/components/sessions/ClientDetailSheet";
 import { RevokeClientDialog } from "@/components/sessions/RevokeClientDialog";
 import { Table, type Column } from "@/components/ui/Table";
 import { SkeletonTable } from "@/components/ui/Skeleton";
@@ -21,9 +21,16 @@ export function GatewayRegisteredClients({
   onRevoked: () => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
-  const [registration, setRegistration] = useState<UserSessionClient | null>(
-    null,
-  );
+  const [, setParams] = useSearchParams();
+  const openRegistration = (id: string) =>
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set("registration", id);
+        return next;
+      },
+      { replace: true },
+    );
   const [revoking, setRevoking] = useState<UserSessionClient | null>(null);
   const clients = useUserSessionClientsInfinite(
     { userSessionIssuerId: issuerId, limit: 50 },
@@ -53,7 +60,7 @@ export function GatewayRegisteredClients({
           actions={[
             {
               label: "View registration",
-              onClick: () => setRegistration(client),
+              onClick: () => openRegistration(client.id),
             },
             ...(canRevoke
               ? [
@@ -117,16 +124,6 @@ export function GatewayRegisteredClients({
             </Button>
           )}
         </>
-      )}
-      {registration && (
-        <ClientDetailSheet
-          clientId={registration.id}
-          client={registration}
-          open
-          onOpenChange={(open) => {
-            if (!open) setRegistration(null);
-          }}
-        />
       )}
       {revoking && (
         <RevokeClientDialog

@@ -20,10 +20,24 @@ import { pluralizeNoun } from "@/lib/format";
  */
 
 export type DateRangeValue = {
+  /** Exclusive instant computed in the timezone where the calendar was selected. */
+  calendarEnd?: Date;
   preset: DateRangePreset | null;
   customRange: { from: Date; to: Date } | null;
   customLabel: string | null;
 };
+
+/** Preserve the selected final day's boundary when a link crosses timezones. */
+export function calendarDateRangeValue(from: Date, to: Date): DateRangeValue {
+  const calendarEnd = new Date(to);
+  calendarEnd.setDate(calendarEnd.getDate() + 1);
+  return {
+    preset: null,
+    customRange: { from, to },
+    customLabel: null,
+    calendarEnd,
+  };
+}
 
 export interface FilterOption {
   label: string;

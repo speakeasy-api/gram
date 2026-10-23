@@ -341,7 +341,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			ClientID: s.det("usc-organization-gateway"), UserID: user(userNumber),
 			Jti:              s.det("org-gateway-session-" + strconv.Itoa(i+1)).String(),
 			RefreshTokenHash: "demo-inert:" + s.det("org-gateway-session-"+strconv.Itoa(i+1)).String(),
-			ExpiresIn:        strconv.Itoa(int(days)) + " days", LastUsedAgo: strconv.Itoa(i+1) + " hours", CreatedAgo: strconv.Itoa(i+1) + " days",
+			RefreshExpiresIn: strconv.Itoa(int(days)) + " days", LastUsedAgo: strconv.Itoa(i+1) + " hours", CreatedAgo: strconv.Itoa(i+1) + " days",
 		}); err != nil {
 			return fmt.Errorf("insert organization gateway session: %w", err)
 		}

@@ -3,6 +3,7 @@ package usersessions_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,7 +23,6 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func seedSessionGateway(t *testing.T, ctx context.Context, ti *testInstance, issuer uuid.UUID) uuid.UUID {
@@ -83,12 +83,15 @@ func TestGatewaySessionsEndpointFiltersAndPagination(t *testing.T) {
 	gateway := seedSessionGateway(t, ctx, ti, issuer)
 	now := time.Now().UTC().Truncate(time.Second)
 	var ids []string
-	for i, name := range []string{"Ada", "Bea", "Cleo", "Different endpoint", "Expired"} {
+	for i, name := range []string{"Ada", "Bea", "Cleo", "Different endpoint", "Expired", "Trailing slash"} {
 		row, err := seedUserSession(t, ctx, ti.conn, issuer, urn.NewUserSubject(name))
 		require.NoError(t, err)
 		resource := pgtype.Text{}
 		if i == 2 {
 			resource = conv.ToPGText(testServerURL + "/mcp/example-gateway")
+		}
+		if i == 5 {
+			resource = conv.ToPGText(testServerURL + "/mcp/example-gateway/")
 		}
 		if i == 3 {
 			resource = conv.ToPGText(testServerURL + "/mcp/another-gateway")
@@ -97,7 +100,7 @@ func TestGatewaySessionsEndpointFiltersAndPagination(t *testing.T) {
 		if i == 4 {
 			expiry = now.Add(-time.Hour)
 		}
-		err = repo.New(ti.conn).SetGatewaySessionListFixture(ctx, repo.SetGatewaySessionListFixtureParams{
+		err = testrepo.New(ti.conn).SetGatewaySessionListFixture(ctx, testrepo.SetGatewaySessionListFixtureParams{
 			ID: row.ID, OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), Resource: resource,
 			CreatedAt:        pgtype.Timestamptz{Time: now, Valid: true},
 			LastUsedAt:       pgtype.Timestamptz{Time: now.Add(time.Duration(i) * time.Minute), Valid: i != 1},
@@ -136,6 +139,9 @@ func TestGatewaySessionsEndpointFiltersAndPagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ids[2], filtered.Items[0].ID)
 	require.Nil(t, filtered.NextCursor)
+	request.Search = new(strings.Repeat("é", 201))
+	_, err = ti.service.ListGatewaySessions(ctx, &request)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 	request.Search = new("%")
 	literal, err := ti.service.ListGatewaySessions(ctx, &request)
 	require.NoError(t, err)
@@ -228,7 +234,7 @@ func TestGatewaySessionsAlternatePlatformHosts(t *testing.T) {
 			for i, base := range []string{testServerURL, "https://alternate.example.test", "https://unserved.example.test"} {
 				row, err := seedUserSession(t, ctx, ti.conn, issuer, urn.NewUserSubject(uuid.NewString()))
 				require.NoError(t, err)
-				require.NoError(t, repo.New(ti.conn).SetGatewaySessionListFixture(ctx, repo.SetGatewaySessionListFixtureParams{
+				require.NoError(t, testrepo.New(ti.conn).SetGatewaySessionListFixture(ctx, testrepo.SetGatewaySessionListFixtureParams{
 					ID: row.ID, OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), Resource: conv.ToPGText(base + path),
 					CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
 				}))

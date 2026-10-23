@@ -10,6 +10,7 @@ import { useAgentIdentityCandidates } from "./useAgentIdentityCandidates";
 import { useAssistantCandidates } from "./useAssistantCandidates";
 import { useCatalogCandidates } from "./useCatalogCandidates";
 import { useDeploymentCandidates } from "./useDeploymentCandidates";
+import { useGatewayConnectionCandidates } from "./useGatewayConnectionCandidates";
 import { useEnvironmentCandidates } from "./useEnvironmentCandidates";
 import { useGatewayCandidates } from "./useGatewayCandidates";
 import { useMarketplaceCandidate } from "./useMarketplaceCandidate";
@@ -87,6 +88,10 @@ export function useLauncherCandidates({
 
   const projectEnabled = enabled && inProject;
 
+  const gatewayConnections = useGatewayConnectionCandidates({
+    enabled,
+    inProject,
+  });
   const actions = useActionCandidates();
   const recents = useRecentCandidates({
     enabled,
@@ -138,6 +143,7 @@ export function useLauncherCandidates({
       inProject && isAdmin ? list : [];
     return [
       ...actions,
+      ...gatewayConnections,
       ...recents,
       ...marketplace,
       ...(inProject && canListMcp ? mcpServers : []),
@@ -174,6 +180,7 @@ export function useLauncherCandidates({
     agentIdentities,
     inferenceSetup,
     actions,
+    gatewayConnections,
     recents,
     marketplace,
     mcpServers,

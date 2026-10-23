@@ -6185,12 +6185,3 @@ WHERE project_id = @project_id AND organization_id = @organization_id
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL;
-
--- name: SetRemoteSessionListFixture :exec
--- Test fixture for effective expiry and timestamp pagination.
-UPDATE remote_sessions s
-SET created_at = @created_at, last_used_at = sqlc.narg('last_used_at'),
-    access_expires_at = sqlc.narg('access_expires_at'), refresh_expires_at = sqlc.narg('refresh_expires_at'),
-    authorization_expires_at = sqlc.narg('authorization_expires_at'), refresh_token_encrypted = sqlc.narg('refresh_token_encrypted')
-FROM remote_session_clients c
-WHERE s.id = @id AND c.id = s.remote_session_client_id AND c.organization_id = @organization_id;

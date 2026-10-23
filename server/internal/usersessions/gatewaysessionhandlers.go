@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -22,6 +23,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessionlist"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+// gatewaySessionSearchLimit matches the public identity-search contract.
+const gatewaySessionSearchLimit = 200
 
 type gatewaySessionScope struct {
 	organizationID string
@@ -74,7 +78,7 @@ func (s *Service) gatewaySessionScope(ctx context.Context, gatewayID *string) (*
 				if !endpoint.IsDomainRoot.Bool {
 					parsed = parsed.JoinPath("mcp", endpoint.Slug)
 				}
-				scope.resources = append(scope.resources, strings.TrimRight(parsed.String(), "/"))
+				scope.resources = append(scope.resources, parsed.String())
 			}
 		}
 		return scope, nil
@@ -100,7 +104,7 @@ func (s *Service) gatewaySessionScope(ctx context.Context, gatewayID *string) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "parse gateway base URL")
 		}
-		scope.resources = append(scope.resources, strings.TrimRight(orggateway.URL(base, organization.Slug), "/"))
+		scope.resources = append(scope.resources, orggateway.URL(base, organization.Slug))
 	}
 	return scope, nil
 }
@@ -117,6 +121,9 @@ func (s *Service) gatewayPlatformURLs() []string {
 
 // ListGatewaySessions applies all filters before stable keyset pagination.
 func (s *Service) ListGatewaySessions(ctx context.Context, payload *gen.ListGatewaySessionsPayload) (*gen.GatewaySessionsResult, error) {
+	if utf8.RuneCountInString(conv.PtrValOr(payload.Search, "")) > gatewaySessionSearchLimit {
+		return nil, oops.E(oops.CodeBadRequest, nil, "identity search must not exceed 200 characters")
+	}
 	scope, err := s.gatewaySessionScope(ctx, payload.GatewayID)
 	if err != nil {
 		return nil, err
