@@ -13,6 +13,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -42,8 +43,15 @@ func createHostedMCPServerFixture(t *testing.T, ctx context.Context, ti *testIns
 	return addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-"+slug)
 }
 
-// addToolsetWrapper adds an mcp_servers row serving the toolset.
+// addToolsetWrapper adds a private, endpointless mcp_servers row serving the toolset.
 func addToolsetWrapper(t *testing.T, ctx context.Context, ti *testInstance, toolsetID, id uuid.UUID, slug string) uuid.UUID {
+	t.Helper()
+	return addToolsetWrapperWith(t, ctx, ti, toolsetID, id, slug, "private", false)
+}
+
+// addToolsetWrapperWith adds an mcp_servers row serving the toolset, with an
+// endpoint when withEndpoint is set.
+func addToolsetWrapperWith(t *testing.T, ctx context.Context, ti *testInstance, toolsetID, id uuid.UUID, slug, visibility string, withEndpoint bool) uuid.UUID {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -69,10 +77,20 @@ func addToolsetWrapper(t *testing.T, ctx context.Context, ti *testInstance, tool
 		ToolsetID:             uuid.NullUUID{UUID: toolsetID, Valid: true},
 		UnproxiedMcpServerID:  uuid.NullUUID{},
 		ToolVariationsGroupID: uuid.NullUUID{},
-		Visibility:            "private",
+		Visibility:            visibility,
 		NetworkAccessMode:     pgtype.Text{},
 	})
 	require.NoError(t, err)
+	if withEndpoint {
+		_, err = mcpendpointsRepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsRepo.CreateMCPEndpointParams{
+			ProjectID:       *authCtx.ProjectID,
+			CustomDomainID:  uuid.NullUUID{},
+			McpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
+			MetaMcpServerID: uuid.NullUUID{},
+			Slug:            slug + "-endpoint",
+		})
+		require.NoError(t, err)
+	}
 	return server.ID
 }
 
@@ -356,7 +374,7 @@ func TestToolUsage_DeletedCanonicalWrapperIsNotTheFallback(t *testing.T) {
 		ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	liveID := addToolsetWrapper(t, ctx, ti, canonicalID, uuid.New(), "acme-rewrapped-live")
+	liveID := addToolsetWrapperWith(t, ctx, ti, canonicalID, uuid.New(), "acme-rewrapped-live", "private", true)
 
 	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
 		projectID:   projectID,
@@ -416,4 +434,120 @@ func TestToolUsage_DisabledToolsetKeepsServerIDForPastCalls(t *testing.T) {
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.Len(t, res.Traces, 1)
 	require.Equal(t, "old_call", res.Traces[0].ToolName)
+}
+
+func TestToolUsage_DisabledCanonicalKeepsUnstampedCalls(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	now := time.Now().UTC()
+
+	toolset, err := toolsetsRepo.New(ti.conn).CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Paused",
+		Slug:                   "paused",
+		Description:            pgtype.Text{},
+		DefaultEnvironmentSlug: pgtype.Text{},
+		McpSlug:                pgtype.Text{String: "acme-paused", Valid: true},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	canonicalID := addToolsetWrapperWith(t, ctx, ti, toolset.ID, toolset.ID, "acme-paused", "disabled", true)
+	memberID := addToolsetWrapperWith(t, ctx, ti, toolset.ID, uuid.New(), "acme-paused-member", "public", true)
+
+	for _, row := range []struct {
+		tool     string
+		serverID string
+	}{
+		{tool: "via_member", serverID: memberID.String()},
+		{tool: "unstamped", serverID: ""},
+	} {
+		insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+			projectID:   authCtx.ProjectID.String(),
+			timestamp:   now.Add(-10 * time.Minute),
+			toolsetSlug: "paused",
+			toolName:    row.tool,
+			userEmail:   "alice@example.com",
+			statusCode:  200,
+			mcpServerID: row.serverID,
+		})
+	}
+
+	listTools := func(t *testing.T, id uuid.UUID) []string {
+		t.Helper()
+		res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+			From:         now.Add(-1 * time.Hour).Format(time.RFC3339),
+			To:           now.Add(1 * time.Hour).Format(time.RFC3339),
+			McpServerIds: []string{id.String()},
+			Limit:        10,
+		})
+		require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+		names := make([]string, 0, len(res.Traces))
+		for _, trace := range res.Traces {
+			names = append(names, trace.ToolName)
+		}
+		return names
+	}
+
+	t.Run("it keeps unstamped calls on the disabled canonical wrapper", func(t *testing.T) {
+		t.Parallel()
+		require.ElementsMatch(t, []string{"unstamped"}, listTools(t, canonicalID))
+	})
+
+	t.Run("it gives the enabled member only its own calls", func(t *testing.T) {
+		t.Parallel()
+		require.ElementsMatch(t, []string{"via_member"}, listTools(t, memberID))
+	})
+}
+
+func TestToolUsage_EndpointlessWrapperIsNotTheFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	now := time.Now().UTC()
+
+	canonicalID := createHostedMCPServerFixture(t, ctx, ti, "Orphaned", "orphaned")
+	_, err := mcpserversRepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversRepo.DeleteMCPServerParams{
+		ID:        canonicalID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	endpointlessID := addToolsetWrapper(t, ctx, ti, canonicalID, uuid.New(), "acme-orphaned-member")
+	hostID := addToolsetWrapperWith(t, ctx, ti, canonicalID, uuid.New(), "acme-orphaned-host", "private", true)
+
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   authCtx.ProjectID.String(),
+		timestamp:   now.Add(-10 * time.Minute),
+		toolsetSlug: "orphaned",
+		toolName:    "legacy_call",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+
+	list := func(t *testing.T, id uuid.UUID) *gen.ListToolUsageTracesResult {
+		t.Helper()
+		res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+			From:         now.Add(-1 * time.Hour).Format(time.RFC3339),
+			To:           now.Add(1 * time.Hour).Format(time.RFC3339),
+			McpServerIds: []string{id.String()},
+			Limit:        10,
+		})
+		require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+		return res
+	}
+
+	t.Run("it attributes unstamped calls to the oldest wrapper with an endpoint", func(t *testing.T) {
+		t.Parallel()
+		res := list(t, hostID)
+		require.Len(t, res.Traces, 1)
+		require.Equal(t, hostID.String(), *res.Traces[0].McpServerID)
+	})
+
+	t.Run("it skips the older wrapper without an endpoint", func(t *testing.T) {
+		t.Parallel()
+		require.Empty(t, list(t, endpointlessID).Traces)
+	})
 }

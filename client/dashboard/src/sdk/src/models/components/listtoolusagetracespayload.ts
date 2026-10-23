@@ -73,6 +73,10 @@ export type ListToolUsageTracesPayload = {
    */
   accountType?: string | undefined;
   /**
+   * Agent identities to include. Combined with user_filters by AND, so an agent and a person select the calls that agent made on that person's behalf.
+   */
+  agentIds?: Array<string> | undefined;
+  /**
    * MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Speakeasy never saw an initialize handshake for) to include
    */
   clientKeys?: Array<string> | undefined;
@@ -133,7 +137,7 @@ export type ListToolUsageTracesPayload = {
    */
   to: Date;
   /**
-   * Typed user identities to include
+   * Typed user identities to include. An email also matches the calls an agent made on that person's behalf.
    */
   userFilters?: Array<ToolUsageUserFilter> | undefined;
 };
@@ -157,6 +161,7 @@ export const ListToolUsageTracesPayloadTargetTypes$outboundSchema:
 /** @internal */
 export type ListToolUsageTracesPayload$Outbound = {
   account_type?: string | undefined;
+  agent_ids?: Array<string> | undefined;
   client_keys?: Array<string> | undefined;
   cursor?: string | undefined;
   filters?: Array<LogFilter$Outbound> | undefined;
@@ -182,6 +187,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     accountType: z.optional(z.string()),
+    agentIds: z.optional(z.array(z.string())),
     clientKeys: z.optional(z.array(z.string())),
     cursor: z.optional(z.string()),
     filters: z.optional(z.array(LogFilter$outboundSchema)),
@@ -206,6 +212,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       accountType: "account_type",
+      agentIds: "agent_ids",
       clientKeys: "client_keys",
       hookSources: "hook_sources",
       hostedToolsetSlugs: "hosted_toolset_slugs",

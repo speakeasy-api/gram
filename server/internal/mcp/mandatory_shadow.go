@@ -270,9 +270,11 @@ func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowe
 		Caller:         m.callerClass(),
 		Principal:      string(m.authorization.Caller()),
 		LegacyAllowed:  legacyAllowed,
-		Outcome:        outcome,
-		Source:         source,
-		Reason:         reason,
+
+		LegacyAuthCeiling: m.authorization.LegacyAuthCeiling(),
+		Outcome:           outcome,
+		Source:            source,
+		Reason:            reason,
 	}
 	s.metrics.RecordMandatoryAuthzShadow(ctx, shadow)
 	trace.SpanFromContext(ctx).AddEvent("mandatory_authz_shadow", trace.WithAttributes(
@@ -280,6 +282,7 @@ func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowe
 		attr.MandatoryAuthzCaller(shadow.Caller),
 		attr.MandatoryAuthzPrincipal(shadow.Principal),
 		attr.MandatoryAuthzLegacyAllowed(legacyAllowed),
+		attr.MandatoryAuthzLegacyAuthCeiling(shadow.LegacyAuthCeiling),
 		attr.MandatoryAuthzOutcome(outcome),
 		attr.MandatoryAuthzSource(source),
 		attr.MandatoryAuthzReason(reason),
@@ -294,6 +297,7 @@ func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowe
 		attr.SlogMandatoryAuthzPrincipal(shadow.Principal),
 		attr.SlogMandatoryAuthzPrincipalID(m.authorization.PrincipalID()),
 		attr.SlogMandatoryAuthzLegacyAllowed(legacyAllowed),
+		attr.SlogMandatoryAuthzLegacyAuthCeiling(shadow.LegacyAuthCeiling),
 		attr.SlogMandatoryAuthzOutcome(outcome),
 		attr.SlogMandatoryAuthzSource(source),
 		attr.SlogMandatoryAuthzReason(reason),

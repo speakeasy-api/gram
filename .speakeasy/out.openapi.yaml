@@ -10765,6 +10765,208 @@ paths:
       x-speakeasy-react-hook:
         name: AnalyticsQuery
         type: query
+  /rpc/analytics.signalDefinition:
+    get:
+      description: Inspect the immutable semantic definition used by a signal reading. Requires signals_intelligence and project:read.
+      operationId: analyticsSignalDefinition
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: sensor_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: definition_hash
+          required: true
+          schema:
+            maxLength: 64
+            minLength: 64
+            pattern: ^[a-f0-9]{64}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsSignalDefinition'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: signalDefinition analytics
+      tags:
+        - analytics
+      x-speakeasy-name-override: signalDefinition
+      x-speakeasy-react-hook:
+        name: AnalyticsSignalDefinition
+  /rpc/analytics.signalFindings:
+    post:
+      description: Find cross-session signal patterns, joint-answer co-occurrence and guarded previous-window changes. Aggregate reads require project:read and Signals Intelligence; each evidence reference additionally passes the underlying conversation access checks.
+      operationId: analyticsSignalFindings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignalFindingsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsSignalFindings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: signalFindings analytics
+      tags:
+        - analytics
+      x-speakeasy-name-override: signalFindings
+      x-speakeasy-react-hook:
+        name: AnalyticsSignalFindings
   /rpc/assets.createSignedChatAttachmentURL:
     post:
       description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -14721,6 +14923,824 @@ paths:
       x-speakeasy-name-override: transferOut
       x-speakeasy-react-hook:
         disabled: true
+  /rpc/authClients.detachFromMcpServer:
+    post:
+      description: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.
+      operationId: detachAuthClientFromMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetachAuthClientFromMcpServerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: detachAuthClientFromMcpServer authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: detachFromMcpServer
+      x-speakeasy-react-hook:
+        name: DetachAuthClientFromMcpServer
+  /rpc/authClients.get:
+    get:
+      description: Get an auth client in the caller's organization. Requires org:read.
+      operationId: getAuthClient
+      parameters:
+        - allowEmptyValue: true
+          description: The auth client id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The auth client id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getAuthClient authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: AuthClient
+  /rpc/authClients.getAudience:
+    get:
+      description: 'List who may use an auth client: the rules naming it and the broader rules that reach it. Requires org:read.'
+      operationId: getAuthClientAudience
+      parameters:
+        - allowEmptyValue: true
+          description: The auth client id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The auth client id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClientAudience'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getAuthClientAudience authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: getAudience
+      x-speakeasy-react-hook:
+        name: AuthClientAudience
+  /rpc/authClients.getMcpServerAuthentication:
+    get:
+      description: 'Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.'
+      operationId: getMcpServerAuthentication
+      parameters:
+        - allowEmptyValue: true
+          description: The MCP server id.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The MCP server id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerAuthentication'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getMcpServerAuthentication authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: getMcpServerAuthentication
+      x-speakeasy-react-hook:
+        name: McpServerAuthentication
+  /rpc/authClients.list:
+    get:
+      description: List the auth clients in the caller's organization. Requires org:read.
+      operationId: listAuthClients
+      parameters:
+        - allowEmptyValue: true
+          description: Only clients offered by this MCP server.
+          in: query
+          name: mcp_server_id
+          schema:
+            description: Only clients offered by this MCP server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Only clients of this type.
+          in: query
+          name: client_type
+          schema:
+            description: Only clients of this type.
+            enum:
+              - remote_session
+              - service_account
+              - static_credential
+              - pass_through
+              - ema
+            type: string
+        - allowEmptyValue: true
+          description: Pagination cursor.
+          in: query
+          name: cursor
+          schema:
+            description: Pagination cursor.
+            type: string
+        - allowEmptyValue: true
+          description: Page size.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Page size.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAuthClientsResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: listAuthClients authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: AuthClients
+  /rpc/authClients.setAudience:
+    post:
+      description: Replace the rules naming an auth client. Use grants mcp:auth on the client and Blocked writes mcp:blocked_auth; both apply on every server that offers the client. Server access is unchanged and still needs mcp:connect. Administering a client gives nobody permission to use it. Requires org:admin.
+      operationId: setAuthClientAudience
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAuthClientAudienceRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClientAudience'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: setAuthClientAudience authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: setAudience
+      x-speakeasy-react-hook:
+        name: SetAuthClientAudience
+  /rpc/authClients.setMcpServerUpstreamAuthRequirement:
+    post:
+      description: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.
+      operationId: setMcpServerUpstreamAuthRequirement
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetMcpServerUpstreamAuthRequirementRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerAuthentication'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: setMcpServerUpstreamAuthRequirement authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: setMcpServerUpstreamAuthRequirement
+      x-speakeasy-react-hook:
+        name: SetMcpServerUpstreamAuthRequirement
+  /rpc/authClients.update:
+    post:
+      description: Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials; elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving. Requires org:admin.
+      operationId: updateAuthClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAuthClientRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: updateAuthClient authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: update
+      x-speakeasy-react-hook:
+        name: UpdateAuthClient
   /rpc/businessMemories.contentScopes:
     get:
       description: List the complete content-scope tree and distinct-memory counts for the active project. Requires organization admin.
@@ -29430,6 +30450,94 @@ paths:
       tags:
         - keys
       x-speakeasy-name-override: rotate
+  /rpc/keys.updatePolicy:
+    post:
+      description: 'Replace an ordinary key''s own policy: the mcp:connect and mcp:auth grants, and their blocks, its server and auth client access is evaluated against. Agent keys keep their delegated grants. Requires org admin.'
+      operationId: updateAPIKeyPolicy
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKeyPolicyRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateKeyPolicy keys
+      tags:
+        - keys
+      x-speakeasy-name-override: updatePolicy
+      x-speakeasy-react-hook:
+        name: UpdateAPIKeyPolicy
   /rpc/keys.verify:
     get:
       description: Verify an api key
@@ -83062,6 +84170,8 @@ components:
           items:
             type: string
           description: Names of the datasets the caller cannot read, such as one only organization administrators can read, so a saved widget over one can say why it shows nothing rather than reading as broken
+        signal_metrics:
+          $ref: '#/components/schemas/AnalyticsSignalCatalog'
       required:
         - datasets
     AnalyticsDimensionValue:
@@ -83071,9 +84181,12 @@ components:
           type: integer
           description: Rows at the dataset's grain carrying this value inside the window
           format: int64
+        present:
+          type: boolean
+          description: For signal attributes, false distinguishes absent labels from present empty strings
         value:
           type: string
-          description: A non-empty value of the dimension
+          description: A recorded dimension value. Signal attributes may be empty; present distinguishes an absent label.
       required:
         - value
         - count
@@ -83239,13 +84352,7 @@ components:
           format: date-time
         grain:
           type: string
-          description: Time bucket width for a grouped query. Absent means none.
-          enum:
-            - none
-            - hour
-            - day
-            - week
-            - month
+          description: Time interval from the analytics catalog. Composed queries admit none, minute, hour, day, week or month. Signal measurements also admit auto.
         limit:
           type: integer
           description: Maximum rows. Defaults to 100; at most 1000 for a grouped result and 200 for ungrouped rows.
@@ -83263,6 +84370,8 @@ components:
           items:
             $ref: '#/components/schemas/AnalyticsOrderBy'
           description: Sort for a grouped result, by measure alias. Ungrouped rows are always newest first.
+        signal_query:
+          $ref: '#/components/schemas/AnalyticsSignalQuery'
         to:
           type: string
           description: End of the half-open window [from, to), ISO 8601
@@ -83292,11 +84401,375 @@ components:
             type: object
             additionalProperties: true
           description: Result rows
-      description: One shape for both modes. Row keys are the requested dimension names plus each measure's alias; time_bucket is present only when grain is set, and time on ungrouped rows.
+        signal_result:
+          $ref: '#/components/schemas/AnalyticsSignalResult'
+      description: 'Composed queries return requested dimensions and measure aliases, with time_bucket for grouped intervals or time for ungrouped rows. The signals dataset instead returns fixed time-series rows: time_bucket, bucket_end, series_id, observed, partial, matched_messages, answered, match_share, matched_sessions, evaluated_sessions, session_breadth, and outcome/definition companions. series_id joins each row to signal_result.groups; signal_result.metadata and signal_result.summary describe the scope and whole-window population. Signal rows remain in the top-level rows field.'
       required:
         - dataset
         - plan
         - rows
+    AnalyticsSignalCatalog:
+      type: object
+      properties:
+        dataset:
+          type: string
+        initial_attributes:
+          type: array
+          items:
+            type: string
+        max_groups:
+          type: integer
+          format: int64
+        max_points:
+          type: integer
+          format: int64
+        max_span_days:
+          type: integer
+          format: int64
+        operators:
+          type: array
+          items:
+            type: string
+        population:
+          type: string
+        sensors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalSensor'
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalName'
+        steps:
+          type: array
+          items:
+            type: string
+        system_dimensions:
+          type: array
+          items:
+            type: string
+        unit:
+          type: string
+      required:
+        - dataset
+        - unit
+        - population
+        - steps
+        - operators
+        - system_dimensions
+        - initial_attributes
+        - max_span_days
+        - max_groups
+        - max_points
+        - sensors
+        - signals
+    AnalyticsSignalComparison:
+      type: object
+      properties:
+        comparable:
+          type: boolean
+        delta_share:
+          type: number
+          description: Descriptive difference in observed answer shares, never a significance test
+          format: double
+        from:
+          type: string
+          format: date-time
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Failed comparison gates. Coverage remains unknown even when the observed measurements are comparable.
+        summary:
+          type: object
+          additionalProperties: true
+        to:
+          type: string
+          format: date-time
+      required:
+        - from
+        - to
+        - summary
+        - comparable
+        - reasons
+    AnalyticsSignalDefinition:
+      type: object
+      properties:
+        captured_at:
+          type: string
+          format: date-time
+        definition:
+          type: object
+          additionalProperties: true
+        definition_hash:
+          type: string
+        sensor_id:
+          type: string
+      required:
+        - sensor_id
+        - definition_hash
+        - definition
+        - captured_at
+    AnalyticsSignalDimension:
+      type: object
+      properties:
+        attribute:
+          type: string
+          description: Exact label key, at most 256 UTF-8 bytes; the shared query engine enforces the byte limit.
+          minLength: 1
+        field:
+          type: string
+          description: 'System dimension from the analytics catalog: source, role, actor, assistant or definition'
+      description: Exactly one system field or arbitrary attribute key.
+    AnalyticsSignalFilter:
+      type: object
+      properties:
+        dimension:
+          $ref: '#/components/schemas/AnalyticsSignalDimension'
+        operator:
+          type: string
+          description: 'Comparison from the analytics catalog: equals, in, exists or missing'
+        values:
+          type: array
+          items:
+            type: string
+          maxItems: 100
+      required:
+        - dimension
+        - operator
+    AnalyticsSignalFindings:
+      type: object
+      properties:
+        comparison:
+          $ref: '#/components/schemas/AnalyticsSignalComparison'
+        concentration:
+          type: object
+          additionalProperties: true
+        cooccurrence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Separate same_message and same_session joint-answer counts and shares
+        evidence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Permitted recent conversation references without transcript content
+        evidence_scope:
+          type: string
+        measurement:
+          $ref: '#/components/schemas/AnalyticsSignalResult'
+        peer:
+          $ref: '#/components/schemas/AnalyticsSignalSelection'
+        peer_summary:
+          type: object
+          additionalProperties: true
+      required:
+        - measurement
+        - concentration
+        - cooccurrence
+        - evidence
+        - evidence_scope
+    AnalyticsSignalMetadata:
+      type: object
+      properties:
+        coverage:
+          type: string
+        exact:
+          type: boolean
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalFilter'
+        from:
+          type: string
+          format: date-time
+        group_by:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalDimension'
+        groups_truncated:
+          type: boolean
+        physical_resolution:
+          type: string
+        point_budget:
+          type: integer
+          format: int64
+        population:
+          type: string
+        queried_at:
+          type: string
+          format: date-time
+        run_id:
+          type: string
+        selection:
+          $ref: '#/components/schemas/AnalyticsSignalSelection'
+        series_complete:
+          type: boolean
+        snapshot:
+          type: string
+          description: Live, not a replayable historical snapshot
+        step:
+          type: string
+        time_axis:
+          type: string
+        to:
+          type: string
+          format: date-time
+        trigger:
+          type: string
+        unit:
+          type: string
+      required:
+        - selection
+        - trigger
+        - step
+        - physical_resolution
+        - time_axis
+        - unit
+        - population
+        - coverage
+        - queried_at
+        - from
+        - to
+        - filters
+        - snapshot
+        - exact
+        - series_complete
+        - groups_truncated
+        - group_by
+        - point_budget
+    AnalyticsSignalName:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+      required:
+        - id
+        - name
+    AnalyticsSignalQuery:
+      type: object
+      properties:
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalFilter'
+          maxItems: 20
+        group_by:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsSignalDimension'
+          maxItems: 3
+        groups:
+          type: integer
+          description: Top groups selected over the whole window
+          default: 5
+          format: int64
+          minimum: 1
+          maximum: 20
+        points:
+          type: integer
+          description: Budget across complete selected series
+          default: 2000
+          format: int64
+          minimum: 1
+          maximum: 10000
+        run_id:
+          type: string
+          format: uuid
+        selection:
+          $ref: '#/components/schemas/AnalyticsSignalSelection'
+        trigger:
+          type: string
+          description: 'Evaluation population: stream or manual'
+          default: stream
+      required:
+        - selection
+    AnalyticsSignalResult:
+      type: object
+      properties:
+        groups:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Whole-window totals for selected groups; group_values follows metadata.group_by
+        metadata:
+          $ref: '#/components/schemas/AnalyticsSignalMetadata'
+        summary:
+          type: object
+          description: Exact whole-window measures, including groups outside the selected top groups
+          additionalProperties: true
+      required:
+        - metadata
+        - summary
+        - groups
+    AnalyticsSignalScope:
+      type: object
+      properties:
+        run_id:
+          type: string
+          description: Required for manual; absent for stream
+          format: uuid
+        sensor_id:
+          type: string
+          format: uuid
+        trigger:
+          type: string
+          description: 'Evaluation population: stream or manual'
+          default: stream
+      required:
+        - sensor_id
+    AnalyticsSignalSelection:
+      type: object
+      properties:
+        minimum_level:
+          type: integer
+          description: Zero-based ordered level; matches cumulative probability at or above this level
+          format: int64
+          minimum: 0
+          maximum: 9
+        sensor_id:
+          type: string
+          format: uuid
+        signal_id:
+          type: string
+          description: For multi-label or exclusive results; omit when minimum_level is set
+          format: uuid
+        threshold:
+          type: number
+          description: Explicit probability threshold greater than zero. Exclusive results use the selected signal instead.
+          format: double
+          exclusiveMinimum: 0
+          maximum: 1
+      required:
+        - sensor_id
+        - threshold
+    AnalyticsSignalSensor:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        id:
+          type: string
+        mode:
+          type: string
+        name:
+          type: string
+        signal_ids:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - name
+        - mode
+        - enabled
+        - signal_ids
     AnthropicInferenceConfig:
       type: object
       properties:
@@ -83994,6 +85467,200 @@ components:
         - value
         - display_name
         - count
+    AuthClient:
+      type: object
+      properties:
+        client_type:
+          type: string
+          description: How the client authenticates upstream.
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+            - ema
+        created_at:
+          type: string
+          description: When the client was created.
+          format: date-time
+        enabled:
+          type: boolean
+          description: Whether the client is enabled. Where typed auth client resolution is enforced, a disabled client is never selected or resolved. Disabling revokes no upstream credentials, and elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving.
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientHeader'
+          description: The headers the client sends upstream.
+        id:
+          type: string
+          description: The auth client id.
+          format: uuid
+        name:
+          type: string
+          description: The client's name.
+        personal:
+          type: boolean
+          description: Whether each caller uses their own connection through the client. A grant on a personal client never lets one user use another user's connection.
+        project_id:
+          type: string
+          description: The project the client belongs to. Omitted for a client shared across the organization's projects.
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The OAuth registration behind remote_session, service_account and ema clients.
+          format: uuid
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientServer'
+          description: The MCP servers that offer the client. Where typed auth client resolution is enforced, changing or disabling the client changes upstream behavior on every one of them.
+        source:
+          enum:
+            - backfill
+            - admin
+          type: string
+          x-speakeasy-name-override: AuthClientSource
+        updated_at:
+          type: string
+          description: When the client was last updated.
+          format: date-time
+      description: 'A configured way for Speakeasy to authenticate to an upstream MCP server. Who may use it is controlled by mcp:auth grants on the client, never by who configured it. Auth clients are typed auth configuration: they take effect only where typed auth client resolution is enforced, which is being rolled out in stages. Elsewhere, including in shadow mode, an MCP server''s existing upstream configuration keeps serving requests.'
+      required:
+        - id
+        - client_type
+        - source
+        - name
+        - enabled
+        - personal
+        - headers
+        - servers
+        - created_at
+        - updated_at
+    AuthClientAudience:
+      type: object
+      properties:
+        auth_client_id:
+          type: string
+          description: The auth client id.
+          format: uuid
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientAudienceEntry'
+          description: The rules deciding who may use the client.
+        public_servers:
+          type: array
+          items:
+            type: string
+          description: Ids of public servers that offer the client. Anonymous callers on them never acquire these rules.
+        version:
+          type: string
+          description: Pass back as expected_version when saving, so an edit made against a stale list is refused.
+      description: Who may use an auth client.
+      required:
+        - auth_client_id
+        - entries
+        - version
+        - public_servers
+    AuthClientAudienceEntry:
+      type: object
+      properties:
+        applies_to:
+          type: string
+          description: client when the rule names this client and can be edited here; client_type when it covers every client of this type; all_clients when it covers every client. Rules that do not name this client are shown for context and edited elsewhere.
+          enum:
+            - client
+            - client_type
+            - all_clients
+        connection_note:
+          type: string
+          description: 'For personal clients: how the rule relates to other people''s connections. A grant never lets anyone use another user''s connection.'
+        level:
+          type: string
+          description: use grants mcp:auth on the client; blocked writes mcp:blocked_auth, which outranks grants.
+          enum:
+            - use
+            - blocked
+        principal_urn:
+          type: string
+          description: 'The principal the rule names: user:<id>, user:all, role:<id> or agent:<id>.'
+        project_id:
+          type: string
+          description: The project the rule is confined to, when it is.
+          format: uuid
+      description: One rule deciding who may use an auth client. The rule applies wherever the client is used, on every server that offers it.
+      required:
+        - principal_urn
+        - level
+        - applies_to
+    AuthClientAudienceRule:
+      type: object
+      properties:
+        level:
+          type: string
+          description: use or blocked.
+          enum:
+            - use
+            - blocked
+        principal_urn:
+          type: string
+          description: user:<id>, user:all, role:<id> or agent:<id>.
+      description: A rule to store for an auth client.
+      required:
+        - principal_urn
+        - level
+    AuthClientHeader:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What the header is for.
+        has_stored_value:
+          type: boolean
+          description: Whether the client stores a value for this header.
+        is_required:
+          type: boolean
+          description: Whether a caller must supply the header when it is copied from the request.
+        is_secret:
+          type: boolean
+          description: Whether the stored value is secret.
+        name:
+          type: string
+          description: The header name.
+        value_from_request_header:
+          type: string
+          description: The request header the value is copied from, for pass-through headers.
+      description: A header an auth client sends upstream. Stored values are never returned.
+      required:
+        - name
+        - is_required
+        - is_secret
+        - has_stored_value
+    AuthClientServer:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The MCP server id.
+          format: uuid
+        name:
+          type: string
+          description: The MCP server's name.
+        project_id:
+          type: string
+          description: The MCP server's project.
+          format: uuid
+        public:
+          type: boolean
+          description: Whether the MCP server is public.
+        slug:
+          type: string
+          description: The MCP server's slug.
+      description: An MCP server an auth client is associated with.
+      required:
+        - id
+        - project_id
+        - public
     AuthorizeRequestBody:
       type: object
       properties:
@@ -88489,6 +90156,20 @@ components:
         - sensitive_data
         - created_at
         - updated_at
+    DetachAuthClientFromMcpServerRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The auth client id.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The MCP server id.
+          format: uuid
+      required:
+        - id
+        - mcp_server_id
     DetachBindingRequestBody:
       type: object
       properties:
@@ -88791,6 +90472,11 @@ components:
     DimensionValuesRequestBody:
       type: object
       properties:
+        attribute:
+          type: string
+          description: With dimension=attribute, the exact signal attribute key. dimension=attribute_keys discovers keys.
+          minLength: 1
+          maxLength: 256
         dataset:
           type: string
           description: Dataset to look in
@@ -88810,6 +90496,8 @@ components:
           format: int64
           minimum: 1
           maximum: 200
+        signal_scope:
+          $ref: '#/components/schemas/AnalyticsSignalScope'
         to:
           type: string
           description: End of the half-open window [from, to), ISO 8601
@@ -91984,6 +93672,11 @@ components:
         account_type:
           type: string
           description: Optional account type filter ('team' or 'personal').
+        agent_ids:
+          type: array
+          items:
+            type: string
+          description: Agent identities to include. Combined with user_filters by AND, so an agent and a person select the calls that agent made on that person's behalf.
         client_keys:
           type: array
           items:
@@ -92062,7 +93755,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ToolUsageUserFilter'
-          description: Typed user identities to include
+          description: Typed user identities to include. An email also matches the calls an agent made on that person's behalf.
       description: Payload for target-aware MCP and tool usage metrics
       required:
         - from
@@ -94633,6 +96326,17 @@ components:
           description: The cursor to be used for the next page of results.
       required:
         - logs
+    ListAuthClientsResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClient'
+        next_cursor:
+          type: string
+      required:
+        - items
     ListBindingsResponseBody:
       type: object
       properties:
@@ -96277,6 +97981,11 @@ components:
         account_type:
           type: string
           description: Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.
+        agent_ids:
+          type: array
+          items:
+            type: string
+          description: Agent identities to include. Combined with user_filters by AND, so an agent and a person select the calls that agent made on that person's behalf.
         client_keys:
           type: array
           items:
@@ -96372,7 +98081,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ToolUsageUserFilter'
-          description: Typed user identities to include
+          description: Typed user identities to include. An email also matches the calls an agent made on that person's behalf.
       description: Payload for listing target-aware MCP and tool usage traces
       required:
         - from
@@ -97455,6 +99164,43 @@ components:
         - target_label
         - total_tool_calls
         - recent_tool_calls
+    McpServerAuthentication:
+      type: object
+      properties:
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClient'
+          description: The auth clients the server offers.
+        mcp_server_id:
+          type: string
+          description: The MCP server id.
+          format: uuid
+        project_id:
+          type: string
+          description: The MCP server's project.
+          format: uuid
+        public:
+          type: boolean
+          description: Whether the MCP server is public.
+        requires_upstream_auth:
+          type: boolean
+          description: Whether the upstream needs authentication. Omitted while undecided.
+        status:
+          type: string
+          description: configured when authentication is required and at least one enabled client is offered; setup_incomplete when it is required and none is; no_auth_required when the upstream explicitly needs none; undecided when nobody has said.
+          enum:
+            - configured
+            - setup_incomplete
+            - no_auth_required
+            - undecided
+      description: How an MCP server authenticates to its upstream.
+      required:
+        - mcp_server_id
+        - project_id
+        - public
+        - status
+        - clients
     McpServerToolsetSummary:
       type: object
       properties:
@@ -97472,6 +99218,10 @@ components:
         external_oauth_server_id:
           type: string
           description: The ID of the external OAuth server attached to the toolset, if any
+          format: uuid
+        hosting_mcp_server_id:
+          type: string
+          description: 'The ID of the MCP server that stands in for the toolset: its canonical server, whose ID is the toolset''s, or when it has none, its oldest live server with a live endpoint. Absent when it has neither.'
           format: uuid
         id:
           type: string
@@ -106201,6 +107951,25 @@ components:
       required:
         - target_id
         - access
+    SetAuthClientAudienceRequestBody:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientAudienceRule'
+          description: Every rule that should name the client.
+        expected_version:
+          type: string
+          description: The version returned by getAudience.
+        id:
+          type: string
+          description: The auth client id.
+          format: uuid
+      required:
+        - id
+        - expected_version
+        - entries
     SetAuthenticationHostRequestBody:
       type: object
       properties:
@@ -106367,6 +108136,19 @@ components:
           description: The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
+    SetMcpServerUpstreamAuthRequirementRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server id.
+          format: uuid
+        requires_upstream_auth:
+          type: boolean
+          description: Whether the upstream needs authentication.
+      required:
+        - mcp_server_id
+        - requires_upstream_auth
     SetOrganizationWhitelistRequestBody:
       type: object
       properties:
@@ -107222,6 +109004,29 @@ components:
         - slug
         - created_at
         - updated_at
+    SignalFindingsRequestBody:
+      type: object
+      properties:
+        compare_previous:
+          type: boolean
+          default: false
+        evidence:
+          type: boolean
+          default: false
+        from:
+          type: string
+          format: date-time
+        peer:
+          $ref: '#/components/schemas/AnalyticsSignalSelection'
+        signal_query:
+          $ref: '#/components/schemas/AnalyticsSignalQuery'
+        to:
+          type: string
+          format: date-time
+      required:
+        - from
+        - to
+        - signal_query
     Skill:
       type: object
       properties:
@@ -110434,6 +112239,12 @@ components:
         account_type:
           type: string
           description: AI account classification ('team' or 'personal'); empty/absent when unclassified
+        authorizer_label:
+          type: string
+          description: Email of the authorizer when they resolve to a known user
+        authorizer_user_id:
+          type: string
+          description: Person an agent call acted on behalf of; absent for direct calls and for agents that sign in as themselves
         block_reason:
           type: string
           description: Hook block reason when hook_status is blocked
@@ -112280,6 +114091,22 @@ components:
           format: int64
       required:
         - id
+    UpdateAuthClientRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the client is enabled where typed auth client resolution is enforced.
+        id:
+          type: string
+          description: The auth client id.
+          format: uuid
+        name:
+          type: string
+          description: The new name.
+          minLength: 1
+      required:
+        - id
     UpdateAwsIamCredentialRequestBody:
       type: object
       properties:
@@ -112587,6 +114414,22 @@ components:
         - id
         - name
         - external_key_id
+    UpdateKeyPolicyRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the key.
+          format: uuid
+        policy_grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIKeyPolicyGrant'
+          description: The key's complete policy. An empty list removes every grant.
+          maxItems: 100
+      required:
+        - id
+        - policy_grants
     UpdateMarketplaceSettingsRequestBody:
       type: object
       properties:
@@ -115852,6 +117695,8 @@ tags:
     description: Manages audit logs in Speakeasy.
   - name: auth
     description: Managed auth for gram producers and dashboard.
+  - name: authClients
+    description: Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect only where typed auth client resolution is enforced, which is being rolled out in stages. They revoke no upstream credentials and remove no existing upstream OAuth associations; elsewhere, including in shadow mode, existing upstream configuration keeps serving.
   - name: businessMemories
     description: Inspect and semantically search business memories.
   - name: chat

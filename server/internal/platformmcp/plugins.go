@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
@@ -458,6 +459,12 @@ type PluginsService struct {
 	metadataLogger *slog.Logger
 	metadataCore   *plugindelivery.PluginMetadataCore
 	metadataBudget OperationBudget
+
+	// orgHosts resolves the platform host stored as an organization's default
+	// host. Nil links follow the request's platform origin. orgHostsLogger
+	// records failed reads of that host.
+	orgHosts       *orghost.Resolver
+	orgHostsLogger *slog.Logger
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
@@ -573,6 +580,21 @@ func (s *PluginsService) WithInstallLinks(dashboardURL, serverURL *url.URL) *Plu
 	if serverURL != nil && serverURL.Scheme == "https" && serverURL.Host != "" && serverURL.User == nil {
 		copyURL := *serverURL
 		s.serverURL = &copyURL
+	}
+	return s
+}
+
+// WithOrganizationHosts makes member links use the platform host stored as the
+// organization's default host, the host the dashboard serves it on. logger
+// records failed reads of that host, after which links fall back to the
+// request's platform origin. A nil logger discards those records.
+func (s *PluginsService) WithOrganizationHosts(resolver *orghost.Resolver, logger *slog.Logger) *PluginsService {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	if s != nil {
+		s.orgHosts = resolver
+		s.orgHostsLogger = logger
 	}
 	return s
 }

@@ -97,6 +97,7 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		ShadowServerNames:  input.ShadowServerNames,
 		MetaMcpServerIds:   input.MetaMcpServerIDs,
 		UserFilters:        nil,
+		AgentIds:           nil,
 		AccountType:        nil,
 		HookSources:        input.HookSources,
 		ClientKeys:         input.ClientKeys,
