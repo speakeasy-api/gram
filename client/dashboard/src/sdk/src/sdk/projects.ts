@@ -6,15 +6,19 @@ import { projectsCreate } from "../funcs/projectsCreate.js";
 import { projectsDeleteById } from "../funcs/projectsDeleteById.js";
 import { projectsList } from "../funcs/projectsList.js";
 import { projectsListAllowedOrigins } from "../funcs/projectsListAllowedOrigins.js";
+import { projectsListBuiltinMcpServers } from "../funcs/projectsListBuiltinMcpServers.js";
 import { projectsRead } from "../funcs/projectsRead.js";
 import { projectsSetLogo } from "../funcs/projectsSetLogo.js";
 import { projectsSetOrganizationWhitelist } from "../funcs/projectsSetOrganizationWhitelist.js";
 import { projectsUpdate } from "../funcs/projectsUpdate.js";
+import { projectsUpdateBuiltinMcpServer } from "../funcs/projectsUpdateBuiltinMcpServer.js";
 import { projectsUpsertAllowedOrigin } from "../funcs/projectsUpsertAllowedOrigin.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { BuiltinMcpServer } from "../models/components/builtinmcpserver.js";
 import { CreateProjectResult } from "../models/components/createprojectresult.js";
 import { GetProjectResult } from "../models/components/getprojectresult.js";
 import { ListAllowedOriginsResult } from "../models/components/listallowedoriginsresult.js";
+import { ListBuiltinMcpServersResponseBody } from "../models/components/listbuiltinmcpserversresponsebody.js";
 import { ListProjectsResult } from "../models/components/listprojectsresult.js";
 import { SetProjectLogoResult } from "../models/components/setprojectlogoresult.js";
 import { UpdateProjectResult } from "../models/components/updateprojectresult.js";
@@ -36,6 +40,10 @@ import {
   ListAllowedOriginsSecurity,
 } from "../models/operations/listallowedorigins.js";
 import {
+  ListBuiltinMcpServersRequest,
+  ListBuiltinMcpServersSecurity,
+} from "../models/operations/listbuiltinmcpservers.js";
+import {
   ListProjectsRequest,
   ListProjectsSecurity,
 } from "../models/operations/listprojects.js";
@@ -47,6 +55,10 @@ import {
   SetProjectLogoRequest,
   SetProjectLogoSecurity,
 } from "../models/operations/setprojectlogo.js";
+import {
+  UpdateBuiltinMcpServerRequest,
+  UpdateBuiltinMcpServerSecurity,
+} from "../models/operations/updatebuiltinmcpserver.js";
 import {
   UpdateProjectRequest,
   UpdateProjectSecurity,
@@ -154,6 +166,25 @@ export class Projects extends ClientSDK {
   }
 
   /**
+   * listBuiltinMcpServers projects
+   *
+   * @remarks
+   * List code-owned MCP servers and their project preferences. Only live organization administrators may discover built-ins. Hidden servers are included for settings management; hiding never changes runtime authorization.
+   */
+  async listBuiltinMcpServers(
+    request?: ListBuiltinMcpServersRequest | undefined,
+    security?: ListBuiltinMcpServersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListBuiltinMcpServersResponseBody> {
+    return unwrapAsync(projectsListBuiltinMcpServers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * setLogo projects
    *
    * @remarks
@@ -203,6 +234,25 @@ export class Projects extends ClientSDK {
     options?: RequestOptions,
   ): Promise<UpdateProjectResult> {
     return unwrapAsync(projectsUpdate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateBuiltinMcpServer projects
+   *
+   * @remarks
+   * Update the user session issuer binding, visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.
+   */
+  async updateBuiltinMcpServer(
+    request: UpdateBuiltinMcpServerRequest,
+    security?: UpdateBuiltinMcpServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<BuiltinMcpServer> {
+    return unwrapAsync(projectsUpdateBuiltinMcpServer(
       this,
       request,
       security,

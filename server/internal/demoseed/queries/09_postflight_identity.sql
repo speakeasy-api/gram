@@ -569,3 +569,13 @@ LEFT JOIN sigint_custom_signals cs
 WHERE ss.project_id = @project_id::uuid AND ss.deleted IS FALSE
   AND (s.id IS NULL OR s.deleted IS TRUE
     OR cs.id IS NULL OR cs.deleted IS TRUE);
+
+-- name: PostflightIDBuiltinSlackBinding :one
+SELECT count(*) FROM builtin_mcp_settings AS settings
+JOIN user_session_issuers AS issuer ON issuer.id = settings.user_session_issuer_id
+WHERE settings.project_id = @project_id::uuid
+  AND settings.builtin_key = 'slack'
+  AND settings.user_session_issuer_bound
+  AND issuer.id = @issuer_id::uuid
+  AND issuer.project_id = settings.project_id
+  AND issuer.organization_id = @org_id::text;

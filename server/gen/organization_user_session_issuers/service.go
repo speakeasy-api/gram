@@ -355,6 +355,9 @@ type OrganizationUserSessionIssuerMigratePreflight struct {
 	// Enterprise-managed authorization bindings already present on the target.
 	// Non-zero blocks migration.
 	EmaBindingConflictCount int
+	// Number of live built-in MCP bindings to the source issuer. Rebind these
+	// explicitly before migrating; a nonzero count blocks migration.
+	BuiltinBindingCount int
 	// Whether a Platform MCP catalog registration owns either issuer. True blocks
 	// migration.
 	PlatformOwned bool
@@ -455,8 +458,8 @@ type UserSessionIssuerFieldMismatch struct {
 	TargetValue string
 }
 
-// A live MCP server, toolset, or meta MCP server attached to a
-// user_session_issuer.
+// A live MCP server, toolset, meta MCP server, or built-in MCP server attached
+// to a user_session_issuer.
 type UserSessionIssuerMcpServer struct {
 	// Which kind of MCP server this is.
 	Kind string

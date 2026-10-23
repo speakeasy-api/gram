@@ -353,6 +353,7 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
+	builtinMCPs               BuiltinMCPManagement
 	xaaReadiness              *xaaReadinessService
 	issuerGate                *internalsessionissuers.Gate
 	logger                    *slog.Logger
@@ -394,6 +395,7 @@ type PostgresReader struct {
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
+		builtinMCPs:               nil,
 		logger:                    logger.With(attr.SlogComponent("platformmcp")),
 		db:                        db,
 		reader:                    readmodel.New(db),

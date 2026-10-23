@@ -191,6 +191,7 @@ func AttachAuthenticationHost(host *AuthenticationHost, service *Service) {
 		handle(route.method, route.path, route.handler)
 	}
 	attachOrganizationGatewayAuthenticationHost(host, service)
+	attachBuiltinAuthenticationHost(host, service)
 }
 
 // RecordAuthenticationHost records the authentication host on service without

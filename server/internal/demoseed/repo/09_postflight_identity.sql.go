@@ -202,6 +202,30 @@ func (q *Queries) PostflightIDBoundAssistantRoot(ctx context.Context, arg Postfl
 	return count, err
 }
 
+const postflightIDBuiltinSlackBinding = `-- name: PostflightIDBuiltinSlackBinding :one
+SELECT count(*) FROM builtin_mcp_settings AS settings
+JOIN user_session_issuers AS issuer ON issuer.id = settings.user_session_issuer_id
+WHERE settings.project_id = $1::uuid
+  AND settings.builtin_key = 'slack'
+  AND settings.user_session_issuer_bound
+  AND issuer.id = $2::uuid
+  AND issuer.project_id = settings.project_id
+  AND issuer.organization_id = $3::text
+`
+
+type PostflightIDBuiltinSlackBindingParams struct {
+	ProjectID uuid.UUID
+	IssuerID  uuid.UUID
+	OrgID     string
+}
+
+func (q *Queries) PostflightIDBuiltinSlackBinding(ctx context.Context, arg PostflightIDBuiltinSlackBindingParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDBuiltinSlackBinding, arg.ProjectID, arg.IssuerID, arg.OrgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDChainingClient = `-- name: PostflightIDChainingClient :one
 SELECT count(*) FROM remote_session_clients
 WHERE project_id = $1::uuid AND id = $2::uuid

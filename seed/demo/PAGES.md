@@ -384,3 +384,19 @@ On the Acme Agent Gateway, the picker groups member tools by server. Specific to
 First-party connect pages link services without issuing a client grant. Agent approvals and management-issued sessions use their explicit principal grants rather than a human tool catalogue. Existing v1 gateway policies retain their unrestricted member scope until their fixed authorization expiry or revocation. Refresh preserves that deadline and policy. A new browser consent records a v2 catalogue.
 
 Denying consent retires unadopted identity-provider credentials for the same issuer, subject, and sign-in across member projects. This also clears pending credentials from other concurrent consent flows; those flows re-exchange on retry. Credentials already adopted by a session remain usable.
+
+### Built-in Slack inbound authentication
+
+Verification: [Built-in Slack inbound authentication](verify.md#built-in-slack-inbound-authentication).
+
+`[~]` The built-in Slack settings have one project-scoped inbound user session
+issuer binding, referencing the existing project-owned `slack` issuer with
+`user_session_issuer_bound = true`. This is separate from the seeded remote Slack
+server: the built-in has no persisted server or toolset row and requires no new
+credentials. Open the built-in Slack authentication settings and verify the
+inbound issuer is selected. Reseed twice and verify the selection remains; the
+postflight checks exactly one binding to the expected project/org issuer.
+Cleanup removes settings across the seeded organization's projects before
+issuers or projects are deleted. If a previous project deletion already detached
+the deterministic Slack preference, cleanup also recovers that specific
+Spec-derived row without deleting other tenants' detached preferences.

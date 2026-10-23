@@ -113,6 +113,8 @@ func TestRuntimeInitializeDropsInstructionsForToolsHiddenFromChatGPT(t *testing.
 	allowlistRPC(t, handler, runtime, testOtherClientID, initialize, &other)
 
 	require.Contains(t, other.Instructions, "distribute_mcp_to_plugin", "other clients keep every instruction")
+	require.Contains(t, other.Instructions, "Omitted user_session_issuer_id preserves the existing binding")
+	require.Contains(t, other.Instructions, "an explicit issuer must be live in the same organization and scoped to this project or the organization")
 	require.Less(t, len(chatGPT.Instructions), len(other.Instructions))
 	require.Contains(t, chatGPT.Instructions, "attach_platform_mcp_identity_provider", "golden-path guidance stays")
 	for _, descriptor := range runtime.registrar.Descriptors() {
@@ -139,6 +141,8 @@ func TestRuntimeDiscoverDropsInstructionsForToolsHiddenFromChatGPT(t *testing.T)
 	allowlistRPC(t, handler, runtime, testOtherClientID, discover, &other, header)
 
 	require.Contains(t, other.Instructions, "distribute_mcp_to_plugin", "other clients keep every instruction")
+	require.Contains(t, other.Instructions, "Omitted user_session_issuer_id preserves the existing binding")
+	require.Contains(t, other.Instructions, "an explicit issuer must be live in the same organization and scoped to this project or the organization")
 	require.Less(t, len(chatGPT.Instructions), len(other.Instructions))
 	require.NotContains(t, chatGPT.Instructions, "distribute_mcp_to_plugin")
 	require.Equal(t, "private", chatGPT.CacheScope)

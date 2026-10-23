@@ -276,6 +276,7 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayl
 }
 
 type userSessionMigrationPreflight struct {
+	builtinBindingCount                                                          int32
 	clientCount, sessionCount, consentCount, cimdClientCount, remoteSessionCount int32
 	conflictingClientIDs                                                         []string
 	principalBindingConflictCount, emaBindingConflictCount                       int32
@@ -285,7 +286,7 @@ type userSessionMigrationPreflight struct {
 }
 
 func (p userSessionMigrationPreflight) canMigrate() bool {
-	return len(p.conflictingClientIDs) == 0 && p.principalBindingConflictCount == 0 && p.emaBindingConflictCount == 0 && !p.platformOwned
+	return p.builtinBindingCount == 0 && len(p.conflictingClientIDs) == 0 && p.principalBindingConflictCount == 0 && p.emaBindingConflictCount == 0 && !p.platformOwned
 }
 
 // userSessionMigrationWarnings lists the configuration differences an
@@ -340,6 +341,12 @@ func userSessionMigrationWarningsFingerprint(sourceID, targetID uuid.UUID, warni
 }
 
 func (s *Service) buildUserSessionMigrationPreflight(ctx context.Context, q *repo.Queries, organizationID string, source, target repo.UserSessionIssuer) (userSessionMigrationPreflight, error) {
+	// Explicit built-in bindings are not migrated implicitly. Administrators must
+	// rebind each built-in before retiring its issuer.
+	builtinBindings, err := q.CountUserSessionIssuerBuiltinBindings(ctx, repo.CountUserSessionIssuerBuiltinBindingsParams{UserSessionIssuerID: source.ID, OrganizationID: organizationID})
+	if err != nil {
+		return userSessionMigrationPreflight{}, fmt.Errorf("count built-in issuer bindings: %w", err)
+	}
 	clients, err := q.CountUserSessionIssuerClientsForMigration(ctx, repo.CountUserSessionIssuerClientsForMigrationParams{UserSessionIssuerID: source.ID, OrganizationID: organizationID})
 	if err != nil {
 		return userSessionMigrationPreflight{}, fmt.Errorf("count clients: %w", err)
@@ -384,14 +391,14 @@ func (s *Service) buildUserSessionMigrationPreflight(ctx context.Context, q *rep
 	return userSessionMigrationPreflight{
 		clientCount: clients, sessionCount: sessions, consentCount: consents, cimdClientCount: cimdClients, remoteSessionCount: remoteSessions,
 		conflictingClientIDs: conflicts, principalBindingConflictCount: principalConflicts, emaBindingConflictCount: emaConflicts,
-		platformOwned: sourceOwned || targetOwned, warnings: warnings,
+		builtinBindingCount: builtinBindings, platformOwned: sourceOwned || targetOwned, warnings: warnings,
 		warningsFingerprint: userSessionMigrationWarningsFingerprint(source.ID, target.ID, warnings),
 	}, nil
 }
 
 func userSessionMigrationPreflightView(preflight userSessionMigrationPreflight) *orggen.OrganizationUserSessionIssuerMigratePreflight {
 	return &orggen.OrganizationUserSessionIssuerMigratePreflight{
-		ClientCount: int(preflight.clientCount), SessionCount: int(preflight.sessionCount), ConsentCount: int(preflight.consentCount), CimdClientCount: int(preflight.cimdClientCount), RemoteSessionCount: int(preflight.remoteSessionCount),
+		BuiltinBindingCount: int(preflight.builtinBindingCount), ClientCount: int(preflight.clientCount), SessionCount: int(preflight.sessionCount), ConsentCount: int(preflight.consentCount), CimdClientCount: int(preflight.cimdClientCount), RemoteSessionCount: int(preflight.remoteSessionCount),
 		ConflictingClientIds: preflight.conflictingClientIDs, PrincipalBindingConflictCount: int(preflight.principalBindingConflictCount), EmaBindingConflictCount: int(preflight.emaBindingConflictCount), PlatformOwned: preflight.platformOwned,
 		Warnings: preflight.warnings, WarningsFingerprint: preflight.warningsFingerprint, CanMigrate: preflight.canMigrate(),
 	}

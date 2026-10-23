@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -45,7 +46,18 @@ func (s *Service) authenticateIssuerGateAgentKey(ctx context.Context, token stri
 		(authCtx.ProjectID != nil && *authCtx.ProjectID != endpoint.ProjectID) {
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
-	keyCtx, err = s.requireAgentSessionAuthorization(keyCtx, endpoint)
+	if endpoint.MetaMcpServerID.Valid {
+		// A machine key admits the gateway, not its members. Member discovery
+		// and dispatch independently enforce live grants and credential ceilings.
+		// Keep this separate from agentAuthorizationTarget: consent-based agent
+		// sessions do not yet represent a configured gateway member set.
+		if endpoint.MetaMcpServerID.UUID == uuid.Nil || endpoint.ProjectID == uuid.Nil || endpoint.UserSessionIssuerID == uuid.Nil {
+			return ctx, nil, oops.C(oops.CodeUnauthorized)
+		}
+		err = s.authz.Require(keyCtx, authz.MCPCheck(authz.ScopeMCPConnect, endpoint.MetaMcpServerID.UUID.String(), endpoint.ProjectID.String()))
+	} else {
+		keyCtx, err = s.requireAgentSessionAuthorization(keyCtx, endpoint)
+	}
 	if err != nil {
 		return ctx, nil, err
 	}

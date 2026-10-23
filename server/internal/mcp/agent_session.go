@@ -132,6 +132,13 @@ func (s *Service) admitAgentSession(ctx context.Context, endpoint *ResolvedMcpEn
 }
 
 func (s *Service) requireAgentSessionAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint) (context.Context, error) {
+	if endpoint.IsBuiltin() {
+		if err := s.authz.RequireBuiltinConnect(ctx, endpoint.BuiltinID.UUID.String(), endpoint.ProjectID.String()); err != nil {
+			return ctx, fmt.Errorf("authorize built-in agent session: %w", err)
+		}
+		return ctx, nil
+	}
+
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
 		return ctx, oops.C(oops.CodeUnauthorized)

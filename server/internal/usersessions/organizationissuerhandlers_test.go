@@ -15,6 +15,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/builtinmcp"
+	builtinrepo "github.com/speakeasy-api/gram/server/internal/builtinmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -732,5 +734,36 @@ func TestOrganizationUserSessionIssuerDeletePreflight(t *testing.T) {
 	require.Equal(t, "Preflight toolset", preflight.Toolsets[0].Name)
 
 	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{ID: created.ID, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestOrganizationUserSessionIssuerBuiltinLifecycle(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	source, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "builtin-source", AuthnChallengeMode: "shared", SessionDurationHours: 24})
+	require.NoError(t, err)
+	target, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "builtin-target", AuthnChallengeMode: "shared", SessionDurationHours: 24})
+	require.NoError(t, err)
+	bound, err := builtinrepo.New(ti.conn).BindUserSessionIssuer(ctx, builtinrepo.BindUserSessionIssuerParams{ProjectID: uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}, BuiltinKey: builtinmcp.Slack, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.MustParse(source.ID), Valid: true}})
+	require.NoError(t, err)
+	stableID := builtinmcp.ID(*ac.ProjectID, builtinmcp.Slack).String()
+	require.NotEqual(t, bound.ID.String(), stableID)
+	preflight, err := ti.service.GetIssuerDeletePreflight(ctx, &orggen.GetIssuerDeletePreflightPayload{ID: source.ID})
+	require.NoError(t, err)
+	require.False(t, preflight.CanDelete)
+	require.Len(t, preflight.McpServers, 1)
+	require.Equal(t, stableID, preflight.McpServers[0].ID)
+	linked, err := ti.service.ListMcpServers(ctx, &orggen.ListMcpServersPayload{UserSessionIssuerID: source.ID})
+	require.NoError(t, err)
+	require.Len(t, linked.Items, 1)
+	require.Equal(t, stableID, linked.Items[0].ID)
+	require.Equal(t, "builtin_mcp_server", linked.Items[0].Kind)
+	migration, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: source.ID, TargetID: target.ID})
+	require.NoError(t, err)
+	require.False(t, migration.CanMigrate)
+	require.Equal(t, 1, migration.BuiltinBindingCount)
+	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: source.ID, TargetID: target.ID})
 	requireOopsCode(t, err, oops.CodeConflict)
 }

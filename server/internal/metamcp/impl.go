@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/builtinmcp"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -261,6 +262,32 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp servers").LogError(ctx, s.logger)
+	}
+
+	// Built-in membership is administrative inventory. Count it only after a
+	// single live admin check; ordinary readers must not infer it from totals.
+	if adminErr := builtinmcp.RequireAdmin(ctx, s.db, authCtx.ActiveOrganizationID); adminErr == nil {
+		gatewayIDs := make([]uuid.UUID, 0, len(rows))
+		for _, row := range rows {
+			gatewayIDs = append(gatewayIDs, row.MetaMcpServer.ID)
+		}
+		keys := make([]string, 0, len(builtinmcp.All()))
+		for _, definition := range builtinmcp.All() {
+			keys = append(keys, definition.Key)
+		}
+		counts, err := repo.New(s.db).CountBuiltinMetaMCPMembers(ctx, repo.CountBuiltinMetaMCPMembersParams{ProjectID: conv.ToNullUUID(*authCtx.ProjectID), GatewayIds: gatewayIDs, BuiltinKeys: keys})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count built-in gateway members")
+		}
+		byGateway := make(map[uuid.UUID]int64, len(counts))
+		for _, count := range counts {
+			byGateway[count.MetaMcpServerID.UUID] = count.MemberCount
+		}
+		for i := range rows {
+			rows[i].MemberCount += byGateway[rows[i].MetaMcpServer.ID]
+		}
+	} else if failure, ok := errors.AsType[*oops.ShareableError](adminErr); !ok || (failure.Code != oops.CodeForbidden && failure.Code != oops.CodeUnauthorized && failure.Code != oops.CodeNotFound) {
+		return nil, oops.E(oops.CodeUnexpected, adminErr, "check built-in gateway administrator")
 	}
 
 	return &gen.ListMetaMcpServersResult{MetaMcpServers: mv.BuildMetaMcpServerListView(rows)}, nil
@@ -656,6 +683,22 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		}
 	}
 
+	// Deleting a gateway also removes its synthetic memberships. This is
+	// parent-resource cleanup, not an independent built-in configuration write.
+	builtinMembers, err := txRepo.ListBuiltinMetaMCPMembers(ctx, repo.ListBuiltinMetaMCPMembersParams{MetaMcpServerID: conv.ToNullUUID(existing.ID), ProjectID: conv.ToNullUUID(*authCtx.ProjectID)})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list built-in memberships for gateway deletion")
+	}
+	for _, builtinMember := range builtinMembers {
+		deletedMember, err := txRepo.DeleteBuiltinMetaMCPMember(ctx, repo.DeleteBuiltinMetaMCPMemberParams{ID: builtinMember.ID, MetaMcpServerID: conv.ToNullUUID(existing.ID), ProjectID: conv.ToNullUUID(*authCtx.ProjectID)})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "delete built-in gateway membership")
+		}
+		if err := s.audit.LogMetaMcpMemberRemove(ctx, dbtx, builtinMemberAuditEvent(actorFromAuthContext(authCtx), existing, deletedMember)); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "audit built-in gateway membership removal")
+		}
+	}
+
 	endpoints, err := endpointsRepo.SoftDeleteMCPEndpointsByMetaMCPServerID(ctx, mcpendpointsrepo.SoftDeleteMCPEndpointsByMetaMCPServerIDParams{
 		MetaMcpServerID: existing.ID,
 		ProjectID:       *authCtx.ProjectID,
@@ -769,7 +812,31 @@ func (s *Service) ListMetaMcpMembers(ctx context.Context, payload *gen.ListMetaM
 		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp members").LogError(ctx, s.logger)
 	}
 
-	return &gen.ListMetaMcpMembersResult{Members: mv.BuildMetaMcpMemberListView(rows)}, nil
+	members := mv.BuildMetaMcpMemberListView(rows)
+	if adminErr := builtinmcp.RequireAdmin(ctx, s.db, authCtx.ActiveOrganizationID); adminErr == nil {
+		builtins, err := r.ListBuiltinMetaMCPMembers(ctx, repo.ListBuiltinMetaMCPMembersParams{MetaMcpServerID: uuid.NullUUID{UUID: metaID, Valid: true}, ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list built-in gateway members")
+		}
+		for _, member := range builtins {
+			if _, ok := builtinmcp.Lookup(member.BuiltinKey); !ok {
+				continue
+			}
+			members = append(members, builtinMemberView(*authCtx.ProjectID, member.ID, member.BuiltinKey, member.EnvironmentID, member.SortOrder))
+		}
+		slices.SortStableFunc(members, func(a, b *types.MetaMcpMember) int {
+			if a.SortOrder < b.SortOrder {
+				return -1
+			}
+			if a.SortOrder > b.SortOrder {
+				return 1
+			}
+			return 0
+		})
+	} else if failure, ok := errors.AsType[*oops.ShareableError](adminErr); !ok || (failure.Code != oops.CodeForbidden && failure.Code != oops.CodeUnauthorized && failure.Code != oops.CodeNotFound) {
+		return nil, oops.E(oops.CodeUnexpected, adminErr, "check built-in gateway administrator")
+	}
+	return &gen.ListMetaMcpMembersResult{Members: members}, nil
 }
 
 func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpMemberPayload) (*types.MetaMcpMember, error) {
@@ -853,6 +920,14 @@ func (s *Service) UpdateMetaMcpMember(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sort_order").LogError(ctx, logger)
 	}
 
+	builtin, builtinErr := repo.New(s.db).GetBuiltinMetaMCPMember(ctx, repo.GetBuiltinMetaMCPMemberParams{ID: memberID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID)})
+	if builtinErr == nil {
+		return s.reorderBuiltinMetaMcpMember(ctx, authCtx, builtin, sortOrder)
+	}
+	if !errors.Is(builtinErr, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, builtinErr, "get built-in gateway membership")
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -914,6 +989,14 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	memberID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid membership id").LogError(ctx, logger)
+	}
+
+	builtin, builtinErr := repo.New(s.db).GetBuiltinMetaMCPMember(ctx, repo.GetBuiltinMetaMCPMemberParams{ID: memberID, ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}})
+	if builtinErr == nil {
+		return s.removeBuiltinMetaMcpMember(ctx, authCtx, builtin)
+	}
+	if !errors.Is(builtinErr, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, builtinErr, "get built-in gateway member")
 	}
 
 	dbtx, err := s.db.Begin(ctx)

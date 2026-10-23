@@ -656,9 +656,9 @@ var ListOrganizationUserSessionIssuersResult = Type("ListOrganizationUserSession
 })
 
 var UserSessionIssuerMcpServer = Type("UserSessionIssuerMcpServer", func() {
-	Description("A live MCP server, toolset, or meta MCP server attached to a user_session_issuer.")
+	Description("A live MCP server, toolset, meta MCP server, or built-in MCP server attached to a user_session_issuer.")
 	Attribute("kind", String, "Which kind of MCP server this is.", func() {
-		Enum("mcp_server", "toolset", "meta_mcp_server")
+		Enum("mcp_server", "toolset", "meta_mcp_server", "builtin_mcp_server")
 	})
 	Attribute("id", String, "The MCP server, toolset, or meta MCP server id.", func() { Format(FormatUUID) })
 	Attribute("name", String, "The display name.")
@@ -716,11 +716,12 @@ var OrganizationUserSessionIssuerMigratePreflight = Type("OrganizationUserSessio
 	Attribute("conflicting_client_ids", ArrayOf(String), "Active OAuth client ids already present on both issuers. Non-empty blocks migration.")
 	Attribute("principal_binding_conflict_count", Int, "Active principal bindings that would violate target uniqueness. Non-zero blocks migration.")
 	Attribute("ema_binding_conflict_count", Int, "Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.")
+	Attribute("builtin_binding_count", Int, "Number of live built-in MCP bindings to the source issuer. Rebind these explicitly before migrating; a nonzero count blocks migration.")
 	Attribute("platform_owned", Boolean, "Whether a Platform MCP catalog registration owns either issuer. True blocks migration.")
 	Attribute("warnings", ArrayOf(UserSessionIssuerFieldMismatch), "Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected. Besides the issuer settings, this reports authorization_server_mode, use_authentication_host, and issuer_url (the shared authorization server's issuer identifier, empty when not served) whenever they differ: repointed MCP servers then direct clients to a different authorization server, so anything configured with the source's values, such as an identity provider or a federated platform, must be updated.")
 	Attribute("warnings_fingerprint", String, "Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.")
 	Attribute("can_migrate", Boolean, "True when no hard blocker is present.")
-	Required("client_count", "session_count", "consent_count", "cimd_client_count", "remote_session_count", "conflicting_client_ids", "principal_binding_conflict_count", "ema_binding_conflict_count", "platform_owned", "warnings", "warnings_fingerprint", "can_migrate")
+	Required("client_count", "session_count", "consent_count", "cimd_client_count", "remote_session_count", "conflicting_client_ids", "principal_binding_conflict_count", "ema_binding_conflict_count", "builtin_binding_count", "platform_owned", "warnings", "warnings_fingerprint", "can_migrate")
 })
 
 var MigrateOrganizationUserSessionIssuerResult = Type("MigrateOrganizationUserSessionIssuerResult", func() {

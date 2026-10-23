@@ -49,6 +49,8 @@ func BuildMetaMcpMemberView(member repo.ListMetaMCPMembersRow) *types.MetaMcpMem
 		McpServerID:   member.McpServerID.String(),
 		McpServerName: conv.FromPGText[string](member.McpServerName),
 		McpServerSlug: conv.FromPGText[string](member.McpServerSlug),
+		BuiltinKey:    nil,
+		EnvironmentID: nil,
 		SortOrder:     int(member.SortOrder),
 	}
 }
@@ -72,6 +74,8 @@ func BuildMetaMcpMemberViewFromParts(member repo.MetaMcpServerMember, server mcp
 		McpServerID:   member.McpServerID.String(),
 		McpServerName: conv.FromPGText[string](server.Name),
 		McpServerSlug: conv.FromPGText[string](server.Slug),
+		BuiltinKey:    nil,
+		EnvironmentID: nil,
 		SortOrder:     int(member.SortOrder),
 	}
 }

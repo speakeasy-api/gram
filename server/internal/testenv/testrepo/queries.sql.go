@@ -319,6 +319,26 @@ func (q *Queries) CountBackendsBlockedByFixture(ctx context.Context, holderPid i
 	return count, err
 }
 
+const countBuiltinIssuerBindingAuditsFixture = `-- name: CountBuiltinIssuerBindingAuditsFixture :one
+SELECT count(*) FROM audit_logs
+WHERE project_id = $1
+  AND subject_id = $2
+  AND action = 'builtin_mcp:update'
+  AND actor_id = 'builtin-mcp-issuer-binding'
+`
+
+type CountBuiltinIssuerBindingAuditsFixtureParams struct {
+	ProjectID uuid.NullUUID
+	SubjectID string
+}
+
+func (q *Queries) CountBuiltinIssuerBindingAuditsFixture(ctx context.Context, arg CountBuiltinIssuerBindingAuditsFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countBuiltinIssuerBindingAuditsFixture, arg.ProjectID, arg.SubjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countChatSessionLinksByKindFixture = `-- name: CountChatSessionLinksByKindFixture :one
 SELECT COUNT(*)
 FROM chat_session_links
@@ -1633,6 +1653,16 @@ func (q *Queries) FailPreparationFixtureIssuerMetadata(ctx context.Context, arg 
 	return err
 }
 
+const forceHardDeleteUserSessionIssuerFixture = `-- name: ForceHardDeleteUserSessionIssuerFixture :exec
+DELETE FROM user_session_issuers WHERE id = $1
+`
+
+// Shared fixture for checking ON DELETE behavior of issuer bindings.
+func (q *Queries) ForceHardDeleteUserSessionIssuerFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, forceHardDeleteUserSessionIssuerFixture, id)
+	return err
+}
+
 const forceRemoteSessionClientAuthMethodFixture = `-- name: ForceRemoteSessionClientAuthMethodFixture :execrows
 UPDATE remote_session_clients
 SET token_endpoint_auth_method = $1
@@ -1956,6 +1986,24 @@ type ForceSoftDeleteUserSessionIssuerParams struct {
 // Test-only fixture for defensive paths that handle a dangling soft-delete FK.
 func (q *Queries) ForceSoftDeleteUserSessionIssuer(ctx context.Context, arg ForceSoftDeleteUserSessionIssuerParams) error {
 	_, err := q.db.Exec(ctx, forceSoftDeleteUserSessionIssuer, arg.ID, arg.ProjectID)
+	return err
+}
+
+const forceUserSessionIssuerOwnershipFixture = `-- name: ForceUserSessionIssuerOwnershipFixture :exec
+UPDATE user_session_issuers
+SET project_id = $1, organization_id = $2
+WHERE id = $3
+`
+
+type ForceUserSessionIssuerOwnershipFixtureParams struct {
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	ID             uuid.UUID
+}
+
+// Shared fixture for defensive runtime checks of stale or invalid bindings.
+func (q *Queries) ForceUserSessionIssuerOwnershipFixture(ctx context.Context, arg ForceUserSessionIssuerOwnershipFixtureParams) error {
+	_, err := q.db.Exec(ctx, forceUserSessionIssuerOwnershipFixture, arg.ProjectID, arg.OrganizationID, arg.ID)
 	return err
 }
 

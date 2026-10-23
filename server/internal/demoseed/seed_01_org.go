@@ -209,6 +209,11 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete mcp servers", func() error { return s.q.OrgDeleteMCPServers(ctx, org) }},
 		{"delete remote protected resources", func() error { return s.q.OrgDeleteRemoteProtectedResources(ctx, proj) }},
 		{"delete meta mcp servers", func() error { return s.q.OrgDeleteMetaMCPServers(ctx, org) }},
+		{"delete built-in mcp settings", func() error {
+			return s.q.OrgDeleteBuiltinMCPSettings(ctx, repo.OrgDeleteBuiltinMCPSettingsParams{
+				OrgID: org, SlackSettingsID: s.det("builtin-slack-settings"),
+			})
+		}},
 		// meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
 		{"delete user session issuers", func() error {
 			return s.q.OrgDeleteUserSessionIssuers(ctx, repo.OrgDeleteUserSessionIssuersParams{ProjectID: proj, OrgID: org})

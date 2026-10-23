@@ -13,6 +13,14 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type MetaMcpMember = {
   /**
+   * The immutable built-in server key, absent for stored servers
+   */
+  builtinKey?: string | undefined;
+  /**
+   * The built-in member environment override
+   */
+  environmentId?: string | undefined;
+  /**
    * The ID of the membership
    */
   id: string;
@@ -40,6 +48,8 @@ export const MetaMcpMember$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    builtin_key: z.optional(z.string()),
+    environment_id: z.optional(z.string()),
     id: z.string(),
     mcp_server_id: z.string(),
     mcp_server_name: z.optional(z.string()),
@@ -48,6 +58,8 @@ export const MetaMcpMember$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "builtin_key": "builtinKey",
+      "environment_id": "environmentId",
       "mcp_server_id": "mcpServerId",
       "mcp_server_name": "mcpServerName",
       "mcp_server_slug": "mcpServerSlug",

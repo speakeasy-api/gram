@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/builtinmcp"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -339,9 +340,13 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *orggen.ListMcpSer
 
 	items := make([]*orggen.UserSessionIssuerMcpServer, len(rows))
 	for i, row := range rows {
+		id := row.ID
+		if row.BuiltinKey != "" {
+			id = builtinmcp.ID(row.ProjectID, row.BuiltinKey)
+		}
 		items[i] = &orggen.UserSessionIssuerMcpServer{
 			Kind:        row.Kind,
-			ID:          row.ID.String(),
+			ID:          id.String(),
 			Name:        row.Name,
 			Slug:        conv.PtrEmpty(row.Slug),
 			ProjectID:   row.ProjectID.String(),
@@ -648,7 +653,11 @@ func organizationIssuerDeletePreflight(ctx context.Context, logger *slog.Logger,
 
 	mcpServers := make([]*orggen.OrganizationUserSessionIssuerReference, 0, len(mcpRows))
 	for _, row := range mcpRows {
-		mcpServers = append(mcpServers, &orggen.OrganizationUserSessionIssuerReference{ID: row.ID.String(), Name: row.Name, ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName})
+		id := row.ID
+		if row.BuiltinKey != "" {
+			id = builtinmcp.ID(row.ProjectID, row.BuiltinKey)
+		}
+		mcpServers = append(mcpServers, &orggen.OrganizationUserSessionIssuerReference{ID: id.String(), Name: row.Name, ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName})
 	}
 	toolsets := make([]*orggen.OrganizationUserSessionIssuerReference, 0, len(toolsetRows))
 	for _, row := range toolsetRows {

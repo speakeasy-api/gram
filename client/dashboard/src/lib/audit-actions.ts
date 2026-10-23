@@ -8,6 +8,7 @@ import { assertNever } from "@/lib/utils";
  * the moment the string lands in this list.
  */
 export const AUDIT_ACTIONS = [
+  "builtin_mcp:update",
   "slack-directory-connection:authorize",
   "slack-directory-connection:disconnect",
   "slack-directory-connection:sync",
@@ -358,6 +359,8 @@ export function isAuditAction(action: string): action is AuditAction {
  */
 export function staticActionPhrase(action: AuditAction): string {
   switch (action) {
+    case "builtin_mcp:update":
+      return "updated built-in MCP server";
     case "slack-identity-mapping:confirm":
       return "confirmed the Slack mapping for";
     case "slack-identity-mapping:reassign":

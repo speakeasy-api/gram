@@ -55,26 +55,26 @@ func (e *AccessRoleMutationError) Error() string { return e.Message }
 func (e *AccessRoleMutationError) Unwrap() error { return e.Cause }
 
 // MCPAccessRoleRule is a caller-facing request for one server-generated
-// mcp:connect selector. MCPID must be a configured MCP returned for the explicit
+// mcp:connect selector. MCPID must be a configured MCP or exact built-in returned for the explicit
 // project. Tool, when present, is accepted only from an enumerable current
 // catalog. Disposition is a closed annotation class, never an open selector.
 type MCPAccessRoleRule struct {
-	MCPID       string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp for the explicit project"`
+	MCPID       string `json:"mcp_id" jsonschema:"configured MCP ID from find_mcp or exact built-in ID from get_builtin_mcp in the explicit project; built-ins support only whole-server connect"`
 	Tool        string `json:"tool,omitempty" jsonschema:"optional exact tool name currently returned by get_mcp_access"`
 	Disposition string `json:"disposition,omitempty" jsonschema:"optional closed tool disposition: read_only, destructive, idempotent, or open_world"`
 }
 
 type CreateMCPAccessRoleInput struct {
-	ProjectID      string              `json:"project_id" jsonschema:"explicit project ID that owns every configured MCP in rules"`
+	ProjectID      string              `json:"project_id" jsonschema:"explicit project ID that owns every configured or built-in MCP in rules"`
 	Name           string              `json:"name" jsonschema:"display name for the new custom role"`
 	Description    string              `json:"description,omitempty" jsonschema:"optional description for the new custom role"`
-	Rules          []MCPAccessRoleRule `json:"rules" jsonschema:"MCP access rules generated only for configured MCP IDs in this project; an empty list creates a role with no grants"`
+	Rules          []MCPAccessRoleRule `json:"rules" jsonschema:"MCP access rules generated only for configured or exact built-in MCP IDs in this project; built-ins support only whole-server connect; an empty list creates a role with no grants"`
 	IdempotencyKey string              `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact write"`
 	Confirmed      bool                `json:"confirmed" jsonschema:"set true only after the user confirms this exact project, role, and MCP access delta"`
 }
 
 type UpdateMCPAccessRoleInput struct {
-	ProjectID       string              `json:"project_id" jsonschema:"explicit project ID that owns every configured MCP in the delta"`
+	ProjectID       string              `json:"project_id" jsonschema:"explicit project ID that owns every configured or built-in MCP in the delta"`
 	RoleReference   string              `json:"role_reference" jsonschema:"opaque role reference returned by list_access_roles, get_mcp_access, or a role mutation"`
 	ExpectedVersion string              `json:"expected_version" jsonschema:"opaque role version returned by the preceding role mutation"`
 	AddRules        []MCPAccessRoleRule `json:"add_rules,omitempty" jsonschema:"MCP access rules to add without replacing other grants"`
@@ -371,6 +371,9 @@ func (s *AccessRoleMutationService) resolveRules(ctx context.Context, principal 
 		if disposition != "" && !validAccessRoleDisposition(disposition) {
 			return nil, accessRoleMutationInvalid("Rule disposition must be read_only, destructive, idempotent, or open_world.")
 		}
+		if _, builtin := builtinAccessDefinition(project.ID, mcpID); builtin && requireCurrentTarget && (tool != "" || disposition != "") {
+			return nil, accessRoleMutationInvalid("Built-in access roles support only exact server connect rules.")
+		}
 		if !requireCurrentTarget {
 			result = append(result, normalizedMCPAccessRoleRule{MCPID: mcpID.String(), Tool: tool, Disposition: disposition})
 			continue
@@ -398,6 +401,9 @@ func (s *AccessRoleMutationService) resolveRules(ctx context.Context, principal 
 }
 
 func (s *AccessRoleMutationService) resolveRuleTarget(ctx context.Context, principal Principal, project ResolvedProject, mcpID uuid.UUID) (accessRoleRuleTarget, error) {
+	if _, ok := builtinAccessDefinition(project.ID, mcpID); ok {
+		return accessRoleRuleTarget{catalog: "unavailable", tools: nil, truncated: false}, nil
+	}
 	row, err := platformrepo.New(s.reads.db).GetPlatformMCPInventoryItem(ctx, platformrepo.GetPlatformMCPInventoryItemParams{
 		OrganizationID: principal.OrganizationID, ConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ConnectionGeneration: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UserID: inventoryText(principal.UserID), ActingSurface: inventoryText(string(principal.surface())),

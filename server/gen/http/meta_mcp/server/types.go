@@ -55,6 +55,19 @@ type UpdateMetaMcpServerRequestBody struct {
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
 }
 
+// SetBuiltinMetaMcpMemberRequestBody is the type of the "metaMcp" service
+// "setBuiltinMetaMcpMember" endpoint HTTP request body.
+type SetBuiltinMetaMcpMemberRequestBody struct {
+	// The gateway ID
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// The immutable built-in server key
+	BuiltinKey *string `form:"builtin_key,omitempty" json:"builtin_key,omitempty" xml:"builtin_key,omitempty"`
+	// Project environment override; omit to use the built-in default
+	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// Position in the gateway; defaults to zero
+	SortOrder *int `form:"sort_order,omitempty" json:"sort_order,omitempty" xml:"sort_order,omitempty"`
+}
+
 // AddMetaMcpMemberRequestBody is the type of the "metaMcp" service
 // "addMetaMcpMember" endpoint HTTP request body.
 type AddMetaMcpMemberRequestBody struct {
@@ -186,6 +199,25 @@ type ListMetaMcpMembersResponseBody struct {
 	Members []*MetaMcpMemberResponseBody `form:"members" json:"members" xml:"members"`
 }
 
+// SetBuiltinMetaMcpMemberResponseBody is the type of the "metaMcp" service
+// "setBuiltinMetaMcpMember" endpoint HTTP response body.
+type SetBuiltinMetaMcpMemberResponseBody struct {
+	// The ID of the membership
+	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the member MCP server
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The immutable built-in server key, absent for stored servers
+	BuiltinKey *string `form:"builtin_key,omitempty" json:"builtin_key,omitempty" xml:"builtin_key,omitempty"`
+	// The built-in member environment override
+	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The name of the member MCP server, when configured
+	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
+	// The slug of the member MCP server, when configured
+	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
+	// The position of the member in the ordered member set
+	SortOrder int `form:"sort_order" json:"sort_order" xml:"sort_order"`
+}
+
 // AddMetaMcpMemberResponseBody is the type of the "metaMcp" service
 // "addMetaMcpMember" endpoint HTTP response body.
 type AddMetaMcpMemberResponseBody struct {
@@ -193,6 +225,10 @@ type AddMetaMcpMemberResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the member MCP server
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The immutable built-in server key, absent for stored servers
+	BuiltinKey *string `form:"builtin_key,omitempty" json:"builtin_key,omitempty" xml:"builtin_key,omitempty"`
+	// The built-in member environment override
+	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The name of the member MCP server, when configured
 	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
 	// The slug of the member MCP server, when configured
@@ -208,6 +244,10 @@ type UpdateMetaMcpMemberResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the member MCP server
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The immutable built-in server key, absent for stored servers
+	BuiltinKey *string `form:"builtin_key,omitempty" json:"builtin_key,omitempty" xml:"builtin_key,omitempty"`
+	// The built-in member environment override
+	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The name of the member MCP server, when configured
 	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
 	// The slug of the member MCP server, when configured
@@ -1333,6 +1373,196 @@ type ListMetaMcpMembersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetBuiltinMetaMcpMemberUnauthorizedResponseBody is the type of the "metaMcp"
+// service "setBuiltinMetaMcpMember" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetBuiltinMetaMcpMemberUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBuiltinMetaMcpMemberForbiddenResponseBody is the type of the "metaMcp"
+// service "setBuiltinMetaMcpMember" endpoint HTTP response body for the
+// "forbidden" error.
+type SetBuiltinMetaMcpMemberForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBuiltinMetaMcpMemberBadRequestResponseBody is the type of the "metaMcp"
+// service "setBuiltinMetaMcpMember" endpoint HTTP response body for the
+// "bad_request" error.
+type SetBuiltinMetaMcpMemberBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBuiltinMetaMcpMemberNotFoundResponseBody is the type of the "metaMcp"
+// service "setBuiltinMetaMcpMember" endpoint HTTP response body for the
+// "not_found" error.
+type SetBuiltinMetaMcpMemberNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBuiltinMetaMcpMemberConflictResponseBody is the type of the "metaMcp"
+// service "setBuiltinMetaMcpMember" endpoint HTTP response body for the
+// "conflict" error.
+type SetBuiltinMetaMcpMemberConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBuiltinMetaMcpMemberUnsupportedMediaResponseBody is the type of the
+// "metaMcp" service "setBuiltinMetaMcpMember" endpoint HTTP response body for
+// the "unsupported_media" error.
+type SetBuiltinMetaMcpMemberUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBuiltinMetaMcpMemberInvalidResponseBody is the type of the "metaMcp"
+// service "setBuiltinMetaMcpMember" endpoint HTTP response body for the
+// "invalid" error.
+type SetBuiltinMetaMcpMemberInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBuiltinMetaMcpMemberInvariantViolationResponseBody is the type of the
+// "metaMcp" service "setBuiltinMetaMcpMember" endpoint HTTP response body for
+// the "invariant_violation" error.
+type SetBuiltinMetaMcpMemberInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBuiltinMetaMcpMemberUnexpectedResponseBody is the type of the "metaMcp"
+// service "setBuiltinMetaMcpMember" endpoint HTTP response body for the
+// "unexpected" error.
+type SetBuiltinMetaMcpMemberUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBuiltinMetaMcpMemberGatewayErrorResponseBody is the type of the "metaMcp"
+// service "setBuiltinMetaMcpMember" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetBuiltinMetaMcpMemberGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AddMetaMcpMemberUnauthorizedResponseBody is the type of the "metaMcp"
 // service "addMetaMcpMember" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1929,6 +2159,10 @@ type MetaMcpMemberResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the member MCP server
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The immutable built-in server key, absent for stored servers
+	BuiltinKey *string `form:"builtin_key,omitempty" json:"builtin_key,omitempty" xml:"builtin_key,omitempty"`
+	// The built-in member environment override
+	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The name of the member MCP server, when configured
 	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
 	// The slug of the member MCP server, when configured
@@ -2035,12 +2269,30 @@ func NewListMetaMcpMembersResponseBody(res *metamcp.ListMetaMcpMembersResult) *L
 	return body
 }
 
+// NewSetBuiltinMetaMcpMemberResponseBody builds the HTTP response body from
+// the result of the "setBuiltinMetaMcpMember" endpoint of the "metaMcp"
+// service.
+func NewSetBuiltinMetaMcpMemberResponseBody(res *types.MetaMcpMember) *SetBuiltinMetaMcpMemberResponseBody {
+	body := &SetBuiltinMetaMcpMemberResponseBody{
+		ID:            res.ID,
+		McpServerID:   res.McpServerID,
+		BuiltinKey:    res.BuiltinKey,
+		EnvironmentID: res.EnvironmentID,
+		McpServerName: res.McpServerName,
+		McpServerSlug: res.McpServerSlug,
+		SortOrder:     res.SortOrder,
+	}
+	return body
+}
+
 // NewAddMetaMcpMemberResponseBody builds the HTTP response body from the
 // result of the "addMetaMcpMember" endpoint of the "metaMcp" service.
 func NewAddMetaMcpMemberResponseBody(res *types.MetaMcpMember) *AddMetaMcpMemberResponseBody {
 	body := &AddMetaMcpMemberResponseBody{
 		ID:            res.ID,
 		McpServerID:   res.McpServerID,
+		BuiltinKey:    res.BuiltinKey,
+		EnvironmentID: res.EnvironmentID,
 		McpServerName: res.McpServerName,
 		McpServerSlug: res.McpServerSlug,
 		SortOrder:     res.SortOrder,
@@ -2054,6 +2306,8 @@ func NewUpdateMetaMcpMemberResponseBody(res *types.MetaMcpMember) *UpdateMetaMcp
 	body := &UpdateMetaMcpMemberResponseBody{
 		ID:            res.ID,
 		McpServerID:   res.McpServerID,
+		BuiltinKey:    res.BuiltinKey,
+		EnvironmentID: res.EnvironmentID,
 		McpServerName: res.McpServerName,
 		McpServerSlug: res.McpServerSlug,
 		SortOrder:     res.SortOrder,
@@ -2944,6 +3198,156 @@ func NewListMetaMcpMembersGatewayErrorResponseBody(res *goa.ServiceError) *ListM
 	return body
 }
 
+// NewSetBuiltinMetaMcpMemberUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "setBuiltinMetaMcpMember" endpoint of the
+// "metaMcp" service.
+func NewSetBuiltinMetaMcpMemberUnauthorizedResponseBody(res *goa.ServiceError) *SetBuiltinMetaMcpMemberUnauthorizedResponseBody {
+	body := &SetBuiltinMetaMcpMemberUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBuiltinMetaMcpMemberForbiddenResponseBody builds the HTTP response
+// body from the result of the "setBuiltinMetaMcpMember" endpoint of the
+// "metaMcp" service.
+func NewSetBuiltinMetaMcpMemberForbiddenResponseBody(res *goa.ServiceError) *SetBuiltinMetaMcpMemberForbiddenResponseBody {
+	body := &SetBuiltinMetaMcpMemberForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBuiltinMetaMcpMemberBadRequestResponseBody builds the HTTP response
+// body from the result of the "setBuiltinMetaMcpMember" endpoint of the
+// "metaMcp" service.
+func NewSetBuiltinMetaMcpMemberBadRequestResponseBody(res *goa.ServiceError) *SetBuiltinMetaMcpMemberBadRequestResponseBody {
+	body := &SetBuiltinMetaMcpMemberBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBuiltinMetaMcpMemberNotFoundResponseBody builds the HTTP response body
+// from the result of the "setBuiltinMetaMcpMember" endpoint of the "metaMcp"
+// service.
+func NewSetBuiltinMetaMcpMemberNotFoundResponseBody(res *goa.ServiceError) *SetBuiltinMetaMcpMemberNotFoundResponseBody {
+	body := &SetBuiltinMetaMcpMemberNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBuiltinMetaMcpMemberConflictResponseBody builds the HTTP response body
+// from the result of the "setBuiltinMetaMcpMember" endpoint of the "metaMcp"
+// service.
+func NewSetBuiltinMetaMcpMemberConflictResponseBody(res *goa.ServiceError) *SetBuiltinMetaMcpMemberConflictResponseBody {
+	body := &SetBuiltinMetaMcpMemberConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBuiltinMetaMcpMemberUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setBuiltinMetaMcpMember" endpoint of
+// the "metaMcp" service.
+func NewSetBuiltinMetaMcpMemberUnsupportedMediaResponseBody(res *goa.ServiceError) *SetBuiltinMetaMcpMemberUnsupportedMediaResponseBody {
+	body := &SetBuiltinMetaMcpMemberUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBuiltinMetaMcpMemberInvalidResponseBody builds the HTTP response body
+// from the result of the "setBuiltinMetaMcpMember" endpoint of the "metaMcp"
+// service.
+func NewSetBuiltinMetaMcpMemberInvalidResponseBody(res *goa.ServiceError) *SetBuiltinMetaMcpMemberInvalidResponseBody {
+	body := &SetBuiltinMetaMcpMemberInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBuiltinMetaMcpMemberInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setBuiltinMetaMcpMember" endpoint of
+// the "metaMcp" service.
+func NewSetBuiltinMetaMcpMemberInvariantViolationResponseBody(res *goa.ServiceError) *SetBuiltinMetaMcpMemberInvariantViolationResponseBody {
+	body := &SetBuiltinMetaMcpMemberInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBuiltinMetaMcpMemberUnexpectedResponseBody builds the HTTP response
+// body from the result of the "setBuiltinMetaMcpMember" endpoint of the
+// "metaMcp" service.
+func NewSetBuiltinMetaMcpMemberUnexpectedResponseBody(res *goa.ServiceError) *SetBuiltinMetaMcpMemberUnexpectedResponseBody {
+	body := &SetBuiltinMetaMcpMemberUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBuiltinMetaMcpMemberGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "setBuiltinMetaMcpMember" endpoint of the
+// "metaMcp" service.
+func NewSetBuiltinMetaMcpMemberGatewayErrorResponseBody(res *goa.ServiceError) *SetBuiltinMetaMcpMemberGatewayErrorResponseBody {
+	body := &SetBuiltinMetaMcpMemberGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewAddMetaMcpMemberUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "addMetaMcpMember" endpoint of the "metaMcp" service.
 func NewAddMetaMcpMemberUnauthorizedResponseBody(res *goa.ServiceError) *AddMetaMcpMemberUnauthorizedResponseBody {
@@ -3478,6 +3882,22 @@ func NewListMetaMcpMembersPayload(metaMcpServerID string, sessionToken *string, 
 	return v
 }
 
+// NewSetBuiltinMetaMcpMemberPayload builds a metaMcp service
+// setBuiltinMetaMcpMember endpoint payload.
+func NewSetBuiltinMetaMcpMemberPayload(body *SetBuiltinMetaMcpMemberRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *metamcp.SetBuiltinMetaMcpMemberPayload {
+	v := &metamcp.SetBuiltinMetaMcpMemberPayload{
+		MetaMcpServerID: *body.MetaMcpServerID,
+		BuiltinKey:      *body.BuiltinKey,
+		EnvironmentID:   body.EnvironmentID,
+		SortOrder:       body.SortOrder,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewAddMetaMcpMemberPayload builds a metaMcp service addMetaMcpMember
 // endpoint payload.
 func NewAddMetaMcpMemberPayload(body *AddMetaMcpMemberRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *metamcp.AddMetaMcpMemberPayload {
@@ -3590,6 +4010,24 @@ func ValidateUpdateMetaMcpServerRequestBody(body *UpdateMetaMcpServerRequestBody
 		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
 		}
+	}
+	return
+}
+
+// ValidateSetBuiltinMetaMcpMemberRequestBody runs the validations defined on
+// SetBuiltinMetaMcpMemberRequestBody
+func ValidateSetBuiltinMetaMcpMemberRequestBody(body *SetBuiltinMetaMcpMemberRequestBody) (err error) {
+	if body.MetaMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("meta_mcp_server_id", "body"))
+	}
+	if body.BuiltinKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("builtin_key", "body"))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	if body.EnvironmentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
 	return
 }

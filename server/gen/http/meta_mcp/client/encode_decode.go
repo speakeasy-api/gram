@@ -1456,6 +1456,249 @@ func DecodeListMetaMcpMembersResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildSetBuiltinMetaMcpMemberRequest instantiates a HTTP request object with
+// method and path set to call the "metaMcp" service "setBuiltinMetaMcpMember"
+// endpoint
+func (c *Client) BuildSetBuiltinMetaMcpMemberRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetBuiltinMetaMcpMemberMetaMcpPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("metaMcp", "setBuiltinMetaMcpMember", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetBuiltinMetaMcpMemberRequest returns an encoder for requests sent to
+// the metaMcp setBuiltinMetaMcpMember server.
+func EncodeSetBuiltinMetaMcpMemberRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*metamcp.SetBuiltinMetaMcpMemberPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("metaMcp", "setBuiltinMetaMcpMember", "*metamcp.SetBuiltinMetaMcpMemberPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetBuiltinMetaMcpMemberRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetBuiltinMetaMcpMemberResponse returns a decoder for responses
+// returned by the metaMcp setBuiltinMetaMcpMember endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetBuiltinMetaMcpMemberResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetBuiltinMetaMcpMemberResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetBuiltinMetaMcpMemberResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			err = ValidateSetBuiltinMetaMcpMemberResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			res := NewSetBuiltinMetaMcpMemberMetaMcpMemberOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetBuiltinMetaMcpMemberUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			err = ValidateSetBuiltinMetaMcpMemberUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			return nil, NewSetBuiltinMetaMcpMemberUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetBuiltinMetaMcpMemberForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			err = ValidateSetBuiltinMetaMcpMemberForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			return nil, NewSetBuiltinMetaMcpMemberForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetBuiltinMetaMcpMemberBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			err = ValidateSetBuiltinMetaMcpMemberBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			return nil, NewSetBuiltinMetaMcpMemberBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetBuiltinMetaMcpMemberNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			err = ValidateSetBuiltinMetaMcpMemberNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			return nil, NewSetBuiltinMetaMcpMemberNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetBuiltinMetaMcpMemberConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			err = ValidateSetBuiltinMetaMcpMemberConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			return nil, NewSetBuiltinMetaMcpMemberConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetBuiltinMetaMcpMemberUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			err = ValidateSetBuiltinMetaMcpMemberUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			return nil, NewSetBuiltinMetaMcpMemberUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetBuiltinMetaMcpMemberInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			err = ValidateSetBuiltinMetaMcpMemberInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			return nil, NewSetBuiltinMetaMcpMemberInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetBuiltinMetaMcpMemberInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+				}
+				err = ValidateSetBuiltinMetaMcpMemberInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("metaMcp", "setBuiltinMetaMcpMember", err)
+				}
+				return nil, NewSetBuiltinMetaMcpMemberInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetBuiltinMetaMcpMemberUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+				}
+				err = ValidateSetBuiltinMetaMcpMemberUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("metaMcp", "setBuiltinMetaMcpMember", err)
+				}
+				return nil, NewSetBuiltinMetaMcpMemberUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("metaMcp", "setBuiltinMetaMcpMember", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetBuiltinMetaMcpMemberGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			err = ValidateSetBuiltinMetaMcpMemberGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("metaMcp", "setBuiltinMetaMcpMember", err)
+			}
+			return nil, NewSetBuiltinMetaMcpMemberGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("metaMcp", "setBuiltinMetaMcpMember", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildAddMetaMcpMemberRequest instantiates a HTTP request object with method
 // and path set to call the "metaMcp" service "addMetaMcpMember" endpoint
 func (c *Client) BuildAddMetaMcpMemberRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2197,6 +2440,8 @@ func unmarshalMetaMcpMemberResponseBodyToTypesMetaMcpMember(v *MetaMcpMemberResp
 	res := &types.MetaMcpMember{
 		ID:            *v.ID,
 		McpServerID:   *v.McpServerID,
+		BuiltinKey:    v.BuiltinKey,
+		EnvironmentID: v.EnvironmentID,
 		McpServerName: v.McpServerName,
 		McpServerSlug: v.McpServerSlug,
 		SortOrder:     *v.SortOrder,

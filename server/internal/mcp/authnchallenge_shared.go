@@ -356,6 +356,8 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 	var routeBase mcproute.Base
 	slug := ""
 	switch {
+	case strings.HasPrefix(routePath, mcproute.Builtin.String()+"/"):
+		routeBase, slug = mcproute.Builtin, strings.TrimPrefix(routePath, mcproute.Builtin.String()+"/")
 	case strings.HasPrefix(routePath, mcproute.OrganizationGateway.String()+"/"):
 		routeBase, slug = mcproute.OrganizationGateway, strings.TrimPrefix(routePath, mcproute.OrganizationGateway.String()+"/")
 	case strings.HasPrefix(routePath, mcproute.MCP.String()+"/"):
@@ -363,7 +365,11 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 	default:
 		return nil, sharedResourceMalformed, nil
 	}
-	if routeBase == mcproute.OrganizationGateway && strings.Contains(slug, "/") {
+	if routeBase == mcproute.Builtin {
+		if !validBuiltinSlug(slug) {
+			return nil, sharedResourceMalformed, nil
+		}
+	} else if routeBase == mcproute.OrganizationGateway && strings.Contains(slug, "/") {
 		organization, project, scoped := strings.Cut(slug, "/projects/")
 		if !scoped || organization == "" || project == "" || strings.Contains(organization, "/") || strings.Contains(project, "/") {
 			return nil, sharedResourceMalformed, nil

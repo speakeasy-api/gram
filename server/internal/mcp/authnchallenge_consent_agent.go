@@ -23,6 +23,7 @@ import (
 // authorization. The scope is always mcp:connect; these fields bind that one
 // scope to the exact challenged endpoint and tenant.
 type AgentAuthorizationTarget struct {
+	Builtin             bool        `json:"builtin,omitempty"`
 	Scope               authz.Scope `json:"scope"`
 	OrganizationID      string      `json:"organization_id"`
 	ProjectID           uuid.UUID   `json:"project_id"`
@@ -59,6 +60,8 @@ func agentAuthorizationTarget(endpoint *ResolvedMcpEndpoint) (*AgentAuthorizatio
 
 	var resourceID uuid.UUID
 	switch {
+	case endpoint.BuiltinID.Valid:
+		resourceID = endpoint.BuiltinID.UUID
 	case endpoint.McpServerID.Valid:
 		resourceID = endpoint.McpServerID.UUID
 	case endpoint.ToolsetID.Valid:
@@ -70,6 +73,7 @@ func agentAuthorizationTarget(endpoint *ResolvedMcpEndpoint) (*AgentAuthorizatio
 		return nil, false
 	}
 	return &AgentAuthorizationTarget{
+		Builtin:             endpoint.IsBuiltin(),
 		Scope:               authz.ScopeMCPConnect,
 		OrganizationID:      endpoint.OrganizationID,
 		ProjectID:           endpoint.ProjectID,
@@ -188,7 +192,7 @@ func (s *Service) eligibleConsentAgents(ctx context.Context, state AuthnChalleng
 		if !consentAgentCandidateEligible(human, candidate, *target) {
 			continue
 		}
-		allowed, err := consentPolicyConnect(policies[candidate.ID], target.connectCheck())
+		allowed, err := target.agentPolicyConnect(policies[candidate.ID])
 		if err != nil {
 			return nil, fmt.Errorf("evaluate candidate agent connect policy: %w", err)
 		}
@@ -276,7 +280,7 @@ func (s *Service) consentAgentEligible(ctx context.Context, human consentHumanAu
 	if err != nil {
 		return false, fmt.Errorf("load direct agent policy: %w", err)
 	}
-	allowed, err := consentPolicyConnect(agentPolicy, target.connectCheck())
+	allowed, err := target.agentPolicyConnect(agentPolicy)
 	if err != nil {
 		return false, fmt.Errorf("evaluate selected agent connect policy: %w", err)
 	}
@@ -318,4 +322,11 @@ func consentPolicyConnect(policy []authz.Grant, check authz.Check) (bool, error)
 		return false, fmt.Errorf("authorize consent connect policy: %w", err)
 	}
 	return allowed, nil
+}
+
+func (t AgentAuthorizationTarget) agentPolicyConnect(policy []authz.Grant) (bool, error) {
+	if t.Builtin && !authz.BuiltinConnectExplicitlyGranted(policy, t.MCPResourceID.String(), t.ProjectID.String()) {
+		return false, nil
+	}
+	return consentPolicyConnect(policy, t.connectCheck())
 }

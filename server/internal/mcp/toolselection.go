@@ -92,6 +92,8 @@ func (e sessionPolicyEntry) TTL() time.Duration { return sessionPolicyTTL }
 // toolset or gateway. Empty when the endpoint has no stored resource.
 func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 	switch {
+	case endpoint.BuiltinID.Valid:
+		return "builtin_mcp:" + endpoint.BuiltinID.UUID.String()
 	case endpoint.MetaMcpServerID.Valid:
 		return "meta_mcp_server:" + endpoint.MetaMcpServerID.UUID.String()
 	case endpoint.McpServerID.Valid:

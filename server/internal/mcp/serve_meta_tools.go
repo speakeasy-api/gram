@@ -253,6 +253,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		}
 		return nil, oops.E(oops.CodeUnavailable, err, "could not verify the approved server; retry shortly").LogError(ctx, logger)
 	}
+	if member.backend == metaMemberBackendBuiltin {
+		return s.executeBuiltinMember(ctx, gate, member, req, toolName, arguments, meta)
+	}
 	if member.backend != metaMemberBackendHosted {
 		return s.executeProxiedMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta)
 	}

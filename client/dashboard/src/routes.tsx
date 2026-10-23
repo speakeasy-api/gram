@@ -55,6 +55,7 @@ import Sources, { SourcesRoot } from "./pages/mcp/sources/Sources";
 import SourceDetailRoute from "./pages/mcp/sources/SourceDetail";
 import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import OrganizationGatewayPage from "./pages/mcp/OrganizationGateway";
+import BuiltinMcpServerPage from "./pages/mcp/BuiltinMcpServer";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
@@ -546,6 +547,29 @@ const ROUTE_STRUCTURE = {
           settings: {
             title: "MCP Server Settings",
             url: "settings",
+          },
+        },
+      },
+      // Servers Speakeasy maintains, which exist in every project. A static
+      // segment beside `add`, `catalog` and `sources`: static segments outrank
+      // `:toolsetSlug`, so a project's own server named "builtin" cannot
+      // shadow this route.
+      builtin: {
+        title: "Built-in MCP Server",
+        url: "builtin/:builtinKey",
+        component: BuiltinMcpServerPage,
+        subPages: {
+          overview: {
+            title: "Built-in MCP Server Overview",
+            url: "overview",
+          },
+          tools: {
+            title: "Built-in MCP Server Tools",
+            url: "tools",
+          },
+          authentication: {
+            title: "Built-in MCP Server Authentication",
+            url: "authentication",
           },
         },
       },

@@ -186,8 +186,8 @@ type MCPRoleCoverage struct {
 }
 
 type GetMCPAccessInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID that owns the configured MCP"`
-	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp"`
+	ProjectID string `json:"project_id" jsonschema:"exact project ID that owns the configured or built-in MCP"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp or exact built-in ID returned by get_builtin_mcp"`
 }
 
 type GetMCPAccessOutput struct {
@@ -529,6 +529,9 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 	mcpID, err := uuid.Parse(input.MCPID)
 	if err != nil {
 		return GetMCPAccessOutput{}, ErrAccessMCPNotFound
+	}
+	if definition, ok := builtinAccessDefinition(projectID, mcpID); ok {
+		return s.getBuiltinAccess(ctx, principal, projectID, mcpID, definition)
 	}
 	row, err := platformrepo.New(s.db).GetPlatformMCPInventoryItem(ctx, platformrepo.GetPlatformMCPInventoryItemParams{
 		OrganizationID:       principal.OrganizationID,

@@ -16,6 +16,8 @@ import (
 
 // Endpoints wraps the "projects" service endpoints.
 type Endpoints struct {
+	ListBuiltinMcpServers    goa.Endpoint
+	UpdateBuiltinMcpServer   goa.Endpoint
 	GetProject               goa.Endpoint
 	CreateProject            goa.Endpoint
 	UpdateProject            goa.Endpoint
@@ -32,6 +34,8 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		ListBuiltinMcpServers:    NewListBuiltinMcpServersEndpoint(s, a.APIKeyAuth),
+		UpdateBuiltinMcpServer:   NewUpdateBuiltinMcpServerEndpoint(s, a.APIKeyAuth),
 		GetProject:               NewGetProjectEndpoint(s, a.APIKeyAuth),
 		CreateProject:            NewCreateProjectEndpoint(s, a.APIKeyAuth),
 		UpdateProject:            NewUpdateProjectEndpoint(s, a.APIKeyAuth),
@@ -46,6 +50,8 @@ func NewEndpoints(s Service) *Endpoints {
 
 // Use applies the given middleware to all the "projects" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.ListBuiltinMcpServers = m(e.ListBuiltinMcpServers)
+	e.UpdateBuiltinMcpServer = m(e.UpdateBuiltinMcpServer)
 	e.GetProject = m(e.GetProject)
 	e.CreateProject = m(e.CreateProject)
 	e.UpdateProject = m(e.UpdateProject)
@@ -55,6 +61,76 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpsertAllowedOrigin = m(e.UpsertAllowedOrigin)
 	e.DeleteProject = m(e.DeleteProject)
 	e.SetOrganizationWhitelist = m(e.SetOrganizationWhitelist)
+}
+
+// NewListBuiltinMcpServersEndpoint returns an endpoint function that calls the
+// method "listBuiltinMcpServers" of service "projects".
+func NewListBuiltinMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListBuiltinMcpServersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListBuiltinMcpServers(ctx, p)
+	}
+}
+
+// NewUpdateBuiltinMcpServerEndpoint returns an endpoint function that calls
+// the method "updateBuiltinMcpServer" of service "projects".
+func NewUpdateBuiltinMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateBuiltinMcpServerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateBuiltinMcpServer(ctx, p)
+	}
 }
 
 // NewGetProjectEndpoint returns an endpoint function that calls the method

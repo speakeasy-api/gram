@@ -97,6 +97,9 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		}
 		return metamcp.SignInNeedsConsent, "No recorded consent outcome."
 	}
+	if member.backend == metaMemberBackendBuiltin {
+		return metamcp.SignInNotRequired, ""
+	}
 	if member.backend == metaMemberBackendHosted {
 		if !member.remoteSessionIssuerID.Valid {
 			return metamcp.SignInNotRequired, ""

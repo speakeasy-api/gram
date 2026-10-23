@@ -36,6 +36,9 @@ type Service interface {
 	DeleteMetaMcpServer(context.Context, *DeleteMetaMcpServerPayload) (err error)
 	// List the members of a meta MCP server, ordered by sort order
 	ListMetaMcpMembers(context.Context, *ListMetaMcpMembersPayload) (res *ListMetaMcpMembersResult, err error)
+	// Add or configure a built-in MCP server in a gateway. Administrator only;
+	// membership does not grant connection access.
+	SetBuiltinMetaMcpMember(context.Context, *SetBuiltinMetaMcpMemberPayload) (res *types.MetaMcpMember, err error)
 	// Add an MCP server to a meta MCP server's member set
 	AddMetaMcpMember(context.Context, *AddMetaMcpMemberPayload) (res *types.MetaMcpMember, err error)
 	// Update a meta MCP membership's sort order
@@ -64,7 +67,7 @@ const ServiceName = "metaMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"createMetaMcpServer", "getMetaMcpServer", "listMetaMcpServers", "updateMetaMcpServer", "deleteMetaMcpServer", "listMetaMcpMembers", "addMetaMcpMember", "updateMetaMcpMember", "removeMetaMcpMember"}
+var MethodNames = [10]string{"createMetaMcpServer", "getMetaMcpServer", "listMetaMcpServers", "updateMetaMcpServer", "deleteMetaMcpServer", "listMetaMcpMembers", "setBuiltinMetaMcpMember", "addMetaMcpMember", "updateMetaMcpMember", "removeMetaMcpMember"}
 
 // AddMetaMcpMemberPayload is the payload type of the metaMcp service
 // addMetaMcpMember method.
@@ -153,6 +156,22 @@ type ListMetaMcpServersResult struct {
 type RemoveMetaMcpMemberPayload struct {
 	// The ID of the membership to remove
 	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// SetBuiltinMetaMcpMemberPayload is the payload type of the metaMcp service
+// setBuiltinMetaMcpMember method.
+type SetBuiltinMetaMcpMemberPayload struct {
+	// The gateway ID
+	MetaMcpServerID string
+	// The immutable built-in server key
+	BuiltinKey string
+	// Project environment override; omit to use the built-in default
+	EnvironmentID *string
+	// Position in the gateway; defaults to zero
+	SortOrder        *int
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

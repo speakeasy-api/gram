@@ -119,6 +119,46 @@ func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDe
 	return result.RowsAffected(), nil
 }
 
+const countBuiltinMetaMCPMembers = `-- name: CountBuiltinMetaMCPMembers :many
+SELECT meta_mcp_server_id, count(*) AS member_count
+FROM builtin_mcp_server_members
+WHERE project_id = $1
+  AND meta_mcp_server_id = ANY($2::uuid[])
+  AND builtin_key = ANY($3::text[])
+GROUP BY meta_mcp_server_id
+`
+
+type CountBuiltinMetaMCPMembersParams struct {
+	ProjectID   uuid.NullUUID
+	GatewayIds  []uuid.UUID
+	BuiltinKeys []string
+}
+
+type CountBuiltinMetaMCPMembersRow struct {
+	MetaMcpServerID uuid.NullUUID
+	MemberCount     int64
+}
+
+func (q *Queries) CountBuiltinMetaMCPMembers(ctx context.Context, arg CountBuiltinMetaMCPMembersParams) ([]CountBuiltinMetaMCPMembersRow, error) {
+	rows, err := q.db.Query(ctx, countBuiltinMetaMCPMembers, arg.ProjectID, arg.GatewayIds, arg.BuiltinKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountBuiltinMetaMCPMembersRow
+	for rows.Next() {
+		var i CountBuiltinMetaMCPMembersRow
+		if err := rows.Scan(&i.MetaMcpServerID, &i.MemberCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countMetaMCPMembersSharingBackend = `-- name: CountMetaMCPMembersSharingBackend :one
 SELECT count(*)
 FROM meta_mcp_server_members m
@@ -266,6 +306,34 @@ func (q *Queries) CreateMetaMCPServer(ctx context.Context, arg CreateMetaMCPServ
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteBuiltinMetaMCPMember = `-- name: DeleteBuiltinMetaMCPMember :one
+DELETE FROM builtin_mcp_server_members
+WHERE id = $1 AND project_id = $2 AND meta_mcp_server_id = $3
+RETURNING id, project_id, meta_mcp_server_id, builtin_key, environment_id, sort_order, created_at, updated_at
+`
+
+type DeleteBuiltinMetaMCPMemberParams struct {
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+}
+
+func (q *Queries) DeleteBuiltinMetaMCPMember(ctx context.Context, arg DeleteBuiltinMetaMCPMemberParams) (BuiltinMcpServerMember, error) {
+	row := q.db.QueryRow(ctx, deleteBuiltinMetaMCPMember, arg.ID, arg.ProjectID, arg.MetaMcpServerID)
+	var i BuiltinMcpServerMember
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.MetaMcpServerID,
+		&i.BuiltinKey,
+		&i.EnvironmentID,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -507,6 +575,32 @@ func (q *Queries) FindMetaMCPSiblingSharingBackend(ctx context.Context, arg Find
 	return name, err
 }
 
+const getBuiltinMetaMCPMember = `-- name: GetBuiltinMetaMCPMember :one
+SELECT id, project_id, meta_mcp_server_id, builtin_key, environment_id, sort_order, created_at, updated_at FROM builtin_mcp_server_members
+WHERE id = $1 AND project_id = $2
+`
+
+type GetBuiltinMetaMCPMemberParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) GetBuiltinMetaMCPMember(ctx context.Context, arg GetBuiltinMetaMCPMemberParams) (BuiltinMcpServerMember, error) {
+	row := q.db.QueryRow(ctx, getBuiltinMetaMCPMember, arg.ID, arg.ProjectID)
+	var i BuiltinMcpServerMember
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.MetaMcpServerID,
+		&i.BuiltinKey,
+		&i.EnvironmentID,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getMetaMCPMember = `-- name: GetMetaMCPMember :one
 SELECT id, project_id, meta_mcp_server_id, mcp_server_id, sort_order, created_at, updated_at, deleted_at, deleted
 FROM meta_mcp_server_members
@@ -608,6 +702,50 @@ func (q *Queries) GetMetaMCPServerByIDAndProjectID(ctx context.Context, arg GetM
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const listBuiltinMetaMCPMembers = `-- name: ListBuiltinMetaMCPMembers :many
+SELECT id, builtin_key, environment_id, sort_order
+FROM builtin_mcp_server_members
+WHERE meta_mcp_server_id = $1 AND project_id = $2
+ORDER BY sort_order, created_at, id
+`
+
+type ListBuiltinMetaMCPMembersParams struct {
+	MetaMcpServerID uuid.NullUUID
+	ProjectID       uuid.NullUUID
+}
+
+type ListBuiltinMetaMCPMembersRow struct {
+	ID            uuid.UUID
+	BuiltinKey    string
+	EnvironmentID uuid.NullUUID
+	SortOrder     int32
+}
+
+func (q *Queries) ListBuiltinMetaMCPMembers(ctx context.Context, arg ListBuiltinMetaMCPMembersParams) ([]ListBuiltinMetaMCPMembersRow, error) {
+	rows, err := q.db.Query(ctx, listBuiltinMetaMCPMembers, arg.MetaMcpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBuiltinMetaMCPMembersRow
+	for rows.Next() {
+		var i ListBuiltinMetaMCPMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BuiltinKey,
+			&i.EnvironmentID,
+			&i.SortOrder,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listMemberProviderIdentities = `-- name: ListMemberProviderIdentities :many
@@ -1320,6 +1458,24 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 	return items, nil
 }
 
+const lockBuiltinMemberEnvironment = `-- name: LockBuiltinMemberEnvironment :one
+SELECT id FROM environments
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockBuiltinMemberEnvironmentParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockBuiltinMemberEnvironment(ctx context.Context, arg LockBuiltinMemberEnvironmentParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockBuiltinMemberEnvironment, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockMetaMCPMember = `-- name: LockMetaMCPMember :one
 SELECT id, project_id, meta_mcp_server_id, mcp_server_id, sort_order, created_at, updated_at, deleted_at, deleted
 FROM meta_mcp_server_members
@@ -1410,6 +1566,45 @@ func (q *Queries) LockUserSessionIssuerForMetaMCP(ctx context.Context, arg LockU
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const setBuiltinMetaMCPMember = `-- name: SetBuiltinMetaMCPMember :one
+INSERT INTO builtin_mcp_server_members (project_id, meta_mcp_server_id, builtin_key, environment_id, sort_order)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (meta_mcp_server_id, builtin_key) DO UPDATE
+SET environment_id = excluded.environment_id, sort_order = excluded.sort_order, updated_at = clock_timestamp()
+WHERE builtin_mcp_server_members.project_id = $1
+RETURNING id, project_id, meta_mcp_server_id, builtin_key, environment_id, sort_order, created_at, updated_at
+`
+
+type SetBuiltinMetaMCPMemberParams struct {
+	ProjectID       uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	BuiltinKey      string
+	EnvironmentID   uuid.NullUUID
+	SortOrder       int32
+}
+
+func (q *Queries) SetBuiltinMetaMCPMember(ctx context.Context, arg SetBuiltinMetaMCPMemberParams) (BuiltinMcpServerMember, error) {
+	row := q.db.QueryRow(ctx, setBuiltinMetaMCPMember,
+		arg.ProjectID,
+		arg.MetaMcpServerID,
+		arg.BuiltinKey,
+		arg.EnvironmentID,
+		arg.SortOrder,
+	)
+	var i BuiltinMcpServerMember
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.MetaMcpServerID,
+		&i.BuiltinKey,
+		&i.EnvironmentID,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateMetaMCPMemberSortOrder = `-- name: UpdateMetaMCPMemberSortOrder :one

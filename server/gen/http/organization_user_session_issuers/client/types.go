@@ -551,6 +551,9 @@ type GetIssuerMigratePreflightResponseBody struct {
 	// Enterprise-managed authorization bindings already present on the target.
 	// Non-zero blocks migration.
 	EmaBindingConflictCount *int `form:"ema_binding_conflict_count,omitempty" json:"ema_binding_conflict_count,omitempty" xml:"ema_binding_conflict_count,omitempty"`
+	// Number of live built-in MCP bindings to the source issuer. Rebind these
+	// explicitly before migrating; a nonzero count blocks migration.
+	BuiltinBindingCount *int `form:"builtin_binding_count,omitempty" json:"builtin_binding_count,omitempty" xml:"builtin_binding_count,omitempty"`
 	// Whether a Platform MCP catalog registration owns either issuer. True blocks
 	// migration.
 	PlatformOwned *bool `form:"platform_owned,omitempty" json:"platform_owned,omitempty" xml:"platform_owned,omitempty"`
@@ -5623,6 +5626,7 @@ func NewGetIssuerMigratePreflightOrganizationUserSessionIssuerMigratePreflightOK
 		RemoteSessionCount:            *body.RemoteSessionCount,
 		PrincipalBindingConflictCount: *body.PrincipalBindingConflictCount,
 		EmaBindingConflictCount:       *body.EmaBindingConflictCount,
+		BuiltinBindingCount:           *body.BuiltinBindingCount,
 		PlatformOwned:                 *body.PlatformOwned,
 		WarningsFingerprint:           *body.WarningsFingerprint,
 		CanMigrate:                    *body.CanMigrate,
@@ -7100,6 +7104,9 @@ func ValidateGetIssuerMigratePreflightResponseBody(body *GetIssuerMigratePreflig
 	}
 	if body.EmaBindingConflictCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ema_binding_conflict_count", "body"))
+	}
+	if body.BuiltinBindingCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("builtin_binding_count", "body"))
 	}
 	if body.PlatformOwned == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("platform_owned", "body"))
@@ -11163,8 +11170,8 @@ func ValidateUserSessionIssuerMcpServerResponseBody(body *UserSessionIssuerMcpSe
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "mcp_server" || *body.Kind == "toolset" || *body.Kind == "meta_mcp_server") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"mcp_server", "toolset", "meta_mcp_server"}))
+		if !(*body.Kind == "mcp_server" || *body.Kind == "toolset" || *body.Kind == "meta_mcp_server" || *body.Kind == "builtin_mcp_server") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"mcp_server", "toolset", "meta_mcp_server", "builtin_mcp_server"}))
 		}
 	}
 	if body.ID != nil {

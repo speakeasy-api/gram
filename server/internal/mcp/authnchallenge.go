@@ -69,6 +69,8 @@ import (
 // on each entry so mutations to the underlying row (issuer change,
 // visibility flip) take effect inside the 10-min challenge window.
 type EndpointRef struct {
+	BuiltinID uuid.NullUUID `json:"builtin_id,omitzero"`
+
 	// Set when the endpoint belongs to a custom domain, otherwise null.
 	CustomDomainID uuid.NullUUID `json:"custom_domain_id"`
 
@@ -1052,11 +1054,6 @@ func (s *Service) authenticateIssuerGate(
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
 ) (context.Context, *issuerGateAuthentication, *toolfilter.SessionPolicy, error) {
-	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
-	if err != nil {
-		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
-	}
-
 	// The gram.mcp.url value for a rejection, rebuilt from the resolved
 	// endpoint rather than taken from the request. The post-authentication
 	// metrics use the raw request URL, query string included; here the caller
@@ -1067,7 +1064,40 @@ func (s *Service) authenticateIssuerGate(
 		host = requestContext.Host
 	}
 	mcpURL := host + "/" + endpoint.RouteBase.String() + "/" + endpoint.Slug
+
+	// Without an authorization server, existing machine credentials still work.
+	// Do not advertise OAuth or validate sessions against an invented issuer.
+	if endpoint.IsBuiltin() && endpoint.UserSessionIssuerID == uuid.Nil {
+		var next context.Context
+		var subject *urn.SessionSubject
+		var err error
+		switch {
+		case principalcredential.IsToken(authToken):
+			next, subject, err = s.authenticateIssuerGatePrincipalCredential(ctx, authToken, endpoint)
+		case strings.HasPrefix(authToken, "gram_"):
+			next, subject, err = s.authenticateIssuerGateAgentKey(ctx, authToken, endpoint)
+		default:
+			err = oops.C(oops.CodeUnauthorized)
+		}
+		if err != nil {
+			reason := issuerGateReasonNoCredentials
+			if authToken != "" {
+				reason = issuerGateFailureReason(err)
+			}
+			s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, mcpmetrics.SurfacePlatform)
+			return ctx, nil, nil, err
+		}
+		return next, &issuerGateAuthentication{endpoint: endpoint, protectedResourceURL: "", mcpURL: "", subject: *subject, surface: mcpmetrics.SurfacePlatform, refreshableUserSession: false, chosenClient: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, chosenNoAuth: false, authClient: nil}, nil, nil
+	}
+	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
+	if err != nil {
+		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
+	}
+
 	surface := mcpmetrics.SurfaceHosting
+	if endpoint.IsBuiltin() {
+		surface = mcpmetrics.SurfacePlatform
+	}
 	if endpoint.MetaMcpServerID.Valid {
 		surface = mcpmetrics.SurfaceMeta
 	}

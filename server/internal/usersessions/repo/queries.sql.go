@@ -238,6 +238,14 @@ SELECT (
           AND project.organization_id = $2::text
           AND project.deleted IS FALSE
     )
+    + (
+        SELECT COUNT(*)
+        FROM builtin_mcp_settings AS builtin
+        JOIN projects AS project ON project.id = builtin.project_id
+        WHERE builtin.user_session_issuer_id = $1::uuid
+          AND project.organization_id = $2::text
+          AND project.deleted IS FALSE
+    )
 )::int AS server_count
 `
 
@@ -297,6 +305,27 @@ type CountOrganizationUserSessionIssuerLiveSessionsParams struct {
 
 func (q *Queries) CountOrganizationUserSessionIssuerLiveSessions(ctx context.Context, arg CountOrganizationUserSessionIssuerLiveSessionsParams) (int32, error) {
 	row := q.db.QueryRow(ctx, countOrganizationUserSessionIssuerLiveSessions, arg.UserSessionIssuerID, arg.OrganizationID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countUserSessionIssuerBuiltinBindings = `-- name: CountUserSessionIssuerBuiltinBindings :one
+SELECT COUNT(*)::int
+FROM builtin_mcp_settings AS builtin
+JOIN projects AS project ON project.id = builtin.project_id
+WHERE builtin.user_session_issuer_id = $1::uuid
+  AND project.organization_id = $2::text
+  AND project.deleted IS FALSE
+`
+
+type CountUserSessionIssuerBuiltinBindingsParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) CountUserSessionIssuerBuiltinBindings(ctx context.Context, arg CountUserSessionIssuerBuiltinBindingsParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerBuiltinBindings, arg.UserSessionIssuerID, arg.OrganizationID)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -466,6 +495,16 @@ FROM (
     AND cimd.deleted IS FALSE
     AND cimd.project_id IS NOT NULL
     AND cimd.project_id <> $2::uuid
+
+  UNION ALL
+
+  SELECT builtin.id
+  FROM builtin_mcp_settings AS builtin
+  JOIN projects AS project ON project.id = builtin.project_id
+  WHERE builtin.user_session_issuer_id = $1
+    AND project.organization_id = $3::text
+    AND project.deleted IS FALSE
+    AND builtin.project_id <> $2::uuid
 
   UNION ALL
 
@@ -1272,6 +1311,15 @@ WHERE issuer.id = $1
   AND issuer.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1
+    FROM builtin_mcp_settings AS builtin
+    JOIN projects AS project ON project.id = builtin.project_id
+    WHERE builtin.user_session_issuer_id = issuer.id
+      AND project.deleted IS FALSE
+      AND project.organization_id = issuer.organization_id
+
+    UNION ALL
+
+    SELECT 1
     FROM mcp_servers AS server
     JOIN projects AS project ON project.id = server.project_id
     WHERE server.user_session_issuer_id = issuer.id
@@ -1424,6 +1472,15 @@ WHERE issuer.id = $1
   AND issuer.project_id = $2::uuid
   AND issuer.deleted IS FALSE
   AND NOT EXISTS (
+    SELECT 1
+    FROM builtin_mcp_settings AS builtin
+    JOIN projects AS project ON project.id = builtin.project_id
+    WHERE builtin.user_session_issuer_id = issuer.id
+      AND project.deleted IS FALSE
+      AND builtin.project_id = issuer.project_id
+
+    UNION ALL
+
     SELECT 1
     FROM mcp_servers AS server
     WHERE server.user_session_issuer_id = issuer.id
@@ -2887,6 +2944,7 @@ func (q *Queries) ListMCPServerProjectIDsForUserSessionIssuerMigration(ctx conte
 const listOrganizationManagedUserSessionIssuerMCPServers = `-- name: ListOrganizationManagedUserSessionIssuerMCPServers :many
 SELECT
     attachment.kind,
+    attachment.builtin_key,
     attachment.id,
     attachment.name,
     attachment.slug,
@@ -2895,6 +2953,7 @@ SELECT
 FROM (
     SELECT
         'mcp_server'::text AS kind,
+        ''::text AS builtin_key,
         server.id,
         COALESCE(server.name, server.slug, server.id::text)::text AS name,
         COALESCE(server.slug, '')::text AS slug,
@@ -2909,6 +2968,7 @@ FROM (
     UNION ALL
     SELECT
         'toolset'::text,
+        ''::text,
         toolset.id,
         toolset.name,
         toolset.slug,
@@ -2930,6 +2990,7 @@ FROM (
     UNION ALL
     SELECT
         'meta_mcp_server'::text,
+        ''::text,
         meta_server.id,
         meta_server.name,
         ''::text,
@@ -2939,6 +3000,20 @@ FROM (
     JOIN projects AS project ON project.id = meta_server.project_id
     WHERE meta_server.user_session_issuer_id = $1::uuid
       AND meta_server.deleted IS FALSE
+      AND project.organization_id = $2::text
+      AND project.deleted IS FALSE
+    UNION ALL
+    SELECT
+        'builtin_mcp_server'::text,
+        builtin.builtin_key,
+        builtin.id,
+        ('Built-in MCP: ' || builtin.builtin_key)::text,
+        builtin.builtin_key,
+        project.id,
+        project.name
+    FROM builtin_mcp_settings AS builtin
+    JOIN projects AS project ON project.id = builtin.project_id
+    WHERE builtin.user_session_issuer_id = $1::uuid
       AND project.organization_id = $2::text
       AND project.deleted IS FALSE
 ) AS attachment
@@ -2956,6 +3031,7 @@ type ListOrganizationManagedUserSessionIssuerMCPServersParams struct {
 
 type ListOrganizationManagedUserSessionIssuerMCPServersRow struct {
 	Kind        string
+	BuiltinKey  string
 	ID          uuid.UUID
 	Name        string
 	Slug        string
@@ -2966,7 +3042,8 @@ type ListOrganizationManagedUserSessionIssuerMCPServersRow struct {
 // The live MCP servers, toolsets, and meta MCP servers attached to an issuer,
 // each read through its own live project in the organization. A toolset
 // wrapped by a live MCP server is listed once, as that server, because clients
-// reach it through the server's endpoints. Pages by id across the three kinds.
+// reach it through the server's endpoints. Pages by id across the resource kinds. Built-in rows use their settings ID only as an opaque
+// pagination position; the handler returns their stable endpoint identity.
 // A wrapper MCP server can share its toolset's id, so the cursor relies on that
 // exclusion: without it the two rows would share a cursor position and a page
 // boundary between them would skip one.
@@ -2986,6 +3063,7 @@ func (q *Queries) ListOrganizationManagedUserSessionIssuerMCPServers(ctx context
 		var i ListOrganizationManagedUserSessionIssuerMCPServersRow
 		if err := rows.Scan(
 			&i.Kind,
+			&i.BuiltinKey,
 			&i.ID,
 			&i.Name,
 			&i.Slug,
@@ -3060,6 +3138,7 @@ func (q *Queries) ListOrganizationUserSessionIssuerCimdClientsByIssuerID(ctx con
 
 const listOrganizationUserSessionIssuerMCPServers = `-- name: ListOrganizationUserSessionIssuerMCPServers :many
 SELECT server.id,
+       ''::text AS builtin_key,
        COALESCE(server.name, server.slug, server.id::text)::text AS name,
        project.id AS project_id,
        project.name AS project_name
@@ -3073,7 +3152,22 @@ WHERE issuer.id = $1
   AND server.deleted IS FALSE
   AND project.deleted IS FALSE
   AND project.organization_id = issuer.organization_id
-ORDER BY project.name, COALESCE(server.name, server.slug, server.id::text), server.id
+UNION ALL
+SELECT builtin.id,
+       builtin.builtin_key,
+       ('Built-in MCP: ' || builtin.builtin_key)::text AS name,
+       project.id AS project_id,
+       project.name AS project_name
+FROM user_session_issuers AS issuer
+JOIN builtin_mcp_settings AS builtin ON builtin.user_session_issuer_id = issuer.id
+JOIN projects AS project ON project.id = builtin.project_id
+WHERE issuer.id = $1
+  AND issuer.project_id IS NULL
+  AND issuer.organization_id = $2::text
+  AND issuer.deleted IS FALSE
+  AND project.deleted IS FALSE
+  AND project.organization_id = issuer.organization_id
+ORDER BY project_name, name, id
 `
 
 type ListOrganizationUserSessionIssuerMCPServersParams struct {
@@ -3083,6 +3177,7 @@ type ListOrganizationUserSessionIssuerMCPServersParams struct {
 
 type ListOrganizationUserSessionIssuerMCPServersRow struct {
 	ID          uuid.UUID
+	BuiltinKey  string
 	Name        string
 	ProjectID   uuid.UUID
 	ProjectName string
@@ -3099,6 +3194,7 @@ func (q *Queries) ListOrganizationUserSessionIssuerMCPServers(ctx context.Contex
 		var i ListOrganizationUserSessionIssuerMCPServersRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.BuiltinKey,
 			&i.Name,
 			&i.ProjectID,
 			&i.ProjectName,
@@ -5624,6 +5720,12 @@ SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE issuer.id = $1
   AND issuer.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1 FROM builtin_mcp_settings AS builtin
+    JOIN projects AS builtin_project ON builtin_project.id = builtin.project_id
+    WHERE builtin.user_session_issuer_id = issuer.id
+      AND builtin_project.deleted IS FALSE
+  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS scoped_issuer
@@ -6715,6 +6817,15 @@ SELECT EXISTS (
       AND issuer.project_id = $2::uuid
       AND issuer.deleted IS FALSE
       AND EXISTS (
+        SELECT 1
+        FROM builtin_mcp_settings AS builtin
+        JOIN projects AS project ON project.id = builtin.project_id
+        WHERE builtin.user_session_issuer_id = issuer.id
+          AND project.deleted IS FALSE
+          AND builtin.project_id = issuer.project_id
+
+        UNION ALL
+
         SELECT 1
         FROM mcp_servers AS server
         WHERE server.user_session_issuer_id = issuer.id

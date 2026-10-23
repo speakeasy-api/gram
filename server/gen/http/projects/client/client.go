@@ -17,6 +17,14 @@ import (
 
 // Client lists the projects service endpoint HTTP clients.
 type Client struct {
+	// ListBuiltinMcpServers Doer is the HTTP client used to make requests to the
+	// listBuiltinMcpServers endpoint.
+	ListBuiltinMcpServersDoer goahttp.Doer
+
+	// UpdateBuiltinMcpServer Doer is the HTTP client used to make requests to the
+	// updateBuiltinMcpServer endpoint.
+	UpdateBuiltinMcpServerDoer goahttp.Doer
+
 	// GetProject Doer is the HTTP client used to make requests to the getProject
 	// endpoint.
 	GetProjectDoer goahttp.Doer
@@ -73,6 +81,8 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		ListBuiltinMcpServersDoer:    doer,
+		UpdateBuiltinMcpServerDoer:   doer,
 		GetProjectDoer:               doer,
 		CreateProjectDoer:            doer,
 		UpdateProjectDoer:            doer,
@@ -87,6 +97,54 @@ func NewClient(
 		host:                         host,
 		decoder:                      dec,
 		encoder:                      enc,
+	}
+}
+
+// ListBuiltinMcpServers returns an endpoint that makes HTTP requests to the
+// projects service listBuiltinMcpServers server.
+func (c *Client) ListBuiltinMcpServers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListBuiltinMcpServersRequest(c.encoder)
+		decodeResponse = DecodeListBuiltinMcpServersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListBuiltinMcpServersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListBuiltinMcpServersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("projects", "listBuiltinMcpServers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateBuiltinMcpServer returns an endpoint that makes HTTP requests to the
+// projects service updateBuiltinMcpServer server.
+func (c *Client) UpdateBuiltinMcpServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateBuiltinMcpServerRequest(c.encoder)
+		decodeResponse = DecodeUpdateBuiltinMcpServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateBuiltinMcpServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateBuiltinMcpServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("projects", "updateBuiltinMcpServer", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

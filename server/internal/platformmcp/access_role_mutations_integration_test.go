@@ -10,14 +10,18 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/builtinmcp"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -260,4 +264,87 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	updateAuditsStale, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessRoleUpdate)
 	require.NoError(t, err)
 	require.Equal(t, updateAuditsAfter, updateAuditsStale)
+}
+
+func TestAccessRoleMutationsBuiltinExactConnect(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_role_mutations")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+
+	organization, err := organizationsrepo.New(conn).GetOrganizationMetadata(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID: principal.OrganizationID, Name: organization.Name, Slug: organization.Slug,
+		WorkosID: conv.ToPGText("workos-" + uuid.NewString()), Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
+	logger := testenv.NewLogger(t)
+	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
+	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard())
+	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
+	require.NoError(t, err)
+
+	id := builtinmcp.ID(project.ID, builtinmcp.Slack)
+	input := CreateMCPAccessRoleInput{ProjectID: project.ID.String(), Name: "Builtin role", Rules: []MCPAccessRoleRule{{MCPID: id.String()}}, Confirmed: true, IdempotencyKey: "builtin-create"}
+	created, err := service.Create(ctx, principal, input)
+	require.NoError(t, err)
+	read, err := reads.GetMCPAccess(ctx, principal, GetMCPAccessInput{ProjectID: project.ID.String(), MCPID: id.String()})
+	require.NoError(t, err)
+	var selected MCPRoleCoverage
+	for _, role := range read.Roles {
+		if role.Name == input.Name {
+			selected = role
+		}
+	}
+	require.True(t, selected.CanEnterServer)
+	require.False(t, selected.AssignmentEligible)
+	require.Empty(t, selected.MatchingPlugins)
+	require.NotEmpty(t, selected.Version)
+	roleID, err := reads.references.Decode(created.Role.Reference, principal, subjectKindAccessRole, reads.now())
+	require.NoError(t, err)
+	stored, err := manager.GetRoleByID(ctx, principal.OrganizationID, roleID)
+	require.NoError(t, err)
+	grants, _ := roleAuthzGrants(stored)
+	require.True(t, authz.BuiltinConnectExplicitlyGranted(grants, id.String(), project.ID.String()))
+
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, principal.UserID, "builtin-owner@example.com")
+	agent, err := agentsrepo.New(conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{OrganizationID: principal.OrganizationID, OwnerUserID: principal.UserID, Name: "Builtin role fixture"})
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertAgentRoleAssignment(ctx, accessrepo.UpsertAgentRoleAssignmentParams{OrganizationID: principal.OrganizationID, RoleUrn: stored.PrincipalUrn, AgentID: agent.ID})
+	require.NoError(t, err)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+	machineGrants, err := runtimepolicy.LoadAgentPolicy(ctx, conn, principal.OrganizationID, agentPrincipal)
+	require.NoError(t, err)
+	require.True(t, authz.BuiltinConnectExplicitlyGranted(machineGrants, id.String(), project.ID.String()))
+	candidates, err := pluginsrepo.New(conn).ListRoleDeliveryServers(ctx, pluginsrepo.ListRoleDeliveryServersParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
+	require.NoError(t, err)
+	for _, candidate := range candidates {
+		require.NotEqual(t, id, candidate.ResourceID, "builtins must never enter plugin reconciliation candidates")
+	}
+	removed, err := service.Update(ctx, principal, UpdateMCPAccessRoleInput{ProjectID: project.ID.String(), RoleReference: selected.Reference, ExpectedVersion: selected.Version, RemoveRules: input.Rules, Confirmed: true, IdempotencyKey: "builtin-remove"})
+	require.NoError(t, err)
+	require.NotEmpty(t, removed.Role.Version)
+	stored, err = manager.GetRoleByID(ctx, principal.OrganizationID, roleID)
+	require.NoError(t, err)
+	grants, _ = roleAuthzGrants(stored)
+	require.False(t, authz.BuiltinConnectExplicitlyGranted(grants, id.String(), project.ID.String()))
+	machineGrants, err = runtimepolicy.LoadAgentPolicy(ctx, conn, principal.OrganizationID, agentPrincipal)
+	require.NoError(t, err)
+	require.False(t, authz.BuiltinConnectExplicitlyGranted(machineGrants, id.String(), project.ID.String()))
+	input.IdempotencyKey = "builtin-narrowed"
+	input.Rules[0].Disposition = "read_only"
+	_, err = service.Create(ctx, principal, input)
+	require.Error(t, err)
+	input.Rules = []MCPAccessRoleRule{{MCPID: builtinmcp.ID(uuid.New(), builtinmcp.Slack).String()}}
+	_, err = service.Create(ctx, principal, input)
+	require.Error(t, err)
+	foreign := principal
+	foreign.OrganizationID = "unrelated-org"
+	_, err = reads.GetMCPAccess(ctx, foreign, GetMCPAccessInput{ProjectID: project.ID.String(), MCPID: id.String()})
+	require.ErrorIs(t, err, ErrAccessMCPNotFound)
 }

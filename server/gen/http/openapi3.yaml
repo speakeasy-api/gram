@@ -44168,6 +44168,110 @@ paths:
             x-speakeasy-name-override: removeMember
             x-speakeasy-react-hook:
                 name: RemoveMetaMcpMember
+    /rpc/metaMcp.setBuiltinMember:
+        post:
+            description: Add or configure a built-in MCP server in a gateway. Administrator only; membership does not grant connection access.
+            operationId: setBuiltinMetaMcpMember
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetBuiltinMetaMcpMemberRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MetaMcpMember'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: setBuiltinMetaMcpMember metaMcp
+            tags:
+                - metaMcp
+            x-speakeasy-name-override: setBuiltinMember
+            x-speakeasy-react-hook:
+                name: SetBuiltinMetaMcpMember
     /rpc/metaMcp.update:
         post:
             description: Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility or network_access_mode preserves the respective stored value, so a caller that does not manage those policies cannot change them by saving an unrelated field.
@@ -57414,6 +57518,94 @@ paths:
             x-speakeasy-name-override: listAllowedOrigins
             x-speakeasy-react-hook:
                 name: ListAllowedOrigins
+    /rpc/projects.listBuiltinMcpServers:
+        get:
+            description: List code-owned MCP servers and their project preferences. Only live organization administrators may discover built-ins. Hidden servers are included for settings management; hiding never changes runtime authorization.
+            operationId: listBuiltinMcpServers
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListBuiltinMcpServersResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listBuiltinMcpServers projects
+            tags:
+                - projects
+            x-speakeasy-react-hook:
+                name: BuiltinMcpServers
     /rpc/projects.setLogo:
         post:
             description: Uploads a logo for a project.
@@ -57694,6 +57886,100 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateProject
+    /rpc/projects.updateBuiltinMcpServer:
+        post:
+            description: Update the user session issuer binding, visual visibility and the default environment of a built-in MCP server. Only live organization administrators may update settings; humans cannot connect to built-ins. Requires the current version.
+            operationId: updateBuiltinMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateBuiltinMcpServerForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BuiltinMcpServer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateBuiltinMcpServer projects
+            tags:
+                - projects
+            x-speakeasy-react-hook:
+                name: UpdateBuiltinMcpServer
     /rpc/projects.upsertAllowedOrigin:
         post:
             description: Upsert an allowed origin for a project.
@@ -95869,6 +96155,66 @@ components:
                 - id
                 - reason
                 - description
+        BuiltinMcpServer:
+            type: object
+            properties:
+                credential_variables:
+                    type: array
+                    items:
+                        type: string
+                description:
+                    type: string
+                environment_id:
+                    type: string
+                    format: uuid
+                hidden:
+                    type: boolean
+                id:
+                    type: string
+                    format: uuid
+                key:
+                    type: string
+                name:
+                    type: string
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BuiltinMcpTool'
+                url:
+                    type: string
+                user_session_issuer_bound:
+                    type: boolean
+                    description: Whether an issuer has been bound; remains true if that issuer is deleted
+                user_session_issuer_id:
+                    type: string
+                    format: uuid
+                version:
+                    type: string
+            required:
+                - id
+                - key
+                - name
+                - description
+                - url
+                - hidden
+                - user_session_issuer_bound
+                - version
+                - tools
+                - credential_variables
+        BuiltinMcpTool:
+            type: object
+            properties:
+                description:
+                    type: string
+                input_schema:
+                    type: string
+                    description: JSON input schema
+                name:
+                    type: string
+            required:
+                - name
+                - description
+                - input_schema
         BulkUpdateAccountTypeRequestBody:
             type: object
             properties:
@@ -106827,6 +107173,15 @@ components:
             required:
                 - version
                 - categories
+        ListBuiltinMcpServersResponseBody:
+            type: object
+            properties:
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BuiltinMcpServer'
+            required:
+                - servers
         ListBusinessMemoriesResponseBody:
             type: object
             properties:
@@ -109814,6 +110169,13 @@ components:
         MetaMcpMember:
             type: object
             properties:
+                builtin_key:
+                    type: string
+                    description: The immutable built-in server key, absent for stored servers
+                environment_id:
+                    type: string
+                    description: The built-in member environment override
+                    format: uuid
                 id:
                     type: string
                     description: The ID of the membership
@@ -111816,6 +112178,10 @@ components:
         OrganizationUserSessionIssuerMigratePreflight:
             type: object
             properties:
+                builtin_binding_count:
+                    type: integer
+                    description: Number of live built-in MCP bindings to the source issuer. Rebind these explicitly before migrating; a nonzero count blocks migration.
+                    format: int64
                 can_migrate:
                     type: boolean
                     description: True when no hard blocker is present.
@@ -111873,6 +112239,7 @@ components:
                 - conflicting_client_ids
                 - principal_binding_conflict_count
                 - ema_binding_conflict_count
+                - builtin_binding_count
                 - platform_owned
                 - warnings
                 - warnings_fingerprint
@@ -118859,6 +119226,27 @@ components:
                     minimum: 0
             required:
                 - billing_cycle_anchor_day
+        SetBuiltinMetaMcpMemberRequestBody:
+            type: object
+            properties:
+                builtin_key:
+                    type: string
+                    description: The immutable built-in server key
+                environment_id:
+                    type: string
+                    description: Project environment override; omit to use the built-in default
+                    format: uuid
+                meta_mcp_server_id:
+                    type: string
+                    description: The gateway ID
+                    format: uuid
+                sort_order:
+                    type: integer
+                    description: Position in the gateway; defaults to zero
+                    format: int64
+            required:
+                - meta_mcp_server_id
+                - builtin_key
         SetDirectoryRoleMappingForm:
             type: object
             properties:
@@ -125549,6 +125937,30 @@ components:
                 - id
                 - external_credential_id
                 - name
+        UpdateBuiltinMcpServerForm:
+            type: object
+            properties:
+                environment_id:
+                    type: string
+                    description: Project environment override; omit to use the project's default environment
+                    format: uuid
+                expected_version:
+                    type: string
+                    description: Version returned by the latest read
+                hidden:
+                    type: boolean
+                    description: Hide from discovery only; runtime access and gateway membership do not change
+                key:
+                    type: string
+                    description: Immutable built-in key
+                user_session_issuer_id:
+                    type: string
+                    description: Bind a live user session issuer from this organization and project; omission preserves the existing binding
+                    format: uuid
+            required:
+                - key
+                - hidden
+                - expected_version
         UpdateConfigurationRequestBody:
             type: object
             properties:
@@ -128285,6 +128697,7 @@ components:
                         - mcp_server
                         - toolset
                         - meta_mcp_server
+                        - builtin_mcp_server
                 name:
                     type: string
                     description: The display name.
@@ -128298,7 +128711,7 @@ components:
                 slug:
                     type: string
                     description: The MCP server or toolset slug. Absent for meta MCP servers and MCP servers without one.
-            description: A live MCP server, toolset, or meta MCP server attached to a user_session_issuer.
+            description: A live MCP server, toolset, meta MCP server, or built-in MCP server attached to a user_session_issuer.
             required:
                 - kind
                 - id

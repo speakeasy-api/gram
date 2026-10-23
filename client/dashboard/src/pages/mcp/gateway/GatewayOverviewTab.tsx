@@ -29,7 +29,9 @@ export function GatewayOverviewTab({
   // unproxied and slugless ones sit in the list permanently excluded.
   const servable = rows.filter(
     (row) =>
-      row.classification === "hosted" || row.classification === "proxied",
+      row.classification === "hosted" ||
+      row.classification === "proxied" ||
+      row.classification === "builtin",
   ).length;
 
   return (

@@ -7,13 +7,17 @@
 
 package types
 
-// MetaMcpMember is the result type of the metaMcp service addMetaMcpMember
-// method.
+// MetaMcpMember is the result type of the metaMcp service
+// setBuiltinMetaMcpMember method.
 type MetaMcpMember struct {
 	// The ID of the membership
 	ID string
 	// The ID of the member MCP server
 	McpServerID string
+	// The immutable built-in server key, absent for stored servers
+	BuiltinKey *string
+	// The built-in member environment override
+	EnvironmentID *string
 	// The name of the member MCP server, when configured
 	McpServerName *string
 	// The slug of the member MCP server, when configured
