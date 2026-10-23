@@ -15771,11 +15771,11 @@ CREATE TABLE IF NOT EXISTS builtin_mcp_settings (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS builtin_mcp_settings_project_key_idx ON builtin_mcp_settings (project_id, builtin_key);
 COMMENT ON COLUMN builtin_mcp_settings.project_id IS '@access: confidential';
-COMMENT ON COLUMN builtin_mcp_settings.builtin_key IS '@access: shared';
-COMMENT ON COLUMN builtin_mcp_settings.hidden IS '@access: shared';
+COMMENT ON COLUMN builtin_mcp_settings.builtin_key IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.hidden IS '@access: confidential';
 COMMENT ON COLUMN builtin_mcp_settings.environment_id IS '@access: confidential';
-COMMENT ON COLUMN builtin_mcp_settings.version IS '@access: shared';
-COMMENT ON COLUMN builtin_mcp_settings.updated_at IS '@access: shared';
+COMMENT ON COLUMN builtin_mcp_settings.version IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.updated_at IS '@access: confidential';
 COMMENT ON COLUMN builtin_mcp_settings.id IS '@access: confidential';
 -- Required by configured gateway synthetic built-in membership.
 CREATE TABLE IF NOT EXISTS builtin_mcp_server_members (
@@ -15797,8 +15797,8 @@ CREATE INDEX IF NOT EXISTS builtin_mcp_server_members_project_id_idx ON builtin_
 COMMENT ON COLUMN builtin_mcp_server_members.id IS '@access: confidential';
 COMMENT ON COLUMN builtin_mcp_server_members.project_id IS '@access: confidential';
 COMMENT ON COLUMN builtin_mcp_server_members.meta_mcp_server_id IS '@access: confidential';
-COMMENT ON COLUMN builtin_mcp_server_members.builtin_key IS '@access: shared';
+COMMENT ON COLUMN builtin_mcp_server_members.builtin_key IS '@access: confidential';
 COMMENT ON COLUMN builtin_mcp_server_members.environment_id IS '@access: confidential';
-COMMENT ON COLUMN builtin_mcp_server_members.sort_order IS '@access: shared';
-COMMENT ON COLUMN builtin_mcp_server_members.created_at IS '@access: shared';
-COMMENT ON COLUMN builtin_mcp_server_members.updated_at IS '@access: shared';
+COMMENT ON COLUMN builtin_mcp_server_members.sort_order IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_server_members.created_at IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_server_members.updated_at IS '@access: confidential';
