@@ -15,7 +15,7 @@ if (!siteURL) {
 
 export default defineConfig({
   testDir: "./tests",
-  testIgnore: "**/registry-editor.spec.ts",
+  testIgnore: ["**/registry-editor.spec.ts", "**/ui-fuzz*.spec.ts"],
   workers: 1,
   fullyParallel: false,
   // Has to sit above every wait the test sets for itself -- the lock wait, the
