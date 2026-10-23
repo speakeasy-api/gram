@@ -71,7 +71,8 @@ export function HostedAddressSections({
       try {
         followRenamedServer(await client.mcpServers.get({ id: toolset.id }));
       } catch {
-        // The refetch below still settles the page.
+        // Hosted endpoint writes only reach the canonical server, whose id is the toolset's; that route always resolves.
+        followRenamedServer({ id: toolset.id });
       }
       void invalidateMcpServerQueries(queryClient);
       toast.success("MCP settings saved successfully");

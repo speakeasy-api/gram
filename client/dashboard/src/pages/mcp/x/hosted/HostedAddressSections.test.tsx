@@ -157,6 +157,8 @@ beforeEach(() => {
   testState.toastError.mockClear();
   testState.invalidateMcpServerQueries.mockClear();
   testState.patchMcpEndpointInCache.mockClear();
+  followRenamedServer.mockReset();
+  getMcpServer.mockReset();
 });
 
 afterEach(cleanup);
@@ -293,6 +295,22 @@ describe("HostedAddressSections", () => {
     expect(testState.invalidateMcpServerQueries).toHaveBeenCalled();
     expect(testState.toastSuccess).toHaveBeenCalledWith(
       "MCP settings saved successfully",
+    );
+  });
+
+  it("follows the server id when the post-save lookup fails", async () => {
+    renderSections(platformToolset, [endpoint()]);
+    getMcpServer.mockRejectedValue(new Error("network"));
+
+    await testState.mutationOptions?.onSuccess?.(
+      endpoint({ slug: "acme-renamed" }),
+    );
+
+    expect(followRenamedServer).toHaveBeenCalledWith({
+      id: platformToolset.id,
+    });
+    expect(followRenamedServer.mock.invocationCallOrder[0]).toBeLessThan(
+      testState.invalidateMcpServerQueries.mock.invocationCallOrder[0]!,
     );
   });
 
