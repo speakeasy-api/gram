@@ -25,15 +25,15 @@ COMMENT ON COLUMN "builtin_mcp_server_members"."project_id" IS '@access: confide
 -- Set comment to column: "meta_mcp_server_id" on table: "builtin_mcp_server_members"
 COMMENT ON COLUMN "builtin_mcp_server_members"."meta_mcp_server_id" IS '@access: confidential';
 -- Set comment to column: "builtin_key" on table: "builtin_mcp_server_members"
-COMMENT ON COLUMN "builtin_mcp_server_members"."builtin_key" IS '@access: shared';
+COMMENT ON COLUMN "builtin_mcp_server_members"."builtin_key" IS '@access: confidential';
 -- Set comment to column: "environment_id" on table: "builtin_mcp_server_members"
 COMMENT ON COLUMN "builtin_mcp_server_members"."environment_id" IS '@access: confidential';
 -- Set comment to column: "sort_order" on table: "builtin_mcp_server_members"
-COMMENT ON COLUMN "builtin_mcp_server_members"."sort_order" IS '@access: shared';
+COMMENT ON COLUMN "builtin_mcp_server_members"."sort_order" IS '@access: confidential';
 -- Set comment to column: "created_at" on table: "builtin_mcp_server_members"
-COMMENT ON COLUMN "builtin_mcp_server_members"."created_at" IS '@access: shared';
+COMMENT ON COLUMN "builtin_mcp_server_members"."created_at" IS '@access: confidential';
 -- Set comment to column: "updated_at" on table: "builtin_mcp_server_members"
-COMMENT ON COLUMN "builtin_mcp_server_members"."updated_at" IS '@access: shared';
+COMMENT ON COLUMN "builtin_mcp_server_members"."updated_at" IS '@access: confidential';
 -- Create "builtin_mcp_settings" table
 CREATE TABLE "builtin_mcp_settings" (
   "project_id" uuid NULL,
@@ -53,14 +53,14 @@ CREATE UNIQUE INDEX "builtin_mcp_settings_project_key_idx" ON "builtin_mcp_setti
 -- Set comment to column: "project_id" on table: "builtin_mcp_settings"
 COMMENT ON COLUMN "builtin_mcp_settings"."project_id" IS '@access: confidential';
 -- Set comment to column: "builtin_key" on table: "builtin_mcp_settings"
-COMMENT ON COLUMN "builtin_mcp_settings"."builtin_key" IS '@access: shared';
+COMMENT ON COLUMN "builtin_mcp_settings"."builtin_key" IS '@access: confidential';
 -- Set comment to column: "hidden" on table: "builtin_mcp_settings"
-COMMENT ON COLUMN "builtin_mcp_settings"."hidden" IS '@access: shared';
+COMMENT ON COLUMN "builtin_mcp_settings"."hidden" IS '@access: confidential';
 -- Set comment to column: "environment_id" on table: "builtin_mcp_settings"
 COMMENT ON COLUMN "builtin_mcp_settings"."environment_id" IS '@access: confidential';
 -- Set comment to column: "version" on table: "builtin_mcp_settings"
-COMMENT ON COLUMN "builtin_mcp_settings"."version" IS '@access: shared';
+COMMENT ON COLUMN "builtin_mcp_settings"."version" IS '@access: confidential';
 -- Set comment to column: "updated_at" on table: "builtin_mcp_settings"
-COMMENT ON COLUMN "builtin_mcp_settings"."updated_at" IS '@access: shared';
+COMMENT ON COLUMN "builtin_mcp_settings"."updated_at" IS '@access: confidential';
 -- Set comment to column: "id" on table: "builtin_mcp_settings"
 COMMENT ON COLUMN "builtin_mcp_settings"."id" IS '@access: confidential';
