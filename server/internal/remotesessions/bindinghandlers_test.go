@@ -309,6 +309,51 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.Equal(t, replacement.ID.String(), rebound.RemoteSessionID)
 }
 
+// Allow delegated management so a refusal can only come from the ownership
+// rule the attachment handler applies on top of the shared authorizer.
+type bindingDelegatedEngine struct{}
+
+func (bindingDelegatedEngine) EvaluateLoadedGrants(context.Context, []authz.Grant, ...authz.Check) error {
+	return nil
+}
+
+func TestAttachBindingRequiresAgentOwner(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	authorizer := agentmanagement.NewAuthorizer(bindingDelegatedEngine{})
+	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+		if err != nil {
+			return fmt.Errorf("authorize attachment owner: %w", err)
+		}
+		return nil
+	})
+	owner := "binding-delegating-owner-" + uuid.NewString()
+	seedUser(t, ctx, ti.conn, owner, "delegating-owner@example.com", "Delegating owner")
+	_, err := testrepo.New(ti.conn).CreateAttachmentMembershipFixture(ctx, testrepo.CreateAttachmentMembershipFixtureParams{OrganizationID: auth.ActiveOrganizationID, UserID: pgtype.Text{String: owner, Valid: true}})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: owner, Name: "Delegated attachment agent"})
+	require.NoError(t, err)
+	issuer := createRemoteIssuer(t, ctx, ti, "binding-delegated-provider", "")
+	config := createUserSessionIssuer(t, ctx, ti.conn, "binding-delegated-config")
+	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "binding-delegated-client")
+	managers := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), config.String(), client)
+	owners := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(owner), config.String(), client)
+
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: managers.ID.String()})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	ownerAuth := *auth
+	ownerAuth.UserID = owner
+	ownerCtx := contextvalues.WithValidatedGramSession(ctx, &ownerAuth, false)
+	attached, err := ti.service.AttachBinding(ownerCtx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: owners.ID.String()})
+	require.NoError(t, err, "a refused attachment leaves the client's slot free for the owner")
+	require.Equal(t, owners.ID.String(), attached.RemoteSessionID)
+}
+
 func TestListRemoteSessionsRequiresPairedEligibilityFilters(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()

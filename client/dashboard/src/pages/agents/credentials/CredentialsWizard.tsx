@@ -53,6 +53,8 @@ import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import { useCatalogEntries, valuesFromSubject } from "./workloadCatalog";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useServerInventory } from "./useServerInventory";
+import { useOwnerConnections } from "./useOwnerConnections";
+import { attachOwnerConnections } from "./ownerConnections";
 import {
   WizardFooter,
   WizardStepHeader,
@@ -377,6 +379,10 @@ export function CredentialsWizard({
       ? reachCoversProject(allServersProjectIDs, server.projectId)
       : scopedProjectID === undefined || server.projectId === scopedProjectID,
   );
+  // The creator becomes the new agent's owner, and an agent uses only its
+  // owner's connections, so these are the creator's own. Editing changes
+  // reach, not credentials: the agent's page attaches accounts there.
+  const connections = useOwnerConnections(listedServers, !editing);
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
@@ -734,6 +740,26 @@ export function CredentialsWizard({
             // key can call it, which this flow has no step for.
             .filter((server) => !server.issuerId)
         : selected.map((entry) => entry.server);
+      // A server that signs in as a person is reached through the owner's own
+      // connection, attached before the key is cut so the key works from its
+      // first call. Attaching again on a retry keeps what is already there.
+      // Editing never attaches: it offers no connection to choose, and the
+      // agent's page connects accounts for the keys it issues.
+      if (!editing) {
+        try {
+          await attachOwnerConnections(
+            sdk,
+            target.id,
+            reach,
+            controller.signal,
+          );
+        } catch (failure) {
+          const reason = failure instanceof Error ? failure.message : "";
+          throw new Error(
+            `The agent was created, but it could not use your connection. ${reason}`.trim(),
+          );
+        }
+      }
       const delegable = await discoverKeyServerGrants(
         sdk.agents,
         target.id,
@@ -888,7 +914,7 @@ export function CredentialsWizard({
           : selected.map((entry) => ({
               id: entry.server.id,
               name: entry.server.name,
-              detail: "all tools",
+              detail: entry.server.issuerId ? "all tools, as you" : "all tools",
             }))
       }
     />
@@ -956,6 +982,7 @@ export function CredentialsWizard({
                 setHighlight(next ? "server:all" : null);
               }}
               selected={selected}
+              connections={editing ? undefined : connections}
               onChange={(next) => {
                 setSelected(next);
                 // The one just added, or the last one left when removing.

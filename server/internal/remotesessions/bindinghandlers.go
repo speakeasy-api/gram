@@ -11,6 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -147,6 +148,22 @@ func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingP
 		return nil, err
 	}
 	defer func() { _ = op.tx.Rollback(ctx) }()
+	// The runtime serves an agent only its owner's attachments, so another
+	// caller's attachment would never be used, would be hidden from every
+	// listing, and would hold the client's only slot. Delegated agent:authorize
+	// lets a caller manage the agent, not lend it their own connection. The
+	// authorizer has already locked the agent row in this transaction, so the
+	// owner cannot change before commit.
+	agent, err := agentsrepo.New(op.tx).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: op.organizationID, ID: op.principalID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load attachment agent owner")
+	}
+	if urn.NewUserSubject(agent.OwnerUserID).String() != op.subject.String() {
+		return nil, oops.E(oops.CodeForbidden, nil, "only the agent's owner can let it use their connection")
+	}
 	sessionID, err := uuid.Parse(payload.RemoteSessionID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_id")

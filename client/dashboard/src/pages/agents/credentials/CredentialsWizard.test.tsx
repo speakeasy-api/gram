@@ -32,6 +32,10 @@ const mocks = vi.hoisted(() => ({
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
   agentList: vi.fn(),
+  sessions: vi.fn(),
+  sessionClients: vi.fn(),
+  bindings: vi.fn(),
+  attach: vi.fn(),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -62,6 +66,18 @@ vi.mock("@/contexts/Sdk", () => ({
       listDelegableGrants: mocks.listDelegableGrants,
     },
     keys: { create: mocks.createKey, list: mocks.listKeys },
+    // A person's own connections, read once per project before the agent
+    // exists and as the agent's candidates once it does.
+    remoteSessions: {
+      list: async (request: object) => [
+        { result: { items: await mocks.sessions(request) } },
+      ],
+      listBindings: async () => ({ items: await mocks.bindings() }),
+      attachBinding: mocks.attach,
+    },
+    remoteSessionClients: {
+      list: async () => [{ result: { items: await mocks.sessionClients() } }],
+    },
   }),
   // The server list links out to a server's settings, and routes read the
   // slugs to build that href.
@@ -216,6 +232,10 @@ beforeEach(() => {
     ],
   });
   mocks.toolsets.mockResolvedValue({ toolsets: [] });
+  mocks.sessions.mockResolvedValue([]);
+  mocks.sessionClients.mockResolvedValue([]);
+  mocks.bindings.mockResolvedValue([]);
+  mocks.attach.mockResolvedValue({});
   mocks.createAgent.mockResolvedValue({ id: "agent_new", name: "Release Bot" });
   mocks.listDelegableGrants.mockResolvedValue([grant]);
   mocks.createKey.mockResolvedValue({ id: "key_new", key: "gram_secret" });
@@ -1025,5 +1045,148 @@ describe("Editing an agent that already exists", () => {
 
     expect(await screen.findByText("Grant is locked")).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
+describe("Servers that sign in as a person", () => {
+  const linear = {
+    id: "server_linear",
+    name: "Linear",
+    slug: "linear",
+    projectId: "project_one",
+    remoteMcpServerId: "remote_linear",
+    userSessionIssuerId: "issuer_linear",
+    visibility: "private",
+    networkAccessMode: "dual",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const mine = {
+    id: "session_mine",
+    remoteSessionClientId: "client_linear",
+    userSessionIssuerId: "issuer_linear",
+    subjectUrn: "user:user_owner",
+    upstreamEmail: "owner@upstream.test",
+    accessExpiresAt: new Date(Date.now() + 3_600_000),
+    hasRefreshToken: true,
+    scopes: [],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  async function reachServers() {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Server selection" });
+  }
+
+  beforeEach(() => {
+    mocks.mcpServers.mockResolvedValue({ mcpServers: [linear] });
+    mocks.sessionClients.mockResolvedValue([
+      { id: "client_linear", credentialOwner: "subject" },
+    ]);
+    mocks.listDelegableGrants.mockResolvedValue([
+      {
+        effect: "allow",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_linear",
+          projectId: "project_one",
+        },
+      },
+    ]);
+  });
+
+  it("uses the creator's own connection, says when it ends, and attaches it before the key", async () => {
+    mocks.sessions.mockResolvedValue([mine]);
+    await reachServers();
+
+    expect(
+      await screen.findByText(
+        "Uses your connection: owner@upstream.test · Refreshes itself, no end date",
+      ),
+    ).toBeTruthy();
+    // Read as the creator, before the agent exists.
+    expect(mocks.sessions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gramProject: "project-one",
+        subjectUrn: "user:user_owner",
+      }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toEqual([
+      {
+        effect: "allow",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_linear",
+          projectId: "project_one",
+        },
+      },
+    ]);
+    // Checked again as the new agent's candidates, then attached.
+    expect(mocks.sessions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        principalId: "agent_new",
+        userSessionIssuerId: "issuer_linear",
+      }),
+    );
+    expect(mocks.attach).toHaveBeenCalledWith(
+      {
+        gramProject: "project-one",
+        attachBindingRequestBody: {
+          principalId: "agent_new",
+          userSessionIssuerId: "issuer_linear",
+          remoteSessionId: "session_mine",
+        },
+      },
+      undefined,
+      expect.anything(),
+    );
+    expect(mocks.attach.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.createKey.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("keeps a server out of reach until the creator has connected to it", async () => {
+    await reachServers();
+
+    expect(
+      await screen.findByText(/You have no connection to it yet/),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("checkbox", { name: "Linear" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("names the step that failed when the connection cannot be attached", async () => {
+    mocks.sessions.mockResolvedValue([mine]);
+    mocks.attach.mockRejectedValue(new Error("attachment refused"));
+    await reachServers();
+    await screen.findByText(/^Uses your connection/);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "The agent was created, but it could not use your connection. attachment refused",
+    );
+    expect(mocks.createKey).not.toHaveBeenCalled();
   });
 });

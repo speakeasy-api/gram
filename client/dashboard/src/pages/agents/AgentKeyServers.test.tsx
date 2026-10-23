@@ -25,13 +25,14 @@ const mocks = vi.hoisted(() => ({
   bindings: vi.fn(),
   attach: vi.fn(),
   detach: vi.fn(),
+  userId: "user_example",
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     id: "org_example",
     projects: [{ id: "project_one", name: "Project one", slug: "project-one" }],
   }),
-  useSession: () => ({ user: { id: "user_example" } }),
+  useSession: () => ({ user: { id: mocks.userId } }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
@@ -63,7 +64,10 @@ vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
   useListMcpServersForOrg: (_r: unknown, _s: unknown, options: object) =>
     useQuery({ queryKey: ["modern"], queryFn: mocks.modern, ...options }),
 }));
-const agent = { id: "agent_example" } as ManagedAgent;
+const agent = {
+  id: "agent_example",
+  ownerUserId: "user_example",
+} as ManagedAgent;
 const server: KeyServer = {
   id: "remote",
   resourceId: "remote",
@@ -191,8 +195,11 @@ beforeEach(() => {
       id: "account_example",
       remoteSessionClientId: "client_example",
       scopes: ["read"],
+      accessExpiresAt: new Date(Date.now() + 3 * 86_400_000),
+      hasRefreshToken: false,
     },
   ]);
+  mocks.userId = "user_example";
   mocks.bindings.mockResolvedValue([]);
   mocks.attach.mockResolvedValue(undefined);
   mocks.detach.mockResolvedValue(undefined);
@@ -452,6 +459,28 @@ describe("Agent key MCP servers", () => {
       expect(ready).not.toHaveBeenCalledWith(true);
     },
   );
+  it("says when an account stops working and that it does not refresh", async () => {
+    setup(1, [server]);
+    expect(
+      await screen.findByText(
+        /^Expires .* \(in 3 days\) and does not refresh$/,
+      ),
+    ).toBeTruthy();
+  });
+  it("offers no account to someone who is not the agent's owner", async () => {
+    // Only the owner's connections are ever used, so another person's would
+    // be attached and never serve a call.
+    mocks.userId = "user_manager";
+    const { ready } = setup(1, [server]);
+    expect(
+      await screen.findByText(/Only the agent's owner can let this agent use/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Use account" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Connect an account" }),
+    ).toBeNull();
+    expect(ready).not.toHaveBeenCalledWith(true);
+  });
   it("does not accept missing or stale bindings as ready", async () => {
     mocks.bindings.mockResolvedValue([
       {
