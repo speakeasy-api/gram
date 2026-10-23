@@ -15768,6 +15768,8 @@ CREATE TABLE IF NOT EXISTS builtin_mcp_settings (
   builtin_key text NOT NULL CHECK (builtin_key <> ''),
   hidden boolean NOT NULL DEFAULT false,
   environment_id uuid REFERENCES environments(id) ON DELETE SET NULL,
+  user_session_issuer_id uuid REFERENCES user_session_issuers(id) ON DELETE SET NULL,
+  user_session_issuer_bound boolean NOT NULL DEFAULT false,
   version bigint NOT NULL DEFAULT 1,
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -15778,6 +15780,9 @@ COMMENT ON COLUMN builtin_mcp_settings.project_id IS '@access: confidential';
 COMMENT ON COLUMN builtin_mcp_settings.builtin_key IS '@access: confidential';
 COMMENT ON COLUMN builtin_mcp_settings.hidden IS '@access: confidential';
 COMMENT ON COLUMN builtin_mcp_settings.environment_id IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN builtin_mcp_settings.user_session_issuer_bound IS 'Records an explicit issuer binding even after issuer deletion, preventing implicit fallback.
+@access: confidential';
 COMMENT ON COLUMN builtin_mcp_settings.version IS '@access: confidential';
 COMMENT ON COLUMN builtin_mcp_settings.updated_at IS '@access: confidential';
 COMMENT ON COLUMN builtin_mcp_settings.id IS '@access: confidential';
