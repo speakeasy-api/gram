@@ -1,3 +1,6 @@
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-one" }),
+}));
 vi.mock("./BuiltinGatewayMembersSection", () => ({
   BuiltinGatewayMembersSection: () => null,
 }));

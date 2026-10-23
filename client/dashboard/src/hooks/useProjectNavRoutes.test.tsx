@@ -7,6 +7,7 @@ import { useProjectNavRoutes } from "./useProjectNavRoutes";
 
 const testState = vi.hoisted(() => ({
   projectId: "project_a",
+  isOrgAdmin: false,
   orgMemoryEnabled: false,
   featureFlags: {} as Record<string, FeatureFlagResult>,
   productFeatures: {
@@ -73,6 +74,15 @@ vi.mock("@/routes", async () => {
   };
 });
 
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string, resource: string) =>
+      scope === "org:admin" &&
+      resource === "organization_a" &&
+      testState.isOrgAdmin,
+  }),
+}));
+
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: (flag: string) => testState.featureFlags[flag],
 }));
@@ -98,6 +108,7 @@ function unavailableFeatureFlag(
 
 beforeEach(() => {
   testState.projectId = "project_a";
+  testState.isOrgAdmin = false;
   testState.orgMemoryEnabled = false;
   testState.productFeatures = {
     isSuccess: true,
@@ -306,5 +317,24 @@ describe("useProjectNavRoutes", () => {
         }),
       ]),
     );
+  });
+});
+
+it("offers settings to organization administrators without project write", () => {
+  testState.isOrgAdmin = true;
+  const { result, rerender } = renderHook(() => useProjectNavRoutes());
+  expect(
+    result.current.find((entry) => entry.route === routes.settings),
+  ).toMatchObject({
+    scope: ["org:admin"],
+    resourceId: "organization_a",
+  });
+  testState.isOrgAdmin = false;
+  rerender();
+  expect(
+    result.current.find((entry) => entry.route === routes.settings),
+  ).toMatchObject({
+    scope: ["project:write"],
+    resourceId: testState.projectId,
   });
 });

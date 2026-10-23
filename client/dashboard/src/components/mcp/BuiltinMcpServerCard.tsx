@@ -7,7 +7,11 @@ import type { BuiltinMcpServer } from "@gram/client/models/components/builtinmcp
 import { ArrowRight, Blocks } from "lucide-react";
 import { McpEntityCard } from "./McpEntityCard";
 
-export function BuiltinMcpServerCard({ server }: { server: BuiltinMcpServer }) {
+export function BuiltinMcpServerCard({
+  server,
+}: {
+  server: BuiltinMcpServer;
+}): JSX.Element | null {
   const routes = useRoutes();
   return (
     <McpEntityCard
@@ -38,7 +42,7 @@ export function BuiltinMcpServerTableRow({
   server,
 }: {
   server: BuiltinMcpServer;
-}) {
+}): JSX.Element | null {
   const routes = useRoutes();
   return (
     <DotRow

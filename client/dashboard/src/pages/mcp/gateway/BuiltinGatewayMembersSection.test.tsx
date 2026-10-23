@@ -4,13 +4,27 @@ import type { ReactNode } from "react";
 
 const state = vi.hoisted(() => ({
   admin: true,
+  canWrite: true,
+  isError: false,
+  refetch: vi.fn(),
+  invalidateQueries: vi.fn(),
+  onSuccess: undefined as undefined | (() => Promise<void>),
   mutate: vi.fn(),
   query: vi.fn(),
 }));
 vi.mock("@/components/mcp/useBuiltinMcpServers", () => ({
   useBuiltinMcpServers: () => ({
     isAdmin: state.admin,
+    isError: state.isError,
+    refetch: state.refetch,
     servers: [{ id: "builtin-one", key: "slack", name: "Slack", hidden: true }],
+  }),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string, id: string) =>
+      scope === "mcp:write" && id === "gateway-one" && state.canWrite,
+    isLoading: false,
   }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -33,12 +47,16 @@ vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
   invalidateAllMetaMcpServers: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/setBuiltinMetaMcpMember.js", () => ({
-  useSetBuiltinMetaMcpMemberMutation: () => ({
-    mutate: state.mutate,
-    isPending: false,
-  }),
+  useSetBuiltinMetaMcpMemberMutation: (options: {
+    onSuccess: () => Promise<void>;
+  }) => {
+    state.onSuccess = options.onSuccess;
+    return { mutate: state.mutate, isPending: false };
+  },
 }));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: state.invalidateQueries }),
+}));
 vi.mock("@/components/ui/Select", () => ({
   Select: ({
     children,
@@ -72,6 +90,8 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   state.admin = true;
+  state.canWrite = true;
+  state.isError = false;
 });
 
 it("adds a built-in using the selected project environment without granting connection access", () => {
@@ -134,4 +154,38 @@ it("does not offer built-in membership controls or environment reads to non-admi
   render(<BuiltinGatewayMembersSection gatewayId="gateway-one" members={[]} />);
   expect(screen.queryByText("Built-in servers")).toBeNull();
   expect(state.query).not.toHaveBeenCalled();
+});
+
+it("shows discovery failures and lets administrators retry", () => {
+  state.isError = true;
+  render(<BuiltinGatewayMembersSection gatewayId="gateway-one" members={[]} />);
+  expect(screen.getByRole("alert").textContent).toContain(
+    "Could not load built-in servers",
+  );
+  expect(screen.queryByRole("combobox")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(state.refetch).toHaveBeenCalledOnce();
+});
+it("refreshes inspection caches after a membership write", async () => {
+  render(<BuiltinGatewayMembersSection gatewayId="gateway-one" members={[]} />);
+  await state.onSuccess!();
+  expect(state.invalidateQueries).toHaveBeenCalledWith({
+    queryKey: ["gatewayInspection"],
+  });
+  expect(state.invalidateQueries).toHaveBeenCalledWith({
+    queryKey: ["gatewayDescribeServer"],
+  });
+});
+
+it("keeps administrator configuration visible but read-only without gateway write", () => {
+  state.canWrite = false;
+  render(<BuiltinGatewayMembersSection gatewayId="gateway-one" members={[]} />);
+  expect(screen.getByText("Built-in servers")).toBeTruthy();
+  expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(
+    true,
+  );
+  const add = screen.getByRole("button", { name: "Add to gateway" });
+  expect((add as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(add);
+  expect(state.mutate).not.toHaveBeenCalled();
 });

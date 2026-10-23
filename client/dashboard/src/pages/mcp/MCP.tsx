@@ -379,7 +379,8 @@ function MCPOverview() {
     !isLoading &&
     !hasRefreshError &&
     mcpServers.length === 0 &&
-    gateways.length === 0
+    gateways.length === 0 &&
+    builtins.length === 0
   ) {
     return (
       <>

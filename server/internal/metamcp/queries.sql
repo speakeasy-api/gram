@@ -628,3 +628,11 @@ RETURNING *;
 SELECT id FROM environments
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 FOR UPDATE;
+
+-- name: CountBuiltinMetaMCPMembers :many
+SELECT meta_mcp_server_id, count(*) AS member_count
+FROM builtin_mcp_server_members
+WHERE project_id = @project_id
+  AND meta_mcp_server_id = ANY(@gateway_ids::uuid[])
+  AND builtin_key = ANY(@builtin_keys::text[])
+GROUP BY meta_mcp_server_id;

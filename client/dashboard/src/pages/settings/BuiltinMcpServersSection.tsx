@@ -7,7 +7,7 @@ import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { Link } from "react-router";
 
-export function BuiltinMcpServersSection() {
+export function BuiltinMcpServersSection(): JSX.Element | null {
   const { servers, isAdmin, isLoading, isError, refetch } =
     useBuiltinMcpServers();
   const update = useUpdateBuiltinMcpServer();

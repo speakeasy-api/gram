@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import type { BuiltinMcpServer } from "@gram/client/models/components/builtinmcpserver.js";
 import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember.js";
@@ -27,9 +28,10 @@ export function BuiltinGatewayMembersSection({
 }: {
   gatewayId: string;
   members: MetaMcpMember[];
-}) {
-  const { servers, isAdmin } = useBuiltinMcpServers();
-  if (!isAdmin || servers.length === 0) return null;
+}): JSX.Element | null {
+  const { servers, isAdmin, isError, isLoading, refetch } =
+    useBuiltinMcpServers();
+  if (!isAdmin || (!isLoading && !isError && servers.length === 0)) return null;
   return (
     <SettingsSection>
       <SettingsSection.Header>
@@ -41,22 +43,36 @@ export function BuiltinGatewayMembersSection({
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          {servers.map((server) => {
-            const member = members.find(
-              (entry) => entry.builtinKey === server.key,
-            );
-            return (
-              <BuiltinGatewayMemberForm
-                key={`${gatewayId}:${server.id}:${member?.id ?? ""}:${member?.environmentId ?? ""}`}
-                server={server}
-                gatewayId={gatewayId}
-                member={member}
-                sortOrder={
-                  Math.max(-1, ...members.map((entry) => entry.sortOrder)) + 1
-                }
-              />
-            );
-          })}
+          {isLoading ? (
+            <Text muted>Loading built-in servers…</Text>
+          ) : isError ? (
+            <div
+              role="alert"
+              className="flex items-center justify-between gap-4"
+            >
+              <Text muted>Could not load built-in servers.</Text>
+              <Button variant="secondary" onClick={() => void refetch()}>
+                Retry
+              </Button>
+            </div>
+          ) : (
+            servers.map((server) => {
+              const member = members.find(
+                (entry) => entry.builtinKey === server.key,
+              );
+              return (
+                <BuiltinGatewayMemberForm
+                  key={`${gatewayId}:${server.id}:${member?.id ?? ""}:${member?.environmentId ?? ""}`}
+                  server={server}
+                  gatewayId={gatewayId}
+                  member={member}
+                  sortOrder={
+                    Math.max(-1, ...members.map((entry) => entry.sortOrder)) + 1
+                  }
+                />
+              );
+            })
+          )}
         </SettingsSection.Body>
       </SettingsSection.Panel>
     </SettingsSection>
@@ -75,6 +91,8 @@ function BuiltinGatewayMemberForm({
   sortOrder: number;
 }) {
   const gramProject = useProjectSlugForRequests();
+  const { hasScope, isLoading: permissionsLoading } = useRBAC();
+  const canWrite = !permissionsLoading && hasScope("mcp:write", gatewayId);
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useListEnvironments(
     { gramProject },
@@ -89,6 +107,8 @@ function BuiltinGatewayMemberForm({
       await Promise.all([
         invalidateAllMetaMcpMembers(queryClient),
         invalidateAllMetaMcpServers(queryClient),
+        queryClient.invalidateQueries({ queryKey: ["gatewayInspection"] }),
+        queryClient.invalidateQueries({ queryKey: ["gatewayDescribeServer"] }),
       ]);
       toast.success(
         member
@@ -112,7 +132,7 @@ function BuiltinGatewayMemberForm({
           <Select
             value={environmentId}
             onValueChange={setEnvironmentId}
-            disabled={isLoading || isError || update.isPending}
+            disabled={!canWrite || isLoading || isError || update.isPending}
           >
             <SelectTrigger id={`gateway-builtin-${server.key}`}>
               <SelectValue />
@@ -132,6 +152,7 @@ function BuiltinGatewayMemberForm({
         <Button
           variant="secondary"
           disabled={
+            !canWrite ||
             update.isPending ||
             isError ||
             isLoading ||

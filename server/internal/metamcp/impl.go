@@ -267,16 +267,24 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 	// Built-in membership is administrative inventory. Count it only after a
 	// single live admin check; ordinary readers must not infer it from totals.
 	if adminErr := builtinmcp.RequireAdmin(ctx, s.db, authCtx.ActiveOrganizationID); adminErr == nil {
+		gatewayIDs := make([]uuid.UUID, 0, len(rows))
+		for _, row := range rows {
+			gatewayIDs = append(gatewayIDs, row.MetaMcpServer.ID)
+		}
+		keys := make([]string, 0, len(builtinmcp.All()))
+		for _, definition := range builtinmcp.All() {
+			keys = append(keys, definition.Key)
+		}
+		counts, err := repo.New(s.db).CountBuiltinMetaMCPMembers(ctx, repo.CountBuiltinMetaMCPMembersParams{ProjectID: conv.ToNullUUID(*authCtx.ProjectID), GatewayIds: gatewayIDs, BuiltinKeys: keys})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count built-in gateway members")
+		}
+		byGateway := make(map[uuid.UUID]int64, len(counts))
+		for _, count := range counts {
+			byGateway[count.MetaMcpServerID.UUID] = count.MemberCount
+		}
 		for i := range rows {
-			members, err := repo.New(s.db).ListBuiltinMetaMCPMembers(ctx, repo.ListBuiltinMetaMCPMembersParams{MetaMcpServerID: conv.ToNullUUID(rows[i].MetaMcpServer.ID), ProjectID: conv.ToNullUUID(*authCtx.ProjectID)})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "count built-in gateway members")
-			}
-			for _, member := range members {
-				if _, ok := builtinmcp.Lookup(member.BuiltinKey); ok {
-					rows[i].MemberCount++
-				}
-			}
+			rows[i].MemberCount += byGateway[rows[i].MetaMcpServer.ID]
 		}
 	} else if failure, ok := errors.AsType[*oops.ShareableError](adminErr); !ok || (failure.Code != oops.CodeForbidden && failure.Code != oops.CodeUnauthorized && failure.Code != oops.CodeNotFound) {
 		return nil, oops.E(oops.CodeUnexpected, adminErr, "check built-in gateway administrator")

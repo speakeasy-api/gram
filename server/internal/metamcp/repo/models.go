@@ -16,15 +16,15 @@ type BuiltinMcpServerMember struct {
 	ProjectID uuid.NullUUID
 	// @access: confidential
 	MetaMcpServerID uuid.NullUUID
-	// @access: shared
+	// @access: confidential
 	BuiltinKey string
 	// @access: confidential
 	EnvironmentID uuid.NullUUID
-	// @access: shared
+	// @access: confidential
 	SortOrder int32
-	// @access: shared
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
-	// @access: shared
+	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
 }
 

@@ -42,7 +42,7 @@ func seedBuiltinAgent(t *testing.T, ctx context.Context, ti *testInstance, expli
 	}
 	require.NoError(t, envErr)
 	id := builtinmcp.ID(*ac.ProjectID, builtinmcp.Slack)
-	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{OrganizationID: ac.ActiveOrganizationID, OwnerUserID: ac.UserID, Name: "Built-in test agent"})
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{OrganizationID: ac.ActiveOrganizationID, OwnerUserID: ac.UserID, Name: "Built-in test agent " + uuid.NewString()})
 	require.NoError(t, err)
 	selector := authz.NewSelector(authz.ScopeMCPConnect, id.String())
 	selector[authz.SelectorKeyProjectID] = ac.ProjectID.String()
@@ -190,4 +190,27 @@ func TestServeBuiltin_CustomDomainLockdown(t *testing.T) {
 	foreign := customdomains.WithContext(t.Context(), &customdomains.Context{OrganizationID: "org_other", Domain: "other.example.com", DomainID: uuid.New()})
 	_, err = serveBuiltinHTTPOn(t, foreign, ti, *ac.ProjectID, token, makeInitializeBody(), nil)
 	requireAgentGatewayCode(t, err, oops.CodeForbidden)
+}
+
+func TestServeBuiltin_RejectsInvalidEnvelope(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	ac, _ := contextvalues.GetAuthContext(ctx)
+	_, token := seedBuiltinAgent(t, ctx, ti, true)
+	for _, tc := range []struct {
+		name string
+		body []byte
+		code oops.Code
+	}{
+		{"malformed", []byte(`{"jsonrpc":`), oops.CodeParseError},
+		{"batch", []byte(`[{"jsonrpc":"2.0","id":1,"method":"tools/list"}]`), oops.CodeBadRequest},
+		{"wrong version", []byte(`{"jsonrpc":"1.0","id":1,"method":"tools/list"}`), oops.CodeBadRequest},
+		{"oversized", bytes.Repeat([]byte("x"), (1<<20)+1), oops.CodeRequestTooLarge},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := serveBuiltinHTTP(t, ti, *ac.ProjectID, token, tc.body, nil)
+			requireAgentGatewayCode(t, err, tc.code)
+		})
+	}
 }

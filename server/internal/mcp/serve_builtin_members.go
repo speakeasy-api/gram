@@ -150,3 +150,25 @@ func (s *Service) builtinMemberAuth(ctx context.Context, member metaMember) (boo
 	}
 	return false, false, err
 }
+
+// Keep existing ordinary identifiers intact. Synthetic members choose the first
+// unused suffix within their project, before cross-project qualification.
+func appendBuiltinCandidates(candidates, builtins []metaMemberCandidate) []metaMemberCandidate {
+	type identity struct {
+		projectID uuid.UUID
+		slug      string
+	}
+	used := make(map[identity]bool, len(candidates)+len(builtins))
+	for _, candidate := range candidates {
+		used[identity{candidate.projectID, candidate.slug}] = true
+	}
+	for _, candidate := range builtins {
+		base := candidate.slug
+		for suffix := 2; used[identity{candidate.projectID, candidate.slug}]; suffix++ {
+			candidate.slug = fmt.Sprintf("%s_%d", base, suffix)
+		}
+		used[identity{candidate.projectID, candidate.slug}] = true
+		candidates = append(candidates, candidate)
+	}
+	return candidates
+}

@@ -51,6 +51,7 @@ func TestBuiltinGatewayMembershipRoundTrip(t *testing.T) {
 	regular := f.seedRemoteMember(t, ctx, "Regular")
 	gateway, err := f.create(ctx, "Built-in Gateway", regular)
 	require.NoError(t, err)
+	ctx = f.grantMCP(ctx, f.project.ID, uuid.MustParse(gateway.Gateway.ID))
 	input := GetBuiltinGatewayMembersInput{ProjectID: f.project.ID.String(), GatewayID: gateway.Gateway.ID}
 	before, err := f.gateways.builtinGatewayMembers(ctx, f.principal, input, nil)
 	require.NoError(t, err)

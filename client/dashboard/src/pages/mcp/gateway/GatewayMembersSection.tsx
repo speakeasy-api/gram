@@ -21,6 +21,7 @@ import {
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
@@ -234,6 +235,11 @@ export function GatewayMembersSection({
 }: {
   metaMcpServer: MetaMcpServer;
 }): JSX.Element {
+  const organization = useOrganization();
+  const { hasScope, isLoading: permissionsLoading } = useRBAC();
+  const canWrite =
+    !permissionsLoading && hasScope("mcp:write", metaMcpServer.id);
+  const isAdmin = !permissionsLoading && hasScope("org:admin", organization.id);
   const client = useSdkClient();
   const queryClient = useQueryClient();
   const {
@@ -439,6 +445,7 @@ export function GatewayMembersSection({
             header: "",
             width: "88px",
             render: (row) => {
+              if (!canWrite || (row.member.builtinKey && !isAdmin)) return null;
               const index = indexByMemberId.get(row.member.id) ?? 0;
               return (
                 <RequireScope
@@ -501,25 +508,26 @@ export function GatewayMembersSection({
       key: "actions",
       header: "",
       width: "64px",
-      render: (row) => (
-        <RequireScope
-          scope="mcp:write"
-          resourceId={metaMcpServer.id}
-          level="component"
-        >
-          <Button
-            variant="destructive-secondary"
-            size="sm"
-            disabled={mutating}
-            onClick={() => setRemoveTarget(row)}
-            aria-label="Remove server"
+      render: (row) =>
+        !canWrite || (row.member.builtinKey && !isAdmin) ? null : (
+          <RequireScope
+            scope="mcp:write"
+            resourceId={metaMcpServer.id}
+            level="component"
           >
-            <Button.Icon>
-              <Trash2 className="size-4" />
-            </Button.Icon>
-          </Button>
-        </RequireScope>
-      ),
+            <Button
+              variant="destructive-secondary"
+              size="sm"
+              disabled={mutating}
+              onClick={() => setRemoveTarget(row)}
+              aria-label="Remove server"
+            >
+              <Button.Icon>
+                <Trash2 className="size-4" />
+              </Button.Icon>
+            </Button>
+          </RequireScope>
+        ),
     },
   ];
 

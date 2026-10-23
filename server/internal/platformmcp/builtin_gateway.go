@@ -17,6 +17,7 @@ import (
 	metarepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
 
 type GetBuiltinGatewayMembersInput struct {
@@ -91,6 +92,10 @@ func (s *GatewayService) builtinGatewayMembers(ctx context.Context, principal Pr
 		return BuiltinGatewayMembers{}, fmt.Errorf("built-in gateway configuration: %w", err)
 	}
 	if change != nil {
+		ctx, err = admission.AdministratorWriteContext(ctx, s.engine, principal.OrganizationID)
+		if err != nil {
+			return BuiltinGatewayMembers{}, fmt.Errorf("built-in gateway configuration: %w", err)
+		}
 		if err := s.charge(ctx, principal); err != nil {
 			return BuiltinGatewayMembers{}, fmt.Errorf("built-in gateway configuration: %w", err)
 		}

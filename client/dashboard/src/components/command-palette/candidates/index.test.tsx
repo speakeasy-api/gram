@@ -1737,7 +1737,7 @@ describe("new resource source wiring", () => {
 });
 
 describe("built-in MCP launcher registration", () => {
-  it("registers admin-only built-ins and excludes stale recent entries", () => {
+  it("registers admin-only built-ins and excludes stale recent entries", async () => {
     mocks.scopes = ["org:admin"];
     mocks.builtinServers = [
       { id: "builtin-slack", key: "slack", name: "Slack", hidden: false },
@@ -1754,7 +1754,7 @@ describe("built-in MCP launcher registration", () => {
       (candidate) => candidate.id === "builtin-mcp:builtin-slack",
     );
     expect(builtin).toBeDefined();
-    builtin!.run("open");
+    await builtin!.run("open");
     expect(mocks.goToBuiltin).toHaveBeenCalledWith("slack");
     expect(
       result.current.some(

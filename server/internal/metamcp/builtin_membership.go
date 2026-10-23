@@ -169,7 +169,7 @@ func (s *Service) removeBuiltinMetaMcpMember(ctx context.Context, ac *contextval
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit built-in membership transaction")
 	}
-	s.signalPluginPublish(ctx, actor.ProjectID, actor.UserID, meta.ID, false)
+	AfterMembershipCommit(ctx, s.logger, s.db, s.publisher, actor, meta)
 	return nil
 }
 

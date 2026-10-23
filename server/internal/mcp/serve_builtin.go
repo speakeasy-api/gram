@@ -90,6 +90,9 @@ func (s *Service) ServeBuiltin(w http.ResponseWriter, r *http.Request) error {
 	if prepared.empty() {
 		return nil
 	}
+	if err := validateMCPRequestEnvelope(ctx, s.logger, prepared, oops.CodeRequestTooLarge, "MCP request body exceeds 1 MiB"); err != nil {
+		return err
+	}
 	req := prepared.request
 	version := prepared.protocolVersion
 	tools, err := s.builtinToolset(ctx, definition, projectID)

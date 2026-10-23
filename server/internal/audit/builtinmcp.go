@@ -13,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const ActionBuiltinMCPUpdate Action = "builtin_mcp:update"
+
 // LogBuiltinMCPUpdate records only non-secret project configuration.
 func (l *Logger) LogBuiltinMCPUpdate(ctx context.Context, db repo.DBTX, organizationID string, projectID, serverID uuid.UUID, key string, actor urn.Principal, before, after any) error {
 	beforeJSON, err := json.Marshal(before)
@@ -31,9 +33,9 @@ func (l *Logger) LogBuiltinMCPUpdate(ctx context.Context, db repo.DBTX, organiza
 		ActorDisplayName:   conv.ToPGTextEmpty(""),
 		ActorSlug:          conv.ToPGTextEmpty(""),
 		Metadata:           nil,
-		Action:             "builtin_mcp:update",
+		Action:             string(ActionBuiltinMCPUpdate),
 		SubjectID:          serverID.String(),
-		SubjectType:        "builtin_mcp_server",
+		SubjectType:        string(subjectTypeBuiltinMcpServer),
 		SubjectDisplayName: conv.ToPGText(key),
 		SubjectSlug:        conv.ToPGText(key),
 		BeforeSnapshot:     beforeJSON,

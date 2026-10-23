@@ -170,7 +170,8 @@ func (s *Service) resolveMetaMemberSnapshot(
 	candidates := make([]metaMemberCandidate, 0, len(rows))
 	for _, row := range rows {
 		candidates = append(candidates, metaMemberCandidate{
-			serverID: row.McpServerID,
+			builtinKey: "",
+			serverID:   row.McpServerID,
 			// A stored gateway's members are all in its own project, which the
 			// membership query already constrains. Its slugs are unique within
 			// that project, so they need no qualifying prefix.
@@ -195,7 +196,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 	if err != nil {
 		return ctx, nil, err
 	}
-	candidates = append(candidates, builtins...)
+	candidates = appendBuiltinCandidates(candidates, builtins)
 	return s.admitMetaMembers(ctx, logger, surface, organizationID, candidates)
 }
 
@@ -304,6 +305,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			continue
 		}
 		candidates = append(candidates, metaMemberCandidate{
+			builtinKey:  "",
 			serverID:    row.McpServerID,
 			projectID:   row.McpServerProjectID,
 			projectSlug: row.McpServerProjectSlug,
@@ -329,7 +331,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	if err != nil {
 		return ctx, nil, err
 	}
-	candidates = append(candidates, builtins...)
+	candidates = appendBuiltinCandidates(candidates, builtins)
 	ctx, members, err := s.admitMetaMembers(ctx, logger, authzSurface, organizationID, candidates)
 	if err != nil {
 		return ctx, nil, err

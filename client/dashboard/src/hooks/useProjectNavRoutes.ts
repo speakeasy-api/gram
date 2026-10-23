@@ -1,3 +1,4 @@
+import { useRBAC } from "@/hooks/useRBAC";
 import { useMemo } from "react";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
@@ -40,6 +41,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const { id: projectId } = useProject();
   const organization = useOrganization();
+  const { hasScope } = useRBAC();
+  const isOrgAdmin = hasScope("org:admin", organization.id);
   const productFeatures = useProductFeatures(
     { organizationId: organization.id },
     undefined,
@@ -128,11 +131,17 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
       { route: routes.logs, scope: ["log:read"], resourceId: projectId },
-      { route: routes.settings, scope: ["project:write"] },
+      {
+        route: routes.settings,
+        scope: [isOrgAdmin ? "org:admin" : "project:write"],
+        resourceId: isOrgAdmin ? organization.id : projectId,
+      },
     ];
   }, [
     routes,
     projectId,
+    organization.id,
+    isOrgAdmin,
     isExploreEnabled,
     isOrgMemoryEnabled,
     isSignalsIntelligenceEnabled,

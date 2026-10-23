@@ -66,7 +66,10 @@ describe("built-in project settings", () => {
     expect(screen.queryByText("Built-in MCP servers")).toBeNull();
   });
   it("hides visually while preserving environment and version", () => {
-    render(<BuiltinMcpServersSection />);
+    const { rerender } = render(<BuiltinMcpServersSection />);
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe(
+      "true",
+    );
     fireEvent.click(
       screen.getByRole("switch", { name: "Show Slack in MCP Servers" }),
     );
@@ -76,7 +79,11 @@ describe("built-in project settings", () => {
       environmentId: "environment-one",
       expectedVersion: "3",
     });
-    expect(screen.getByText(/Hiding is visual only/)).toBeTruthy();
+    state.hidden = true;
+    rerender(<BuiltinMcpServersSection />);
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe(
+      "false",
+    );
   });
   it("keeps hidden entries configurable and lets admins unhide them", () => {
     state.hidden = true;

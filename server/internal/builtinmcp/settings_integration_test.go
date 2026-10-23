@@ -2,6 +2,7 @@ package builtinmcp
 
 import (
 	"context"
+	"net/url"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -60,7 +62,7 @@ func TestSettingsStoreIntegration(t *testing.T) {
 
 	ac := &contextvalues.AuthContext{ActiveOrganizationID: org, UserID: user, ProjectID: &project}
 	admin := contextvalues.WithAuthenticatedActor(ctx, ac, urn.NewPrincipal(urn.PrincipalTypeUser, user))
-	store := NewStore(db, audit.NewLogger(), nil)
+	store := NewStore(db, audit.NewLogger(), orghost.New(orghost.Config{ServerURL: &url.URL{Scheme: "https", Host: "mcp.example.com"}}))
 
 	initial, err := store.Get(admin, org, project, Slack)
 	require.NoError(t, err)
@@ -77,9 +79,12 @@ func TestSettingsStoreIntegration(t *testing.T) {
 	require.Equal(t, initial.ID, updated.ID)
 	require.Equal(t, initial.URL, updated.URL)
 	require.NotNil(t, updated.EnvironmentID)
+	require.Equal(t, environment.String(), *updated.EnvironmentID)
 	listed, err := store.List(admin, org, project)
 	require.NoError(t, err)
 	require.Len(t, listed, 1)
+	require.NotNil(t, listed[0].EnvironmentID)
+	require.Equal(t, environment.String(), *listed[0].EnvironmentID)
 	require.True(t, listed[0].Hidden, "settings must retain hidden entries")
 	logs, err := auditrepo.New(db).ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, Action: conv.ToPGText("builtin_mcp:update")})
 	require.NoError(t, err)
@@ -97,8 +102,29 @@ func TestSettingsStoreIntegration(t *testing.T) {
 	require.Equal(t, "2", reset.Version)
 	require.False(t, reset.Hidden)
 	require.Nil(t, reset.EnvironmentID)
+	// Effective exclusions apply even to a canonical administrator, and a
+	// prepared allow grant must not mask a newly added live exclusion.
+	selector, err := authz.NewSelector(authz.ScopeOrgBlockedAdmin, org).MarshalJSON()
+	require.NoError(t, err)
+	blocked, err := roles.UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: org, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, user), Scope: string(authz.ScopeOrgBlockedAdmin), Selectors: selector})
+	require.NoError(t, err)
+	_, err = store.Get(authz.GrantsToContext(admin, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, org)}), org, project, Slack)
+	require.Error(t, err, "live blocked_admin must deny canonical admin")
+	_, err = store.Update(admin, org, project, Slack, Update{ExpectedVersion: "2"})
+	require.Error(t, err, "live blocked_admin must deny configuration as well as discovery")
+	_, err = roles.DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{ID: blocked.ID, OrganizationID: org})
+	require.NoError(t, err)
+	_, err = store.Get(admin, org, project, Slack)
+	require.NoError(t, err)
+	_, err = NewStore(db, audit.NewLogger(), nil).Get(admin, org, project, Slack)
+	require.ErrorContains(t, err, "host resolver is not configured")
 	// A prepared admin grant never substitutes for the live canonical role.
 	_, err = roles.SoftDeleteAllRoleAssignmentsByWorkosUser(ctx, accessrepo.SoftDeleteAllRoleAssignmentsByWorkosUserParams{OrganizationID: org, WorkosUserID: "external_test"})
+	require.NoError(t, err)
+	// Even a live direct org:admin grant cannot replace the canonical role.
+	allowSelector, err := authz.NewSelector(authz.ScopeOrgAdmin, org).MarshalJSON()
+	require.NoError(t, err)
+	_, err = roles.UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: org, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, user), Scope: string(authz.ScopeOrgAdmin), Selectors: allowSelector})
 	require.NoError(t, err)
 	prepared := authz.GrantsToContext(admin, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, org)})
 	_, err = store.Get(prepared, org, project, Slack)

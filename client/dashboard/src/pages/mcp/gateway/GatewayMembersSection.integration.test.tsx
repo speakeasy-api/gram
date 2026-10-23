@@ -1,3 +1,6 @@
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-one" }),
+}));
 vi.mock("./BuiltinGatewayMembersSection", () => ({
   BuiltinGatewayMembersSection: () => null,
 }));
@@ -17,6 +20,8 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { queryKeyMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { GatewayMembersSection } from "./GatewayMembersSection";
+
+const access = vi.hoisted(() => ({ isAdmin: false, canWrite: true }));
 
 const api = vi.hoisted(() => ({
   servers: vi.fn(),
@@ -72,7 +77,9 @@ vi.mock("@/hooks/useRBAC", () => {
     "project:write:project",
   ]);
   const hasScope = (scope: string, resource?: string) =>
-    grants.has(`${scope}:${resource}`);
+    scope === "org:admin"
+      ? access.isAdmin && resource === "org-one"
+      : access.canWrite && grants.has(`${scope}:${resource}`);
   return {
     useRBAC: () => ({
       hasScope,
@@ -96,6 +103,7 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
       catalog: { href: () => "/catalog" },
+      builtin: { href: (key: string) => `/builtin/${key}` },
       x: { overview: { href: () => "/server" } },
       add: Object.fromEntries(
         ["remote", "tunneled", "openapi", "fromSource", "function"].map(
@@ -109,6 +117,8 @@ vi.mock("@/routes", () => ({
 const ok = <T,>(value: T) => ({ ok: true as const, value });
 
 beforeEach(() => {
+  access.isAdmin = false;
+  access.canWrite = true;
   api.readServers.mockResolvedValue({ mcpServers: [] });
   api.readMembers.mockResolvedValue({ members: [] });
 });
@@ -390,6 +400,66 @@ it.each(["create", "attach", "create-retry", "attach-retry"])(
       expect(await screen.findByText("Alpha")).toBeTruthy();
     } finally {
       cleanup();
+      client.clear();
+    }
+  },
+);
+
+it.each([
+  { isAdmin: true, canWrite: true },
+  { isAdmin: true, canWrite: false },
+  { isAdmin: false, canWrite: true },
+])(
+  "requires both org admin and gateway write for built-in row actions: %j",
+  async ({ isAdmin, canWrite }) => {
+    access.isAdmin = isAdmin;
+    access.canWrite = canWrite;
+    api.servers.mockResolvedValue(ok({ mcpServers: [] }));
+    api.members.mockResolvedValue(
+      ok({
+        members: [
+          {
+            id: "builtin-member",
+            mcpServerId: "builtin",
+            builtinKey: "slack",
+            mcpServerName: "Slack",
+            sortOrder: 0,
+          },
+          {
+            id: "other-builtin-member",
+            mcpServerId: "builtin-other",
+            builtinKey: "other",
+            mcpServerName: "Other",
+            sortOrder: 1,
+          },
+        ],
+      }),
+    );
+    api.toolsets.mockResolvedValue(ok({ toolsets: [] }));
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    try {
+      render(
+        <QueryClientProvider client={client}>
+          <MemoryRouter>
+            <TooltipProvider>
+              <GatewayMembersSection
+                metaMcpServer={
+                  { id: "gateway", projectId: "project" } as MetaMcpServer
+                }
+              />
+            </TooltipProvider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await screen.findByText("Slack");
+      for (const name of ["Remove server", "Move down"]) {
+        expect(screen.queryAllByRole("button", { name }).length > 0).toBe(
+          isAdmin && canWrite,
+        );
+      }
+    } finally {
       client.clear();
     }
   },

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -104,6 +103,17 @@ func RequireAdmin(ctx context.Context, db repo.DBTX, organizationID string) erro
 	wanted := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+role.ID.String()).String()
 	for _, principal := range principals {
 		if principal.String() == wanted {
+			grants, err := authz.LoadGrants(ctx, db, organizationID, principals)
+			if err != nil {
+				return fmt.Errorf("load built-in administrator grants: %w", err)
+			}
+			allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil})
+			if err != nil {
+				return fmt.Errorf("evaluate built-in administrator grants: %w", err)
+			}
+			if !allowed {
+				return oops.C(oops.CodeForbidden)
+			}
 			return nil
 		}
 	}
@@ -133,13 +143,16 @@ func (s *Store) get(ctx context.Context, db repo.DBTX, organizationID string, pr
 	if err != nil {
 		return Server{}, fmt.Errorf("manage built-in MCP: %w", err)
 	}
-	base := &url.URL{}
-	if s.hosts != nil {
-		org, err := orgrepo.New(db).GetOrganizationMetadata(ctx, organizationID)
-		if err != nil {
-			return Server{}, fmt.Errorf("manage built-in MCP: %w", err)
-		}
-		base = s.hosts.ServerURL(org.DefaultHost)
+	if s.hosts == nil {
+		return Server{}, oops.E(oops.CodeUnexpected, nil, "built-in MCP host resolver is not configured")
+	}
+	org, err := orgrepo.New(db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return Server{}, fmt.Errorf("manage built-in MCP: %w", err)
+	}
+	base := s.hosts.ServerURL(org.DefaultHost)
+	if base == nil || !base.IsAbs() || base.Host == "" {
+		return Server{}, oops.E(oops.CodeUnexpected, nil, "built-in MCP host resolver has no absolute server URL")
 	}
 	result := Server{ID: ID(projectID, key).String(), Key: key, Name: definition.Name, Description: definition.Description, URL: URL(base, projectID, key), Hidden: settings.Hidden, EnvironmentID: nil, Version: strconv.FormatInt(settings.Version, 10), Tools: make([]Tool, 0, len(definition.Tools)), CredentialVariables: definition.CredentialVariables}
 	if settings.EnvironmentID.Valid {

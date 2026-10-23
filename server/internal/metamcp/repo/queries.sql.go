@@ -119,6 +119,46 @@ func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDe
 	return result.RowsAffected(), nil
 }
 
+const countBuiltinMetaMCPMembers = `-- name: CountBuiltinMetaMCPMembers :many
+SELECT meta_mcp_server_id, count(*) AS member_count
+FROM builtin_mcp_server_members
+WHERE project_id = $1
+  AND meta_mcp_server_id = ANY($2::uuid[])
+  AND builtin_key = ANY($3::text[])
+GROUP BY meta_mcp_server_id
+`
+
+type CountBuiltinMetaMCPMembersParams struct {
+	ProjectID   uuid.NullUUID
+	GatewayIds  []uuid.UUID
+	BuiltinKeys []string
+}
+
+type CountBuiltinMetaMCPMembersRow struct {
+	MetaMcpServerID uuid.NullUUID
+	MemberCount     int64
+}
+
+func (q *Queries) CountBuiltinMetaMCPMembers(ctx context.Context, arg CountBuiltinMetaMCPMembersParams) ([]CountBuiltinMetaMCPMembersRow, error) {
+	rows, err := q.db.Query(ctx, countBuiltinMetaMCPMembers, arg.ProjectID, arg.GatewayIds, arg.BuiltinKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountBuiltinMetaMCPMembersRow
+	for rows.Next() {
+		var i CountBuiltinMetaMCPMembersRow
+		if err := rows.Scan(&i.MetaMcpServerID, &i.MemberCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countMetaMCPMembersSharingBackend = `-- name: CountMetaMCPMembersSharingBackend :one
 SELECT count(*)
 FROM meta_mcp_server_members m

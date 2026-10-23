@@ -26,7 +26,7 @@ import { useListEnvironments } from "@gram/client/react-query/listEnvironments.j
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-export default function BuiltinMcpServerPage() {
+export default function BuiltinMcpServerPage(): JSX.Element | null {
   const organization = useOrganization();
   const project = useProject();
   return (

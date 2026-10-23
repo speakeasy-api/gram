@@ -61,7 +61,7 @@ describe("built-in MCP candidates", () => {
         scope === "org:admin" && id === state.orgId && state.isAdmin,
     );
   });
-  it("searches the live visible catalog and opens the canonical detail without connection verbs", () => {
+  it("searches the live visible catalog and opens the canonical detail without connection verbs", async () => {
     const { result } = renderHook(() =>
       useBuiltinMcpCandidates({ enabled: true }),
     );
@@ -71,7 +71,7 @@ describe("built-in MCP candidates", () => {
       verbs: ["open"],
       keywords: expect.arrayContaining(["slack", "builtin", "builtin-one"]),
     });
-    result.current[0]!.run("open");
+    await result.current[0]!.run("open");
     expect(state.goTo).toHaveBeenCalledWith("slack");
     expect(state.hasScope).toHaveBeenCalledWith("org:admin", "org-one");
   });
