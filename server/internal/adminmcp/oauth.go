@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -91,6 +92,11 @@ func (s *StaffOAuth) Attach(mux interface {
 	mux.Handle("POST", Path+"/token", s.handler(s.Tokens.TokenHandler()))
 	mux.Handle("GET", Path+"/proposals/{id}", s.handler(s.Approval.Handler()))
 	mux.Handle("POST", Path+"/proposals/{id}", s.handler(s.Approval.Handler()))
+	// The authorization error page inlines the shared consent stylesheet, whose
+	// @font-face urls resolve against this origin.
+	mux.Handle("GET", "/mcp/consent-fonts/{file}", func(w http.ResponseWriter, r *http.Request) {
+		_ = consentpage.WriteFont(w, r.PathValue("file"))
+	})
 }
 
 func (*StaffOAuth) handler(h http.Handler) http.HandlerFunc {

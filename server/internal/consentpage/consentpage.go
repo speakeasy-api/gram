@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"net/http"
 	"path"
 	"strings"
 )
@@ -57,6 +58,27 @@ func Font(name string) (data []byte, ok bool) {
 		return nil, false
 	}
 	return data, true
+}
+
+// WriteFont writes one embedded brand font response, or 404 for an unknown
+// name (a stale URL). Every origin that renders an authorization page mounts it
+// at `GET /mcp/consent-fonts/{file}`, the build's `base` and so the prefix the
+// stylesheet's @font-face urls point at; the pages' CSP only allows same-origin
+// fonts. File names are content-hashed by the build, so the response is
+// immutable.
+func WriteFont(w http.ResponseWriter, name string) error {
+	data, ok := Font(name)
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return nil
+	}
+	w.Header().Set("Content-Type", "font/woff2")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(data); err != nil {
+		return fmt.Errorf("write consent font response: %w", err)
+	}
+	return nil
 }
 
 // FontNames lists the embedded font files.
