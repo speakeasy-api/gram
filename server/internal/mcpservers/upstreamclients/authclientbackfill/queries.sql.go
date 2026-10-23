@@ -3161,6 +3161,8 @@ WITH link AS (
 ), session AS (
   INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted)
   VALUES ($8::text, $4, $5, 'fixture-not-a-token')
+  ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
+  DO UPDATE SET access_token_encrypted = EXCLUDED.access_token_encrypted
   RETURNING id, grant_generation
 )
 INSERT INTO principal_remote_session_bindings (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
