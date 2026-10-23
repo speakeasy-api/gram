@@ -54,3 +54,22 @@ func TestConversationEvidenceUsesPlatformMemberOwnershipAndExactGrants(t *testin
 	require.NoError(t, err)
 	require.Empty(t, allowed, "support impersonation cannot obtain evidence references")
 }
+
+func TestConversationEvidenceBlocksWorkOSImpersonation(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	owned := seedChat(t, ctx, ti, auth.UserID, "", "Owned evidence")
+	other := seedChat(t, ctx, ti, "another-user", "", "Granted evidence")
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeChatRead, other.String()))
+	ids := []string{owned.String(), other.String()}
+	allowed, err := ti.service.ReadableConversations(ctx, ids)
+	require.NoError(t, err)
+	require.ElementsMatch(t, ids, allowed)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, true)
+	allowed, err = ti.service.ReadableConversations(ctx, ids)
+	require.NoError(t, err)
+	require.Empty(t, allowed, "impersonation overrides both ownership and exact chat grants")
+}
