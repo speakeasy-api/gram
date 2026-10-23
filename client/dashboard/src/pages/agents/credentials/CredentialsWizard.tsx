@@ -1142,8 +1142,15 @@ export function CredentialsWizard({
           if (platformKey !== null) {
             note =
               workload.steps.length === 0
-                ? "Setup is unavailable. Refresh or choose another platform."
+                ? "Setup is unavailable. Refresh or choose another option."
                 : `${platform?.displayName ?? "Your platform"} issues the tokens; the next step sets it up.`;
+          }
+          // A preset opened from a link arrives chosen, even for someone who
+          // may not trust a platform. Editing only reads the setup back.
+          const refused = !editing && !canFederate;
+          if (refused) {
+            note =
+              "Using a platform's tokens needs permission to manage workload identities. Choose an API key instead.";
           }
           return (
             <WizardFooter
@@ -1151,7 +1158,7 @@ export function CredentialsWizard({
               onBack={() => setStep(1)}
               primary={
                 <Button
-                  disabled={workload.steps.length === 0}
+                  disabled={refused || workload.steps.length === 0}
                   onClick={() => setStep(3)}
                 >
                   Continue

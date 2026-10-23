@@ -1,9 +1,15 @@
 import { isRelativePath } from "@/components/setup-steps/origin";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
-import { KeyRound, Waypoints } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ChevronRight, KeyRound, Waypoints } from "lucide-react";
 import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
@@ -51,6 +57,27 @@ function PlatformLogo({ icon }: { icon?: string }): JSX.Element {
   return <Waypoints aria-hidden="true" className="text-foreground size-5" />;
 }
 
+/**
+ * An option's title with a tag beside it. Part of the title, not the card's
+ * trailing slot, so a click on the tag still selects the card.
+ */
+function TaggedTitle({
+  title,
+  tag,
+}: {
+  title: string;
+  tag: string;
+}): JSX.Element {
+  return (
+    <span className="flex items-center gap-2">
+      <span className="truncate">{title}</span>
+      <Badge variant="neutral" size="sm">
+        <Badge.Text>{tag}</Badge.Text>
+      </Badge>
+    </span>
+  );
+}
+
 /** A catalog platform this dashboard ships no working setup for. */
 function UnavailablePreset({ entry }: { entry: CatalogEntry }): JSX.Element {
   return (
@@ -59,20 +86,17 @@ function UnavailablePreset({ entry }: { entry: CatalogEntry }): JSX.Element {
       className="border-border flex items-start gap-3 border border-dashed p-3 opacity-60"
     >
       <PlatformLogo icon={entry.icon} />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="truncate font-medium">{entry.displayName}</span>
-          <Badge variant="neutral" size="sm">
-            Unavailable
-          </Badge>
-        </span>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium">
+          <TaggedTitle title={entry.displayName} tag="Unavailable" />
+        </div>
         <Text muted small className="block">
           {entry.description}
         </Text>
         <Text muted small className="block">
           Setup is unavailable. Refresh or choose another option.
         </Text>
-      </span>
+      </div>
     </div>
   );
 }
@@ -94,7 +118,10 @@ function PlatformPresets({
   if (isError) {
     return (
       <div role="alert" className="space-y-2 border p-3">
-        <Text small>The platform presets could not be loaded.</Text>
+        <Text small>
+          The platform presets could not be loaded. A custom OIDC issuer, under
+          Advanced, still works.
+        </Text>
         <Button variant="secondary" size="sm" onClick={onRetry}>
           Try again
         </Button>
@@ -164,10 +191,20 @@ export function CredentialPicker({
 }): JSX.Element {
   const customChosen =
     credential === "workload" && platformKey === CUSTOM_PLATFORM_KEY;
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const planned = PLANNED.filter(
-    (plan) => !entries.some((entry) => entry.key === plan.key),
-  );
+  // Starts open when the custom issuer is already chosen, so choosing
+  // something else later does not snap the section shut.
+  const [advancedOpen, setAdvancedOpen] = useState(customChosen);
+  // Held open while the custom issuer is chosen, so the choice is never
+  // hidden behind a collapsed section.
+  const advancedShown = advancedOpen || customChosen;
+  // Only an answered catalog can say which platforms it lacks. While it loads
+  // or fails, every planned platform would read as absent.
+  const planned =
+    isPending || isError
+      ? []
+      : PLANNED.filter(
+          (plan) => !entries.some((entry) => entry.key === plan.key),
+        );
 
   return (
     <RadioCardGroup
@@ -180,18 +217,14 @@ export function CredentialPicker({
         onChoosePlatform(next.slice(PLATFORM_PREFIX.length));
       }}
       disabled={disabled}
+      aria-label="Credential"
       className="gap-4"
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <RadioCard
           value={API_KEY_VALUE}
-          title="API key"
+          title={<TaggedTitle title="API key" tag="Default" />}
           leading={<KeyRound aria-hidden="true" className="size-5" />}
-          trailing={
-            <Badge variant="neutral" size="sm">
-              Default
-            </Badge>
-          }
           className="p-3"
         >
           <Text muted small>
@@ -222,25 +255,26 @@ export function CredentialPicker({
         {!canFederate &&
           " Presets and custom issuers need permission to manage workload identities."}
       </Text>
-      <details
-        // Kept open while the custom issuer is chosen, so the choice is
-        // never hidden behind a collapsed section.
-        open={advancedOpen || customChosen}
-        onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+      <Collapsible
+        open={advancedShown}
+        onOpenChange={setAdvancedOpen}
+        disabled={customChosen}
       >
-        <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">
+        <CollapsibleTrigger className="text-muted-foreground enabled:hover:text-foreground flex items-center gap-1 text-sm">
+          <ChevronRight
+            aria-hidden="true"
+            className={cn(
+              "size-3.5 transition-transform",
+              advancedShown && "rotate-90",
+            )}
+          />
           Advanced: trust another platform's tokens
-        </summary>
-        <div className="mt-3 sm:w-1/2 sm:pr-1.5">
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-3 sm:w-1/2 sm:pr-1.5">
           <RadioCard
             value={PLATFORM_PREFIX + CUSTOM_PLATFORM_KEY}
-            title="Custom OIDC issuer"
+            title={<TaggedTitle title="Custom OIDC issuer" tag="Advanced" />}
             leading={<Waypoints aria-hidden="true" className="size-5" />}
-            trailing={
-              <Badge variant="neutral" size="sm">
-                Advanced
-              </Badge>
-            }
             disabled={!canFederate}
             className="p-3"
           >
@@ -253,8 +287,8 @@ export function CredentialPicker({
               No key minted · you enter the issuer URLs
             </CredentialMeta>
           </RadioCard>
-        </div>
-      </details>
+        </CollapsibleContent>
+      </Collapsible>
     </RadioCardGroup>
   );
 }

@@ -65,7 +65,8 @@ export function AgentFederatedAccess({
         {mine.length === 0 ? (
           <IdentityPanelEmpty>
             No platform signs in as this agent. A platform that already mints
-            tokens for its workloads can, with no key to mint or store.
+            tokens for its workloads can sign in as it, with no key to mint or
+            store.
           </IdentityPanelEmpty>
         ) : (
           mine.map((admission) => (
