@@ -51,10 +51,6 @@ const (
 	codeTemplateRefresh = 15 * time.Second
 	// codeTemplateCheckTimeout bounds one template read.
 	codeTemplateCheckTimeout = 3 * time.Second
-	// codeReadyWait bounds how long a starting replica reports not ready while
-	// its sandbox template is missing; after it, the replica serves with the
-	// Progressive fallback rather than blocking a rollout forever.
-	codeReadyWait = 5 * time.Minute
 	// codeCapacityWait bounds how long an execution waits for a stream when
 	// its organization's pods are all busy and at their cap.
 	codeCapacityWait = DefaultAdmissionWait
@@ -191,7 +187,6 @@ type GKEProvider struct {
 	config  GKEConfig
 	owner   string
 	now     func() time.Time
-	started time.Time
 	mu      sync.Mutex
 	entries map[runnerScope]*projectRunner
 	// changed is closed and replaced whenever a stream or pod slot frees, to
@@ -199,10 +194,6 @@ type GKEProvider struct {
 	changed chan struct{}
 	// available is false once the sandbox template is known to be missing.
 	available atomic.Bool
-	// templateMissing is set while the template is confirmed absent. Only
-	// that holds readiness: an unreachable cluster API must not keep a new
-	// replica, and the API and dashboard it serves, out of rotation.
-	templateMissing atomic.Bool
 	// templateUnreadable records that a forbidden read was already logged.
 	templateUnreadable atomic.Bool
 	// capacityWait bounds the wait for a stream at the organization's cap.
@@ -240,7 +231,7 @@ func NewGKEProvider(ctx context.Context, config GKEConfig) (*GKEProvider, error)
 		config.MaxOrganizationRunners = defaultMaxOrganizationRunners
 	}
 	runCtx, cancel := context.WithCancel(ctx)
-	p := &GKEProvider{config: config, owner: uuid.NewString(), now: time.Now, started: time.Now(), mu: sync.Mutex{}, entries: make(map[runnerScope]*projectRunner), changed: make(chan struct{}), available: atomic.Bool{}, templateMissing: atomic.Bool{}, templateUnreadable: atomic.Bool{}, capacityWait: codeCapacityWait, closed: false, ctx: runCtx, cancel: cancel, draining: make(map[*projectRunner]struct{}), workers: sync.WaitGroup{}, leases: sync.WaitGroup{}, done: make(chan struct{})}
+	p := &GKEProvider{config: config, owner: uuid.NewString(), now: time.Now, mu: sync.Mutex{}, entries: make(map[runnerScope]*projectRunner), changed: make(chan struct{}), available: atomic.Bool{}, templateUnreadable: atomic.Bool{}, capacityWait: codeCapacityWait, closed: false, ctx: runCtx, cancel: cancel, draining: make(map[*projectRunner]struct{}), workers: sync.WaitGroup{}, leases: sync.WaitGroup{}, done: make(chan struct{})}
 	// Until the template is read, assume it exists: an API brownout at startup
 	// must not disable Code Mode, and a missing template is caught here or by
 	// the first claim's TemplateNotFound condition.
@@ -255,12 +246,6 @@ func NewGKEProvider(ctx context.Context, config GKEConfig) (*GKEProvider, error)
 // to Progressive discovery instead of refusing every execution.
 func (p *GKEProvider) Available() bool { return p.available.Load() }
 
-// Ready is false while the sandbox template is confirmed missing, for at
-// most the bounded wait after startup.
-func (p *GKEProvider) Ready() bool {
-	return !p.templateMissing.Load() || p.now().Sub(p.started) >= codeReadyWait
-}
-
 func (p *GKEProvider) checkTemplate(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, codeTemplateCheckTimeout)
 	defer cancel()
@@ -268,16 +253,13 @@ func (p *GKEProvider) checkTemplate(ctx context.Context) {
 	switch {
 	case err == nil:
 		p.available.Store(true)
-		p.templateMissing.Store(false)
 	case k8serrors.IsNotFound(err):
-		p.templateMissing.Store(true)
 		if p.available.Swap(false) {
 			p.config.Logger.WarnContext(ctx, "code sandbox template is missing; serving Code Mode gateways progressively", attr.SlogError(err))
 		}
 	case k8serrors.IsForbidden(err):
 		// Without read access to templates the claim's condition is the only
 		// signal, so assume the template exists.
-		p.templateMissing.Store(false)
 		p.available.Store(true)
 		if !p.templateUnreadable.Swap(true) {
 			p.config.Logger.WarnContext(ctx, "code sandbox template is unreadable; relying on claim conditions", attr.SlogError(err))

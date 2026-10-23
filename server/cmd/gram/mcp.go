@@ -424,7 +424,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build MCP server runtime: %w", err)
 	}
 
-	mux, err := newMCPServerMux(c, logger, db, serverURL, authenticationHost, platformHosts, chatSessions, publishers, mcpService.CodeRuntimeReady)
+	mux, err := newMCPServerMux(c, logger, db, serverURL, authenticationHost, platformHosts, chatSessions, publishers)
 	if err != nil {
 		return err
 	}
@@ -504,8 +504,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 // newMCPServerMux builds the public listener middleware chain for the MCP
 // tier. It mirrors the public-route portion of the `gram start` chain and
 // omits the marketplace, hooks, and management-API layers.
-// ready gates /healthz on runtime startup checks; nil is always ready.
-func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, authenticationHost *mcp.AuthenticationHost, platformHosts map[string]string, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers, ready func() bool) (goahttp.Muxer, error) {
+func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, authenticationHost *mcp.AuthenticationHost, platformHosts map[string]string, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers) (goahttp.Muxer, error) {
 	mux := goahttp.NewMuxer()
 	mux.Use(middleware.NetworkServingPolicyVersion)
 	mux.Use(middleware.StripPrivateIngressHeaders)
@@ -513,10 +512,6 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	mux.Use(func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
-				if ready != nil && !ready() {
-					w.WriteHeader(http.StatusServiceUnavailable)
-					return
-				}
 				w.WriteHeader(http.StatusOK)
 				return
 			}

@@ -32,7 +32,10 @@ pub async fn new_pool(binary: &str, capacity: usize) -> Result<Pool> {
     config.min_processes = 1;
     config.max_processes = capacity;
     config.checkout_timeout = Some(Duration::from_secs(2));
-    config.request_timeout = Some(Duration::from_secs(4));
+    // A pool backstop just above the 25-second active-execution limit: the
+    // worker's CPU budget bounds work, so a slow turn on a busy pod is not
+    // killed by wall time.
+    config.request_timeout = Some(Duration::from_secs(26));
     config.max_checkouts_per_worker = Some(1);
     config.auto_resume = false;
     Ok(Pool::new(config).await?)

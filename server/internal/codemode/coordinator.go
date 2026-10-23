@@ -149,16 +149,6 @@ func (c *Coordinator) Available() bool {
 	return true
 }
 
-// Ready reports whether the provider has finished its startup checks, so a
-// rolling deploy keeps the previous replica serving until this one can run
-// code. A provider without startup checks is always ready.
-func (c *Coordinator) Ready() bool {
-	if provider, ok := c.provider.(interface{ Ready() bool }); ok {
-		return provider.Ready()
-	}
-	return true
-}
-
 func scopeKey(scope Scope) (string, error) {
 	if scope.Organization == "" || (scope.Project == uuid.Nil) != scope.OrganizationWide || scope.Gateway == uuid.Nil || scope.Session == "" || len(scope.Request) == 0 || !json.Valid(scope.Request) || string(scope.Request) == "null" {
 		return "", fmt.Errorf("incomplete execution scope")

@@ -222,10 +222,10 @@ The provider re-reads its SandboxTemplate every 15 seconds. While it is missing,
 as during a deploy that has not synced it yet, `Available` is false: gateways
 serve Progressive discovery, Settings and consent hide Code Mode, and no claim
 is created. A claim whose controller reports `TemplateNotFound` marks the
-runtime unavailable and is deleted at once. A starting replica reports
-`/healthz` not ready until it has read the template, for at most five minutes,
-so a rolling deploy keeps the previous replica serving; use this for readiness,
-not liveness.
+runtime unavailable and is deleted at once. `/healthz` never depends on the
+code runtime: a single-replica deployment that drops its old pod first would
+otherwise take the whole API down while the template syncs, where the
+Progressive fallback only degrades Code Mode.
 
 The provider requires the Agent Sandbox controller's
 [`spec.lifecycle.shutdownTime`](https://github.com/kubernetes-sigs/agent-sandbox/blob/v0.5.6/extensions/api/v1alpha1/sandboxclaim_types.go)

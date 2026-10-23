@@ -602,7 +602,6 @@ func TestCodeGKEMissingTemplateIsUnavailable(t *testing.T) {
 	t.Parallel()
 	provider, client, scope := newCodeGKEFixture(t, nil)
 	require.True(t, provider.Available())
-	require.True(t, provider.Ready())
 	require.NoError(t, client.Tracker().Delete(sandbox.Templates, "code", "code-v1"))
 	provider.checkTemplate(t.Context())
 	require.False(t, provider.Available())
@@ -620,7 +619,7 @@ func TestCodeGKEMissingTemplateIsUnavailable(t *testing.T) {
 	require.NoError(t, lease.Release(t.Context()))
 }
 
-func TestCodeGKEStartupWithoutTemplateIsNotReady(t *testing.T) {
+func TestCodeGKEStartupWithoutTemplateIsUnavailable(t *testing.T) {
 	t.Parallel()
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{sandbox.Templates: "SandboxTemplateList"})
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
@@ -630,10 +629,7 @@ func TestCodeGKEStartupWithoutTemplateIsNotReady(t *testing.T) {
 	provider, err := NewGKEProvider(t.Context(), GKEConfig{Dynamic: client, Namespace: "code", Template: "code-v1", Image: "registry.example.com/code@sha256:" + strings.Repeat("a", 64), Port: 8081, Token: strings.Repeat("t", 32), Dialer: policy.Dialer(), CIDRs: []*net.IPNet{cidr}, Logger: testenv.NewLogger(t)})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	require.False(t, provider.Available())
-	require.False(t, provider.Ready(), "a replica waits for its template before reporting ready")
-	provider.started = time.Now().Add(-codeReadyWait)
-	require.True(t, provider.Ready(), "the wait for a template is bounded")
+	require.False(t, provider.Available(), "a replica without its template serves Code Mode gateways progressively")
 }
 
 func TestCodeGKETemplateNotFoundClaimIsUnavailable(t *testing.T) {
@@ -791,13 +787,12 @@ func TestCodeGKEAmbiguousOrphansCountAgainstCapacity(t *testing.T) {
 	provider.mu.Unlock()
 }
 
-func TestCodeGKEUnreachableTemplateAPIStaysReady(t *testing.T) {
+func TestCodeGKEUnreachableTemplateAPIKeepsAvailability(t *testing.T) {
 	t.Parallel()
 	provider, client, _ := newCodeGKEFixture(t, nil)
 	client.PrependReactor("get", "sandboxtemplates", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("temporary API outage")
 	})
 	provider.checkTemplate(t.Context())
-	require.True(t, provider.Ready(), "an API outage must not hold the replica out of rotation")
 	require.True(t, provider.Available(), "an API outage keeps the last known availability")
 }

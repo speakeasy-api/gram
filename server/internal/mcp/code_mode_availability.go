@@ -10,14 +10,3 @@ package mcp
 func (s *Service) CodeModeAvailable() bool {
 	return s.codeExecutor.Available()
 }
-
-// CodeRuntimeReady reports whether the code runtime finished its startup
-// checks. Health checks report not ready until then, so a rolling deploy
-// keeps the previous replica serving Code Mode while this one waits for its
-// sandbox template. The runtime bounds that wait itself.
-func (s *Service) CodeRuntimeReady() bool {
-	if runtime, ok := s.codeExecutor.(interface{ Ready() bool }); ok {
-		return runtime.Ready()
-	}
-	return true
-}
