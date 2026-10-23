@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 
@@ -38,6 +39,10 @@ func NewRemoteDynamicClient(ctx context.Context, endpoint string, caCert []byte,
 	if len(caCert) == 0 {
 		return nil, fmt.Errorf("remote cluster CA certificate is required")
 	}
+	qps := float64(options.QPS)
+	if math.IsNaN(qps) || math.IsInf(qps, 0) || qps < 0 || options.Burst < 0 || (qps == 0) != (options.Burst == 0) {
+		return nil, fmt.Errorf("remote client QPS and burst must both be positive or zero for defaults")
+	}
 
 	tokenSource, err := google.DefaultTokenSource(ctx, gkeAuthScope)
 	if err != nil {
@@ -55,9 +60,6 @@ func NewRemoteDynamicClient(ctx context.Context, endpoint string, caCert []byte,
 	config := &rest.Config{
 		Host:            host,
 		TLSClientConfig: rest.TLSClientConfig{CAData: caCert},
-	}
-	if options.QPS < 0 || options.Burst < 0 || (options.QPS == 0) != (options.Burst == 0) {
-		return nil, fmt.Errorf("remote client QPS and burst must both be positive or zero for defaults")
 	}
 	config.QPS, config.Burst = options.QPS, options.Burst
 	config.Wrap(func(rt http.RoundTripper) http.RoundTripper {
