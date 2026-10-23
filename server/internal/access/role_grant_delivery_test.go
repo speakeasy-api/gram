@@ -240,6 +240,7 @@ type roleDeliveryFixture struct {
 	roleID        string
 	toolsetID     uuid.UUID
 	serverID      uuid.UUID
+	signals       *recordingPublishSignaler
 }
 
 func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture) {
@@ -267,13 +268,14 @@ func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture
 	t.Cleanup(func() { github.AssertExpectations(t) })
 	githubConfig := &plugins.GitHubConfig{Client: github, Org: "test-org", InstallationID: 12345}
 	pluginService := plugins.NewService(logger, tracer, ti.conn, sessions, cache.NewRedisCacheAdapter(redis), ti.service.authz, ti.service.audit, githubConfig, "test", "https://example.com", nil, nil)
-	ti.service.roleMgr = NewRoleManager(logger, ti.conn, ti.roles, ti.service.audit, plugins.PublicationRequests{Enabled: true}, nil)
+	signals := &recordingPublishSignaler{}
+	ti.service.roleMgr = NewRoleManager(logger, ti.conn, ti.roles, ti.service.audit, plugins.PublicationRequests{Enabled: true}, nil).WithPluginPublisher(signals)
 	plugin, err := pluginService.CreatePlugin(ctx, &plugingen.CreatePluginPayload{Name: "Delivery audience"})
 	require.NoError(t, err)
 	_, err = pluginService.SetPluginAssignments(ctx, &plugingen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{"role:organization:" + roleID}})
 	require.NoError(t, err)
 
-	return ctx, &roleDeliveryFixture{ti: ti, ac: ac, pluginService: pluginService, plugin: plugin, github: github, githubConfig: githubConfig, roleID: roleID, toolsetID: toolsetID, serverID: serverID}
+	return ctx, &roleDeliveryFixture{ti: ti, ac: ac, pluginService: pluginService, plugin: plugin, github: github, githubConfig: githubConfig, roleID: roleID, toolsetID: toolsetID, serverID: serverID, signals: signals}
 }
 
 func (f *roleDeliveryFixture) patch(t *testing.T, ctx context.Context, id string, add bool) {

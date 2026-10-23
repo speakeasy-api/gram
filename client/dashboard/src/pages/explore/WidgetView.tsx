@@ -107,8 +107,15 @@ export function WidgetView({
     bodyStyle = { minHeight: bodyHeight ?? 0 };
   } else bodyStyle = { height: bodyHeight ?? 0 };
 
+  // The viewer may not read the widget's dataset, so neither its answer nor
+  // whether its query still works is theirs to see.
+  const restricted =
+    describe.data?.restrictedDatasets?.includes(widget.dataset) ?? false;
+
   let body: JSX.Element;
-  if (saved === null) {
+  if (restricted) {
+    body = <WidgetRestricted />;
+  } else if (saved === null) {
     body = (
       <WidgetBroken
         reason={
@@ -145,7 +152,10 @@ export function WidgetView({
       specProblem(datasets, saved) !== "");
   let headerSpec = paged?.spec ?? saved;
   let headerWidgetId = paged?.changed ? undefined : widget.id;
-  if (broken) {
+  if (restricted) {
+    // No way in: the builder could not read the widget either.
+    headerSpec = null;
+  } else if (broken) {
     headerSpec = widget.id ? saved : null;
     headerWidgetId = widget.id;
   }
@@ -164,7 +174,7 @@ export function WidgetView({
         onOpen={onOpen}
         actions={actions}
       />
-      {paged && paged.skipped.length > 0 && (
+      {!restricted && paged && paged.skipped.length > 0 && (
         <p className="text-muted-foreground -mt-2 text-xs">
           Not filtered by {paged.skipped.join(", ")}, which {saved?.dataset}{" "}
           cannot filter on.
@@ -352,6 +362,15 @@ function WidgetNumber({
 
 function WidgetBroken({ reason }: { reason: string }): JSX.Element {
   return <WidgetError text={`This widget no longer works: ${reason}.`} />;
+}
+
+function WidgetRestricted(): JSX.Element {
+  return (
+    <p className="text-muted-foreground flex items-start gap-2 text-sm">
+      <Icon name="lock" className="mt-0.5 size-4 shrink-0" />
+      <span>Only org admins can see this.</span>
+    </p>
+  );
 }
 
 function WidgetError({ text }: { text: string }): JSX.Element {

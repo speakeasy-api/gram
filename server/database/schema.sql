@@ -3800,6 +3800,9 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- at creation: no update query sets this column.
   credential_owner TEXT NOT NULL DEFAULT 'subject',
 
+  -- Administrator-chosen label. NULL means unset, and readers show client_id.
+  display_name TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -3862,6 +3865,7 @@ COMMENT ON COLUMN remote_session_clients.organization_id IS '@access: confidenti
 COMMENT ON COLUMN remote_session_clients.attachment_scope IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.remote_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_id IS '@access: restricted';
+COMMENT ON COLUMN remote_session_clients.display_name IS '@access: opaque-confidential';
 COMMENT ON COLUMN remote_session_clients.client_secret_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN remote_session_clients.client_id_issued_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_secret_expires_at IS '@access: confidential';
@@ -4834,6 +4838,12 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   client_id TEXT NOT NULL,
   client_secret_hash TEXT,
   client_name TEXT NOT NULL,
+  -- Immutable principal credential profile for registered agent clients.
+  -- Human and public OAuth clients leave this profile absent.
+  subject_urn TEXT,
+  authorizer_user_id TEXT,
+  delegated_grants JSONB,
+  delegated_grants_version INTEGER,
   redirect_uris TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
   client_id_issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4917,6 +4927,14 @@ COMMENT ON COLUMN user_session_clients.organization_id IS '@access: confidential
 COMMENT ON COLUMN user_session_clients.user_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN user_session_clients.client_id IS '@access: restricted';
 COMMENT ON COLUMN user_session_clients.client_secret_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN user_session_clients.subject_urn IS 'Canonical agent principal bound by authenticated registration.
+@access: confidential';
+COMMENT ON COLUMN user_session_clients.authorizer_user_id IS 'User authorizing the immutable agent credential profile.
+@access: confidential-pii';
+COMMENT ON COLUMN user_session_clients.delegated_grants IS 'Immutable delegated policy for an agent client.
+@access: opaque-restricted';
+COMMENT ON COLUMN user_session_clients.delegated_grants_version IS 'Delegated policy encoding version.
+@access: confidential';
 COMMENT ON COLUMN user_session_clients.client_name IS '@access: opaque-confidential';
 COMMENT ON COLUMN user_session_clients.redirect_uris IS '@access: opaque-restricted';
 COMMENT ON COLUMN user_session_clients.client_id_issued_at IS '@access: confidential';
@@ -6450,6 +6468,10 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   -- same logical conversation view share a generation.
   generation INTEGER NOT NULL DEFAULT 0,
 
+  -- Capture lineage is independent of historical import/spool replay.
+  capture_kind TEXT,
+  original_message_id uuid,
+
   -- True when the message arrived as a replay from a device's offline spool
   -- after control-plane downtime (X-Gram-Replayed on hooks.ingest), so
   -- downtime backlog — and findings produced by retroactively scanning it —
@@ -6512,6 +6534,10 @@ COMMENT ON COLUMN chat_messages.tool_outcome_notes IS '@access: opaque-restricte
 COMMENT ON COLUMN chat_messages.tool_call_summaries IS '@access: opaque-restricted';
 COMMENT ON COLUMN chat_messages.content_hash IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.generation IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.capture_kind IS 'Original utterance, exact transcript reobservation, synthetic summary, or unknown lineage.
+@access: confidential';
+COMMENT ON COLUMN chat_messages.original_message_id IS 'Original source-message identity for an exact transcript copy. A logical reference retained independently of source-row lifetime.
+@access: confidential';
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
@@ -9346,6 +9372,47 @@ ON principal_grants (organization_id, principal_urn, scope, COALESCE(effect, 'al
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
 USING GIN (selectors);
+
+-- Grants the default auth permission backfill wrote, kept after the grant is
+-- deleted: a rerun never restores what an admin removed, and a rollback
+-- deletes exactly these, except those an admin since took over by writing the
+-- same grant.
+CREATE TABLE IF NOT EXISTS auth_permission_provisions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  principal_urn TEXT NOT NULL CHECK (principal_urn <> ''),
+  scope TEXT NOT NULL CHECK (scope <> ''),
+  selectors JSONB NOT NULL,
+  kind TEXT NOT NULL CHECK (kind <> ''),
+  taken_over_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT auth_permission_provisions_pkey PRIMARY KEY (id),
+  CONSTRAINT auth_permission_provisions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT auth_permission_provisions_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
+);
+
+COMMENT ON TABLE auth_permission_provisions IS 'Default auth permission grants provisioned by the backfill or at organization creation, one row per grant, kept after the grant itself is deleted.';
+COMMENT ON COLUMN auth_permission_provisions.id IS '@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.organization_id IS 'The organization the grant belongs to.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.principal_urn IS 'The principal the grant was written to, as in principal_grants.principal_urn.
+@access: confidential-pii';
+COMMENT ON COLUMN auth_permission_provisions.scope IS 'The granted scope, mcp:auth or mcp:connect.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.selectors IS 'The grant''s selector, as in principal_grants.selectors.
+@access: opaque-restricted';
+COMMENT ON COLUMN auth_permission_provisions.kind IS 'Which default the grant belongs to: personal_default, shared_client or api_key from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.taken_over_at IS 'When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
+@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.created_at IS '@access: confidential';
+COMMENT ON COLUMN auth_permission_provisions.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS auth_permission_provisions_org_principal_scope_selector_key
+ON auth_permission_provisions (organization_id, principal_urn, scope, selectors);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -15547,6 +15614,26 @@ ON sigint_sensors (project_id, slug);
 
 CREATE INDEX IF NOT EXISTS sigint_sensors_project_id_id_idx
 ON sigint_sensors (project_id, id) WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS sigint_definition_snapshots (
+  project_id uuid NOT NULL,
+  sensor_id uuid NOT NULL,
+  definition_hash TEXT NOT NULL,
+  definition JSONB NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT sigint_definition_snapshots_pkey PRIMARY KEY (project_id, sensor_id, definition_hash),
+  CONSTRAINT sigint_definition_snapshots_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN sigint_definition_snapshots.project_id IS '@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.sensor_id IS 'Sensor identity retained after configuration deletion.
+@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.definition_hash IS '@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.definition IS 'Immutable semantic definition whose digest is carried by evaluated readings.
+@access: opaque-restricted';
+COMMENT ON COLUMN sigint_definition_snapshots.created_at IS '@access: confidential';
+COMMENT ON COLUMN sigint_definition_snapshots.updated_at IS '@access: confidential';
 
 CREATE TABLE IF NOT EXISTS sigint_sensor_signals (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

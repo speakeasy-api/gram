@@ -1134,15 +1134,11 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID, access chatAccess) (repo.GetChatRow, error) {
 	var none repo.GetChatRow
 
-	// A Speakeasy admin impersonating an org via the dev-tools override holds
-	// every scope (see authz.Engine), so RBAC cannot stop them — refuse before
-	// any session data is read. Covers the mutations too: an impersonating
-	// admin has no reason to pin, rename or delete a customer's sessions, and
-	// one rule for every endpoint avoids the per-endpoint bookkeeping that let
-	// the gate drift in the first place. The shared demo org is exempt: its
-	// transcripts are fabricated by seed/demo/ and exist to be read.
-	if contextvalues.IsSupportSession(ctx) && authCtx.ActiveOrganizationID != constants.DemoOrganizationID {
-		return none, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be accessed while impersonating an organization")
+	// Impersonation bypasses RBAC, so enforce the shared sensitive-content
+	// restriction before reading any session data, for reads and mutations.
+	// The shared policy preserves access to the fabricated demo organization.
+	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
+		return none, fmt.Errorf("authorize chat session access: %w", err)
 	}
 
 	chat, err := s.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
@@ -3124,6 +3120,7 @@ type chatMessageRow struct {
 	totalTokens      int64
 
 	generation int32
+	lineage    *MessageLineage
 
 	metadata httpMetadata
 }
@@ -3341,6 +3338,7 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 			UserEmail:         row.userEmail,
 			Provider:          "",
 			InferenceProvider: "",
+			Lineage:           row.lineage,
 			HookHostname:      "",
 			AccountType:       "",
 			BillingMode:       "",

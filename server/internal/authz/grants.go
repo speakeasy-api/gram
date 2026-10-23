@@ -32,6 +32,10 @@ type Grant struct {
 	PrincipalUrn string
 	Scope        Scope
 	Selector     Selector
+	// Inferred marks a grant provisioned by the default auth permission
+	// backfill that no explicit write has taken over. It allows like any
+	// other grant but never outranks an inherited block.
+	Inferred bool
 }
 
 type ScopedGrant struct {
@@ -177,7 +181,27 @@ func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSl
 	}
 
 	q := repo.New(dbtx)
-	removeRows, err := flattenRoleGrants(removeGrants)
+	// An unrestricted removal deletes every wildcard row for the scope, not
+	// only the one this release would write: the editor shows any of them as
+	// "all", so removing "all" has to remove whichever one is stored.
+	var exactRemovals []*RoleGrant
+	for _, grant := range removeGrants {
+		if grant == nil {
+			continue
+		}
+		if grant.Selectors != nil {
+			exactRemovals = append(exactRemovals, grant)
+			continue
+		}
+		if _, err := q.DeletePrincipalWildcardGrants(ctx, repo.DeletePrincipalWildcardGrantsParams{
+			OrganizationID: orgID,
+			PrincipalUrn:   principal,
+			Scope:          grant.Scope,
+		}); err != nil {
+			return nil, fmt.Errorf("delete wildcard grant %q for %s: %w", grant.Scope, principal.Label(), err)
+		}
+	}
+	removeRows, err := flattenRoleGrants(exactRemovals)
 	if err != nil {
 		return nil, err
 	}
@@ -290,6 +314,7 @@ func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGran
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        scope,
 			Selector:     selectors,
+			Inferred:     false,
 		})
 	}
 

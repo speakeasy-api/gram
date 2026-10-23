@@ -105,6 +105,16 @@ WHERE project_id = @project_id
 ORDER BY created_at DESC, id DESC
 LIMIT @page_limit;
 
+-- name: ListRiskPolicyAnalyticsLabels :many
+-- Explore reads a finding's policy as its name and its severity band. Deleted
+-- policies are included: their findings still count, as they do on the
+-- Watchdog page, and read as the category's fallback severity.
+SELECT id, name, score, deleted
+FROM risk_policies
+WHERE project_id = @project_id
+  AND organization_id = @organization_id
+ORDER BY created_at DESC, id DESC;
+
 -- name: ListRiskPoliciesPage :many
 -- Platform MCP keyset page. The existing unbounded query remains the Goa
 -- compatibility path.

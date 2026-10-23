@@ -215,10 +215,10 @@ func TestAuthorizeMandatoryKeepsAgentKeyAdmission(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	connect := MCPCheck(ScopeMCPConnect, "toolset_1", "p")
 	allow := []Grant{NewGrant(ScopeMCPConnect, WildcardResource)}
-	ctx := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "user_u", Policy: allow}, allow, allow, allow)
+	ctx := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "user_u", Policy: allow}, false, allow, allow, allow)
 	requireMandatory(t, engine, ctx, MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNone}, connect)
 
-	restricted := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "user_u", Policy: allow}, allow, nil, allow)
+	restricted := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "user_u", Policy: allow}, false, allow, nil, allow)
 	requireMandatory(t, engine, restricted, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNotGranted}, connect)
 }
 
@@ -336,4 +336,53 @@ func TestLegacyKeysNeverUseTheirCreatorsConnection(t *testing.T) {
 	f.grant(t, ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a"})
 	personal := MCPAuthClientCheck("client_a", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: f.projectID, ConnectionOwner: f.creatorID})
 	requireMandatory(t, f.engine, f.keyContext(t), MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNotGranted}, personal)
+}
+
+func TestPrepareMandatoryAdmitsOnceAndDecidesPerServer(t *testing.T) {
+	t.Parallel()
+
+	f := newAPIKeyFixture(t)
+	f.grant(t, ScopeMCPConnect, projectConnectSelector(f.projectID))
+	prepared, err := f.engine.PrepareMandatory(f.keyContext(t))
+	require.NoError(t, err)
+	require.Equal(t, MandatoryCallerAPIKey, prepared.Caller())
+	require.Equal(t, f.keyID.String(), prepared.PrincipalID())
+	require.Empty(t, prepared.RepresentedUserID(), "a key's creator is attribution")
+
+	_, err = keysrepo.New(f.db).DeleteAPIKey(t.Context(), keysrepo.DeleteAPIKeyParams{ID: f.keyID, OrganizationID: f.organizationID})
+	require.NoError(t, err)
+	got, err := prepared.Decide(f.organizationID, MCPCheck(ScopeMCPConnect, "toolset_1", f.projectID), MCPCheck(ScopeMCPConnect, "toolset_2", f.projectID))
+	require.NoError(t, err)
+	require.Equal(t, MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNone}, got, "deciding reuses the admission")
+
+	got, err = prepared.Decide("org-elsewhere", MCPCheck(ScopeMCPConnect, "toolset_1", f.projectID))
+	require.NoError(t, err)
+	require.Equal(t, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonOrganizationMismatch}, got)
+}
+
+func TestPrepareMandatoryBindsTheSignedInUser(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	session := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPConnect, WildcardResource)})
+	prepared, err := engine.PrepareMandatory(session)
+	require.NoError(t, err)
+	require.Equal(t, MandatoryCallerUser, prepared.Caller())
+	require.Equal(t, sessionUserID, prepared.RepresentedUserID())
+
+	got, err := prepared.Decide("org-elsewhere", MCPCheck(ScopeMCPConnect, "toolset_1", "p"))
+	require.NoError(t, err)
+	require.Equal(t, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonOrganizationMismatch}, got, "a wildcard grant in another organization is no authority here")
+
+	anonymous, err := engine.PrepareMandatory(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, MandatoryCallerAnonymous, anonymous.Caller())
+}
+
+func TestAuthorizeMandatoryValidatesChecksBeforeAdmission(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	modeless := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_123", APIKeyID: uuid.NewString(), AccountType: "enterprise"})
+	requireMandatory(t, engine, modeless, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceNone, Reason: MandatoryDenyReasonUnsupportedScope}, checkForTest(ScopeProjectRead, "proj"))
 }

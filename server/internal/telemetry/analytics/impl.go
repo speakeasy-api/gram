@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -79,6 +80,44 @@ func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, er
 	return authCtx, nil
 }
 
+// authorizeDataset requires what a dataset asks of its readers beyond reading
+// the project. An unknown dataset is left for the compiler to name.
+func (s *Service) authorizeDataset(ctx context.Context, authCtx *contextvalues.AuthContext, dataset string) error {
+	ds, ok := s.engine.Catalog().Dataset(dataset)
+	if !ok {
+		return nil
+	}
+	check, restricted := ds.AccessCheck(authCtx.ActiveOrganizationID)
+	if !restricted {
+		return nil
+	}
+	return s.authz.Require(ctx, check)
+}
+
+// readableDatasets splits the catalog's datasets, in declaration order, into
+// the ones the caller may read and the names of the rest. A dataset they
+// cannot read is not described to them, only named.
+func (s *Service) readableDatasets(ctx context.Context, authCtx *contextvalues.AuthContext) ([]*Dataset, []string, error) {
+	datasets := s.engine.Catalog().Datasets()
+	readable := make([]*Dataset, 0, len(datasets))
+	restricted := make([]string, 0)
+	for _, ds := range datasets {
+		check, needsCheck := ds.AccessCheck(authCtx.ActiveOrganizationID)
+		if needsCheck {
+			allowed, err := s.authz.Evaluate(ctx, check)
+			if err != nil {
+				return nil, nil, fmt.Errorf("evaluate dataset %s access: %w", ds.Name, err)
+			}
+			if !allowed {
+				restricted = append(restricted, ds.Name)
+				continue
+			}
+		}
+		readable = append(readable, ds)
+	}
+	return readable, restricted, nil
+}
+
 // failure maps an engine error onto the API: a request the compiler rejected
 // is the caller's to correct, anything else is unexpected and logged.
 func (s *Service) failure(ctx context.Context, err error, message string) error {
@@ -92,6 +131,9 @@ func (s *Service) failure(ctx context.Context, err error, message string) error 
 func (s *Service) Query(ctx context.Context, payload *gen.QueryPayload) (*gen.AnalyticsQueryResult, error) {
 	authCtx, err := s.authorize(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authorizeDataset(ctx, authCtx, payload.Dataset); err != nil {
 		return nil, err
 	}
 
@@ -114,10 +156,15 @@ func (s *Service) Query(ctx context.Context, payload *gen.QueryPayload) (*gen.An
 
 // Describe serves the catalog: every dataset and what each field admits.
 func (s *Service) Describe(ctx context.Context, _ *gen.DescribePayload) (*gen.AnalyticsDescribeResult, error) {
-	if _, err := s.authorize(ctx); err != nil {
+	authCtx, err := s.authorize(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return &gen.AnalyticsDescribeResult{Datasets: describeDatasets(s.engine.Catalog())}, nil
+	datasets, restricted, err := s.readableDatasets(ctx, authCtx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read the analytics catalog").LogError(ctx, s.logger)
+	}
+	return &gen.AnalyticsDescribeResult{Datasets: describeDatasets(s.engine.Catalog(), datasets), RestrictedDatasets: restricted}, nil
 }
 
 func requestFromPayload(payload *gen.QueryPayload) (Request, error) {
@@ -164,8 +211,7 @@ func requestFromPayload(payload *gen.QueryPayload) (Request, error) {
 	return req, nil
 }
 
-func describeDatasets(catalog *Catalog) []*gen.AnalyticsDataset {
-	datasets := catalog.Datasets()
+func describeDatasets(catalog *Catalog, datasets []*Dataset) []*gen.AnalyticsDataset {
 	out := make([]*gen.AnalyticsDataset, 0, len(datasets))
 	for _, ds := range datasets {
 		fields := make([]*gen.AnalyticsField, 0, len(ds.Fields))

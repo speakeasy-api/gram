@@ -951,6 +951,34 @@ type AuditLog struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+// Default auth permission grants provisioned by the backfill or at organization creation, one row per grant, kept after the grant itself is deleted.
+type AuthPermissionProvision struct {
+	// @access: confidential
+	ID uuid.UUID
+	// The organization the grant belongs to.
+	// @access: confidential
+	OrganizationID string
+	// The principal the grant was written to, as in principal_grants.principal_urn.
+	// @access: confidential-pii
+	PrincipalUrn string
+	// The granted scope, mcp:auth or mcp:connect.
+	// @access: confidential
+	Scope string
+	// The grant's selector, as in principal_grants.selectors.
+	// @access: opaque-restricted
+	Selectors []byte
+	// Which default the grant belongs to: personal_default, shared_client or api_key from the backfill, or creation_default for the personal default written when the organization was created. Validated in application code.
+	// @access: confidential
+	Kind string
+	// When an admin wrote the same grant, making it theirs: a rollback leaves it. NULL while it is still provisioned.
+	// @access: confidential
+	TakenOverAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 // Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
 type AuthzChallengeResolution struct {
 	// @access: confidential
@@ -1313,6 +1341,12 @@ type ChatMessage struct {
 	ContentHash []byte
 	// @access: confidential
 	Generation int32
+	// Original utterance, exact transcript reobservation, synthetic summary, or unknown lineage.
+	// @access: confidential
+	CaptureKind pgtype.Text
+	// Original source-message identity for an exact transcript copy. A logical reference retained independently of source-row lifetime.
+	// @access: confidential
+	OriginalMessageID uuid.NullUUID
 	// @access: confidential
 	Replayed bool
 	// @access: confidential
@@ -5325,6 +5359,8 @@ type RemoteSessionClient struct {
 	IdentityProviderConnectionID uuid.NullUUID
 	// @access: confidential
 	CredentialOwner string
+	// @access: opaque-confidential
+	DisplayName pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -5957,6 +5993,23 @@ type SigintCustomSignal struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type SigintDefinitionSnapshot struct {
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Sensor identity retained after configuration deletion.
+	// @access: confidential
+	SensorID uuid.UUID
+	// @access: confidential
+	DefinitionHash string
+	// Immutable semantic definition whose digest is carried by evaluated readings.
+	// @access: opaque-restricted
+	Definition []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SigintSensor struct {
@@ -7734,6 +7787,18 @@ type UserSessionClient struct {
 	ClientSecretHash pgtype.Text
 	// @access: opaque-confidential
 	ClientName string
+	// Canonical agent principal bound by authenticated registration.
+	// @access: confidential
+	SubjectUrn pgtype.Text
+	// User authorizing the immutable agent credential profile.
+	// @access: confidential-pii
+	AuthorizerUserID pgtype.Text
+	// Immutable delegated policy for an agent client.
+	// @access: opaque-restricted
+	DelegatedGrants []byte
+	// Delegated policy encoding version.
+	// @access: confidential
+	DelegatedGrantsVersion pgtype.Int4
 	// @access: opaque-restricted
 	RedirectUris []string
 	// @access: confidential
