@@ -82,6 +82,46 @@ var McpServerAuthentication = Type("McpServerAuthentication", func() {
 	Required("mcp_server_id", "project_id", "public", "status", "clients")
 })
 
+func audienceLevelEnum() {
+	Enum("use", "blocked")
+}
+
+var AuthClientAudienceEntry = Type("AuthClientAudienceEntry", func() {
+	Meta("struct:pkg:path", "types")
+	Description("One rule deciding who may use an auth client. The rule applies wherever the client is used, on every server that offers it.")
+
+	Attribute("principal_urn", String, "The principal the rule names: user:<id>, user:all, role:<id> or agent:<id>.")
+	Attribute("level", String, "use grants mcp:auth on the client; blocked writes mcp:blocked_auth, which outranks grants.", audienceLevelEnum)
+	Attribute("applies_to", String, "client when the rule names this client and can be edited here; client_type when it covers every client of this type; all_clients when it covers every client. Rules that do not name this client are shown for context and edited elsewhere.", func() {
+		Enum("client", "client_type", "all_clients")
+	})
+	Attribute("project_id", String, "The project the rule is confined to, when it is.", func() { Format(FormatUUID) })
+	Attribute("connection_note", String, "For personal clients: how the rule relates to other people's connections. A grant never lets anyone use another user's connection.")
+
+	Required("principal_urn", "level", "applies_to")
+})
+
+var AuthClientAudience = Type("AuthClientAudience", func() {
+	Meta("struct:pkg:path", "types")
+	Description("Who may use an auth client.")
+
+	Attribute("auth_client_id", String, "The auth client id.", func() { Format(FormatUUID) })
+	Attribute("entries", ArrayOf(AuthClientAudienceEntry), "The rules deciding who may use the client.")
+	Attribute("version", String, "Pass back as expected_version when saving, so an edit made against a stale list is refused.")
+	Attribute("public_servers", ArrayOf(String), "Ids of public servers that offer the client. Anonymous callers on them never acquire these rules.")
+
+	Required("auth_client_id", "entries", "version", "public_servers")
+})
+
+var AuthClientAudienceRule = Type("AuthClientAudienceRule", func() {
+	Description("A rule to store for an auth client.")
+
+	Attribute("principal_urn", String, "user:<id>, user:all, role:<id> or agent:<id>.")
+	Attribute("level", String, "use or blocked.", audienceLevelEnum)
+
+	Required("principal_urn", "level")
+})
+
 var _ = Service("authClients", func() {
 	Description("Manage the auth clients Speakeasy uses to authenticate to upstream MCP servers, and which servers offer them. Managing a client never grants permission to use it. Stored header values are never returned. Changes are to typed auth configuration and take effect only where typed auth client resolution is enforced, which is being rolled out in stages. They revoke no upstream credentials and remove no existing upstream OAuth associations; elsewhere, including in shadow mode, existing upstream configuration keeps serving.")
 	Security(security.Session)
@@ -253,5 +293,55 @@ var _ = Service("authClients", func() {
 		Meta("openapi:operationId", "setMcpServerUpstreamAuthRequirement")
 		Meta("openapi:extension:x-speakeasy-name-override", "setMcpServerUpstreamAuthRequirement")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetMcpServerUpstreamAuthRequirement"}`)
+	})
+	Method("getAuthClientAudience", func() {
+		Description("List who may use an auth client: the rules naming it and the broader rules that reach it. Requires org:read.")
+
+		Payload(func() {
+			Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(AuthClientAudience)
+
+		HTTP(func() {
+			GET("/rpc/authClients.getAudience")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getAuthClientAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "getAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AuthClientAudience"}`)
+	})
+
+	Method("setAuthClientAudience", func() {
+		Description("Replace the rules naming an auth client. Use grants mcp:auth on the client and Blocked writes mcp:blocked_auth; both apply on every server that offers the client. Server access is unchanged and still needs mcp:connect. Administering a client gives nobody permission to use it. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
+			Attribute("expected_version", String, "The version returned by getAudience.")
+			Attribute("entries", ArrayOf(AuthClientAudienceRule), "Every rule that should name the client.")
+			Required("id", "expected_version", "entries")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(AuthClientAudience)
+
+		HTTP(func() {
+			POST("/rpc/authClients.setAudience")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setAuthClientAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "setAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetAuthClientAudience"}`)
 	})
 })

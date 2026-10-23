@@ -30,7 +30,7 @@ func requireHostedIDs(t *testing.T, ctx context.Context, ti *testInstance, metad
 	row, err := repo.New(ti.conn).GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: id, ToolsetBackend: true})
 	require.NoError(t, err)
 	require.Equal(t, row.ID.String(), metadata.ID)
-	require.True(t, row.McpServerID.Valid)
+	require.Equal(t, id, row.McpServerID)
 }
 
 // Callers reading toolset_id still get it from a hosted server-keyed row, under every addressing form.

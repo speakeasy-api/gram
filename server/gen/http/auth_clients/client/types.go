@@ -43,6 +43,17 @@ type SetMcpServerUpstreamAuthRequirementRequestBody struct {
 	RequiresUpstreamAuth bool `form:"requires_upstream_auth" json:"requires_upstream_auth" xml:"requires_upstream_auth"`
 }
 
+// SetAuthClientAudienceRequestBody is the type of the "authClients" service
+// "setAuthClientAudience" endpoint HTTP request body.
+type SetAuthClientAudienceRequestBody struct {
+	// The auth client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The version returned by getAudience.
+	ExpectedVersion string `form:"expected_version" json:"expected_version" xml:"expected_version"`
+	// Every rule that should name the client.
+	Entries []*AuthClientAudienceRuleRequestBody `form:"entries" json:"entries" xml:"entries"`
+}
+
 // ListAuthClientsResponseBody is the type of the "authClients" service
 // "listAuthClients" endpoint HTTP response body.
 type ListAuthClientsResponseBody struct {
@@ -203,6 +214,36 @@ type SetMcpServerUpstreamAuthRequirementResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The auth clients the server offers.
 	Clients []*AuthClientResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
+}
+
+// GetAuthClientAudienceResponseBody is the type of the "authClients" service
+// "getAuthClientAudience" endpoint HTTP response body.
+type GetAuthClientAudienceResponseBody struct {
+	// The auth client id.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// The rules deciding who may use the client.
+	Entries []*AuthClientAudienceEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	// Pass back as expected_version when saving, so an edit made against a stale
+	// list is refused.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Ids of public servers that offer the client. Anonymous callers on them never
+	// acquire these rules.
+	PublicServers []string `form:"public_servers,omitempty" json:"public_servers,omitempty" xml:"public_servers,omitempty"`
+}
+
+// SetAuthClientAudienceResponseBody is the type of the "authClients" service
+// "setAuthClientAudience" endpoint HTTP response body.
+type SetAuthClientAudienceResponseBody struct {
+	// The auth client id.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// The rules deciding who may use the client.
+	Entries []*AuthClientAudienceEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	// Pass back as expected_version when saving, so an edit made against a stale
+	// list is refused.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Ids of public servers that offer the client. Anonymous callers on them never
+	// acquire these rules.
+	PublicServers []string `form:"public_servers,omitempty" json:"public_servers,omitempty" xml:"public_servers,omitempty"`
 }
 
 // ListAuthClientsUnauthorizedResponseBody is the type of the "authClients"
@@ -1335,6 +1376,386 @@ type SetMcpServerUpstreamAuthRequirementGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetAuthClientAudienceUnauthorizedResponseBody is the type of the
+// "authClients" service "getAuthClientAudience" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetAuthClientAudienceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthClientAudienceForbiddenResponseBody is the type of the "authClients"
+// service "getAuthClientAudience" endpoint HTTP response body for the
+// "forbidden" error.
+type GetAuthClientAudienceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthClientAudienceBadRequestResponseBody is the type of the "authClients"
+// service "getAuthClientAudience" endpoint HTTP response body for the
+// "bad_request" error.
+type GetAuthClientAudienceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthClientAudienceNotFoundResponseBody is the type of the "authClients"
+// service "getAuthClientAudience" endpoint HTTP response body for the
+// "not_found" error.
+type GetAuthClientAudienceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthClientAudienceConflictResponseBody is the type of the "authClients"
+// service "getAuthClientAudience" endpoint HTTP response body for the
+// "conflict" error.
+type GetAuthClientAudienceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthClientAudienceUnsupportedMediaResponseBody is the type of the
+// "authClients" service "getAuthClientAudience" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetAuthClientAudienceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthClientAudienceInvalidResponseBody is the type of the "authClients"
+// service "getAuthClientAudience" endpoint HTTP response body for the
+// "invalid" error.
+type GetAuthClientAudienceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthClientAudienceInvariantViolationResponseBody is the type of the
+// "authClients" service "getAuthClientAudience" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetAuthClientAudienceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthClientAudienceUnexpectedResponseBody is the type of the "authClients"
+// service "getAuthClientAudience" endpoint HTTP response body for the
+// "unexpected" error.
+type GetAuthClientAudienceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAuthClientAudienceGatewayErrorResponseBody is the type of the
+// "authClients" service "getAuthClientAudience" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetAuthClientAudienceGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthClientAudienceUnauthorizedResponseBody is the type of the
+// "authClients" service "setAuthClientAudience" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetAuthClientAudienceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthClientAudienceForbiddenResponseBody is the type of the "authClients"
+// service "setAuthClientAudience" endpoint HTTP response body for the
+// "forbidden" error.
+type SetAuthClientAudienceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthClientAudienceBadRequestResponseBody is the type of the "authClients"
+// service "setAuthClientAudience" endpoint HTTP response body for the
+// "bad_request" error.
+type SetAuthClientAudienceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthClientAudienceNotFoundResponseBody is the type of the "authClients"
+// service "setAuthClientAudience" endpoint HTTP response body for the
+// "not_found" error.
+type SetAuthClientAudienceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthClientAudienceConflictResponseBody is the type of the "authClients"
+// service "setAuthClientAudience" endpoint HTTP response body for the
+// "conflict" error.
+type SetAuthClientAudienceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthClientAudienceUnsupportedMediaResponseBody is the type of the
+// "authClients" service "setAuthClientAudience" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetAuthClientAudienceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthClientAudienceInvalidResponseBody is the type of the "authClients"
+// service "setAuthClientAudience" endpoint HTTP response body for the
+// "invalid" error.
+type SetAuthClientAudienceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthClientAudienceInvariantViolationResponseBody is the type of the
+// "authClients" service "setAuthClientAudience" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetAuthClientAudienceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthClientAudienceUnexpectedResponseBody is the type of the "authClients"
+// service "setAuthClientAudience" endpoint HTTP response body for the
+// "unexpected" error.
+type SetAuthClientAudienceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetAuthClientAudienceGatewayErrorResponseBody is the type of the
+// "authClients" service "setAuthClientAudience" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetAuthClientAudienceGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AuthClientResponseBody is used to define fields on response body types.
 type AuthClientResponseBody struct {
 	// The auth client id.
@@ -1402,6 +1823,35 @@ type AuthClientServerResponseBody struct {
 	Public *bool `form:"public,omitempty" json:"public,omitempty" xml:"public,omitempty"`
 }
 
+// AuthClientAudienceEntryResponseBody is used to define fields on response
+// body types.
+type AuthClientAudienceEntryResponseBody struct {
+	// The principal the rule names: user:<id>, user:all, role:<id> or agent:<id>.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// use grants mcp:auth on the client; blocked writes mcp:blocked_auth, which
+	// outranks grants.
+	Level *string `form:"level,omitempty" json:"level,omitempty" xml:"level,omitempty"`
+	// client when the rule names this client and can be edited here; client_type
+	// when it covers every client of this type; all_clients when it covers every
+	// client. Rules that do not name this client are shown for context and edited
+	// elsewhere.
+	AppliesTo *string `form:"applies_to,omitempty" json:"applies_to,omitempty" xml:"applies_to,omitempty"`
+	// The project the rule is confined to, when it is.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// For personal clients: how the rule relates to other people's connections. A
+	// grant never lets anyone use another user's connection.
+	ConnectionNote *string `form:"connection_note,omitempty" json:"connection_note,omitempty" xml:"connection_note,omitempty"`
+}
+
+// AuthClientAudienceRuleRequestBody is used to define fields on request body
+// types.
+type AuthClientAudienceRuleRequestBody struct {
+	// user:<id>, user:all, role:<id> or agent:<id>.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// use or blocked.
+	Level string `form:"level" json:"level" xml:"level"`
+}
+
 // NewUpdateAuthClientRequestBody builds the HTTP request body from the payload
 // of the "updateAuthClient" endpoint of the "authClients" service.
 func NewUpdateAuthClientRequestBody(p *authclients.UpdateAuthClientPayload) *UpdateAuthClientRequestBody {
@@ -1431,6 +1881,28 @@ func NewSetMcpServerUpstreamAuthRequirementRequestBody(p *authclients.SetMcpServ
 	body := &SetMcpServerUpstreamAuthRequirementRequestBody{
 		McpServerID:          p.McpServerID,
 		RequiresUpstreamAuth: p.RequiresUpstreamAuth,
+	}
+	return body
+}
+
+// NewSetAuthClientAudienceRequestBody builds the HTTP request body from the
+// payload of the "setAuthClientAudience" endpoint of the "authClients" service.
+func NewSetAuthClientAudienceRequestBody(p *authclients.SetAuthClientAudiencePayload) *SetAuthClientAudienceRequestBody {
+	body := &SetAuthClientAudienceRequestBody{
+		ID:              p.ID,
+		ExpectedVersion: p.ExpectedVersion,
+	}
+	if p.Entries != nil {
+		body.Entries = make([]*AuthClientAudienceRuleRequestBody, len(p.Entries))
+		for i, val := range p.Entries {
+			if val == nil {
+				body.Entries[i] = nil
+				continue
+			}
+			body.Entries[i] = marshalAuthclientsAuthClientAudienceRuleToAuthClientAudienceRuleRequestBody(val)
+		}
+	} else {
+		body.Entries = []*AuthClientAudienceRuleRequestBody{}
 	}
 	return body
 }
@@ -2505,6 +2977,352 @@ func NewSetMcpServerUpstreamAuthRequirementGatewayError(body *SetMcpServerUpstre
 	return v
 }
 
+// NewGetAuthClientAudienceAuthClientAudienceOK builds a "authClients" service
+// "getAuthClientAudience" endpoint result from a HTTP "OK" response.
+func NewGetAuthClientAudienceAuthClientAudienceOK(body *GetAuthClientAudienceResponseBody) *types.AuthClientAudience {
+	v := &types.AuthClientAudience{
+		AuthClientID: *body.AuthClientID,
+		Version:      *body.Version,
+	}
+	v.Entries = make([]*types.AuthClientAudienceEntry, len(body.Entries))
+	for i, val := range body.Entries {
+		if val == nil {
+			v.Entries[i] = nil
+			continue
+		}
+		v.Entries[i] = unmarshalAuthClientAudienceEntryResponseBodyToTypesAuthClientAudienceEntry(val)
+	}
+	v.PublicServers = make([]string, len(body.PublicServers))
+	for i, val := range body.PublicServers {
+		v.PublicServers[i] = val
+	}
+
+	return v
+}
+
+// NewGetAuthClientAudienceUnauthorized builds a authClients service
+// getAuthClientAudience endpoint unauthorized error.
+func NewGetAuthClientAudienceUnauthorized(body *GetAuthClientAudienceUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthClientAudienceForbidden builds a authClients service
+// getAuthClientAudience endpoint forbidden error.
+func NewGetAuthClientAudienceForbidden(body *GetAuthClientAudienceForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthClientAudienceBadRequest builds a authClients service
+// getAuthClientAudience endpoint bad_request error.
+func NewGetAuthClientAudienceBadRequest(body *GetAuthClientAudienceBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthClientAudienceNotFound builds a authClients service
+// getAuthClientAudience endpoint not_found error.
+func NewGetAuthClientAudienceNotFound(body *GetAuthClientAudienceNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthClientAudienceConflict builds a authClients service
+// getAuthClientAudience endpoint conflict error.
+func NewGetAuthClientAudienceConflict(body *GetAuthClientAudienceConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthClientAudienceUnsupportedMedia builds a authClients service
+// getAuthClientAudience endpoint unsupported_media error.
+func NewGetAuthClientAudienceUnsupportedMedia(body *GetAuthClientAudienceUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthClientAudienceInvalid builds a authClients service
+// getAuthClientAudience endpoint invalid error.
+func NewGetAuthClientAudienceInvalid(body *GetAuthClientAudienceInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthClientAudienceInvariantViolation builds a authClients service
+// getAuthClientAudience endpoint invariant_violation error.
+func NewGetAuthClientAudienceInvariantViolation(body *GetAuthClientAudienceInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthClientAudienceUnexpected builds a authClients service
+// getAuthClientAudience endpoint unexpected error.
+func NewGetAuthClientAudienceUnexpected(body *GetAuthClientAudienceUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAuthClientAudienceGatewayError builds a authClients service
+// getAuthClientAudience endpoint gateway_error error.
+func NewGetAuthClientAudienceGatewayError(body *GetAuthClientAudienceGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthClientAudienceAuthClientAudienceOK builds a "authClients" service
+// "setAuthClientAudience" endpoint result from a HTTP "OK" response.
+func NewSetAuthClientAudienceAuthClientAudienceOK(body *SetAuthClientAudienceResponseBody) *types.AuthClientAudience {
+	v := &types.AuthClientAudience{
+		AuthClientID: *body.AuthClientID,
+		Version:      *body.Version,
+	}
+	v.Entries = make([]*types.AuthClientAudienceEntry, len(body.Entries))
+	for i, val := range body.Entries {
+		if val == nil {
+			v.Entries[i] = nil
+			continue
+		}
+		v.Entries[i] = unmarshalAuthClientAudienceEntryResponseBodyToTypesAuthClientAudienceEntry(val)
+	}
+	v.PublicServers = make([]string, len(body.PublicServers))
+	for i, val := range body.PublicServers {
+		v.PublicServers[i] = val
+	}
+
+	return v
+}
+
+// NewSetAuthClientAudienceUnauthorized builds a authClients service
+// setAuthClientAudience endpoint unauthorized error.
+func NewSetAuthClientAudienceUnauthorized(body *SetAuthClientAudienceUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthClientAudienceForbidden builds a authClients service
+// setAuthClientAudience endpoint forbidden error.
+func NewSetAuthClientAudienceForbidden(body *SetAuthClientAudienceForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthClientAudienceBadRequest builds a authClients service
+// setAuthClientAudience endpoint bad_request error.
+func NewSetAuthClientAudienceBadRequest(body *SetAuthClientAudienceBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthClientAudienceNotFound builds a authClients service
+// setAuthClientAudience endpoint not_found error.
+func NewSetAuthClientAudienceNotFound(body *SetAuthClientAudienceNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthClientAudienceConflict builds a authClients service
+// setAuthClientAudience endpoint conflict error.
+func NewSetAuthClientAudienceConflict(body *SetAuthClientAudienceConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthClientAudienceUnsupportedMedia builds a authClients service
+// setAuthClientAudience endpoint unsupported_media error.
+func NewSetAuthClientAudienceUnsupportedMedia(body *SetAuthClientAudienceUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthClientAudienceInvalid builds a authClients service
+// setAuthClientAudience endpoint invalid error.
+func NewSetAuthClientAudienceInvalid(body *SetAuthClientAudienceInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthClientAudienceInvariantViolation builds a authClients service
+// setAuthClientAudience endpoint invariant_violation error.
+func NewSetAuthClientAudienceInvariantViolation(body *SetAuthClientAudienceInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthClientAudienceUnexpected builds a authClients service
+// setAuthClientAudience endpoint unexpected error.
+func NewSetAuthClientAudienceUnexpected(body *SetAuthClientAudienceUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetAuthClientAudienceGatewayError builds a authClients service
+// setAuthClientAudience endpoint gateway_error error.
+func NewSetAuthClientAudienceGatewayError(body *SetAuthClientAudienceGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateListAuthClientsResponseBody runs the validations defined on
 // ListAuthClientsResponseBody
 func ValidateListAuthClientsResponseBody(body *ListAuthClientsResponseBody) (err error) {
@@ -2817,6 +3635,62 @@ func ValidateSetMcpServerUpstreamAuthRequirementResponseBody(body *SetMcpServerU
 	for _, e := range body.Clients {
 		if e != nil {
 			if err2 := ValidateAuthClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetAuthClientAudienceResponseBody runs the validations defined on
+// GetAuthClientAudienceResponseBody
+func ValidateGetAuthClientAudienceResponseBody(body *GetAuthClientAudienceResponseBody) (err error) {
+	if body.AuthClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auth_client_id", "body"))
+	}
+	if body.Entries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.PublicServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("public_servers", "body"))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	for _, e := range body.Entries {
+		if e != nil {
+			if err2 := ValidateAuthClientAudienceEntryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSetAuthClientAudienceResponseBody runs the validations defined on
+// SetAuthClientAudienceResponseBody
+func ValidateSetAuthClientAudienceResponseBody(body *SetAuthClientAudienceResponseBody) (err error) {
+	if body.AuthClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auth_client_id", "body"))
+	}
+	if body.Entries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.PublicServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("public_servers", "body"))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	for _, e := range body.Entries {
+		if e != nil {
+			if err2 := ValidateAuthClientAudienceEntryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4281,6 +5155,488 @@ func ValidateSetMcpServerUpstreamAuthRequirementGatewayErrorResponseBody(body *S
 	return
 }
 
+// ValidateGetAuthClientAudienceUnauthorizedResponseBody runs the validations
+// defined on getAuthClientAudience_unauthorized_response_body
+func ValidateGetAuthClientAudienceUnauthorizedResponseBody(body *GetAuthClientAudienceUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthClientAudienceForbiddenResponseBody runs the validations
+// defined on getAuthClientAudience_forbidden_response_body
+func ValidateGetAuthClientAudienceForbiddenResponseBody(body *GetAuthClientAudienceForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthClientAudienceBadRequestResponseBody runs the validations
+// defined on getAuthClientAudience_bad_request_response_body
+func ValidateGetAuthClientAudienceBadRequestResponseBody(body *GetAuthClientAudienceBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthClientAudienceNotFoundResponseBody runs the validations
+// defined on getAuthClientAudience_not_found_response_body
+func ValidateGetAuthClientAudienceNotFoundResponseBody(body *GetAuthClientAudienceNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthClientAudienceConflictResponseBody runs the validations
+// defined on getAuthClientAudience_conflict_response_body
+func ValidateGetAuthClientAudienceConflictResponseBody(body *GetAuthClientAudienceConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthClientAudienceUnsupportedMediaResponseBody runs the
+// validations defined on getAuthClientAudience_unsupported_media_response_body
+func ValidateGetAuthClientAudienceUnsupportedMediaResponseBody(body *GetAuthClientAudienceUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthClientAudienceInvalidResponseBody runs the validations
+// defined on getAuthClientAudience_invalid_response_body
+func ValidateGetAuthClientAudienceInvalidResponseBody(body *GetAuthClientAudienceInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthClientAudienceInvariantViolationResponseBody runs the
+// validations defined on
+// getAuthClientAudience_invariant_violation_response_body
+func ValidateGetAuthClientAudienceInvariantViolationResponseBody(body *GetAuthClientAudienceInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthClientAudienceUnexpectedResponseBody runs the validations
+// defined on getAuthClientAudience_unexpected_response_body
+func ValidateGetAuthClientAudienceUnexpectedResponseBody(body *GetAuthClientAudienceUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAuthClientAudienceGatewayErrorResponseBody runs the validations
+// defined on getAuthClientAudience_gateway_error_response_body
+func ValidateGetAuthClientAudienceGatewayErrorResponseBody(body *GetAuthClientAudienceGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthClientAudienceUnauthorizedResponseBody runs the validations
+// defined on setAuthClientAudience_unauthorized_response_body
+func ValidateSetAuthClientAudienceUnauthorizedResponseBody(body *SetAuthClientAudienceUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthClientAudienceForbiddenResponseBody runs the validations
+// defined on setAuthClientAudience_forbidden_response_body
+func ValidateSetAuthClientAudienceForbiddenResponseBody(body *SetAuthClientAudienceForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthClientAudienceBadRequestResponseBody runs the validations
+// defined on setAuthClientAudience_bad_request_response_body
+func ValidateSetAuthClientAudienceBadRequestResponseBody(body *SetAuthClientAudienceBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthClientAudienceNotFoundResponseBody runs the validations
+// defined on setAuthClientAudience_not_found_response_body
+func ValidateSetAuthClientAudienceNotFoundResponseBody(body *SetAuthClientAudienceNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthClientAudienceConflictResponseBody runs the validations
+// defined on setAuthClientAudience_conflict_response_body
+func ValidateSetAuthClientAudienceConflictResponseBody(body *SetAuthClientAudienceConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthClientAudienceUnsupportedMediaResponseBody runs the
+// validations defined on setAuthClientAudience_unsupported_media_response_body
+func ValidateSetAuthClientAudienceUnsupportedMediaResponseBody(body *SetAuthClientAudienceUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthClientAudienceInvalidResponseBody runs the validations
+// defined on setAuthClientAudience_invalid_response_body
+func ValidateSetAuthClientAudienceInvalidResponseBody(body *SetAuthClientAudienceInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthClientAudienceInvariantViolationResponseBody runs the
+// validations defined on
+// setAuthClientAudience_invariant_violation_response_body
+func ValidateSetAuthClientAudienceInvariantViolationResponseBody(body *SetAuthClientAudienceInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthClientAudienceUnexpectedResponseBody runs the validations
+// defined on setAuthClientAudience_unexpected_response_body
+func ValidateSetAuthClientAudienceUnexpectedResponseBody(body *SetAuthClientAudienceUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetAuthClientAudienceGatewayErrorResponseBody runs the validations
+// defined on setAuthClientAudience_gateway_error_response_body
+func ValidateSetAuthClientAudienceGatewayErrorResponseBody(body *SetAuthClientAudienceGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAuthClientResponseBody runs the validations defined on
 // AuthClientResponseBody
 func ValidateAuthClientResponseBody(body *AuthClientResponseBody) (err error) {
@@ -4391,6 +5747,43 @@ func ValidateAuthClientServerResponseBody(body *AuthClientServerResponseBody) (e
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAuthClientAudienceEntryResponseBody runs the validations defined on
+// AuthClientAudienceEntryResponseBody
+func ValidateAuthClientAudienceEntryResponseBody(body *AuthClientAudienceEntryResponseBody) (err error) {
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.Level == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("level", "body"))
+	}
+	if body.AppliesTo == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applies_to", "body"))
+	}
+	if body.Level != nil {
+		if !(*body.Level == "use" || *body.Level == "blocked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", *body.Level, []any{"use", "blocked"}))
+		}
+	}
+	if body.AppliesTo != nil {
+		if !(*body.AppliesTo == "client" || *body.AppliesTo == "client_type" || *body.AppliesTo == "all_clients") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.applies_to", *body.AppliesTo, []any{"client", "client_type", "all_clients"}))
+		}
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAuthClientAudienceRuleRequestBody runs the validations defined on
+// AuthClientAudienceRuleRequestBody
+func ValidateAuthClientAudienceRuleRequestBody(body *AuthClientAudienceRuleRequestBody) (err error) {
+	if !(body.Level == "use" || body.Level == "blocked") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", body.Level, []any{"use", "blocked"}))
 	}
 	return
 }

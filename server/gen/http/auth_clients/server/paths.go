@@ -36,3 +36,13 @@ func GetMcpServerAuthenticationAuthClientsPath() string {
 func SetMcpServerUpstreamAuthRequirementAuthClientsPath() string {
 	return "/rpc/authClients.setMcpServerUpstreamAuthRequirement"
 }
+
+// GetAuthClientAudienceAuthClientsPath returns the URL path to the authClients service getAuthClientAudience HTTP endpoint.
+func GetAuthClientAudienceAuthClientsPath() string {
+	return "/rpc/authClients.getAudience"
+}
+
+// SetAuthClientAudienceAuthClientsPath returns the URL path to the authClients service setAuthClientAudience HTTP endpoint.
+func SetAuthClientAudienceAuthClientsPath() string {
+	return "/rpc/authClients.setAudience"
+}

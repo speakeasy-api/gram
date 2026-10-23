@@ -12,6 +12,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countLiveAuthClientsInOrganization = `-- name: CountLiveAuthClientsInOrganization :one
+SELECT COUNT(*)
+FROM mcp_auth_clients
+WHERE organization_id = $1
+  AND id = ANY($2::uuid[])
+  AND deleted IS FALSE
+`
+
+type CountLiveAuthClientsInOrganizationParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+func (q *Queries) CountLiveAuthClientsInOrganization(ctx context.Context, arg CountLiveAuthClientsInOrganizationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveAuthClientsInOrganization, arg.OrganizationID, arg.Ids)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAPIKey = `-- name: CreateAPIKey :one
 INSERT INTO api_keys (
     organization_id
@@ -812,6 +832,26 @@ func (q *Queries) RevokePluginHooksAPIKeysByProject(ctx context.Context, arg Rev
 		return nil, err
 	}
 	return items, nil
+}
+
+const touchAPIKeyUpdatedAt = `-- name: TouchAPIKeyUpdatedAt :one
+UPDATE api_keys
+SET updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+RETURNING updated_at
+`
+
+type TouchAPIKeyUpdatedAtParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) TouchAPIKeyUpdatedAt(ctx context.Context, arg TouchAPIKeyUpdatedAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, touchAPIKeyUpdatedAt, arg.ID, arg.OrganizationID)
+	var updated_at pgtype.Timestamptz
+	err := row.Scan(&updated_at)
+	return updated_at, err
 }
 
 const updateAPIKeyLastAccessedAt = `-- name: UpdateAPIKeyLastAccessedAt :exec

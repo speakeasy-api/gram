@@ -22,10 +22,12 @@ type Client struct {
 	DetachAuthClientFromMcpServerEndpoint       goa.Endpoint
 	GetMcpServerAuthenticationEndpoint          goa.Endpoint
 	SetMcpServerUpstreamAuthRequirementEndpoint goa.Endpoint
+	GetAuthClientAudienceEndpoint               goa.Endpoint
+	SetAuthClientAudienceEndpoint               goa.Endpoint
 }
 
 // NewClient initializes a "authClients" service client given the endpoints.
-func NewClient(listAuthClients, getAuthClient, updateAuthClient, detachAuthClientFromMcpServer, getMcpServerAuthentication, setMcpServerUpstreamAuthRequirement goa.Endpoint) *Client {
+func NewClient(listAuthClients, getAuthClient, updateAuthClient, detachAuthClientFromMcpServer, getMcpServerAuthentication, setMcpServerUpstreamAuthRequirement, getAuthClientAudience, setAuthClientAudience goa.Endpoint) *Client {
 	return &Client{
 		ListAuthClientsEndpoint:                     listAuthClients,
 		GetAuthClientEndpoint:                       getAuthClient,
@@ -33,6 +35,8 @@ func NewClient(listAuthClients, getAuthClient, updateAuthClient, detachAuthClien
 		DetachAuthClientFromMcpServerEndpoint:       detachAuthClientFromMcpServer,
 		GetMcpServerAuthenticationEndpoint:          getMcpServerAuthentication,
 		SetMcpServerUpstreamAuthRequirementEndpoint: setMcpServerUpstreamAuthRequirement,
+		GetAuthClientAudienceEndpoint:               getAuthClientAudience,
+		SetAuthClientAudienceEndpoint:               setAuthClientAudience,
 	}
 }
 
@@ -172,4 +176,50 @@ func (c *Client) SetMcpServerUpstreamAuthRequirement(ctx context.Context, p *Set
 		return
 	}
 	return ires.(*types.McpServerAuthentication), nil
+}
+
+// GetAuthClientAudience calls the "getAuthClientAudience" endpoint of the
+// "authClients" service.
+// GetAuthClientAudience may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetAuthClientAudience(ctx context.Context, p *GetAuthClientAudiencePayload) (res *types.AuthClientAudience, err error) {
+	var ires any
+	ires, err = c.GetAuthClientAudienceEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.AuthClientAudience), nil
+}
+
+// SetAuthClientAudience calls the "setAuthClientAudience" endpoint of the
+// "authClients" service.
+// SetAuthClientAudience may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetAuthClientAudience(ctx context.Context, p *SetAuthClientAudiencePayload) (res *types.AuthClientAudience, err error) {
+	var ires any
+	ires, err = c.SetAuthClientAudienceEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.AuthClientAudience), nil
 }

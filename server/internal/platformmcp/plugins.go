@@ -171,7 +171,7 @@ type PluginServer struct {
 	// DisplayName is the name the generated package gives this server.
 	DisplayName string `json:"display_name"`
 
-	// Backend is what the entry is backed by: "mcp_server", "gateway", or "unresolved" when it has no current backend.
+	// Backend is what the entry is backed by: "mcp_server" or "gateway".
 	Backend string `json:"backend"`
 
 	// TargetID is the exact typed backend ID. It is present only in
@@ -811,11 +811,8 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 	}
 	for _, server := range servers {
 		backend := "mcp_server"
-		switch {
-		case server.GatewayBacked:
+		if server.GatewayBacked {
 			backend = "gateway"
-		case server.Unresolved:
-			backend = "unresolved"
 		}
 		output.Servers = append(output.Servers, PluginServer{DisplayName: server.DisplayName, Backend: backend, MCPSlug: server.McpSlug, Policy: server.Policy, Enabled: server.Enabled})
 	}

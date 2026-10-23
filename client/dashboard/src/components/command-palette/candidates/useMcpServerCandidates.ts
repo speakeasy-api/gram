@@ -6,10 +6,9 @@ import {
   mcpServerVisibilityUpdateForm,
 } from "@/lib/mcp-server-visibility";
 import { mcpServerRouteParam } from "@/lib/sources";
-import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useRoutes } from "@/routes";
 import {
-  canonicalToolset,
   listedMcpServers,
   mcpServerDisplayName,
 } from "@/components/mcp/mcp-server-kind";
@@ -39,7 +38,7 @@ function verbsFor(server: McpServer, canWrite: boolean): Verb[] {
 }
 
 /**
- * MCP server candidates, one per /mcp listing row; a canonical hosted wrapper opens (and enables on) its toolset page.
+ * MCP server candidates, one per /mcp listing row, each opening its server page; enabling a hosted server opens that page too.
  *
  * Verbs are gated per server (`hasScope("mcp:write", <grant resource>)`),
  * the same check the server's own pages apply, so a grant scoped to some
@@ -136,8 +135,6 @@ export function useMcpServerCandidates({
       applyVisibility(server, verb === "enable" ? "private" : "disabled", true);
 
     return servers.map(({ server }): LauncherCandidate => {
-      // Without a summary the server page redirects a canonical wrapper to its toolset.
-      const toolsetSlug = canonicalToolset(server)?.slug;
       return {
         id: `mcp:${server.id}`,
         kind: "mcp_server",
@@ -150,16 +147,13 @@ export function useMcpServerCandidates({
         icon: "network",
         group: GROUP,
         run: (verb) => {
-          const opensToolsetPage =
-            verb === "enable" && isCanonicalHostedWrapper(server);
-          if (!opensToolsetPage && (verb === "enable" || verb === "disable")) {
+          // Enabling a hosted server goes through its page's enable dialog and free-tier gate.
+          const opensServerPage =
+            verb === "enable" && standsInForToolset(server);
+          if (!opensServerPage && (verb === "enable" || verb === "disable")) {
             return setVisibility(server, verb);
           }
-          if (toolsetSlug) {
-            routes.mcp.details.goTo(toolsetSlug);
-          } else {
-            routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
-          }
+          routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
         },
       };
     });

@@ -25,6 +25,10 @@ type Service interface {
 	ListKeys(context.Context, *ListKeysPayload) (res *ListKeysResult, err error)
 	// Revoke a api key
 	RevokeKey(context.Context, *RevokeKeyPayload) (err error)
+	// Replace an ordinary key's own policy: the mcp:connect and mcp:auth grants,
+	// and their blocks, its server and auth client access is evaluated against.
+	// Agent keys keep their delegated grants. Requires org admin.
+	UpdateKeyPolicy(context.Context, *UpdateKeyPolicyPayload) (res *Key, err error)
 	// Verify an api key
 	VerifyKey(context.Context, *VerifyKeyPayload) (res *ValidateKeyResult, err error)
 }
@@ -49,7 +53,7 @@ const ServiceName = "keys"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createKey", "rotateKey", "listKeys", "revokeKey", "verifyKey"}
+var MethodNames = [6]string{"createKey", "rotateKey", "listKeys", "revokeKey", "updateKeyPolicy", "verifyKey"}
 
 type APIKeyPolicyGrant struct {
 	// mcp:connect, mcp:auth, or a block: mcp:blocked_connect, mcp:blocked_auth
@@ -208,6 +212,16 @@ type RotateKeyPayload struct {
 	RequestedGrants []*AgentPolicyGrantForm
 	// Replacement expiry; defaults to 90 days and cannot exceed one year
 	ExpiresAt *string
+}
+
+// UpdateKeyPolicyPayload is the payload type of the keys service
+// updateKeyPolicy method.
+type UpdateKeyPolicyPayload struct {
+	// The ID of the key.
+	ID string
+	// The key's complete policy. An empty list removes every grant.
+	PolicyGrants []*APIKeyPolicyGrant
+	SessionToken *string
 }
 
 type ValidateKeyOrganization struct {

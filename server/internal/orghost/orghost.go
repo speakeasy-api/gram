@@ -125,6 +125,19 @@ func (r *Resolver) StoredPlatformBaseURLs(defaultHost pgtype.Text) (serverURL, s
 	return parsed, clone(parsed), true
 }
 
+// StoredPlatformBaseURLsOr returns the server and dashboard base URLs of links
+// given to an organization's members, such as MCP addresses: the platform host
+// stored as its default host, so links match the host the dashboard serves it
+// on, or serverURL and siteURL when r is nil or no platform host is stored.
+func (r *Resolver) StoredPlatformBaseURLsOr(defaultHost pgtype.Text, serverURL, siteURL *url.URL) (*url.URL, *url.URL) {
+	if r != nil {
+		if storedServerURL, storedSiteURL, ok := r.StoredPlatformBaseURLs(defaultHost); ok {
+			return storedServerURL, storedSiteURL
+		}
+	}
+	return serverURL, siteURL
+}
+
 func (r *Resolver) resolve(defaultHost pgtype.Text, configured *url.URL) *url.URL {
 	if host, ok := storedHost(defaultHost); ok {
 		// The server URL's own host keeps the configured URL, so a local

@@ -364,7 +364,7 @@ func (s *Service) setDefaultServerIcon(ctx context.Context, logger *slog.Logger,
 	// the row already had a logo (or a user edit raced ahead) -- not a
 	// failure.
 	if _, err := mcpmetadatarepo.New(s.db).SetDefaultLogoIfUnset(ctx, mcpmetadatarepo.SetDefaultLogoIfUnsetParams{
-		McpServerID: uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		McpServerID: mcpServerID,
 		ProjectID:   projectID,
 		LogoID:      uuid.NullUUID{UUID: assetID, Valid: true},
 	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
