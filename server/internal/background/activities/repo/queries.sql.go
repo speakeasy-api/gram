@@ -1444,11 +1444,15 @@ JOIN projects p ON p.id = t.project_id
     AND p.deleted IS FALSE
 JOIN organization_metadata om ON om.id = p.organization_id
 WHERE t.deleted IS FALSE
-  AND COALESCE((
-      SELECT w.visibility IN ('public', 'private')
+  AND t.mcp_enabled IS TRUE
+  -- A canonical wrapper that disagrees with its toolset is denied when served (hostedmcp.InSync).
+  AND NOT EXISTS (
+      SELECT 1
       FROM mcp_servers w
       WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
-  ), t.mcp_enabled) IS TRUE
+        AND (w.visibility <> (CASE WHEN t.mcp_is_public THEN 'public' ELSE 'private' END)
+          OR w.user_session_issuer_id IS DISTINCT FROM t.user_session_issuer_id)
+  )
   AND NOT EXISTS (
       SELECT 1
       FROM openrouter_api_keys k
@@ -2000,11 +2004,15 @@ WITH latest_toolsets AS (
         LIMIT 1
     ) tv ON TRUE
     WHERE t.deleted IS FALSE
-      AND COALESCE((
-          SELECT w.visibility IN ('public', 'private')
+      AND t.mcp_enabled IS TRUE
+      -- A canonical wrapper that disagrees with its toolset is denied when served (hostedmcp.InSync).
+      AND NOT EXISTS (
+          SELECT 1
           FROM mcp_servers w
           WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
-      ), t.mcp_enabled) IS TRUE
+            AND (w.visibility <> (CASE WHEN t.mcp_is_public THEN 'public' ELSE 'private' END)
+              OR w.user_session_issuer_id IS DISTINCT FROM t.user_session_issuer_id)
+      )
       AND NOT EXISTS (
           SELECT 1
           FROM openrouter_api_keys k

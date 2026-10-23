@@ -120,26 +120,30 @@ func TestGetAttachImpactCanonicalServer(t *testing.T) {
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ToolVariationsGroupID: uuid.NullUUID{}, Visibility: mcpservers.VisibilityDisabled,
 	})
 	require.NoError(t, err)
-	payload := &projectgen.GetAttachImpactPayload{ToolsetID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())}
+	// Naming the toolset or its canonical server previews the same thing.
+	preview := func() *projectgen.UserSessionIssuerAttachImpact {
+		t.Helper()
+		byToolset, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{ToolsetID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
+		require.NoError(t, err)
+		byServer, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{McpServerID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
+		require.NoError(t, err)
+		require.Equal(t, byToolset, byServer)
+		return byToolset
+	}
 
 	// The legacy alias on the platform host answers beside a custom-domain endpoint.
 	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: domainID, Valid: true}, "impact-canonical-domain")
-	impact, err := ti.service.GetAttachImpact(ctx, payload)
-	require.NoError(t, err)
+	impact := preview()
 	require.Equal(t, currentID.String(), impact.CurrentIssuer.ID)
 	require.True(t, impact.AuthorizationServerChanges)
 
 	require.NoError(t, testrepo.New(ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
 		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Slug: toolset.Slug, ProjectID: projectID,
 	}))
-	impact, err = ti.service.GetAttachImpact(ctx, payload)
-	require.NoError(t, err)
-	require.False(t, impact.AuthorizationServerChanges)
+	require.False(t, preview().AuthorizationServerChanges)
 
 	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "impact-canonical-platform")
-	impact, err = ti.service.GetAttachImpact(ctx, payload)
-	require.NoError(t, err)
-	require.True(t, impact.AuthorizationServerChanges)
+	require.True(t, preview().AuthorizationServerChanges)
 }
 
 // useAuthenticationHost opts an issuer in to announcing the authentication
