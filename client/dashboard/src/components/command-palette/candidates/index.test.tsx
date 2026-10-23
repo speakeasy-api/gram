@@ -276,14 +276,14 @@ vi.mock("@/routes", () => ({
     access: { roles: { href: () => "/acme/access/roles" } },
   }),
   useRoutes: () => ({
+    toolset: { goTo: mocks.goToToolsetDetails },
     plugins: {
       goTo: mocks.goToPlugins,
       href: () => "/acme/projects/default/plugins",
     },
     mcp: {
       goTo: vi.fn(),
-      details: { goTo: mocks.goToToolsetDetails },
-      x: { overview: { goTo: mocks.goToMcpServerOverview } },
+      details: { overview: { goTo: mocks.goToMcpServerOverview } },
       catalog: { detail: { goTo: mocks.goToCatalogDetail } },
       sources: {
         goTo: mocks.goToSources,

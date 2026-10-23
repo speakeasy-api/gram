@@ -16,6 +16,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -159,7 +160,7 @@ func createCountToolset(t *testing.T, db *pgxpool.Pool, orgID string, projectID 
 		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: mcpSlug, McpEnabled: enabled,
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.SetToolsetMCPPublicByID(t.Context(), toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: public, ID: toolset.ID, ProjectID: projectID}))
+	require.NoError(t, testrepo.New(db).SetToolsetMCPPublicByID(t.Context(), testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: public, ID: toolset.ID, ProjectID: projectID}))
 	return toolset
 }
 

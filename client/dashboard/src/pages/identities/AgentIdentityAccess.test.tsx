@@ -88,7 +88,7 @@ describe("Agent profile permissions", () => {
     expect(await screen.findByText("mcp:connect")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: /Example server/ }).getAttribute("href"),
-    ).toBe("/org/projects/example/mcp/example-server");
+    ).toBe("/org/projects/example/toolsets/example-server");
     expect(
       screen.getByText(
         /Project: Example project.*Tool: search.*Disposition: read_only.*Server identity: example.*Server URL: https:\/\/example.test\/mcp/,

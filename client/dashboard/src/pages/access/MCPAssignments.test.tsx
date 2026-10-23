@@ -112,7 +112,9 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ access: { roles: { href: () => "/access/roles" } } }),
   useRoutes: () => ({
-    mcp: { x: { overview: { href: (slug: string) => `/servers/${slug}` } } },
+    mcp: {
+      details: { overview: { href: (slug: string) => `/servers/${slug}` } },
+    },
   }),
 }));
 vi.mock("./PersonServerAssignment", () => ({

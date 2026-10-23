@@ -186,10 +186,10 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 			continue
 		}
 		clientID, chosen := picks[member.serverID]
-		res, resolveErr := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.serverID, uuid.NullUUID{UUID: clientID, Valid: chosen}, subject)
+		res, resolveErr := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.serverID, member.projectID, uuid.NullUUID{UUID: clientID, Valid: chosen}, subject)
 		s.applyMemberAuthClient(ctx, member, res, resolveErr)
 	}
-	gate.memberChoices = &memberChoices{selector: nil, subject: subject, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	gate.memberChoices = &memberChoices{selector: nil, enforced: false, subject: subject, profile: false, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 		return s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
 	}, mu: sync.Mutex{}, byServer: map[uuid.UUID]*memberTokens{}}
 	var signInID uuid.UUID

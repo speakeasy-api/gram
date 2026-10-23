@@ -108,7 +108,7 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     policyCenter: { goTo: vi.fn() },
     mcp: {
-      x: { inspect: { href: (slug: string) => `/mcp/x/${slug}/inspect` } },
+      details: { inspect: { href: (slug: string) => `/mcp/${slug}/inspect` } },
     },
   }),
 }));
@@ -1174,7 +1174,7 @@ describe("PolicyMCPScopePicker all-server selection", () => {
       screen
         .getByRole("link", { name: "Discover tools on Docs MCP" })
         .getAttribute("href"),
-    ).toBe("/mcp/x/docs-mcp/inspect");
+    ).toBe("/mcp/docs-mcp/inspect");
   });
 
   it("counts a selected server with no discovered tools as all tools in scope", async () => {

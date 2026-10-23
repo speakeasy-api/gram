@@ -12,7 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // The deprecated check answers "taken in any scope", so it cannot delegate to
@@ -46,7 +46,7 @@ func TestToolsetsService_CheckMCPSlugAvailability_TakenInAnyScope(t *testing.T) 
 		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
-	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
 		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
 		Slug:           conv.ToLower(string(created.Slug)),
 		ProjectID:      *authCtx.ProjectID,

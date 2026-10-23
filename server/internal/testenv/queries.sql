@@ -2242,3 +2242,49 @@ VALUES (
     (SELECT ac.attachment_scope FROM mcp_auth_clients ac WHERE ac.id = @auth_client_id),
     'backfill'
 );
+
+-- name: SetToolsetCustomDomain :exec
+-- Points a toolset's legacy alias at a custom domain; the canonical wrapper's endpoints are left as they are.
+UPDATE toolsets
+SET
+    custom_domain_id = @custom_domain_id
+  , updated_at = clock_timestamp()
+WHERE slug = @slug AND project_id = @project_id;
+
+-- name: SetToolsetMCPPublicByID :exec
+-- Sets publicness as an MCP server update would: on the canonical wrapper, and on the columns for wrapper-less toolsets.
+WITH toolset AS (
+    UPDATE toolsets
+    SET mcp_is_public = @mcp_is_public
+    WHERE toolsets.id = @id AND toolsets.project_id = @project_id
+    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
+)
+UPDATE mcp_servers
+SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
+FROM toolset
+WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
+
+-- name: SetToolsetMCPPublicBySlug :exec
+WITH toolset AS (
+    UPDATE toolsets
+    SET mcp_is_public = @mcp_is_public
+    WHERE toolsets.mcp_slug = @mcp_slug AND toolsets.project_id = @project_id
+    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
+)
+UPDATE mcp_servers
+SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
+FROM toolset
+WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
+
+-- name: SetToolsetMCPEnabledByID :exec
+-- Enables or disables as an MCP server update would: on the canonical wrapper, and on the column for wrapper-less toolsets.
+WITH toolset AS (
+    UPDATE toolsets
+    SET mcp_enabled = @mcp_enabled
+    WHERE toolsets.id = @id AND toolsets.project_id = @project_id
+    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
+)
+UPDATE mcp_servers
+SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
+FROM toolset
+WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;

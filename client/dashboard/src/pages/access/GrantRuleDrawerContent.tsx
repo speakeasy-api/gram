@@ -957,7 +957,7 @@ function InspectTabLink({
   const routes = useRoutes({ projectSlug });
   return (
     <Link
-      to={routes.mcp.x.inspect.href(
+      to={routes.mcp.details.inspect.href(
         mcpServerRouteParam({ id: serverId, slug: serverSlug }),
       )}
       className="text-primary inline-flex items-center gap-1 hover:underline"
