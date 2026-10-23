@@ -759,11 +759,7 @@ export function CredentialsWizard({
     setStep(lastStep);
   }, [existing, step, defaultStep, lastStep, setStep]);
 
-  /**
-   * Create the agent, discover what it may delegate, issue its first key, and
-   * mint the setup command. Each step depends on the one before it, so a
-   * failure stops here and says which part did not happen.
-   */
+  /** Issue the agent's first key for these grants and show it once. */
   const issueKey = async (
     agentId: string,
     requestedGrants: AgentPolicyGrantForm[],
@@ -821,6 +817,11 @@ export function CredentialsWizard({
     );
   };
 
+  /**
+   * Create the agent, discover what it may delegate, issue its first key, and
+   * mint the setup command. Each step depends on the one before it, so a
+   * failure stops here and says which part did not happen.
+   */
   const provision = async () => {
     if (provisioning) return;
     setProvisioning(true);
