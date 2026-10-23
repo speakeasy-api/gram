@@ -208,10 +208,12 @@ approval-watch.sh:
 %s`, status, expires, tokenFile, row.Token, tokenFile, command, id, monitorTimeoutMs(checks), tokenFile, watchScript)
 }
 
-// monitorTimeoutMs covers the watcher's run plus a minute, capped at an hour,
-// the longest Monitor timeout Claude Code allows.
+// monitorTimeoutMs covers the watcher's run, with a second per poll for a
+// typical request, plus a minute. It is capped at an hour, the longest Monitor
+// timeout Claude Code allows. A Monitor that still times out first is started
+// again, as the instructions say.
 func monitorTimeoutMs(checks int) int {
-	return min((checks*watchIntervalSeconds+60)*1000, 3_600_000)
+	return min((checks*(watchIntervalSeconds+1)+60)*1000, 3_600_000)
 }
 
 // watchChecks is how many polls cover the rest of the request's window, plus

@@ -276,28 +276,27 @@ func TestArgumentsPreviewKeepsExactNumbers(t *testing.T) {
 func TestHeldCallRecordsTheMCPServerOnlyWhenItIsInTheProject(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	fixtures := testrepo.New(f.db)
-	toolsetID, err := fixtures.CreateToolsetFixture(t.Context(), testrepo.CreateToolsetFixtureParams{
-		ID:             uuid.New(),
-		OrganizationID: f.organizationID,
-		ProjectID:      f.projectID,
-		Name:           "Team Slack",
-		Slug:           "team-slack-" + uuid.NewString()[:8],
-	})
-	require.NoError(t, err)
-	serverID, err := fixtures.CreateRemoteMCPServerFixture(t.Context(), testrepo.CreateRemoteMCPServerFixtureParams{
-		ID:         uuid.New(),
-		ProjectID:  f.projectID,
-		ToolsetID:  uuid.NullUUID{UUID: toolsetID, Valid: true},
-		Visibility: "private",
-	})
-	require.NoError(t, err)
+	serverID := f.addRemoteServer(t, f.projectID)
 
 	onServer := f.call(`{"channel":"#releases"}`)
 	onServer.ServerID = serverID.String()
 	row, err := repo.New(f.db).GetApprovalByToken(t.Context(), f.hold(t, onServer))
 	require.NoError(t, err)
 	require.Equal(t, uuid.NullUUID{UUID: serverID, Valid: true}, row.McpServerID)
+
+	// A real MCP server in another project of the organization is not recorded.
+	otherProjectID, err := testrepo.New(f.db).CreateProjectFixture(t.Context(), testrepo.CreateProjectFixtureParams{
+		ID:             uuid.New(),
+		Name:           "Other project",
+		Slug:           "other-" + uuid.NewString()[:8],
+		OrganizationID: f.organizationID,
+	})
+	require.NoError(t, err)
+	inOtherProject := f.call(`{"channel":"#random"}`)
+	inOtherProject.ServerID = f.addRemoteServer(t, otherProjectID).String()
+	row, err = repo.New(f.db).GetApprovalByToken(t.Context(), f.hold(t, inOtherProject))
+	require.NoError(t, err)
+	require.False(t, row.McpServerID.Valid)
 
 	// A Platform MCP call carries a platform toolset id, not an MCP server.
 	elsewhere := f.call(`{"channel":"#general"}`)

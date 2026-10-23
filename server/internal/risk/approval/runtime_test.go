@@ -171,7 +171,7 @@ func TestRequestApprovalToolHasNoOutputSchema(t *testing.T) {
 
 func TestMonitorTimeoutCoversTheWatcherUpToAnHour(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, (620*watchIntervalSeconds+60)*1000, monitorTimeoutMs(620))
+	require.Equal(t, 2_540_000, monitorTimeoutMs(620))
 	require.Equal(t, 3_600_000, monitorTimeoutMs(30_000))
 }
 

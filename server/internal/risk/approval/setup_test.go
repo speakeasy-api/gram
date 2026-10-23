@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -189,6 +190,29 @@ func (f fixture) addMember(t *testing.T) string {
 	})
 	require.NoError(t, err)
 	return userID
+}
+
+// addRemoteServer creates a remote MCP server, with its toolset, in a project
+// of the fixture's organization.
+func (f fixture) addRemoteServer(t *testing.T, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+	fixtures := testrepo.New(f.db)
+	toolsetID, err := fixtures.CreateToolsetFixture(t.Context(), testrepo.CreateToolsetFixtureParams{
+		ID:             uuid.New(),
+		OrganizationID: f.organizationID,
+		ProjectID:      projectID,
+		Name:           "Team Slack",
+		Slug:           "team-slack-" + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+	serverID, err := fixtures.CreateRemoteMCPServerFixture(t.Context(), testrepo.CreateRemoteMCPServerFixtureParams{
+		ID:         uuid.New(),
+		ProjectID:  projectID,
+		ToolsetID:  uuid.NullUUID{UUID: toolsetID, Valid: true},
+		Visibility: "private",
+	})
+	require.NoError(t, err)
+	return serverID
 }
 
 // shiftClock makes the service's clock run offset from real time.

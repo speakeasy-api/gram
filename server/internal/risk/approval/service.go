@@ -182,7 +182,9 @@ type HoldInput struct {
 	ToolsetID string
 
 	// ServerID is the MCP server the call targets, when known. It is stored
-	// with the request so approvers see which server the tool belongs to.
+	// with the request only when it names an MCP server in the call's project,
+	// so approvers see which server the tool belongs to. A Platform MCP call
+	// passes a toolset id here, which is not stored.
 	ServerID string
 
 	// ToolName is the called tool.
