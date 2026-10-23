@@ -33,7 +33,13 @@ export function SegmentedControl<T extends string>({
    *  that has not been made yet. */
   value: T | null;
   onChange: (value: T) => void;
-  options: { value: T; label: ReactNode; tooltip?: string }[];
+  /** A disabled option stays hoverable so its tooltip can say why. */
+  options: {
+    value: T;
+    label: ReactNode;
+    tooltip?: string;
+    disabled?: boolean;
+  }[];
   disabled?: boolean;
   className?: string;
   /** Names the control as a group for assistive technology. */
@@ -64,11 +70,15 @@ export function SegmentedControl<T extends string>({
             type="button"
             disabled={disabled}
             aria-pressed={active}
-            onClick={() => onChange(option.value)}
+            aria-disabled={option.disabled || undefined}
+            onClick={() => {
+              if (!option.disabled) onChange(option.value);
+            }}
             className={cn(
               SEGMENT_BASE,
               active ? SEGMENT_ACTIVE : SEGMENT_INACTIVE,
               disabled && "pointer-events-none",
+              option.disabled && "cursor-not-allowed opacity-50",
             )}
           >
             {option.label}

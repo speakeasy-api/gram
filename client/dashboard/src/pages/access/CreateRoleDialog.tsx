@@ -29,6 +29,13 @@ import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import type { ListRolesResult } from "@gram/client/models/components/listrolesresult.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
+import { RoleAuthClientTypesField } from "./RoleAuthClientTypesField";
+import {
+  clientTypeGrantChanges,
+  clientTypeRulesFromRole,
+  clientTypeRulesKey,
+  type ClientTypeRules,
+} from "./roleAuthClientTypes";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -175,6 +182,11 @@ export function CreateRoleDialog({
   const [initialName, setInitialName] = useState("");
   const [initialDescription, setInitialDescription] = useState("");
   const [initialGrantKeys, setInitialGrantKeys] = useState("");
+  const [clientTypeRules, setClientTypeRules] = useState<ClientTypeRules>(() =>
+    clientTypeRulesFromRole(undefined),
+  );
+  const [savedClientTypeRules, setSavedClientTypeRules] =
+    useState<ClientTypeRules>(() => clientTypeRulesFromRole(undefined));
   const [showMembers, setShowMembers] = useState(false);
   const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -247,6 +259,8 @@ export function CreateRoleDialog({
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
     setInitialGrantKeys(grantKeysStringFn(roleGrants));
+    setClientTypeRules(clientTypeRulesFromRole(editingRole));
+    setSavedClientTypeRules(clientTypeRulesFromRole(editingRole));
     const assignedIds = new Set(membersWithRole(members, editingRole.id));
     setSelectedMembers(assignedIds);
     setInitialMembers(new Set(assignedIds));
@@ -273,6 +287,7 @@ export function CreateRoleDialog({
   });
 
   const submitted = useRef<{
+    clientTypeRules: ClientTypeRules;
     name: string;
     description: string;
     grantKeys: string;
@@ -307,7 +322,15 @@ export function CreateRoleDialog({
         !saved ||
         !scopeDefinitions ||
         roleHoldsGrants(role, saved.grants, scopeDefinitions);
-      if (!grantsStored) {
+      // Credential type rules are left out of the form's grants, so check
+      // them on their own against what the role stores.
+      const storedClientTypeRules = clientTypeRulesFromRole(role);
+      const clientTypesStored =
+        !saved ||
+        clientTypeRulesKey(storedClientTypeRules) ===
+          clientTypeRulesKey(saved.clientTypeRules);
+      const allStored = grantsStored && clientTypesStored;
+      if (!allStored) {
         toast.error(
           "Some permission changes weren't saved. Check the role and save again.",
         );
@@ -323,10 +346,11 @@ export function CreateRoleDialog({
         if (grantsStored) setInitialGrantKeys(saved.grantKeys);
         setInitialMembers(saved.members);
         setInitialAgents(saved.agents);
-        if (grantsStored) toast.success("Role saved");
+        setSavedClientTypeRules(storedClientTypeRules);
+        if (allStored) toast.success("Role saved");
         return;
       }
-      if (grantsStored) handleClose();
+      if (allStored) handleClose();
     },
   });
 
@@ -339,6 +363,9 @@ export function CreateRoleDialog({
       isMutating,
       isEditing,
       isSystemRole,
+      clientTypesChanged:
+        clientTypeRulesKey(clientTypeRules) !==
+        clientTypeRulesKey(savedClientTypeRules),
       name,
       description,
       grants,
@@ -518,8 +545,17 @@ export function CreateRoleDialog({
         grantsFromRole(editingRole, scopeDefinitions),
         scopeDefinitions,
       );
-      const { addGrants, removeGrants } = diffGrants(initialGrants, sdkGrants);
+      const scopeChanges = diffGrants(initialGrants, sdkGrants);
+      // Removals use the role's stored selectors, so only the credential
+      // types whose rule changed are rewritten.
+      const typeChanges = clientTypeGrantChanges(editingRole, clientTypeRules);
+      const addGrants = [...scopeChanges.addGrants, ...typeChanges.addGrants];
+      const removeGrants = [
+        ...scopeChanges.removeGrants,
+        ...typeChanges.removeGrants,
+      ];
       submitted.current = {
+        clientTypeRules,
         name,
         description,
         grantKeys: grantKeysStringFn(grants),
@@ -553,7 +589,10 @@ export function CreateRoleDialog({
           createRoleForm: {
             name,
             description: description.trim() || undefined,
-            grants: sdkGrants,
+            grants: [
+              ...sdkGrants,
+              ...clientTypeGrantChanges(undefined, clientTypeRules).addGrants,
+            ],
             memberIds:
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
@@ -573,6 +612,8 @@ export function CreateRoleDialog({
     setName("");
     setDescription("");
     setGrants({});
+    setClientTypeRules(clientTypeRulesFromRole(undefined));
+    setSavedClientTypeRules(clientTypeRulesFromRole(undefined));
     setSelectedMembers(new Set());
     setInitialMembers(new Set());
     setSelectedAgents(new Set());
@@ -728,6 +769,14 @@ export function CreateRoleDialog({
               markAgentIneligible={selectedAgents.size > 0}
               onEditRule={openRuleEditor}
               onRemoveRule={removeRule}
+            />
+            <RoleAuthClientTypesField
+              value={clientTypeRules}
+              onChange={(next) => {
+                setAssignmentConfirmed(false);
+                setClientTypeRules(next);
+              }}
+              disabled={isEditing && !initialized}
             />
 
             {/* ─── Who holds the role ───────────────────────────────

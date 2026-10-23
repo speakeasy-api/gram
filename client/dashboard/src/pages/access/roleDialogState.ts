@@ -15,6 +15,8 @@ export interface SaveButtonInput {
   isEditing: boolean;
   /** True when the role being edited is a system role (Member/Admin) */
   isSystemRole: boolean;
+  /** True when the upstream credential rules differ from the saved role */
+  clientTypesChanged?: boolean;
   /** Current form values */
   name: string;
   description: string;
@@ -104,6 +106,7 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
     membersHaveChanged(input.selectedAgents, input.initial.agents) ||
     input.name !== input.initial.name ||
     input.description !== input.initial.description ||
+    input.clientTypesChanged === true ||
     grantKeysString(input.grants) !== input.initial.grantKeys
   );
 }
