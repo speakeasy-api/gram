@@ -15769,7 +15769,7 @@ CREATE TABLE IF NOT EXISTS builtin_mcp_settings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   PRIMARY KEY (id)
 );
-CREATE UNIQUE INDEX builtin_mcp_settings_project_key_idx ON builtin_mcp_settings (project_id, builtin_key);
+CREATE UNIQUE INDEX IF NOT EXISTS builtin_mcp_settings_project_key_idx ON builtin_mcp_settings (project_id, builtin_key);
 COMMENT ON COLUMN builtin_mcp_settings.project_id IS '@access: confidential';
 COMMENT ON COLUMN builtin_mcp_settings.builtin_key IS '@access: shared';
 COMMENT ON COLUMN builtin_mcp_settings.hidden IS '@access: shared';
