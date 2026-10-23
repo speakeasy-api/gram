@@ -1,0 +1,14 @@
+server/internal/background/process_workos_org_events.go
+  h_9630b74bdac540 60-62,64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b866f49a0f9d13c3ab14f5576a8233997943e237",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
