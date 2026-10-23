@@ -75,6 +75,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
 	"github.com/speakeasy-api/gram/server/internal/externalkeys"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
@@ -805,6 +806,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			posthogClient, featureFlags := identityDeps.Posthog, identityDeps.Features
+			authz.SetUpstreamSelectorWriteGate(feature.UpstreamSelectorWrites(featureFlags))
 			workosClient, stripeClient := identityDeps.WorkOS, identityDeps.Stripe
 			billingRepo, billingTracker := identityDeps.Billing, identityDeps.BillingTracker
 			productFeatures, siteURL := identityDeps.ProductFeatures, identityDeps.SiteURL

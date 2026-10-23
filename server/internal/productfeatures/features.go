@@ -61,6 +61,12 @@ const (
 	// deployment with the runtime configured. Without it, Code Mode gateways
 	// serve Progressive discovery.
 	FeatureCodeMode Feature = "code_mode"
+	// FeatureUpstreamAuthEnforced serves the organization's direct proxied
+	// servers through the typed auth client resolver and requires mcp:auth on
+	// the chosen auth client. Staff turn it on through the admin enforcement
+	// endpoint once the organization's readiness checks pass, so it is left out
+	// of the productFeatures.set enum and cannot be toggled there.
+	FeatureUpstreamAuthEnforced Feature = "upstream_auth_enforced"
 )
 
 // RequiresPlatformAdmin reports whether toggling f through productFeatures.set
