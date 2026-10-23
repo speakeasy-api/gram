@@ -9,9 +9,10 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
-	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -21,8 +22,8 @@ import (
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
-// maxConcurrentMemberDescribes bounds how many members one gateway inventory
-// describes at once.
+// maxConcurrentMemberDescribes bounds how many member describes one gateway
+// inventory runs at once. A member waiting to retry holds no slot.
 const maxConcurrentMemberDescribes = 6
 
 // memberDescribeBudget bounds a whole inventory, in member call timeouts, when
@@ -60,18 +61,21 @@ type memberDescribeResult struct {
 // described again after its Retry-After, or a jittered backoff, when that
 // retry can still start before the deadline.
 func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) []memberDescribeResult {
-	requestCtx := ctx
 	ctx, cancelAll := context.WithTimeout(ctx, min(memberDescribeBudget*s.metaRuntime.MemberCallTimeout, maxGatewayListingTime))
 	defer cancelAll()
 	results := make([]memberDescribeResult, len(members))
-	var group errgroup.Group
-	group.SetLimit(maxConcurrentMemberDescribes)
+	slots := semaphore.NewWeighted(maxConcurrentMemberDescribes)
+	var group sync.WaitGroup
 	for i, member := range members {
-		group.Go(func() error {
-			for attempt := 1; ctx.Err() == nil; attempt++ {
+		group.Go(func() {
+			for attempt := 1; ; attempt++ {
+				if slots.Acquire(ctx, 1) != nil {
+					break
+				}
 				memberCtx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 				results[i].catalog, results[i].err = s.describeMetaMember(memberCtx, logger, gate, member)
 				cancel()
+				slots.Release(1)
 				failure, ok := errors.AsType[memberDiscoveryError](results[i].err)
 				if !ok || !failure.retryable || attempt == maxMemberDescribeAttempts {
 					break
@@ -94,19 +98,14 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 			}
 			// Past the budget, a member that never finished, or failed outside
 			// its own classification, is the budget's failure, so it is skipped
-			// like a slow member. A canceled request fails the listing instead.
+			// like a slow member.
 			_, memberFailure := errors.AsType[*metaMemberError](results[i].err)
 			if ctx.Err() != nil && results[i].catalog == nil && !memberFailure {
-				if err := requestCtx.Err(); err != nil {
-					results[i] = memberDescribeResult{catalog: nil, err: err}
-				} else {
-					results[i] = memberDescribeResult{catalog: nil, err: memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}, status: 0, retryable: false, retryAfter: 0}}
-				}
+				results[i] = memberDescribeResult{catalog: nil, err: memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}, status: 0, retryable: false, retryAfter: 0}}
 			}
-			return nil
 		})
 	}
-	_ = group.Wait()
+	group.Wait()
 	return results
 }
 

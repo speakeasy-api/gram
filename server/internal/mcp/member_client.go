@@ -288,9 +288,11 @@ func upstreamStatusOK(status int) bool {
 
 // memberDiscoveryError is a member failure that leaves its tools unknown: its
 // tool source did not answer successfully, or the gateway could not load what
-// reaching it needs. It is distinct from a failure that excludes the member,
-// such as a missing credential, visibility, or consent. Gateway discovery
-// records it, and retries it briefly when retryable.
+// reaching it needs. Gateway discovery records it, and retries it briefly when
+// retryable. Exclusions are not discovery errors and are left out unrecorded:
+// visibility, consent, a member that is not servable, and a credential that is
+// missing, rejected, misconfigured, or needs a new sign-in, all of which are
+// fixed where the member or its sign-in is configured.
 type memberDiscoveryError struct {
 	*metaMemberError
 
