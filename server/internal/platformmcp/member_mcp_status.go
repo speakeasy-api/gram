@@ -120,6 +120,25 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, err
 	}
+	return s.memberConnectionStatus(ctx, principal, target)
+}
+
+// MemberConnectionStatus reports the member's sign-in state for one MCP server
+// from grants the caller already loaded, outside the Platform MCP operation
+// budget. The device agent's menu bar reads it for each server in the
+// member's plugins.
+func (s *PluginsService) MemberConnectionStatus(ctx context.Context, principal Principal, grants []authz.Grant, projectID, mcpID uuid.UUID) (GetMyMCPConnectionStatusOutput, error) {
+	if s == nil || s.db == nil || s.now == nil || s.authorization == nil {
+		return GetMyMCPConnectionStatusOutput{}, ErrUnavailable
+	}
+	target, err := s.resolveMemberMCPStatusTarget(ctx, principal, grants, projectID, mcpID)
+	if err != nil {
+		return GetMyMCPConnectionStatusOutput{}, err
+	}
+	return s.memberConnectionStatus(ctx, principal, target)
+}
+
+func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal Principal, target memberMCPStatusTarget) (GetMyMCPConnectionStatusOutput, error) {
 	output := GetMyMCPConnectionStatusOutput{
 		ProjectID: target.projectID.String(), MCPID: target.mcpID.String(), MCPName: target.name,
 		State: MCPConnectionStateNotConnected, Reason: "", RequiredScope: "", RequestAccessURL: "", ConnectionURL: "", NextAction: "connect",
@@ -265,6 +284,14 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return memberMCPStatusTarget{}, err
 	}
+	grants, ok := authz.GrantsFromContext(ctx)
+	if !ok {
+		return memberMCPStatusTarget{}, ErrUnavailable
+	}
+	return s.resolveMemberMCPStatusTarget(ctx, principal, grants, projectID, mcpID)
+}
+
+func (s *PluginsService) resolveMemberMCPStatusTarget(ctx context.Context, principal Principal, grants []authz.Grant, projectID, mcpID uuid.UUID) (memberMCPStatusTarget, error) {
 	row, err := platformrepo.New(s.db).GetPlatformMCPInstallTarget(ctx, platformrepo.GetPlatformMCPInstallTargetParams{
 		OrganizationID: principal.OrganizationID, McpServerID: mcpID, ProjectID: projectID,
 	})
@@ -273,10 +300,6 @@ func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Pr
 	}
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("get member MCP status target: %w", err)
-	}
-	grants, ok := authz.GrantsFromContext(ctx)
-	if !ok {
-		return memberMCPStatusTarget{}, ErrUnavailable
 	}
 	canRead, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, mcpID.String(), projectID.String()))
 	if err != nil {

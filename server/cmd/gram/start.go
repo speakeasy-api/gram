@@ -1879,7 +1879,7 @@ func newStartCommand() *cli.Command {
 			riskFindings := riskchrepo.New(chDB)
 			widgetsSvc := widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
-			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
+			platformMCPCfg := platformMCPConfig{
 				DeploymentRedeploy:        deploymentsService,
 				AssistantIdentity:         assistantsSvc,
 				Workspaces:                platformMCPWorkspaces{auth: authService, organizations: organizationsService},
@@ -1952,7 +1952,9 @@ func newStartCommand() *cli.Command {
 				SessionPortability:        platformmcp.FeatureChecker(sessionPortabilityEnabled),
 				LocalFixture:              platformFixture,
 				RegistryDiscoveryEnabled:  c.Bool("registry-discovery-enabled"),
-			})
+			}
+			agentService.WithConnectionStatuses(newAgentConnectionStatuses(platformMCPCfg))
+			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPCfg)
 			if err != nil {
 				return err
 			}

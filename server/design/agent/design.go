@@ -109,6 +109,38 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentPlugins"}`)
 	})
 
+	Method("getMyConnections", func() {
+		Description("Report the enrolled user's sign-in state for each MCP server in the plugins delivered to them, with the page that signs in to each. Sign-in belongs to the server, so one sign-in covers every plugin that contains it. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.")
+
+		// The org install key is accepted with a vouched email, unlike
+		// getSessionMeta: this exposes only whether a member has signed in to
+		// each server, never a credential or any content, and MDM fleets that
+		// cannot mint per-user keys would otherwise show no sign-in state.
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("email", String, "Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.", func() {
+				Example("dev@acme.corp")
+			})
+		})
+
+		Result(GetMyConnectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/agent.getMyConnections")
+			security.ByKeyHeader()
+			Header("email:Gram-User-Email")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getAgentMyConnections")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMyConnections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentMyConnections"}`)
+	})
+
 	Method("listSyncedUsers", func() {
 		Description("List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.")
 
@@ -505,6 +537,7 @@ var AgentPluginModel = Type("AgentPlugin", func() {
 
 var AgentPluginServerModel = Type("AgentPluginServer", func() {
 	Required("name")
+	Attribute("id", String, "Stable identifier of the server, the same in every plugin that contains it. Matches the id getMyConnections reports the server's sign-in state under. Absent from servers predating the field.")
 	Attribute("name", String, "Display name of the server within its plugin.")
 	Attribute("dashboard_url", String, "Link to the server's page in the Speakeasy dashboard. Present only when the enrolled user holds mcp:read on the server; the agent tells the user that links need that scope when it is absent.", func() {
 		Format(FormatURI)
@@ -666,5 +699,22 @@ var CreateSessionHandoffResult = Type("CreateSessionHandoffResult", func() {
 	Attribute("expires_at", String, func() {
 		Description("When the link stops being served regardless of reads.")
 		Format(FormatDateTime)
+	})
+})
+
+var GetMyConnectionsResult = Type("GetMyConnectionsResult", func() {
+	Required("servers")
+	Attribute("servers", ArrayOf(AgentServerConnectionModel), "One entry per distinct MCP server in the plugins delivered to the user, in plugin order. Servers the user holds no access to are omitted.")
+})
+
+var AgentServerConnectionModel = Type("AgentServerConnection", func() {
+	Required("id", "state")
+	Attribute("id", String, "The server's id, as getPlugins reports it on each plugin server.")
+	Attribute("state", String, func() {
+		Description("`connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server's sign-in setup first. `unknown`: the state can't be determined, for example for a gateway.")
+		Enum("connected", "not_connected", "reauthorization_required", "not_required", "setup_required", "unknown")
+	})
+	Attribute("connect_url", String, "Page that signs the user in to this server in the browser. Present when state is not_connected or reauthorization_required.", func() {
+		Format(FormatURI)
 	})
 })
