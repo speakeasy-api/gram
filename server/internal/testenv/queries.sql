@@ -2147,6 +2147,24 @@ VALUES (
 -- server, so a table-driven test can set each case's associations afresh.
 DELETE FROM mcp_server_remote_session_clients WHERE mcp_server_id = @mcp_server_id;
 
+-- name: CopyConsentEMACredentialToProjectFixture :exec
+-- TEST FIXTURE ONLY. A pending organization-issued consent in another member project.
+INSERT INTO remote_session_ema_credentials (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id,
+  remote_session_client_id, resource, subject_urn, client_selection,
+  remote_session_ema_binding_id, ema_binding_generation, ema_provider,
+  internal_session_issuer_id, internal_session_issuer_updated_at, internal_session_issuer_key_id, sign_in_id,
+  access_token_encrypted, access_expires_at
+)
+SELECT c.organization_id, p.id, c.user_session_issuer_id, c.remote_session_issuer_id,
+       c.remote_session_client_id, c.resource, c.subject_urn, c.client_selection,
+       c.remote_session_ema_binding_id, c.ema_binding_generation, c.ema_provider,
+       c.internal_session_issuer_id, c.internal_session_issuer_updated_at, c.internal_session_issuer_key_id, c.sign_in_id,
+       c.access_token_encrypted, c.access_expires_at
+FROM remote_session_ema_credentials AS c
+JOIN projects AS p ON p.id = @project_id AND p.organization_id = c.organization_id
+WHERE c.id = @id AND c.organization_id = @organization_id AND c.user_session_id IS NULL;
+
 -- name: ListUserSessionCredentialsForSubjectFixture :many
 -- Test-only fixture: every session row of one subject, oldest first, with the
 -- credential it belongs to, so a test can follow refresh rotation.

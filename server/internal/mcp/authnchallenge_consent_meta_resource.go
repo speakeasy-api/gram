@@ -121,6 +121,9 @@ func (s *Service) claimingMetaMembers(
 		// are members of it here.
 		surface := requestNetworkSurface(ctx)
 		for _, row := range organizationRows {
+			if endpoint.ProjectID != uuid.Nil && row.ProjectID != endpoint.ProjectID {
+				continue
+			}
 			if servableOnSurface(row.McpServerNetworkAccessMode, surface) {
 				rows = append(rows, metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow(row))
 			}
@@ -163,18 +166,23 @@ func (s *Service) authorizedMetaMembers(
 		return nil, fmt.Errorf("load access grants: %w", err)
 	}
 
+	shadow := s.newMandatoryShadow(ctx, endpoint.OrganizationID)
 	authorized := make([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, 0, len(rows))
 	for _, row := range rows {
 		// Only proxy backends reach here, so mcp:connect is keyed on the
 		// mcp_servers id. Unknown visibility fails closed.
+		connect := authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), row.ProjectID.String())
 		switch row.McpServerVisibility {
 		case mcpservers.VisibilityPublic:
+			shadow.record(ctx, mandatorySurfaceConsent, true, connect)
 		case mcpservers.VisibilityPrivate:
 			// Only a denial drops a member (Unauthorized is an anonymous
 			// caller, as the runtime snapshot treats it); dropping on a fault
 			// narrows the candidate set and turns ambiguous into a confident
 			// wrong answer.
-			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), row.ProjectID.String())); err != nil {
+			err := s.authz.Require(ctx, connect)
+			shadow.shadowRequire(ctx, mandatorySurfaceConsent, err, connect)
+			if err != nil {
 				if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
 					continue
 				}
@@ -210,6 +218,7 @@ func (s *Service) gatewayMemberResourceScopes(
 		s.logger.WarnContext(ctx, "stamp consent subject for gateway member scopes", attr.SlogError(err))
 		return nil
 	}
+	memberCtx = withMandatoryAdmission(memberCtx)
 	// Members claim a client through their own association, so two clients
 	// of one authorization server can belong to different members and each is
 	// resolved on its own.

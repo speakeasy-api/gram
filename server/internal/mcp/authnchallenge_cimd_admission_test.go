@@ -305,7 +305,7 @@ func TestCIMDAdmission_PresetsDeniesUnknownURLWithoutFetching(t *testing.T) {
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	require.Zero(t, ds.requests.Load(), "a denied client_id must not cost an outbound document fetch")
 }
 
@@ -335,7 +335,7 @@ func TestCIMDAdmission_DefaultAdmitsWhatPresetsRefuses(t *testing.T) {
 	require.Positive(t, ds.requests.Load(), "an admitted client_id reaches the document fetch")
 
 	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 
 	// A URL the issuer does list is admitted under both, so the difference
 	// above is the mode and not the configuration.
@@ -361,7 +361,7 @@ func TestCIMDAdmission_PresetsDenialIsActionable(t *testing.T) {
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	requireAuthorizeErrorDescription(t, w, "not permitted by the server's client policy")
 	require.NotContains(t, w.Body.String(), "unknown client_id")
 }
@@ -399,7 +399,7 @@ func TestCIMDAdmission_CustomURLIsPerIssuer(t *testing.T) {
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	require.Zero(t, ds.requests.Load(), "another issuer's allowance must not admit this one")
 
 	// The neighbour that DOES allow it is admitted, proving the row exists
@@ -421,7 +421,7 @@ func TestCIMDAdmission_DisabledDeniesEverything(t *testing.T) {
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	requireAuthorizeErrorDescription(t, w, "does not accept client ID metadata documents")
 	require.Zero(t, ds.requests.Load())
 }
@@ -452,7 +452,7 @@ func TestCIMDAdmission_UnrecognizedModeFailsClosed(t *testing.T) {
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	require.Zero(t, ds.requests.Load())
 }
 
@@ -596,7 +596,7 @@ func TestCIMDAdmission_ExplicitConfidentialAuthMethodStillRejected(t *testing.T)
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 }
 
 // doCIMDToken posts an authorization_code exchange for a CIMD client. The
@@ -653,7 +653,7 @@ func TestCIMDAdmission_TokenRejectsWhenDisabled(t *testing.T) {
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeDisabled)
 
 	w := doCIMDToken(t, ti, mcpSlug, ds.clientID)
-	require.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Equal(t, http.StatusBadRequest, w.Code)
 	requireTokenOAuthError(t, w, "invalid_client")
 	requireAuthorizeErrorDescription(t, w, "does not accept client ID metadata documents")
 }
@@ -683,7 +683,7 @@ func TestCIMDAdmission_TokenAllowsWhenPresetsNoLongerListsClient(t *testing.T) {
 
 	// De-list the client. New authorize flows are now denied...
 	revokeCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
-	requireAuthorizeOAuthError(t, doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t))), http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(pkceVerifier(t))), http.StatusBadRequest, "invalid_client")
 
 	// ...but the token leg must not be, or removing a URL would revoke live
 	// sessions rather than stopping new ones.

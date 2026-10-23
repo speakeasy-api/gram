@@ -97,7 +97,7 @@ func TestHandleAuthorize_BlockedAITool_RefusedBeforeATokenExists(t *testing.T) {
 	w := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleAuthorize(w, authorizeRequest(t, toolset.McpSlug.String, claudeCodeCIMDClientID, cimdLoopbackRedirect)))
 
-	require.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Equal(t, http.StatusBadRequest, w.Code)
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.Equal(t, "invalid_client", body["error"])
@@ -236,7 +236,7 @@ func TestHandleToken_BlockedAITool_RefusedOnItsNextUse(t *testing.T) {
 
 	w := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
 
-	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	requireTokenOAuthError(t, w, "invalid_client")
 	requireAuthorizeErrorDescription(t, w, "administrator must approve")
 }

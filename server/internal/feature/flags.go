@@ -208,6 +208,13 @@ const (
 	// and logs where they disagree. Ignored while FlagAuthClientResolver is on.
 	// Targeted the same way as FlagAuthClientResolver.
 	FlagAuthClientResolverShadow Flag = "auth-client-resolver-shadow"
+
+	// FlagMandatoryAuthzShadow evaluates the mandatory server and auth client
+	// check beside today's decision for an organization's MCP requests and
+	// records where they disagree, without changing any response. Auth clients
+	// are only evaluated where FlagAuthClientResolver or its shadow is on.
+	// Targeted the same way as FlagAuthClientResolver.
+	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

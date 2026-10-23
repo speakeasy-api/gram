@@ -553,7 +553,16 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		return base + marketplace.RoutePrefix + token + ".git"
 	}
 
-	result := mv.BuildAgentPluginsView(rows, marketplaceURL)
+	// Server lists are display metadata: trouble reading them must not block
+	// plugin delivery. A nil map leaves every plugin's list off, which the
+	// agent renders as it did before plugins listed their servers.
+	servers, err := s.pluginServers(ctx, authCtx.ActiveOrganizationID, principals, rows)
+	if err != nil {
+		s.logger.WarnContext(ctx, "plugin servers unavailable; plugin poll omits server lists", attr.SlogError(err))
+		servers = nil
+	}
+
+	result := mv.BuildAgentPluginsView(rows, marketplaceURL, servers)
 	configuration := defaultDeviceAgentConfigurationView()
 	if hasConfiguration {
 		built, err := buildDeviceAgentConfigurationView(configurationRow)

@@ -1077,6 +1077,35 @@ func unmarshalAgentPolicySelectorRequestBodyToKeysAgentPolicySelector(v *AgentPo
 	return res
 }
 
+// unmarshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant builds a value
+// of type *keys.APIKeyPolicyGrant from a value of type
+// *APIKeyPolicyGrantRequestBody.
+func unmarshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant(v *APIKeyPolicyGrantRequestBody) *keys.APIKeyPolicyGrant {
+	if v == nil {
+		return nil
+	}
+	res := &keys.APIKeyPolicyGrant{
+		Scope: *v.Scope,
+	}
+	res.Selector = unmarshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector(v.Selector)
+
+	return res
+}
+
+// unmarshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector builds a
+// value of type *keys.APIKeyPolicySelector from a value of type
+// *APIKeyPolicySelectorRequestBody.
+func unmarshalAPIKeyPolicySelectorRequestBodyToKeysAPIKeyPolicySelector(v *APIKeyPolicySelectorRequestBody) *keys.APIKeyPolicySelector {
+	res := &keys.APIKeyPolicySelector{
+		ResourceKind: *v.ResourceKind,
+		ResourceID:   *v.ResourceID,
+		ProjectID:    v.ProjectID,
+		ClientType:   v.ClientType,
+	}
+
+	return res
+}
+
 // marshalKeysAgentDelegatedPolicyToAgentDelegatedPolicyResponseBody builds a
 // value of type *AgentDelegatedPolicyResponseBody from a value of type
 // *keys.AgentDelegatedPolicy.
@@ -1146,6 +1175,37 @@ func marshalKeysAgentPolicySelectorToAgentPolicySelectorResponseBody(v *keys.Age
 	return res
 }
 
+// marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody builds a value
+// of type *APIKeyPolicyGrantResponseBody from a value of type
+// *keys.APIKeyPolicyGrant.
+func marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(v *keys.APIKeyPolicyGrant) *APIKeyPolicyGrantResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &APIKeyPolicyGrantResponseBody{
+		Scope: v.Scope,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorResponseBody(v.Selector)
+	}
+
+	return res
+}
+
+// marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorResponseBody builds a
+// value of type *APIKeyPolicySelectorResponseBody from a value of type
+// *keys.APIKeyPolicySelector.
+func marshalKeysAPIKeyPolicySelectorToAPIKeyPolicySelectorResponseBody(v *keys.APIKeyPolicySelector) *APIKeyPolicySelectorResponseBody {
+	res := &APIKeyPolicySelectorResponseBody{
+		ResourceKind: v.ResourceKind,
+		ResourceID:   v.ResourceID,
+		ProjectID:    v.ProjectID,
+		ClientType:   v.ClientType,
+	}
+
+	return res
+}
+
 // marshalKeysKeyToKeyResponseBody builds a value of type *KeyResponseBody from
 // a value of type *keys.Key.
 func marshalKeysKeyToKeyResponseBody(v *keys.Key) *KeyResponseBody {
@@ -1174,6 +1234,16 @@ func marshalKeysKeyToKeyResponseBody(v *keys.Key) *KeyResponseBody {
 	}
 	if v.DelegatedGrants != nil {
 		res.DelegatedGrants = marshalKeysAgentDelegatedPolicyToAgentDelegatedPolicyResponseBody(v.DelegatedGrants)
+	}
+	if v.PolicyGrants != nil {
+		res.PolicyGrants = make([]*APIKeyPolicyGrantResponseBody, len(v.PolicyGrants))
+		for i, val := range v.PolicyGrants {
+			if val == nil {
+				res.PolicyGrants[i] = nil
+				continue
+			}
+			res.PolicyGrants[i] = marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(val)
+		}
 	}
 
 	return res

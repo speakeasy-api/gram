@@ -279,6 +279,23 @@ export function diffGrants(
 }
 
 /**
+ * Whether a role the server returned holds exactly the grants the editor sent
+ * it to hold. The server applies an edit as additions and removals, and a
+ * removal that matches no stored row does nothing, so a reply without an error
+ * does not prove the edit landed. Both sides go through the form's shape, so a
+ * stored wildcard and an unrestricted grant compare equal.
+ */
+export function roleHoldsGrants(
+  role: Role,
+  wanted: SdkRoleGrant[],
+  scopes: ScopeDefinition[],
+): boolean {
+  const saved = sdkGrantsFromForm(grantsFromRole(role, scopes), scopes);
+  const { addGrants, removeGrants } = diffGrants(saved, wanted);
+  return addGrants.length === 0 && removeGrants.length === 0;
+}
+
+/**
  * Pure helper for the chip X-click behavior on a single scope's grant.
  * Returns the next grant value, or null when the scope should be removed
  * entirely from the form state.

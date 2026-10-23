@@ -111,6 +111,8 @@ var chPurgeOrgTables = []string{
 	// Target of authz_challenge_bucket_summaries_mv.
 	"authz_challenge_bucket_summaries",
 	"risk_findings",
+	// Target of risk_finding_states_mv.
+	"risk_finding_states",
 	"skill_session_versions",
 	"skill_efficacy_scores",
 	"billing_meter_daily_summaries",

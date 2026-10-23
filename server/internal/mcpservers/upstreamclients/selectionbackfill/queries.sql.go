@@ -153,12 +153,18 @@ SELECT r.id AS mcp_server_id,
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
+         LEFT JOIN mcp_auth_clients AS headers_only
+           ON headers_only.id = sel.auth_client_id
+          AND sel.remote_session_client_id IS NULL
+          AND headers_only.organization_id = sel.organization_id
+          AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+          AND headers_only.client_type IN ('static_credential', 'pass_through')
          WHERE sel.credential_kind = $1::text
            AND sel.credential_id = $2::uuid
            AND sel.mcp_server_id = r.id
            AND sel.deleted IS FALSE
            AND CASE
-             WHEN sel.no_auth THEN NOT EXISTS (
+             WHEN sel.no_auth OR headers_only.id IS NOT NULL THEN NOT EXISTS (
                SELECT 1
                FROM mcp_server_remote_session_clients AS a
                WHERE a.mcp_server_id = r.id
@@ -183,7 +189,8 @@ SELECT r.id AS mcp_server_id,
        -- by another client, so one that is not also selected is resolved only
        -- by a reconnection. A no-auth choice is not one: when unusable,
        -- RecordUpstreamClientSelections replaces it once a client is decided,
-       -- so it is classified like a missing choice.
+       -- so it is classified like a missing choice. A header-only auth client
+       -- choice is never replaced either, so it counts as a client choice.
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
@@ -311,6 +318,35 @@ type SeedClientBindingFixtureParams struct {
 
 func (q *Queries) SeedClientBindingFixture(ctx context.Context, arg SeedClientBindingFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedClientBindingFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
+}
+
+const seedHeaderAuthClientFixture = `-- name: SeedHeaderAuthClientFixture :exec
+WITH client AS (
+    INSERT INTO mcp_auth_clients (id, organization_id, project_id, client_type, source, name)
+    VALUES ($2, $3, $4, 'static_credential', 'admin', 'headers')
+    RETURNING id, organization_id, project_id, attachment_scope
+)
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+SELECT client.project_id, client.organization_id, $1, client.id, client.attachment_scope, 'admin'
+FROM client
+`
+
+type SeedHeaderAuthClientFixtureParams struct {
+	McpServerID    uuid.UUID
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+// A static-credential auth client in the project, linked to one server.
+func (q *Queries) SeedHeaderAuthClientFixture(ctx context.Context, arg SeedHeaderAuthClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedHeaderAuthClientFixture,
+		arg.McpServerID,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
 	return err
 }
 
