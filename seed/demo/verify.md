@@ -663,7 +663,7 @@ Open MCP Servers → Private inventory → Overview. Verify request, connection 
    only after these browser checks pass and record the verification evidence.
 
 For the detached-preference regression, run
-`mise run test:server -tags=demoseed_safety ./internal/demoseed/ -run '^TestBuiltinSlackSettingsReseedAfterProjectDetach$'`.
+`mise run test:server -count=1 -tags=demoseed_safety ./internal/demoseed/ -run '^TestBuiltinSlackSettingsReseedAfterProjectDetach$'`.
 It clears the seeded preference's project/issuer references, matching their
 `ON DELETE SET NULL` state, and reseeds twice for both default and local Specs.
 Each reseed must restore the binding while preserving another tenant's detached
