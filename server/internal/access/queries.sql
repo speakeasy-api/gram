@@ -80,6 +80,11 @@ WHERE organization_id = @organization_id
   AND selectors = @selectors
   AND taken_over_at IS NULL;
 
+-- name: LockAuthPermissionBackfill :exec
+-- Takes the organization's auth client backfill lock for the transaction's
+-- life; the key must match authclientbackfill's LockOrganizationBackfill.
+SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || @organization_id::text));
+
 -- name: MarkPrincipalAuthPermissionsTakenOver :exec
 -- An explicit write of a principal's whole policy takes every grant the
 -- backfill provisioned for it over, including ones since removed.
