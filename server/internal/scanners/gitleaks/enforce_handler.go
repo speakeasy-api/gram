@@ -26,8 +26,7 @@ import (
 const (
 	// DefaultMaxRequestAge is the maximum useful age of an inline scan request.
 	DefaultMaxRequestAge = 30 * time.Second
-	// DefaultEnforcementMaxContentBytes matches the published content budget;
-	// only Presidio keeps a smaller engine limit.
+	// DefaultEnforcementMaxContentBytes matches the published content budget.
 	DefaultEnforcementMaxContentBytes = 1 * 1024 * 1024
 	maxReplyReasonRunes               = 256
 )

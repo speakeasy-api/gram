@@ -97,6 +97,20 @@ func RenderPayload(m Message) Payload {
 	return renderPayload(m, true)
 }
 
+// Truncated reports whether the judge payload shortens any body or arguments.
+func (m Message) Truncated() bool {
+	payload := renderPayload(m, false)
+	if payload.BodyTruncated || payload.ToolCallsTruncated {
+		return true
+	}
+	for _, call := range payload.ToolCalls {
+		if call.ArgumentsTruncated {
+			return true
+		}
+	}
+	return false
+}
+
 func renderPayload(m Message, includeDecoded bool) Payload {
 	decoded := func(s string) string {
 		if !includeDecoded {

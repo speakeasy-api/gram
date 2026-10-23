@@ -5,6 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,6 +20,14 @@ func TestToolIdentityWithinLimitIsUnchanged(t *testing.T) {
 	require.Equal(t, identity, mcp.MCPFunction)
 	require.False(t, mcp.IdentityTruncated)
 	require.Nil(t, payloadTool("", "", ""))
+}
+
+func TestTruncatedReportsPayloadCaps(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, New(message.User, "", strings.Repeat("x", maxPayloadBodyLen)).Truncated())
+	require.True(t, New(message.User, "", strings.Repeat("x", maxPayloadBodyLen+1)).Truncated())
+	require.True(t, NewForToolCalls([]ToolCall{NewToolCall("bash", strings.Repeat("x", maxPayloadBodyLen+1))}).Truncated())
 }
 
 func TestToolIdentityTruncationIsExplicit(t *testing.T) {

@@ -123,6 +123,39 @@ func TestEnforceHandlerDoesNotReportUnusedContentTruncation(t *testing.T) {
 	require.False(t, writer.reply.GetContentTruncated())
 }
 
+func TestEnforceHandlerReportsJudgePayloadTruncation(t *testing.T) {
+	t.Parallel()
+
+	scanner := &incompletePromptPolicyScanner{}
+	writer := &captureEnforcementReply{}
+	handler, err := NewEnforceHandler(
+		testenv.NewLogger(t),
+		testenv.NewMeterProvider(t),
+		scanner,
+		writer,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		EnforceHandlerConfig{},
+	)
+	require.NoError(t, err)
+
+	body := strings.Repeat("x", 16001)
+	err = handler.Handle(t.Context(), riskv1.PromptPolicyEnforcement_builder{
+		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
+		OrganizationId: new("org-test"),
+		ProjectId:      new("project-test"),
+		RiskPolicyId:   new("0198f1f4-0000-7000-8000-000000000001"),
+		Content:        new(body),
+		Body:           new(body),
+		Prompt:         new("deny unsafe requests"),
+		MessageType:    new("user"),
+	}.Build(), gcp.MessageMetadata{Attributes: map[string]string{
+		requestreply.ReplyURNAttribute: "urn:gram:risk:enforce:replica-test:0198f1f4-0000-7000-8000-000000000002",
+	}})
+	require.NoError(t, err)
+	require.Equal(t, body, scanner.message.Body)
+	require.True(t, writer.reply.GetContentTruncated())
+}
+
 func TestEnforceHandlerDropsRequestsOlderThanLaneWait(t *testing.T) {
 	t.Parallel()
 

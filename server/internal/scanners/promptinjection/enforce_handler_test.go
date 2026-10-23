@@ -2,6 +2,7 @@ package promptinjection
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,6 +61,37 @@ func enforceCounterValue(t *testing.T, reader *sdkmetric.ManualReader, name stri
 		}
 	}
 	return 0
+}
+
+func TestEnforceHandlerReportsJudgePayloadTruncation(t *testing.T) {
+	t.Parallel()
+
+	scanner := &capturePromptInjectionScanner{}
+	writer := &captureEnforcementReply{}
+	handler, err := NewEnforceHandler(
+		testenv.NewLogger(t),
+		testenv.NewMeterProvider(t),
+		scanner,
+		writer,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		EnforceHandlerConfig{},
+	)
+	require.NoError(t, err)
+
+	body := strings.Repeat("x", 16001)
+	err = handler.Handle(t.Context(), riskv1.PromptInjectionEnforcement_builder{
+		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
+		OrganizationId: new("org-test"),
+		ProjectId:      new("project-test"),
+		Content:        new(body),
+		Body:           new(body),
+		MessageType:    new("user"),
+	}.Build(), gcp.MessageMetadata{Attributes: map[string]string{
+		requestreply.ReplyURNAttribute: "urn:gram:risk:enforce:replica-test:0198f1f4-0000-7000-8000-000000000000",
+	}})
+	require.NoError(t, err)
+	require.Equal(t, body, scanner.message.Body)
+	require.True(t, writer.reply.GetContentTruncated())
 }
 
 func TestEnforceHandlerScansBoundedPrefixAndMarksTruncated(t *testing.T) {

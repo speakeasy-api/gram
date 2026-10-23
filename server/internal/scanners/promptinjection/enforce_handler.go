@@ -26,8 +26,8 @@ const (
 	// DefaultEnforcementMaxRequestAge matches the dispatcher's lane wait so
 	// requests cannot be scanned after the caller stops waiting.
 	DefaultEnforcementMaxRequestAge = 60 * time.Second
-	// DefaultEnforcementMaxContentBytes matches the published content budget;
-	// only Presidio keeps a smaller engine limit.
+	// DefaultEnforcementMaxContentBytes matches the published content budget.
+	// The judge payload applies its own rune cap and reports it as truncation.
 	DefaultEnforcementMaxContentBytes = 1 * 1024 * 1024
 )
 
@@ -113,10 +113,6 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.PromptInjectionEn
 	}
 	contentCut := enforce.TruncateFields(h.maxContentBytes, &content)
 	messageCut := enforce.TruncateFields(h.maxContentBytes, fields...)
-	truncated := m.GetContentTruncated() || contentCut || messageCut
-	if contentCut || messageCut {
-		enforce.RecordTruncation(ctx, h.truncations, "prompt_injection")
-	}
 	var judgeMessage judgemessage.Message
 	switch len(argumentFields) {
 	case 0:
@@ -132,6 +128,13 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.PromptInjectionEn
 	}
 	judgeMessage.AnchorID, _ = uuid.Parse(m.GetChatMessageId())
 	judgeMessage.ChatID, _ = uuid.Parse(m.GetChatId())
+	// The judge payload caps each body at its own rune limit, so the reply
+	// reports that cut too.
+	judgeCut := judgeMessage.Truncated()
+	truncated := m.GetContentTruncated() || contentCut || messageCut || judgeCut
+	if contentCut || messageCut || judgeCut {
+		enforce.RecordTruncation(ctx, h.truncations, "prompt_injection")
+	}
 
 	started := time.Now().UTC()
 	result, verdict, scanErr := h.scanner.ScanWithVerdict(ctx, content, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), judgeMessage)
