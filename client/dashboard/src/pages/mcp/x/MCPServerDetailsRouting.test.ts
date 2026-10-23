@@ -234,6 +234,30 @@ describe("renamedServerHref", () => {
     );
   });
 
+  it.each([
+    "overview",
+    "tools",
+    "resources",
+    "prompts",
+    "inspect",
+    "team-access",
+    "guardrails",
+    "sessions",
+    "settings",
+  ])("keeps the %s tab under the new slug", (tab) => {
+    expect(
+      renamedServerHref(
+        fakeRoutes,
+        "old-slug",
+        { id: "srv-1", slug: "new-slug" },
+        {
+          ...location,
+          pathname: `/acme/projects/default/mcp/x/old-slug/${tab}`,
+        },
+      ),
+    ).toBe(`/acme/projects/default/mcp/x/new-slug/${tab}?tab=1#authentication`);
+  });
+
   it("stays put when the slug is unchanged", () => {
     expect(
       renamedServerHref(
