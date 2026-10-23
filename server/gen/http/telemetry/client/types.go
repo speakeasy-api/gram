@@ -375,8 +375,11 @@ type GetToolUsageSummaryRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -415,8 +418,11 @@ type GetToolUsageTotalsRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -455,8 +461,11 @@ type GetToolUsageTargetsRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -495,8 +504,11 @@ type GetToolUsageUsersRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -535,8 +547,11 @@ type GetToolUsageClientsRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -575,8 +590,11 @@ type GetToolUsageClientToolBreakdownRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -615,8 +633,11 @@ type GetToolUsageTargetTimeSeriesRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -655,8 +676,11 @@ type GetToolUsageUserTimeSeriesRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -695,8 +719,11 @@ type GetToolUsageUsersByTargetRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -735,8 +762,11 @@ type GetToolUsageTargetToolBreakdownRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -775,8 +805,11 @@ type ListToolUsageTracesRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Target types to include. Empty means all target types.
 	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 	// Shadow MCP server names to include
 	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
@@ -8879,6 +8912,8 @@ type ToolUsageTargetSummaryResponseBody struct {
 	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
 	// User-facing label for the target
 	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Total number of tool usage events for the target
 	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
 	// Number of distinct tools observed for the target
@@ -9066,6 +9101,8 @@ type ToolUsageTraceSummaryResponseBody struct {
 	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
 	// User-facing target label
 	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Stable user identity value
 	UserKey *string `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
 	// User-facing user identity label
@@ -9121,6 +9158,8 @@ type ToolUsageHostedServerFilterOptionResponseBody struct {
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
 	// Hosted MCP toolset display name
 	ToolsetName *string `form:"toolset_name,omitempty" json:"toolset_name,omitempty" xml:"toolset_name,omitempty"`
+	// MCP server id to filter by; absent when the server has no mcp_servers row
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
 }
@@ -9706,6 +9745,12 @@ func NewGetToolUsageSummaryRequestBody(p *telemetry.GetToolUsageSummaryPayload) 
 			body.HostedToolsetSlugs[i] = val
 		}
 	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
+		}
+	}
 	if p.ShadowServerNames != nil {
 		body.ShadowServerNames = make([]string, len(p.ShadowServerNames))
 		for i, val := range p.ShadowServerNames {
@@ -9784,6 +9829,12 @@ func NewGetToolUsageTotalsRequestBody(p *telemetry.GetToolUsageTotalsPayload) *G
 		body.HostedToolsetSlugs = make([]string, len(p.HostedToolsetSlugs))
 		for i, val := range p.HostedToolsetSlugs {
 			body.HostedToolsetSlugs[i] = val
+		}
+	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
 		}
 	}
 	if p.ShadowServerNames != nil {
@@ -9866,6 +9917,12 @@ func NewGetToolUsageTargetsRequestBody(p *telemetry.GetToolUsageTargetsPayload) 
 			body.HostedToolsetSlugs[i] = val
 		}
 	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
+		}
+	}
 	if p.ShadowServerNames != nil {
 		body.ShadowServerNames = make([]string, len(p.ShadowServerNames))
 		for i, val := range p.ShadowServerNames {
@@ -9946,6 +10003,12 @@ func NewGetToolUsageUsersRequestBody(p *telemetry.GetToolUsageUsersPayload) *Get
 			body.HostedToolsetSlugs[i] = val
 		}
 	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
+		}
+	}
 	if p.ShadowServerNames != nil {
 		body.ShadowServerNames = make([]string, len(p.ShadowServerNames))
 		for i, val := range p.ShadowServerNames {
@@ -10024,6 +10087,12 @@ func NewGetToolUsageClientsRequestBody(p *telemetry.GetToolUsageClientsPayload) 
 		body.HostedToolsetSlugs = make([]string, len(p.HostedToolsetSlugs))
 		for i, val := range p.HostedToolsetSlugs {
 			body.HostedToolsetSlugs[i] = val
+		}
+	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
 		}
 	}
 	if p.ShadowServerNames != nil {
@@ -10107,6 +10176,12 @@ func NewGetToolUsageClientToolBreakdownRequestBody(p *telemetry.GetToolUsageClie
 			body.HostedToolsetSlugs[i] = val
 		}
 	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
+		}
+	}
 	if p.ShadowServerNames != nil {
 		body.ShadowServerNames = make([]string, len(p.ShadowServerNames))
 		for i, val := range p.ShadowServerNames {
@@ -10186,6 +10261,12 @@ func NewGetToolUsageTargetTimeSeriesRequestBody(p *telemetry.GetToolUsageTargetT
 		body.HostedToolsetSlugs = make([]string, len(p.HostedToolsetSlugs))
 		for i, val := range p.HostedToolsetSlugs {
 			body.HostedToolsetSlugs[i] = val
+		}
+	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
 		}
 	}
 	if p.ShadowServerNames != nil {
@@ -10269,6 +10350,12 @@ func NewGetToolUsageUserTimeSeriesRequestBody(p *telemetry.GetToolUsageUserTimeS
 			body.HostedToolsetSlugs[i] = val
 		}
 	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
+		}
+	}
 	if p.ShadowServerNames != nil {
 		body.ShadowServerNames = make([]string, len(p.ShadowServerNames))
 		for i, val := range p.ShadowServerNames {
@@ -10348,6 +10435,12 @@ func NewGetToolUsageUsersByTargetRequestBody(p *telemetry.GetToolUsageUsersByTar
 		body.HostedToolsetSlugs = make([]string, len(p.HostedToolsetSlugs))
 		for i, val := range p.HostedToolsetSlugs {
 			body.HostedToolsetSlugs[i] = val
+		}
+	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
 		}
 	}
 	if p.ShadowServerNames != nil {
@@ -10431,6 +10524,12 @@ func NewGetToolUsageTargetToolBreakdownRequestBody(p *telemetry.GetToolUsageTarg
 			body.HostedToolsetSlugs[i] = val
 		}
 	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
+		}
+	}
 	if p.ShadowServerNames != nil {
 		body.ShadowServerNames = make([]string, len(p.ShadowServerNames))
 		for i, val := range p.ShadowServerNames {
@@ -10512,6 +10611,12 @@ func NewListToolUsageTracesRequestBody(p *telemetry.ListToolUsageTracesPayload) 
 		body.HostedToolsetSlugs = make([]string, len(p.HostedToolsetSlugs))
 		for i, val := range p.HostedToolsetSlugs {
 			body.HostedToolsetSlugs[i] = val
+		}
+	}
+	if p.McpServerIds != nil {
+		body.McpServerIds = make([]string, len(p.McpServerIds))
+		for i, val := range p.McpServerIds {
+			body.McpServerIds[i] = val
 		}
 	}
 	if p.ShadowServerNames != nil {

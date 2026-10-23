@@ -93701,7 +93701,14 @@ components:
           type: array
           items:
             type: string
-          description: Hosted MCP toolset slugs to include
+          description: 'Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include'
+        mcp_server_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.
+          maxItems: 100
         meta_mcp_server_ids:
           type: array
           items:
@@ -98006,7 +98013,7 @@ components:
           type: array
           items:
             type: string
-          description: Hosted MCP toolset slugs to include
+          description: 'Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include'
         limit:
           type: integer
           description: Number of traces to return
@@ -98014,6 +98021,13 @@ components:
           format: int64
           minimum: 1
           maximum: 1000
+        mcp_server_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.
+          maxItems: 100
         meta_mcp_server_ids:
           type: array
           items:
@@ -111951,6 +111965,9 @@ components:
           type: integer
           description: Number of tool usage events observed for the hosted MCP server
           format: int64
+        mcp_server_id:
+          type: string
+          description: MCP server id to filter by; absent when the server has no mcp_servers row
         toolset_name:
           type: string
           description: Hosted MCP toolset display name
@@ -111991,6 +112008,9 @@ components:
           type: number
           description: Fraction of completed tool usage events for the target that failed
           format: double
+        mcp_server_id:
+          type: string
+          description: MCP server id for hosted and tunneled targets; absent for other targets
         success_count:
           type: integer
           description: Number of successful tool usage events for the target
@@ -112267,6 +112287,9 @@ components:
           format: int64
         log_group:
           $ref: '#/components/schemas/ToolUsageTraceLogGroup'
+        mcp_server_id:
+          type: string
+          description: MCP server id for hosted and tunneled targets; absent for other targets
         start_time_unix_nano:
           type: string
           description: Earliest log timestamp in Unix nanoseconds as a string for JavaScript integer safety
