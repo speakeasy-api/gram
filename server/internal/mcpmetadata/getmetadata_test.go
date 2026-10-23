@@ -37,6 +37,7 @@ func TestService_GetMcpMetadata_WithInstructions(t *testing.T) {
 		McpEnabled:             false,
 	})
 	require.NoError(t, err)
+	createCanonicalWrapper(t, ctx, ti, toolset)
 
 	instructions := "You have tools for searching the Test Hub. Use them wisely."
 	docURL := "https://docs.example.com"
@@ -97,6 +98,7 @@ func TestService_GetMcpMetadata_WithoutInstructions(t *testing.T) {
 		McpEnabled:             false,
 	})
 	require.NoError(t, err)
+	createCanonicalWrapper(t, ctx, ti, toolset)
 
 	docURL := "https://docs.example.com"
 

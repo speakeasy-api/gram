@@ -125,7 +125,6 @@ func TestCORSMiddleware_SharedOAuthLeavesOtherRoutesUnchanged(t *testing.T) {
 		"/oauth/other/token",
 		"/rpc/example",
 		"/mcp/example/token",
-		"/x/mcp/example/token",
 	} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()

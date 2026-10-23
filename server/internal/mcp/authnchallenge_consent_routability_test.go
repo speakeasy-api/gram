@@ -7,10 +7,12 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,6 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	tunneledmcp_repo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -224,8 +228,9 @@ func TestServeConsent_MetaUnclaimedProviderIsNotShown(t *testing.T) {
 	require.Contains(t, html, "You don't have access to any servers on this gateway yet.")
 }
 
-// Two grants naming one remote upstream make the runtime refuse both.
-func TestServeConsent_DuplicateRemoteGrantsAskForReconnect(t *testing.T) {
+// Two members on one upstream each use their own client, so another member's
+// grant for the same upstream never competes with this member's.
+func TestServeConsent_AnotherMembersGrantForTheSameUpstreamDoesNotCompete(t *testing.T) {
 	t.Parallel()
 	ctx, fx, metaID, clientA, issuerA := metaConsent(t, "rt-dup-a")
 	const upstream = "https://dup.example.com/mcp"
@@ -233,12 +238,17 @@ func TestServeConsent_DuplicateRemoteGrantsAskForReconnect(t *testing.T) {
 	issuerB := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientB)
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-dup-member-a", upstream, conv.ToNullUUID(issuerA), 0)
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-dup-member-b", upstream, conv.ToNullUUID(issuerB), 1)
+	// Rendered before any grant, the migration associates each member with
+	// the client of its own authorization server.
 	fx.server = "rt-dup-member-a"
+	expect(t, fx, 0, 1, false)
 
 	grant(t, ctx, fx, clientA, upstream)
 	expect(t, fx, 1, 1, false)
 	grant(t, ctx, fx, clientB, upstream)
-	expect(t, fx, 0, 1, true)
+	expect(t, fx, 1, 1, false)
+	fx.server = "rt-dup-member-b"
+	expect(t, fx, 1, 1, false)
 }
 
 // A single remote-backed server applies the rule against its one upstream.
@@ -298,9 +308,9 @@ func TestServeConsent_OtherResourceDisplayFallsBackToIssuer(t *testing.T) {
 	require.Contains(t, html, `href="https://res-a.example.com/policy"`)
 }
 
-// A tunneled server reads only the entry keyed by its own derived issuer, so
-// another provider's grant is never judged.
-func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
+// A tunneled server routes each card's grant by that card's own client, so
+// every card is judged against the server's resource identifier on its own.
+func TestServeConsent_TunneledServerJudgesEachCardsGrant(t *testing.T) {
 	t.Parallel()
 	const identifier = "https://mcp.example.test/a%2Fb/"
 	var serverID uuid.UUID
@@ -314,17 +324,19 @@ func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
 
 	grant(t, ctx, fx, other, "https://unrelated.example.com/mcp")
 	grant(t, ctx, fx, own, "")
+	expect(t, fx, 1, 2, true)
+	grant(t, ctx, fx, other, strings.TrimRight(identifier, "/"))
 	expect(t, fx, 2, 2, false)
-	expectRechecks(t, fx, 1)
+	expectRechecks(t, fx, 2)
 	grant(t, ctx, fx, own, "urn:gram:tunnel:other")
 	expect(t, fx, 1, 2, true)
-	expectRechecks(t, fx, 0)
+	expectRechecks(t, fx, 1)
 	grant(t, ctx, fx, own, strings.TrimRight(identifier, "/"))
 	expect(t, fx, 2, 2, false)
-	expectRechecks(t, fx, 1)
+	expectRechecks(t, fx, 2)
 	grant(t, ctx, fx, own, "https://mcp.example.test/a/b/")
 	expect(t, fx, 1, 2, true)
-	expectRechecks(t, fx, 0)
+	expectRechecks(t, fx, 1)
 }
 
 // A server picked from the gateway's list shows its page, which says what
@@ -370,4 +382,26 @@ func TestServeConsent_GatewayListOpensOnlyWhenShort(t *testing.T) {
 	code, html, _ = render(t, fx)
 	require.Equal(t, http.StatusOK, code, html)
 	require.Regexp(t, `data-gateway-list data-state="[^"]+" >`, html)
+}
+
+// Re-consenting to a gateway keeps the discovery mode the subject chose for
+// its previous connection instead of falling back to the gateway default.
+func TestServeConsent_GatewayPrefillsStoredDiscoveryMode(t *testing.T) {
+	t.Parallel()
+	ctx, fx, metaID, _, _ := metaConsent(t, "dm-prefill")
+	directSelected := regexp.MustCompile(`value="direct"\s+selected`)
+
+	code, html, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.Contains(t, html, `name="discovery_mode"`)
+	require.NotRegexp(t, directSelected, html)
+
+	mode := metamcp.DiscoveryModeDirect
+	raw, err := json.Marshal(&toolfilter.SessionPolicy{Resource: "meta_mcp_server:" + metaID.String(), Selection: nil, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: &mode}})
+	require.NoError(t, err)
+	seedSubjectSessionPolicy(t, ctx, fx, raw)
+
+	code, html, _ = render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.Regexp(t, directSelected, html)
 }

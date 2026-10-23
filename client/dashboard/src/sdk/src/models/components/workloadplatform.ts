@@ -12,10 +12,6 @@ import {
   WorkloadPlatformConstant$inboundSchema,
 } from "./workloadplatformconstant.js";
 import {
-  WorkloadPlatformStep,
-  WorkloadPlatformStep$inboundSchema,
-} from "./workloadplatformstep.js";
-import {
   WorkloadPlatformSubject,
   WorkloadPlatformSubject$inboundSchema,
 } from "./workloadplatformsubject.js";
@@ -25,7 +21,7 @@ import {
 } from "./workloadplatformvariable.js";
 
 /**
- * A platform the catalog offers to trust, with what the operator supplies and the guided setup that connects it.
+ * A platform the catalog offers to trust, with what the operator supplies to connect it. How the setup is explained belongs to the dashboard, not to this policy.
  */
 export type WorkloadPlatform = {
   /**
@@ -57,10 +53,6 @@ export type WorkloadPlatform = {
    */
   key: string;
   /**
-   * The guided setup. Empty for a platform without one, which is listed as coming soon and cannot be opened.
-   */
-  steps: Array<WorkloadPlatformStep>;
-  /**
    * The access rule a catalog platform produces.
    */
   subject: WorkloadPlatformSubject;
@@ -83,7 +75,6 @@ export const WorkloadPlatform$inboundSchema: z.ZodMiniType<
     issuer: WorkloadPlatformConstant$inboundSchema,
     jwks_uri: WorkloadPlatformConstant$inboundSchema,
     key: z.string(),
-    steps: z.array(WorkloadPlatformStep$inboundSchema),
     subject: WorkloadPlatformSubject$inboundSchema,
     variables: z.array(WorkloadPlatformVariable$inboundSchema),
   }),

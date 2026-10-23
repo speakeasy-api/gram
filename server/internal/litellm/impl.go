@@ -180,6 +180,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 
 	hookPayload := &hooksgen.IngestPayload{
 		ApikeyToken:      nil,
+		DeviceAgentToken: nil,
 		ProjectSlugInput: nil,
 		Replayed:         nil,
 		SchemaVersion:    "hook.ingest.v1",
@@ -311,6 +312,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 	role := "assistant"
 	hookPayload := &hooksgen.IngestPayload{
 		ApikeyToken:      nil,
+		DeviceAgentToken: nil,
 		ProjectSlugInput: nil,
 		Replayed:         nil,
 		SchemaVersion:    "hook.ingest.v1",

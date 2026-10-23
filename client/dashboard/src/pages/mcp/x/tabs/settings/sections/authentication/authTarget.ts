@@ -1,3 +1,6 @@
+import { UpdateMcpServerFormNetworkAccessMode as KnownUpdateMcpServerFormNetworkAccessMode } from "@gram/client/models/components/updatemcpserverform.js";
+import { requireKnownEnumValue } from "@/lib/enum";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
@@ -82,14 +85,20 @@ export function useMcpServerAuthTarget(
           updateMcpServerForm: {
             id: latest.id,
             environmentId: latest.environmentId,
-            networkAccessMode: latest.networkAccessMode,
+            networkAccessMode: requireKnownEnumValue(
+              KnownUpdateMcpServerFormNetworkAccessMode,
+              latest.networkAccessMode,
+            ),
             remoteMcpServerId: latest.remoteMcpServerId,
             tunneledMcpServerId: latest.tunneledMcpServerId,
             toolsetId: latest.toolsetId,
             unproxiedMcpServerId: latest.unproxiedMcpServerId,
             toolVariationsGroupId: latest.toolVariationsGroupId,
             userSessionIssuerId,
-            visibility: latest.visibility,
+            visibility: requireKnownEnumValue(
+              KnownUpdateMcpServerFormVisibility,
+              latest.visibility,
+            ),
           },
         });
       },
@@ -136,6 +145,7 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
         await Promise.all([
           invalidateAllToolset(queryClient, { refetchType: "all" }),
           invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+          invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         ]);
       },
     }),

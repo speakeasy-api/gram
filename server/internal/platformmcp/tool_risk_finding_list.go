@@ -37,7 +37,7 @@ func registerRiskFindingListTools(reg *Registrar, service riskFindingListLister)
 	})
 	registerRiskFindingListTool(reg, &mcp.Tool{
 		Name: riskRuleBreakdownToolName, Title: "Get Risk Rule Breakdown",
-		Description: "Count live risk findings per rule and detection source for one category over a detection-time window, defaulting to the last seven days and capped at 31 days, in an exact project or the organization's literal default project. Answers volume questions in one small call instead of paginating list_risk_findings. Unlike list_watchdog_findings it filters by category rather than severity band, needs no Watchdog rollout, and returns up to 1000 rules with explicit truncation.",
+		Description: "Count live risk findings per rule and detection source for one category over a detection-time window, defaulting to the last seven days and capped at 31 days, in an exact project or the organization's literal default project. Answers volume questions in one small call instead of paginating list_risk_findings. Unlike list_watchdog_findings it filters by category rather than severity band, and returns up to 1000 rules with explicit truncation.",
 		Annotations: readOnlyAnnotations(), InputSchema: riskRuleBreakdownSchema(),
 	}, available, func(ctx context.Context, principal Principal, input GetRiskRuleBreakdownInput) (GetRiskRuleBreakdownOutput, error) {
 		return service.RuleBreakdown(ctx, principal, input)

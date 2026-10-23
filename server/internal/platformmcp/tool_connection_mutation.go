@@ -34,12 +34,12 @@ func registerMCPConnectionMutationTools(reg *Registrar, service *MCPConnectionMu
 	addTool(reg, &mcp.Tool{
 		Name: setMCPAddressToolName, Title: "Set MCP Address",
 		Description: "Create or update the address for one exact MCP server or gateway in an explicit project. Supply the exact settings version from get_mcp_connection_settings, an idempotency key, and confirmed: true only after the user confirms the exact change. This commits the local desired address and requests publication; the response reports the publication request outcome, not that publication or downstream convergence has completed.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)},
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)},
 	}, meta, setAddress)
 	addTool(reg, &mcp.Tool{
 		Name: setMCPNetworkAccessToolName, Title: "Set MCP Network Access",
 		Description: "Change network access for one exact MCP server or gateway in an explicit project to public_only, dual, or private_only. Supply the exact settings version from get_mcp_connection_settings, an idempotency key, and confirmed: true only after the user confirms the exact change. This commits the local desired mode and requests publication; the response reports the publication request outcome, not that publication or downstream convergence has completed. Private access may be rejected when it is unavailable for the organization.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)},
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)},
 	}, meta, setNetworkAccess)
 }
 

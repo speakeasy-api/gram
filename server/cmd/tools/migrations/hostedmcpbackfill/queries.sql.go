@@ -12,6 +12,45 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const bumpPluginServerDeletedAtFixture = `-- name: BumpPluginServerDeletedAtFixture :exec
+UPDATE plugin_servers AS ps SET deleted_at = ps.deleted_at + interval '1 second'
+FROM plugins AS pl
+WHERE ps.id = $1 AND pl.id = ps.plugin_id AND pl.project_id = $2
+`
+
+type BumpPluginServerDeletedAtFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) BumpPluginServerDeletedAtFixture(ctx context.Context, arg BumpPluginServerDeletedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, bumpPluginServerDeletedAtFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
+const canonicalWrapperLive = `-- name: CanonicalWrapperLive :one
+SELECT EXISTS (
+  SELECT 1
+  FROM mcp_servers AS ms
+  WHERE ms.id = $1::uuid
+    AND ms.project_id = $2
+    AND ms.toolset_id = $1::uuid
+    AND ms.deleted IS FALSE
+)
+`
+
+type CanonicalWrapperLiveParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) CanonicalWrapperLive(ctx context.Context, arg CanonicalWrapperLiveParams) (bool, error) {
+	row := q.db.QueryRow(ctx, canonicalWrapperLive, arg.ToolsetID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const countFreshIDServers = `-- name: CountFreshIDServers :one
 SELECT count(*)
 FROM mcp_servers
@@ -79,6 +118,45 @@ type DeleteMetadataTwinParams struct {
 // Cascades to the twin's mcp_environment_configs, which the journal records.
 func (q *Queries) DeleteMetadataTwin(ctx context.Context, arg DeleteMetadataTwinParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteMetadataTwin, arg.ID, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOrphanAssistantToolset = `-- name: DeleteOrphanAssistantToolset :execrows
+DELETE FROM assistant_toolsets
+WHERE id = $1 AND project_id = $2 AND toolset_id = $3::uuid
+`
+
+type DeleteOrphanAssistantToolsetParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+func (q *Queries) DeleteOrphanAssistantToolset(ctx context.Context, arg DeleteOrphanAssistantToolsetParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOrphanAssistantToolset, arg.ID, arg.ProjectID, arg.ToolsetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOrphanMetadata = `-- name: DeleteOrphanMetadata :execrows
+DELETE FROM mcp_metadata
+WHERE id = $1 AND project_id = $2 AND toolset_id = $3::uuid
+`
+
+type DeleteOrphanMetadataParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+// Cascades to the row's mcp_environment_configs, which the journal records.
+func (q *Queries) DeleteOrphanMetadata(ctx context.Context, arg DeleteOrphanMetadataParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOrphanMetadata, arg.ID, arg.ProjectID, arg.ToolsetID)
 	if err != nil {
 		return 0, err
 	}
@@ -620,7 +698,7 @@ func (q *Queries) ListPluginServersFixture(ctx context.Context, projectID uuid.U
 }
 
 const listServersFixture = `-- name: ListServersFixture :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = $1
 ORDER BY id
@@ -650,6 +728,7 @@ func (q *Queries) ListServersFixture(ctx context.Context, projectID uuid.UUID) (
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.RequiresUpstreamAuth,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -864,6 +943,205 @@ func (q *Queries) LockDependentToolset(ctx context.Context, arg LockDependentToo
 	return i, err
 }
 
+const lockMetadataEnvironmentConfigs = `-- name: LockMetadataEnvironmentConfigs :many
+SELECT id, project_id, mcp_metadata_id, variable_name, header_display_name, provided_by, created_at, updated_at
+FROM mcp_environment_configs
+WHERE mcp_metadata_id = $1 AND project_id = $2
+ORDER BY variable_name
+FOR UPDATE
+`
+
+type LockMetadataEnvironmentConfigsParams struct {
+	McpMetadataID uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+func (q *Queries) LockMetadataEnvironmentConfigs(ctx context.Context, arg LockMetadataEnvironmentConfigsParams) ([]McpEnvironmentConfig, error) {
+	rows, err := q.db.Query(ctx, lockMetadataEnvironmentConfigs, arg.McpMetadataID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpEnvironmentConfig
+	for rows.Next() {
+		var i McpEnvironmentConfig
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.McpMetadataID,
+			&i.VariableName,
+			&i.HeaderDisplayName,
+			&i.ProvidedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockOrphanAssistantToolset = `-- name: LockOrphanAssistantToolset :one
+SELECT a.id, a.assistant_id, to_jsonb(a)::jsonb AS row_json
+FROM assistant_toolsets AS a
+WHERE a.id = $1 AND a.project_id = $2 AND a.toolset_id = $3::uuid
+FOR UPDATE OF a
+`
+
+type LockOrphanAssistantToolsetParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+type LockOrphanAssistantToolsetRow struct {
+	ID          uuid.UUID
+	AssistantID uuid.UUID
+	RowJson     []byte
+}
+
+func (q *Queries) LockOrphanAssistantToolset(ctx context.Context, arg LockOrphanAssistantToolsetParams) (LockOrphanAssistantToolsetRow, error) {
+	row := q.db.QueryRow(ctx, lockOrphanAssistantToolset, arg.ID, arg.ProjectID, arg.ToolsetID)
+	var i LockOrphanAssistantToolsetRow
+	err := row.Scan(&i.ID, &i.AssistantID, &i.RowJson)
+	return i, err
+}
+
+const lockOrphanMetadata = `-- name: LockOrphanMetadata :one
+SELECT m.id, m.toolset_id, m.mcp_server_id, m.project_id, m.external_documentation_url, m.external_documentation_text, m.logo_id, m.instructions, m.header_display_names, m.default_environment_id, m.installation_override_url, m.created_at, m.updated_at, to_jsonb(m)::jsonb AS row_json
+FROM mcp_metadata AS m
+WHERE m.id = $1 AND m.project_id = $2 AND m.toolset_id = $3::uuid
+FOR UPDATE OF m
+`
+
+type LockOrphanMetadataParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+type LockOrphanMetadataRow struct {
+	McpMetadatum McpMetadatum
+	RowJson      []byte
+}
+
+func (q *Queries) LockOrphanMetadata(ctx context.Context, arg LockOrphanMetadataParams) (LockOrphanMetadataRow, error) {
+	row := q.db.QueryRow(ctx, lockOrphanMetadata, arg.ID, arg.ProjectID, arg.ToolsetID)
+	var i LockOrphanMetadataRow
+	err := row.Scan(
+		&i.McpMetadatum.ID,
+		&i.McpMetadatum.ToolsetID,
+		&i.McpMetadatum.McpServerID,
+		&i.McpMetadatum.ProjectID,
+		&i.McpMetadatum.ExternalDocumentationUrl,
+		&i.McpMetadatum.ExternalDocumentationText,
+		&i.McpMetadatum.LogoID,
+		&i.McpMetadatum.Instructions,
+		&i.McpMetadatum.HeaderDisplayNames,
+		&i.McpMetadatum.DefaultEnvironmentID,
+		&i.McpMetadatum.InstallationOverrideUrl,
+		&i.McpMetadatum.CreatedAt,
+		&i.McpMetadatum.UpdatedAt,
+		&i.RowJson,
+	)
+	return i, err
+}
+
+const lockOrphanPluginServer = `-- name: LockOrphanPluginServer :one
+SELECT
+  ps.id,
+  ps.plugin_id,
+  pl.name AS plugin_name,
+  pl.slug AS plugin_slug,
+  to_jsonb(ps)::jsonb AS row_json,
+  EXISTS (
+    SELECT 1
+    FROM platform_mcp_distributions AS d
+    WHERE d.project_id = pl.project_id AND d.plugin_server_id = ps.id
+  ) AS distributed
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.id = $1
+  AND pl.project_id = $2
+  AND ps.toolset_id = $3::uuid
+  AND ps.deleted IS FALSE
+FOR UPDATE OF ps
+`
+
+type LockOrphanPluginServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+type LockOrphanPluginServerRow struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	PluginName  string
+	PluginSlug  string
+	RowJson     []byte
+	Distributed bool
+}
+
+func (q *Queries) LockOrphanPluginServer(ctx context.Context, arg LockOrphanPluginServerParams) (LockOrphanPluginServerRow, error) {
+	row := q.db.QueryRow(ctx, lockOrphanPluginServer, arg.ID, arg.ProjectID, arg.ToolsetID)
+	var i LockOrphanPluginServerRow
+	err := row.Scan(
+		&i.ID,
+		&i.PluginID,
+		&i.PluginName,
+		&i.PluginSlug,
+		&i.RowJson,
+		&i.Distributed,
+	)
+	return i, err
+}
+
+const lockOrphanToolset = `-- name: LockOrphanToolset :one
+SELECT t.id, t.project_id, t.organization_id, t.name, t.slug, t.mcp_slug, t.deleted, p.deleted AS project_deleted
+FROM toolsets AS t
+JOIN projects AS p ON p.id = t.project_id AND p.organization_id = t.organization_id
+WHERE t.id = $1 AND t.project_id = $2
+FOR NO KEY UPDATE OF t FOR SHARE OF p
+`
+
+type LockOrphanToolsetParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type LockOrphanToolsetRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Name           string
+	Slug           string
+	McpSlug        pgtype.Text
+	Deleted        bool
+	ProjectDeleted bool
+}
+
+// FOR SHARE OF p holds off a concurrent project delete or restore until commit.
+func (q *Queries) LockOrphanToolset(ctx context.Context, arg LockOrphanToolsetParams) (LockOrphanToolsetRow, error) {
+	row := q.db.QueryRow(ctx, lockOrphanToolset, arg.ID, arg.ProjectID)
+	var i LockOrphanToolsetRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Slug,
+		&i.McpSlug,
+		&i.Deleted,
+		&i.ProjectDeleted,
+	)
+	return i, err
+}
+
 const lockServerKeyedMetadataTwin = `-- name: LockServerKeyedMetadataTwin :one
 SELECT m.id, to_jsonb(m)::jsonb AS row_json
 FROM mcp_metadata AS m
@@ -1028,6 +1306,27 @@ func (q *Queries) MetadataEnvironmentConfigsJSON(ctx context.Context, arg Metada
 	return configs, err
 }
 
+const metadataHasForeignEnvironmentConfig = `-- name: MetadataHasForeignEnvironmentConfig :one
+SELECT EXISTS (
+  SELECT 1
+  FROM mcp_environment_configs
+  WHERE mcp_metadata_id = $1 AND project_id <> $2
+)
+`
+
+type MetadataHasForeignEnvironmentConfigParams struct {
+	McpMetadataID uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+// The cascade would remove these too, so a config outside the project blocks the delete.
+func (q *Queries) MetadataHasForeignEnvironmentConfig(ctx context.Context, arg MetadataHasForeignEnvironmentConfigParams) (bool, error) {
+	row := q.db.QueryRow(ctx, metadataHasForeignEnvironmentConfig, arg.McpMetadataID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const moveAssistantToolset = `-- name: MoveAssistantToolset :execrows
 WITH moved AS (
   DELETE FROM assistant_toolsets AS at
@@ -1144,6 +1443,21 @@ type RestoreMetadataTwinFixtureParams struct {
 
 func (q *Queries) RestoreMetadataTwinFixture(ctx context.Context, arg RestoreMetadataTwinFixtureParams) error {
 	_, err := q.db.Exec(ctx, restoreMetadataTwinFixture, arg.RowJson, arg.ProjectID)
+	return err
+}
+
+const restoreProjectFixture = `-- name: RestoreProjectFixture :exec
+UPDATE projects SET deleted_at = NULL
+WHERE id = $1 AND organization_id = $2
+`
+
+type RestoreProjectFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) RestoreProjectFixture(ctx context.Context, arg RestoreProjectFixtureParams) error {
+	_, err := q.db.Exec(ctx, restoreProjectFixture, arg.ID, arg.OrganizationID)
 	return err
 }
 
@@ -1426,6 +1740,16 @@ func (q *Queries) SeedPluginFixture(ctx context.Context, arg SeedPluginFixturePa
 	return err
 }
 
+const seedPluginGithubConnectionFixture = `-- name: SeedPluginGithubConnectionFixture :exec
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name)
+VALUES ($1, 1, 'owner', 'repo')
+`
+
+func (q *Queries) SeedPluginGithubConnectionFixture(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, seedPluginGithubConnectionFixture, projectID)
+	return err
+}
+
 const seedPluginServerFixture = `-- name: SeedPluginServerFixture :exec
 INSERT INTO plugin_servers (id, plugin_id, toolset_id, mcp_server_id, display_name)
 VALUES ($1, $2, $3, $4, $5)
@@ -1583,6 +1907,32 @@ type SoftDeleteEndpointFixtureParams struct {
 func (q *Queries) SoftDeleteEndpointFixture(ctx context.Context, arg SoftDeleteEndpointFixtureParams) error {
 	_, err := q.db.Exec(ctx, softDeleteEndpointFixture, arg.ID, arg.ProjectID)
 	return err
+}
+
+const softDeleteOrphanPluginServer = `-- name: SoftDeleteOrphanPluginServer :one
+UPDATE plugin_servers AS ps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM plugins AS pl
+WHERE ps.id = $1
+  AND pl.id = ps.plugin_id
+  AND pl.project_id = $2
+  AND ps.toolset_id = $3::uuid
+  AND ps.deleted IS FALSE
+RETURNING ps.deleted_at::text AS deleted_at
+`
+
+type SoftDeleteOrphanPluginServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+// deleted_at as text round-trips exactly, so a restore can match only this tool's delete.
+func (q *Queries) SoftDeleteOrphanPluginServer(ctx context.Context, arg SoftDeleteOrphanPluginServerParams) (string, error) {
+	row := q.db.QueryRow(ctx, softDeleteOrphanPluginServer, arg.ID, arg.ProjectID, arg.ToolsetID)
+	var deleted_at string
+	err := row.Scan(&deleted_at)
+	return deleted_at, err
 }
 
 const softDeletePluginServerTwin = `-- name: SoftDeletePluginServerTwin :execrows

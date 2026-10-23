@@ -20,19 +20,23 @@ type Client struct {
 	DetachBindingEndpoint                     goa.Endpoint
 	CommitServerIdentityConfigurationEndpoint goa.Endpoint
 	GetServerIdentityImpactEndpoint           goa.Endpoint
+	ListServerClientAssociationsEndpoint      goa.Endpoint
+	DetachServerClientAssociationEndpoint     goa.Endpoint
 	ListRemoteSessionsEndpoint                goa.Endpoint
 	CountRemoteSessionsEndpoint               goa.Endpoint
 	RevokeRemoteSessionEndpoint               goa.Endpoint
 }
 
 // NewClient initializes a "remoteSessions" service client given the endpoints.
-func NewClient(listBindings, attachBinding, detachBinding, commitServerIdentityConfiguration, getServerIdentityImpact, listRemoteSessions, countRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
+func NewClient(listBindings, attachBinding, detachBinding, commitServerIdentityConfiguration, getServerIdentityImpact, listServerClientAssociations, detachServerClientAssociation, listRemoteSessions, countRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
 	return &Client{
 		ListBindingsEndpoint:                      listBindings,
 		AttachBindingEndpoint:                     attachBinding,
 		DetachBindingEndpoint:                     detachBinding,
 		CommitServerIdentityConfigurationEndpoint: commitServerIdentityConfiguration,
 		GetServerIdentityImpactEndpoint:           getServerIdentityImpact,
+		ListServerClientAssociationsEndpoint:      listServerClientAssociations,
+		DetachServerClientAssociationEndpoint:     detachServerClientAssociation,
 		ListRemoteSessionsEndpoint:                listRemoteSessions,
 		CountRemoteSessionsEndpoint:               countRemoteSessions,
 		RevokeRemoteSessionEndpoint:               revokeRemoteSession,
@@ -148,6 +152,48 @@ func (c *Client) GetServerIdentityImpact(ctx context.Context, p *GetServerIdenti
 		return
 	}
 	return ires.(*ServerIdentityImpactResult), nil
+}
+
+// ListServerClientAssociations calls the "listServerClientAssociations"
+// endpoint of the "remoteSessions" service.
+// ListServerClientAssociations may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListServerClientAssociations(ctx context.Context, p *ListServerClientAssociationsPayload) (res *ListServerClientAssociationsResult, err error) {
+	var ires any
+	ires, err = c.ListServerClientAssociationsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListServerClientAssociationsResult), nil
+}
+
+// DetachServerClientAssociation calls the "detachServerClientAssociation"
+// endpoint of the "remoteSessions" service.
+// DetachServerClientAssociation may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DetachServerClientAssociation(ctx context.Context, p *DetachServerClientAssociationPayload) (err error) {
+	_, err = c.DetachServerClientAssociationEndpoint(ctx, p)
+	return
 }
 
 // ListRemoteSessions calls the "listRemoteSessions" endpoint of the

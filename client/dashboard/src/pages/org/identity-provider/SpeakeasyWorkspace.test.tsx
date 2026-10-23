@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -39,8 +40,21 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.admin }),
 }));
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ setQueryData: mocks.setData }),
+  useQueryClient: () => ({
+    setQueryData: mocks.setData,
+    invalidateQueries: () => Promise.resolve(),
+  }),
 }));
+vi.mock("./services/TrustedByServices", () => ({
+  TrustedByServices: () => <div>Services that trust Speakeasy</div>,
+}));
+vi.mock(
+  "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js",
+  () => ({
+    invalidateAllOrganizationRemoteSessionIssuerEMAServices: () =>
+      Promise.resolve(),
+  }),
+);
 vi.mock("./useEnterpriseIssuer", () => ({
   enterpriseIssuerQueryKey: (organizationId: string) => [
     "@gram/client",
@@ -486,7 +500,11 @@ describe("Speakeasy identity provider page", () => {
   });
 
   it.each([
-    ["enabled", "Enabled", /vouches for your team/],
+    [
+      "enabled",
+      "Enabled",
+      /vouches for people on MCP servers with Speakeasy sign-in/,
+    ],
     ["setup_required", "Off", /cannot be enabled on this deployment right now/],
     ["disabled", "Off", /cannot be re-enabled right now/],
     ["signing_paused", "Paused", /temporarily paused/],
@@ -515,6 +533,12 @@ describe("Speakeasy identity provider page", () => {
     expect(keys.getByText("Active")).toBeTruthy();
     expect(keys.getByText("Pending")).toBeTruthy();
     expect(screen.getByText(/2 withdrawn keys/)).toBeTruthy();
+  });
+
+  it("shows which services trust the issuer once it exists", () => {
+    mocks.issuer = enabledIssuer;
+    show();
+    expect(screen.getByText("Services that trust Speakeasy")).toBeTruthy();
   });
 
   it("links back to all identity providers", () => {
@@ -556,4 +580,48 @@ describe("Speakeasy identity provider page", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
+});
+
+describe("unknown issuer state", () => {
+  it("shows the neutral status without offering issuer management", () => {
+    mocks.issuer = {
+      ...enabledIssuer,
+      state: unrecognized("future_state"),
+      canEnable: true,
+    };
+    show();
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.getByText(/Issuer status is unknown/)).toBeTruthy();
+    for (const name of [
+      "Disable",
+      "Replace compromised key",
+      "Rotate key",
+      "Enable Enterprise Managed Authorization",
+    ]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    expect(mocks.rotate).not.toHaveBeenCalled();
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
+  it.each(["Disable", "Replace compromised key", "Rotate key"])(
+    "closes pending %s confirmation when issuer state becomes unknown",
+    (name) => {
+      mocks.issuer = enabledIssuer;
+      const view = show();
+      fireEvent.click(screen.getByRole("button", { name }));
+      expect(screen.getByRole("dialog")).toBeTruthy();
+      mocks.issuer = { ...enabledIssuer, state: unrecognized("future_state") };
+      view.rerender(
+        <MemoryRouter>
+          <TooltipProvider>
+            <SpeakeasyWorkspace />
+          </TooltipProvider>
+        </MemoryRouter>,
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(mocks.rotate).not.toHaveBeenCalled();
+      expect(mocks.mutate).not.toHaveBeenCalled();
+    },
+  );
 });

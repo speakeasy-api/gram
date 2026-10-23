@@ -3,11 +3,11 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -148,37 +148,46 @@ func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID
 	return bs, nil
 }
 
-// hostedSkillScope resolves the endpoint and caller a skills request is
-// answered for. The endpoint is the described toolset together with its
-// fronting server when the request came through one, so a plugin containing
-// either carries skills to it. The caller's delivery principals decide which
-// plugins are assigned to them; a caller who is not an authenticated member
-// of the owning organization, or one the endpoint never resolved a toolset
-// for, has none and so is served no skills.
+// hostedSkillScope resolves the surface and caller a skills request is
+// answered for. The surface is the MCP server serving the endpoint: the
+// fronting server when the request came through one, otherwise the single
+// enabled server wrapping a legacy toolset. Skills are linked to servers, so
+// an endpoint with neither serves none and ok is false. Resolving the wrapper
+// is best effort: a failure is logged and treated as no server. The resolver
+// serves a caller only while they are a live member of the owning
+// organization; an unauthenticated caller has no user id and so is served no
+// skills.
 //
 // An API key is never a recipient. A legacy key carries its creator's user
 // id in the auth context, but the key is the actor, not that person: serving
-// the creator's personal assignments to every agent holding the key, and
+// the creator's organization skills to every agent holding the key, and
 // recording each read as the creator's activation, would be wrong on both
 // counts. The RBAC engine refuses the same identification (an API key is not
 // a user principal), so the skill scope follows it.
-func hostedSkillScope(ctx context.Context, db *pgxpool.Pool, payload *mcpInputs) (mcpskills.Scope, error) {
-	scope := mcpskills.Scope{
-		ProjectID:     payload.projectID,
-		ToolsetID:     payload.toolsetID.UUID,
-		MCPServerID:   payload.mcpServerID,
-		PrincipalURNs: nil,
-	}
-	if !payload.toolsetID.Valid || !payload.authenticated || payload.userID == "" || payload.apiKeyID != "" {
-		return scope, nil
+func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs) (scope mcpskills.Scope, ok bool) {
+	// The dispatcher leaves attribution to the handlers, and it must not turn
+	// an otherwise valid skills request into an error.
+	if payload.toolsetID.Valid {
+		if err := payload.resolveServingAttribution(ctx, logger, db, payload.toolsetID.UUID); err != nil {
+			logger.WarnContext(ctx, "failed to resolve skill serving attribution", attr.SlogError(err))
+		}
 	}
 
-	principals, err := mcpskills.PrincipalURNsForCaller(ctx, db, payload.organizationID, payload.userID)
-	if err != nil {
-		return scope, fmt.Errorf("resolve skill recipient principals: %w", err)
+	serverID := payload.servingServerID()
+	if !payload.toolsetID.Valid || serverID == nil {
+		return scope, false
 	}
-	scope.PrincipalURNs = principals
-	return scope, nil
+
+	userID := ""
+	if payload.authenticated && payload.apiKeyID == "" {
+		userID = payload.userID
+	}
+	return mcpskills.Scope{
+		OrganizationID:     payload.organizationID,
+		Target:             mcpskills.MCPServerTarget(*serverID),
+		MemberMCPServerIDs: nil,
+		UserID:             userID,
+	}, true
 }
 
 // skillResourceURI reports the skill URI a resources/read request names, when
@@ -190,7 +199,7 @@ func skillResourceURI(params json.RawMessage) (string, bool) {
 	if err := json.Unmarshal(params, &read); err != nil {
 		return "", false
 	}
-	if _, ok := mcpskills.ParseSkillURI(read.URI); !ok {
+	if _, _, ok := mcpskills.ParseSkillURI(read.URI); !ok {
 		return "", false
 	}
 	return read.URI, true

@@ -278,6 +278,7 @@ func TestServiceAttachingRequiresMCPConnect(t *testing.T) {
 		McpEnabled:     true,
 	})
 	require.NoError(t, err)
+	syncCanonicalWrapper(t, conn, ts)
 	toolsets := []*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}}
 
 	writerCtx := authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
@@ -328,6 +329,7 @@ func newMCPEnableFixture(t *testing.T, dbName string) (mcpEnableFixture, context
 		McpEnabled:     true,
 	})
 	require.NoError(t, err)
+	syncCanonicalWrapper(t, conn, enabled)
 	return mcpEnableFixture{svc: svc, projectID: projectID, conn: conn, disabled: disabled, enabled: enabled}, ctx
 }
 
@@ -766,7 +768,7 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 		logger:   logger,
 		auth:     nil,
 		authz:    authzEngine,
-		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn)),
+		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn)),
 		signaler: &stubWorkflowSignaler{signalledThreads: nil},
 	}
 

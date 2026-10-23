@@ -71,7 +71,7 @@ func (s *Service) readPlatformResource(ctx context.Context, req *rawRequest) (js
 	if err := json.Unmarshal(req.Params, &params); err != nil || params.URI == "" {
 		return nil, oops.E(oops.CodeInvalid, err, "resource URI is required").LogWarn(ctx, s.logger)
 	}
-	if _, ok := mcpskills.ParseSkillURI(params.URI); !ok {
+	if _, _, ok := mcpskills.ParseSkillURI(params.URI); !ok {
 		return nil, oops.E(oops.CodeInvalid, nil, "no resource is served at %s", params.URI).LogWarn(ctx, s.logger)
 	}
 	return s.readPlatformSkill(ctx, req, params.URI)

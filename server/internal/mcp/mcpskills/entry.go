@@ -48,11 +48,17 @@ type Entry struct {
 	// SkillID is the skill the entry serves.
 	SkillID uuid.UUID
 
+	// ProjectID is the project that owns the skill. A gateway serves skills
+	// from every project in its organization, so it can differ from the
+	// endpoint's.
+	ProjectID uuid.UUID
+
+	// ProjectSlug is the owning project's slug, the URI segment that keeps
+	// same-named skills from different projects apart.
+	ProjectSlug string
+
 	// VersionID is the resolved skill version whose content is served.
 	VersionID uuid.UUID
-
-	// PluginID is the plugin whose distribution won the resolution.
-	PluginID uuid.UUID
 
 	// Name is the skill's normalized name, the final path segment of the URI
 	// and the frontmatter name.
@@ -69,15 +75,12 @@ type Entry struct {
 
 	// Frontmatter is the parsed YAML frontmatter of Content.
 	Frontmatter map[string]any
-
-	// Pinned reports whether the winning distribution pins this version
-	// rather than tracking the skill's latest valid version.
-	Pinned bool
 }
 
-// URI returns the entry's resource URI, skill://<name>/SKILL.md.
+// URI returns the entry's resource URI,
+// skill://<project-slug>/<name>/SKILL.md.
 func (e Entry) URI() string {
-	return SkillURI(e.Name)
+	return SkillURI(e.ProjectSlug, e.Name)
 }
 
 // CheckFrontmatterName reports an error when the entry's frontmatter name is

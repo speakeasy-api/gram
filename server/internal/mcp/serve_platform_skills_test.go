@@ -24,11 +24,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
-	mcpskillsrepo "github.com/speakeasy-api/gram/server/internal/mcp/mcpskills/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // platformSkillsFixture is a project whose managed assistant can reach the
@@ -156,8 +156,9 @@ func TestServePlatformToolset_Skills_ListIsTheEmbeddedSet(t *testing.T) {
 
 	names := make([]string, 0, len(skills))
 	for _, skill := range skills {
-		name, ok := mcpskills.ParseSkillURI(skill.URI)
+		projectSlug, name, ok := mcpskills.ParseSkillURI(skill.URI)
 		require.True(t, ok, "uri=%s", skill.URI)
+		require.Equal(t, mcpskills.EmbeddedProjectSlug, projectSlug, "uri=%s", skill.URI)
 		names = append(names, name)
 
 		content, ok := embedded[name]
@@ -191,7 +192,7 @@ func TestServePlatformToolset_Skills_GetByURI(t *testing.T) {
 	f := newPlatformSkillsFixture(t, ctx, ti)
 	embedded := embeddedPlatformSkills(t)
 	name := slices.Sorted(maps.Keys(embedded))[0]
-	uri := mcpskills.SkillURI(name)
+	uri := mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, name)
 
 	w, err := servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, mcpversions.MethodSkillsGet, map[string]any{"uri": uri}), f.token)
 	require.NoError(t, err)
@@ -206,7 +207,7 @@ func TestServePlatformToolset_Skills_GetByURI(t *testing.T) {
 	require.Len(t, skill.Resources, 1)
 	require.Equal(t, "sha256:"+hex.EncodeToString(digest[:]), skill.Resources[0].Digest)
 
-	w, err = servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, mcpversions.MethodSkillsGet, map[string]any{"uri": mcpskills.SkillURI("not-an-embedded-skill")}), f.token)
+	w, err = servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, mcpversions.MethodSkillsGet, map[string]any{"uri": mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, "not-an-embedded-skill")}), f.token)
 	require.NoError(t, err)
 	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
 }
@@ -219,7 +220,7 @@ func TestServePlatformToolset_Skills_ReadServesEmbeddedBytesWithoutActivation(t 
 	embedded := embeddedPlatformSkills(t)
 
 	for name, content := range embedded {
-		uri := mcpskills.SkillURI(name)
+		uri := mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, name)
 		w, err := servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": uri}), f.token)
 		require.NoError(t, err)
 		result := requireRPCResult(t, w)
@@ -238,7 +239,7 @@ func TestServePlatformToolset_Skills_ReadServesEmbeddedBytesWithoutActivation(t 
 	}
 
 	// Embedded skills belong to no stored version, so a read is no activation.
-	observations, err := mcpskillsrepo.New(ti.conn).ListMCPSkillObservations(ctx, mcpskillsrepo.ListMCPSkillObservationsParams{
+	observations, err := testrepo.New(ti.conn).ListMCPSkillObservations(ctx, testrepo.ListMCPSkillObservationsParams{
 		ProjectID: *f.authCtx.ProjectID, Provider: mcpskills.ObservationProvider,
 	})
 	require.NoError(t, err)
@@ -251,7 +252,7 @@ func TestServePlatformToolset_Skills_ReadUnknownURIIsInvalidParams(t *testing.T)
 	ctx, ti := newTestMCPService(t)
 	f := newPlatformSkillsFixture(t, ctx, ti)
 
-	w, err := servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": mcpskills.SkillURI("not-an-embedded-skill")}), f.token)
+	w, err := servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, "not-an-embedded-skill")}), f.token)
 	require.NoError(t, err)
 	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
 
@@ -284,7 +285,7 @@ func TestServePlatformToolset_Skills_FlagOffLeavesSurfaceUnchanged(t *testing.T)
 	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.authCtx.ActiveOrganizationID, false)
 	grantProjectLogRead(t, ti, f.authCtx)
 	name := slices.Sorted(maps.Keys(embeddedPlatformSkills(t)))[0]
-	uri := mcpskills.SkillURI(name)
+	uri := mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, name)
 
 	for _, method := range []string{mcpversions.MethodSkillsList, mcpversions.MethodSkillsGet, mcpversions.MethodResourcesRead, mcpversions.MethodResourcesList} {
 		w, err := servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, method, map[string]any{"uri": uri}), f.token)

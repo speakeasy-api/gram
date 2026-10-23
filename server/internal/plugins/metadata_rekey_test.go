@@ -17,7 +17,7 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-func TestPluginsService_PublishPlugins_ReadsUserHeadersFromRekeyedMetadata(t *testing.T) {
+func TestPluginsService_PublishPlugins_ReadsUserHeadersFromServerKeyedMetadata(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -25,7 +25,7 @@ func TestPluginsService_PublishPlugins_ReadsUserHeadersFromRekeyedMetadata(t *te
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createTestToolset(t, ctx, ti.conn, "rekeyed-toolset")
+	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "rekeyed-toolset")
 	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
@@ -38,9 +38,9 @@ func TestPluginsService_PublishPlugins_ReadsUserHeadersFromRekeyedMetadata(t *te
 	require.NoError(t, err)
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
-	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		ProjectID: *authCtx.ProjectID,
+	metadata, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
+		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID:   *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
 	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
@@ -51,12 +51,6 @@ func TestPluginsService_PublishPlugins_ReadsUserHeadersFromRekeyedMetadata(t *te
 		ProvidedBy:        "user",
 	})
 	require.NoError(t, err)
-	rows, err := testrepo.New(ti.conn).RekeyMcpMetadataToMcpServerFixture(ctx, testrepo.RekeyMcpMetadataToMcpServerFixtureParams{
-		ProjectID: *authCtx.ProjectID,
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
-	})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, rows)
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Rekeyed"})
 	require.NoError(t, err)
@@ -90,7 +84,7 @@ func TestPluginsService_PublishPlugins_UsesToolsetKeyedMetadataTwin(t *testing.T
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createTestToolset(t, ctx, ti.conn, "twin-toolset")
+	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "twin-toolset")
 	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
@@ -103,9 +97,10 @@ func TestPluginsService_PublishPlugins_UsesToolsetKeyedMetadataTwin(t *testing.T
 	require.NoError(t, err)
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
-	toolsetRow, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
-		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		ProjectID: *authCtx.ProjectID,
+	toolsetRowID, err := testrepo.New(ti.conn).InsertToolsetKeyedMcpMetadataFixture(ctx, testrepo.InsertToolsetKeyedMcpMetadataFixtureParams{
+		ToolsetID:          uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID:          *authCtx.ProjectID,
+		HeaderDisplayNames: []byte("{}"),
 	})
 	require.NoError(t, err)
 	serverRow, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
@@ -113,7 +108,7 @@ func TestPluginsService_PublishPlugins_UsesToolsetKeyedMetadataTwin(t *testing.T
 		ProjectID:   *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	for metadataID, header := range map[uuid.UUID]string{toolsetRow.ID: "X-Toolset", serverRow.ID: "X-Server"} {
+	for metadataID, header := range map[uuid.UUID]string{toolsetRowID: "X-Toolset", serverRow.ID: "X-Server"} {
 		_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
 			ProjectID:         *authCtx.ProjectID,
 			McpMetadataID:     metadataID,

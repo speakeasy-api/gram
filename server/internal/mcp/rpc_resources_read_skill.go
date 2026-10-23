@@ -35,19 +35,11 @@ func handleSkillResourceRead(
 	uri string,
 	now time.Time,
 ) (json.RawMessage, error) {
-	// The dispatcher leaves attribution to resources/read handlers, and it
-	// must not turn an otherwise valid read into an error.
-	if payload.toolsetID.Valid {
-		if err := payload.resolveServingAttribution(ctx, logger, db, payload.toolsetID.UUID); err != nil {
-			logger.WarnContext(ctx, "failed to resolve skill serving attribution", attr.SlogError(err))
-		}
-	}
+	scope, ok := hostedSkillScope(ctx, logger, db, payload)
 
-	scope, err := hostedSkillScope(ctx, db, payload)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve skill recipient").LogError(ctx, logger)
+	if !ok {
+		return nil, skillNotFound(ctx, logger, mcpskills.ErrSkillNotFound, uri)
 	}
-
 	entry, err := resolver.Get(ctx, scope, uri)
 	if errors.Is(err, mcpskills.ErrSkillNotFound) {
 		return nil, skillNotFound(ctx, logger, err, uri)
@@ -59,21 +51,20 @@ func handleSkillResourceRead(
 	// The activation is bookkeeping about the read, not part of it: a
 	// failure to record it is logged and the content is still served.
 	if _, err := resolver.RecordRead(ctx, mcpskills.Read{
-		ProjectID: payload.projectID,
 		Entry:     *entry,
-		UserID:    payload.userID,
+		UserID:    scope.UserID,
 		SessionID: payload.sessionID,
 		SeenAt:    now,
 	}); err != nil {
 		logger.WarnContext(ctx, "failed to record skill read",
 			attr.SlogError(err),
-			attr.SlogProjectID(payload.projectID.String()),
+			attr.SlogProjectID(entry.ProjectID.String()),
 			attr.SlogResourceURI(entry.URI()),
 		)
 	}
 	metrics.RecordSkillRead(ctx, mcpmetrics.SurfaceHosting, mcpmetrics.SkillOriginDistribution)
 
-	// Whether the URI resolves at all depends on the caller's plugin
-	// assignments, so the content is private to the caller.
+	// Whether the URI resolves at all depends on the caller's organization
+	// membership, so the content is private to the caller.
 	return marshalSkillRead(ctx, logger, req.ID, *entry, serverInfoHostedToolset)
 }

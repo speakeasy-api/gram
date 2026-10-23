@@ -17,7 +17,7 @@ import {
   explainedLevel,
   LEVEL_NAME,
   levelStatus,
-  ruleIsBlock,
+  ruleAccessTone,
   ruleReachLabel,
   whySentence,
   groupRules,
@@ -302,15 +302,19 @@ function RuleSource({ rule }: { rule: ExplainedAccessRule }): JSX.Element {
 
 function RuleDescription({ group }: { group: RuleGroup }): JSX.Element {
   const { rule, labels } = group;
-  const block = ruleIsBlock(rule);
+  const tone = ruleAccessTone(rule);
   // A rule that lost still says what it would have done, struck through so
   // it is not read as access the person has.
   const lost = rule.effect === "blocked" || rule.effect === "overridden";
   return (
     <div className="flex items-start gap-3 self-start text-sm">
       <span className="text-eyebrow flex w-16 shrink-0 items-center gap-1.5 pt-0.5">
-        <ToneMark tone={block ? "blocked" : "allowed"} />
-        {block ? "Blocks" : "Grants"}
+        <ToneMark tone={tone} />
+        {tone === "blocked"
+          ? "Blocks"
+          : tone === "allowed"
+            ? "Grants"
+            : "Unknown"}
       </span>
       <span
         className={cn(

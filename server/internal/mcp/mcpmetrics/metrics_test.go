@@ -501,11 +501,12 @@ func TestRecordSkillRead_SeparatesSurfaceAndOrigin(t *testing.T) {
 
 	m := NewMetrics(meter, testenv.NewLogger(t))
 	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginEmbedded)
 	m.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded)
 
 	sum, ok := collectMetric(t, reader, InstrumentMCPSkillRead).Data.(metricdata.Sum[int64])
 	require.True(t, ok)
-	require.Len(t, sum.DataPoints, 2)
+	require.Len(t, sum.DataPoints, 3)
 }
 
 func TestRecordSkillRead_UsesTrustedPrivateOrigin(t *testing.T) {

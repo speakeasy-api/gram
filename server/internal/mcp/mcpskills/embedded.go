@@ -13,6 +13,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills"
 )
 
+// EmbeddedProjectSlug is the project slug in the URI of every embedded skill:
+// skill://speakeasy/<name>/SKILL.md. Embedded skills belong to no project, and
+// the Platform MCP endpoints serve only embedded skills, so the fixed slug
+// never collides with a customer project's skills there.
+const EmbeddedProjectSlug = "speakeasy"
+
 // EmbeddedCatalog is the set of reviewed skills the Platform MCP serves over
 // the Skills extension (SEP-2640): the skills embedded in the server and
 // shipped inside every Platform MCP package. Both platform endpoints, the
@@ -32,7 +38,7 @@ type EmbeddedCatalog struct {
 // NewEmbeddedCatalog renders the embedded reviewed skills as served entries.
 // Each entry carries the exact embedded bytes, their SHA-256 as the digest,
 // and the SKILL.md frontmatter parsed verbatim; it belongs to no stored
-// skill, version, or plugin. The embedded set is validated against the Agent
+// skill, version, or project, and its URI carries EmbeddedProjectSlug. The embedded set is validated against the Agent
 // Skills specification at load time, so a failure here means the server
 // binary ships an invalid skill and must not start serving the catalog.
 func NewEmbeddedCatalog() (*EmbeddedCatalog, error) {
@@ -54,13 +60,13 @@ func NewEmbeddedCatalog() (*EmbeddedCatalog, error) {
 		digest := sha256.Sum256(content)
 		entry := Entry{
 			SkillID:     uuid.Nil,
+			ProjectID:   uuid.Nil,
+			ProjectSlug: EmbeddedProjectSlug,
 			VersionID:   uuid.Nil,
-			PluginID:    uuid.Nil,
 			Name:        name,
 			Content:     string(content),
 			RawSHA256:   hex.EncodeToString(digest[:]),
 			Frontmatter: frontmatter,
-			Pinned:      false,
 		}
 		if err := entry.CheckFrontmatterName(); err != nil {
 			return nil, fmt.Errorf("embedded platform skill %q: %w", name, err)
@@ -84,8 +90,8 @@ func (c *EmbeddedCatalog) Entries() []Entry {
 // Get returns the entry a skill URI names, or false when the URI is not the
 // SKILL.md of a served skill.
 func (c *EmbeddedCatalog) Get(uri string) (entry Entry, ok bool) {
-	name, ok := ParseSkillURI(uri)
-	if !ok {
+	projectSlug, name, ok := ParseSkillURI(uri)
+	if !ok || projectSlug != EmbeddedProjectSlug {
 		return entry, false
 	}
 	entry, ok = c.byName[name]

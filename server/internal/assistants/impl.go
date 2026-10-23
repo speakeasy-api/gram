@@ -28,6 +28,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -530,7 +531,7 @@ func (s *Service) Dispatch(ctx context.Context, task bgtriggers.Task) error {
 }
 
 // startRuntimeWarmup eagerly boots the assistant's runtime so the first turn
-// doesn't pay the Fly cold-start cost. It rides the standard turn machinery:
+// doesn't pay the runtime cold-start cost. It rides the standard turn machinery:
 // an event-less warmup thread reserves the runtime row, and its thread
 // workflow runs Ensure, coordinator kicks and the warm window exactly as a
 // turn would. Best-effort: a failure here never fails the request — the
@@ -582,6 +583,8 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 		return oops.E(oops.CodeUnauthorized, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, errMCPEnableForbidden):
 		return oops.E(oops.CodeForbidden, err, "%s", errMCPEnableForbidden.Error()).LogWarn(ctx, logger)
+	case errors.Is(err, errToolsetNoMCPServer):
+		return oops.E(oops.CodeBadRequest, err, "%s", hostedmcp.NoServerMessage).LogWarn(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
 		return oops.E(oops.CodeBadRequest, err, "%s", message).LogError(ctx, logger)
 	default:

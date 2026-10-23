@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
   AGENT_POLICY_SCOPES,
   agentPolicyFingerprint,
@@ -292,6 +293,38 @@ describe("policy diff", () => {
 // no control for either, so rewriting one through the draft would drop the
 // constraint.
 describe("stored constraints the editor cannot show", () => {
+  it("preserves the whole scope when a grant has an unsupported effect", () => {
+    const allow = storedGrant("grant_allow", "mcp:connect", {
+      resourceKind: "mcp",
+      resourceId: "*",
+    });
+    const future = {
+      ...allow,
+      id: "grant_future",
+      effect: unrecognized("future_effect"),
+    };
+    const view = agentPolicyViewFromGrants([allow, future]);
+    expect(view.editable).toEqual([]);
+    expect(view.draft).toEqual({});
+    expect(view.preserved).toEqual([allow, future]);
+    expect(view.preservedScopes).toEqual(["mcp:connect"]);
+    expect(
+      diffAgentPolicyGrants(
+        view.editable,
+        agentPolicyGrantsFromDraft({ ...view.draft, "project:read": null }),
+      ).remove,
+    ).toEqual([]);
+    expect(agentPolicyFingerprint([future])).not.toEqual(
+      agentPolicyFingerprint([{ ...future, effect: "allow" }]),
+    );
+    expect(
+      diffAgentPolicyGrants([future], [{ ...future, effect: "allow" }]),
+    ).toEqual({
+      create: [{ ...future, effect: "allow" }],
+      remove: [future],
+    });
+  });
+
   const riskGrant = (
     id: string,
     selector: AgentPolicyGrant["selector"],

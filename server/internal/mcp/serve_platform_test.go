@@ -177,7 +177,7 @@ func TestServePlatformToolset_DeniedAndMissingInvalidBodiesMatch(t *testing.T) {
 	token := mintAssistantToken(t, ti, authCtx, otherID)
 
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	for _, revision := range []string{"", mcpversions.Version20251125, mcpversions.Version20260728} {
 		for _, tc := range []struct {
@@ -261,7 +261,7 @@ func TestServePlatformToolset_AttachedFailuresAreJSONRPCErrors(t *testing.T) {
 
 	_, ti := newTestMCPService(t)
 	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service, nil)
+	mcp.Attach(router, ti.service.Service, nil)
 
 	for _, tc := range []struct {
 		name   string

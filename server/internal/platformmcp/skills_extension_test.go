@@ -121,7 +121,7 @@ func TestRuntimeServesEmbeddedSkillsWhenFlagOn(t *testing.T) {
 	require.Len(t, listed.Skills, len(sources))
 
 	name, content := firstEmbeddedSkill(t)
-	uri := mcpskills.SkillURI(name)
+	uri := mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, name)
 	digest := sha256.Sum256(content)
 
 	get := postSkillsRPC(t, handler, mcpversions.MethodSkillsGet, map[string]any{"uri": uri})
@@ -153,11 +153,11 @@ func TestRuntimeServesEmbeddedSkillsWhenFlagOn(t *testing.T) {
 	require.Nil(t, resources.Error)
 	require.NotContains(t, string(resources.Result), "skill://", "skills are listed by skills/list, never by resources/list")
 
-	unknown := postSkillsRPC(t, handler, mcpversions.MethodSkillsGet, map[string]any{"uri": mcpskills.SkillURI("no-such-skill")})
+	unknown := postSkillsRPC(t, handler, mcpversions.MethodSkillsGet, map[string]any{"uri": mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, "no-such-skill")})
 	require.NotNil(t, unknown.Error)
 	require.Equal(t, -32602, unknown.Error.Code)
 
-	for _, uri := range []string{mcpskills.SkillURI("no-such-skill"), "skill://no-such-skill/references/example.md"} {
+	for _, uri := range []string{mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, "no-such-skill"), "skill://no-such-skill/references/example.md"} {
 		unknownRead := postSkillsRPC(t, handler, "resources/read", map[string]any{"uri": uri})
 		require.NotNil(t, unknownRead.Error, uri)
 		require.Equal(t, -32602, unknownRead.Error.Code, uri)
@@ -186,13 +186,13 @@ func TestRuntimeHidesSkillsWhenFlagOff(t *testing.T) {
 	require.NotContains(t, initialized.Capabilities, "extensions")
 
 	for _, method := range []string{mcpversions.MethodSkillsList, mcpversions.MethodSkillsGet} {
-		res := postSkillsRPC(t, handler, method, map[string]any{"uri": mcpskills.SkillURI("anything")})
+		res := postSkillsRPC(t, handler, method, map[string]any{"uri": mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, "anything")})
 		require.NotNil(t, res.Error, method)
 		require.Equal(t, -32601, res.Error.Code, method)
 	}
 
 	name, _ := firstEmbeddedSkill(t)
-	read := postSkillsRPC(t, handler, "resources/read", map[string]any{"uri": mcpskills.SkillURI(name)})
+	read := postSkillsRPC(t, handler, "resources/read", map[string]any{"uri": mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, name)})
 	require.NotNil(t, read.Error, "a skill read is an ordinary unknown resource while the flag is off")
 	require.Nil(t, read.Result)
 }
