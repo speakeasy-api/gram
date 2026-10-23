@@ -1313,6 +1313,10 @@ func oauthAuthorityError(err error) *oops.ShareableError {
 	return oops.E(oops.CodeBadRequest, err, "authn challenge state does not match this MCP server")
 }
 
+// errUserSessionIssuerRetired identifies a resolved endpoint whose issuer is
+// no longer live, independently of an unknown endpoint or an unserved host.
+var errUserSessionIssuerRetired = errors.New("user session issuer is no longer live")
+
 // RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id
 // FK still resolves to a live row, and stamps the issuer configuration the
 // OAuth handlers need onto the endpoint. Returns CodeNotFound when the
@@ -1339,7 +1343,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+			return oops.E(oops.CodeNotFound, fmt.Errorf("%w: %w", errUserSessionIssuerRetired, err), "user_session_issuer not found")
 		}
 		return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").LogError(ctx, s.logger)
 	}

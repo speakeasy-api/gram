@@ -167,6 +167,7 @@ func TestShadowMandatoryAuthClientChecksTheStoredOwner(t *testing.T) {
 
 	project := uuid.New()
 	client := uuid.New()
+	registration := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	shared := authz.NewGrantWithSelector(authz.ScopeMCPAuth, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: client.String()})
 	personal := authz.NewGrantWithSelector(authz.ScopeMCPAuth, authz.Selector{
 		authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: authz.WildcardResource,
@@ -175,7 +176,7 @@ func TestShadowMandatoryAuthClientChecksTheStoredOwner(t *testing.T) {
 
 	h := newShadowHarness(t, true)
 	record := func(ctx context.Context, clientType string, subject urn.SessionSubject) {
-		h.service.shadowMandatory(ctx, mandatorySurfaceAuthClient, shadowOrg, true, mandatoryAuthClientCheck(project, client, clientType, subject))
+		h.service.shadowMandatory(ctx, mandatorySurfaceAuthClient, shadowOrg, true, mandatoryAuthClientCheck(project, client, registration, clientType, subject))
 	}
 	record(sessionContext(t, shadowOrg, shared), authClientTypeServiceAccount, urn.NewUserSubject("user_1"))
 	record(sessionContext(t, shadowOrg, personal), authClientTypeRemoteSession, urn.NewUserSubject("user_1"))
@@ -303,8 +304,8 @@ func TestShadowAuthClientUseSkipsPersonalClientsWithoutAUser(t *testing.T) {
 
 	h := newShadowHarness(t, true)
 	project, client := uuid.New(), uuid.New()
-	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, true, project, client, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
-	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, false, project, client, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
+	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, true, project, client, uuid.NullUUID{}, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
+	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, false, project, client, uuid.NullUUID{}, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
 	require.Equal(t, map[attribute.Set]int64{
 		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "skipped", "none", mandatoryReasonNoConnectionOwner):  1,
 		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", false, "skipped", "none", mandatoryReasonNoConnectionOwner): 1,

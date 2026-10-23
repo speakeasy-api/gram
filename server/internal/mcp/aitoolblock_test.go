@@ -237,7 +237,7 @@ func TestHandleToken_BlockedAITool_RefusedOnItsNextUse(t *testing.T) {
 	w := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
 
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	requireTokenOAuthError(t, w, "invalid_client")
+	requireTokenOAuthError(t, w, "unauthorized_client")
 	requireAuthorizeErrorDescription(t, w, "administrator must approve")
 }
 
@@ -281,4 +281,22 @@ func TestHandleToken_CatalogReadFailsWhileBlocked_RefusedAsRetryable(t *testing.
 
 	require.Equal(t, http.StatusServiceUnavailable, w.Code, w.Body.String())
 	requireTokenOAuthError(t, w, "temporarily_unavailable")
+}
+
+func TestHandleToken_BlockedAITool_RefreshInvalidatesOnlyTokens(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, claudeCodeCIMDClientID)
+	blockTarget(t, ctx, ti, authCtx.ActiveOrganizationID, "claude-code")
+
+	w := postForm(t, ti, toolset.McpSlug.String, "token", url.Values{"grant_type": {"refresh_token"}, "client_id": {client.ClientID}, "refresh_token": {"unused-refresh-token"}})
+
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	requireTokenOAuthError(t, w, "invalid_grant")
+	requireAuthorizeErrorDescription(t, w, "administrator must approve")
 }

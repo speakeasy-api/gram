@@ -224,9 +224,13 @@ trackedFiles:
   src/models/components/adminstripesubscriptioncandidate.ts: {}
   src/models/components/adminupstreamoauthmigrationauthclientkind.ts: {}
   src/models/components/adminupstreamoauthmigrationauthclients.ts: {}
+  src/models/components/adminupstreamoauthmigrationexecutionprofilegap.ts: {}
+  src/models/components/adminupstreamoauthmigrationexecutionprofiles.ts: {}
   src/models/components/adminupstreamoauthmigrationorganization.ts: {}
   src/models/components/adminupstreamoauthmigrationorganizations.ts: {}
   src/models/components/adminupstreamoauthmigrationrun.ts: {}
+  src/models/components/adminupstreamoauthmigrationselectionclass.ts: {}
+  src/models/components/adminupstreamoauthmigrationselectiongap.ts: {}
   src/models/components/adminupstreamoauthmigrationserver.ts: {}
   src/models/components/adminupstreamoauthmigrationstatus.ts: {}
   src/models/components/adminupstreamoauthmigrationunresolvedassociation.ts: {}

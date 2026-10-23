@@ -9,6 +9,7 @@ import { CheckCircle2Icon, CircleDashedIcon, Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AdminUpstreamOAuthMigrationOrganization } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganization";
+import type { AdminUpstreamOAuthMigrationAuthClients } from "@gram/admin-client/models/components/adminupstreamoauthmigrationauthclients";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
 import type { AdminUpstreamOAuthMigrationUnresolvedAssociation } from "@gram/admin-client/models/components/adminupstreamoauthmigrationunresolvedassociation";
 
@@ -301,7 +302,12 @@ function MigrationStatus({
     );
   }
   const s = status.data;
-  const authClients = <AuthClientStatus status={s} />;
+  const authClients = (
+    <>
+      <AuthClientStatus status={s} />
+      <ExecutionProfileStatus status={s} />
+    </>
+  );
   const reconnect =
     s.reconnectCredentials > 0
       ? `${s.reconnectCredentials} ${s.reconnectCredentials === 1 ? "credential" : "credentials"} will be asked to reconnect`
@@ -392,6 +398,7 @@ function AuthClientStatus({
       <div className="space-y-1">
         <p className="text-muted-foreground text-xs">Auth clients: recorded</p>
         <AuthClientItems items={a.warnings} label="Worth a look" />
+        <SelectionCoverage authClients={a} />
       </div>
     );
   }
@@ -445,6 +452,69 @@ function AuthClientStatus({
       ) : null}
       <AuthClientItems items={a.unresolvedAssociations} />
       <AuthClientItems items={a.warnings} label="Worth a look" />
+      <SelectionCoverage authClients={a} />
+    </div>
+  );
+}
+
+// Which typed auth client each live credential's choice names, by credential
+// class. Gaps are never guessed: the server's configuration decides them, or
+// the credential reconnects.
+function SelectionCoverage({
+  authClients: a,
+}: {
+  authClients: AdminUpstreamOAuthMigrationAuthClients;
+}): JSX.Element | null {
+  // A server older than credential choice coverage omits it while a deploy
+  // rolls out: that is unknown, never complete.
+  const classes = a.selectionClasses;
+  if (classes === undefined || a.selectionsComplete === undefined) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Credential choices: coverage unknown; this server did not report it.
+        Check again once the deploy finishes.
+      </p>
+    );
+  }
+  if (classes.length === 0) {
+    return null;
+  }
+  const gaps = a.selectionGaps ?? [];
+  const gapCount = a.selectionGapCount ?? gaps.length;
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground text-xs">
+        Credential choices:{" "}
+        {a.selectionsComplete
+          ? "every choice is covered (auth client or explicit no-auth)"
+          : `${a.pendingSelectionMappings ?? "unknown"} to name, ${gapCount} without a usable auth client`}
+      </p>
+      <ul className="text-muted-foreground text-xs">
+        {classes.map((c) => (
+          <li key={c.credentialClass}>
+            {c.credentialClass}: {c.mapped} of {c.selections} named, {c.noAuth}{" "}
+            no-auth, {c.pending} to name
+            {c.ambiguous > 0 ? `, ${c.ambiguous} ambiguous` : ""}
+            {c.noClient > 0 ? `, ${c.noClient} without a client` : ""}
+            {c.staleNoAuth + c.unusable > 0
+              ? `, ${c.staleNoAuth + c.unusable} to reconnect`
+              : ""}
+          </li>
+        ))}
+      </ul>
+      {gaps.length > 0 ? (
+        <ul className="text-muted-foreground font-mono text-xs">
+          {gaps.map((gap) => (
+            <li key={gap.selectionId}>
+              {gap.credentialClass} {gap.outcome}: credential {gap.credentialId}
+              , server {gap.mcpServerId} in project {gap.projectId}
+            </li>
+          ))}
+          {gapCount > gaps.length ? (
+            <li>and {gapCount - gaps.length} more</li>
+          ) : null}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -488,6 +558,59 @@ function AuthClientItems({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// The auth client choices assistant turns use, per assistant, trigger and
+// execution context. Gaps are never guessed: the server's auth clients are
+// configured instead.
+function ExecutionProfileStatus({
+  status,
+}: {
+  status: AdminUpstreamOAuthMigrationStatus;
+}): JSX.Element | null {
+  const p = status.executionProfiles;
+  if (!p) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Assistant profiles: couldn't check
+      </p>
+    );
+  }
+  if (p.targets === 0) {
+    return null;
+  }
+  if (p.complete) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Assistant profiles: recorded for {p.targets}{" "}
+        {p.targets === 1
+          ? "assistant and trigger pair"
+          : "assistant and trigger pairs"}
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground text-xs">
+        Assistant profiles:{" "}
+        {p.pendingVersions > 0
+          ? `${p.pendingVersions} to record`
+          : "every profile recorded"}
+      </p>
+      {p.gaps.length > 0 ? (
+        <ul className="text-muted-foreground text-xs">
+          {p.gaps.map((gap) => (
+            <li key={`${gap.executionContext}:${gap.reason}`}>
+              {gap.executionContext} {gap.reason}: {gap.servers}{" "}
+              {gap.servers === 1
+                ? "profile and server pair"
+                : "profile and server pairs"}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

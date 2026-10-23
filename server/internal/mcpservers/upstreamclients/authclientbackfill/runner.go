@@ -11,7 +11,10 @@
 // no longer yields, so the records track it, and marks each server it links a
 // client to as needing upstream authentication where that is still
 // undecided. Admin-created records are never
-// read or retired here. Its last phase grants the default auth permissions
+// retired here. It then names, on each live credential's choice for a server,
+// the one auth client that serves it, admin-created clients included (see
+// selections.go), and reports coverage by credential class; a choice several
+// clients could serve is reported, never guessed. Its last phase grants the default auth permissions
 // the mandatory auth client check needs (see grants.go); those grants are live
 // authorization data. The client records themselves are not read yet: the
 // existing resolution stays authoritative.
@@ -85,7 +88,9 @@ const (
 	PhaseEMAWarnings = "ema_warnings"
 	PhaseReconcile   = "reconcile"
 	PhaseMark        = "mark"
-	PhaseGrants      = "grants"
+	// PhaseSelections names auth clients on credentials' choices.
+	PhaseSelections = "selections"
+	PhaseGrants     = "grants"
 )
 
 // Outcome classifies one decision.
@@ -370,6 +375,27 @@ type Report struct {
 	// failed, or some await retirement.
 	SharedClientsWaiting bool `json:"shared_clients_waiting"`
 
+	// AttachmentRemediations lists the agent attachments the grants phase
+	// could not carry over, which need their owner to act.
+	AttachmentRemediations []AttachmentRemediation `json:"attachment_remediations"`
+
+	// AttachmentsWaiting counts carryable attachments whose grants were not
+	// planned because the organization's upstream_client write gate is off.
+	// A run with any is not complete.
+	AttachmentsWaiting int `json:"attachments_waiting"`
+
+	// Selections summarizes live choices by credential class, and
+	// SelectionGaps lists each live choice left without a usable auth client.
+	Selections    map[CredentialClass]*SelectionCounts `json:"selections"`
+	SelectionGaps []SelectionGap                       `json:"selection_gaps"`
+
+	// PendingSelectionMappings counts choices with exactly one auth client to
+	// name, named or not.
+	PendingSelectionMappings int `json:"pending_selection_mappings"`
+
+	// SelectionsMapped counts choices this run named an auth client on.
+	SelectionsMapped int `json:"selections_mapped"`
+
 	// PhaseErrors names each phase that failed and why. A failed phase's
 	// writes are rolled back and its records are not retired; the other
 	// phases still run.
@@ -417,31 +443,37 @@ func (r *Report) wroteHeader(k Kind)   { r.HeadersWritten++; r.kind(k).Written++
 // newReport returns an empty report in the given mode.
 func newReport(apply bool) Report {
 	report := Report{
-		Mode:                  "dry_run",
-		Associations:          0,
-		Outcomes:              map[Outcome]int{},
-		ByKind:                map[Kind]*KindCounts{},
-		PendingClients:        0,
-		PendingLinks:          0,
-		PendingHeaders:        0,
-		ClientsWritten:        0,
-		LinksWritten:          0,
-		HeadersWritten:        0,
-		Gaps:                  0,
-		PendingRetiredClients: 0,
-		PendingRetiredLinks:   0,
-		ClientsRetired:        0,
-		LinksRetired:          0,
-		PendingMarkedServers:  0,
-		ServersMarked:         0,
-		PendingGrants:         0,
-		PendingGrantsByKind:   map[GrantKind]int{},
-		GrantsWritten:         0,
-		APIKeysGranted:        []string{},
-		APIKeysWaiting:        false,
-		SharedClientsWaiting:  false,
-		PhaseErrors:           map[string]string{},
-		Results:               []Result{},
+		Mode:                     "dry_run",
+		Associations:             0,
+		Outcomes:                 map[Outcome]int{},
+		ByKind:                   map[Kind]*KindCounts{},
+		PendingClients:           0,
+		PendingLinks:             0,
+		PendingHeaders:           0,
+		ClientsWritten:           0,
+		LinksWritten:             0,
+		HeadersWritten:           0,
+		Gaps:                     0,
+		PendingRetiredClients:    0,
+		PendingRetiredLinks:      0,
+		ClientsRetired:           0,
+		LinksRetired:             0,
+		PendingMarkedServers:     0,
+		ServersMarked:            0,
+		PendingGrants:            0,
+		PendingGrantsByKind:      map[GrantKind]int{},
+		GrantsWritten:            0,
+		APIKeysGranted:           []string{},
+		APIKeysWaiting:           false,
+		SharedClientsWaiting:     false,
+		Selections:               map[CredentialClass]*SelectionCounts{},
+		SelectionGaps:            []SelectionGap{},
+		PendingSelectionMappings: 0,
+		SelectionsMapped:         0,
+		AttachmentRemediations:   []AttachmentRemediation{},
+		AttachmentsWaiting:       0,
+		PhaseErrors:              map[string]string{},
+		Results:                  []Result{},
 	}
 	if apply {
 		report.Mode = "apply"
@@ -491,6 +523,19 @@ func (r *Report) merge(o Report) {
 	r.APIKeysGranted = append(r.APIKeysGranted, o.APIKeysGranted...)
 	r.APIKeysWaiting = r.APIKeysWaiting || o.APIKeysWaiting
 	r.SharedClientsWaiting = r.SharedClientsWaiting || o.SharedClientsWaiting
+	r.AttachmentRemediations = append(r.AttachmentRemediations, o.AttachmentRemediations...)
+	r.AttachmentsWaiting += o.AttachmentsWaiting
+	for class, c := range o.Selections {
+		mine := r.selectionClass(class)
+		mine.Selections += c.Selections
+		mine.Written += c.Written
+		for outcome, n := range c.Outcomes {
+			mine.Outcomes[outcome] += n
+		}
+	}
+	r.SelectionGaps = append(r.SelectionGaps, o.SelectionGaps...)
+	r.PendingSelectionMappings += o.PendingSelectionMappings
+	r.SelectionsMapped += o.SelectionsMapped
 	r.Results = append(r.Results, o.Results...)
 }
 
@@ -643,8 +688,13 @@ func clientsRecorded(ctx context.Context, db TxStarter, organizationID string) (
 // nothing left to retire. A client or link awaiting retirement keeps its
 // stable id, so a grant written on it now would come back if it were revived.
 func sharedReady(r Report) bool {
-	if len(r.PhaseErrors) > 0 {
-		return false
+	for name := range r.PhaseErrors {
+		// Selection coverage only reports and maps credential choices; it
+		// records no client or link a grant depends on. Its failure stays
+		// reported and keeps selections incomplete.
+		if name != PhaseSelections {
+			return false
+		}
 	}
 	return r.Mode == "apply" || (r.PendingRetiredClients == 0 && r.PendingRetiredLinks == 0)
 }
@@ -704,6 +754,14 @@ func runPhases(ctx context.Context, db TxStarter, opts Options, startedAt pgtype
 		}},
 		{name: PhaseMark, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
 			return markRequiringUpstreamAuth(ctx, New(tx), opts, &report, local)
+		}},
+		// After every phase that records or retires clients and links, so
+		// choices name what this run left in place.
+		// Choices are only reported, not mapped, when an earlier phase failed:
+		// its clients and links were rolled back, and a mapped choice is never
+		// revisited.
+		{name: PhaseSelections, kind: "", run: func(ctx context.Context, tx pgx.Tx, local *Report) error {
+			return runSelections(ctx, New(tx), opts, size, opts.Apply && len(report.PhaseErrors) == 0, local)
 		}},
 	}
 	if withGrants {
