@@ -111,6 +111,12 @@ func (s *Service) BlockAgentOnConnection(ctx context.Context, payload *gen.Block
 			return err
 		}
 		organizationID, ownerUserID := human.Auth.ActiveOrganizationID, human.Auth.UserID
+		// A block names upstream_client, which replicas older than the
+		// dimension drop and whose policy edits do not protect, so new blocks
+		// wait for the write gate. Listing and removing blocks never do.
+		if err := authz.RequireUpstreamSelectorWrites(ctx, organizationID, connectionBlockSelector(remoteSessionClientID, ownerUserID)); err != nil {
+			return fmt.Errorf("check upstream_client write gate: %w", err)
+		}
 		q := repo.New(tx)
 
 		// Only the agent's tenant is checked: blocking an agent from your own

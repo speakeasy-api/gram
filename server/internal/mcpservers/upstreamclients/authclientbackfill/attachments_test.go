@@ -1,6 +1,8 @@
 package authclientbackfill
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -154,4 +156,40 @@ func TestRun_AttachmentsTheRuntimeNoLongerServesAreRemediated(t *testing.T) {
 			f.requireNoConnectionGrant(agentID)
 		})
 	}
+}
+
+// With the organization's upstream_client write gate off, an attachment the
+// backfill could carry over waits: nothing is written for it, not even a
+// narrower grant, and the run reports it until a run with the gate on.
+func TestRun_AttachmentsWaitForTheUpstreamSelectorWriteGate(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	registration := f.client("subject")
+	server := f.server()
+	f.associate(server, registration)
+	f.run(true)
+	owner := f.member()
+	kept := f.agent(owner)
+	f.attach(kept, registration, "user:"+owner, owner, 0)
+
+	for name, gate := range map[string]authz.UpstreamSelectorWriteGate{
+		"no provider":      nil,
+		"flag off":         func(context.Context, string) (bool, error) { return false, nil },
+		"evaluation error": func(context.Context, string) (bool, error) { return true, errors.New("flags unavailable") },
+	} {
+		report, err := Run(authz.WithUpstreamSelectorWriteGate(t.Context(), gate), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+		require.NoError(t, err, name)
+		require.Equal(t, 1, report.AttachmentsWaiting, name)
+		require.Zero(t, report.PendingGrantsByKind[GrantAttachment], name)
+		f.requireNoConnectionGrant(kept)
+	}
+
+	report := f.run(true)
+	require.Zero(t, report.AttachmentsWaiting)
+	require.Equal(t, 1, report.PendingGrantsByKind[GrantAttachment])
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, kept.String())
+	require.Contains(t, f.grantsOf(agent), authz.Grant{
+		PrincipalUrn: agent.String(), Scope: authz.ScopeMCPAuth,
+		Selector: authz.ConnectionAuthClientSelector(registration.String(), owner), Inferred: true,
+	})
 }

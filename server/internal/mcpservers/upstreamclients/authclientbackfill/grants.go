@@ -429,10 +429,18 @@ func planAttachmentGrants(ctx context.Context, q *Queries, opts Options, plan *g
 	if err != nil {
 		return fmt.Errorf("list agent attachments: %w", err)
 	}
+	// Attachment grants name upstream_client, so they are planned only once
+	// the organization's write gate allows it. Until then they wait: nothing
+	// is written without the dimension, and the run reports them pending.
+	writable := authz.UpstreamSelectorWritesAllowed(ctx, opts.OrganizationID)
 	for _, row := range rows {
 		reason := attachmentRemediationReason(row)
 		if reason != "" {
 			report.AttachmentRemediations = append(report.AttachmentRemediations, AttachmentRemediation{BindingID: row.BindingID.String(), AgentID: row.AgentID.String(), Reason: reason})
+			continue
+		}
+		if !writable {
+			report.AttachmentsWaiting++
 			continue
 		}
 		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, row.AgentID.String())

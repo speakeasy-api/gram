@@ -315,6 +315,15 @@ func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agen
 }
 
 func (s *Service) createPreparedAgentKey(ctx context.Context, tx pgx.Tx, human agentmanagement.HumanContext, prepared preparedAgentKey) (repo.ApiKey, error) {
+	// Issuance and rotation both copy the policy into the key, so both wait
+	// for the upstream_client write gate.
+	for _, grants := range [][]runtimepolicy.DelegatedPolicyGrant{prepared.policy.Requested, prepared.policy.Effective} {
+		for _, grant := range grants {
+			if err := authz.RequireUpstreamSelectorWrites(ctx, human.Auth.ActiveOrganizationID, grant.Selector); err != nil {
+				return repo.ApiKey{}, fmt.Errorf("check upstream_client write gate: %w", err)
+			}
+		}
+	}
 	created, err := repo.New(tx).CreateAgentAPIKey(ctx, repo.CreateAgentAPIKeyParams{
 		OrganizationID:         human.Auth.ActiveOrganizationID,
 		CreatedByUserID:        human.Auth.UserID,

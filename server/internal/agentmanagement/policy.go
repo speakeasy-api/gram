@@ -223,6 +223,9 @@ func (s *Service) DeletePolicyGrant(ctx context.Context, payload *gen.DeletePoli
 // mcp:blocked_auth restriction only withdraws access, so writing one needs no
 // containment; every other grant must be contained.
 func requirePolicyAuthority(ctx context.Context, tx pgx.Tx, human HumanContext, agent repo.Agent, scope authz.Scope, selectorRaw []byte) error {
+	if err := authz.RequireUpstreamSelectorWritesRaw(ctx, human.Auth.ActiveOrganizationID, selectorRaw); err != nil {
+		return fmt.Errorf("check upstream_client write gate: %w", err)
+	}
 	if scope == authz.ScopeMCPBlockedAuth {
 		return nil
 	}

@@ -2,6 +2,7 @@ package authclientbackfill
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"log"
 	"os"
 	"testing"
@@ -22,6 +23,8 @@ func TestMain(m *testing.M) {
 		log.Fatalf("launch test infrastructure: %v", err)
 	}
 	testInfra = res
+	// Tests carry attachments over unless they turn the write gate off.
+	authz.SetUpstreamSelectorWriteGate(func(context.Context, string) (bool, error) { return true, nil })
 	code := m.Run()
 	if err := cleanup(); err != nil {
 		log.Fatalf("cleanup test infrastructure: %v", err)

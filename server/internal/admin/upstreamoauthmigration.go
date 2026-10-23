@@ -281,7 +281,7 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 	classes, gaps, gapCount := selectionCoverage(report)
 	_, selectionsFailed := report.PhaseErrors[authclientbackfill.PhaseSelections]
 	return &gen.AdminUpstreamOAuthMigrationAuthClients{
-		Complete:                 report.PendingClients == 0 && report.PendingLinks == 0 && report.PendingHeaders == 0 && report.Gaps == 0 && pendingRetirements == 0 && report.PendingMarkedServers == 0 && len(phases) == 0,
+		Complete:                 report.PendingClients == 0 && report.PendingLinks == 0 && report.PendingHeaders == 0 && report.Gaps == 0 && pendingRetirements == 0 && report.PendingMarkedServers == 0 && report.AttachmentsWaiting == 0 && len(phases) == 0,
 		InProgress:               false,
 		Associations:             int64(report.Associations),
 		PendingClients:           int64(report.PendingClients),

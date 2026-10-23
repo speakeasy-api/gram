@@ -379,6 +379,11 @@ type Report struct {
 	// could not carry over, which need their owner to act.
 	AttachmentRemediations []AttachmentRemediation `json:"attachment_remediations"`
 
+	// AttachmentsWaiting counts carryable attachments whose grants were not
+	// planned because the organization's upstream_client write gate is off.
+	// A run with any is not complete.
+	AttachmentsWaiting int `json:"attachments_waiting"`
+
 	// Selections summarizes live choices by credential class, and
 	// SelectionGaps lists each live choice left without a usable auth client.
 	Selections    map[CredentialClass]*SelectionCounts `json:"selections"`
@@ -466,6 +471,7 @@ func newReport(apply bool) Report {
 		PendingSelectionMappings: 0,
 		SelectionsMapped:         0,
 		AttachmentRemediations:   []AttachmentRemediation{},
+		AttachmentsWaiting:       0,
 		PhaseErrors:              map[string]string{},
 		Results:                  []Result{},
 	}
@@ -518,6 +524,7 @@ func (r *Report) merge(o Report) {
 	r.APIKeysWaiting = r.APIKeysWaiting || o.APIKeysWaiting
 	r.SharedClientsWaiting = r.SharedClientsWaiting || o.SharedClientsWaiting
 	r.AttachmentRemediations = append(r.AttachmentRemediations, o.AttachmentRemediations...)
+	r.AttachmentsWaiting += o.AttachmentsWaiting
 	for class, c := range o.Selections {
 		mine := r.selectionClass(class)
 		mine.Selections += c.Selections

@@ -70,9 +70,12 @@ type authPermissionDefaultsReport struct {
 	Written       int
 	KeysWaiting   int
 	SharedWaiting int
-	Busy          int
-	Failed        int
-	Remediations  []attachmentRemediation
+	// AttachmentsWaiting counts attachments held back by the upstream_client
+	// write gate; a run with any is incomplete.
+	AttachmentsWaiting int
+	Busy               int
+	Failed             int
+	Remediations       []attachmentRemediation
 }
 
 // attachmentRemediation is one agent attachment an owner must reconnect or
@@ -83,7 +86,7 @@ type attachmentRemediation struct {
 }
 
 func newAuthPermissionDefaultsReport() authPermissionDefaultsReport {
-	return authPermissionDefaultsReport{Organizations: 0, Granted: map[authclientbackfill.GrantKind]int{}, Written: 0, KeysWaiting: 0, SharedWaiting: 0, Busy: 0, Failed: 0, Remediations: nil}
+	return authPermissionDefaultsReport{Organizations: 0, Granted: map[authclientbackfill.GrantKind]int{}, Written: 0, KeysWaiting: 0, SharedWaiting: 0, AttachmentsWaiting: 0, Busy: 0, Failed: 0, Remediations: nil}
 }
 
 // authPermissionDefaultsProgressEvery is how many organizations pass between
@@ -128,6 +131,7 @@ func backfillAuthPermissionDefaults(organizationIDs []string, run func(organizat
 		if result.SharedClientsWaiting {
 			report.SharedWaiting++
 		}
+		report.AttachmentsWaiting += result.AttachmentsWaiting
 	}
 	return report, nil
 }
@@ -169,10 +173,10 @@ func runAuthPermissionDefaults(args []string, stdout io.Writer, getenv func(stri
 	for _, remediation := range report.Remediations {
 		_, _ = fmt.Fprintf(stdout, "remediate organization=%s binding=%s agent=%s reason=%s\n", remediation.OrganizationID, remediation.BindingID, remediation.AgentID, remediation.Reason)
 	}
-	_, _ = fmt.Fprintf(stdout, "mode=%s environment=%s organizations=%d personal_default=%d shared_client=%d api_key=%d attachment=%d written=%d keys_waiting=%d shared_waiting=%d attachments_to_remediate=%d busy=%d failed=%d\n",
+	_, _ = fmt.Fprintf(stdout, "mode=%s environment=%s organizations=%d personal_default=%d shared_client=%d api_key=%d attachment=%d written=%d keys_waiting=%d shared_waiting=%d attachments_waiting=%d attachments_to_remediate=%d busy=%d failed=%d\n",
 		mode, cfg.environment, report.Organizations,
 		report.Granted[authclientbackfill.GrantPersonalDefault], report.Granted[authclientbackfill.GrantSharedClient], report.Granted[authclientbackfill.GrantAPIKey], report.Granted[authclientbackfill.GrantAttachment],
-		report.Written, report.KeysWaiting, report.SharedWaiting, len(report.Remediations), report.Busy, report.Failed)
+		report.Written, report.KeysWaiting, report.SharedWaiting, report.AttachmentsWaiting, len(report.Remediations), report.Busy, report.Failed)
 	if err != nil {
 		_, _ = fmt.Fprintf(stdout, "migration failed: %v\n", err)
 		return 1
@@ -210,6 +214,10 @@ func authPermissionDefaultsOrganizations(stdout io.Writer, organizationID string
 func authPermissionDefaultsExitCode(stdout io.Writer, report authPermissionDefaultsReport) int {
 	if report.Failed > 0 || report.Busy > 0 {
 		_, _ = fmt.Fprintln(stdout, "migration incomplete: some organizations failed or were busy; rerun")
+		return 1
+	}
+	if report.AttachmentsWaiting > 0 {
+		_, _ = fmt.Fprintln(stdout, "migration incomplete: attachment grants wait for the upstream_client write gate; rerun once it is enabled")
 		return 1
 	}
 	return 0

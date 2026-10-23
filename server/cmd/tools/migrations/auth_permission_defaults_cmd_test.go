@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -121,4 +122,14 @@ func TestBackfillAuthPermissionDefaultsAggregates(t *testing.T) {
 		return authclientbackfill.Report{}, errors.New("database down")
 	}, func(int, int) {})
 	require.Error(t, err)
+}
+
+func TestAuthPermissionDefaultsIncompleteWhileAttachmentsWait(t *testing.T) {
+	t.Parallel()
+
+	report := newAuthPermissionDefaultsReport()
+	report.AttachmentsWaiting = 1
+	var out strings.Builder
+	require.Equal(t, 1, authPermissionDefaultsExitCode(&out, report))
+	require.Contains(t, out.String(), "migration incomplete")
 }
