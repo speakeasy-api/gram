@@ -283,9 +283,14 @@ export function McpServerCardStatus({
   server,
 }: {
   server: McpServer;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   if (server.remoteMcpServerId) {
     return <MCPServerAvailabilityToggle server={server} />;
+  }
+
+  // Clients connect straight to the vendor, so visibility has nothing to gate.
+  if (server.unproxiedMcpServerId) {
+    return null;
   }
 
   return (
