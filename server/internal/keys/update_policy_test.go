@@ -1,6 +1,7 @@
 package keys_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -109,12 +110,37 @@ func TestKeysService_UpdateKeyPolicy(t *testing.T) {
 		require.True(t, row.UpdatedAt.Time.After(row.CreatedAt.Time), "the key's updated_at moves with its policy")
 		require.Equal(t, row.UpdatedAt.Time.Format(time.RFC3339), cleared.UpdatedAt)
 
-		_, err = authclientbackfill.RunGrants(ctx, ti.conn, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
+		report, err := authclientbackfill.RunGrants(ctx, ti.conn, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0})
 		require.NoError(t, err)
+		require.Empty(t, report.PhaseErrors)
+		require.False(t, report.APIKeysWaiting, "the grants phase reached the key policies")
 
 		grants, err := authz.LoadGrants(ctx, ti.conn, organizationID, []urn.Principal{urn.NewAPIKeyPrincipal(uuid.MustParse(key.ID))})
 		require.NoError(t, err)
 		require.Empty(t, grants, "the backfill must not give an emptied key its legacy reach back")
+	})
+
+	t.Run("waits for a running backfill", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestKeysService(t)
+		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "locked" + randstr(6), Scopes: []string{"consumer"}})
+		require.NoError(t, err)
+
+		conn, err := ti.conn.Acquire(ctx)
+		require.NoError(t, err)
+		defer conn.Release()
+		lock, err := authclientbackfill.New(conn).TryLockOrganizationBackfill(ctx, key.OrganizationID)
+		require.NoError(t, err)
+		require.True(t, lock.Locked)
+
+		blocked, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
+		_, err = ti.service.UpdateKeyPolicy(blocked, &gen.UpdateKeyPolicyPayload{ID: key.ID, PolicyGrants: []*gen.APIKeyPolicyGrant{}})
+		require.Error(t, err, "a policy replacement must not run alongside a backfill")
+
+		require.NoError(t, authclientbackfill.New(conn).UnlockOrganizationBackfill(ctx, key.OrganizationID))
+		_, err = ti.service.UpdateKeyPolicy(ctx, &gen.UpdateKeyPolicyPayload{ID: key.ID, PolicyGrants: []*gen.APIKeyPolicyGrant{}})
+		require.NoError(t, err)
 	})
 
 	t.Run("refuses an auth client from another organization", func(t *testing.T) {
