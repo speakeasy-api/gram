@@ -35,6 +35,16 @@ const state = vi.hoisted(() => ({
   })),
   settings: vi.fn(() => ({ data: { effectiveName: "example-marketplace" } })),
   mutation: vi.fn(() => ({ isPending: false, mutateAsync: vi.fn() })),
+  mcpServer: { id: "server-a", name: "Server" } as Record<string, string>,
+  skillsOverMcp: false,
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => ({
+    status:
+      flag === "skills-over-mcp" && state.skillsOverMcp
+        ? "enabled"
+        : "disabled",
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-a" }),
@@ -83,7 +93,7 @@ vi.mock("react-router", () => ({
   useLocation: () => ({ pathname: "/mcp/server-a" }),
 }));
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
-  useGetMcpServer: () => ({ data: { id: "server-a", name: "Server" } }),
+  useGetMcpServer: () => ({ data: state.mcpServer }),
 }));
 vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
   useGetRemoteMcpServer: () => ({}),
@@ -174,6 +184,8 @@ import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 beforeEach(() => {
   vi.clearAllMocks();
   state.grants = [];
+  state.mcpServer = { id: "server-a", name: "Server" };
+  state.skillsOverMcp = false;
 });
 afterEach(cleanup);
 const scope = { gramProject: "project-slug", gramSession: "session-a" };
@@ -330,4 +342,50 @@ describe("MCP plugin permission boundaries", () => {
       }
     },
   );
+});
+
+describe("remote MCP server Skills tab", () => {
+  const remote = {
+    id: "server-a",
+    name: "Server",
+    remoteMcpServerId: "remote-source-a",
+  };
+
+  it("shows for a remote server with the flag on and project skill read", () => {
+    state.skillsOverMcp = true;
+    state.mcpServer = remote;
+    state.grants = [{ scope: "skill:read" }];
+    render(<McpServerXSidebarNav />);
+    expect(screen.getByText("Skills")).toBeTruthy();
+  });
+
+  it.each([
+    {
+      case: "flag off",
+      flag: false,
+      server: remote,
+      grants: [{ scope: "skill:read" }],
+    },
+    {
+      case: "server not remote-backed",
+      flag: true,
+      server: { id: "server-a", name: "Server", tunneledMcpServerId: "t-1" },
+      grants: [{ scope: "skill:read" }],
+    },
+    { case: "no skill read", flag: true, server: remote, grants: [] },
+    {
+      case: "skill read on another project",
+      flag: true,
+      server: remote,
+      grants: [
+        { scope: "skill:read", selectors: [{ resourceId: "project-b" }] },
+      ],
+    },
+  ])("is hidden with $case", ({ flag, server, grants }) => {
+    state.skillsOverMcp = flag;
+    state.mcpServer = server;
+    state.grants = grants;
+    render(<McpServerXSidebarNav />);
+    expect(screen.queryByText("Skills")).toBeNull();
+  });
 });
