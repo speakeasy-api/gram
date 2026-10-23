@@ -25,8 +25,9 @@ WHERE u.id = @user_id
 -- The skills a hosted toolset endpoint serves over MCP to one caller, one row
 -- per skill name, ordered by name. A candidate is an active plugin-channel
 -- distribution whose plugin belongs to the endpoint's project, is not deleted,
--- contains the endpoint's backend (the toolset itself, or the mcp_servers row
--- fronting it when the caller passes one), and is assigned to at least one of
+-- contains the endpoint's backend (the toolset's canonical mcp_servers row,
+-- which shares the toolset's id, or the mcp_servers row fronting it when the
+-- caller passes one), and is assigned to at least one of
 -- the caller's principal URNs. The skill must not be archived. Each candidate
 -- carries the distribution's resolved version: the pin when one is set,
 -- otherwise the latest valid version under the same ordering as
@@ -88,7 +89,7 @@ WITH candidates AS (
       WHERE ps.plugin_id = p.id
         AND ps.deleted IS FALSE
         AND (
-          ps.toolset_id = @toolset_id::uuid
+          ps.mcp_server_id = @toolset_id::uuid
           OR (
             sqlc.narg(mcp_server_id)::uuid IS NOT NULL
             AND ps.mcp_server_id = sqlc.narg(mcp_server_id)::uuid

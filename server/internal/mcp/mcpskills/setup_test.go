@@ -23,7 +23,6 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -103,12 +102,19 @@ func createToolset(t *testing.T, ctx context.Context, f *fixture, projectID uuid
 		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: conv.ToPGText(slug), McpEnabled: true,
 	})
 	require.NoError(t, err)
+
+	// The canonical mcp_servers row shares the toolset's id, and plugins
+	// contain the toolset through it.
+	_, err = mcpserversrepo.New(f.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: toolset.ID, ProjectID: projectID, Name: conv.ToPGText(slug), Slug: conv.ToPGText(slug),
+		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: visibility.Private,
+	})
+	require.NoError(t, err)
 	return toolset.ID
 }
 
-// createFrontingServer gives the fixture toolset an mcp_servers row, which is
-// what a plugin references when it contains the server rather than the
-// toolset.
+// createFrontingServer gives the fixture toolset a second, non-canonical
+// mcp_servers row, which a caller passes as the server fronting the toolset.
 func createFrontingServer(t *testing.T, ctx context.Context, f *fixture) uuid.UUID {
 	t.Helper()
 
@@ -166,9 +172,9 @@ func createPlugin(t *testing.T, ctx context.Context, f *fixture, projectID uuid.
 func containToolset(t *testing.T, ctx context.Context, f *fixture, pluginID, toolsetID uuid.UUID) uuid.UUID {
 	t.Helper()
 
-	member, err := testrepo.New(f.conn).InsertToolsetKeyedPluginServerFixture(ctx, testrepo.InsertToolsetKeyedPluginServerFixtureParams{
-		PluginID: pluginID, ToolsetID: conv.ToNullUUID(toolsetID),
-		DisplayName: "toolset", Policy: "required", SortOrder: 0, DeletedAt: pgtype.Timestamptz{},
+	member, err := pluginsrepo.New(f.conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID: pluginID, McpServerID: conv.ToNullUUID(toolsetID),
+		DisplayName: "toolset", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)
 	return member.ID
