@@ -849,6 +849,7 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
+			pluginPublisher.WithOrganizationHosts(orgHosts)
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 

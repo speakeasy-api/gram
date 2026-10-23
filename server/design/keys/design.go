@@ -97,6 +97,28 @@ var _ = Service("keys", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeAPIKey"}`)
 	})
 
+	Method("updateKeyPolicy", func() {
+		Description("Replace an ordinary key's own policy: the mcp:connect and mcp:auth grants, and their blocks, its server and auth client access is evaluated against. Agent keys keep their delegated grants. Requires org admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the key.", func() { Format(FormatUUID) })
+			Attribute("policy_grants", ArrayOf(APIKeyPolicyGrant), "The key's complete policy. An empty list removes every grant.", func() { MaxLength(100) })
+			Required("id", "policy_grants")
+			security.SessionPayload()
+		})
+		Result(KeyModel)
+
+		HTTP(func() {
+			POST("/rpc/keys.updatePolicy")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateAPIKeyPolicy")
+		Meta("openapi:extension:x-speakeasy-name-override", "updatePolicy")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateAPIKeyPolicy"}`)
+	})
+
 	Method("verifyKey", func() {
 		Description("Verify an api key")
 

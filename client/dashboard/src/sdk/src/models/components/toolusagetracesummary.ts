@@ -89,6 +89,14 @@ export type ToolUsageTraceSummary = {
    */
   accountType?: string | undefined;
   /**
+   * Email of the authorizer when they resolve to a known user
+   */
+  authorizerLabel?: string | undefined;
+  /**
+   * Person an agent call acted on behalf of; absent for direct calls and for agents that sign in as themselves
+   */
+  authorizerUserId?: string | undefined;
+  /**
    * Hook block reason when hook_status is blocked
    */
   blockReason?: string | undefined;
@@ -217,6 +225,8 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     account_type: z.optional(z.string()),
+    authorizer_label: z.optional(z.string()),
+    authorizer_user_id: z.optional(z.string()),
     block_reason: z.optional(z.string()),
     client_key: z.string(),
     client_label: z.string(),
@@ -245,6 +255,8 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "account_type": "accountType",
+      "authorizer_label": "authorizerLabel",
+      "authorizer_user_id": "authorizerUserId",
       "block_reason": "blockReason",
       "client_key": "clientKey",
       "client_label": "clientLabel",
