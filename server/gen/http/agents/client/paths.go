@@ -62,6 +62,21 @@ func DeletePolicyGrantAgentsPath() string {
 	return "/rpc/agents.deletePolicyGrant"
 }
 
+// ListConnectionBlocksAgentsPath returns the URL path to the agents service listConnectionBlocks HTTP endpoint.
+func ListConnectionBlocksAgentsPath() string {
+	return "/rpc/agents.listConnectionBlocks"
+}
+
+// BlockAgentOnConnectionAgentsPath returns the URL path to the agents service blockAgentOnConnection HTTP endpoint.
+func BlockAgentOnConnectionAgentsPath() string {
+	return "/rpc/agents.blockOnConnection"
+}
+
+// RemoveConnectionBlockAgentsPath returns the URL path to the agents service removeConnectionBlock HTTP endpoint.
+func RemoveConnectionBlockAgentsPath() string {
+	return "/rpc/agents.removeConnectionBlock"
+}
+
 // TransferAgentsPath returns the URL path to the agents service transfer HTTP endpoint.
 func TransferAgentsPath() string {
 	return "/rpc/agents.transfer"

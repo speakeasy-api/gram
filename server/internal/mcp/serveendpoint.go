@@ -954,6 +954,9 @@ func (s *Service) prepareProxyBackendContext(
 			if err != nil {
 				return denied(fmt.Errorf("public identity auth: %w", err))
 			}
+			if err := s.refuseForeignCaller(ctx, organizationID); err != nil {
+				return denied(err)
+			}
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			if ok && authCtx != nil && authCtx.ProjectID == nil && projectWithOrganization.ID == authCtx.ActiveOrganizationID {
 				ctx = setProxyBackendProjectContext(ctx, authCtx, projectWithOrganization.ProjectID, projectWithOrganization.ProjectSlug)

@@ -174,6 +174,9 @@ func PatchRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orgID string, roleSl
 	if orgID == "" {
 		return nil, fmt.Errorf("organization id is required")
 	}
+	if err := RequireUpstreamSelectorWritesForGrants(ctx, orgID, addGrants); err != nil {
+		return nil, err
+	}
 
 	principal, err := loadRolePrincipal(ctx, dbtx, orgID, roleSlug, rolePrincipalURN)
 	if err != nil {

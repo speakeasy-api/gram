@@ -193,12 +193,12 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
+		return oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidRequest, "an mcp slug must be provided", nil)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
-		return err
+		return tokenEndpointResolutionError(err)
 	}
 	return s.ServeToken(w, r, endpoint)
 }
@@ -315,7 +315,10 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 
 	logger := endpoint.LogWith(s.logger)
 
-	grantType := r.PostForm.Get("grant_type")
+	grantType := r.PostForm.Get(oauthwire.ParamGrantType)
+	if grantType == "" {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
+	}
 	creds := extractClientCredentials(r)
 	grant, ok := s.tokenGrantFor(r, grantType, creds)
 	// A workload's assertion signs in a workload, and an organization gateway
@@ -472,7 +475,7 @@ func (s *Service) authenticateTokenClient(
 		}
 		if mode == admission.ModeDisabled {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_disabled")
-			return nil, writeInvalidClientError(ctx, w, r, logger, "this server does not accept client ID metadata documents")
+			return nil, writeTokenPolicyError(ctx, w, logger, grantType, "this server does not accept client ID metadata documents")
 		}
 	}
 	// Authentication is decided by the method the row persisted, not by
@@ -507,7 +510,7 @@ func (s *Service) authenticateTokenClient(
 			if grantType == oauthwire.GrantTypeAuthorizationCode {
 				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageToken)
 			}
-			return nil, writeInvalidClientError(ctx, w, r, logger, blockedErr.Description())
+			return nil, writeTokenPolicyError(ctx, w, logger, grantType, blockedErr.Description())
 		}
 		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
 			return nil, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
@@ -805,7 +808,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 			ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+				return oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "authorization issuer is no longer available", err)
 			}
 			return oops.E(oops.CodeUnavailable, err, "lock user session issuer for session admission")
 		}
@@ -1186,7 +1189,7 @@ func (s *Service) rotateRefreshToken(
 		ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return true, oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+			return true, oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "authorization issuer is no longer available", err)
 		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.SerializationFailure {
@@ -1884,10 +1887,10 @@ func (s *Service) mintSession(
 			endpoint, params.Subject, params.Subject, pgtype.Text{String: endpoint.OrganizationID, Valid: true},
 			params.AuthorizerUserID, params.DelegatedGrants, params.DelegatedGrantsVersion,
 		); err != nil {
-			return nil, oops.C(oops.CodeUnauthorized)
+			return nil, oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "session authorization is no longer valid", nil)
 		}
 	case params.AuthorizerUserID.Valid || params.DelegatedGrants != nil || params.DelegatedGrantsVersion.Valid:
-		return nil, oops.C(oops.CodeUnauthorized)
+		return nil, oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "session authorization is no longer valid", nil)
 	}
 
 	issuerURL, err := s.issuerURL(endpoint, params.BaseURL)
@@ -2016,7 +2019,7 @@ func (s *Service) issueSession(
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+				return nil, oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "authorization issuer is no longer available", err)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "lookup user session issuer").LogError(ctx, logger)
 		}
@@ -2106,9 +2109,9 @@ func (s *Service) issueSession(
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			if revoked, rerr := signInRevokedForGrant(ctx, queries, issuance); rerr == nil && revoked {
-				return nil, oops.E(oops.CodeUnauthorized, errSignInRevoked, "the sign-in that authorized this grant was revoked; sign in again")
+				return nil, oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "the sign-in that authorized this grant was revoked; sign in again", errSignInRevoked)
 			}
-			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+			return nil, oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "authorization issuer is no longer available", err)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
 	}

@@ -187,22 +187,28 @@ func isAccessDenial(err error) bool {
 // shadowAuthClientUse records the check for using a resolved client. A
 // personal client a non-user session uses has no connection owner to check
 // yet, so it is recorded as skipped rather than as an invalid check.
-func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, clientType string, subject urn.SessionSubject) {
+func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, subject urn.SessionSubject) {
 	if clientType == authClientTypeRemoteSession && subject.Kind != urn.SessionSubjectKindUser {
 		s.newMandatoryShadow(ctx, organizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, legacyAllowed, mandatoryReasonNoConnectionOwner, clientID.String(), projectID.String())
 		return
 	}
-	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, clientType, subject))
+	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, registrationID, clientType, subject))
 }
 
 // mandatoryAuthClientCheck is the check for using a resolved client. A
-// personal client is checked against the connection's stored owner.
-func mandatoryAuthClientCheck(projectID, clientID uuid.UUID, clientType string, subject urn.SessionSubject) authz.Check {
-	owner := ""
-	if clientType == authClientTypeRemoteSession && subject.Kind == urn.SessionSubjectKindUser {
-		owner = subject.ID
+// personal client is checked against the connection's stored owner and the
+// upstream OAuth client the connection uses.
+func mandatoryAuthClientCheck(projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, subject urn.SessionSubject) authz.Check {
+	owner, upstream := "", ""
+	if clientType == authClientTypeRemoteSession {
+		if subject.Kind == urn.SessionSubjectKindUser {
+			owner = subject.ID
+		}
+		if registrationID.Valid {
+			upstream = registrationID.UUID.String()
+		}
 	}
-	return authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: clientType, ProjectID: projectID.String(), ConnectionOwner: owner})
+	return authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: clientType, ProjectID: projectID.String(), ConnectionOwner: owner, UpstreamClient: upstream})
 }
 
 func (m *mandatoryShadow) callerClass() string {

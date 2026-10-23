@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -117,9 +118,15 @@ type Service struct {
 	assistantWorkloadTokens AssistantWorkloadTokenIssuer
 	federatedLoginConsumer  FederatedLoginConsumer
 	identityChainer         identityChainer
-	// authClientPermitter decides whether the caller may use a resolved typed
-	// auth client; nil keeps the connect-equivalent rule (connectPermitter).
-	authClientPermitter       authClientPermitter
+	// authClientPermitter overrides how the caller's use of a resolved typed
+	// auth client is decided, for every organization. nil uses the mandatory
+	// mcp:auth check (mandatoryPermitter) for an organization that enforces
+	// when authz is configured, and the connect-equivalent rule
+	// (connectPermitter) otherwise.
+	authClientPermitter authClientPermitter
+	// authEnforcement says which organizations have upstream auth
+	// enforcement enabled; the resolver is authoritative only for them.
+	authEnforcement           *authenforcement.Gate
 	logger                    *slog.Logger
 	tracer                    trace.Tracer
 	metrics                   *mcpmetrics.Metrics
@@ -533,7 +540,8 @@ func NewService(
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
-		authClientPermitter:       connectPermitter{},
+		authClientPermitter:       nil,
+		authEnforcement:           authenforcement.NewGate(db),
 		consentBindings:           nil,
 		logger:                    logger,
 		tracer:                    tracer,
@@ -761,9 +769,9 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 		case netingress.RouteConsentToolsScript:
 			handler = oops.ErrHandle(service.logger, service.ServeConsentToolsScript)
 		case netingress.RouteToken:
-			handler = oops.ErrHandle(service.logger, service.HandleToken)
+			handler = oops.OAuthErrHandle(service.logger, service.HandleToken)
 		case netingress.RouteRevoke:
-			handler = oops.ErrHandle(service.logger, service.HandleRevoke)
+			handler = oops.OAuthErrHandle(service.logger, service.HandleRevoke)
 		}
 		if handler == nil {
 			panic(fmt.Sprintf("private MCP route %s %s has no handler", route.Method, route.Path))
@@ -792,7 +800,7 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.MCPErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", deviceagenttoken.TokenPathPattern, oops.ErrHandle(service.logger, service.HandleDeviceAgentToken).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", deviceagenttoken.TokenPathPattern, oops.OAuthErrHandle(service.logger, service.HandleDeviceAgentToken).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback/{clientID}", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
@@ -842,8 +850,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-page-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentScript).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-tools-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentToolsScript).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-fonts/{file}", oops.ErrHandle(service.logger, service.ServeConsentFont).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/token", oops.OAuthErrHandle(service.logger, service.HandleToken).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/revoke", oops.OAuthErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 
 	attachSharedAuthorizationServers(mux, service)
@@ -1385,6 +1393,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			}
 		default:
 			ctx, err = s.TryPublicIdentityAuth(ctx, r, false, toolset.ID)
+			if err == nil {
+				err = s.refuseForeignCaller(ctx, toolset.OrganizationID)
+			}
 			if err != nil {
 				s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
 				return err

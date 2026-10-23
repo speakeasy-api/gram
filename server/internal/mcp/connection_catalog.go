@@ -133,7 +133,7 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 			if member.Auth.RegistrationID.UUID != upstreamPicks[member.ServerID] {
 				return nil, errConsentConfigurationChanged
 			}
-			resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.Auth.RegistrationID, *state.Subject)
+			resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.RegistrationID, *state.Subject)
 			if err != nil {
 				return nil, err
 			}

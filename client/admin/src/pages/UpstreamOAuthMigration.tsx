@@ -9,6 +9,7 @@ import { CheckCircle2Icon, CircleDashedIcon, Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AdminUpstreamOAuthMigrationOrganization } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganization";
+import type { AdminUpstreamOAuthMigrationAuthClients } from "@gram/admin-client/models/components/adminupstreamoauthmigrationauthclients";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
 import type { AdminUpstreamOAuthMigrationUnresolvedAssociation } from "@gram/admin-client/models/components/adminupstreamoauthmigrationunresolvedassociation";
 
@@ -27,6 +28,8 @@ import {
 import { errorMessage } from "@/lib/gramAdminApi";
 import { needsMigrationRun } from "@/lib/upstreamOAuthMigration";
 import {
+  disableUpstreamAuthEnforcement,
+  enableUpstreamAuthEnforcement,
   runUpstreamOAuthMigration,
   upstreamOAuthMigrationOrganizationsQuery,
   upstreamOAuthMigrationStatusQuery,
@@ -40,7 +43,8 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
   const [confirm, confirmDialog] = useConfirmDialog();
   const organizations = useQuery(upstreamOAuthMigrationOrganizationsQuery());
   const [filter, setFilter] = useState("");
-  const [running, setRunning] = useState<Set<string>>(new Set());
+  // What each busy organization is doing, by id.
+  const [running, setRunning] = useState<Map<string, string>>(new Map());
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(
     null,
   );
@@ -79,7 +83,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
   const pendingCount = statuses.filter((s) => needsMigrationRun(s.data)).length;
 
   async function migrate(org: AdminUpstreamOAuthMigrationOrganization) {
-    setRunning((current) => new Set(current).add(org.id));
+    setRunning((current) => new Map(current).set(org.id, "Migrating"));
     try {
       const run = await runUpstreamOAuthMigration(org.id);
       client.setQueryData(
@@ -89,7 +93,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
       return run;
     } finally {
       setRunning((current) => {
-        const next = new Set(current);
+        const next = new Map(current);
         next.delete(org.id);
         return next;
       });
@@ -116,6 +120,53 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
       }
     } catch (e) {
       toast.error(`${org.name}: ${errorMessage(e)}`);
+    }
+  }
+
+  async function toggleEnforcement(
+    org: AdminUpstreamOAuthMigrationOrganization,
+    enable: boolean,
+  ) {
+    const ok = await confirm(
+      enable
+        ? {
+            title: `Enforce upstream auth for ${org.name}?`,
+            description:
+              "Its servers and assistant turns are served by the auth client each credential chose, and using it requires permission. Confirm that its mandatory authorization shadow shows no unexplained new denial, and that it was told valid credentials from another organization are refused on its public servers instead of served anonymously. Credentials with an ambiguous choice are asked to reconnect.",
+            confirmLabel: "Enforce",
+          }
+        : {
+            title: `Stop enforcing upstream auth for ${org.name}?`,
+            description:
+              "Requests go back to the upstream client choice within a minute. Choices keep being recorded, so enforcement can be turned on again later.",
+            confirmLabel: "Stop enforcing",
+          },
+    );
+    if (!ok) return;
+    setRunning((current) =>
+      new Map(current).set(org.id, "Updating enforcement"),
+    );
+    try {
+      const status = enable
+        ? await enableUpstreamAuthEnforcement(org.id)
+        : await disableUpstreamAuthEnforcement(org.id);
+      client.setQueryData(
+        upstreamOAuthMigrationStatusQuery(org.id).queryKey,
+        status,
+      );
+      toast.success(
+        enable
+          ? `Enforcing upstream auth for ${org.name}`
+          : `Stopped enforcing upstream auth for ${org.name}`,
+      );
+    } catch (e) {
+      toast.error(`${org.name}: ${errorMessage(e)}`);
+    } finally {
+      setRunning((current) => {
+        const next = new Map(current);
+        next.delete(org.id);
+        return next;
+      });
     }
   }
 
@@ -240,7 +291,8 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
             ) : (
               visible.map((org) => {
                 const status = statusByID.get(org.id);
-                const busy = running.has(org.id);
+                const activity = running.get(org.id);
+                const busy = activity !== undefined;
                 return (
                   <TableRow key={org.id}>
                     <TableCell>
@@ -253,17 +305,38 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
                       {org.servers}
                     </TableCell>
                     <TableCell>
-                      <MigrationStatus status={status} busy={busy} />
+                      <MigrationStatus status={status} activity={activity} />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void migrateOne(org)}
-                        disabled={busy || bulk !== null}
-                      >
-                        {status?.data?.migrated ? "Run again" : "Migrate"}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void migrateOne(org)}
+                          disabled={busy || bulk !== null}
+                        >
+                          {status?.data?.migrated ? "Run again" : "Migrate"}
+                        </Button>
+                        {status?.data?.enforcement?.enabled ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void toggleEnforcement(org, false)}
+                            disabled={busy || bulk !== null}
+                          >
+                            Stop enforcing
+                          </Button>
+                        ) : status?.data?.enforcement?.ready ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void toggleEnforcement(org, true)}
+                            disabled={busy || bulk !== null}
+                          >
+                            Enforce
+                          </Button>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -279,16 +352,16 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
 
 function MigrationStatus({
   status,
-  busy,
+  activity,
 }: {
   status: UseQueryResult<AdminUpstreamOAuthMigrationStatus> | undefined;
-  busy: boolean;
+  activity: string | undefined;
 }): JSX.Element {
-  if (busy) {
+  if (activity !== undefined) {
     return (
       <span className="text-muted-foreground inline-flex items-center gap-1.5">
         <Loader2Icon aria-hidden="true" className="size-4 animate-spin" />
-        Migrating
+        {activity}
       </span>
     );
   }
@@ -301,7 +374,13 @@ function MigrationStatus({
     );
   }
   const s = status.data;
-  const authClients = <AuthClientStatus status={s} />;
+  const authClients = (
+    <>
+      <AuthClientStatus status={s} />
+      <ExecutionProfileStatus status={s} />
+      <EnforcementStatus status={s} />
+    </>
+  );
   const reconnect =
     s.reconnectCredentials > 0
       ? `${s.reconnectCredentials} ${s.reconnectCredentials === 1 ? "credential" : "credentials"} will be asked to reconnect`
@@ -392,6 +471,7 @@ function AuthClientStatus({
       <div className="space-y-1">
         <p className="text-muted-foreground text-xs">Auth clients: recorded</p>
         <AuthClientItems items={a.warnings} label="Worth a look" />
+        <SelectionCoverage authClients={a} />
       </div>
     );
   }
@@ -445,6 +525,69 @@ function AuthClientStatus({
       ) : null}
       <AuthClientItems items={a.unresolvedAssociations} />
       <AuthClientItems items={a.warnings} label="Worth a look" />
+      <SelectionCoverage authClients={a} />
+    </div>
+  );
+}
+
+// Which typed auth client each live credential's choice names, by credential
+// class. Gaps are never guessed: the server's configuration decides them, or
+// the credential reconnects.
+function SelectionCoverage({
+  authClients: a,
+}: {
+  authClients: AdminUpstreamOAuthMigrationAuthClients;
+}): JSX.Element | null {
+  // A server older than credential choice coverage omits it while a deploy
+  // rolls out: that is unknown, never complete.
+  const classes = a.selectionClasses;
+  if (classes === undefined || a.selectionsComplete === undefined) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Credential choices: coverage unknown; this server did not report it.
+        Check again once the deploy finishes.
+      </p>
+    );
+  }
+  if (classes.length === 0) {
+    return null;
+  }
+  const gaps = a.selectionGaps ?? [];
+  const gapCount = a.selectionGapCount ?? gaps.length;
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground text-xs">
+        Credential choices:{" "}
+        {a.selectionsComplete
+          ? "every choice is covered (auth client or explicit no-auth)"
+          : `${a.pendingSelectionMappings ?? "unknown"} to name, ${gapCount} without a usable auth client`}
+      </p>
+      <ul className="text-muted-foreground text-xs">
+        {classes.map((c) => (
+          <li key={c.credentialClass}>
+            {c.credentialClass}: {c.mapped} of {c.selections} named, {c.noAuth}{" "}
+            no-auth, {c.pending} to name
+            {c.ambiguous > 0 ? `, ${c.ambiguous} ambiguous` : ""}
+            {c.noClient > 0 ? `, ${c.noClient} without a client` : ""}
+            {c.staleNoAuth + c.unusable > 0
+              ? `, ${c.staleNoAuth + c.unusable} to reconnect`
+              : ""}
+          </li>
+        ))}
+      </ul>
+      {gaps.length > 0 ? (
+        <ul className="text-muted-foreground font-mono text-xs">
+          {gaps.map((gap) => (
+            <li key={gap.selectionId}>
+              {gap.credentialClass} {gap.outcome}: credential {gap.credentialId}
+              , server {gap.mcpServerId} in project {gap.projectId}
+            </li>
+          ))}
+          {gapCount > gaps.length ? (
+            <li>and {gapCount - gaps.length} more</li>
+          ) : null}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -489,6 +632,93 @@ function AuthClientItems({
         ))}
       </ul>
     </div>
+  );
+}
+
+// The auth client choices assistant turns use, per assistant, trigger and
+// execution context. Gaps are never guessed: the server's auth clients are
+// configured instead.
+function ExecutionProfileStatus({
+  status,
+}: {
+  status: AdminUpstreamOAuthMigrationStatus;
+}): JSX.Element | null {
+  const p = status.executionProfiles;
+  if (!p) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Assistant profiles: couldn't check
+      </p>
+    );
+  }
+  if (p.targets === 0) {
+    return null;
+  }
+  if (p.complete) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Assistant profiles: recorded for {p.targets}{" "}
+        {p.targets === 1
+          ? "assistant and trigger pair"
+          : "assistant and trigger pairs"}
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground text-xs">
+        Assistant profiles:{" "}
+        {p.pendingVersions > 0
+          ? `${p.pendingVersions} to record`
+          : "every profile recorded"}
+      </p>
+      {p.gaps.length > 0 ? (
+        <ul className="text-muted-foreground text-xs">
+          {p.gaps.map((gap) => (
+            <li key={`${gap.executionContext}:${gap.reason}`}>
+              {gap.executionContext} {gap.reason}: {gap.servers}{" "}
+              {gap.servers === 1
+                ? "profile and server pair"
+                : "profile and server pairs"}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+// Whether upstream auth is enforced for the organization, and what keeps it
+// from being enforced. Enforcing refuses valid credentials from another
+// organization on its public servers instead of serving them anonymously.
+function EnforcementStatus({
+  status,
+}: {
+  status: AdminUpstreamOAuthMigrationStatus;
+}): JSX.Element | null {
+  const e = status.enforcement;
+  if (!e) {
+    return null;
+  }
+  if (e.enabled) {
+    return (
+      <p className="text-xs text-emerald-600 dark:text-emerald-400">
+        Upstream auth enforced. Valid credentials from another organization are
+        refused on its public servers.
+      </p>
+    );
+  }
+  if (e.ready) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Ready to enforce upstream auth once its shadow evaluation agrees.
+      </p>
+    );
+  }
+  return (
+    <p className="text-muted-foreground text-xs">
+      Not ready to enforce: {e.blockers.join(" ")}
+    </p>
   );
 }
 

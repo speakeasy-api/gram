@@ -1,3 +1,4 @@
+import { mcpServerRouteParam } from "@/lib/sources";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -309,8 +310,8 @@ export function StepServers({
                             navigating away then coming back loses all of it. */}
                         <Button size="sm" variant="secondary" asChild>
                           <Link
-                            to={`${routes.mcp.x.settings.href(
-                              server.slug || server.id,
+                            to={`${routes.mcp.details.settings.href(
+                              mcpServerRouteParam(server),
                             )}#${MCP_AUTHENTICATION_SECTION_ID}`}
                             target="_blank"
                             rel="noreferrer"

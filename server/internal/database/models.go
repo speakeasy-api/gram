@@ -2135,6 +2135,48 @@ type EnvironmentEntry struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type ExecutionSelectionProfile struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	AssistantID uuid.UUID
+	// @access: confidential
+	TriggerInstanceID uuid.UUID
+	// @access: confidential
+	ExecutionContext string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type ExecutionSelectionProfileVersion struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProfileID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Version int64
+	// @access: confidential
+	Source string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type ExternalCredential struct {
 	// @access: confidential
 	ID uuid.UUID
