@@ -187,8 +187,12 @@ type GKEProvider struct {
 	changed chan struct{}
 	// available is false once the sandbox template is known to be missing.
 	available atomic.Bool
-	// templateSeen is set once the template has been read successfully.
-	templateSeen atomic.Bool
+	// templateMissing is set while the template is confirmed absent. Only
+	// that holds readiness: an unreachable cluster API must not keep a new
+	// replica, and the API and dashboard it serves, out of rotation.
+	templateMissing atomic.Bool
+	// templateUnreadable records that a forbidden read was already logged.
+	templateUnreadable atomic.Bool
 	// capacityWait bounds the wait for a stream at the organization's cap.
 	capacityWait time.Duration
 	closed       bool
@@ -224,7 +228,7 @@ func NewGKEProvider(ctx context.Context, config GKEConfig) (*GKEProvider, error)
 		config.MaxOrganizationRunners = defaultMaxOrganizationRunners
 	}
 	runCtx, cancel := context.WithCancel(ctx)
-	p := &GKEProvider{config: config, owner: uuid.NewString(), now: time.Now, started: time.Now(), mu: sync.Mutex{}, entries: make(map[runnerScope]*projectRunner), changed: make(chan struct{}), available: atomic.Bool{}, templateSeen: atomic.Bool{}, capacityWait: codeCapacityWait, closed: false, ctx: runCtx, cancel: cancel, draining: make(map[*projectRunner]struct{}), workers: sync.WaitGroup{}, leases: sync.WaitGroup{}, done: make(chan struct{})}
+	p := &GKEProvider{config: config, owner: uuid.NewString(), now: time.Now, started: time.Now(), mu: sync.Mutex{}, entries: make(map[runnerScope]*projectRunner), changed: make(chan struct{}), available: atomic.Bool{}, templateMissing: atomic.Bool{}, templateUnreadable: atomic.Bool{}, capacityWait: codeCapacityWait, closed: false, ctx: runCtx, cancel: cancel, draining: make(map[*projectRunner]struct{}), workers: sync.WaitGroup{}, leases: sync.WaitGroup{}, done: make(chan struct{})}
 	// Until the template is read, assume it exists: an API brownout at startup
 	// must not disable Code Mode, and a missing template is caught here or by
 	// the first claim's TemplateNotFound condition.
@@ -239,10 +243,10 @@ func NewGKEProvider(ctx context.Context, config GKEConfig) (*GKEProvider, error)
 // to Progressive discovery instead of refusing every execution.
 func (p *GKEProvider) Available() bool { return p.available.Load() }
 
-// Ready reports whether the startup template check has passed, or the
-// bounded wait for it has elapsed.
+// Ready is false while the sandbox template is confirmed missing, for at
+// most the bounded wait after startup.
 func (p *GKEProvider) Ready() bool {
-	return p.templateSeen.Load() || p.now().Sub(p.started) >= codeReadyWait
+	return !p.templateMissing.Load() || p.now().Sub(p.started) >= codeReadyWait
 }
 
 func (p *GKEProvider) checkTemplate(ctx context.Context) {
@@ -252,18 +256,20 @@ func (p *GKEProvider) checkTemplate(ctx context.Context) {
 	switch {
 	case err == nil:
 		p.available.Store(true)
-		p.templateSeen.Store(true)
+		p.templateMissing.Store(false)
 	case k8serrors.IsNotFound(err):
+		p.templateMissing.Store(true)
 		if p.available.Swap(false) {
 			p.config.Logger.WarnContext(ctx, "code sandbox template is missing; serving Code Mode gateways progressively", attr.SlogError(err))
 		}
 	case k8serrors.IsForbidden(err):
 		// Without read access to templates the claim's condition is the only
 		// signal, so assume the template exists.
-		if !p.templateSeen.Swap(true) {
+		p.templateMissing.Store(false)
+		p.available.Store(true)
+		if !p.templateUnreadable.Swap(true) {
 			p.config.Logger.WarnContext(ctx, "code sandbox template is unreadable; relying on claim conditions", attr.SlogError(err))
 		}
-		p.available.Store(true)
 	default:
 		p.config.Logger.WarnContext(ctx, "read code sandbox template", attr.SlogError(err))
 	}
@@ -284,6 +290,7 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 	if err != nil {
 		return nil, err
 	}
+	evicted := false
 	var capacityTimer *time.Timer
 	defer func() {
 		if capacityTimer != nil {
@@ -318,7 +325,7 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 				}
 			case entry.retired || !p.now().Add(codeDrainMargin).Before(entry.expires):
 				expiring = entry
-			case entry.refs < maxRunnerStreams && (best == nil || entry.refs < best.refs):
+			case entry.refs < RunnerStreams && (best == nil || entry.refs < best.refs):
 				best = entry
 			}
 		}
@@ -337,13 +344,15 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 		}
 		// Warm another pod alongside those already warming once their
 		// streams are spoken for, so a burst does not warm pods one by one.
-		if best == nil && warming != nil && warmingDemand >= warmingRunners*maxRunnerStreams && organizationRunners < p.config.MaxOrganizationRunners && len(p.entries)+len(p.draining) < p.config.MaxRunners {
+		if best == nil && warming != nil && warmingDemand >= warmingRunners*RunnerStreams && organizationRunners < p.config.MaxOrganizationRunners && len(p.entries)+len(p.draining) < p.config.MaxRunners {
 			warming = nil
 		}
 		if best == nil && warming == nil {
 			if len(p.entries)+len(p.draining) >= p.config.MaxRunners || organizationRunners >= p.config.MaxOrganizationRunners {
 				var oldest *projectRunner
-				if organizationRunners < p.config.MaxOrganizationRunners {
+				// Evict at most once per execution, so failing deletions
+				// cannot let one execution clear every idle pod.
+				if organizationRunners < p.config.MaxOrganizationRunners && !evicted {
 					for _, candidate := range p.entries {
 						if candidate.creating || candidate.refs != 0 {
 							continue
@@ -354,6 +363,7 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 					}
 				}
 				if oldest != nil {
+					evicted = true
 					p.retireLocked(oldest)
 					p.mu.Unlock()
 					p.destroy(ctx, oldest)
@@ -805,6 +815,7 @@ func (p *GKEProvider) reap(ctx context.Context) {
 		// the controller-enforced expiry plus drain slack, preventing orphan churn.
 		if p.now().After(entry.expires.Add(codeDrainMargin)) {
 			delete(p.draining, entry)
+			p.notifyLocked()
 			continue
 		}
 		expired = append(expired, entry)

@@ -42,7 +42,12 @@ func newCodeExecutor(c *cli.Context, logger *slog.Logger, policy *guardian.Polic
 		if err != nil {
 			return nil, err
 		}
-		coordinator, err := codemode.NewCoordinator(provider, ownership, codeRuntimeLimits(c))
+		limits := codeRuntimeLimits(c)
+		if limits.OrganizationExecutions == 0 {
+			// An organization can run as many executions as its pods hold.
+			limits.OrganizationExecutions = c.Int("code-runtime-max-organization-runners") * codemode.RunnerStreams
+		}
+		coordinator, err := codemode.NewCoordinator(provider, ownership, limits)
 		if err != nil {
 			_ = provider.Shutdown(c.Context)
 			return nil, fmt.Errorf("configure code coordinator: %w", err)
@@ -165,7 +170,7 @@ func codeRuntimeFlags() []cli.Flag {
 		&cli.StringSliceFlag{Name: "code-runtime-gke-runner-cidr", Usage: "Permitted code sandbox pod CIDRs", EnvVars: []string{"GRAM_CODE_RUNTIME_GKE_RUNNER_CIDR"}},
 		&cli.IntFlag{Name: "code-runtime-max-runners", Usage: "Most code runner pods one replica claims across organizations", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_RUNNERS"}, Value: 64},
 		&cli.IntFlag{Name: "code-runtime-max-organization-runners", Usage: "Most shared code runner pods one organization holds on a replica", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_ORGANIZATION_RUNNERS"}, Value: 4},
-		&cli.IntFlag{Name: "code-runtime-max-organization-executions", Usage: "Most concurrent code executions one organization runs on a replica (0 uses the default)", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_ORGANIZATION_EXECUTIONS"}, Value: 0},
+		&cli.IntFlag{Name: "code-runtime-max-organization-executions", Usage: "Most concurrent code executions one organization runs on a replica (0 derives it from the organization's pod cap)", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_ORGANIZATION_EXECUTIONS"}, Value: 0},
 		&cli.IntFlag{Name: "code-runtime-max-caller-executions", Usage: "Most concurrent code executions one caller runs on a replica (0 uses the default)", EnvVars: []string{"GRAM_CODE_RUNTIME_MAX_CALLER_EXECUTIONS"}, Value: 0},
 		&cli.DurationFlag{Name: "code-runtime-admission-wait", Usage: "How long a code execution waits for a free slot before a retryable refusal (0 uses the default)", EnvVars: []string{"GRAM_CODE_RUNTIME_ADMISSION_WAIT"}, Value: 0},
 	}

@@ -63,8 +63,8 @@ func TestCancelledRunReleasesSlotDuringConnect(t *testing.T) {
 	factory := func(context.Context) (Host, error) { return idleHost{}, nil }
 
 	ctx, cancel := context.WithCancel(t.Context())
-	results := make(chan *ExecutionResult, maxRunnerStreams)
-	for range maxRunnerStreams {
+	results := make(chan *ExecutionResult, RunnerStreams)
+	for range RunnerStreams {
 		go func() { results <- client.Run(ctx, uuid.New(), "1", factory) }()
 	}
 	require.Eventually(t, func() bool {
@@ -77,7 +77,7 @@ func TestCancelledRunReleasesSlotDuringConnect(t *testing.T) {
 
 	cancelled := time.Now()
 	cancel()
-	for range maxRunnerStreams {
+	for range RunnerStreams {
 		select {
 		case result := <-results:
 			require.NotNil(t, result.Error)
@@ -87,8 +87,8 @@ func TestCancelledRunReleasesSlotDuringConnect(t *testing.T) {
 		}
 	}
 	require.Less(t, time.Since(cancelled), connectTimeout)
-	require.True(t, client.slots.TryAcquire(maxRunnerStreams), "cancelled runs released their slots")
-	client.slots.Release(maxRunnerStreams)
+	require.True(t, client.slots.TryAcquire(RunnerStreams), "cancelled runs released their slots")
+	client.slots.Release(RunnerStreams)
 }
 
 type callFailureHost struct {

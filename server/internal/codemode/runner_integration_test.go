@@ -145,16 +145,16 @@ await asyncio.gather(tools.call("remote--ping", {}), tools.call("remote--ping", 
 func TestCodeRunnerBurstDoesNotInterruptOtherExecutions(t *testing.T) {
 	t.Parallel()
 	client := realRunnerClient(t)
-	host := &runnerHost{entered: make(chan struct{}, maxRunnerStreams), block: true}
+	host := &runnerHost{entered: make(chan struct{}, RunnerStreams), block: true}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	done := make(chan *ExecutionResult, maxRunnerStreams)
-	for range maxRunnerStreams {
+	done := make(chan *ExecutionResult, RunnerStreams)
+	for range RunnerStreams {
 		go func() {
 			done <- client.Run(ctx, uuid.New(), `await tools.call("remote--write", {})`, func(context.Context) (Host, error) { return host, nil })
 		}()
 	}
-	for range maxRunnerStreams {
+	for range RunnerStreams {
 		select {
 		case <-host.entered:
 		case <-time.After(5 * time.Second):
@@ -179,7 +179,7 @@ func TestCodeRunnerBurstDoesNotInterruptOtherExecutions(t *testing.T) {
 	refusals.Wait()
 	require.False(t, session.IsClosed())
 	cancel()
-	for range maxRunnerStreams {
+	for range RunnerStreams {
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):

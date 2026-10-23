@@ -21,7 +21,7 @@ const (
 	// may run at once on a replica: four shared runner pods at twelve streams
 	// each. It reserves the rest of the replica for other tenants however
 	// many caller identities an organization creates.
-	DefaultOrganizationExecutions = 4 * maxRunnerStreams
+	DefaultOrganizationExecutions = 4 * RunnerStreams
 	// DefaultCallerExecutions bounds one caller's concurrent executions, so
 	// one agent fanning out cannot take its whole organization's share.
 	DefaultCallerExecutions = 4

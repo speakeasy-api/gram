@@ -31,12 +31,12 @@ const (
 	connectTimeout = 5 * time.Second
 	// maxUpgradeHeaderBytes bounds an untrusted runner's HTTP response headers.
 	maxUpgradeHeaderBytes = 16 << 10
-	// maxRunnerStreams is one runner pod's concurrent executions. Each runs in
+	// RunnerStreams is one runner pod's concurrent executions. Each runs in
 	// its own Monty worker that starts in about a millisecond and is capped at
 	// 64 MiB, so a pod is CPU-bound rather than startup-bound. It matches the
 	// runner's GRAM_CODE_RUNNER_CAPACITY default and stays below the peer's
 	// 16-stream limit, which counts closing streams too.
-	maxRunnerStreams = 12
+	RunnerStreams = 12
 	// runnerSlotWait bounds how long an execution waits for a free stream on
 	// a runner that every caller shares, such as the local runner.
 	runnerSlotWait = DefaultAdmissionWait
@@ -66,7 +66,7 @@ func NewRunnerClient(endpoint, token string, dialer *net.Dialer) (*RunnerClient,
 	if len(token) < 32 || strings.ContainsAny(token, "\r\n") || dialer == nil {
 		return nil, fmt.Errorf("code runner requires a guarded dialer and a token of at least 32 bytes")
 	}
-	return &RunnerClient{mu: sync.Mutex{}, endpoint: u, token: token, dialer: dialer, session: nil, closed: false, slots: semaphore.NewWeighted(maxRunnerStreams), connecting: nil}, nil
+	return &RunnerClient{mu: sync.Mutex{}, endpoint: u, token: token, dialer: dialer, session: nil, closed: false, slots: semaphore.NewWeighted(RunnerStreams), connecting: nil}, nil
 }
 
 // Close terminates the transport and all active executions during provider release.

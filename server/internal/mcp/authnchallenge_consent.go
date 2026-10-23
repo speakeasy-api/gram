@@ -816,7 +816,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	gatewayDefaultMode := ""
-	codeModeUnavailable := prefillDiscoveryMode == metamcp.DiscoveryModeCode && !s.codeExecutor.Enabled()
+	codeModeUnavailable := prefillDiscoveryMode == metamcp.DiscoveryModeCode && !s.CodeModeAvailable()
 	if codeModeUnavailable {
 		prefillDiscoveryMode = metamcp.DiscoveryModeProgressive
 	}

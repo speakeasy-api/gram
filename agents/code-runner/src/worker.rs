@@ -35,6 +35,8 @@ mod linux {
     // linux/seccomp.h.
     const BPF_LD_W_ABS: u16 = 0x20;
     const BPF_JEQ_K: u16 = 0x15;
+    #[cfg(target_arch = "x86_64")]
+    const BPF_JGE_K: u16 = 0x35;
     const BPF_RET_K: u16 = 0x06;
     const SECCOMP_RET_ALLOW: u32 = 0x7fff_0000;
     const SECCOMP_RET_KILL_PROCESS: u32 = 0x8000_0000;
@@ -45,20 +47,29 @@ mod linux {
 
     #[cfg(target_arch = "x86_64")]
     const AUDIT_ARCH: u32 = 0xc000_003e;
+    /// x32 syscalls share the x86_64 audit arch with this bit set in `nr`,
+    /// so they would otherwise slip past the numbers below.
+    #[cfg(target_arch = "x86_64")]
+    const X32_SYSCALL_BIT: u32 = 0x4000_0000;
     #[cfg(target_arch = "aarch64")]
     const AUDIT_ARCH: u32 = 0xc000_00b7;
 
     /// Syscalls that act on another process.
-    const DENIED: [libc::c_long; 9] = [
+    const DENIED: [libc::c_long; 14] = [
         libc::SYS_ptrace,
         libc::SYS_process_vm_readv,
         libc::SYS_process_vm_writev,
+        libc::SYS_process_madvise,
         libc::SYS_kill,
         libc::SYS_tkill,
         libc::SYS_tgkill,
+        libc::SYS_rt_sigqueueinfo,
+        libc::SYS_rt_tgsigqueueinfo,
         libc::SYS_pidfd_open,
         libc::SYS_pidfd_send_signal,
         libc::SYS_pidfd_getfd,
+        libc::SYS_prlimit64,
+        libc::SYS_kcmp,
     ];
 
     fn stmt(code: u16, k: u32) -> libc::sock_filter {
@@ -70,27 +81,26 @@ mod linux {
         }
     }
 
-    fn jump(k: u32, jt: u8, jf: u8) -> libc::sock_filter {
-        libc::sock_filter {
-            code: BPF_JEQ_K,
-            jt,
-            jf,
-            k,
-        }
+    fn jump(code: u16, k: u32, jt: u8, jf: u8) -> libc::sock_filter {
+        libc::sock_filter { code, jt, jf, k }
     }
 
     pub fn restrict() -> Result<()> {
         let mut program = vec![
             stmt(BPF_LD_W_ABS, SECCOMP_DATA_ARCH),
             // A foreign syscall ABI could bypass the numbers below.
-            jump(AUDIT_ARCH, 1, 0),
+            jump(BPF_JEQ_K, AUDIT_ARCH, 1, 0),
             stmt(BPF_RET_K, SECCOMP_RET_KILL_PROCESS),
             stmt(BPF_LD_W_ABS, SECCOMP_DATA_NR),
         ];
-        for (index, syscall) in DENIED.iter().enumerate() {
-            let remaining = (DENIED.len() - index - 1) as u8;
+        let mut checks: Vec<(u16, u32)> = Vec::with_capacity(DENIED.len() + 1);
+        #[cfg(target_arch = "x86_64")]
+        checks.push((BPF_JGE_K, X32_SYSCALL_BIT));
+        checks.extend(DENIED.iter().map(|syscall| (BPF_JEQ_K, *syscall as u32)));
+        for (index, (code, k)) in checks.iter().enumerate() {
+            let remaining = (checks.len() - index - 1) as u8;
             // Match: jump past the remaining checks and the allow to the deny.
-            program.push(jump(*syscall as u32, remaining + 1, 0));
+            program.push(jump(*code, *k, remaining + 1, 0));
         }
         program.push(stmt(BPF_RET_K, SECCOMP_RET_ALLOW));
         program.push(stmt(BPF_RET_K, SECCOMP_RET_ERRNO | libc::EPERM as u32));

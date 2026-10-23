@@ -330,7 +330,7 @@ func TestCodeGKEReconnectRevalidatesOwnership(t *testing.T) {
 func TestCodeGKEConcurrentAdmissionScalesToOrganizationCap(t *testing.T) {
 	t.Parallel()
 	provider, client, scope := newCodeGKEFixture(t, nil)
-	capacity := defaultMaxOrganizationRunners * maxRunnerStreams
+	capacity := defaultMaxOrganizationRunners * RunnerStreams
 	var wg sync.WaitGroup
 	leases := make(chan Lease, capacity+8)
 	refused := make(chan error, capacity+8)
@@ -358,7 +358,7 @@ func TestCodeGKEConcurrentAdmissionScalesToOrganizationCap(t *testing.T) {
 	}
 	require.Len(t, clients, defaultMaxOrganizationRunners)
 	for _, streams := range clients {
-		require.Equal(t, maxRunnerStreams, streams)
+		require.Equal(t, RunnerStreams, streams)
 	}
 	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
@@ -370,8 +370,8 @@ func TestCodeGKEWaitsForAFreeStream(t *testing.T) {
 	provider, _, scope := newCodeGKEFixture(t, nil)
 	provider.capacityWait = 5 * time.Second
 	provider.config.MaxOrganizationRunners = 1
-	leases := make([]Lease, 0, maxRunnerStreams)
-	for range maxRunnerStreams {
+	leases := make([]Lease, 0, RunnerStreams)
+	for range RunnerStreams {
 		lease, err := provider.Acquire(t.Context(), scope)
 		require.NoError(t, err)
 		leases = append(leases, lease)
@@ -725,4 +725,15 @@ func TestCodeGKEAmbiguousOrphansCountAgainstCapacity(t *testing.T) {
 	provider.mu.Lock()
 	require.Empty(t, provider.draining)
 	provider.mu.Unlock()
+}
+
+func TestCodeGKEUnreachableTemplateAPIStaysReady(t *testing.T) {
+	t.Parallel()
+	provider, client, _ := newCodeGKEFixture(t, nil)
+	client.PrependReactor("get", "sandboxtemplates", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("temporary API outage")
+	})
+	provider.checkTemplate(t.Context())
+	require.True(t, provider.Ready(), "an API outage must not hold the replica out of rotation")
+	require.True(t, provider.Available(), "an API outage keeps the last known availability")
 }
