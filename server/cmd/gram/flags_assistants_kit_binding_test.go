@@ -166,7 +166,11 @@ func TestKitMCPAuthoritativeBinding(t *testing.T) {
 				localOrigin = kitBindingURL(t, "https://host.docker.internal:8443")
 				good = true
 			case "legacy", "legacy-disabled":
-				db.toolset = &toolsetsrepo.Toolset{ProjectID: project, McpEnabled: scenario == "legacy", UserSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
+				db.toolset = &toolsetsrepo.Toolset{ID: serverID, ProjectID: project, McpEnabled: scenario == "legacy", UserSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
+				db.server.ToolsetID = uuid.NullUUID{UUID: serverID, Valid: true}
+				if scenario == "legacy-disabled" {
+					db.server.Visibility = "disabled"
+				}
 				good = scenario == "legacy"
 			case "custom-domain", "inactive-domain":
 				resource = kitBindingURL(t, "https://mcp.customer.example/mcp/attached")

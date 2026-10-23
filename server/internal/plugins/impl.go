@@ -849,7 +849,10 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			}
 			hosted = mcpErr == nil && server.HasEndpoint
 		}
-		if !hosted {
+		switch {
+		case !hosted && toolset.McpEnabled:
+			return nil, oops.E(oops.CodeBadRequest, nil, "toolset has no published MCP endpoint")
+		case !hosted:
 			return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
 		}
 		if displayName == "" {

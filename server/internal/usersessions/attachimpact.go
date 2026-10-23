@@ -130,15 +130,12 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if wrapper == nil {
 			return attachTarget{issuerID: toolset.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
 		}
-		// The canonical wrapper owns the issuer; without a live endpoint only the legacy alias serves.
+		// The canonical wrapper owns the issuer; the legacy alias answers on its own host beside any live endpoints.
 		customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
 		if err != nil {
 			return none, err
 		}
-		onPlatformHost := !toolset.CustomDomainID.Valid
-		if len(customDomainIDs) > 0 {
-			onPlatformHost = anyOnPlatformHost(customDomainIDs)
-		}
+		onPlatformHost := !toolset.CustomDomainID.Valid || (len(customDomainIDs) > 0 && anyOnPlatformHost(customDomainIDs))
 		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: onPlatformHost}, nil
 	default:
 		id, err := uuid.Parse(*payload.MetaMcpServerID)
@@ -164,9 +161,6 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 	}
 }
 
-// anyOnPlatformHost reports whether any of a server's endpoints, by their
-// custom domains, is on the platform host. A server without endpoints counts as
-// on the platform host, so its preview errs toward warning.
 // liveEndpointDomains lists the custom domain of each endpoint the server serves on.
 func (s *Service) liveEndpointDomains(ctx context.Context, logger *slog.Logger, organizationID string, projectID, serverID uuid.UUID) ([]uuid.NullUUID, error) {
 	endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{OrganizationID: organizationID, ProjectID: projectID, McpServerID: serverID})
@@ -180,6 +174,9 @@ func (s *Service) liveEndpointDomains(ctx context.Context, logger *slog.Logger, 
 	return customDomainIDs, nil
 }
 
+// anyOnPlatformHost reports whether any of a server's endpoints, by their
+// custom domains, is on the platform host. A server without endpoints counts as
+// on the platform host, so its preview errs toward warning.
 func anyOnPlatformHost(customDomainIDs []uuid.NullUUID) bool {
 	if len(customDomainIDs) == 0 {
 		return true

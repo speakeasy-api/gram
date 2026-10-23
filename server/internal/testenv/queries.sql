@@ -2259,7 +2259,7 @@ WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mc
 WITH toolset AS (
     UPDATE toolsets
     SET mcp_is_public = @mcp_is_public
-    WHERE toolsets.mcp_slug = @mcp_slug
+    WHERE toolsets.mcp_slug = @mcp_slug AND toolsets.project_id = @project_id
     RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
 )
 UPDATE mcp_servers

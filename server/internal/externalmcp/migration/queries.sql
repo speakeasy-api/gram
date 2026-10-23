@@ -27,15 +27,16 @@ scoped_toolsets AS (
     t.name,
     t.slug,
     t.mcp_slug,
-    -- The canonical wrapper owns hosting state; the toolset columns stand only without one.
-    (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' ELSE t.mcp_enabled END)::boolean AS mcp_enabled,
+    -- The canonical wrapper owns hosting state; the toolset columns stand only without one,
+    -- and a server that kept the toolset's id but left it leaves the toolset disabled.
+    (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' WHEN kept.id IS NOT NULL THEN FALSE ELSE t.mcp_enabled END)::boolean AS mcp_enabled,
     t.custom_domain_id,
     COALESCE(cw.user_session_issuer_id, CASE WHEN cw.id IS NULL THEN t.user_session_issuer_id END) AS user_session_issuer_id,
     t.external_oauth_server_id,
     t.oauth_proxy_server_id,
     t.tool_variations_group_id,
     (
-      (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' ELSE t.mcp_enabled END)
+      (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' WHEN kept.id IS NOT NULL THEN FALSE ELSE t.mcp_enabled END)
       OR EXISTS (
         SELECT 1
         FROM mcp_servers AS ms
@@ -45,6 +46,7 @@ scoped_toolsets AS (
   FROM toolsets AS t
   JOIN projects AS p ON p.id = t.project_id AND p.deleted IS FALSE
   LEFT JOIN mcp_servers AS cw ON cw.id = t.id AND cw.toolset_id = t.id AND cw.project_id = t.project_id AND cw.deleted IS FALSE
+  LEFT JOIN mcp_servers AS kept ON kept.id = t.id AND kept.toolset_id IS DISTINCT FROM t.id AND kept.project_id = t.project_id AND kept.deleted IS FALSE
   WHERE t.deleted IS FALSE
     AND (sqlc.narg('toolset_ids')::uuid[] IS NULL OR t.id = ANY(sqlc.narg('toolset_ids')::uuid[]))
 ),

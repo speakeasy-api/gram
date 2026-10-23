@@ -13,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -92,6 +94,49 @@ func TestGetAttachImpactBetweenPerServerIssuersOnCustomDomain(t *testing.T) {
 	require.False(t, impact.AuthorizationServerChanges)
 
 	createMCPServerEndpoint(t, ctx, ti, projectID, serverID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "impact-platform-endpoint")
+	impact, err = ti.service.GetAttachImpact(ctx, payload)
+	require.NoError(t, err)
+	require.True(t, impact.AuthorizationServerChanges)
+}
+
+// A toolset with a canonical server previews that server's issuer, and is on
+// the platform host through its legacy alias or any live endpoint.
+func TestGetAttachImpactCanonicalServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	currentID := seedIssuer(t, ctx, ti, "impact-canonical-current")
+	candidateID := seedIssuer(t, ctx, ti, "impact-canonical-candidate")
+	useAuthenticationHost(t, ctx, ti, candidateID)
+	domainID := createCustomDomain(t, ctx, ti)
+	toolset := attachIssuerToolset(t, ctx, ti, projectID, currentID, "impact-canonical-toolset")
+	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: toolset.ID, ProjectID: projectID,
+		Name: pgtype.Text{String: toolset.Slug, Valid: true}, Slug: pgtype.Text{String: toolset.Slug, Valid: true},
+		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{UUID: currentID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{},
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ToolVariationsGroupID: uuid.NullUUID{}, Visibility: mcpservers.VisibilityDisabled,
+	})
+	require.NoError(t, err)
+	payload := &projectgen.GetAttachImpactPayload{ToolsetID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())}
+
+	// The legacy alias on the platform host answers beside a custom-domain endpoint.
+	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: domainID, Valid: true}, "impact-canonical-domain")
+	impact, err := ti.service.GetAttachImpact(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, currentID.String(), impact.CurrentIssuer.ID)
+	require.True(t, impact.AuthorizationServerChanges)
+
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
+		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Slug: toolset.Slug, ProjectID: projectID,
+	}))
+	impact, err = ti.service.GetAttachImpact(ctx, payload)
+	require.NoError(t, err)
+	require.False(t, impact.AuthorizationServerChanges)
+
+	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "impact-canonical-platform")
 	impact, err = ti.service.GetAttachImpact(ctx, payload)
 	require.NoError(t, err)
 	require.True(t, impact.AuthorizationServerChanges)
