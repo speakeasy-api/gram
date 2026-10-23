@@ -140,7 +140,6 @@ var gatewayWriteRefusals = []struct {
 	{ErrMemberServerHasNoSlug, oops.CodeInvalid},
 	{ErrMemberServerUnproxied, oops.CodeInvalid},
 	{ErrMemberServerIsHostedToolset, oops.CodeInvalid},
-	{ErrCodeModeRequiresSignIn, oops.CodeInvalid},
 	{ErrMemberSharesBackend, oops.CodeConflict},
 	{ErrMemberAlreadyPresent, oops.CodeConflict},
 	{ErrMemberNeedsShadowApproval, oops.CodeConflict},
@@ -369,7 +368,8 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	// Defensive issuer wiring, mirroring create: an omitted issuer preserves
 	// the existing one (matching UpdateMCPServer's COALESCE) and a gateway
 	// that would end up issuer-less gets one minted, so no update path can
-	// strand a gateway in the anonymous trap.
+	// strand a gateway in the anonymous trap. It also keeps every Code Mode
+	// gateway signed in: anonymous callers never get Code Mode.
 	if !issuerID.Valid {
 		issuerID = existing.UserSessionIssuerID
 	}
@@ -382,16 +382,6 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 
 	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
 		return nil, err
-	}
-
-	// Code Mode runs a runner per execution, so it is never offered to
-	// anonymous callers: a Code Mode gateway must keep requiring sign-in.
-	finalDiscovery := gatewaymcp.ResolveDiscoveryMode(existing.DiscoveryMode)
-	if payload.DiscoveryMode != nil {
-		finalDiscovery = gatewaymcp.DiscoveryMode(*payload.DiscoveryMode)
-	}
-	if finalDiscovery == gatewaymcp.DiscoveryModeCode && !issuerID.Valid {
-		return nil, oops.E(oops.CodeInvalid, nil, "%s", ErrCodeModeRequiresSignIn.Error()).LogWarn(ctx, logger)
 	}
 
 	mode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, existing.NetworkAccessMode)

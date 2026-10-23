@@ -43,7 +43,6 @@ var (
 	ErrMemberNeedsShadowApproval     = errors.New("gateway member requires Shadow MCP approval")
 	ErrMemberAdmissionUnverifiable   = errors.New("gateway member distribution approval could not be verified safely")
 	ErrMemberServerNotFoundForUpdate = errors.New("member mcp server not found")
-	ErrCodeModeRequiresSignIn        = errors.New("code mode requires sign-in; gateways that allow anonymous callers cannot use it")
 )
 
 // Actor is the project and user a gateway write is made in and attributed to.

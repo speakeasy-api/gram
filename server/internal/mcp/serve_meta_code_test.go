@@ -221,6 +221,25 @@ func TestCodeModeRefusalIsStructured(t *testing.T) {
 	require.Contains(t, refusal.Message, "No program was submitted.")
 }
 
+// TestCodeModeRunnerRefusalIsStructured pins that a runner refusing a
+// program before it starts reports the same structured shape as admission.
+func TestCodeModeRunnerRefusalIsStructured(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	executor := &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil, run: func(context.Context, string, codemode.Host) (*codemode.ExecutionResult, error) {
+		return &codemode.ExecutionResult{Value: json.RawMessage("null"), ToolCalls: []codemode.CallOutcome{}, Error: &codemode.ExecutionError{Code: "capacity_exceeded", Message: "full"}}, nil
+	}}
+	mcp.SetTestCodeExecutor(ti.service.Service, executor)
+	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
+
+	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), `"code":"capacity_exceeded"`)
+	require.Contains(t, w.Body.String(), `"retryable":true`)
+	require.Contains(t, w.Body.String(), `"retry_after_ms":1000`)
+}
+
 // refusingCodeExecutor refuses every execution before submission.
 type refusingCodeExecutor struct{ err error }
 

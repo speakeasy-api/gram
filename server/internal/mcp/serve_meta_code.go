@@ -164,6 +164,13 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 		}
 		return marshalCodeAdmissionRefusal(ctx, logger, req.ID, refusal)
 	}
+	// The runner refused before the program started: report it in the same
+	// structured, retryable shape as a coordinator refusal.
+	if execution.Error != nil && len(execution.ToolCalls) == 0 {
+		if refused, ok := runnerRefusal(execution.Error.Code); ok {
+			return marshalCodeAdmissionRefusal(ctx, logger, req.ID, newCodeAdmissionRefusal(refused))
+		}
+	}
 	structured, err := json.Marshal(execution)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code execution").LogError(ctx, logger)

@@ -70,6 +70,21 @@ func newCodeAdmissionRefusal(err error) codeAdmissionRefusal {
 	}
 }
 
+// runnerRefusal maps a runner result code that proves the program was never
+// submitted to its admission refusal.
+func runnerRefusal(code string) (error, bool) {
+	switch code {
+	case "capacity_exceeded":
+		return codemode.ErrCapacity, true
+	case "runtime_unavailable":
+		return codemode.ErrRuntimeUnavailable, true
+	case "admission_refused":
+		return errors.New("runner refused admission"), true
+	default:
+		return nil, false
+	}
+}
+
 // marshalCodeAdmissionRefusal returns the refusal as both text and
 // structured content, so clients can branch on the code and retry hint.
 func marshalCodeAdmissionRefusal(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, refusal codeAdmissionRefusal) (json.RawMessage, error) {

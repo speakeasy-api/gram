@@ -155,7 +155,11 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	}
 	stream, err := c.open(ctx)
 	if err != nil {
-		fail("admission_refused", "code runtime unavailable; program was not submitted")
+		if ctx.Err() != nil {
+			fail("admission_refused", "execution ended before submission")
+		} else {
+			fail("runtime_unavailable", "code runtime unavailable; program was not submitted")
+		}
 		return result
 	}
 	defer stream.finish()

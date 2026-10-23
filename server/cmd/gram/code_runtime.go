@@ -31,7 +31,12 @@ func newCodeExecutor(c *cli.Context, logger *slog.Logger, policy *guardian.Polic
 		if err != nil {
 			return nil, err
 		}
-		coordinator, err := codemode.NewCoordinator(provider, ownership, codeRuntimeLimits(c))
+		limits := codeRuntimeLimits(c)
+		if limits.OrganizationExecutions == 0 {
+			// One local runner serves every organization.
+			limits.OrganizationExecutions = codemode.RunnerStreams
+		}
+		coordinator, err := codemode.NewCoordinator(provider, ownership, limits)
 		if err != nil {
 			_ = provider.Runner.Close()
 			return nil, fmt.Errorf("configure code coordinator: %w", err)
