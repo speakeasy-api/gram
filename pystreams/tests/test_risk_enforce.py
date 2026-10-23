@@ -13,19 +13,19 @@ from gram.risk.v1 import enforcement_reply_pb2, presidio_enforcement_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
 
-import pystreams.risk.enforce_handler as enforce_handler_mod
+import pystreams.risk.presidio_enforce_handler as enforce_handler_mod
 from pystreams.risk import maskdisplay
 from pystreams.risk import metering as metering_mod
-from pystreams.risk.enforce_handler import (
-    MAX_CONTENT_BYTES,
-    MalformedEnforcementRequest,
-    PresidioEnforceHandler,
-)
 from pystreams.risk.fingerprint import (
     Fingerprinter,
     FingerprintKeyringError,
     encode_fingerprint,
     parse_pepper_keyring,
+)
+from pystreams.risk.presidio_enforce_handler import (
+    MAX_CONTENT_BYTES,
+    MalformedEnforcementRequest,
+    PresidioEnforceHandler,
 )
 from pystreams.risk.replywriter import (
     ReplyWriter,
