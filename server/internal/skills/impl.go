@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -72,6 +73,9 @@ type Service struct {
 	// is a no-op then.
 	publisher PluginPublishSignaler
 	siteURL   *url.URL
+	// flags gates the skill link methods behind the skills-over-mcp rollout.
+	// Nil refuses them; see WithFeatureProvider.
+	flags feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -102,6 +106,7 @@ func NewService(
 		signaler:  signaler,
 		publisher: publisher,
 		siteURL:   siteURL,
+		flags:     nil,
 	}
 }
 
@@ -136,7 +141,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	// and tenant resolution, without also demanding unrelated project:read.
 	switch ctx.Value(goa.MethodKey) {
 	case "list", "listTags", "listSuggestions", "listFeedback", "listSuggestionFeedback",
-		"get", "listUnknownActivations", "listVersions", "distribute", "undistribute", "listDistributions":
+		"get", "listUnknownActivations", "listVersions", "distribute", "undistribute", "listDistributions",
+		"link", "unlink", "listLinks":
 		return s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
 	default:
 		return s.auth.Authorize(ctx, key, schema)
@@ -590,7 +596,7 @@ func (s *Service) recordVersion(
 		}
 
 		return &gen.RecordSkillResult{
-			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}),
+			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}),
 			Version:        matchedView,
 			CreatedSkill:   false,
 			CreatedVersion: false,
@@ -628,7 +634,7 @@ func (s *Service) recordVersion(
 	if err != nil {
 		return nil, false, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
 	}
-	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false})
+	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false})
 	versionView, err := mv.BuildSkillVersionView(version, derivedFromVersionID, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
 		FirstSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		LastSeenAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -952,7 +958,7 @@ func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersio
 		s.signalPluginPublishForSkills(ctx, authCtx, []uuid.UUID{skill.ID}, true)
 	}
 	return &gen.RecordSkillResult{
-		Skill:   mv.BuildSkillView(skill, stateAfter.LatestVersionID, stateAfter.VersionCount, stateAfter.HasValidVersion, pgtype.Text{String: "", Valid: false}),
+		Skill:   mv.BuildSkillView(skill, stateAfter.LatestVersionID, stateAfter.VersionCount, stateAfter.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}),
 		Version: versionView, CreatedSkill: false, CreatedVersion: false,
 	}, nil
 }
@@ -1021,7 +1027,7 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		}
 		// Returned before the write so a replay neither advances updated_at nor
 		// records a second update event for an edit that already happened.
-		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}), nil
 	}
 
 	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{
@@ -1063,7 +1069,7 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		s.signalPluginPublishForSkills(ctx, authCtx, []uuid.UUID{skill.ID}, false)
 	}
 
-	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}), nil
 }
 
 // skillMetadataMatches reports whether a skill already carries exactly the
@@ -1491,7 +1497,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	return &gen.GetSkillResult{
-		Skill:                   mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
+		Skill:                   mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken, details.LastLoadedOverMcpAt),
 		LatestVersion:           latestView,
 		AssistantCount:          details.AssistantCount,
 		PromptInjectionFindings: promptInjectionFindings,
@@ -1713,6 +1719,11 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		resolvedVersionID = version
 	}
 
+	lastLoadedOverMCPAt, err := queries.GetSkillLastLoadedOverMCPAt(ctx, repo.GetSkillLastLoadedOverMCPAtParams{ProjectID: *authCtx.ProjectID, SkillID: skill.ID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve last skill load over mcp").LogError(ctx, logger)
+	}
+
 	existing, err := queries.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
 		ProjectID: *authCtx.ProjectID, SkillID: skill.ID, PluginID: target.pluginID,
 		AssistantID: target.assistantID, Channel: target.channel,
@@ -1723,7 +1734,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 			if err := dbtx.Commit(ctx); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "commit unchanged skill distribution transaction").LogError(ctx, logger)
 			}
-			return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+			return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 		}
 
 		beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution, existing.ResolvedVersionID)
@@ -1758,7 +1769,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 
 		s.signalPluginPublish(ctx, target, authCtx)
 
-		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "get active skill distribution").LogError(ctx, logger)
@@ -1795,7 +1806,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 
 	s.signalPluginPublish(ctx, target, authCtx)
 
-	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 }
 
 func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePayload) error {

@@ -1,4 +1,4 @@
-package mcpskills
+package skilllink
 
 import (
 	"errors"
@@ -73,4 +73,34 @@ func (t Target) Validate() error {
 		return fmt.Errorf("%w: unknown kind %q", ErrInvalidTarget, t.Kind)
 	}
 	return nil
+}
+
+// Columns returns the mcp_skill_links id columns the target fills: the
+// mcp_server_id for a stored MCP server, the meta_mcp_server_id for a stored
+// gateway, and neither for a row-less target.
+func (t Target) Columns() (mcpServerID, metaMCPServerID uuid.NullUUID) {
+	mcpServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	metaMCPServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	switch t.Kind {
+	case TargetMCPServer:
+		mcpServerID = uuid.NullUUID{UUID: t.ID, Valid: true}
+	case TargetMetaMCPServer:
+		metaMCPServerID = uuid.NullUUID{UUID: t.ID, Valid: true}
+	case TargetOrganizationGateway:
+	}
+	return mcpServerID, metaMCPServerID
+}
+
+// TargetOf reads the target back from a link's stored columns.
+func TargetOf(kind string, mcpServerID, metaMCPServerID uuid.NullUUID) Target {
+	switch TargetKind(kind) {
+	case TargetMCPServer:
+		return MCPServerTarget(mcpServerID.UUID)
+	case TargetMetaMCPServer:
+		return MetaMCPServerTarget(metaMCPServerID.UUID)
+	case TargetOrganizationGateway:
+		return OrganizationGatewayTarget()
+	default:
+		return Target{Kind: TargetKind(kind), ID: uuid.Nil}
+	}
 }
