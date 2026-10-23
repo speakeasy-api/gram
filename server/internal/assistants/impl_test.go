@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/url"
 	"testing"
 	"time"
@@ -345,7 +346,7 @@ func (f mcpEnableFixture) writerCtx(t *testing.T, ctx context.Context, toolsetID
 
 func (f mcpEnableFixture) disable(t *testing.T, toolsetID uuid.UUID) {
 	t.Helper()
-	require.NoError(t, toolsetsRepo.New(f.conn).SetToolsetMCPEnabledByID(t.Context(), toolsetsRepo.SetToolsetMCPEnabledByIDParams{McpEnabled: false, ID: toolsetID, ProjectID: f.projectID}))
+	require.NoError(t, testrepo.New(f.conn).SetToolsetMCPEnabledByID(t.Context(), testrepo.SetToolsetMCPEnabledByIDParams{McpEnabled: false, ID: toolsetID, ProjectID: f.projectID}))
 }
 
 func (f mcpEnableFixture) requireMCPEnabled(t *testing.T, toolsetID uuid.UUID, want bool) {

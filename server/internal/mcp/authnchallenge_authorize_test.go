@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -117,7 +118,7 @@ func TestAuthorize_CustomDomainIssSurvivesPlatformOriginConsent(t *testing.T) {
 	// consent, keeping this test on the origin question rather than the IDP
 	// round-trip. The local copy is updated too because attachCustomDomainToToolset
 	// writes the whole row back from the struct it is handed.
-	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -249,7 +250,7 @@ func TestAuthorize_PublicToolset_IgnoresAmbientSessionCredentials(t *testing.T) 
 
 	slug := "auth-public-anon-" + uuid.New().String()[:8]
 	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
-	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,

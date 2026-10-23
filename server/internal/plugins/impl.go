@@ -836,7 +836,20 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			}
 			return nil, oops.E(oops.CodeUnexpected, tErr, "verify toolset").LogError(ctx, s.logger)
 		}
-		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+		toolset, wrapper, wErr := hostedmcp.LoadEffective(ctx, s.db, toolset)
+		if wErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, wErr, "verify toolset mcp server").LogError(ctx, s.logger)
+		}
+		hosted := toolset.McpEnabled && toolset.McpSlug.Valid && toolset.McpSlug.String != ""
+		if wrapper != nil {
+			// The canonical wrapper owns the address: it must have a published endpoint.
+			server, mcpErr := s.repo.GetMcpServerForPluginServer(ctx, repo.GetMcpServerForPluginServerParams{McpServerID: wrapper.ID, ProjectID: *ac.ProjectID})
+			if mcpErr != nil && !errors.Is(mcpErr, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeUnexpected, mcpErr, "verify toolset mcp server").LogError(ctx, s.logger)
+			}
+			hosted = mcpErr == nil && toolset.McpEnabled && server.HasEndpoint
+		}
+		if !hosted {
 			return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
 		}
 		if displayName == "" {

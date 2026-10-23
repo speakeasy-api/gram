@@ -351,7 +351,7 @@ func TestServePublic_DisabledPublicLegacyToolset_Returns404(t *testing.T) {
 	// Disable via the same flag the dashboard/API writes, deliberately
 	// leaving mcp_is_public true — the state that kept serving anonymously
 	// before the fix.
-	err = toolsetsRepo.SetToolsetMCPEnabledByID(ctx, toolsets_repo.SetToolsetMCPEnabledByIDParams{
+	err = testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{
 		McpEnabled: false,
 		ID:         toolset.ID,
 		ProjectID:  *authCtx.ProjectID,

@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -126,7 +127,23 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolset.ID.String(), projectID.String())); err != nil {
 			return none, err
 		}
-		return attachTarget{issuerID: toolset.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
+		toolset, wrapper, err := hostedmcp.LoadEffective(ctx, s.db, toolset)
+		if err != nil {
+			return none, oops.E(oops.CodeUnexpected, err, "load toolset MCP server").LogError(ctx, logger)
+		}
+		if wrapper == nil {
+			return attachTarget{issuerID: toolset.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
+		}
+		// The canonical wrapper owns the issuer and the addresses.
+		endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{OrganizationID: organizationID, ProjectID: projectID, McpServerID: wrapper.ID})
+		if err != nil {
+			return none, oops.E(oops.CodeUnexpected, err, "list MCP server endpoints").LogError(ctx, logger)
+		}
+		customDomainIDs := make([]uuid.NullUUID, 0, len(endpoints))
+		for _, endpoint := range endpoints {
+			customDomainIDs = append(customDomainIDs, endpoint.McpEndpoint.CustomDomainID)
+		}
+		return attachTarget{issuerID: wrapper.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(customDomainIDs)}, nil
 	default:
 		id, err := uuid.Parse(*payload.MetaMcpServerID)
 		if err != nil {

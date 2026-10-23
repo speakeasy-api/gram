@@ -3,6 +3,7 @@ package plugins_test
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"log"
 	"os"
 	"slices"
@@ -354,8 +355,8 @@ func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 }
 
 // setTestToolsetMCPPublic sets a toolset's MCP visibility and mirrors it onto its canonical server.
-func setTestToolsetMCPPublic(ctx context.Context, conn *pgxpool.Pool, params toolsetsrepo.SetToolsetMCPPublicByIDParams) error {
-	if err := toolsetsrepo.New(conn).SetToolsetMCPPublicByID(ctx, params); err != nil {
+func setTestToolsetMCPPublic(ctx context.Context, conn *pgxpool.Pool, params testrepo.SetToolsetMCPPublicByIDParams) error {
+	if err := testrepo.New(conn).SetToolsetMCPPublicByID(ctx, params); err != nil {
 		return fmt.Errorf("set toolset mcp public: %w", err)
 	}
 	//nolint:glint // notestingrawsql: mirrors hostedmcp.Sync without its audit and address checks.
@@ -417,7 +418,7 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 	// check; the plugin path does not distinguish remote- vs toolset-backed.
 	backing := createUnwrappedTestToolset(t, ctx, conn, name+"-backing")
 	if visibility == mcpservers.VisibilityPublic {
-		err := toolsetsrepo.New(conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: backing.ID, ProjectID: backing.ProjectID})
+		err := testrepo.New(conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: backing.ID, ProjectID: backing.ProjectID})
 		require.NoError(t, err)
 	}
 

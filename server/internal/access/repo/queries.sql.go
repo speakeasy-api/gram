@@ -404,6 +404,7 @@ SELECT resource_type, visibility FROM (
   SELECT
     'toolset'::text AS resource_type,
     (CASE
+      WHEN cw.id IS NOT NULL THEN cw.visibility
       WHEN NOT toolsets.mcp_enabled THEN 'disabled'
       WHEN toolsets.mcp_is_public THEN 'public'
       ELSE 'private'
@@ -411,6 +412,8 @@ SELECT resource_type, visibility FROM (
     2 AS source_rank
   FROM toolsets
   JOIN projects ON projects.id = toolsets.project_id
+  -- The canonical wrapper owns a hosted toolset's visibility.
+  LEFT JOIN mcp_servers cw ON cw.id = toolsets.id AND cw.toolset_id = toolsets.id AND cw.project_id = toolsets.project_id AND cw.deleted IS FALSE
   WHERE projects.organization_id = $1
     AND toolsets.id = $2::uuid
     AND toolsets.deleted IS FALSE

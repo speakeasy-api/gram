@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"log/slog"
 	"strings"
 	"testing"
@@ -353,7 +354,7 @@ func disableFixtureServer(t *testing.T, ctx context.Context, fixture toolExposur
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := toolsetsrepo.New(tx)
-	require.NoError(t, q.SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
+	require.NoError(t, testrepo.New(tx).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{
 		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
 	}))
 	toolset, err := q.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: fixture.toolsetID, ProjectID: fixture.project.ID})

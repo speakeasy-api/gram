@@ -73,7 +73,7 @@ func TestGetAttachImpactBetweenPerServerIssuersOnCustomDomain(t *testing.T) {
 	useAuthenticationHost(t, ctx, ti, candidateID)
 	domainID := createCustomDomain(t, ctx, ti)
 	toolset := attachIssuerToolset(t, ctx, ti, projectID, currentID, "impact-domain-toolset")
-	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
 		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Slug: toolset.Slug, ProjectID: projectID,
 	}))
 

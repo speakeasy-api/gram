@@ -3,6 +3,7 @@ package mcpmetadata_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"html"
 	"net/http"
 	"net/http/httptest"
@@ -48,7 +49,7 @@ func createPublicToolsetWithTools(t *testing.T, ctx context.Context, ti *testIns
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,

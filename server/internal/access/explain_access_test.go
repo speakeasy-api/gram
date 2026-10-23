@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,7 +14,6 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -461,11 +461,10 @@ func TestService_ExplainResourceAccess_ToolsetVisibilityFollowsItsMCPEndpoint(t 
 
 	require.Equal(t, "disabled", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility, "a switched-off MCP endpoint serves nobody")
 
-	toolsets := toolsetsrepo.New(ti.conn)
-	require.NoError(t, toolsets.SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{McpEnabled: true, ID: id, ProjectID: projectID}))
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{McpEnabled: true, ID: id, ProjectID: projectID}))
 	require.Equal(t, "private", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
 
-	require.NoError(t, toolsets.SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: id, ProjectID: projectID}))
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: id, ProjectID: projectID}))
 	require.Equal(t, "public", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
 }
 

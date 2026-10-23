@@ -2,6 +2,7 @@ package customdomains_test
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
 
 	"github.com/google/uuid"
@@ -40,7 +41,7 @@ func seedCanonicalHostedServer(t *testing.T, ctx context.Context, conn *pgxpool.
 		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	require.NoError(t, toolsetsrepo.New(conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
+	require.NoError(t, testrepo.New(conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
 		CustomDomainID: customDomainID,
 		Slug:           slug,
 		ProjectID:      projectID,

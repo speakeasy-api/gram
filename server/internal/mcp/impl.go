@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
@@ -1795,7 +1796,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 // on the platform domain — the value is an explicit assertion rather
 // than a route inference.
 //
-// Disabled toolsets (mcp_enabled false) surface as errToolsetNotFound so
+// Disabled servers (wrapper visibility, else mcp_enabled) surface as errToolsetNotFound so
 // every legacy-routed surface (serving, well-known metadata, OAuth
 // challenges) treats them as nonexistent — mirroring how the
 // mcp_endpoints → mcp_servers path handles visibility 'disabled'.
@@ -1820,21 +1821,29 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 	case err != nil:
 		return nil, noWrapper, fmt.Errorf("lookup toolset: %w", err)
 	}
-	if !toolset.McpEnabled {
-		return nil, noWrapper, errToolsetNotFound
-	}
 	wrapper, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
+		if !toolset.McpEnabled {
+			return nil, noWrapper, errToolsetNotFound
+		}
 		return &toolset, noWrapper, nil
 	}
 	if err != nil {
 		return nil, noWrapper, fmt.Errorf("lookup hosted MCP network policy: %w", err)
 	}
+	if !hostedmcp.IsCanonical(&wrapper, toolset.ID) {
+		return nil, noWrapper, errToolsetNotFound
+	}
+	// The canonical wrapper owns hosting state; the toolset slug is only the legacy alias.
+	toolset = hostedmcp.Effective(toolset, &wrapper)
+	if !toolset.McpEnabled {
+		return nil, noWrapper, errToolsetNotFound
+	}
 	mode, err := networkaccess.Effective(wrapper.NetworkAccessMode)
 	if err != nil {
 		return nil, noWrapper, fmt.Errorf("invalid hosted MCP network policy: %w", err)
 	}
-	if !mode.Allows(networkaccess.SurfacePublic) || !mcpmetadata.CanonicalWrapperMatchesToolset(&wrapper, &toolset) {
+	if !mode.Allows(networkaccess.SurfacePublic) {
 		return nil, noWrapper, errToolsetNotFound
 	}
 	return &toolset, uuid.NullUUID{UUID: wrapper.ID, Valid: true}, nil

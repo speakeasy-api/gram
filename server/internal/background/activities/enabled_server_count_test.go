@@ -16,6 +16,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -73,7 +74,8 @@ func TestEnabledServerCountMatchesToolsetFlagCount(t *testing.T) {
 
 	metrics := collectOrgMetrics(t, db, orgID)
 	require.Equal(t, int64(want), metrics.TotalEnabledServers)
-	require.Equal(t, int64(2), metrics.PublicMCPServers)
+	// A wrapped server counts by its wrapper's visibility, so the disabled one is neither.
+	require.Equal(t, int64(1), metrics.PublicMCPServers)
 	require.Equal(t, int64(4), metrics.PrivateMCPServers)
 }
 
@@ -159,7 +161,7 @@ func createCountToolset(t *testing.T, db *pgxpool.Pool, orgID string, projectID 
 		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: mcpSlug, McpEnabled: enabled,
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.SetToolsetMCPPublicByID(t.Context(), toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: public, ID: toolset.ID, ProjectID: projectID}))
+	require.NoError(t, testrepo.New(db).SetToolsetMCPPublicByID(t.Context(), testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: public, ID: toolset.ID, ProjectID: projectID}))
 	return toolset
 }
 

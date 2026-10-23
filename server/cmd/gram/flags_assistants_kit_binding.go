@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -87,6 +88,10 @@ func validateKitMCPBinding(ctx context.Context, db toolsetsrepo.DBTX, request as
 		toolset, err := toolsetsrepo.New(db).GetToolsetByMcpSlugAndProjectAndCustomDomain(ctx, toolsetsrepo.GetToolsetByMcpSlugAndProjectAndCustomDomainParams{OrganizationID: request.OrganizationID, CustomDomainID: domainID, McpSlug: pgtype.Text{String: slug, Valid: true}, ProjectID: request.ProjectID})
 		if err != nil {
 			return fmt.Errorf("resolve Kit MCP toolset: %w", err)
+		}
+		toolset, _, err = hostedmcp.LoadEffective(ctx, db, toolset)
+		if err != nil {
+			return fmt.Errorf("resolve Kit MCP toolset server: %w", err)
 		}
 		if toolset.ProjectID != request.ProjectID || toolset.CustomDomainID != domainID || !toolset.McpEnabled {
 			return errors.New("kit MCP resource is not enabled in this project")

@@ -2,6 +2,7 @@ package mcpendpoints_test
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
 	"time"
 
@@ -251,7 +252,7 @@ func (f *hostedAddressFixture) placeOnDomain(t *testing.T, ctx context.Context, 
 	})
 	require.NoError(t, err)
 	domainID := uuid.NullUUID{UUID: domain.ID, Valid: true}
-	require.NoError(t, toolsetsrepo.New(f.ti.conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{CustomDomainID: domainID, Slug: f.toolset.Slug, ProjectID: f.projectID}))
+	require.NoError(t, testrepo.New(f.ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{CustomDomainID: domainID, Slug: f.toolset.Slug, ProjectID: f.projectID}))
 	_, err = mcpendpointsrepo.New(f.ti.conn).UpdateMCPEndpointAddress(ctx, mcpendpointsrepo.UpdateMCPEndpointAddressParams{
 		CustomDomainID: domainID, Slug: f.endpoint.Slug, IsDomainRoot: pgtype.Bool{Bool: false, Valid: false}, ID: f.endpoint.ID, ProjectID: f.projectID,
 	})
