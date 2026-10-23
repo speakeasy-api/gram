@@ -1598,27 +1598,6 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 	return err
 }
 
-const serversMirrorHostedToolsets = `-- name: ServersMirrorHostedToolsets :exec
-UPDATE toolsets AS t
-SET
-    mcp_slug = e.slug
-  , custom_domain_id = e.custom_domain_id
-  , mcp_enabled = s.visibility <> 'disabled'
-  , mcp_is_public = s.visibility = 'public'
-  , user_session_issuer_id = s.user_session_issuer_id
-  , tool_variations_group_id = s.tool_variations_group_id
-FROM mcp_servers AS s
-JOIN mcp_endpoints AS e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
-WHERE s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
-  AND t.project_id = $1::uuid AND t.deleted IS FALSE
-`
-
-// Hosted toolsets mirror their canonical server's hosting state for pods that still read the toolset columns.
-func (q *Queries) ServersMirrorHostedToolsets(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, serversMirrorHostedToolsets, projectID)
-	return err
-}
-
 const serversStampLinearRemoteSessionIssuer = `-- name: ServersStampLinearRemoteSessionIssuer :exec
 UPDATE mcp_servers
 SET remote_session_issuer_id = $1::uuid

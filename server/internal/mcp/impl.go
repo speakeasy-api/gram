@@ -1843,7 +1843,7 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 	if err != nil {
 		return nil, noWrapper, fmt.Errorf("lookup hosted MCP network policy: %w", err)
 	}
-	if !hostedmcp.InSync(toolset, &wrapper) {
+	if !hostedmcp.IsCanonical(&wrapper, toolset.ID) {
 		return nil, noWrapper, errToolsetNotFound
 	}
 	// The canonical wrapper owns hosting state; the toolset slug is only the legacy alias.

@@ -194,9 +194,6 @@ func CreateCanonical(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, 
 	}); err != nil {
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "audit hosted MCP endpoint")
 	}
-	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
-		return mcpserversrepo.McpServer{}, err //nolint:wrapcheck // oops errors pass through.
-	}
 	return server, nil
 }
 
@@ -245,7 +242,7 @@ func RequireLiveAddress(ctx context.Context, tx pgx.Tx, organizationID string, s
 	return nil
 }
 
-// Enable re-enables a toolset's disabled canonical wrapper as its mirrored columns last described it: public when
+// Enable re-enables a toolset's disabled canonical wrapper as its frozen columns last described it: public when
 // the toolset was public or carries external OAuth (which a private server cannot), else private. A private network
 // mode needs a live ingress for the server's endpoints. It reports false when there is no disabled wrapper to enable.
 func Enable(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) (bool, error) {
@@ -284,9 +281,6 @@ func Enable(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Act
 	}
 	if err := LogUpdate(ctx, tx, auditLogger, actor, toolset.OrganizationID, canonical, updated); err != nil {
 		return false, err
-	}
-	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
-		return false, err //nolint:wrapcheck // oops errors pass through.
 	}
 	return true, nil
 }
