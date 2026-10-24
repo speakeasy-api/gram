@@ -74,9 +74,7 @@ func (s *Service) ahpResolveConfiguration(ctx context.Context) (*ahp.Configurati
 	if base == nil || base.Host == "" || base.User != nil || (base.Scheme != "https" && base.Scheme != "http") {
 		return nil, errors.New("AHP upload origin unavailable")
 	}
-	endpoint := *base
-	endpoint.Path = ahpUploadPath
-	endpoint.RawPath = ""
+	endpoint := base.JoinPath(ahpUploadPath)
 	endpoint.RawQuery = ""
 	endpoint.ForceQuery = false
 	endpoint.Fragment = ""

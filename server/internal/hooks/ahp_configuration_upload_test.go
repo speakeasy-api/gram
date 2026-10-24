@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
 func TestAHPConfigurationNativeUpload(t *testing.T) {
@@ -40,6 +43,7 @@ func TestAHPConfigurationNativeUpload(t *testing.T) {
 			}
 			var uploadCalls, eventCalls, discoveryCalls int
 			var delivered ahp.UserMessageInboundEvent
+			loseUpload := false
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, value, r.Header.Get(header))
 				assert.Equal(t, "chosen", r.Header.Get("Gram-Project"))
@@ -67,6 +71,10 @@ func TestAHPConfigurationNativeUpload(t *testing.T) {
 				if envelope.Method == "hooks/intercept" {
 					eventCalls++
 					assert.NoError(t, json.Unmarshal(envelope.Params.Event, &delivered))
+					if loseUpload {
+						ref := delivered.Message.Messages[0].Parts[0].AttachmentBodyPart.Value.Body.Ref
+						assert.NoError(t, ti.service.cache.Delete(ctx, ahpUploadCacheKey(*auth.ProjectID, strings.TrimPrefix(ref, ahpUploadRefPrefix))))
+					}
 				}
 				handler.ServeHTTP(w, r)
 			}))
@@ -96,10 +104,23 @@ func TestAHPConfigurationNativeUpload(t *testing.T) {
 				Content:         ahpclient.ContentOptions{AllowLoopbackHTTP: true, AuthorizeContent: func(context.Context, ahpclient.ContentAuthorization) (bool, error) { return true, nil }},
 			}
 			// Upload-bearing discovery is not implicitly authorized.
-			unapproved, err := ahpclient.New(registration.Value, options)
-			require.NoError(t, err)
-			require.False(t, unapproved.Subscribes(event.UserMessageInbound))
-			require.NoError(t, unapproved.Close())
+			for _, approval := range []string{"missing", "rejected", "error"} {
+				unapprovedOptions := options
+				if approval != "missing" {
+					unapprovedOptions.AuthorizeConfiguration = func(context.Context, *ahp.Configuration) (bool, error) {
+						if approval == "error" {
+							return false, errors.New("approval unavailable")
+						}
+						return false, nil
+					}
+				}
+				unapproved, err := ahpclient.New(registration.Value, unapprovedOptions)
+				require.NoError(t, err)
+				for _, name := range []event.Type{event.UserMessageInbound, event.ToolBefore, event.SessionStart, event.SessionEnd, event.TurnEnd, event.ModelResponseAfter, event.ToolAfter} {
+					require.False(t, unapproved.Subscribes(name), "%s approval must skip the entire backend: %s", approval, name)
+				}
+				require.NoError(t, unapproved.Close())
+			}
 			options.AuthorizeConfiguration = func(_ context.Context, config *ahp.Configuration) (bool, error) {
 				raw, marshalErr := json.Marshal(config)
 				require.NoError(t, marshalErr)
@@ -178,6 +199,25 @@ func TestAHPConfigurationNativeUpload(t *testing.T) {
 			require.NotEmpty(t, oversized.Diagnostics)
 			require.Equal(t, 1, uploadCalls, "advertised size limit rejects before upload")
 			require.Equal(t, 1, eventCalls, "fail-closed content failure must not dispatch")
+			// Simulate expiry/eviction after a valid receipt but before event handling.
+			loseUpload = true
+			missing := dispatch([]byte("staged evidence must not disappear silently"))
+			require.NotEmpty(t, missing.Diagnostics)
+			require.Empty(t, missing.AcceptedResponses)
+			require.Equal(t, ahp.InterceptRequestParamsStatePermissionDeny, missing.Permission, "fail-closed must deny execution after evidence loss")
+			require.True(t, missing.Diagnostics[0].FailClosed)
+			// Fail-open remains an explicit organization policy, not a successful scan.
+			_, err = featuresrepo.New(ti.conn).EnableFeature(ctx, featuresrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)})
+			require.NoError(t, err)
+			require.NoError(t, client.Close())
+			client, err = ahpclient.New(registration.Value, options)
+			require.NoError(t, err)
+			missing = dispatch([]byte("fail-open evidence loss remains diagnostic"))
+			require.NotEmpty(t, missing.Diagnostics)
+			require.Empty(t, missing.AcceptedResponses)
+			require.NotEqual(t, ahp.InterceptRequestParamsStatePermissionDeny, missing.Permission)
+			require.False(t, missing.Interrupted)
+			require.False(t, missing.Diagnostics[0].FailClosed)
 		})
 	}
 }
@@ -199,6 +239,50 @@ func TestAHPConfigurationUploadOrigin(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, string(raw), tc.want+ahpUploadPath)
 			require.NotContains(t, string(raw), "attacker.invalid")
+		})
+	}
+}
+
+func TestAHPConfigurationUploadBasePath(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		base, want string
+		invalid    bool
+	}{
+		{"https://api.example.test/prefix", "https://api.example.test/prefix/ahp/uploads", false},
+		{"https://api.example.test/prefix/", "https://api.example.test/prefix/ahp/uploads", false},
+		{"https://api.example.test/api%2Fv1/space%20here?ignored=1#ignored", "https://api.example.test/api%2Fv1/space%20here/ahp/uploads", false},
+		{"https://userinfo@api.example.test/prefix", "", true},
+	} {
+		t.Run(tc.base, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			base, err := url.Parse(tc.base)
+			require.NoError(t, err)
+			ti.service.serverURL = base
+			ti.service.orgHosts = nil
+			config, err := ti.service.ahpResolveConfiguration(ctx)
+			if tc.invalid {
+				require.Error(t, err)
+				require.Nil(t, config)
+				return
+			}
+			require.NoError(t, err)
+			raw, err := json.Marshal(config)
+			require.NoError(t, err)
+			var fields struct {
+				Subscriptions []struct {
+					Upload struct {
+						Endpoint string `json:"endpoint"`
+					} `json:"upload"`
+				} `json:"subscriptions"`
+			}
+			require.NoError(t, json.Unmarshal(raw, &fields))
+			require.Len(t, fields.Subscriptions, 2)
+			for _, sub := range fields.Subscriptions {
+				require.Equal(t, tc.want, sub.Upload.Endpoint)
+			}
+			require.Equal(t, tc.base, base.String(), "resolution must not mutate shared configuration")
 		})
 	}
 }
