@@ -2,6 +2,7 @@ package agentmanagement
 
 import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -50,4 +51,32 @@ func TestAgentPolicyDeletePrecondition(t *testing.T) {
 			require.Empty(t, listed)
 		})
 	}
+}
+
+func TestAgentPolicyDeletePreconditionLegacySelector(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-legacy-policy")
+	seedOrganizationUser(t, conn, "org-legacy-policy", "owner")
+	agent := createAgent(t, conn, "org-legacy-policy", "owner", "Legacy policy")
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-legacy-policy", "owner")
+	_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: "org-legacy-policy", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), Scope: string(authz.ScopeProjectRead), Selectors: []byte(`{"resource_id":"project-one"}`),
+	})
+	require.NoError(t, err)
+	listed, err := service.ListPolicyGrants(ctx, &gen.ListPolicyGrantsPayload{AgentID: agent.ID.String()})
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	grant := listed[0]
+	require.Empty(t, grant.Selector.ResourceKind)
+	expected := &gen.AgentExpectedPolicy{Scope: grant.Scope, Selector: grant.Selector}
+	deletion := &gen.DeletePolicyGrantPayload{AgentID: agent.ID.String(), GrantID: grant.ID, ExpectedPolicy: expected}
+	expected.Selector.ResourceID = "project-two"
+	requireOopsCode(t, service.DeletePolicyGrant(ctx, deletion), oops.CodeConflict)
+	expected.Selector.ResourceID = "project-one"
+	require.NoError(t, service.DeletePolicyGrant(ctx, deletion))
+	listed, err = service.ListPolicyGrants(ctx, &gen.ListPolicyGrantsPayload{AgentID: agent.ID.String()})
+	require.NoError(t, err)
+	require.Empty(t, listed)
 }

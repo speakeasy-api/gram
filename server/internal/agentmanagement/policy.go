@@ -210,6 +210,16 @@ func (s *Service) DeletePolicyGrant(ctx context.Context, payload *gen.DeletePoli
 			if err != nil {
 				return fmt.Errorf("parse current agent policy selector: %w", err)
 			}
+			// These required API fields serialize absent legacy keys as empty strings.
+			// Preserve every other key and all nonempty values for exact comparison.
+			for _, key := range []string{authz.SelectorKeyResourceKind, authz.SelectorKeyResourceID} {
+				if _, ok := current[key]; !ok {
+					if current == nil {
+						current = make(authz.Selector)
+					}
+					current[key] = ""
+				}
+			}
 			if existing.Scope != expected.Scope || !maps.Equal(current, policySelector(expected.Selector)) {
 				return oops.E(oops.CodeConflict, nil, "agent policy grant changed; reload before deleting")
 			}
