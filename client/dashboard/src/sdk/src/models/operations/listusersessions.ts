@@ -66,6 +66,10 @@ export type ListUserSessionsRequest = {
    */
   search?: string | undefined;
   /**
+   * Only sessions issued for this gateway, by the gateway they recorded or, for sessions that recorded none, the gateway their consent selection names. Sessions with neither are left out.
+   */
+  metaMcpServerId?: string | undefined;
+  /**
    * Pagination cursor: id of the last item from the previous page.
    */
   cursor?: string | undefined;
@@ -204,6 +208,7 @@ export type ListUserSessionsRequest$Outbound = {
   status?: string | undefined;
   client_id?: string | undefined;
   search?: string | undefined;
+  meta_mcp_server_id?: string | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
   "Gram-Session"?: string | undefined;
@@ -222,6 +227,7 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
     status: z.optional(ListUserSessionsQueryParamStatus$outboundSchema),
     clientId: z.optional(z.string()),
     search: z.optional(z.string()),
+    metaMcpServerId: z.optional(z.string()),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramSession: z.optional(z.string()),
@@ -233,6 +239,7 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
       subjectUrn: "subject_urn",
       userSessionIssuerId: "user_session_issuer_id",
       clientId: "client_id",
+      metaMcpServerId: "meta_mcp_server_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

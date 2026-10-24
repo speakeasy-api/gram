@@ -1,8 +1,6 @@
 import { MCPSessionsEmptyState } from "@/components/setup-empty-state";
 import { useSessionAgents } from "@/hooks/useSessionAgents";
-import { useCallback, useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
-import { keepPreviousData } from "@tanstack/react-query";
+import { useDeferredValue, useMemo, useState } from "react";
 import {
   defineFilters,
   useFilterState,
@@ -21,6 +19,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { subjectLabel } from "@/lib/user-session-status";
 import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
 import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
@@ -73,25 +72,7 @@ function UserSessionsInner(): JSX.Element {
   const filters = useFilterState(USER_SESSION_FILTERS);
   const projectSlug = project.slug;
   const canRevoke = hasScope("project:write", project.id);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const search = searchParams.get("q") ?? "";
-  const setSearch = useCallback(
-    (value: string) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (value) {
-            next.set("q", value);
-          } else {
-            next.delete("q");
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
+  const [searchQuery, setSearchQuery] = useState("");
   const [grouping, setGrouping] = useState<ConnectionGrouping>("subject");
 
   const handleFilterChange = (id: string, value: FilterValue) => {
@@ -123,27 +104,39 @@ function UserSessionsInner(): JSX.Element {
     fetchNextPage,
     isFetchingNextPage,
     isFetching,
-    isPlaceholderData,
     refetch,
-  } = useUserSessionsInfinite(
-    {
-      gramProject: projectSlug,
-      status: (filters.values.status ?? undefined) as
-        | ListUserSessionsQueryParamStatus
-        | undefined,
-      subjectUrn: filters.values.subjectUrn ?? undefined,
-      userSessionIssuerId: filters.values.issuerId ?? undefined,
-      search: search.trim() || undefined,
-    },
-    undefined,
-    { placeholderData: keepPreviousData },
-  );
+  } = useUserSessionsInfinite({
+    gramProject: projectSlug,
+    status: (filters.values.status ?? undefined) as
+      | ListUserSessionsQueryParamStatus
+      | undefined,
+    subjectUrn: filters.values.subjectUrn ?? undefined,
+    userSessionIssuerId: filters.values.issuerId ?? undefined,
+  });
   const unresolvedSessions = useMemo(
     () => data?.pages.flatMap((p) => p.result.items) ?? [],
     [data],
   );
 
   const sessions = useSessionAgents(unresolvedSessions);
+
+  // Search filters the loaded rows client-side (subject / client / server /
+  // upstream provider), matching the loaded-count semantics shown in the
+  // toolbar. Deferred so the input stays responsive while the list re-filters.
+  const deferredSearch = useDeferredValue(searchQuery);
+  const filteredSessions = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return sessions;
+    return sessions.filter(
+      (s) =>
+        subjectLabel(s).toLowerCase().includes(q) ||
+        (s.clientName ?? "").toLowerCase().includes(q) ||
+        s.issuerSlug.toLowerCase().includes(q) ||
+        (s.upstreams ?? []).some((upstream) =>
+          upstream.issuerSlug.toLowerCase().includes(q),
+        ),
+    );
+  }, [sessions, deferredSearch]);
 
   let listBody: JSX.Element;
   if (isPending) {
@@ -165,12 +158,6 @@ function UserSessionsInner(): JSX.Element {
         </Button>
       </div>
     );
-  } else if (sessions.length === 0 && search.trim()) {
-    listBody = (
-      <p className="text-muted-foreground text-sm">
-        No connections match your search
-      </p>
-    );
   } else if (
     sessions.length === 0 &&
     Object.values(filters.values).some(Boolean)
@@ -182,10 +169,16 @@ function UserSessionsInner(): JSX.Element {
     );
   } else if (sessions.length === 0) {
     listBody = <MCPSessionsEmptyState />;
+  } else if (filteredSessions.length === 0) {
+    listBody = (
+      <p className="text-muted-foreground text-sm">
+        No connections match your search
+      </p>
+    );
   } else {
     listBody = (
       <ConnectionsList
-        sessions={sessions}
+        sessions={filteredSessions}
         grouping={grouping}
         canRevoke={canRevoke}
         onRevoked={() => void refetch()}
@@ -214,9 +207,9 @@ function UserSessionsInner(): JSX.Element {
         <div className="space-y-4">
           <Page.Toolbar>
             <Page.Toolbar.Search
-              value={search}
-              onChange={setSearch}
-              debounceMs={250}
+              value={searchQuery}
+              onChange={setSearchQuery}
+              debounceMs={150}
               placeholder="Search connections"
             />
             <Page.Toolbar.Filters
@@ -250,12 +243,12 @@ function UserSessionsInner(): JSX.Element {
 
           {listBody}
 
-          {hasNextPage && !isPlaceholderData && (
+          {hasNextPage && (
             <div className="flex justify-center">
               <Button
                 variant="tertiary"
                 size="sm"
-                disabled={isFetching}
+                disabled={isFetchingNextPage}
                 onClick={() => void fetchNextPage()}
               >
                 {isFetchingNextPage ? "Loading…" : "Load more"}

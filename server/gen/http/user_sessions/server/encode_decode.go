@@ -45,6 +45,7 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 			status              *string
 			clientID            *string
 			search              *string
+			metaMcpServerID     *string
 			cursor              *string
 			limit               *int
 			sessionToken        *string
@@ -89,6 +90,13 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 200, false))
 			}
 		}
+		metaMcpServerIDRaw := qp.Get("meta_mcp_server_id")
+		if metaMcpServerIDRaw != "" {
+			metaMcpServerID = &metaMcpServerIDRaw
+		}
+		if metaMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
+		}
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
@@ -122,7 +130,7 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListUserSessionsPayload(subjectUrn, userSessionIssuerID, status, clientID, search, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListUserSessionsPayload(subjectUrn, userSessionIssuerID, status, clientID, search, metaMcpServerID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

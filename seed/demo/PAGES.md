@@ -375,6 +375,10 @@ The seeded gateway uses Progressive discovery. Settings shows this default and I
 
 Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, and no-agent state.
 
+### Gateway Debug
+
+Open **Acme Agent Gateway → Debug**. It lists the gateway's two seeded sessions, which record the gateway as their origin. The Linear, Slack and partner sessions record their own MCP servers, so they never appear here even where they share a sign-in server. Searching narrows the list and is kept in the URL; a search with no match shows "No connections match your search".
+
 ### Gateway tool picker
 
 Browser verification: [~] — follow check 32 in `seed/demo/verify.md`.

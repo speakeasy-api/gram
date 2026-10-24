@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/clientcred"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/gatewayscope"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -33,6 +34,7 @@ type listInput struct {
 	UserSessionIssuerID string `json:"user_session_issuer_id,omitempty" jsonschema:"Filter to one issuer/server id (UUID)."`
 	SubjectURN          string `json:"subject_urn,omitempty" jsonschema:"Exact subject URN to filter by (e.g. user:<id>)."`
 	ClientID            string `json:"client_id,omitempty" jsonschema:"Filter to one connecting client id (UUID)."`
+	MetaMcpServerID     string `json:"meta_mcp_server_id,omitempty" jsonschema:"Only sessions issued for this gateway (UUID): those that recorded it and, when none was recorded, those whose consent selection names it."`
 	Search              string `json:"search,omitempty" jsonschema:"Case-insensitive substring match on the person, API key, workload, client, MCP server, or upstream provider of a session. Workload issuer and assignment labels and upstream provider labels may match without being included in the response."`
 	Cursor              string `json:"cursor,omitempty" jsonschema:"Pagination cursor: id of the last item from the previous page."`
 	Limit               int    `json:"limit,omitempty" jsonschema:"Page size (default 50, max 100)."`
@@ -213,6 +215,14 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		return oops.E(oops.CodeBadRequest, nil, "search must be at most %d characters", maxSearchLength)
 	}
 
+	resourceIdentity := pgtype.Text{String: "", Valid: false}
+	if in.MetaMcpServerID != "" {
+		resourceIdentity, err = gatewayscope.ResourceIdentity(ctx, t.db, pid, in.MetaMcpServerID)
+		if err != nil {
+			return fmt.Errorf("scope sessions to gateway: %w", err)
+		}
+	}
+
 	rows, err := repo.New(t.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
 		ProjectID:            pid,
 		OrganizationID:       org,
@@ -224,6 +234,7 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		Search:               conv.ContainsPattern(in.Search),
 		AgentSubjectUrns:     []string{},
 		FirstPartyClientName: sessiontokens.FirstPartyClientName,
+		ResourceIdentity:     resourceIdentity,
 		Cursor:               cursor,
 		LimitValue:           limit,
 	})
@@ -296,6 +307,7 @@ func (t *GetTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io
 		Search:               pgtype.Text{String: "", Valid: false},
 		AgentSubjectUrns:     []string{},
 		FirstPartyClientName: sessiontokens.FirstPartyClientName,
+		ResourceIdentity:     pgtype.Text{String: "", Valid: false},
 		Cursor:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		LimitValue:           1,
 	})

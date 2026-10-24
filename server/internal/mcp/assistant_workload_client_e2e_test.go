@@ -154,6 +154,7 @@ func TestAssistantWorkloadClientCredentialsEndToEnd(t *testing.T) {
 			require.True(t, session.UserSessionClientID.Valid)
 			require.Equal(t, client.RegistrationID, session.UserSessionClientID.UUID)
 			require.False(t, session.AuthorizerUserID.Valid)
+			require.Equal(t, "toolset:"+fx.toolset.ID.String(), session.ResourceIdentity.String)
 			revoke := httptest.NewRecorder()
 			require.NoError(t, ti.service.ServeRevoke(revoke, request(urls.Revoke, url.Values{"token": {token}, "token_type_hint": {"access_token"}}), endpoint))
 			require.Equal(t, http.StatusOK, revoke.Code)

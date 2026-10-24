@@ -149,6 +149,7 @@ func TestMintUserSessionForServerAllowsMCPConnect(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, row.UserSessionClientID.Valid)
 	require.True(t, strings.HasPrefix(row.RefreshTokenHash.String, "dashboard-mint:"))
+	require.Equal(t, "mcp_server:"+server.ID.String(), row.ResourceIdentity.String)
 }
 
 func TestMintUserSessionForServerRejectsUngatedServer(t *testing.T) {

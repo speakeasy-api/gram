@@ -9,7 +9,9 @@ import {
 } from "@/components/mcp-server-readiness-bar";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useGatewayDebugAction } from "@/pages/mcp/gateway/useGatewayDebugAction";
 import {
   gatewayInstallPageUrl,
   useResolvedMcpServerUrl,
@@ -25,6 +27,7 @@ import { useRoutes } from "@/routes";
 import { useGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import {
+  Bug,
   ExternalLink,
   LayoutDashboard,
   Network,
@@ -39,6 +42,7 @@ import { useLocation, useParams } from "react-router";
 export function GatewaySidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
   const location = useLocation();
+  const project = useProject();
   const { gatewayId } = useParams<{ gatewayId: string }>();
 
   const id = gatewayId ?? "";
@@ -58,6 +62,9 @@ export function GatewaySidebarNav(): React.JSX.Element | null {
   // the resource, so hide it rather than render a permission wall.
   const canViewTeamAccess =
     !!metaMcpServer && hasScope("org:read") && hasScope("mcp:read", id);
+  const canDebug =
+    id !== "" && !!metaMcpServer && hasScope("project:read", project.id);
+  useGatewayDebugAction(canDebug ? gatewayTabHref(routes, id, "debug") : null);
   if (!id) return null;
 
   const activeTab = activeTabFromPath(location.pathname, id);
@@ -129,6 +136,17 @@ export function GatewaySidebarNav(): React.JSX.Element | null {
       href: gatewayTabHref(routes, id, "sessions"),
       active: activeTab === "sessions",
     },
+    ...(canDebug
+      ? [
+          {
+            key: "debug",
+            title: "Debug",
+            Icon: Bug,
+            href: gatewayTabHref(routes, id, "debug"),
+            active: activeTab === "debug",
+          },
+        ]
+      : []),
     {
       key: "settings",
       title: "Settings",

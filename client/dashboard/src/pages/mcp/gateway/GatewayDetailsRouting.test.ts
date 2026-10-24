@@ -15,6 +15,7 @@ const TABS = [
   "inspect",
   "team-access",
   "sessions",
+  "debug",
   "settings",
 ] as const;
 

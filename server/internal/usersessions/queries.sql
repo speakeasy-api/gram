@@ -1677,15 +1677,39 @@ WHERE (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.org
         )
       )
     )
-    OR EXISTS (
-      SELECT 1
-      FROM remote_sessions AS rs
-      JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
-      JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-      WHERE ri.slug ILIKE sqlc.narg('search')::text
-        AND (
-          (s.subject_urn::text NOT LIKE 'agent:%' AND rs.subject_urn = s.subject_urn::text)
-          OR EXISTS (
+    OR (
+      s.subject_urn::text NOT LIKE 'agent:%'
+      AND EXISTS (
+        SELECT 1
+        FROM remote_sessions AS rs
+        JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+        JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+        WHERE ri.slug ILIKE sqlc.narg('search')::text
+          AND rs.subject_urn = s.subject_urn::text
+          AND (rc.project_id = @project_id::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id::text)))
+          AND (
+            EXISTS (
+              SELECT 1
+              FROM remote_session_client_user_session_issuers AS blink
+              WHERE blink.remote_session_client_id = rs.remote_session_client_id
+                AND blink.user_session_issuer_id = s.user_session_issuer_id
+            )
+            OR rs.user_session_issuer_id = s.user_session_issuer_id
+          )
+          AND rs.deleted IS FALSE
+          AND rc.deleted IS FALSE
+          AND ri.deleted IS FALSE
+      )
+    )
+    OR (
+      s.subject_urn::text LIKE 'agent:%'
+      AND EXISTS (
+        SELECT 1
+        FROM remote_sessions AS rs
+        JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+        JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+        WHERE ri.slug ILIKE sqlc.narg('search')::text
+          AND EXISTS (
             SELECT 1
             FROM principal_remote_session_bindings AS b
             JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
@@ -1722,21 +1746,26 @@ WHERE (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.org
               AND (bc.project_id = @project_id::uuid OR (bc.project_id IS NULL AND (bc.organization_id IS NULL OR bc.organization_id = @organization_id::text)))
               AND bs.id = rs.id
           )
-        )
-        AND (rc.project_id = @project_id::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id::text)))
-        AND (
-          EXISTS (
-            SELECT 1
-            FROM remote_session_client_user_session_issuers AS blink
-            WHERE blink.remote_session_client_id = rs.remote_session_client_id
-              AND blink.user_session_issuer_id = s.user_session_issuer_id
+          AND (rc.project_id = @project_id::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id::text)))
+          AND (
+            EXISTS (
+              SELECT 1
+              FROM remote_session_client_user_session_issuers AS blink
+              WHERE blink.remote_session_client_id = rs.remote_session_client_id
+                AND blink.user_session_issuer_id = s.user_session_issuer_id
+            )
+            OR rs.user_session_issuer_id = s.user_session_issuer_id
           )
-          OR rs.user_session_issuer_id = s.user_session_issuer_id
-        )
-        AND rs.deleted IS FALSE
-        AND rc.deleted IS FALSE
-        AND ri.deleted IS FALSE
+          AND rs.deleted IS FALSE
+          AND rc.deleted IS FALSE
+          AND ri.deleted IS FALSE
+      )
     )
+  )
+  AND (
+    sqlc.narg('resource_identity')::text IS NULL
+    OR s.resource_identity = sqlc.narg('resource_identity')::text
+    OR (s.resource_identity IS NULL AND s.tool_selection->>'resource' = sqlc.narg('resource_identity')::text)
   )
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
 ORDER BY s.id DESC
@@ -2142,6 +2171,7 @@ INSERT INTO user_sessions (
     expires_at,
     tool_selection,
     resource,
+    resource_identity,
     sign_in_id,
     credential_id
 )
@@ -2160,6 +2190,7 @@ SELECT
     @expires_at,
     @tool_selection,
     sqlc.narg('resource'),
+    sqlc.narg('resource_identity'),
     (SELECT sign_in.id FROM sign_in),
     sqlc.narg('credential_id')
 FROM issuer

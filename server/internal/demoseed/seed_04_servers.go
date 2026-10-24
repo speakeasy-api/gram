@@ -302,6 +302,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			UserSessionIssuerID: s.det("issuer-" + us.issuer),
 			UserSessionClientID: s.det("usc-" + us.client),
 			UserID:              user(us.user),
+			ResourceIdentity:    s.serversResourceIdentity(us.issuer),
 			Jti:                 "demo-jti-" + num,
 			RefreshTokenHash:    s.det("user-session-refresh-" + num).String(),
 			RefreshExpiresIn:    us.refreshExpiresIn,
@@ -710,4 +711,13 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 		return fmt.Errorf("insert demo ema provider order: %w", err)
 	}
 	return nil
+}
+
+// serversResourceIdentity is the resource a session on the named seeded issuer
+// is recorded for.
+func (s *seeder) serversResourceIdentity(issuer string) string {
+	if issuer == "gateway" {
+		return "meta_mcp_server:" + s.det("metamcp-1").String()
+	}
+	return "mcp_server:" + s.det("mcpserver-"+issuer).String()
 }

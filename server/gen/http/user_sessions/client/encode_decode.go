@@ -71,6 +71,9 @@ func EncodeListUserSessionsRequest(encoder func(*http.Request) goahttp.Encoder) 
 		if p.Search != nil {
 			values.Add("search", *p.Search)
 		}
+		if p.MetaMcpServerID != nil {
+			values.Add("meta_mcp_server_id", *p.MetaMcpServerID)
+		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
