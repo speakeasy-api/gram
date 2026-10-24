@@ -4,9 +4,10 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useNavigate } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToolApprovalsTab } from "./ToolApprovalsTab";
 
@@ -129,5 +130,34 @@ describe("ToolApprovalsTab", () => {
     expect(
       within(sheet).queryByRole("button", { name: "Approve once" }),
     ).toBeNull();
+  });
+
+  it("closes the linked request when Back leaves its link", async () => {
+    mocks.byID.set(decided.id, decided);
+    function BackButton(): JSX.Element {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => void navigate(-1)}>
+          Back
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/?tab=tool-approvals",
+          `/?tab=tool-approvals&request=${decided.id}`,
+        ]}
+        initialIndex={1}
+      >
+        <BackButton />
+        <ToolApprovalsTab />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Back", hidden: true }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });

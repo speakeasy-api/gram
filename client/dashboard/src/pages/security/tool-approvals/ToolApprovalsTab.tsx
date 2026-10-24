@@ -36,8 +36,10 @@ export function ToolApprovalsTab(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedID = searchParams.get("request");
   const [selectedID, setSelectedID] = useState<string | null>(requestedID);
+  // Follow the link both ways: a new ?request= opens that request, and Back
+  // past it closes the sheet.
   useEffect(() => {
-    if (requestedID) setSelectedID(requestedID);
+    setSelectedID(requestedID);
   }, [requestedID]);
   const approvalsQuery = useRiskListApprovals(
     filter === "pending"
