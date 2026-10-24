@@ -61,8 +61,8 @@ an assumed failure policy. Authentication failures remain HTTP 401/403.
 Observe mode records events without enforcing policy. `turn.start` is not advertised. Prompt and tool
 interception require the harness to support denial at the subscribed boundary.
 Both subscriptions advertise `/ahp/uploads` with a ten-second timeout and a 1 MiB
-limit. Uploads use the same authentication and project as event requests. Uploaded
-text can supply prompt attachment evidence; binary content is not ingested.
+limit. Uploads use the same authentication and project as event requests. Binary
+uploads are accepted, but only text is processed as prompt attachment evidence.
 Unavailable staged references return a backend error, subject to the subscription's
 fail-open or fail-closed policy.
 

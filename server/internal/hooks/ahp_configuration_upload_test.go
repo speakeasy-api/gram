@@ -21,9 +21,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	domainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 func TestAHPConfigurationNativeUpload(t *testing.T) {
@@ -222,25 +226,54 @@ func TestAHPConfigurationNativeUpload(t *testing.T) {
 	}
 }
 
-func TestAHPConfigurationUploadOrigin(t *testing.T) {
+func TestAHPConfigurationUploadRequestOrigin(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct{ name, stored, want string }{
-		{"platform", "https://platform.example.test", testPlatformBaseURL},
-		{"untrusted stored host", "https://attacker.invalid", "https://localhost:8080"},
-		{"legacy fallback", "", "https://localhost:8080"},
+	for _, tc := range []struct {
+		name    string
+		surface requestorigin.Surface
+		base    string
+	}{
+		{"platform", requestorigin.SurfacePlatform, "https://alternate.example.test"},
+		{"custom domain", requestorigin.SurfaceCustomDomain, "https://custom.example.test"},
+		{"private origin context", requestorigin.SurfacePrivateNetwork, "https://private.example.test"},
+		{"configured fallback", "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestHooksService(t)
-			useTestOrgHosts(t, ctx, ti, pgtype.Text{String: tc.stored, Valid: tc.stored != ""})
-			config, err := ti.service.ahpResolveConfiguration(ctx)
+			auth := hookAuthContext(t, ctx)
+			ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+			// The stored org default must not move uploads away from the request origin.
+			useTestOrgHosts(t, ctx, ti, pgtype.Text{String: testPlatformBaseURL, Valid: true})
+			handler, err := ti.service.ahpHandler()
 			require.NoError(t, err)
-			raw, err := json.Marshal(config)
-			require.NoError(t, err)
-			require.Contains(t, string(raw), tc.want+ahpUploadPath)
-			require.NotContains(t, string(raw), "attacker.invalid")
+			request := httptest.NewRequest(http.MethodPost, "https://forged.invalid/ahp", strings.NewReader(`{"jsonrpc":"2.0","id":"discovery","method":"hooks/configuration","params":{"protocolVersion":"draft"}}`))
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Forwarded-Host", "forwarded.invalid")
+			request.Header.Set("Forwarded", "host=forwarded.invalid;proto=http")
+			for key, value := range ahpAuthHeaders {
+				request.Header.Set(key, value)
+			}
+			if tc.base != "" {
+				request = request.WithContext(requestorigin.WithContext(request.Context(), requestorigin.Origin{Surface: tc.surface, BaseURL: tc.base, OrganizationID: auth.ActiveOrganizationID}))
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			require.Equal(t, http.StatusOK, response.Code)
+			want := tc.base
+			if want == "" {
+				want = ti.service.serverURL.String()
+			}
+			require.Contains(t, response.Body.String(), want+ahpUploadPath)
+			require.NotContains(t, response.Body.String(), testPlatformBaseURL)
+			require.NotContains(t, response.Body.String(), "forged.invalid")
+			require.NotContains(t, response.Body.String(), "forwarded.invalid")
 		})
 	}
+	// Private ingress currently exposes only MCP routes. The context case above
+	// verifies origin selection, not an AHP route on the private listener.
+	require.False(t, netingress.IsPrivateRoute(http.MethodPost, "/ahp"))
+	require.False(t, netingress.IsPrivateRoute(http.MethodPost, ahpUploadPath))
 }
 
 func TestAHPConfigurationUploadBasePath(t *testing.T) {
@@ -284,5 +317,42 @@ func TestAHPConfigurationUploadBasePath(t *testing.T) {
 			}
 			require.Equal(t, tc.base, base.String(), "resolution must not mutate shared configuration")
 		})
+	}
+}
+
+func TestAHPConfigurationOriginMiddleware(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	auth := hookAuthContext(t, ctx)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+	domains := domainsrepo.New(ti.conn)
+	domain, err := domains.CreateCustomDomain(ctx, domainsrepo.CreateCustomDomainParams{OrganizationID: auth.ActiveOrganizationID, Domain: "custom.example.test", IpAllowlist: []string{}})
+	require.NoError(t, err)
+	_, err = domains.UpdateCustomDomain(ctx, domainsrepo.UpdateCustomDomainParams{ID: domain.ID, Verified: true, Activated: true})
+	require.NoError(t, err)
+	handler, err := ti.service.ahpHandler()
+	require.NoError(t, err)
+	handler = customdomains.Middleware(ti.service.logger, ti.conn, "prod", ti.service.serverURL, map[string]string{"alternate.example.test": "https://alternate.example.test"})(handler)
+	for _, tc := range []struct {
+		host, want string
+		status     int
+	}{
+		{"alternate.example.test", "https://alternate.example.test/ahp/uploads", http.StatusOK},
+		{"custom.example.test", "https://custom.example.test/ahp/uploads", http.StatusOK},
+		{"unknown.invalid", "", http.StatusForbidden},
+	} {
+		request := httptest.NewRequest(http.MethodPost, "https://"+tc.host+"/ahp", strings.NewReader(`{"jsonrpc":"2.0","id":"discovery","method":"hooks/configuration","params":{"protocolVersion":"draft"}}`))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("X-Forwarded-Host", "forged.invalid")
+		for key, value := range ahpAuthHeaders {
+			request.Header.Set(key, value)
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		require.Equal(t, tc.status, response.Code, tc.host)
+		if tc.want != "" {
+			require.Contains(t, response.Body.String(), tc.want)
+		}
+		require.NotContains(t, response.Body.String(), "forged.invalid")
 	}
 }

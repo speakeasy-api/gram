@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -64,13 +66,13 @@ func (s *Service) ahpResolveConfiguration(ctx context.Context) (*ahp.Configurati
 		)
 		return nil, fmt.Errorf("read AHP configuration fail-open setting: %w", err)
 	}
-	// Resolve only deployment-configured origins for the authenticated organization.
-	// Request Host and forwarding headers must never redirect upload credentials.
-	base := s.serverURL
-	if s.orgHosts != nil {
-		base = s.orgHosts.ServerURL(s.orgDefaultHost(ctx, auth.ActiveOrganizationID))
+	// Reuse the validated request origin, as MCP does; never read raw host headers.
+	fallback := ""
+	if s.serverURL != nil {
+		fallback = s.serverURL.String()
 	}
-	if base == nil || base.Host == "" || base.User != nil || (base.Scheme != "https" && base.Scheme != "http") {
+	base, err := url.Parse(requestorigin.BaseURL(ctx, fallback))
+	if err != nil || base.Host == "" || base.User != nil || (base.Scheme != "https" && base.Scheme != "http") {
 		return nil, errors.New("AHP upload origin unavailable")
 	}
 	endpoint := base.JoinPath(ahpUploadPath)
