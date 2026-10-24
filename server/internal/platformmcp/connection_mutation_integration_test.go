@@ -98,13 +98,13 @@ func requireConnectionRefusal(t *testing.T, err error, code string) {
 	require.True(t, ok, "expected a readable refusal, got %v", err)
 	require.True(t, result.IsError)
 	var refusal *RiskMutationError
-	switch {
-	case code == "confirmation_required":
+	switch code {
+	case "confirmation_required":
 		var preview *connectionMutationPreviewError
 		require.ErrorAs(t, err, &preview)
-	case code == "not_found":
+	case "not_found":
 		require.ErrorIs(t, err, ErrMCPConnectionMutationMissing)
-	case code == "conflict":
+	case "conflict":
 		require.ErrorIs(t, err, ErrMCPConnectionMutationConflict)
 	default:
 		require.ErrorAs(t, err, &refusal)
@@ -217,7 +217,7 @@ func TestSetMCPAddressHostedCustomDomainMustBeLiveAndVerified(t *testing.T) {
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, version, "", "docs", foreign.String(), true)
 	requireConnectionRefusal(t, err, "invalid_request")
 
-	_, err = queriesActivate(ctx, f, pending)
+	_, err = customdomainsrepo.New(f.conn).UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{Verified: true, Activated: true, ProvisionerKind: "local", ID: pending})
 	require.NoError(t, err)
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, version, "", "docs", pending.String(), true)
 	requireConnectionRefusal(t, err, "invalid_request")
@@ -236,10 +236,6 @@ func TestSetMCPAddressHostedCustomDomainMustBeLiveAndVerified(t *testing.T) {
 	}
 	require.NotNil(t, onDomain)
 	require.Equal(t, f.orgSlug+"-docs", onDomain.Slug)
-}
-
-func queriesActivate(ctx context.Context, f connectionMutationFixture, domainID uuid.UUID) (customdomainsrepo.CustomDomain, error) {
-	return customdomainsrepo.New(f.conn).UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{Verified: true, Activated: true, ProvisionerKind: "local", ID: domainID})
 }
 
 func TestSetMCPAddressRemoteServerAndGateway(t *testing.T) {
