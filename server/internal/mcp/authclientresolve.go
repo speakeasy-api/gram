@@ -602,7 +602,7 @@ func annotateAuthClient(ctx context.Context, logger *slog.Logger, res authClient
 func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, selector *upstreamSelector) (upstreamChoice, bool, error) {
 	var none upstreamChoice
 	endpoint := authentication.endpoint
-	res, err := s.resolveEnforcedAuthClient(ctx, selector, endpoint.McpServerID.UUID, endpoint.ProjectID, authentication.subject)
+	res, err := s.resolveEnforcedAuthClient(ctx, selector, endpoint.McpServerID.UUID, endpoint.ProjectID, connectionSubject(ctx, authentication.subject))
 	if err != nil {
 		return none, true, oops.E(oops.CodeUnexpected, err, "resolve auth client").LogError(ctx, s.logger)
 	}
