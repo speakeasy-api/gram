@@ -104,8 +104,8 @@ export function ServerUrlSection({
     isError: privateUrlsError,
   } = usePrivateMcpServerUrls(mcpServer, endpoints);
 
-  const platformEndpoint = useMemo(
-    () => endpoints.find((e) => !e.customDomainId),
+  const platformEndpoints = useMemo(
+    () => endpoints.filter((e) => !e.customDomainId),
     [endpoints],
   );
   const customDomainEndpoints = useMemo(
@@ -116,6 +116,24 @@ export function ServerUrlSection({
     () => domains.filter((d): d is CustomDomain => d != null),
     [domains],
   );
+  // Only addresses that can serve count toward the last one: the platform, or a verified, activated domain.
+  const servableIds = useMemo(
+    () =>
+      new Set(
+        endpoints
+          .filter(
+            (e) =>
+              !e.customDomainId ||
+              availableDomains.some(
+                (d) => d.id === e.customDomainId && d.verified && d.activated,
+              ),
+          )
+          .map((e) => e.id),
+      ),
+    [endpoints, availableDomains],
+  );
+  const isLast = (endpoint: McpEndpoint) =>
+    servableIds.size === 1 && servableIds.has(endpoint.id);
 
   const [addingPlatform, setAddingPlatform] = useState(false);
   const [addingCustom, setAddingCustom] = useState(false);
@@ -175,15 +193,18 @@ export function ServerUrlSection({
             </Text>
           ) : (
             <FieldGroup className="gap-6">
-              {/* Hosted (platform) address: at most one. */}
+              {/* Hosted (platform) addresses. */}
               <Field>
                 <FieldLabel>Hosted Address</FieldLabel>
-                {platformEndpoint ? (
-                  <AddressRow
-                    backend={backend}
-                    endpoint={platformEndpoint}
-                    isLastEndpoint={endpoints.length === 1}
-                  />
+                {platformEndpoints.length > 0 ? (
+                  platformEndpoints.map((endpoint) => (
+                    <AddressRow
+                      key={endpoint.id}
+                      backend={backend}
+                      endpoint={endpoint}
+                      isLastEndpoint={isLast(endpoint)}
+                    />
+                  ))
                 ) : addingPlatform ? (
                   <NewPlatformAddressRow
                     backend={backend}
@@ -216,7 +237,7 @@ export function ServerUrlSection({
                     backend={backend}
                     endpoint={endpoint}
                     domains={availableDomains}
-                    isLastEndpoint={endpoints.length === 1}
+                    isLastEndpoint={isLast(endpoint)}
                     canManageDomainRoot={canManageDomains}
                   />
                 ))}
@@ -444,6 +465,7 @@ function AddressRow({
             variant="destructive-secondary"
             className="border border-destructive/40 bg-transparent hover:border-destructive"
             disabled={remove.isPending}
+            aria-label="Remove address"
             onClick={() => {
               if (isLastEndpoint) {
                 setConfirmRemoveOpen(true);

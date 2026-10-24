@@ -10,9 +10,9 @@ WITH latest_deployments AS (
 toolset_metrics AS (
   SELECT 
     p.organization_id,
-    -- A wrapped server counts by its wrapper's visibility; a disabled one keeps its toolset's flag.
-    COUNT(CASE WHEN w.visibility = 'public' OR ((w.id IS NULL OR w.visibility = 'disabled') AND t.mcp_is_public = true AND t.mcp_slug IS NOT NULL) THEN 1 END) as public_mcp_servers,
-    COUNT(CASE WHEN w.visibility = 'private' OR ((w.id IS NULL OR w.visibility = 'disabled') AND t.mcp_is_public = false AND t.mcp_slug IS NOT NULL) THEN 1 END) as private_mcp_servers,
+    -- A wrapped server counts by its server's visibility only; the toolset columns count only without a wrapper.
+    COUNT(CASE WHEN w.visibility = 'public' OR (w.id IS NULL AND t.mcp_is_public = true AND t.mcp_slug IS NOT NULL) THEN 1 END) as public_mcp_servers,
+    COUNT(CASE WHEN w.visibility = 'private' OR (w.id IS NULL AND t.mcp_is_public = false AND t.mcp_slug IS NOT NULL) THEN 1 END) as private_mcp_servers,
     (COUNT(CASE WHEN w.id IS NULL AND t.mcp_enabled = true THEN 1 END)
       + COUNT(CASE WHEN w.visibility <> 'disabled' THEN 1 END))::bigint as total_enabled_servers,
     COUNT(t.id) as total_toolsets

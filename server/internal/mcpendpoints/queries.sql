@@ -74,6 +74,21 @@ WHERE e.project_id = @project_id
   AND e.deleted IS FALSE
   AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL);
 
+-- name: ListServableMCPEndpointsByMCPServerID :many
+-- Endpoints that can serve: on the platform, or on a live, verified and activated domain of the organization.
+SELECT sqlc.embed(e)
+FROM mcp_endpoints e
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = @organization_id
+  AND cd.deleted IS FALSE
+  AND cd.verified
+  AND cd.activated
+WHERE e.project_id = @project_id
+  AND e.mcp_server_id = @mcp_server_id::uuid
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL);
+
 -- name: ListMCPEndpointsByMetaMCPServerID :many
 SELECT *
 FROM mcp_endpoints

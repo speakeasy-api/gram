@@ -227,10 +227,10 @@ func LockServer(ctx context.Context, tx pgx.Tx, organizationID string, projectID
 	return endpoints, server, nil
 }
 
-// RequireLiveAddress rejects enabling a hosted server with no endpoint that can serve; an address on a deleted
-// domain does not count.
+// RequireLiveAddress rejects enabling a hosted server with no endpoint that can serve: one on the platform or on
+// a live, verified and activated custom domain.
 func RequireLiveAddress(ctx context.Context, tx pgx.Tx, organizationID string, server mcpserversrepo.McpServer) error {
-	live, err := mcpendpointsrepo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+	live, err := mcpendpointsrepo.New(tx).ListServableMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListServableMCPEndpointsByMCPServerIDParams{
 		OrganizationID: organizationID, ProjectID: server.ProjectID, McpServerID: server.ID,
 	})
 	if err != nil {
@@ -242,9 +242,9 @@ func RequireLiveAddress(ctx context.Context, tx pgx.Tx, organizationID string, s
 	return nil
 }
 
-// Enable re-enables a toolset's disabled canonical wrapper as its frozen columns last described it: public when
-// the toolset was public or carries external OAuth (which a private server cannot), else private. A private network
-// mode needs a live ingress for the server's endpoints. It reports false when there is no disabled wrapper to enable.
+// Enable re-enables a toolset's disabled canonical wrapper with hostingstate.ReEnableVisibility: public only with
+// external OAuth or an OAuth proxy, else private. A private network mode needs a live ingress for the server's
+// endpoints. It reports false when there is no disabled wrapper to enable.
 func Enable(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) (bool, error) {
 	endpoints, canonical, err := LockServer(ctx, tx, toolset.OrganizationID, toolset.ProjectID, toolset.ID)
 	switch {
@@ -258,10 +258,7 @@ func Enable(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Act
 	if err := RequireLiveAddress(ctx, tx, toolset.OrganizationID, canonical); err != nil {
 		return false, err
 	}
-	target := visibility.Private
-	if toolset.McpIsPublic || toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid {
-		target = visibility.Public
-	}
+	target := hostingstate.ReEnableVisibility(toolset)
 	mode, err := networkaccess.Effective(canonical.NetworkAccessMode)
 	if err != nil {
 		return false, oops.E(oops.CodeInvalid, err, "hosted MCP server has an invalid network access mode")

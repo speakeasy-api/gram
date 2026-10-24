@@ -1575,6 +1575,33 @@ func (q *Queries) LockToolsetByIDAndProject(ctx context.Context, arg LockToolset
 	return i, err
 }
 
+const moveToolsetMCPAlias = `-- name: MoveToolsetMCPAlias :exec
+UPDATE toolsets
+SET
+    mcp_slug = $1
+  , custom_domain_id = $2
+  , updated_at = clock_timestamp()
+WHERE id = $3 AND project_id = $4 AND deleted IS FALSE AND mcp_slug IS NOT NULL
+`
+
+type MoveToolsetMCPAliasParams struct {
+	McpSlug        pgtype.Text
+	CustomDomainID uuid.NullUUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Moves a legacy toolset's MCP alias to the hosted endpoint that now holds its address.
+func (q *Queries) MoveToolsetMCPAlias(ctx context.Context, arg MoveToolsetMCPAliasParams) error {
+	_, err := q.db.Exec(ctx, moveToolsetMCPAlias,
+		arg.McpSlug,
+		arg.CustomDomainID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const toolsetHasExternalMCPProxy = `-- name: ToolsetHasExternalMCPProxy :one
 WITH latest_toolset_version AS (
   SELECT tv.tool_urns

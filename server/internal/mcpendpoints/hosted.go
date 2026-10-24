@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -83,12 +84,8 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 	switch {
 	case requestedDomainID == existing.CustomDomainID:
 	case requestedDomainID.Valid:
-		domain, err := customdomainsrepo.New(dbtx).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
-		switch {
-		case err != nil && !errors.Is(err, pgx.ErrNoRows):
-			return nil, oops.E(oops.CodeUnexpected, err, "load organization custom domain").LogError(ctx, logger)
-		case err != nil || !domain.Activated || !domain.Verified || domain.ID != requestedDomainID.UUID:
-			return nil, oops.E(oops.CodeInvalid, err, "a hosted MCP server can only move to the organization's verified custom domain").LogWarn(ctx, logger)
+		if err := requireOrganizationDomain(ctx, dbtx, logger, authCtx, requestedDomainID.UUID); err != nil {
+			return nil, err
 		}
 		if existing.CustomDomainID.Valid {
 			if err := requireDomainLeavable(ctx, dbtx, logger, authCtx.ActiveOrganizationID, existing.CustomDomainID.UUID, dead); err != nil {
@@ -107,9 +104,8 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 		return nil, oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
 	if slug != existing.Slug || customDomainID != existing.CustomDomainID {
-		// Platform slugs, and every slug on a free account, carry the organization prefix.
-		if (!customDomainID.Valid || authCtx.AccountType == "free") && validateSlugPrefix(slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, authCtx.OrganizationSlug) != nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug must be prefixed with the org slug for free accounts").LogWarn(ctx, logger)
+		if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
+			return nil, err
 		}
 		if err := LockSlugScope(ctx, dbtx, customDomainID, slug); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, logger)
@@ -185,6 +181,10 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 		}
 	}
 
+	if err := hostingstate.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
+		return nil, err //nolint:wrapcheck // oops errors pass through.
+	}
+
 	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
 	}
@@ -233,22 +233,45 @@ func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, 
 		return oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
 	if customDomainID.Valid {
-		domain, err := customdomainsrepo.New(tx).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
-		switch {
-		case err != nil && !errors.Is(err, pgx.ErrNoRows):
-			return oops.E(oops.CodeUnexpected, err, "load organization custom domain").LogError(ctx, logger)
-		case err != nil || !domain.Activated || !domain.Verified || domain.ID != customDomainID.UUID:
-			return oops.E(oops.CodeInvalid, err, "a hosted MCP server can only use the organization's verified custom domain").LogWarn(ctx, logger)
+		if err := requireOrganizationDomain(ctx, tx, logger, authCtx, customDomainID.UUID); err != nil {
+			return err
 		}
 	}
-	if (!customDomainID.Valid || authCtx.AccountType == "free") && validateSlugPrefix(slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, authCtx.OrganizationSlug) != nil {
-		return oops.E(oops.CodeBadRequest, nil, "mcp slug must be prefixed with the org slug for free accounts").LogWarn(ctx, logger)
+	if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
+		return err
 	}
-	others, err := repo.New(tx).ListMCPEndpointsByMCPServerID(ctx, repo.ListMCPEndpointsByMCPServerIDParams{ProjectID: server.ProjectID, McpServerID: server.ID})
+	// Endpoints left on a deleted domain cannot serve, so they do not hold back a new address.
+	live, err := repo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, repo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, McpServerID: server.ID,
+	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints").LogError(ctx, logger)
 	}
-	return checkHostedIngress(ctx, tx, logger, authCtx, server, append(others, proposedAddress(customDomainID, slug)))
+	addresses := make([]repo.McpEndpoint, 0, len(live)+1)
+	for _, row := range live {
+		addresses = append(addresses, row.McpEndpoint)
+	}
+	return checkHostedIngress(ctx, tx, logger, authCtx, server, append(addresses, proposedAddress(customDomainID, slug)))
+}
+
+// requireOrganizationDomain lets a hosted address sit only on the organization's verified, activated custom domain.
+func requireOrganizationDomain(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, domainID uuid.UUID) error {
+	domain, err := customdomainsrepo.New(tx).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	switch {
+	case err != nil && !errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeUnexpected, err, "load organization custom domain").LogError(ctx, logger)
+	case err != nil || !domain.Activated || !domain.Verified || domain.ID != domainID:
+		return oops.E(oops.CodeInvalid, err, "a hosted MCP server can only use the organization's verified custom domain").LogWarn(ctx, logger)
+	}
+	return nil
+}
+
+// requireHostedSlugPrefix requires the organization prefix on platform slugs and on every slug of a free account.
+func requireHostedSlugPrefix(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, customDomainID uuid.NullUUID, slug string) error {
+	if (!customDomainID.Valid || authCtx.AccountType == "free") && validateSlugPrefix(slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, authCtx.OrganizationSlug) != nil {
+		return oops.E(oops.CodeBadRequest, nil, "mcp slug must be prefixed with the org slug for free accounts").LogWarn(ctx, logger)
+	}
+	return nil
 }
 
 // checkHostedIngress requires a live private ingress covering every endpoint of a hosted server whose network
@@ -267,21 +290,23 @@ func checkHostedIngress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, aut
 	return nil
 }
 
-// rejectLastHostedAddress keeps an enabled hosted server from losing its last live address.
+// rejectLastHostedAddress keeps an enabled hosted server from losing its last endpoint that can serve. Removing an
+// endpoint that cannot serve, such as one on a deleted or unverified domain, is always allowed.
 func rejectLastHostedAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, endpointID uuid.UUID) error {
 	if !isCanonicalHosted(server) || server.Visibility == mcpservers.VisibilityDisabled {
 		return nil
 	}
-	live, err := repo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, repo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+	servable, err := repo.New(tx).ListServableMCPEndpointsByMCPServerID(ctx, repo.ListServableMCPEndpointsByMCPServerIDParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, McpServerID: server.ID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints").LogError(ctx, logger)
 	}
-	for _, row := range live {
-		if row.McpEndpoint.ID != endpointID {
-			return nil
-		}
+	if !slices.ContainsFunc(servable, func(row repo.ListServableMCPEndpointsByMCPServerIDRow) bool { return row.McpEndpoint.ID == endpointID }) {
+		return nil
+	}
+	if len(servable) > 1 {
+		return nil
 	}
 	return oops.E(oops.CodeInvalid, nil, "disable the server before removing its last address").LogWarn(ctx, logger)
 }

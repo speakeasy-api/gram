@@ -282,6 +282,15 @@ WHERE slug = @slug
   AND external_oauth_server_id IS NULL
 RETURNING *;
 
+-- name: MoveToolsetMCPAlias :exec
+-- Moves a legacy toolset's MCP alias to the hosted endpoint that now holds its address.
+UPDATE toolsets
+SET
+    mcp_slug = @mcp_slug
+  , custom_domain_id = @custom_domain_id
+  , updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE AND mcp_slug IS NOT NULL;
+
 -- name: UpdateToolsetUserSessionIssuer :one
 -- Test fixture: production code never writes the frozen issuer alias column.
 UPDATE toolsets

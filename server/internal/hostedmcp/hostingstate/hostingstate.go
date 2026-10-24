@@ -8,7 +8,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -22,17 +24,26 @@ import (
 type Row = toolsetsrepo.ListCanonicalHostingByToolsetIDsRow
 
 // ApplyServer sets toolset's enabled, public and issuer state from its canonical wrapper's visibility and issuer.
-// A disabled server reads as public when it would re-enable public: its frozen alias was public or it carries
-// external OAuth, which a private server cannot.
+// A disabled server reads as the visibility it re-enables to.
 func ApplyServer(toolset toolsetsrepo.Toolset, serverVisibility string, issuer uuid.NullUUID) toolsetsrepo.Toolset {
 	toolset.McpEnabled = serverVisibility == visibility.Public || serverVisibility == visibility.Private
 	if serverVisibility == visibility.Disabled {
-		toolset.McpIsPublic = toolset.McpIsPublic || toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid
+		toolset.McpIsPublic = ReEnableVisibility(toolset) == visibility.Public
 	} else {
 		toolset.McpIsPublic = serverVisibility == visibility.Public
 	}
 	toolset.UserSessionIssuerID = issuer
 	return toolset
+}
+
+// ReEnableVisibility is the visibility a disabled hosted server comes back with: public only when it carries
+// external OAuth or an OAuth proxy, which a private server cannot, and private otherwise. The frozen toolset
+// public flag does not count, since nothing updates it.
+func ReEnableVisibility(toolset toolsetsrepo.Toolset) string {
+	if toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid {
+		return visibility.Public
+	}
+	return visibility.Private
 }
 
 // ApplyKept marks a toolset whose id a non-canonical server kept after leaving it: nothing serves it.
@@ -109,6 +120,66 @@ func CheckPrivateIngress(ctx context.Context, db networkingressrepo.DBTX, organi
 			(ingress.EndpointNamespaceKind == namespaceCustomDomain && (!endpoint.CustomDomainID.Valid || endpoint.CustomDomainID != ingress.CustomDomainID)) {
 			return oops.E(oops.CodeInvalid, nil, "hosted MCP address does not match the private ingress namespace")
 		}
+	}
+	return nil
+}
+
+// AliasAddress is the address a legacy toolset's MCP alias follows among its hosted server's live endpoints: its
+// current address while an endpoint still holds it, else the platform endpoint, else the oldest one. With no live
+// endpoint the alias stays. This is the address rule pods that mirror the toolset columns apply, so both agree.
+func AliasAddress(toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
+	var preferred *mcpendpointsrepo.McpEndpoint
+	for i := range endpoints {
+		candidate := &endpoints[i]
+		switch {
+		case toolset.McpSlug.Valid && candidate.Slug == toolset.McpSlug.String && candidate.CustomDomainID == toolset.CustomDomainID:
+			return toolset.McpSlug, toolset.CustomDomainID
+		case preferred == nil:
+			preferred = candidate
+		case !candidate.CustomDomainID.Valid && preferred.CustomDomainID.Valid:
+			preferred = candidate
+		case candidate.CustomDomainID.Valid == preferred.CustomDomainID.Valid && candidate.CreatedAt.Time.Before(preferred.CreatedAt.Time):
+			preferred = candidate
+		}
+	}
+	if preferred == nil {
+		return toolset.McpSlug, toolset.CustomDomainID
+	}
+	return pgtype.Text{String: preferred.Slug, Valid: true}, preferred.CustomDomainID
+}
+
+// FollowAlias moves a legacy toolset's MCP alias to the endpoint AliasAddress picks, after a write to its hosted
+// server's endpoints. Toolsets without an alias are left alone. The caller holds the toolset row lock.
+func FollowAlias(ctx context.Context, tx toolsetsrepo.DBTX, organizationID string, projectID, toolsetID uuid.UUID) error {
+	toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load hosted toolset")
+	case !toolset.McpSlug.Valid || toolset.McpSlug.String == "":
+		return nil
+	}
+	rows, err := mcpendpointsrepo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+		OrganizationID: organizationID, ProjectID: projectID, McpServerID: toolsetID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints")
+	}
+	live := make([]mcpendpointsrepo.McpEndpoint, 0, len(rows))
+	for _, row := range rows {
+		live = append(live, row.McpEndpoint)
+	}
+	slug, domainID := AliasAddress(toolset, live)
+	if slug == toolset.McpSlug && domainID == toolset.CustomDomainID {
+		return nil
+	}
+	if err := toolsetsrepo.New(tx).MoveToolsetMCPAlias(ctx, toolsetsrepo.MoveToolsetMCPAliasParams{McpSlug: slug, CustomDomainID: domainID, ID: toolsetID, ProjectID: projectID}); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return oops.E(oops.CodeConflict, err, "this address is already taken by another toolset")
+		}
+		return oops.E(oops.CodeUnexpected, err, "move hosted MCP alias")
 	}
 	return nil
 }

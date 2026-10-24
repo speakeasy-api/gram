@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -192,7 +193,8 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	if err := verifyEndpointReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, metaMcpServerID, customDomainID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
-	if mcpServerID.Valid && isCanonicalHosted(mcpServer) {
+	hosted := mcpServerID.Valid && isCanonicalHosted(mcpServer)
+	if hosted {
 		if err := checkHostedNewAddress(ctx, dbtx, logger, authCtx, mcpServer, slug, customDomainID); err != nil {
 			return nil, err
 		}
@@ -243,6 +245,11 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		Slug:             created.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation").LogError(ctx, logger)
+	}
+	if hosted {
+		if err := hostingstate.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.ID); err != nil {
+			return nil, err //nolint:wrapcheck // oops errors pass through.
+		}
 	}
 
 	// Meta-MCP-backed endpoints never participate in default-plugin attachment
@@ -762,12 +769,16 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	if existing.CustomDomainID != preexisting.CustomDomainID {
 		return oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request").LogError(ctx, logger)
 	}
+	hostedServerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if existing.McpServerID.Valid {
 		server, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: existing.McpServerID.UUID, ProjectID: *authCtx.ProjectID})
 		switch {
 		case err != nil && !errors.Is(err, pgx.ErrNoRows):
 			return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 		case err == nil:
+			if isCanonicalHosted(server) {
+				hostedServerID = uuid.NullUUID{UUID: server.ID, Valid: true}
+			}
 			if err := rejectLastHostedAddress(ctx, dbtx, logger, authCtx, server, existing.ID); err != nil {
 				return err
 			}
@@ -782,6 +793,11 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 			return oops.E(oops.CodeNotFound, err, "mcp endpoint not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete mcp endpoint").LogError(ctx, logger)
+	}
+	if hostedServerID.Valid {
+		if err := hostingstate.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, hostedServerID.UUID); err != nil {
+			return err //nolint:wrapcheck // oops errors pass through.
+		}
 	}
 
 	if err := s.audit.LogMcpEndpointDelete(ctx, dbtx, audit.LogMcpEndpointDeleteEvent{
