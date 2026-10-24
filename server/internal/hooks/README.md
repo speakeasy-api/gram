@@ -60,10 +60,26 @@ an assumed failure policy. Authentication failures remain HTTP 401/403.
 
 Observe mode records events without enforcing policy. `turn.start` is not advertised. Prompt and tool
 interception require the harness to support denial at the subscribed boundary.
-Only inline text is supported; content references and uploads are not supported.
+Both subscriptions advertise `upload` with an absolute `/ahp/uploads` endpoint,
+a ten-second timeout, and a 1 MiB maximum. The origin comes from the authenticated
+organization's configured platform host (with the deployment fallback), never
+from request `Host` or forwarding headers. Uploads use the same bearer or
+`Gram-Key` credential and `Gram-Project` selector as event requests. Discovery
+contains no credential values or separate `upload.auth` binding: the Go SDK
+forwards configured HTTP transport headers to uploads. Clients using a separate
+auth provider must explicitly authorize and supply upload-purpose credentials.
 
-Clients must support `hooks/configuration` discovery before explicit local subscriptions
-can be removed. Advertising defaults does not enable discovery in older clients.
+The Go SDK requires `AuthorizeConfiguration` to accept discovered uploads;
+without it, discovery skips the backend. Clients must validate the destination
+before authorizing header forwarding, and separately authorize content reads.
+Redirects are not followed. Loopback HTTP requires explicit client opt-in.
+Uploads stage project-scoped receiver references; arbitrary remote references
+are not fetched. UTF-8 text without NUL bytes can supply prompt attachment
+evidence; binary uploads are staged but excluded from prompt text ingestion.
+
+Clients must support `hooks/configuration` discovery and authorize the advertised
+upload destination before explicit local subscription and upload settings can be
+removed. Advertising defaults does not enable discovery in older clients.
 
 ## Legacy Compatibility
 

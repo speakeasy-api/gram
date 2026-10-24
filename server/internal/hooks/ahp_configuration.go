@@ -2,8 +2,10 @@ package hooks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	ahp "github.com/agenthooksprotocol/go-sdk"
@@ -22,21 +24,23 @@ const ahpDefaultInterceptTimeout = 10 * time.Second
 // ahpConfiguration advertises the default harness subscriptions. Each event occurs
 // once: intercept delivery already records the event, so adding an observer
 // for the same event would duplicate ingestion.
-func ahpConfiguration(failOpen bool) *ahp.Configuration {
+func ahpConfiguration(failOpen bool, uploadURL string) *ahp.Configuration {
 	boundaries := []event.Type{event.UserMessageInbound, event.ToolBefore}
 	observations := []event.Type{
 		event.SessionStart, event.SessionEnd, event.TurnEnd,
 		event.ModelResponseAfter, event.ToolAfter,
 	}
-	// Discovery does not introduce uploads or authorize credential forwarding.
+	// Upload authentication uses the HTTP transport's configured headers. Never
+	// advertise credential values or invent a separate client auth binding.
+	upload := content.NewUpload(uploadURL, json.Number(strconv.Itoa(ahpMaxUploadBytes)), ahpDefaultInterceptTimeout)
 	selection := content.NewSelection(ahp.ContentSelectionDefaultBody)
 	failurePolicy := subscription.FailClosed
 	if failOpen {
 		failurePolicy = subscription.FailOpen
 	}
 	return ahp.NewConfiguration(
-		subscription.NewIntercept(boundaries, ahpDefaultInterceptTimeout, failurePolicy, selection),
-		subscription.NewObserve(selection, observations),
+		subscription.NewIntercept(boundaries, ahpDefaultInterceptTimeout, failurePolicy, selection, subscription.WithInterceptUpload(upload)),
+		subscription.NewObserve(selection, observations, subscription.WithObserveUpload(upload)),
 	)
 }
 
@@ -61,5 +65,21 @@ func (s *Service) ahpResolveConfiguration(ctx context.Context) (*ahp.Configurati
 		)
 		return nil, fmt.Errorf("read AHP configuration fail-open setting: %w", err)
 	}
-	return ahpConfiguration(failOpen), nil
+	// Resolve only deployment-configured origins for the authenticated organization.
+	// Request Host and forwarding headers must never redirect upload credentials.
+	base := s.serverURL
+	if s.orgHosts != nil {
+		base = s.orgHosts.ServerURL(s.orgDefaultHost(ctx, auth.ActiveOrganizationID))
+	}
+	if base == nil || base.Host == "" || base.User != nil || (base.Scheme != "https" && base.Scheme != "http") {
+		return nil, errors.New("AHP upload origin unavailable")
+	}
+	endpoint := *base
+	endpoint.Path = ahpUploadPath
+	endpoint.RawPath = ""
+	endpoint.RawQuery = ""
+	endpoint.ForceQuery = false
+	endpoint.Fragment = ""
+	endpoint.RawFragment = ""
+	return ahpConfiguration(failOpen, endpoint.String()), nil
 }
