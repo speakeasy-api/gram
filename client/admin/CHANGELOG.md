@@ -1,5 +1,14 @@
 # admin
 
+## 0.9.6
+
+### Patch Changes
+
+- 0908c44: Organizations can now be granted the default auth permissions the mandatory auth client check needs: everyone's and each agent's use of their own personal connections, shared clients for whoever can connect to a server using them, and a policy for each legacy API key that has none. An offline backfill grants them for every organization and records each grant it writes, so a rerun never restores one an admin removed; the upstream OAuth migration grants them for the clients it records, and new organizations start with the personal default. Role permission counts no longer include these provisioned permissions.
+- c7d8212: Assistant turns now bind a versioned execution-selection profile that records, for each MCP server the assistant reaches, which typed auth client its turns use, kept separately for turns run for an identified user and turns run as the trigger's workload. A server several clients could serve, or only a personal connection could serve on a turn with no user, is reported instead of guessed. The upstream OAuth migration records profiles for every assistant trigger and reports what still needs configuring. How turns authenticate upstream does not change yet.
+- 2ec5a32: Staff can now turn on upstream auth enforcement per organization from the upstream OAuth migration page, and only once its auth clients, credential choices and assistant profiles are recorded. Under enforcement each request is served with the auth client its credential chose, assistant turns with the one their profile names, and using that client requires permission; a credential with no usable choice is asked to reconnect rather than served with another client. Valid credentials from another organization are refused on an organization's public servers instead of being served anonymously. Turning enforcement off returns the organization to the previous behavior within a minute.
+- c1a55fb: The upstream OAuth migration now names, on every live credential's choice for a server, the one typed auth client that serves it, and reports coverage by credential class (interactive, ID-JAG, dashboard-minted, workload and agent sessions). A choice that several auth clients could serve is listed for an administrator to resolve instead of being guessed, and choices whose client is gone or no longer fits the server are listed as needing a reconnect.
+
 ## 0.9.5
 
 ### Patch Changes
