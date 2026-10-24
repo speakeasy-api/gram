@@ -12,11 +12,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	"github.com/stretchr/testify/require"
-
 	workloadpolicyrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
@@ -83,7 +83,7 @@ func TestWorkloadAssertionGrant_DisableDuringVerificationFailsClosed(t *testing.
 	f.setAssertionReuse(t, true)
 	assertion := f.assertion(t, f.advertisedIssuer)
 	f.requireWorkloadSession(t, f.exchange(t, assertion, f.resource), f.advertisedIssuer)
-	tx, err := f.ti.conn.Begin(t.Context())
+	tx, err := f.ti.conn.Begin(t.Context()) //nolint:glint // notestingrawsql: transaction boundary holds the SQLc-taken issuer lock
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	_, err = workloadpolicyrepo.New(tx).LockWorkloadIssuerForWrite(t.Context(), workloadpolicyrepo.LockWorkloadIssuerForWriteParams{OrganizationID: f.fx.orgID, ID: f.issuerID})
@@ -152,7 +152,7 @@ func TestWorkloadAssertionGrant_DeviceDisableDuringVerificationFailsClosed(t *te
 	assertion := f.assertion(t, f.tokenURL)
 	first := f.exchangeDeviceAgent(t, assertion)
 	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
-	tx, err := f.ti.conn.Begin(t.Context())
+	tx, err := f.ti.conn.Begin(t.Context()) //nolint:glint // notestingrawsql: transaction boundary holds the SQLc-taken issuer lock
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	_, err = workloadpolicyrepo.New(tx).LockWorkloadIssuerForWrite(t.Context(), workloadpolicyrepo.LockWorkloadIssuerForWriteParams{OrganizationID: f.fx.orgID, ID: f.issuerID})
