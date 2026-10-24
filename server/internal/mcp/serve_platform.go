@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -468,7 +469,7 @@ func (s *Service) callPlatformToolsetTool(
 		})
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
-		logAttrs[attr.OutcomeKey] = toolCallOutcome(rw.statusCode, rw.resultIsError)
+		logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(rw.statusCode, rw.resultIsError)
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
