@@ -60,10 +60,15 @@ an assumed failure policy. Authentication failures remain HTTP 401/403.
 
 Observe mode records events without enforcing policy. `turn.start` is not advertised. Prompt and tool
 interception require the harness to support denial at the subscribed boundary.
-Only inline text is supported; content references and uploads are not supported.
+Both subscriptions advertise `/ahp/uploads` with a ten-second timeout and a 1 MiB
+limit. Uploads use the same authentication and project as event requests. Binary
+uploads are accepted, but only text is processed as prompt attachment evidence.
+Unavailable staged references return a backend error, subject to the subscription's
+fail-open or fail-closed policy.
 
-Clients must support `hooks/configuration` discovery before explicit local subscriptions
-can be removed. Advertising defaults does not enable discovery in older clients.
+To omit local subscriptions, clients must support discovery and approve the upload
+destination and credential forwarding. Go SDK hosts use `AuthorizeConfiguration`;
+without approval, discovery skips the **entire backend**, including inline-text events.
 
 ## Legacy Compatibility
 

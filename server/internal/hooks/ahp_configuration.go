@@ -2,8 +2,11 @@ package hooks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"strconv"
 	"time"
 
 	ahp "github.com/agenthooksprotocol/go-sdk"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -22,21 +26,22 @@ const ahpDefaultInterceptTimeout = 10 * time.Second
 // ahpConfiguration advertises the default harness subscriptions. Each event occurs
 // once: intercept delivery already records the event, so adding an observer
 // for the same event would duplicate ingestion.
-func ahpConfiguration(failOpen bool) *ahp.Configuration {
+func ahpConfiguration(failOpen bool, uploadURL string) *ahp.Configuration {
 	boundaries := []event.Type{event.UserMessageInbound, event.ToolBefore}
 	observations := []event.Type{
 		event.SessionStart, event.SessionEnd, event.TurnEnd,
 		event.ModelResponseAfter, event.ToolAfter,
 	}
-	// Discovery does not introduce uploads or authorize credential forwarding.
+	// Uploads reuse the client's configured HTTP headers after discovery approval.
+	upload := content.NewUpload(uploadURL, json.Number(strconv.Itoa(ahpMaxUploadBytes)), ahpDefaultInterceptTimeout)
 	selection := content.NewSelection(ahp.ContentSelectionDefaultBody)
 	failurePolicy := subscription.FailClosed
 	if failOpen {
 		failurePolicy = subscription.FailOpen
 	}
 	return ahp.NewConfiguration(
-		subscription.NewIntercept(boundaries, ahpDefaultInterceptTimeout, failurePolicy, selection),
-		subscription.NewObserve(selection, observations),
+		subscription.NewIntercept(boundaries, ahpDefaultInterceptTimeout, failurePolicy, selection, subscription.WithInterceptUpload(upload)),
+		subscription.NewObserve(selection, observations, subscription.WithObserveUpload(upload)),
 	)
 }
 
@@ -61,5 +66,19 @@ func (s *Service) ahpResolveConfiguration(ctx context.Context) (*ahp.Configurati
 		)
 		return nil, fmt.Errorf("read AHP configuration fail-open setting: %w", err)
 	}
-	return ahpConfiguration(failOpen), nil
+	// Reuse the validated request origin, as MCP does; never read raw host headers.
+	fallback := ""
+	if s.serverURL != nil {
+		fallback = s.serverURL.String()
+	}
+	base, err := url.Parse(requestorigin.BaseURL(ctx, fallback))
+	if err != nil || base.Host == "" || base.User != nil || (base.Scheme != "https" && base.Scheme != "http") {
+		return nil, errors.New("AHP upload origin unavailable")
+	}
+	endpoint := base.JoinPath(ahpUploadPath)
+	endpoint.RawQuery = ""
+	endpoint.ForceQuery = false
+	endpoint.Fragment = ""
+	endpoint.RawFragment = ""
+	return ahpConfiguration(failOpen, endpoint.String()), nil
 }

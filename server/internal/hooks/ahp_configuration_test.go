@@ -37,6 +37,7 @@ func requireAHPConfiguration(t *testing.T, h http.Handler, failurePolicy string)
 		Result struct {
 			Configuration struct {
 				Subscriptions []struct {
+					Upload        map[string]any `json:"upload"`
 					Events        []string       `json:"events"`
 					Mode          string         `json:"mode"`
 					FailurePolicy string         `json:"failurePolicy"`
@@ -53,6 +54,7 @@ func requireAHPConfiguration(t *testing.T, h http.Handler, failurePolicy string)
 	intercepts := 0
 	for _, sub := range response.Result.Configuration.Subscriptions {
 		require.Equal(t, map[string]any{"default": "body"}, sub.Content)
+		require.Equal(t, map[string]any{"endpoint": "https://localhost:8080/ahp/uploads", "maxBytes": float64(ahpMaxUploadBytes), "timeoutMs": float64(10000)}, sub.Upload)
 		for _, event := range sub.Events {
 			require.NotContains(t, events, event, "must not deliver the same event twice")
 			events[event] = sub.Mode
