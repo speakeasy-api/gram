@@ -260,14 +260,14 @@ func (s *Service) SetAuthClientHeaders(ctx context.Context, payload *gen.SetAuth
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list auth client headers").LogError(ctx, logger)
 	}
-	storedSecrets := make(map[string]pgtype.Text, len(stored))
+	storedValues := make(map[string]storedHeaderValue, len(stored))
 	for _, h := range stored {
-		if h.IsSecret && h.Value.Valid {
-			storedSecrets[headerKey(h.Name)] = h.Value
+		if h.Value.Valid {
+			storedValues[headerKey(h.Name)] = storedHeaderValue{value: h.Value, isSecret: h.IsSecret}
 		}
 	}
 
-	headers, err := validateClientHeaders(client.ClientType, payload.Headers, storedSecrets)
+	headers, err := validateClientHeaders(client.ClientType, payload.Headers, storedValues)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, logger)
 	}
@@ -442,7 +442,7 @@ func attachErrorResponse(ctx context.Context, logger *slog.Logger, err error) er
 }
 
 // clientHeader is a validated header to store. value is plaintext unless
-// keepStored is set, in which case it is the stored ciphertext.
+// keepStored is set, in which case it is the stored value as is.
 type clientHeader struct {
 	name                   string
 	description            pgtype.Text
@@ -453,18 +453,26 @@ type clientHeader struct {
 	keepStored             bool
 }
 
+// storedHeaderValue is a header's stored value: ciphertext when isSecret,
+// plaintext otherwise.
+type storedHeaderValue struct {
+	value    pgtype.Text
+	isSecret bool
+}
+
 // headerKey is a header name's identity: names match regardless of case, and
 // '_' matches '-'.
 func headerKey(name string) string {
 	return strings.ToLower(strings.ReplaceAll(strings.Trim(name, " "), "_", "-"))
 }
 
-// validateClientHeaders checks a client's complete header set. storedSecrets
-// maps lower-cased names of secret headers already storing a value to that
-// ciphertext; a secret header given no value keeps it. A returned error's
+// validateClientHeaders checks a client's complete header set. storedValues
+// maps header keys of headers already storing a value to that value; a header
+// given no value keeps it when it is still secret or still not secret, so a
+// kept value is never reinterpreted as plaintext or ciphertext. A returned error's
 // message is shown to the administrator as is, so it names the header and how
 // to fix it, never a value.
-func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInput, storedSecrets map[string]pgtype.Text) ([]clientHeader, error) {
+func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInput, storedValues map[string]storedHeaderValue) ([]clientHeader, error) {
 	if len(inputs) > maxHeadersPerClient {
 		return nil, fmt.Errorf("an auth client can send at most %d headers", maxHeadersPerClient)
 	}
@@ -493,8 +501,8 @@ func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInpu
 
 		value := conv.PtrValOr(in.Value, "")
 		source := strings.Trim(conv.PtrValOr(in.ValueFromRequestHeader, ""), " ")
-		stored, hasStored := storedSecrets[key]
-		keep := in.IsSecret && value == "" && source == "" && hasStored
+		stored, hasStored := storedValues[key]
+		keep := value == "" && source == "" && hasStored && stored.isSecret == in.IsSecret
 
 		switch {
 		case keep:
@@ -540,7 +548,7 @@ func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInpu
 			keepStored:             keep,
 		}
 		if keep {
-			header.value = stored
+			header.value = stored.value
 		}
 		headers = append(headers, header)
 	}

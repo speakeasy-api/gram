@@ -83,7 +83,7 @@ export function ServiceAccountPanel({
       {showingSaved ? null : (
         <div className="flex max-w-[280px] min-w-[240px] flex-1 flex-col gap-4">
           <FormatGroup
-            label="Static"
+            label="Static credential"
             value={format}
             onChange={choose}
             disabled={disabled}
@@ -106,7 +106,7 @@ export function ServiceAccountPanel({
             ]}
           />
           <FormatGroup
-            label="OAuth"
+            label="Service account"
             value={format}
             onChange={choose}
             disabled={disabled}
@@ -175,7 +175,7 @@ function FormatGroup({
     <div className="flex flex-col gap-2">
       <span className="text-eyebrow">{label}</span>
       <RadioCardGroup
-        aria-label={`${label} credential`}
+        aria-label={label}
         size="sm"
         showIndicator={false}
         value={inGroup ? value : null}
