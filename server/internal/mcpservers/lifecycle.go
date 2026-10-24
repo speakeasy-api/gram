@@ -38,13 +38,15 @@ type LifecycleUpdateInput struct {
 	Visibility        string
 	NetworkAccessMode *networkaccess.Mode
 
-	EnvironmentID         uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	TunneledMcpServerID   uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	UnproxiedMcpServerID  uuid.NullUUID
-	ToolVariationsGroupID uuid.NullUUID
+	EnvironmentID       uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	// ClearUserSessionIssuer detaches the issuer; UserSessionIssuerID must then be invalid.
+	ClearUserSessionIssuer bool
+	RemoteMcpServerID      uuid.NullUUID
+	TunneledMcpServerID    uuid.NullUUID
+	ToolsetID              uuid.NullUUID
+	UnproxiedMcpServerID   uuid.NullUUID
+	ToolVariationsGroupID  uuid.NullUUID
 }
 
 const maxLifecycleMCPServerNameBytes = 256
@@ -194,20 +196,21 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 	}
 
 	updated, err := repo.New(tx).UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		Name:                  name,
-		Slug:                  conv.ToPGText(slug),
-		EnvironmentID:         input.EnvironmentID,
-		UserSessionIssuerID:   input.UserSessionIssuerID,
-		RemoteMcpServerID:     input.RemoteMcpServerID,
-		TunneledMcpServerID:   input.TunneledMcpServerID,
-		ToolsetID:             input.ToolsetID,
-		UnproxiedMcpServerID:  input.UnproxiedMcpServerID,
-		ToolVariationsGroupID: input.ToolVariationsGroupID,
-		Visibility:            input.Visibility,
-		NetworkAccessModeSet:  input.NetworkAccessMode != nil,
-		NetworkAccessMode:     storedMode,
-		ID:                    existing.ID,
-		ProjectID:             input.ProjectID,
+		Name:                   name,
+		Slug:                   conv.ToPGText(slug),
+		EnvironmentID:          input.EnvironmentID,
+		UserSessionIssuerID:    input.UserSessionIssuerID,
+		ClearUserSessionIssuer: input.ClearUserSessionIssuer,
+		RemoteMcpServerID:      input.RemoteMcpServerID,
+		TunneledMcpServerID:    input.TunneledMcpServerID,
+		ToolsetID:              input.ToolsetID,
+		UnproxiedMcpServerID:   input.UnproxiedMcpServerID,
+		ToolVariationsGroupID:  input.ToolVariationsGroupID,
+		Visibility:             input.Visibility,
+		NetworkAccessModeSet:   input.NetworkAccessMode != nil,
+		NetworkAccessMode:      storedMode,
+		ID:                     existing.ID,
+		ProjectID:              input.ProjectID,
 	})
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("update MCP server lifecycle: %w", err)

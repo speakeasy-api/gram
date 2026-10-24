@@ -2103,37 +2103,46 @@ SET
     name = $1,
     slug = $2,
     environment_id = $3,
-    user_session_issuer_id = COALESCE($4, user_session_issuer_id),
-    remote_mcp_server_id = $5,
-    tunneled_mcp_server_id = $6,
-    toolset_id = $7,
-    unproxied_mcp_server_id = $8,
-    tool_variations_group_id = $9,
-    visibility = $10,
+    user_session_issuer_id = CASE
+        WHEN $4::boolean THEN NULL
+        ELSE COALESCE($5, user_session_issuer_id)
+    END,
+    -- Detaching the issuer clears the derived remote issuer, which no resync can reach.
+    remote_session_issuer_id = CASE
+        WHEN $4::boolean THEN NULL
+        ELSE remote_session_issuer_id
+    END,
+    remote_mcp_server_id = $6,
+    tunneled_mcp_server_id = $7,
+    toolset_id = $8,
+    unproxied_mcp_server_id = $9,
+    tool_variations_group_id = $10,
+    visibility = $11,
     network_access_mode = CASE
-        WHEN $11::boolean THEN $12
+        WHEN $12::boolean THEN $13
         ELSE network_access_mode
     END,
     updated_at = clock_timestamp()
-WHERE id = $13 AND project_id = $14 AND deleted IS FALSE
+WHERE id = $14 AND project_id = $15 AND deleted IS FALSE
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPServerParams struct {
-	Name                  pgtype.Text
-	Slug                  pgtype.Text
-	EnvironmentID         uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	TunneledMcpServerID   uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	UnproxiedMcpServerID  uuid.NullUUID
-	ToolVariationsGroupID uuid.NullUUID
-	Visibility            string
-	NetworkAccessModeSet  bool
-	NetworkAccessMode     pgtype.Text
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
+	Name                   pgtype.Text
+	Slug                   pgtype.Text
+	EnvironmentID          uuid.NullUUID
+	ClearUserSessionIssuer bool
+	UserSessionIssuerID    uuid.NullUUID
+	RemoteMcpServerID      uuid.NullUUID
+	TunneledMcpServerID    uuid.NullUUID
+	ToolsetID              uuid.NullUUID
+	UnproxiedMcpServerID   uuid.NullUUID
+	ToolVariationsGroupID  uuid.NullUUID
+	Visibility             string
+	NetworkAccessModeSet   bool
+	NetworkAccessMode      pgtype.Text
+	ID                     uuid.UUID
+	ProjectID              uuid.UUID
 }
 
 func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams) (McpServer, error) {
@@ -2141,6 +2150,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		arg.Name,
 		arg.Slug,
 		arg.EnvironmentID,
+		arg.ClearUserSessionIssuer,
 		arg.UserSessionIssuerID,
 		arg.RemoteMcpServerID,
 		arg.TunneledMcpServerID,

@@ -692,6 +692,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
+	clearIssuer := payload.ClearUserSessionIssuer != nil && *payload.ClearUserSessionIssuer
+	if clearIssuer && payload.UserSessionIssuerID != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "user_session_issuer_id and clear_user_session_issuer cannot be set together").LogWarn(ctx, logger)
+	}
 
 	ids, err := parseServerIDs(serverIDStrings{
 		EnvironmentID:         payload.EnvironmentID,
@@ -844,16 +848,24 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	// NULL leaves the stored issuer untouched (the update query COALESCEs).
 	// A backend switch onto remote/tunneled from a backend that never carried
-	// one (toolset, unproxied) needs a fresh mint here.
+	// one (toolset, unproxied) needs a fresh mint here; a server whose issuer
+	// was detached keeps none.
 	issuerID := ids.UserSessionIssuerID
-	if issuerID.Valid {
+	if clearIssuer && existing.UserSessionIssuerID.Valid {
+		if err := lifecycle.GuardEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, existing.UserSessionIssuerID.UUID); err != nil {
+			return nil, err //nolint:wrapcheck // oops errors pass through.
+		}
+	}
+	switch {
+	case clearIssuer:
+	case issuerID.Valid:
 		if _, err := usersessionbindings.ValidateAndLock(ctx, dbtx, issuerID.UUID, *authCtx.ProjectID, authCtx.ActiveOrganizationID); err != nil {
 			if errors.Is(err, usersessionbindings.ErrNotFound) {
 				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "validate user session issuer").LogError(ctx, logger)
 		}
-	} else if (ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid) && !existing.UserSessionIssuerID.Valid {
+	case ((ids.RemoteMcpServerID.Valid && ids.RemoteMcpServerID != existing.RemoteMcpServerID) || (ids.TunneledMcpServerID.Valid && ids.TunneledMcpServerID != existing.TunneledMcpServerID)) && !existing.UserSessionIssuerID.Valid:
 		issuerID, err = MintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
@@ -861,21 +873,22 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	lifecycleInput := LifecycleUpdateInput{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ProjectID:             *authCtx.ProjectID,
-		ActorUserID:           authCtx.UserID,
-		ActorEmail:            authCtx.Email,
-		ServerID:              serverID,
-		Name:                  payload.Name,
-		Visibility:            string(payload.Visibility),
-		NetworkAccessMode:     networkAccessModeUpdate(payload.NetworkAccessMode, mode),
-		EnvironmentID:         ids.EnvironmentID,
-		UserSessionIssuerID:   issuerID,
-		RemoteMcpServerID:     ids.RemoteMcpServerID,
-		TunneledMcpServerID:   ids.TunneledMcpServerID,
-		ToolsetID:             ids.ToolsetID,
-		UnproxiedMcpServerID:  ids.UnproxiedMcpServerID,
-		ToolVariationsGroupID: ids.ToolVariationsGroupID,
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		ActorUserID:            authCtx.UserID,
+		ActorEmail:             authCtx.Email,
+		ServerID:               serverID,
+		Name:                   payload.Name,
+		Visibility:             string(payload.Visibility),
+		NetworkAccessMode:      networkAccessModeUpdate(payload.NetworkAccessMode, mode),
+		EnvironmentID:          ids.EnvironmentID,
+		UserSessionIssuerID:    issuerID,
+		ClearUserSessionIssuer: clearIssuer,
+		RemoteMcpServerID:      ids.RemoteMcpServerID,
+		TunneledMcpServerID:    ids.TunneledMcpServerID,
+		ToolsetID:              ids.ToolsetID,
+		UnproxiedMcpServerID:   ids.UnproxiedMcpServerID,
+		ToolVariationsGroupID:  ids.ToolVariationsGroupID,
 	}
 	var clearedRootDomainIDs []uuid.UUID
 	var updated repo.McpServer
@@ -936,8 +949,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			updated = refreshed
 		}
 	} else {
-		// Without an issuer the server keeps no upstream client associations.
-		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, nil)
+		// Without an issuer the server keeps no upstream client associations; a detached issuer's other servers are recomputed.
+		var detached []uuid.UUID
+		if clearIssuer && existing.UserSessionIssuerID.Valid {
+			detached = []uuid.UUID{existing.UserSessionIssuerID.UUID}
+		}
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, detached)
 	}
 	afterView, _ := s.buildMcpServerView(ctx, authCtx.ActiveOrganizationID, updated)
 
