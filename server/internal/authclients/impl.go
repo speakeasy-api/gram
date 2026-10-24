@@ -121,7 +121,7 @@ func (s *Service) ListAuthClients(ctx context.Context, payload *gen.ListAuthClie
 		return nil, oops.E(oops.CodeUnexpected, err, "list auth clients").LogError(ctx, logger)
 	}
 
-	items, err := s.views(ctx, queries, authCtx.ActiveOrganizationID, clients)
+	items, err := clientViews(ctx, queries, authCtx.ActiveOrganizationID, clients)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build auth client views").LogError(ctx, logger)
 	}
@@ -463,18 +463,39 @@ func (s *Service) require(ctx context.Context, scope authz.Scope) (*contextvalue
 }
 
 func (s *Service) serverAuthentication(ctx context.Context, queries *repo.Queries, organizationID string, serverID, projectID uuid.UUID, serverVisibility string, requires pgtype.Bool, logger *slog.Logger) (*types.McpServerAuthentication, error) {
+	view, err := serverAuthenticationView(ctx, queries, organizationID, serverID, projectID, serverVisibility, requires)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read server authentication").LogError(ctx, logger)
+	}
+	return view, nil
+}
+
+// ReadServerAuthentication reports how one MCP server in the organization
+// authenticates to its upstream, for surfaces other than this service. It
+// performs no authorization: callers check access to the server first. A
+// server outside the organization returns pgx.ErrNoRows.
+func ReadServerAuthentication(ctx context.Context, db repo.DBTX, organizationID string, serverID uuid.UUID) (*types.McpServerAuthentication, error) {
+	queries := repo.New(db)
+	server, err := queries.GetOrganizationMCPServer(ctx, repo.GetOrganizationMCPServerParams{ID: serverID, OrganizationID: organizationID})
+	if err != nil {
+		return nil, fmt.Errorf("get mcp server: %w", err)
+	}
+	return serverAuthenticationView(ctx, queries, organizationID, server.ID, server.ProjectID, server.Visibility, server.RequiresUpstreamAuth)
+}
+
+func serverAuthenticationView(ctx context.Context, queries *repo.Queries, organizationID string, serverID, projectID uuid.UUID, serverVisibility string, requires pgtype.Bool) (*types.McpServerAuthentication, error) {
 	clients, err := queries.ListServerAuthClients(ctx, repo.ListServerAuthClientsParams{
 		McpServerID:    serverID,
 		ProjectID:      projectID,
 		OrganizationID: organizationID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list server auth clients").LogError(ctx, logger)
+		return nil, fmt.Errorf("list server auth clients: %w", err)
 	}
 
-	views, err := s.views(ctx, queries, organizationID, clients)
+	views, err := clientViews(ctx, queries, organizationID, clients)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build auth client views").LogError(ctx, logger)
+		return nil, err
 	}
 
 	return &types.McpServerAuthentication{
@@ -506,14 +527,14 @@ func upstreamAuthStatus(requires pgtype.Bool, clients []repo.McpAuthClient) stri
 }
 
 func (s *Service) view(ctx context.Context, queries *repo.Queries, organizationID string, client repo.McpAuthClient, logger *slog.Logger) (*types.AuthClient, error) {
-	views, err := s.views(ctx, queries, organizationID, []repo.McpAuthClient{client})
+	views, err := clientViews(ctx, queries, organizationID, []repo.McpAuthClient{client})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build auth client view").LogError(ctx, logger)
 	}
 	return views[0], nil
 }
 
-func (s *Service) views(ctx context.Context, queries *repo.Queries, organizationID string, clients []repo.McpAuthClient) ([]*types.AuthClient, error) {
+func clientViews(ctx context.Context, queries *repo.Queries, organizationID string, clients []repo.McpAuthClient) ([]*types.AuthClient, error) {
 	ids := make([]uuid.UUID, 0, len(clients))
 	for _, c := range clients {
 		ids = append(ids, c.ID)

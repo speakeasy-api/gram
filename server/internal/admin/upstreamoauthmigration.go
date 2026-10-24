@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -118,6 +119,18 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 			)
 		}
 	}
+	// Profiles decide from the typed auth clients, so they are recorded only
+	// after a run that recorded every auth client phase.
+	var profileVersionsWritten *int64
+	if authClientsError == nil {
+		profiles, err := executionprofiles.Backfill(migrationCtx, s.db, organizationID, true)
+		switch {
+		case err != nil:
+			logger.ErrorContext(ctx, "record execution selection profiles", attr.SlogError(err))
+		default:
+			profileVersionsWritten = new(int64(profiles.VersionsWritten))
+		}
+	}
 	// The writes above are committed even if the caller has gone, so the
 	// audit line and the status read do not depend on the request.
 	logger.InfoContext(detached, "upstream oauth migration ran",
@@ -140,6 +153,7 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 		AuthClientLinksWritten:             new(int64(authClients.LinksWritten)),
 		ServersMarkedRequiringUpstreamAuth: new(int64(authClients.ServersMarked)),
 		SelectionsMapped:                   new(int64(authClients.SelectionsMapped)),
+		ExecutionProfileVersionsWritten:    profileVersionsWritten,
 		AuthPermissionGrantsWritten:        new(int64(authClients.GrantsWritten)),
 		AuthClientsError:                   authClientsError,
 		Status:                             status,
@@ -184,8 +198,10 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 	}
 	pendingSelections := int64(selections.Pairs[selectionbackfill.OutcomeClient] + selections.Pairs[selectionbackfill.OutcomeNoAuth])
 
-	return &gen.AdminUpstreamOAuthMigrationStatus{
+	status := &gen.AdminUpstreamOAuthMigrationStatus{
 		AuthClients:          s.authClientMigrationStatus(ctx, organizationID),
+		ExecutionProfiles:    s.executionProfileMigrationStatus(ctx, organizationID),
+		Enforcement:          nil,
 		OrganizationID:       organizationID,
 		Migrated:             associations.Decided == 0 && len(unresolved) == 0 && pendingSelections == 0,
 		Servers:              int64(associations.Servers),
@@ -194,7 +210,9 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 		Credentials:          int64(selections.Credentials),
 		PendingSelections:    pendingSelections,
 		ReconnectCredentials: int64(len(reconnect)),
-	}, nil
+	}
+	status.Enforcement = s.upstreamAuthEnforcement(ctx, status)
+	return status, nil
 }
 
 // authClientMigrationStatus dry-runs the typed auth client backfill. It is
@@ -221,6 +239,7 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 			FailedPhases:             []string{},
 			SelectionsComplete:       new(false),
 			PendingSelectionMappings: new(int64(0)),
+			PendingGrants:            new(int64(0)),
 			SelectionClasses:         []*gen.AdminUpstreamOAuthMigrationSelectionClass{},
 			SelectionGaps:            []*gen.AdminUpstreamOAuthMigrationSelectionGap{},
 			SelectionGapCount:        new(int64(0)),
@@ -296,6 +315,7 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 		FailedPhases:             phases,
 		SelectionsComplete:       new(gapCount == 0 && report.PendingSelectionMappings == 0 && !selectionsFailed),
 		PendingSelectionMappings: new(int64(report.PendingSelectionMappings)),
+		PendingGrants:            new(int64(report.PendingGrants)),
 		SelectionClasses:         classes,
 		SelectionGaps:            gaps,
 		SelectionGapCount:        new(int64(gapCount)),
@@ -343,6 +363,37 @@ func selectionCoverage(report authclientbackfill.Report) ([]*gen.AdminUpstreamOA
 		})
 	}
 	return classes, gaps, gapCount
+}
+
+// executionProfileMigrationStatus dry-runs the execution-selection profile
+// backfill. A failure only leaves it out.
+func (s *Service) executionProfileMigrationStatus(ctx context.Context, organizationID string) *gen.AdminUpstreamOAuthMigrationExecutionProfiles {
+	report, err := executionprofiles.Backfill(ctx, s.db, organizationID, false)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "check execution selection profiles", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
+		return nil
+	}
+	gaps := []*gen.AdminUpstreamOAuthMigrationExecutionProfileGap{}
+	for _, execCtx := range executionprofiles.Contexts {
+		reasons := make([]string, 0, len(report.Gaps[execCtx]))
+		for reason := range report.Gaps[execCtx] {
+			reasons = append(reasons, string(reason))
+		}
+		slices.Sort(reasons)
+		for _, reason := range reasons {
+			gaps = append(gaps, &gen.AdminUpstreamOAuthMigrationExecutionProfileGap{
+				ExecutionContext: string(execCtx),
+				Reason:           reason,
+				Servers:          int64(report.Gaps[execCtx][executionprofiles.GapReason(reason)]),
+			})
+		}
+	}
+	return &gen.AdminUpstreamOAuthMigrationExecutionProfiles{
+		Complete:        report.VersionsWritten == 0 && len(gaps) == 0,
+		Targets:         int64(report.Targets),
+		PendingVersions: int64(report.VersionsWritten),
+		Gaps:            gaps,
+	}
 }
 
 // failedPhases names the phases a run reports failed, in run order.

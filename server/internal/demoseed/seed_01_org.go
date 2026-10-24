@@ -246,7 +246,7 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete github grants", func() error {
 			return s.q.OrgDeleteGrantsByID(ctx, repo.OrgDeleteGrantsByIDParams{
 				OrgID: org,
-				Ids:   []uuid.UUID{s.det("github-direct-grant"), s.det("github-wildcard-grant")},
+				Ids:   []uuid.UUID{s.det("github-direct-grant"), s.det("github-wildcard-grant"), s.det("auth-client-github-token-use"), s.det("auth-client-github-token-block")},
 			})
 		}},
 		// Workload trust is organization-scoped: an organization-tier issuer or

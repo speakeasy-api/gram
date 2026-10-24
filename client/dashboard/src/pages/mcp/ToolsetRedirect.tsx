@@ -5,23 +5,30 @@ import {
 } from "@/components/route-not-found-state";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useToolset } from "@/hooks/toolTypes";
-import { isNotFoundError } from "@/lib/route-errors";
+import { getHttpStatusCode, isNotFoundError } from "@/lib/route-errors";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { Navigate, useLocation, useParams } from "react-router";
-import {
-  serverTabForToolsetTab,
-  toolsetTabSegment,
-} from "./toolsetRedirectRouting";
+import { serverTabForToolsetTab } from "./toolsetRedirectRouting";
 import {
   mcpServerTabHref,
   standsInForToolset,
+  toolsetRouteTabSegment,
+  withoutMcpXSegment,
 } from "./x/MCPServerDetailsRouting";
 
-/** Old `/mcp/<toolsetSlug>/...` links open the matching tab of the toolset's MCP server page. */
-export function ToolsetRedirectPage(): React.JSX.Element | null {
-  const { toolsetSlug = "" } = useParams<{ toolsetSlug: string }>();
+// Precedence for /mcp/<param>: a server slug or id (MCPServerDetails), then a
+// toolset slug (its hosting server), then a retired /mcp/x/<slug> link.
+export function ToolsetRedirectPage({
+  toolsetSlug,
+  tabSegment,
+  serverLookupMissed = false,
+}: {
+  toolsetSlug: string;
+  tabSegment: string | undefined;
+  serverLookupMissed?: boolean;
+}): React.JSX.Element | null {
   const location = useLocation();
   const routes = useRoutes();
   const gramProject = useProjectSlugForRequests();
@@ -40,8 +47,21 @@ export function ToolsetRedirectPage(): React.JSX.Element | null {
     throwOnError: false,
   });
 
-  if (!toolsetSlug || isNotFoundError(toolsetError)) {
-    return <ToolsetNotFound title="MCP server not found" />;
+  const legacyXTarget =
+    serverLookupMissed && toolsetSlug === "x"
+      ? withoutMcpXSegment(location.pathname)
+      : undefined;
+  const toLegacyX = legacyXTarget ? (
+    <Navigate
+      to={`${legacyXTarget}${location.search}${location.hash}`}
+      replace
+    />
+  ) : null;
+
+  const unreadable =
+    isNotFoundError(toolsetError) || getHttpStatusCode(toolsetError) === 403;
+  if (!toolsetSlug || unreadable) {
+    return toLegacyX ?? <ToolsetNotFound title="MCP server not found" />;
   }
   if (toolsetError) throw toolsetError;
   if (serversError) {
@@ -61,21 +81,36 @@ export function ToolsetRedirectPage(): React.JSX.Element | null {
   );
   if (!host) {
     return (
-      <ToolsetNotFound
-        title={`${toolset.name} has no MCP server`}
-        description="No MCP server in this project serves these tools. They may only be reachable through a gateway."
-      />
+      toLegacyX ?? (
+        <ToolsetNotFound
+          title={`${toolset.name} has no MCP server`}
+          description="No MCP server in this project serves these tools. They may only be reachable through a gateway."
+        />
+      )
     );
   }
+  // The server lookup already missed this slug; redirecting to it would loop.
+  if (serverLookupMissed && mcpServerRouteParam(host) === toolsetSlug) {
+    return <ToolsetNotFound title="MCP server not found" />;
+  }
 
-  const target = serverTabForToolsetTab(
-    toolsetTabSegment(location.pathname, toolsetSlug),
-    location.hash,
-  );
+  const target = serverTabForToolsetTab(tabSegment, location.hash);
   return (
     <Navigate
       to={`${mcpServerTabHref(routes, mcpServerRouteParam(host), target.tab)}${location.search}${target.hash}`}
       replace
+    />
+  );
+}
+
+/** `/toolsets/<toolsetSlug>[/<tab>]`: in-app links that know a toolset, not its server. */
+export function ToolsetSlugRedirectPage(): React.JSX.Element | null {
+  const { toolsetSlug = "" } = useParams<{ toolsetSlug: string }>();
+  const location = useLocation();
+  return (
+    <ToolsetRedirectPage
+      toolsetSlug={toolsetSlug}
+      tabSegment={toolsetRouteTabSegment(location.pathname)}
     />
   );
 }

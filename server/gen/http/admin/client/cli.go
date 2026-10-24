@@ -3461,3 +3461,55 @@ func BuildRunUpstreamOAuthMigrationPayload(adminRunUpstreamOAuthMigrationBody st
 
 	return v, nil
 }
+
+// BuildEnableUpstreamAuthEnforcementPayload builds the payload for the admin
+// enableUpstreamAuthEnforcement endpoint from CLI flags.
+func BuildEnableUpstreamAuthEnforcementPayload(adminEnableUpstreamAuthEnforcementBody string, adminEnableUpstreamAuthEnforcementAdminSessionToken string) (*admin.EnableUpstreamAuthEnforcementPayload, error) {
+	var err error
+	var body EnableUpstreamAuthEnforcementRequestBody
+	{
+		err = json.Unmarshal([]byte(adminEnableUpstreamAuthEnforcementBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cross_organization_denial_communicated\": false,\n      \"organization_id\": \"abc123\",\n      \"shadow_parity_confirmed\": false\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminEnableUpstreamAuthEnforcementAdminSessionToken != "" {
+			adminSessionToken = &adminEnableUpstreamAuthEnforcementAdminSessionToken
+		}
+	}
+	v := &admin.EnableUpstreamAuthEnforcementPayload{
+		OrganizationID:                      body.OrganizationID,
+		ShadowParityConfirmed:               body.ShadowParityConfirmed,
+		CrossOrganizationDenialCommunicated: body.CrossOrganizationDenialCommunicated,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildDisableUpstreamAuthEnforcementPayload builds the payload for the admin
+// disableUpstreamAuthEnforcement endpoint from CLI flags.
+func BuildDisableUpstreamAuthEnforcementPayload(adminDisableUpstreamAuthEnforcementBody string, adminDisableUpstreamAuthEnforcementAdminSessionToken string) (*admin.DisableUpstreamAuthEnforcementPayload, error) {
+	var err error
+	var body DisableUpstreamAuthEnforcementRequestBody
+	{
+		err = json.Unmarshal([]byte(adminDisableUpstreamAuthEnforcementBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminDisableUpstreamAuthEnforcementAdminSessionToken != "" {
+			adminSessionToken = &adminDisableUpstreamAuthEnforcementAdminSessionToken
+		}
+	}
+	v := &admin.DisableUpstreamAuthEnforcementPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

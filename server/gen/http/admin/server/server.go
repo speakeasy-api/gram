@@ -121,6 +121,8 @@ type Server struct {
 	ListUpstreamOAuthMigrationOrganizations http.Handler
 	GetUpstreamOAuthMigrationStatus         http.Handler
 	RunUpstreamOAuthMigration               http.Handler
+	EnableUpstreamAuthEnforcement           http.Handler
+	DisableUpstreamAuthEnforcement          http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -250,6 +252,8 @@ func New(
 			{"ListUpstreamOAuthMigrationOrganizations", "GET", "/admin/upstreamOAuthMigration.organizations"},
 			{"GetUpstreamOAuthMigrationStatus", "GET", "/admin/upstreamOAuthMigration.status"},
 			{"RunUpstreamOAuthMigration", "POST", "/admin/upstreamOAuthMigration.run"},
+			{"EnableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.enableEnforcement"},
+			{"DisableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.disableEnforcement"},
 		},
 		Login:                                   NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                                NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -351,6 +355,8 @@ func New(
 		ListUpstreamOAuthMigrationOrganizations: NewListUpstreamOAuthMigrationOrganizationsHandler(e.ListUpstreamOAuthMigrationOrganizations, mux, decoder, encoder, errhandler, formatter),
 		GetUpstreamOAuthMigrationStatus:         NewGetUpstreamOAuthMigrationStatusHandler(e.GetUpstreamOAuthMigrationStatus, mux, decoder, encoder, errhandler, formatter),
 		RunUpstreamOAuthMigration:               NewRunUpstreamOAuthMigrationHandler(e.RunUpstreamOAuthMigration, mux, decoder, encoder, errhandler, formatter),
+		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementHandler(e.EnableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
+		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementHandler(e.DisableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -459,6 +465,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListUpstreamOAuthMigrationOrganizations = m(s.ListUpstreamOAuthMigrationOrganizations)
 	s.GetUpstreamOAuthMigrationStatus = m(s.GetUpstreamOAuthMigrationStatus)
 	s.RunUpstreamOAuthMigration = m(s.RunUpstreamOAuthMigration)
+	s.EnableUpstreamAuthEnforcement = m(s.EnableUpstreamAuthEnforcement)
+	s.DisableUpstreamAuthEnforcement = m(s.DisableUpstreamAuthEnforcement)
 }
 
 // MethodNames returns the methods served.
@@ -566,6 +574,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListUpstreamOAuthMigrationOrganizationsHandler(mux, h.ListUpstreamOAuthMigrationOrganizations)
 	MountGetUpstreamOAuthMigrationStatusHandler(mux, h.GetUpstreamOAuthMigrationStatus)
 	MountRunUpstreamOAuthMigrationHandler(mux, h.RunUpstreamOAuthMigration)
+	MountEnableUpstreamAuthEnforcementHandler(mux, h.EnableUpstreamAuthEnforcement)
+	MountDisableUpstreamAuthEnforcementHandler(mux, h.DisableUpstreamAuthEnforcement)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -5933,6 +5943,114 @@ func NewRunUpstreamOAuthMigrationHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "runUpstreamOAuthMigration")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountEnableUpstreamAuthEnforcementHandler configures the mux to serve the
+// "admin" service "enableUpstreamAuthEnforcement" endpoint.
+func MountEnableUpstreamAuthEnforcementHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/upstreamOAuthMigration.enableEnforcement", f)
+}
+
+// NewEnableUpstreamAuthEnforcementHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "enableUpstreamAuthEnforcement" endpoint.
+func NewEnableUpstreamAuthEnforcementHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeEnableUpstreamAuthEnforcementRequest(mux, decoder)
+		encodeResponse = EncodeEnableUpstreamAuthEnforcementResponse(encoder)
+		encodeError    = EncodeEnableUpstreamAuthEnforcementError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "enableUpstreamAuthEnforcement")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDisableUpstreamAuthEnforcementHandler configures the mux to serve the
+// "admin" service "disableUpstreamAuthEnforcement" endpoint.
+func MountDisableUpstreamAuthEnforcementHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/upstreamOAuthMigration.disableEnforcement", f)
+}
+
+// NewDisableUpstreamAuthEnforcementHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "disableUpstreamAuthEnforcement" endpoint.
+func NewDisableUpstreamAuthEnforcementHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDisableUpstreamAuthEnforcementRequest(mux, decoder)
+		encodeResponse = EncodeDisableUpstreamAuthEnforcementResponse(encoder)
+		encodeError    = EncodeDisableUpstreamAuthEnforcementError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "disableUpstreamAuthEnforcement")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

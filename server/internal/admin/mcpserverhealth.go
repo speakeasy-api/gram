@@ -13,8 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -188,6 +190,15 @@ func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Querie
 		Correlation:       healthCorrelation(server),
 		LegacyAuth:        nil,
 		UserSessionIssuer: nil,
+		UpstreamAuth:      nil,
+	}
+
+	if !server.ToolsetOnly {
+		upstream, err := authclients.ReadServerAuthentication(ctx, s.db, organizationID, server.ID)
+		if err != nil {
+			return nil, fmt.Errorf("read upstream authentication: %w", err)
+		}
+		result.UpstreamAuth = healthUpstreamAuth(upstream)
 	}
 
 	if server.UserSessionIssuerID.Valid {
@@ -577,4 +588,24 @@ func nonNilStrings(values []string) []string {
 		return []string{}
 	}
 	return values
+}
+
+func healthUpstreamAuth(view *types.McpServerAuthentication) *gen.AdminMcpServerHealthUpstreamAuth {
+	clients := make([]*gen.AdminMcpServerHealthAuthClient, 0, len(view.Clients))
+	for _, client := range view.Clients {
+		clients = append(clients, &gen.AdminMcpServerHealthAuthClient{
+			ID:                    client.ID,
+			ClientType:            client.ClientType,
+			Source:                string(client.Source),
+			Enabled:               client.Enabled,
+			RemoteSessionClientID: client.RemoteSessionClientID,
+			ServerCount:           len(client.Servers),
+			HeaderCount:           len(client.Headers),
+		})
+	}
+	return &gen.AdminMcpServerHealthUpstreamAuth{
+		Status:               view.Status,
+		RequiresUpstreamAuth: view.RequiresUpstreamAuth,
+		AuthClients:          clients,
+	}
 }

@@ -19,7 +19,9 @@ import { adminDeleteOnboardingPlaybook } from "../funcs/adminDeleteOnboardingPla
 import { adminDeleteOnboardingUseCase } from "../funcs/adminDeleteOnboardingUseCase.js";
 import { adminDescribeMcpServerHealth } from "../funcs/adminDescribeMcpServerHealth.js";
 import { adminDisableOrganization } from "../funcs/adminDisableOrganization.js";
+import { adminDisableUpstreamAuthEnforcement } from "../funcs/adminDisableUpstreamAuthEnforcement.js";
 import { adminEnableOrganization } from "../funcs/adminEnableOrganization.js";
+import { adminEnableUpstreamAuthEnforcement } from "../funcs/adminEnableUpstreamAuthEnforcement.js";
 import { adminExtendTrial } from "../funcs/adminExtendTrial.js";
 import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerMetadata.js";
 import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
@@ -161,7 +163,9 @@ import { CurateRegistryPromotionCandidateRequestBody } from "../models/component
 import { DeleteOnboardingPlaybookRequestBody } from "../models/components/deleteonboardingplaybookrequestbody.js";
 import { DeleteOnboardingUseCaseRequestBody } from "../models/components/deleteonboardingusecaserequestbody.js";
 import { DisableOrganizationRequestBody } from "../models/components/disableorganizationrequestbody.js";
+import { DisableUpstreamAuthEnforcementRequestBody } from "../models/components/disableupstreamauthenforcementrequestbody.js";
 import { EnableOrganizationRequestBody } from "../models/components/enableorganizationrequestbody.js";
+import { EnableUpstreamAuthEnforcementRequestBody } from "../models/components/enableupstreamauthenforcementrequestbody.js";
 import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestbody.js";
 import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuermetadatarequestbody.js";
 import { GetRegistryPromotionCandidateRequestBody } from "../models/components/getregistrypromotioncandidaterequestbody.js";
@@ -1791,6 +1795,40 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminStartTrial(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * disableUpstreamAuthEnforcement admin
+   *
+   * @remarks
+   * Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.
+   */
+  async disableUpstreamAuthEnforcement(
+    request: DisableUpstreamAuthEnforcementRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminUpstreamOAuthMigrationStatus> {
+    return unwrapAsync(adminDisableUpstreamAuthEnforcement(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * enableUpstreamAuthEnforcement admin
+   *
+   * @remarks
+   * Enables upstream auth enforcement for one organization: its direct proxied servers and assistant turns are served by the typed auth client resolver, and using the chosen auth client requires mcp:auth. Refused unless the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that can name an auth client does, and its assistant profiles are recorded. Choices left ambiguous and profile gaps are not blocking: those credentials are asked to reconnect and those turns are refused with the reason. Shadow parity and the cross-organization denial notice are confirmed by the caller, since they are read from telemetry and communication outside the database. Enabled enforcement does not depend on the auth-client-resolver flags.
+   */
+  async enableUpstreamAuthEnforcement(
+    request: EnableUpstreamAuthEnforcementRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminUpstreamOAuthMigrationStatus> {
+    return unwrapAsync(adminEnableUpstreamAuthEnforcement(
       this,
       request,
       options,

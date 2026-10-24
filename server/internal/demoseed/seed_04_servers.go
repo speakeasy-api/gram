@@ -527,6 +527,56 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
+	return s.seedAuthClients(ctx)
+}
+
+// seedAuthClients records the typed auth clients the upstream OAuth migration
+// would derive, so server settings show a personal client, a client shared by
+// two servers, and who may use it.
+func (s *seeder) seedAuthClients(ctx context.Context) error {
+	org := s.orgID()
+	proj := s.projectID()
+
+	clients := []repo.ServersInsertAuthClientParams{
+		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Name: "Linear", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
+		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Name: "Engineering automation token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
+	}
+	for _, client := range clients {
+		if err := s.q.ServersInsertAuthClient(ctx, client); err != nil {
+			return fmt.Errorf("insert demo auth client %s: %w", client.Name, err)
+		}
+	}
+	if err := s.q.ServersInsertAuthClientHeader(ctx, repo.ServersInsertAuthClientHeaderParams{
+		ID: s.det("auth-client-github-token-header"), AuthClientID: s.det("auth-client-github-token"), OrgID: org,
+		Name: "Authorization", Value: "Bearer demo-placeholder",
+	}); err != nil {
+		return fmt.Errorf("insert demo auth client header: %w", err)
+	}
+
+	associations := []struct{ key, server, client string }{
+		{"auth-client-assoc-linear", "mcpserver-linear", "auth-client-linear"},
+		{"auth-client-assoc-github", "mcpserver-github", "auth-client-github-token"},
+		{"auth-client-assoc-linear-token", "mcpserver-linear", "auth-client-github-token"},
+	}
+	for _, a := range associations {
+		if err := s.q.ServersInsertServerAuthClient(ctx, repo.ServersInsertServerAuthClientParams{
+			ID: s.det(a.key), ProjectID: proj, OrgID: org, McpServerID: s.det(a.server), AuthClientID: s.det(a.client),
+		}); err != nil {
+			return fmt.Errorf("associate demo auth client %s: %w", a.key, err)
+		}
+	}
+	if err := s.q.ServersMarkRequiresUpstreamAuth(ctx, repo.ServersMarkRequiresUpstreamAuthParams{
+		ProjectID: proj,
+		Ids:       []uuid.UUID{s.det("mcpserver-linear"), s.det("mcpserver-github")},
+	}); err != nil {
+		return fmt.Errorf("mark demo servers as requiring upstream auth: %w", err)
+	}
+	if err := s.q.ServersInsertAuthClientRoleGrants(ctx, repo.ServersInsertAuthClientRoleGrantsParams{
+		OrgID: org, AuthClientID: s.det("auth-client-github-token"),
+		UseID: s.det("auth-client-github-token-use"), BlockID: s.det("auth-client-github-token-block"),
+	}); err != nil {
+		return fmt.Errorf("insert demo auth client role grants: %w", err)
+	}
 	return nil
 }
 

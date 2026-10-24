@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -499,8 +500,9 @@ func (s *Service) buildMemberDispatch(
 		attributionServerID:   nil,
 		// Meta members keep their toolset-keyed per-tool checks; the meta
 		// surface's RBAC model is outside the wrapper-governance cutover.
+		// Publicness is the hosting state the member was admitted under.
 		wrapperRBACResourceID:    "",
-		wrapperIsPublic:          nil,
+		wrapperIsPublic:          new(toolset.McpIsPublic),
 		metaMcpServerID:          gate.metaServerID.String(),
 		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
 		skipProxyTools:           true,
@@ -561,9 +563,13 @@ func (s *Service) loadMemberToolset(
 	case err != nil:
 		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
 	}
-	// Match direct wrapper dispatch: only the legacy canonical wrapper uses
-	// the toolset's enablement flag. Independently configured servers use
-	// their own visibility, already checked during member admission.
+	toolset, _, err = hostedmcp.LoadServerState(ctx, s.db, toolset)
+	if err != nil {
+		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member hosting state").LogError(ctx, logger)
+	}
+	// Match direct wrapper dispatch: only the canonical wrapper gates on the
+	// toolset's hosting state. Independently configured servers use their own
+	// visibility, already checked during member admission.
 	if member.serverID == toolset.ID && !toolset.McpEnabled {
 		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}

@@ -37,6 +37,7 @@ function status(
             failedPhases: [],
             selectionsComplete: true,
             pendingSelectionMappings: 0,
+            pendingGrants: 0,
             selectionClasses: [],
             selectionGaps: [],
             selectionGapCount: 0,
@@ -106,6 +107,12 @@ describe("needsMigrationRun", () => {
     expect(needsMigrationRun(s)).toBe(true);
   });
 
+  it("includes an organization with default permissions to grant", () => {
+    const s = status(true, true);
+    if (s.authClients) s.authClients.pendingGrants = 2;
+    expect(needsMigrationRun(s)).toBe(true);
+  });
+
   it("skips an organization whose only choice gaps need a reconnect", () => {
     const s = status(true, false);
     if (s.authClients) {
@@ -113,6 +120,46 @@ describe("needsMigrationRun", () => {
       s.authClients.selectionsComplete = false;
       s.authClients.selectionGapCount = 3;
     }
+    expect(needsMigrationRun(s)).toBe(false);
+  });
+
+  it("includes an organization with execution profiles to record", () => {
+    const s = status(true, true);
+    s.executionProfiles = {
+      complete: false,
+      targets: 1,
+      pendingVersions: 2,
+      gaps: [],
+    };
+    expect(needsMigrationRun(s)).toBe(true);
+  });
+
+  it("skips an organization whose only profile gaps need configuring", () => {
+    const s = status(true, true);
+    s.executionProfiles = {
+      complete: false,
+      targets: 1,
+      pendingVersions: 0,
+      gaps: [
+        {
+          executionContext: "userless",
+          reason: "personal_requires_user",
+          servers: 1,
+        },
+      ],
+    };
+    expect(needsMigrationRun(s)).toBe(false);
+  });
+
+  it("skips profiles to record while a run records auth clients", () => {
+    const s = status(true, true);
+    if (s.authClients) s.authClients.inProgress = true;
+    s.executionProfiles = {
+      complete: false,
+      targets: 1,
+      pendingVersions: 2,
+      gaps: [],
+    };
     expect(needsMigrationRun(s)).toBe(false);
   });
 

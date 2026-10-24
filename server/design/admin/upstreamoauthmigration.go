@@ -43,6 +43,36 @@ var AdminUpstreamOAuthMigrationStatus = Type("AdminUpstreamOAuthMigrationStatus"
 	Attribute("pending_selections", Int64, "Credential choices the configuration decides that are not yet recorded.")
 	Attribute("reconnect_credentials", Int64, "Credentials with at least one server they will be asked to reconnect to, because no single client is decided for them.")
 	Attribute("auth_clients", AdminUpstreamOAuthMigrationAuthClients, "Where the organization stands in recording typed auth clients. Separate from migrated: it never gates the upstream OAuth cutover. Absent when its check failed.")
+	Attribute("execution_profiles", AdminUpstreamOAuthMigrationExecutionProfiles, "Where the organization stands in recording the auth client choices its assistants' turns use. Separate from migrated. Absent when its check failed.")
+	Attribute("enforcement", AdminUpstreamAuthEnforcement, "Whether upstream auth enforcement is on for the organization, and whether it can be turned on.")
+})
+
+var AdminUpstreamAuthEnforcement = Type("AdminUpstreamAuthEnforcement", func() {
+	Description("One organization's upstream auth enforcement.")
+	Required("enabled", "ready", "blockers")
+
+	Attribute("enabled", Boolean, "Whether enforcement is on.")
+	Attribute("ready", Boolean, "Whether the coverage enforcement needs is in place, so it can be turned on.")
+	Attribute("blockers", ArrayOf(String), "What keeps enforcement from being turned on, empty when ready.")
+})
+
+var AdminUpstreamOAuthMigrationExecutionProfileGap = Type("AdminUpstreamOAuthMigrationExecutionProfileGap", func() {
+	Description("MCP servers execution-selection profiles hold no choice for, for one execution context and reason.")
+	Required("execution_context", "reason", "servers")
+
+	Attribute("execution_context", String, "user_backed for turns run for a user the event identified, userless for turns run as the trigger's workload.")
+	Attribute("reason", String, "Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client), setup_incomplete (it needs upstream authentication and offers no auth client) or upstream_auth_undecided (it offers no auth client and an administrator has not decided whether it needs upstream authentication).")
+	Attribute("servers", Int64, "Profile and server pairs with no choice for this reason.")
+})
+
+var AdminUpstreamOAuthMigrationExecutionProfiles = Type("AdminUpstreamOAuthMigrationExecutionProfiles", func() {
+	Description("Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.")
+	Required("complete", "targets", "pending_versions", "gaps")
+
+	Attribute("complete", Boolean, "Whether every profile is recorded and holds a choice for every server its assistant reaches.")
+	Attribute("targets", Int64, "Assistant and trigger pairs, each with a profile per execution context.")
+	Attribute("pending_versions", Int64, "Profile versions not yet recorded.")
+	Attribute("gaps", ArrayOf(AdminUpstreamOAuthMigrationExecutionProfileGap), "Servers the profiles hold no choice for, by execution context and reason. They are never guessed: configure the server's auth clients.")
 })
 
 var AdminUpstreamOAuthMigrationUnresolvedAssociation = Type("AdminUpstreamOAuthMigrationUnresolvedAssociation", func() {
@@ -123,6 +153,7 @@ var AdminUpstreamOAuthMigrationAuthClients = Type("AdminUpstreamOAuthMigrationAu
 	Attribute("failed_phases", ArrayOf(String), "Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile, mark, selections or grants. The counts cover the other phases.")
 	Attribute("selections_complete", Boolean, "Whether every live credential choice names a usable auth client or is an explicit no-auth choice, and the selections check did not fail.")
 	Attribute("pending_selection_mappings", Int64, "Live credential choices with exactly one auth client to name, not yet named.")
+	Attribute("pending_grants", Int64, "Default auth permission grants (mcp:auth) the organization's roles, users, agents and API keys are missing, which a run adds. Enforcement needs them, so existing callers keep their access.")
 	Attribute("selection_classes", ArrayOf(AdminUpstreamOAuthMigrationSelectionClass), "Credential choice coverage for each credential class.")
 	Attribute("selection_gaps", ArrayOf(AdminUpstreamOAuthMigrationSelectionGap), "The first live credential choices left without a usable auth client.")
 	Attribute("selection_gap_count", Int64, "Every live credential choice left without a usable auth client, including those beyond selection_gaps.")
@@ -139,6 +170,7 @@ var AdminUpstreamOAuthMigrationRun = Type("AdminUpstreamOAuthMigrationRun", func
 	Attribute("auth_client_links_written", Int64, "Server to auth client links recorded.")
 	Attribute("servers_marked_requiring_upstream_auth", Int64, "Servers marked as needing upstream authentication because they offer a backfilled auth client.")
 	Attribute("selections_mapped", Int64, "Credential choices this run named a typed auth client on.")
+	Attribute("execution_profile_versions_written", Int64, "Execution-selection profile versions this run recorded.")
 	Attribute("auth_permission_grants_written", Int64, "Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.")
 	Attribute("auth_clients_error", String, "Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.")
 	Attribute("status", AdminUpstreamOAuthMigrationStatus, "The organization's status after the run.")
@@ -209,5 +241,53 @@ func upstreamOAuthMigrationMethods() {
 
 		Meta("openapi:operationId", "adminRunUpstreamOAuthMigration")
 		Meta("openapi:extension:x-speakeasy-name-override", "runUpstreamOAuthMigration")
+	})
+
+	Method("enableUpstreamAuthEnforcement", func() {
+		Description("Enables upstream auth enforcement for one organization: its direct proxied servers and assistant turns are served by the typed auth client resolver, and using the chosen auth client requires mcp:auth. Refused unless the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that can name an auth client does, and its assistant profiles are recorded. Choices left ambiguous and profile gaps are not blocking: those credentials are asked to reconnect and those turns are refused with the reason. Shadow parity and the cross-organization denial notice are confirmed by the caller, since they are read from telemetry and communication outside the database. Enabled enforcement does not depend on the auth-client-resolver flags.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "shadow_parity_confirmed", "cross_organization_denial_communicated")
+
+			Attribute("organization_id", String, "The organization ID.")
+			Attribute("shadow_parity_confirmed", Boolean, "The caller checked the organization's mandatory authorization shadow (mcp.authz.mandatory_shadow) and found no unexplained new denial.")
+			Attribute("cross_organization_denial_communicated", Boolean, "The organization was told that valid credentials from another organization are refused on its public servers once enforcement is on, instead of being served anonymously.")
+
+			Meta("openapi:typename", "EnableUpstreamAuthEnforcementRequestBody")
+		})
+
+		Result(AdminUpstreamOAuthMigrationStatus)
+
+		HTTP(func() {
+			POST("/admin/upstreamOAuthMigration.enableEnforcement")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminEnableUpstreamAuthEnforcement")
+		Meta("openapi:extension:x-speakeasy-name-override", "enableUpstreamAuthEnforcement")
+	})
+
+	Method("disableUpstreamAuthEnforcement", func() {
+		Description("Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+
+			Attribute("organization_id", String, "The organization ID.")
+
+			Meta("openapi:typename", "DisableUpstreamAuthEnforcementRequestBody")
+		})
+
+		Result(AdminUpstreamOAuthMigrationStatus)
+
+		HTTP(func() {
+			POST("/admin/upstreamOAuthMigration.disableEnforcement")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminDisableUpstreamAuthEnforcement")
+		Meta("openapi:extension:x-speakeasy-name-override", "disableUpstreamAuthEnforcement")
 	})
 }

@@ -512,6 +512,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListUpstreamOAuthMigrationOrganizations = service.preauthorizeAdmin(server.ListUpstreamOAuthMigrationOrganizations)
 	server.GetUpstreamOAuthMigrationStatus = service.preauthorizeAdmin(server.GetUpstreamOAuthMigrationStatus)
 	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
+	server.EnableUpstreamAuthEnforcement = service.strictAdminJSON(server.EnableUpstreamAuthEnforcement, func() any { return new(adminserver.EnableUpstreamAuthEnforcementRequestBody) })
+	server.DisableUpstreamAuthEnforcement = service.strictAdminJSON(server.DisableUpstreamAuthEnforcement, func() any { return new(adminserver.DisableUpstreamAuthEnforcementRequestBody) })
 	adminserver.Mount(mux, server)
 
 }

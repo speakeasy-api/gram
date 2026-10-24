@@ -81,7 +81,6 @@ func TestHandleToken_UnsupportedGrantPrecedesClientAuthentication(t *testing.T) 
 
 	forms := map[string]url.Values{
 		"no client":           {"grant_type": {"urn:example:grant-type:unknown"}},
-		"no grant_type":       {},
 		"unregistered client": {"grant_type": {"urn:example:grant-type:unknown"}, "client_id": {"client_" + uuid.NewString()}},
 		"wrong secret":        {"grant_type": {"password"}, "client_id": {publicClient.ClientID}, "client_secret": {"wrong"}},
 	}

@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -84,11 +85,7 @@ func (s *Service) pluginServerDashboardURL(grants []authz.Grant, row repo.ListAg
 			resourceID = row.McpServerToolsetID.UUID.String()
 		}
 		check = authz.MCPCheck(authz.ScopeMCPRead, resourceID, projectID)
-		slug := row.McpServerSlug.String
-		if !row.McpServerSlug.Valid || slug == "" {
-			slug = row.McpServerID.UUID.String()
-		}
-		route = []string{"x", slug}
+		route = []string{mcpservers.DashboardRouteParam(row.McpServerSlug.String, row.McpServerID.UUID)}
 	case row.GatewayID.Valid:
 		check = authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: projectID, Dimensions: nil}
 		route = []string{"gateway", row.GatewayID.UUID.String()}
