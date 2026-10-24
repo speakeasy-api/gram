@@ -15,9 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -259,6 +261,15 @@ func TestPlatformMCPOffersUpstreamCredentialOnAnotherServer(t *testing.T) {
 		ClientType: authz.AuthClientTypeServiceAccount, Name: "Operations service account",
 	})
 	require.NoError(t, err)
+	// Another server already offers the credential, as get_mcp_connection_settings reports it.
+	remote, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{ID: uuid.New(), ProjectID: project.ID, TransportType: "sse", Url: "https://source.example.com/mcp"})
+	require.NoError(t, err)
+	source, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: project.ID, Name: conv.ToPGText("Source"), Slug: conv.ToPGText("source-" + uuid.NewString()[:8]),
+		RemoteMcpServerID: conv.ToNullUUID(remote.ID), Visibility: "private",
+	})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).AssociateAuthClientFixture(ctx, testrepo.AssociateAuthClientFixtureParams{ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: source.ID, AuthClientID: shared}))
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
@@ -280,6 +291,11 @@ func TestPlatformMCPOffersUpstreamCredentialOnAnotherServer(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got.UpstreamAuthentication.Clients, 1)
 	require.Equal(t, shared.String(), got.UpstreamAuthentication.Clients[0].ID)
+
+	sourceAuthentication, err := upstreamAuthentication(ctx, conn, principal.OrganizationID, source.ID)
+	require.NoError(t, err)
+	require.Len(t, sourceAuthentication.Clients, 1, "the source server keeps offering the credential")
+	require.Equal(t, shared.String(), sourceAuthentication.Clients[0].ID)
 
 	_, err = service.OfferUpstreamCredential(ctx, principal, input)
 	require.ErrorAs(t, err, &mutationErr)
