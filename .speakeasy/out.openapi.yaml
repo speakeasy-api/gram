@@ -8405,7 +8405,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AgentPolicyGrantIDForm'
+              $ref: '#/components/schemas/DeleteAgentPolicyGrantForm'
         required: true
       responses:
         "204":
@@ -83872,7 +83872,7 @@ components:
           minLength: 1
         project_scoped:
           type: boolean
-          description: Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+          description: Admit the subject for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.
           default: false
         subject:
           type: string
@@ -83943,6 +83943,18 @@ components:
       required:
         - requested
         - effective
+    AgentExpectedPolicy:
+      type: object
+      properties:
+        scope:
+          type: string
+          description: Scope of the grant originally read
+          minLength: 1
+        selector:
+          $ref: '#/components/schemas/AgentPolicySelector'
+      required:
+        - scope
+        - selector
     AgentIDForm:
       type: object
       properties:
@@ -84121,20 +84133,6 @@ components:
         - scope
         - effect
         - selector
-    AgentPolicyGrantIDForm:
-      type: object
-      properties:
-        agent_id:
-          type: string
-          description: First-class agent identifier
-          format: uuid
-        grant_id:
-          type: string
-          description: Direct policy grant identifier
-          format: uuid
-      required:
-        - grant_id
-        - agent_id
     AgentPolicySelector:
       type: object
       properties:
@@ -84161,7 +84159,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).
+          description: Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -84177,6 +84175,7 @@ components:
             - assistant
             - risk_policy
             - chat
+            - inference
             - agent
             - mcp_auth_client
             - '*'
@@ -89640,6 +89639,13 @@ components:
           enum:
             - chain
             - interactive
+        authorization_server_mode:
+          type: string
+          description: Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+          default: endpoint
+          enum:
+            - endpoint
+            - shared
         session_duration_hours:
           type: integer
           description: Maximum issued user session lifetime, in hours.
@@ -90152,6 +90158,22 @@ components:
       required:
         - status
         - count
+    DeleteAgentPolicyGrantForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: First-class agent identifier
+          format: uuid
+        expected_policy:
+          $ref: '#/components/schemas/AgentExpectedPolicy'
+        grant_id:
+          type: string
+          description: Direct policy grant identifier
+          format: uuid
+      required:
+        - grant_id
+        - agent_id
     DeleteAiScanTargetRequestBody:
       type: object
       properties:
@@ -97834,6 +97856,7 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - inference:execute
             - log:read
             - agent:read
             - agent:write
@@ -97890,6 +97913,7 @@ components:
               - risk_policy:block
               - chat:read
               - chat:write
+              - inference:execute
               - log:read
               - agent:read
               - agent:write
@@ -103874,7 +103898,7 @@ components:
           maxLength: 100
         project_scoped:
           type: boolean
-          description: Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+          description: Register the issuer for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.
           default: false
         tags:
           type: array
@@ -104789,6 +104813,7 @@ components:
             - risk_policy:bypass
             - chat:read
             - chat:write
+            - inference:execute
             - log:read
             - agent:read
             - agent:write
@@ -106906,6 +106931,7 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - inference:execute
             - log:read
             - agent:read
             - agent:write
@@ -107249,6 +107275,7 @@ components:
             - assistant
             - risk_policy
             - chat
+            - inference
             - agent
             - workload
             - mcp_auth_client
@@ -107291,6 +107318,7 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - inference:execute
             - log:read
             - agent:read
             - agent:write
@@ -107785,7 +107813,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
+          description: Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -107801,6 +107829,7 @@ components:
             - assistant
             - risk_policy
             - chat
+            - inference
             - agent
             - workload
             - mcp_auth_client

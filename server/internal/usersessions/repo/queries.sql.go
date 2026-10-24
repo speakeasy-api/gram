@@ -1134,7 +1134,9 @@ INSERT INTO user_session_issuers (
     slug,
     authn_challenge_mode,
     session_duration,
-    client_id_metadata_admission_mode
+    client_id_metadata_admission_mode,
+    authorization_server_mode,
+    use_authentication_host
 )
 VALUES (
     $1::uuid,
@@ -1147,17 +1149,21 @@ VALUES (
     -- absence the application has to interpret. A literal, not a parameter:
     -- the create form carries no admission field, and an operator changes
     -- the mode afterwards through the update endpoint.
-    'open'
+    'open',
+    COALESCE($6::text, 'endpoint'),
+    COALESCE($7::boolean, false)
 )
 RETURNING id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, use_authentication_host, authorization_server_mode, pinned_issuer_url, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionIssuerParams struct {
-	ProjectID          uuid.UUID
-	OrganizationID     pgtype.Text
-	Slug               string
-	AuthnChallengeMode string
-	SessionDuration    pgtype.Interval
+	ProjectID               uuid.UUID
+	OrganizationID          pgtype.Text
+	Slug                    string
+	AuthnChallengeMode      string
+	SessionDuration         pgtype.Interval
+	AuthorizationServerMode pgtype.Text
+	UseAuthenticationHost   pgtype.Bool
 }
 
 func (q *Queries) CreateUserSessionIssuer(ctx context.Context, arg CreateUserSessionIssuerParams) (UserSessionIssuer, error) {
@@ -1167,6 +1173,8 @@ func (q *Queries) CreateUserSessionIssuer(ctx context.Context, arg CreateUserSes
 		arg.Slug,
 		arg.AuthnChallengeMode,
 		arg.SessionDuration,
+		arg.AuthorizationServerMode,
+		arg.UseAuthenticationHost,
 	)
 	var i UserSessionIssuer
 	err := row.Scan(

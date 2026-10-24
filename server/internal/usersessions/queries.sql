@@ -5,7 +5,9 @@ INSERT INTO user_session_issuers (
     slug,
     authn_challenge_mode,
     session_duration,
-    client_id_metadata_admission_mode
+    client_id_metadata_admission_mode,
+    authorization_server_mode,
+    use_authentication_host
 )
 VALUES (
     @project_id::uuid,
@@ -18,7 +20,9 @@ VALUES (
     -- absence the application has to interpret. A literal, not a parameter:
     -- the create form carries no admission field, and an operator changes
     -- the mode afterwards through the update endpoint.
-    'open'
+    'open',
+    COALESCE(sqlc.narg('authorization_server_mode')::text, 'endpoint'),
+    COALESCE(sqlc.narg('use_authentication_host')::boolean, false)
 )
 RETURNING *;
 

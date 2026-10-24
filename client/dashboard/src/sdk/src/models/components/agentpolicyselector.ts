@@ -56,6 +56,7 @@ export const AgentPolicySelectorResourceKind = {
   Assistant: "assistant",
   RiskPolicy: "risk_policy",
   Chat: "chat",
+  Inference: "inference",
   Agent: "agent",
   McpAuthClient: "mcp_auth_client",
   Wildcard: "*",
@@ -84,7 +85,7 @@ export type AgentPolicySelector = {
    */
   disposition?: AgentPolicySelectorDisposition | undefined;
   /**
-   * Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).
+   * Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
    */
   projectId?: string | undefined;
   /**

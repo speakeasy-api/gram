@@ -2203,6 +2203,15 @@ WHERE project_id = @project_id
   AND deployment_id = @deployment_id
   AND tool_urn = @tool_urn;
 
+-- name: ExpireUserSessionFixture :execrows
+-- Test-only fixture: expires a session without waiting for its access token TTL.
+UPDATE user_sessions
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id
+  AND organization_id = @organization_id::text
+  AND project_id = @project_id::uuid
+  AND user_session_issuer_id = @user_session_issuer_id;
+
 -- name: ExpireAPIKeyFixture :exec
 -- Test-only fixture: puts a key's expiry in the past.
 UPDATE api_keys
@@ -2279,3 +2288,10 @@ UPDATE mcp_servers
 SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
 FROM toolset
 WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
+
+-- name: SetWorkloadIssuerWildcardAdmissionForTest :execrows
+-- Test-only fixture for an issuer policy change while admission waits on its lock.
+UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission
+WHERE organization_id = @organization_id
+  AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND id = @id AND deleted IS FALSE;

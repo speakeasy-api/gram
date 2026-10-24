@@ -28,7 +28,7 @@ func (q *Queries) DeployAttachUserSessionIssuer(ctx context.Context, arg DeployA
 
 const deployInsertAgent = `-- name: DeployInsertAgent :exec
 INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)
-VALUES ($1, $2::text, $3::uuid, $4, 'Identity-bound assistant agent')
+VALUES ($1, $2::text, $3::uuid, $4, $5::text)
 `
 
 type DeployInsertAgentParams struct {
@@ -36,6 +36,7 @@ type DeployInsertAgentParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
 	OwnerUserID    string
+	Name           string
 }
 
 func (q *Queries) DeployInsertAgent(ctx context.Context, arg DeployInsertAgentParams) error {
@@ -44,6 +45,7 @@ func (q *Queries) DeployInsertAgent(ctx context.Context, arg DeployInsertAgentPa
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.OwnerUserID,
+		arg.Name,
 	)
 	return err
 }
