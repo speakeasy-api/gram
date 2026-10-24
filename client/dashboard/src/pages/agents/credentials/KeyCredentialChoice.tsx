@@ -39,7 +39,7 @@ export function KeyCredentialChoice({
   }, [choices.isSuccess, offered, onChange]);
   if (choices.isError) {
     return (
-      <Text small className="text-destructive mt-2 block">
+      <Text small role="alert" className="text-destructive mt-2 block">
         The credentials {serverName} offers could not be loaded. Refresh the
         page to try again.
       </Text>
