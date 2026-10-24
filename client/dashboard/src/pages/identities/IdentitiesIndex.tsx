@@ -1278,6 +1278,13 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                 Set up Claude Tag
               </Link>
             </Button>
+            <Button asChild variant="secondary">
+              <Link
+                to={`${routes.identities.agents.new.href()}?capability=inference`}
+              >
+                Set up inference
+              </Link>
+            </Button>
             <Button asChild variant="primary">
               <Link to={routes.identities.agents.new.href()}>
                 <Plus className="size-4" aria-hidden="true" />

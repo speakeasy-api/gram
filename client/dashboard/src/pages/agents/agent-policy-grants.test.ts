@@ -38,6 +38,7 @@ describe("agent policy scope catalog", () => {
       "assistant:write",
       "environment:read",
       "environment:write",
+      "inference:execute",
       "mcp:connect",
       "mcp:read",
       "mcp:write",

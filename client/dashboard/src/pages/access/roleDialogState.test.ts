@@ -646,3 +646,25 @@ describe("computeRuleTooltip", () => {
     ).toBe("Permits access to all assistants in ecommerce-api");
   });
 });
+
+it.each(["allow", "deny"] as const)(
+  "describes project-specific inference %s without treating inference as a collection",
+  (effect) => {
+    expect(
+      computeRuleTooltip(
+        effect,
+        [
+          {
+            resourceKind: "inference",
+            resourceId: "*",
+            projectId: "project_one",
+          },
+        ],
+        "inference",
+        [{ id: "project_one", name: "Project one" }],
+      ),
+    ).toBe(
+      `${effect === "allow" ? "Permits" : "Excludes"} access to inference in Project one`,
+    );
+  },
+);

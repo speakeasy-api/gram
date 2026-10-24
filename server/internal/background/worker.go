@@ -57,6 +57,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
@@ -69,6 +71,7 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -103,6 +106,9 @@ type WorkerOptions struct {
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
 	GitHubEvidenceToken string
 	SiteURL             *url.URL
+	// ServerURL is the API origin. Approval requests sent to Slack use it
+	// through the approvals service.
+	ServerURL *url.URL
 	// OrgHosts resolves the host of links sent to an organization by email.
 	OrgHosts          *orghost.Resolver
 	BillingTracker    billing.Tracker
@@ -225,6 +231,7 @@ func ForDeploymentProcessing(
 		ExpectedARecords:             nil,
 		GitHubEvidenceToken:          "",
 		SiteURL:                      nil,
+		ServerURL:                    nil,
 		OrgHosts:                     orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		BillingTracker:               nil,
 		BillingRepository:            nil,
@@ -319,6 +326,7 @@ func NewTemporalWorker(
 		ExpectedARecords:             nil,
 		GitHubEvidenceToken:          "",
 		SiteURL:                      nil,
+		ServerURL:                    nil,
 		OrgHosts:                     orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		BillingTracker:               nil,
 		BillingRepository:            nil,
@@ -378,6 +386,7 @@ func NewTemporalWorker(
 			ExpectedARecords:             conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
 			GitHubEvidenceToken:          conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
 			SiteURL:                      conv.Default(o.SiteURL, opts.SiteURL),
+			ServerURL:                    conv.Default(o.ServerURL, opts.ServerURL),
 			OrgHosts:                     conv.Default(o.OrgHosts, opts.OrgHosts),
 			BillingTracker:               conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:            conv.Default(o.BillingRepository, opts.BillingRepository),
@@ -720,7 +729,16 @@ func NewTemporalWorker(
 		slackDirectory := newSlackDirectoryActivities(opts.DB, opts.EncryptionClient, opts.GuardianPolicy.PooledClient(), opts.SlackDirectoryTokenRefresher)
 		temporalWorker.RegisterActivity(slackDirectory.SyncSlackDirectory)
 		temporalWorker.RegisterActivity(slackDirectory.ListDueSlackDirectories)
+		if opts.ServerURL != nil {
+			approvals := approval.NewService(logger, opts.DB, opts.ServerURL, opts.AuditLogger)
+			cards := slackapproval.NewCards(opts.DB, approvals, opts.OrgHosts)
+			notifier := slackapproval.NewNotifier(logger, cards, slackDirectory.sync, slackapi.NewClient("", opts.GuardianPolicy.PooledClient()))
+			riskApprovalSlack := &riskApprovalSlackActivities{logger: logger, notifier: notifier}
+			temporalWorker.RegisterActivity(riskApprovalSlack.NotifyRiskApprovalApprovers)
+			temporalWorker.RegisterActivity(riskApprovalSlack.FinishRiskApprovalCards)
+		}
 	}
+	temporalWorker.RegisterWorkflow(RiskApprovalSlackWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)

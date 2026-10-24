@@ -1,8 +1,12 @@
+import { useOrganization, useProject } from "@/contexts/Auth";
+import { WorkloadIssuerSelector } from "./WorkloadIssuerSelector";
+import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { useAdmitWorkloadSubjectMutation } from "@gram/client/react-query/admitWorkloadSubject.js";
 import { useRegisterWorkloadIssuerMutation } from "@gram/client/react-query/registerWorkloadIssuer.js";
 import {
   invalidateAllWorkloadIdentities,
+  queryKeyWorkloadIdentities,
   useWorkloadIdentities,
 } from "@gram/client/react-query/workloadIdentities.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,7 +17,11 @@ import {
 } from "./CustomSetupInstructions";
 import { platformSetup } from "./platformSetups";
 import { ComputedStatus } from "./SetupFields";
-import type { SetupContext, SetupStep } from "./setupInstructions";
+import type {
+  PlatformSetup,
+  SetupContext,
+  SetupStep,
+} from "./setupInstructions";
 import {
   connectedIssuer,
   duplicateRuleMessage,
@@ -21,7 +29,7 @@ import {
   type CatalogEntry,
   type VariableValues,
 } from "./workloadCatalog";
-import { useSetupValues } from "./workloadTokenEndpoints";
+import { useSetupValues, type SetupValues } from "./workloadTokenEndpoints";
 
 /**
  * The state behind a platform's guided setup, run for the agent this wizard
@@ -34,6 +42,7 @@ import { useSetupValues } from "./workloadTokenEndpoints";
  */
 
 export interface WorkloadSetup {
+  exchange: SetupValues;
   /** The platform's steps, each of which is a step of the wizard. */
   steps: SetupStep[];
   /**
@@ -68,7 +77,13 @@ export function useWorkloadSetup({
   initialValues,
   connectedSubject,
   settled = false,
+  setupOverride,
+  targetProjectId,
 }: {
+  /** Reuses issuer registration and admission for non-MCP setup. */
+  setupOverride?: PlatformSetup;
+  /** An inference exchange cannot use another project’s issuer. */
+  targetProjectId?: string;
   /** The catalog's policy for the platform, absent for a custom one. */
   entry: CatalogEntry | undefined;
   /** The chosen platform, which may be the custom one. Null until chosen. */
@@ -96,8 +111,17 @@ export function useWorkloadSetup({
   onValueChange?: (key: string) => void;
 }): WorkloadSetup {
   const queryClient = useQueryClient();
-  const identities = useWorkloadIdentities({});
-  const issuers = identities.data?.issuers ?? [];
+  const organization = useOrganization();
+  const project = useProject();
+  const identityRequest = { gramProject: project.slug };
+  const identities = useWorkloadIdentities(identityRequest, undefined, {
+    throwOnError: false,
+  });
+  const issuers = (identities.data?.issuers ?? []).filter(
+    (issuer) =>
+      issuer.organizationId === organization.id &&
+      (issuer.projectId === "" || issuer.projectId === project.id),
+  );
   const admissions = identities.data?.admissions ?? [];
 
   const [values, setValues] = useState<VariableValues>(initialValues ?? {});
@@ -114,7 +138,7 @@ export function useWorkloadSetup({
   }, [initialValues, values]);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const setupValues = useSetupValues();
+  const setupValues = useSetupValues(targetProjectId);
 
   // The issuer this flow has already trusted, so a retry after a later failure
   // does not try to trust it a second time. The URL rather than a flag: a
@@ -133,13 +157,43 @@ export function useWorkloadSetup({
   // The catalog's platforms come from the same map the picker offers tiles
   // from, plus the custom flow for everything the catalog does not know.
   const setup =
-    platformKey === CUSTOM_PLATFORM_KEY
+    setupOverride ??
+    (platformKey === CUSTOM_PLATFORM_KEY
       ? customSetupInstructions()
       : entry === undefined
         ? undefined
-        : platformSetup(entry);
+        : platformSetup(entry));
 
-  const connection = setup?.connection(values) ?? null;
+  const customFlow = platformKey === CUSTOM_PLATFORM_KEY;
+  const selectedIssuer = issuers.find((issuer) =>
+    values.issuer_id
+      ? issuer.id === values.issuer_id
+      : issuer.issuer === values.issuer,
+  );
+  const resolvedValues =
+    selectedIssuer && customFlow
+      ? {
+          ...values,
+          name: selectedIssuer.name,
+          issuer: selectedIssuer.issuer,
+          jwks_uri: selectedIssuer.jwksUri,
+        }
+      : values;
+  const connection =
+    customFlow &&
+    (!selectedIssuer || identities.isPending || identities.isError)
+      ? null
+      : (setup?.connection(resolvedValues) ?? null);
+  const selectIssuer = (issuer: WorkloadIssuer) => {
+    setValues((current) => ({
+      ...current,
+      issuer_id: issuer.id,
+      name: issuer.name,
+      issuer: issuer.issuer,
+      jwks_uri: issuer.jwksUri,
+    }));
+    onValueChange?.("issuer");
+  };
   const platformName = entry?.displayName ?? "this platform";
 
   const isTrusted =
@@ -158,7 +212,12 @@ export function useWorkloadSetup({
   const conflicting =
     connection === null || ours
       ? undefined
-      : existingRule(connection.issuer, admissions, connection);
+      : existingRule(
+          connection.issuer,
+          admissions,
+          connection,
+          customFlow ? selectedIssuer?.projectId : undefined,
+        );
   const ruleConflict =
     conflicting === undefined
       ? null
@@ -202,7 +261,11 @@ export function useWorkloadSetup({
       admitting = true;
       await admitSubject.mutateAsync({
         request: {
+          ...(customFlow ? { gramProject: project.slug } : {}),
           admitWorkloadSubjectForm: {
+            ...(customFlow
+              ? { projectScoped: !!selectedIssuer?.projectId }
+              : {}),
             issuer: connection.issuer,
             subject: connection.subject,
             matchKind: connection.matchKind,
@@ -228,7 +291,7 @@ export function useWorkloadSetup({
   };
 
   const context: SetupContext = {
-    values,
+    values: resolvedValues,
     setValue: (key: string, value: string) => {
       setValues((current) => ({ ...current, [key]: value }));
       onValueChange?.(key);
@@ -255,10 +318,43 @@ export function useWorkloadSetup({
   };
 
   return {
+    exchange: setupValues,
     steps: setup?.steps ?? [],
     requirements: setup?.requirements ?? null,
-    render: (step) => <div className="space-y-4">{step.body(context)}</div>,
-    complete: (step) => step.complete?.(context) ?? true,
+    render: (step) =>
+      customFlow && step.id === "issuer" ? (
+        <WorkloadIssuerSelector
+          key={`${organization.id}:${project.id}`}
+          issuers={issuers}
+          selectedId={selectedIssuer?.id ?? ""}
+          loading={identities.isPending}
+          failed={identities.isError}
+          onRetry={() => {
+            void identities.refetch();
+          }}
+          onSelect={selectIssuer}
+          issuerStep={step}
+          onCreated={(policy, issuer) => {
+            queryClient.setQueryData(
+              queryKeyWorkloadIdentities(identityRequest),
+              policy,
+            );
+            selectIssuer(issuer);
+            // An organization-tier create response may omit project-tier rows.
+            if (!issuer.projectId) {
+              void queryClient.invalidateQueries({
+                queryKey: queryKeyWorkloadIdentities(identityRequest),
+              });
+            }
+          }}
+        />
+      ) : (
+        <div className="space-y-4">{step.body(context)}</div>
+      ),
+    complete: (step) =>
+      customFlow && step.id === "issuer"
+        ? !!selectedIssuer && !identities.isPending && !identities.isError
+        : (step.complete?.(context) ?? true),
     connect,
     connecting,
     canConnect: connection !== null,

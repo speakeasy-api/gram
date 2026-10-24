@@ -26,6 +26,9 @@ func (s *seeder) seedDeployment(ctx context.Context) error {
 	if err := s.seedDeploymentWorkloads(ctx); err != nil {
 		return err
 	}
+	if err := s.seedDeploymentInference(ctx); err != nil {
+		return err
+	}
 	return s.seedDeploymentAssistants(ctx)
 }
 
@@ -521,6 +524,7 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 		OrganizationID: org,
 		ProjectID:      proj,
 		OwnerUserID:    owner,
+		Name:           "Identity-bound assistant agent",
 	}); err != nil {
 		return fmt.Errorf("insert demo assistant agent: %w", err)
 	}

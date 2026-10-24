@@ -30,7 +30,7 @@ export type RegisterWorkloadIssuerForm = {
    */
   name: string;
   /**
-   * Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+   * Register the issuer for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.
    */
   projectScoped?: boolean | undefined;
   /**

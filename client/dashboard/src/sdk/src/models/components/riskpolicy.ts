@@ -15,21 +15,26 @@ import {
 } from "./riskdetectionscope.js";
 import { RiskMCPScope, RiskMCPScope$inboundSchema } from "./riskmcpscope.js";
 import {
+  RiskPolicyApprovalConfig,
+  RiskPolicyApprovalConfig$inboundSchema,
+} from "./riskpolicyapprovalconfig.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$inboundSchema,
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export const RiskPolicyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
   Quarantine: "quarantine",
+  RequireApproval: "require_approval",
 } as const;
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export type RiskPolicyAction = OpenEnum<typeof RiskPolicyAction>;
 
@@ -73,9 +78,10 @@ export type RiskPolicyShadowMcpDisposition = OpenEnum<
 
 export type RiskPolicy = {
   /**
-   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
+   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
    */
   action: RiskPolicyAction;
+  approvalConfig?: RiskPolicyApprovalConfig | undefined;
   /**
    * For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty means the domain rule is inert.
    */
@@ -201,6 +207,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
   .pipe(
     z.object({
       action: z._default(RiskPolicyAction$inboundSchema, "flag"),
+      approval_config: z.optional(RiskPolicyApprovalConfig$inboundSchema),
       approved_email_domains: z.optional(z.array(z.string())),
       audience_principal_urns: z.array(z.string()),
       audience_type: z._default(
@@ -240,6 +247,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "approval_config": "approvalConfig",
         "approved_email_domains": "approvedEmailDomains",
         "audience_principal_urns": "audiencePrincipalUrns",
         "audience_type": "audienceType",
