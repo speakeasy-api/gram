@@ -44,10 +44,12 @@ func (c *memberChoices) recordNewMemberChoices(ctx context.Context, logger *slog
 	service := c.selector.service
 	queries := upstreamclientsrepo.New(service.db)
 	added, err := queries.ListGatewayMembersAddedAfterIssuance(ctx, upstreamclientsrepo.ListGatewayMembersAddedAfterIssuanceParams{
-		OrganizationID:  c.selector.organizationID,
-		MetaMcpServerID: c.metaServerID,
-		McpServerIds:    missing,
-		CredentialID:    c.selector.credentialID,
+		OrganizationID:      c.selector.organizationID,
+		MetaMcpServerID:     c.metaServerID,
+		McpServerIds:        missing,
+		CredentialID:        c.selector.credentialID,
+		SubjectUrn:          c.subject.String(),
+		UserSessionIssuerID: c.selector.userSessionIssuerID,
 	})
 	if err != nil {
 		logger.ErrorContext(ctx, "list gateway members added after issuance", attr.SlogError(err))

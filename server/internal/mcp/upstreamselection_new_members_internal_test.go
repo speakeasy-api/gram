@@ -83,10 +83,12 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	row, err := selection(single)
 	require.NoError(t, err)
 	require.Equal(t, validUUID(singleClient), row.AuthClientID, "a new member with one ready client records it")
+	require.Equal(t, upstreamclients.SelectionSourceNewMember, row.Source)
 
 	row, err = selection(noAuth)
 	require.NoError(t, err)
 	require.True(t, row.NoAuth, "a new member needing no authentication records no-auth")
+	require.Equal(t, upstreamclients.SelectionSourceNewMember, row.Source)
 
 	_, err = selection(ambiguous)
 	require.Error(t, err, "a new member with several ready clients is left for the person to choose")
