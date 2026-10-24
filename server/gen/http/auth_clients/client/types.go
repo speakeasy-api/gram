@@ -3378,8 +3378,8 @@ type AuthClientHeaderInputRequestBody struct {
 	// Whether the value is secret. Secret values are stored encrypted and never
 	// returned.
 	IsSecret bool `form:"is_secret" json:"is_secret" xml:"is_secret"`
-	// The value to send. Omit it on a secret header that already stores one to
-	// keep the stored value.
+	// The value to send. Omit it on a header that already stores one, with
+	// is_secret unchanged, to keep the stored value.
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 	// The caller's request header to copy the value from, for pass-through headers.
 	ValueFromRequestHeader *string `form:"value_from_request_header,omitempty" json:"value_from_request_header,omitempty" xml:"value_from_request_header,omitempty"`
@@ -3391,7 +3391,7 @@ type AuthClientChoiceResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The client's name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// How the client authenticates upstream.
+	// How the client authenticates upstream. Only shared types are offered.
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
 }
 
@@ -10683,8 +10683,8 @@ func ValidateAuthClientChoiceResponseBody(body *AuthClientChoiceResponseBody) (e
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	if body.ClientType != nil {
-		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema"}))
+		if !(*body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"service_account", "static_credential", "pass_through"}))
 		}
 	}
 	return

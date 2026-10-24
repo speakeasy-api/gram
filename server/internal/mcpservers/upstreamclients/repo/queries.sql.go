@@ -894,18 +894,24 @@ LEFT JOIN meta_mcp_server_members AS m
  AND m.deleted IS FALSE
 WHERE s.id = ANY($3::uuid[])
   AND s.deleted IS FALSE
+  -- The subject and sign-in bound the lineage lookup to one person's
+  -- sessions, which an index serves.
   AND COALESCE(m.created_at, s.created_at) > (
     SELECT min(us.created_at)
     FROM user_sessions AS us
-    WHERE COALESCE(us.credential_id, us.id) = $4::uuid
+    WHERE us.subject_urn = $4::text
+      AND us.user_session_issuer_id = $5::uuid
+      AND COALESCE(us.credential_id, us.id) = $6::uuid
   )
 `
 
 type ListGatewayMembersAddedAfterIssuanceParams struct {
-	OrganizationID  string
-	MetaMcpServerID uuid.NullUUID
-	McpServerIds    []uuid.UUID
-	CredentialID    uuid.UUID
+	OrganizationID      string
+	MetaMcpServerID     uuid.NullUUID
+	McpServerIds        []uuid.UUID
+	SubjectUrn          string
+	UserSessionIssuerID uuid.UUID
+	CredentialID        uuid.UUID
 }
 
 // The members, of those given, that joined the gateway after the credential
@@ -917,6 +923,8 @@ func (q *Queries) ListGatewayMembersAddedAfterIssuance(ctx context.Context, arg 
 		arg.OrganizationID,
 		arg.MetaMcpServerID,
 		arg.McpServerIds,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
 		arg.CredentialID,
 	)
 	if err != nil {
@@ -1024,19 +1032,23 @@ func (q *Queries) ListMCPServerRemoteSessionClients(ctx context.Context, arg Lis
 }
 
 const listRememberedAuthClients = `-- name: ListRememberedAuthClients :many
-SELECT DISTINCT ON (sel.mcp_server_id)
-       sel.mcp_server_id,
-       sel.auth_client_id::uuid AS auth_client_id
-FROM upstream_client_selections AS sel
-JOIN user_sessions AS us
-  ON COALESCE(us.credential_id, us.id) = sel.credential_id
- AND us.subject_urn = $1::text
-WHERE sel.credential_kind = 'user_session'
-  AND sel.organization_id = $2::text
-  AND sel.mcp_server_id = ANY($3::uuid[])
-  AND sel.auth_client_id IS NOT NULL
-  AND sel.deleted IS FALSE
-ORDER BY sel.mcp_server_id, sel.created_at DESC
+SELECT latest.mcp_server_id,
+       latest.auth_client_id::uuid AS auth_client_id
+FROM (
+  SELECT DISTINCT ON (sel.mcp_server_id)
+         sel.mcp_server_id,
+         sel.auth_client_id
+  FROM upstream_client_selections AS sel
+  JOIN user_sessions AS us
+    ON COALESCE(us.credential_id, us.id) = sel.credential_id
+   AND us.subject_urn = $1::text
+  WHERE sel.credential_kind = 'user_session'
+    AND sel.organization_id = $2::text
+    AND sel.mcp_server_id = ANY($3::uuid[])
+    AND sel.deleted IS FALSE
+  ORDER BY sel.mcp_server_id, sel.created_at DESC
+) AS latest
+WHERE latest.auth_client_id IS NOT NULL
 `
 
 type ListRememberedAuthClientsParams struct {
@@ -1052,7 +1064,8 @@ type ListRememberedAuthClientsRow struct {
 
 // The auth client a subject most recently approved for each MCP server
 // through any of their user sessions. It only prefills a new consent and is
-// checked again before use.
+// checked again before use. A latest approval with no client remembers
+// nothing.
 func (q *Queries) ListRememberedAuthClients(ctx context.Context, arg ListRememberedAuthClientsParams) ([]ListRememberedAuthClientsRow, error) {
 	rows, err := q.db.Query(ctx, listRememberedAuthClients, arg.SubjectUrn, arg.OrganizationID, arg.McpServerIds)
 	if err != nil {

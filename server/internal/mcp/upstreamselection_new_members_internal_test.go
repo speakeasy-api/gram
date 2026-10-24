@@ -85,10 +85,12 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	row, err := selection(single)
 	require.NoError(t, err)
 	require.Equal(t, validUUID(singleClient), row.AuthClientID, "a new member with one ready client records it")
+	require.Equal(t, upstreamclients.SelectionSourceNewMember, row.Source)
 
 	row, err = selection(noAuth)
 	require.NoError(t, err)
 	require.True(t, row.NoAuth, "a new member needing no authentication records no-auth")
+	require.Equal(t, upstreamclients.SelectionSourceNewMember, row.Source)
 
 	_, err = selection(ambiguous)
 	require.Error(t, err, "a new member with several ready clients is left for the person to choose")
@@ -121,6 +123,20 @@ func TestAgentKeySelectorReadsOnlyTheKeysOwnChoices(t *testing.T) {
 	selector, err := f.service.agentKeySelectorFor(keyCtx, endpoint)
 	require.NoError(t, err)
 	require.Nil(t, selector, "a key with no choice for the server keeps the issuer-derived path")
+
+	// A sibling key's choice for this server, and this key's choice for
+	// another server, are not this key's choice here.
+	otherServer, _ := f.server()
+	for _, other := range []upstreamclientsrepo.RecordAuthClientChoiceParams{
+		{CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: uuid.New(), Source: upstreamclients.SelectionSourceIssuance, OrganizationID: f.orgID, AuthClientID: validUUID(clientID), McpServerID: f.serverID},
+		{CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: keyID, Source: upstreamclients.SelectionSourceIssuance, OrganizationID: f.orgID, AuthClientID: uuid.NullUUID{}, McpServerID: otherServer},
+	} {
+		_, err = upstreamclientsrepo.New(pool).RecordAuthClientChoice(ctx, other)
+		require.NoError(t, err)
+	}
+	selector, err = f.service.agentKeySelectorFor(keyCtx, endpoint)
+	require.NoError(t, err)
+	require.Nil(t, selector, "other keys' choices and this key's other servers do not apply")
 
 	_, err = upstreamclientsrepo.New(pool).RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{
 		CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: keyID, Source: upstreamclients.SelectionSourceIssuance,

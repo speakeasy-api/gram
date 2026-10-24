@@ -2,12 +2,18 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KeyCredentialChoice } from "./KeyCredentialChoice";
 
-const mocks = vi.hoisted(() => ({ choices: [] as unknown[] }));
+const mocks = vi.hoisted(() => ({ choices: [] as unknown[], failed: false }));
 vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
-  useMcpServerAuthClientChoices: () => ({ data: { choices: mocks.choices } }),
+  useMcpServerAuthClientChoices: () =>
+    mocks.failed
+      ? { isError: true, isSuccess: false, data: undefined }
+      : { isError: false, isSuccess: true, data: { choices: mocks.choices } },
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  mocks.failed = false;
+});
 
 describe("KeyCredentialChoice", () => {
   it("asks nothing of a server with one credential", () => {
@@ -50,5 +56,50 @@ describe("KeyCredentialChoice", () => {
       screen.getByRole("option", { name: /Marketing · Service account/ }),
     );
     expect(onChange).toHaveBeenCalledWith("b");
+  });
+
+  it("says so when the server's credentials cannot be loaded", () => {
+    mocks.failed = true;
+    render(
+      <KeyCredentialChoice
+        serverId="s"
+        serverName="GitHub"
+        value={undefined}
+        onChange={() => undefined}
+      />,
+    );
+    expect(
+      screen.getByText(/The credentials GitHub offers could not be loaded/),
+    ).toBeTruthy();
+  });
+
+  it("clears a pick the server no longer offers and keeps one it does", () => {
+    mocks.choices = [
+      { id: "a", name: "Engineering token", clientType: "static_credential" },
+      { id: "b", name: "Marketing", clientType: "service_account" },
+    ];
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <KeyCredentialChoice
+        serverId="s"
+        serverName="GitHub"
+        value="a"
+        onChange={(id) => {
+          onChange(id);
+        }}
+      />,
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    rerender(
+      <KeyCredentialChoice
+        serverId="s"
+        serverName="GitHub"
+        value="gone"
+        onChange={(id) => {
+          onChange(id);
+        }}
+      />,
+    );
+    expect(onChange).toHaveBeenCalledWith("");
   });
 });

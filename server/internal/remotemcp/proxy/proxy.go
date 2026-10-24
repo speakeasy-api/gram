@@ -1681,6 +1681,9 @@ func (p *Proxy) runUserRequestInterceptors(ctx context.Context, req *UserRequest
 // one this helper already issued.
 func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span trace.Span, id jsonrpc.ID, cause error) int64 {
 	observeRejection(ctx)
+	if toolResult, ok := errors.AsType[*ToolResultError](cause); ok && id.IsValid() {
+		return p.writeToolResultError(ctx, w, id, toolResult)
+	}
 	rejectErr := RejectErrorFromCause(cause)
 	payload, err := marshalErrorResponse(id, rejectErr)
 	if err != nil {
@@ -1708,6 +1711,28 @@ func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span 
 	}
 	span.SetStatus(codes.Error, cause.Error())
 	span.RecordError(cause, trace.WithStackTrace(true))
+	return int64(n)
+}
+
+// writeToolResultError answers a tools/call with a result marked isError. The
+// call did not fail at the protocol level, so the request span stays
+// unmarked. The interceptor's own span still records the error.
+func (p *Proxy) writeToolResultError(ctx context.Context, w http.ResponseWriter, id jsonrpc.ID, result *ToolResultError) int64 {
+	payload, err := marshalToolResultError(id, result.Message)
+	if err != nil {
+		p.Logger.WarnContext(ctx, "failed to marshal tool error result; client will see no body",
+			attr.SlogError(err),
+			attr.SlogComponent("remotemcp.proxy"))
+		return 0
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	n, writeErr := w.Write(payload)
+	if writeErr != nil {
+		p.Logger.WarnContext(ctx, "failed to write tool error result to client",
+			attr.SlogError(writeErr),
+			attr.SlogComponent("remotemcp.proxy"))
+	}
 	return int64(n)
 }
 

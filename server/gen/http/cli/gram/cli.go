@@ -189,7 +189,7 @@ func UsageCommands() []string {
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-bindings|attach-binding|detach-binding|commit-server-identity-configuration|get-server-identity-impact|list-server-client-associations|detach-server-client-association|list-remote-sessions|count-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|reveal-risk-result-payload|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|list-risk-presets|suggest-risk-policy|compile-expr|get-risk-user-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|reveal-risk-result-payload|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|list-risk-presets|suggest-risk-policy|compile-expr|get-risk-user-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|list-risk-policy-approvals|get-risk-policy-approval|decide-risk-policy-approval|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"sigint (create-signal|get-signal|list-signals|update-signal|delete-signal|create-sensor|get-sensor|list-sensors|update-sensor|delete-sensor)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
@@ -3503,6 +3503,26 @@ func ParseEndpoint(
 		riskRevokeRiskPolicyBypassRequestSessionTokenFlag     = riskRevokeRiskPolicyBypassRequestFlags.String("session-token", "", "")
 		riskRevokeRiskPolicyBypassRequestProjectSlugInputFlag = riskRevokeRiskPolicyBypassRequestFlags.String("project-slug-input", "", "")
 
+		riskListRiskPolicyApprovalsFlags                = flag.NewFlagSet("list-risk-policy-approvals", flag.ExitOnError)
+		riskListRiskPolicyApprovalsStatusFlag           = riskListRiskPolicyApprovalsFlags.String("status", "", "")
+		riskListRiskPolicyApprovalsCursorFlag           = riskListRiskPolicyApprovalsFlags.String("cursor", "", "")
+		riskListRiskPolicyApprovalsLimitFlag            = riskListRiskPolicyApprovalsFlags.String("limit", "50", "")
+		riskListRiskPolicyApprovalsApikeyTokenFlag      = riskListRiskPolicyApprovalsFlags.String("apikey-token", "", "")
+		riskListRiskPolicyApprovalsSessionTokenFlag     = riskListRiskPolicyApprovalsFlags.String("session-token", "", "")
+		riskListRiskPolicyApprovalsProjectSlugInputFlag = riskListRiskPolicyApprovalsFlags.String("project-slug-input", "", "")
+
+		riskGetRiskPolicyApprovalFlags                = flag.NewFlagSet("get-risk-policy-approval", flag.ExitOnError)
+		riskGetRiskPolicyApprovalIDFlag               = riskGetRiskPolicyApprovalFlags.String("id", "REQUIRED", "")
+		riskGetRiskPolicyApprovalApikeyTokenFlag      = riskGetRiskPolicyApprovalFlags.String("apikey-token", "", "")
+		riskGetRiskPolicyApprovalSessionTokenFlag     = riskGetRiskPolicyApprovalFlags.String("session-token", "", "")
+		riskGetRiskPolicyApprovalProjectSlugInputFlag = riskGetRiskPolicyApprovalFlags.String("project-slug-input", "", "")
+
+		riskDecideRiskPolicyApprovalFlags                = flag.NewFlagSet("decide-risk-policy-approval", flag.ExitOnError)
+		riskDecideRiskPolicyApprovalBodyFlag             = riskDecideRiskPolicyApprovalFlags.String("body", "REQUIRED", "")
+		riskDecideRiskPolicyApprovalApikeyTokenFlag      = riskDecideRiskPolicyApprovalFlags.String("apikey-token", "", "")
+		riskDecideRiskPolicyApprovalSessionTokenFlag     = riskDecideRiskPolicyApprovalFlags.String("session-token", "", "")
+		riskDecideRiskPolicyApprovalProjectSlugInputFlag = riskDecideRiskPolicyApprovalFlags.String("project-slug-input", "", "")
+
 		riskTriggerRiskAnalysisFlags                = flag.NewFlagSet("trigger-risk-analysis", flag.ExitOnError)
 		riskTriggerRiskAnalysisBodyFlag             = riskTriggerRiskAnalysisFlags.String("body", "REQUIRED", "")
 		riskTriggerRiskAnalysisApikeyTokenFlag      = riskTriggerRiskAnalysisFlags.String("apikey-token", "", "")
@@ -6031,6 +6051,9 @@ func ParseEndpoint(
 	riskApproveRiskPolicyBypassRequestFlags.Usage = riskApproveRiskPolicyBypassRequestUsage
 	riskDenyRiskPolicyBypassRequestFlags.Usage = riskDenyRiskPolicyBypassRequestUsage
 	riskRevokeRiskPolicyBypassRequestFlags.Usage = riskRevokeRiskPolicyBypassRequestUsage
+	riskListRiskPolicyApprovalsFlags.Usage = riskListRiskPolicyApprovalsUsage
+	riskGetRiskPolicyApprovalFlags.Usage = riskGetRiskPolicyApprovalUsage
+	riskDecideRiskPolicyApprovalFlags.Usage = riskDecideRiskPolicyApprovalUsage
 	riskTriggerRiskAnalysisFlags.Usage = riskTriggerRiskAnalysisUsage
 	riskCreateCustomDetectionRuleFlags.Usage = riskCreateCustomDetectionRuleUsage
 	riskListCustomDetectionRulesFlags.Usage = riskListCustomDetectionRulesUsage
@@ -8718,6 +8741,15 @@ func ParseEndpoint(
 
 			case "revoke-risk-policy-bypass-request":
 				epf = riskRevokeRiskPolicyBypassRequestFlags
+
+			case "list-risk-policy-approvals":
+				epf = riskListRiskPolicyApprovalsFlags
+
+			case "get-risk-policy-approval":
+				epf = riskGetRiskPolicyApprovalFlags
+
+			case "decide-risk-policy-approval":
+				epf = riskDecideRiskPolicyApprovalFlags
 
 			case "trigger-risk-analysis":
 				epf = riskTriggerRiskAnalysisFlags
@@ -11940,6 +11972,15 @@ func ParseEndpoint(
 			case "revoke-risk-policy-bypass-request":
 				endpoint = c.RevokeRiskPolicyBypassRequest()
 				data, err = riskc.BuildRevokeRiskPolicyBypassRequestPayload(*riskRevokeRiskPolicyBypassRequestBodyFlag, *riskRevokeRiskPolicyBypassRequestApikeyTokenFlag, *riskRevokeRiskPolicyBypassRequestSessionTokenFlag, *riskRevokeRiskPolicyBypassRequestProjectSlugInputFlag)
+			case "list-risk-policy-approvals":
+				endpoint = c.ListRiskPolicyApprovals()
+				data, err = riskc.BuildListRiskPolicyApprovalsPayload(*riskListRiskPolicyApprovalsStatusFlag, *riskListRiskPolicyApprovalsCursorFlag, *riskListRiskPolicyApprovalsLimitFlag, *riskListRiskPolicyApprovalsApikeyTokenFlag, *riskListRiskPolicyApprovalsSessionTokenFlag, *riskListRiskPolicyApprovalsProjectSlugInputFlag)
+			case "get-risk-policy-approval":
+				endpoint = c.GetRiskPolicyApproval()
+				data, err = riskc.BuildGetRiskPolicyApprovalPayload(*riskGetRiskPolicyApprovalIDFlag, *riskGetRiskPolicyApprovalApikeyTokenFlag, *riskGetRiskPolicyApprovalSessionTokenFlag, *riskGetRiskPolicyApprovalProjectSlugInputFlag)
+			case "decide-risk-policy-approval":
+				endpoint = c.DecideRiskPolicyApproval()
+				data, err = riskc.BuildDecideRiskPolicyApprovalPayload(*riskDecideRiskPolicyApprovalBodyFlag, *riskDecideRiskPolicyApprovalApikeyTokenFlag, *riskDecideRiskPolicyApprovalSessionTokenFlag, *riskDecideRiskPolicyApprovalProjectSlugInputFlag)
 			case "trigger-risk-analysis":
 				endpoint = c.TriggerRiskAnalysis()
 				data, err = riskc.BuildTriggerRiskAnalysisPayload(*riskTriggerRiskAnalysisBodyFlag, *riskTriggerRiskAnalysisApikeyTokenFlag, *riskTriggerRiskAnalysisSessionTokenFlag, *riskTriggerRiskAnalysisProjectSlugInputFlag)
@@ -16297,7 +16338,7 @@ func authClientsUsage() {
 	fmt.Fprintln(os.Stderr, `    attach-auth-client-to-mcp-server: Offer an existing auth client on another MCP server instead of creating a copy. The client stays one client: changing or rotating it changes upstream behavior on every server that offers it. Offering a client grants nobody permission to use it or access to the server. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    set-auth-client-headers: Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    detach-auth-client-from-mcp-server: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    list-mcp-server-auth-client-choices: List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Only names and types are returned.`)
+	fmt.Fprintln(os.Stderr, `    list-mcp-server-auth-client-choices: List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Returns each choice's id, name and client_type, and whether the upstream requires authentication; no headers or credentials.`)
 	fmt.Fprintln(os.Stderr, `    list-issuance-profiles: List the issuance profiles for headless callers signing in through a sign-in. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    set-issuance-profile: Create or replace the issuance profile of one headless caller signing in through a sign-in: an OAuth client, or a workload issuer and subject. Each choice names a credential the server offers, or none for a server that needs no upstream authentication. A workload subject represents no person, so its profile names shared credentials only. Choices take effect on sessions issued afterwards; existing sessions keep theirs. Choosing a credential grants nothing: each issuance checks the caller may use it. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-issuance-profile: Delete an issuance profile. Sessions already issued keep their choices; later sessions decide theirs without it. Requires org:admin.`)
@@ -16479,7 +16520,7 @@ func authClientsListMcpServerAuthClientChoicesUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Only names and types are returned.`)
+	fmt.Fprintln(os.Stderr, `List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Returns each choice's id, name and client_type, and whether the upstream requires authentication; no headers or credentials.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
@@ -26891,6 +26932,9 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    approve-risk-policy-bypass-request: Approve a risk policy bypass request for the requested policy target.`)
 	fmt.Fprintln(os.Stderr, `    deny-risk-policy-bypass-request: Deny a risk policy bypass request, updating workflow state.`)
 	fmt.Fprintln(os.Stderr, `    revoke-risk-policy-bypass-request: Revoke a previously approved risk policy bypass request.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-policy-approvals: List tool approval requests held by require_approval policies, newest first. Org admins see every request; others see requests they can approve and their own.`)
+	fmt.Fprintln(os.Stderr, `    get-risk-policy-approval: Get one tool approval request, including a preview of the call's arguments.`)
+	fmt.Fprintln(os.Stderr, `    decide-risk-policy-approval: Approve or deny a pending tool approval request. Only a listed approver may decide, and never the person who made the call. An approval releases one retry of the exact call.`)
 	fmt.Fprintln(os.Stderr, `    trigger-risk-analysis: Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `+"`"+`limit=0`+"`"+` to backfill every unanalyzed message.`)
 	fmt.Fprintln(os.Stderr, `    create-custom-detection-rule: Create a custom regex-backed detection rule for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-custom-detection-rules: List custom detection rules for the current project.`)
@@ -26933,7 +26977,7 @@ func riskCreateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"mcp_scope\": {\n         \"all_servers\": false,\n         \"servers\": [\n            {\n               \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"tools\": [\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"tool_annotations\": [\n            \"readOnlyHint\"\n         ]\n      },\n      \"model_config\": {\n         \"fail_open\": false,\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_blocked_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_disposition\": \"allow_all\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approval_config\": {\n         \"approvers\": [\n            \"abc123\",\n            \"abc123\"\n         ]\n      },\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"mcp_scope\": {\n         \"all_servers\": false,\n         \"servers\": [\n            {\n               \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"tools\": [\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"tool_annotations\": [\n            \"readOnlyHint\"\n         ]\n      },\n      \"model_config\": {\n         \"fail_open\": false,\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_blocked_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_disposition\": \"allow_all\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesUsage() {
@@ -27073,7 +27117,7 @@ func riskUpdateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_scope\": {\n         \"all_servers\": false,\n         \"servers\": [\n            {\n               \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"tools\": [\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"tool_annotations\": [\n            \"readOnlyHint\"\n         ]\n      },\n      \"model_config\": {\n         \"fail_open\": false,\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_blocked_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_disposition\": \"allow_all\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"supersede_decisions\": false,\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approval_config\": {\n         \"approvers\": [\n            \"abc123\",\n            \"abc123\"\n         ]\n      },\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_scope\": {\n         \"all_servers\": false,\n         \"servers\": [\n            {\n               \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"tools\": [\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"tool_annotations\": [\n            \"readOnlyHint\"\n         ]\n      },\n      \"model_config\": {\n         \"fail_open\": false,\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_blocked_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_disposition\": \"allow_all\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"supersede_decisions\": false,\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteRiskPolicyUsage() {
@@ -27838,6 +27882,82 @@ func riskRevokeRiskPolicyBypassRequestUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk revoke-risk-policy-bypass-request --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListRiskPolicyApprovalsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-policy-approvals", os.Args[0])
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT32")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List tool approval requests held by require_approval policies, newest first. Org admins see every request; others see requests they can approve and their own.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT32: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-policy-approvals --status \"pending\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskGetRiskPolicyApprovalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-policy-approval", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get one tool approval request, including a preview of the call's arguments.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-policy-approval --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskDecideRiskPolicyApprovalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk decide-risk-policy-approval", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Approve or deny a pending tool approval request. Only a listed approver may decide, and never the person who made the call. An approval releases one retry of the exact call.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk decide-risk-policy-approval --body '{\n      \"decision\": \"deny\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"note\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskTriggerRiskAnalysisUsage() {

@@ -52,6 +52,20 @@ func (q *Queries) PostflightCountAgentAttributedChats(ctx context.Context, arg P
 	return count, err
 }
 
+const postflightCountApprovals = `-- name: PostflightCountApprovals :one
+SELECT count(*) FROM risk_policy_approvals
+WHERE organization_id = $1::text AND deleted IS FALSE
+`
+
+// The Tool approvals tab needs its four seeded approval requests: pending,
+// used, denied and expired.
+func (q *Queries) PostflightCountApprovals(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountApprovals, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountAuthClientAssociations = `-- name: PostflightCountAuthClientAssociations :one
 SELECT count(*) FROM mcp_server_auth_clients
 WHERE organization_id = $1::text AND deleted IS FALSE

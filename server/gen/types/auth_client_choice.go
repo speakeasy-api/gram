@@ -14,6 +14,6 @@ type AuthClientChoice struct {
 	ID string
 	// The client's name.
 	Name string
-	// How the client authenticates upstream.
+	// How the client authenticates upstream. Only shared types are offered.
 	ClientType string
 }

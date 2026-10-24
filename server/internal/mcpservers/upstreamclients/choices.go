@@ -45,8 +45,7 @@ func CheckConfiguredChoice(offered []repo.ListServerConsentAuthClientsRow, clien
 		if row.AuthClientID != clientID {
 			continue
 		}
-		switch row.ClientType.String {
-		case authz.AuthClientTypeServiceAccount, authz.AuthClientTypeStaticCredential, authz.AuthClientTypePassThrough:
+		if authz.IsSharedAuthClientType(row.ClientType.String) {
 			return nil
 		}
 		if sharedOnly {

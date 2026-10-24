@@ -1,3 +1,7 @@
+-- atlas:txmode none
+
+-- Create index "user_session_clients_issuer_id_key" to table: "user_session_clients"
+CREATE UNIQUE INDEX CONCURRENTLY "user_session_clients_issuer_id_key" ON "user_session_clients" ("user_session_issuer_id", "id");
 -- Create "issuance_selection_profiles" table
 CREATE TABLE "issuance_selection_profiles" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -15,11 +19,10 @@ CREATE TABLE "issuance_selection_profiles" (
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
   CONSTRAINT "issuance_selection_profiles_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "issuance_selection_profiles_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "issuance_selection_profiles_user_session_client_id_fkey" FOREIGN KEY ("user_session_client_id") REFERENCES "user_session_clients" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "issuance_selection_profiles_project_tenant_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "issuance_selection_profiles_user_session_client_fkey" FOREIGN KEY ("user_session_issuer_id", "user_session_client_id") REFERENCES "user_session_clients" ("user_session_issuer_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "issuance_selection_profiles_user_session_issuer_id_fkey" FOREIGN KEY ("user_session_issuer_id") REFERENCES "user_session_issuers" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "issuance_selection_profiles_workload_issuer_id_fkey" FOREIGN KEY ("workload_issuer_id") REFERENCES "workload_issuers" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "issuance_selection_profiles_caller_check" CHECK (((user_session_client_id IS NOT NULL) <> (workload_issuer_id IS NOT NULL)) AND ((workload_issuer_id IS NULL) = (workload_subject IS NULL))),
+  CONSTRAINT "issuance_selection_profiles_workload_issuer_tenant_fkey" FOREIGN KEY ("organization_id", "workload_issuer_id") REFERENCES "workload_issuers" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "issuance_selection_profiles_name_check" CHECK ((name <> ''::text) AND (char_length(name) <= 100)),
   CONSTRAINT "issuance_selection_profiles_workload_subject_check" CHECK ((workload_subject IS NULL) OR (workload_subject <> ''::text))
 );
