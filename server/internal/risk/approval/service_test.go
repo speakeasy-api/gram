@@ -290,17 +290,20 @@ func TestArgumentsPreviewNotesOmittedArguments(t *testing.T) {
 	require.Contains(t, preview, "k00")
 	require.NotContains(t, preview, fmt.Sprintf("k%02d", maxPreviewKeys))
 	require.Equal(t, "arguments not shown: 3", preview[omittedArgumentsKey])
+}
 
-	// A kept argument named like the note keeps its value.
-	args = make(map[string]int, maxPreviewKeys+1)
+func TestArgumentsPreviewKeepsAnArgumentNamedLikeTheNote(t *testing.T) {
+	t.Parallel()
+	args := make(map[string]int, maxPreviewKeys+1)
 	for i := range maxPreviewKeys - 1 {
 		args[fmt.Sprintf("k%02d", i)] = i
 	}
 	args[omittedArgumentsKey] = 100
 	args[omittedArgumentsKey+"z"] = 101
-	raw, err = json.Marshal(args)
+	raw, err := json.Marshal(args)
 	require.NoError(t, err)
-	preview = nil
+
+	var preview map[string]any
 	require.NoError(t, json.Unmarshal(argumentsPreview(raw), &preview))
 	require.InDelta(t, 100, preview[omittedArgumentsKey], 0)
 	require.Equal(t, "arguments not shown: 1", preview[omittedArgumentsKey+"…"])
