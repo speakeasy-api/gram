@@ -119,6 +119,8 @@ type connectionMutationInput struct {
 
 type connectionMutationReceipt struct {
 	PublicationRequest string `json:"publication_request"`
+	// ClearedRootDomainIDs are reconciled after commit, so a replay can retry a failed reconcile.
+	ClearedRootDomainIDs []uuid.UUID `json:"cleared_root_domain_ids,omitempty"`
 }
 
 func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal Principal, input SetMCPAddressInput) (MCPConnectionMutationOutput, error) {
@@ -232,9 +234,8 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 		return MCPConnectionMutationOutput{}, err
 	}
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, Mode: string(mode)}
-	var clearedRootDomainIDs []uuid.UUID
 	result, receipt, err := s.execute(ctx, principal, project, operationSetMCPNetworkAccess, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
-		clearedRootDomainIDs = nil
+		var clearedRootDomainIDs []uuid.UUID
 		finalize, err := s.eligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: principal.OrganizationID, Mode: mode})
 		if err != nil {
 			return connectionMutationReceipt{}, connectionMutationUnavailable(err)
@@ -269,13 +270,13 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 		if err != nil {
 			return connectionMutationReceipt{}, fmt.Errorf("request MCP network access publication: %w", err)
 		}
-		return connectionMutationReceipt{PublicationRequest: string(outcome)}, nil
+		return connectionMutationReceipt{PublicationRequest: string(outcome), ClearedRootDomainIDs: clearedRootDomainIDs}, nil
 	})
 	if err != nil {
 		return MCPConnectionMutationOutput{}, err
 	}
-	if s.reconcile != nil && len(clearedRootDomainIDs) > 0 {
-		if err := s.reconcile(ctx, clearedRootDomainIDs); err != nil {
+	if s.reconcile != nil && len(result.ClearedRootDomainIDs) > 0 {
+		if err := s.reconcile(ctx, result.ClearedRootDomainIDs); err != nil {
 			return MCPConnectionMutationOutput{}, fmt.Errorf("reconcile hosted MCP custom domains: %w", err)
 		}
 	}

@@ -408,10 +408,10 @@ WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE
     OR s.tool_variations_group_id IS DISTINCT FROM t.tool_variations_group_id
     OR s.user_session_issuer_id IS DISTINCT FROM t.user_session_issuer_id
     OR s.visibility <> CASE WHEN NOT t.mcp_enabled THEN 'disabled' WHEN t.mcp_is_public THEN 'public' ELSE 'private' END
-    OR 1 <> (SELECT count(*) FROM mcp_endpoints e WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE)
+    OR 1 <> (SELECT count(*) FROM mcp_endpoints e WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE)
     OR NOT EXISTS (
       SELECT 1 FROM mcp_endpoints e
-      WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
+      WHERE e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
         AND e.slug = t.mcp_slug AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id));
 
 -- name: PostflightCountCanonicalWrappers :one

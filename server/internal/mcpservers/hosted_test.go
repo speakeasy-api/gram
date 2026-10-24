@@ -131,8 +131,9 @@ func TestUpdateMcpServerHostedWrapperWritesWrapper(t *testing.T) {
 
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("disabled"), nil))
 	require.NoError(t, err)
-	_, server = f.requireProjected(t, ctx)
+	toolset, server = f.requireProjected(t, ctx)
 	require.Equal(t, "disabled", server.Visibility)
+	require.True(t, toolset.McpIsPublic, "disabling keeps the public flag the legacy columns re-enable with")
 	require.False(t, server.ToolVariationsGroupID.Valid, "omitted tool variations group clears it")
 	require.False(t, f.resolve(t, ctx).Allowed)
 }

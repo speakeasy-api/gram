@@ -69,6 +69,7 @@ func TestApplyCreatesCanonicalWrapperAndIsIdempotent(t *testing.T) {
 	rerun := f.run(t, Options{Apply: true})
 	require.Len(t, rerun.Outcomes, 1)
 	require.Equal(t, 4, rerun.Outcomes[OutcomeAlreadyComplete])
+	require.Equal(t, 1, rowFor(t, rerun, onDomain).LiveEndpoints, "a rerun still reports the existing wrapper's endpoints")
 	require.Zero(t, rerun.Writes)
 	require.Equal(t, state, f.state(t))
 }

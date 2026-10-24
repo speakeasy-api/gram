@@ -600,6 +600,7 @@ func auditHostedIssuerMoves(ctx context.Context, tx pgx.Tx, auditLogger *audit.L
 		}
 		before := after
 		before.UserSessionIssuerID = conv.ToNullUUID(sourceID)
+		before.UpdatedAt = row.PreviousUpdatedAt
 		if err := hostedmcp.LogUpdate(ctx, tx, auditLogger, actor, authCtx.ActiveOrganizationID, before, after); err != nil {
 			return fmt.Errorf("audit hosted MCP issuer move: %w", err)
 		}

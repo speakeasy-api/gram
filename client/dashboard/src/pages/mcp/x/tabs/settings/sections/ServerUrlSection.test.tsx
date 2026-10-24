@@ -13,16 +13,20 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
+const domainsLoading = vi.hoisted(() => ({ current: false }));
 vi.mock("@/hooks/useToolsetUrl", () => ({
   useCustomDomains: () => ({
-    domains: [
-      {
-        id: "domain-1",
-        domain: "mcp.example.com",
-        verified: true,
-        activated: true,
-      },
-    ],
+    isLoading: domainsLoading.current,
+    domains: domainsLoading.current
+      ? []
+      : [
+          {
+            id: "domain-1",
+            domain: "mcp.example.com",
+            verified: true,
+            activated: true,
+          },
+        ],
   }),
 }));
 vi.mock("@/hooks/usePrivateMcpServerUrls", () => ({
@@ -47,6 +51,20 @@ vi.mock("@/routes", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
   useSlugs: () => ({ orgSlug: "acme" }),
+}));
+vi.mock("../../../useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => vi.fn(),
+}));
+vi.mock("@/hooks/useNetworkIngressRollout", () => ({
+  useNetworkIngressRollout: () => ({ canManageIngress: true }),
+}));
+const networkIngress = vi.hoisted(() => ({
+  current: undefined as
+    | { endpointNamespaceKind: string; customDomainId?: string }
+    | undefined,
+}));
+vi.mock("@gram/client/react-query/networkIngress.js", () => ({
+  useNetworkIngress: () => ({ data: { ingress: networkIngress.current } }),
 }));
 vi.mock("../../../useMcpEndpointSlugValidation", () => ({
   useMcpEndpointSlugValidation: () => null,
@@ -105,6 +123,8 @@ function renderSection(mcpServer: McpServer, endpoints: McpEndpoint[]) {
 afterEach(() => {
   cleanup();
   updateEndpoint.mockReset();
+  domainsLoading.current = false;
+  networkIngress.current = undefined;
 });
 
 describe("ServerUrlSection", () => {
@@ -196,6 +216,47 @@ describe("ServerUrlSection", () => {
         },
       },
     });
+  });
+
+  it("does not treat a still-loading domain list as a deleted domain", () => {
+    domainsLoading.current = true;
+    renderSection(server({ id: "toolset-1", toolsetId: "toolset-1" }), [
+      customEndpoint,
+    ]);
+
+    expect(
+      screen.queryByRole("button", { name: "Move to Speakeasy domain" }),
+    ).toBeNull();
+  });
+
+  it("only offers a private server moves within its ingress namespace", () => {
+    networkIngress.current = { endpointNamespaceKind: "platform" };
+    renderSection(
+      server({
+        id: "toolset-1",
+        toolsetId: "toolset-1",
+        networkAccessMode: "private_only",
+      }),
+      [platformEndpoint],
+    );
+    expect(screen.queryByRole("button", { name: /^Move to/ })).toBeNull();
+    cleanup();
+
+    networkIngress.current = {
+      endpointNamespaceKind: "custom_domain",
+      customDomainId: "domain-1",
+    };
+    renderSection(
+      server({
+        id: "toolset-1",
+        toolsetId: "toolset-1",
+        networkAccessMode: "private_only",
+      }),
+      [platformEndpoint],
+    );
+    expect(
+      screen.getByRole("button", { name: "Move to mcp.example.com" }),
+    ).toBeTruthy();
   });
 
   it("does not offer in-place moves to other servers", () => {

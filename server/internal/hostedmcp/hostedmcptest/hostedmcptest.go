@@ -33,8 +33,15 @@ func load(t *testing.T, ctx context.Context, db toolsetsrepo.DBTX, projectID, to
 	require.NoError(t, err)
 	server, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolsetID, ProjectID: projectID})
 	require.NoError(t, err)
-	endpoints, err := mcpendpointsrepo.New(db).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: toolsetID})
+	// The same live-domain endpoint set MirrorToToolset reads.
+	rows, err := mcpendpointsrepo.New(db).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+		OrganizationID: toolset.OrganizationID, ProjectID: projectID, McpServerID: toolsetID,
+	})
 	require.NoError(t, err)
+	endpoints := make([]mcpendpointsrepo.McpEndpoint, 0, len(rows))
+	for _, row := range rows {
+		endpoints = append(endpoints, row.McpEndpoint)
+	}
 	return hostedState{toolset: toolset, server: server, endpoints: endpoints}
 }
 

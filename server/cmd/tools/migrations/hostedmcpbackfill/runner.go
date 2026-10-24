@@ -269,6 +269,11 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		return row, fmt.Errorf("load canonical identity: %w", err)
 	case err == nil:
 		// An existing canonical wrapper owns its hosting state; the toolset columns never overwrite it.
+		existing, err := loadCanonical(ctx, tx, toolset)
+		if err != nil {
+			return row, err
+		}
+		row.LiveEndpoints = len(existing.endpoints)
 		row.Outcome = OutcomeAlreadyComplete
 		return row, nil
 	}
