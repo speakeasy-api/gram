@@ -519,7 +519,7 @@ func pushFunction(
 			return nil, fmt.Errorf("resolve project: %w", err)
 		}
 		if _, err := os.Stat(p.ZipFile); errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("%s does not exist: run 'speakeasy functions build' first or drop --no-build", p.ZipFile)
+			return nil, fmt.Errorf("%s does not exist: run 'speakeasy-ai functions build' first or drop --no-build", p.ZipFile)
 		}
 		resolved = p
 	} else {
@@ -578,7 +578,7 @@ func newFunctionsStageCommand() *cli.Command {
 	cmd.Usage = "Add a functions zip file to a deployment file without pushing it"
 	cmd.Description = `
 Add a functions zip file to the deployment file, the same way
-"speakeasy stage function" does. Run "speakeasy push" to deploy it.
+"speakeasy-ai stage function" does. Run "speakeasy-ai push" to deploy it.
 `[1:]
 	cmd.Flags = append([]cli.Flag{stageConfigFlag()}, cmd.Flags...)
 	cmd.Before = ensureStageConfig

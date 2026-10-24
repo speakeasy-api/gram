@@ -4,6 +4,9 @@ This Speakeasy Function shows how to connect to a Supabase database and run a qu
 
 ## Usage
 
+- Install the Speakeasy AI Control Plane CLI, which `pnpm build` and `pnpm push` run as
+  `speakeasy-ai`: `brew install speakeasy-api/tap/cli`, `npm i -g @speakeasy-api/cli` or
+  `curl -fsSL https://ai.speakeasy.com/cli.sh | bash`
 - Sign up to [Supabase](https://supabase.com/) and create a new project
 - Store your Supabase URL and Anon Key as environment variables:
   - `SUPABASE_URL`

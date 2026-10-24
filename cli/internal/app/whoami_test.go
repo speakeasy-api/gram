@@ -15,7 +15,7 @@ func TestDoWhoami_NoProfileIsNotAuthenticated(t *testing.T) {
 	_, err := DoWhoami(t.Context(), WhoamiOptions{Profile: nil, APIKey: "", APIURL: ""})
 
 	require.ErrorIs(t, err, ErrNotAuthenticated)
-	require.Contains(t, whoamiError(err).Error(), "speakeasy auth")
+	require.Contains(t, whoamiError(err).Error(), "speakeasy-ai auth")
 }
 
 func TestDoWhoami_NoAPIKeyIsNotAuthenticated(t *testing.T) {
@@ -24,7 +24,7 @@ func TestDoWhoami_NoAPIKeyIsNotAuthenticated(t *testing.T) {
 	_, err := DoWhoami(t.Context(), WhoamiOptions{Profile: &profile.Profile{Name: "default", Secret: "", DefaultProjectSlug: "", APIUrl: "", Org: nil, Projects: nil}, APIKey: "", APIURL: ""})
 
 	require.ErrorIs(t, err, ErrNotAuthenticated)
-	require.Contains(t, whoamiError(err).Error(), "speakeasy auth")
+	require.Contains(t, whoamiError(err).Error(), "speakeasy-ai auth")
 }
 
 func TestDoWhoami_InvalidAPIURLHasNoAuthHint(t *testing.T) {
@@ -34,7 +34,7 @@ func TestDoWhoami_InvalidAPIURLHasNoAuthHint(t *testing.T) {
 
 	require.Error(t, err)
 	require.NotErrorIs(t, err, ErrNotAuthenticated)
-	require.NotContains(t, whoamiError(err).Error(), "speakeasy auth")
+	require.NotContains(t, whoamiError(err).Error(), "speakeasy-ai auth")
 }
 
 func TestWhoamiError_PassesOtherErrorsThrough(t *testing.T) {
