@@ -93,6 +93,10 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 		credential: credential,
 		projectID:  projectID,
 		endpoint:   nil,
+		// A session for every server on the issuer targets no one server, so
+		// its choices are decided when they are recorded.
+		choosesUpstream:      false,
+		requestedAuthClients: nil,
 		session: workloadSessionIssuance(workloadSessionTarget{
 			userSessionIssuerID: shared.issuerID,
 			projectID:           shared.projectID,

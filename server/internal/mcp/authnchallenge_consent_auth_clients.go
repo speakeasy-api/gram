@@ -179,8 +179,11 @@ func (s *Service) consentAuthChoicesEnforced(ctx context.Context, organizationID
 // choose from, their state, and which one is selected: the person's pick when
 // it is still usable, otherwise the client they last approved for the server,
 // otherwise the first usable one in the fixed preselection order. Nothing is
-// selected that cannot be approved now.
-func (s *Service) consentAuthChoices(ctx context.Context, organizationID string, subject urn.SessionSubject, servers []consentAuthServer, cards []remoteSessionCard, picked map[uuid.UUID]uuid.UUID) (map[uuid.UUID]*consentServerAuth, error) {
+// selected that cannot be approved now. With deferPersonal, personal and
+// identity-provider clients the resolver accepts are left in
+// consentClientConnect for the caller to judge, as a browserless caller has
+// no consent cards; cards is then unused.
+func (s *Service) consentAuthChoices(ctx context.Context, organizationID string, subject urn.SessionSubject, servers []consentAuthServer, cards []remoteSessionCard, picked map[uuid.UUID]uuid.UUID, deferPersonal bool) (map[uuid.UUID]*consentServerAuth, error) {
 	if len(servers) == 0 {
 		return map[uuid.UUID]*consentServerAuth{}, nil
 	}
@@ -264,6 +267,8 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 			switch {
 			case res.outcome == authClientGap:
 				option.State = consentClientSetup
+			case (clientType == authz.AuthClientTypeRemoteSession || clientType == authz.AuthClientTypeEMA) && deferPersonal:
+				option.State = consentClientConnect
 			case clientType == authz.AuthClientTypeRemoteSession || clientType == authz.AuthClientTypeEMA:
 				option.State, option.ConnectClientID = personalReadiness(clientType, row.RemoteSessionClientID, cards)
 			}
@@ -366,7 +371,7 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 		return nil, err
 	}
 	serverID := endpoint.McpServerID.UUID
-	choices, err := s.consentAuthChoices(ctx, endpoint.OrganizationID, *challengeState.Subject, []consentAuthServer{{id: serverID, projectID: endpoint.ProjectID}}, cards, map[uuid.UUID]uuid.UUID{serverID: picked})
+	choices, err := s.consentAuthChoices(ctx, endpoint.OrganizationID, *challengeState.Subject, []consentAuthServer{{id: serverID, projectID: endpoint.ProjectID}}, cards, map[uuid.UUID]uuid.UUID{serverID: picked}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +450,7 @@ func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request
 			}
 		}
 	}
-	return s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, cards, picked)
+	return s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, cards, picked, false)
 }
 
 // resolveMemberAuthChoice is the resolution a gateway member's credential

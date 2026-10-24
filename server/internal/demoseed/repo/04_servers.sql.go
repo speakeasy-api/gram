@@ -723,6 +723,36 @@ func (q *Queries) ServersInsertGitHubUserGrants(ctx context.Context, arg Servers
 	return err
 }
 
+const serversInsertHeadlessClient = `-- name: ServersInsertHeadlessClient :exec
+INSERT INTO user_session_clients
+  (id, project_id, organization_id, user_session_issuer_id, client_id,
+   client_secret_hash, client_name, redirect_uris, client_id_issued_at,
+   token_endpoint_auth_method)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::uuid,
+   'gram_demo_client_nightly_report', NULL, 'Nightly report job',
+   ARRAY[]::text[], now() - interval '6 days', 'none')
+`
+
+type ServersInsertHeadlessClientParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+	IssuerID  uuid.UUID
+}
+
+// An app that signs in to Linear without a browser, so it cannot pick a
+// credential on the consent screen.
+func (q *Queries) ServersInsertHeadlessClient(ctx context.Context, arg ServersInsertHeadlessClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertHeadlessClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.IssuerID,
+	)
+	return err
+}
+
 const serversInsertHostedToolsetEndpoints = `-- name: ServersInsertHostedToolsetEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
 SELECT overlay(overlay(md5($1::text || t.slug) placing '5' from 13) placing '8' from 17)::uuid,
@@ -762,6 +792,70 @@ WHERE t.project_id = $1::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
 // toolsets.
 func (q *Queries) ServersInsertHostedToolsetMCPServers(ctx context.Context, projectID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, serversInsertHostedToolsetMCPServers, projectID)
+	return err
+}
+
+const serversInsertIssuanceProfile = `-- name: ServersInsertIssuanceProfile :exec
+INSERT INTO issuance_selection_profiles
+  (id, organization_id, project_id, user_session_issuer_id,
+   user_session_client_id, name)
+VALUES
+  ($1::uuid, $2::text, $3::uuid, $4::uuid,
+   $5::uuid, $6::text)
+`
+
+type ServersInsertIssuanceProfileParams struct {
+	ID        uuid.UUID
+	OrgID     string
+	ProjectID uuid.UUID
+	IssuerID  uuid.UUID
+	ClientID  uuid.UUID
+	Name      string
+}
+
+// The credential the headless app's sessions use on one server.
+func (q *Queries) ServersInsertIssuanceProfile(ctx context.Context, arg ServersInsertIssuanceProfileParams) error {
+	_, err := q.db.Exec(ctx, serversInsertIssuanceProfile,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.IssuerID,
+		arg.ClientID,
+		arg.Name,
+	)
+	return err
+}
+
+const serversInsertIssuanceProfileChoice = `-- name: ServersInsertIssuanceProfileChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   auth_client_id, auth_client_attachment_scope, source)
+SELECT $1::uuid, $2::uuid, $3::text, 'issuance_profile',
+       $4::uuid, $5::uuid, ac.remote_session_client_id,
+       NULL, FALSE, ac.id, ac.attachment_scope, 'issuance'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $6::uuid AND ac.organization_id = $3::text
+`
+
+type ServersInsertIssuanceProfileChoiceParams struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	OrgID        string
+	ProfileID    uuid.UUID
+	McpServerID  uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+func (q *Queries) ServersInsertIssuanceProfileChoice(ctx context.Context, arg ServersInsertIssuanceProfileChoiceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertIssuanceProfileChoice,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.ProfileID,
+		arg.McpServerID,
+		arg.AuthClientID,
+	)
 	return err
 }
 

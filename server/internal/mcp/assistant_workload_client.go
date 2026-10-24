@@ -210,7 +210,7 @@ func (i *registeredAssistantWorkloadIssuer) IssueAssistantWorkloadToken(ctx cont
 	issuance.Resource = r.Resource
 	grant := workloadGrantIssuance{
 		client: r.client, presented: presentedWorkload{issuerID: identity.IssuerID, subject: identity.Subject, issuerURL: ""},
-		credential: credential, projectID: &r.ProjectID, endpoint: r.endpoint, session: issuance,
+		credential: credential, projectID: &r.ProjectID, endpoint: r.endpoint, session: issuance, choosesUpstream: false, requestedAuthClients: nil,
 		beforeCommit: func(ctx context.Context, tx pgx.Tx, minted *mintedSession) error {
 			// Re-read the exact binding before persistence commits. Live use repeats
 			// this check and workload admission, so policy withdrawal cannot be cached.

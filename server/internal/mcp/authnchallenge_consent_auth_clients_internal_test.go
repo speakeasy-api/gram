@@ -68,7 +68,7 @@ func TestConsentAuthChoices(t *testing.T) {
 
 	choices := func(t *testing.T, f *authClientFixture, subject urn.SessionSubject, cards []remoteSessionCard, picked uuid.UUID) *consentServerAuth {
 		t.Helper()
-		got, err := f.service.consentAuthChoices(t.Context(), f.orgID, subject, []consentAuthServer{{id: f.serverID, projectID: f.projectID}}, cards, map[uuid.UUID]uuid.UUID{f.serverID: picked})
+		got, err := f.service.consentAuthChoices(t.Context(), f.orgID, subject, []consentAuthServer{{id: f.serverID, projectID: f.projectID}}, cards, map[uuid.UUID]uuid.UUID{f.serverID: picked}, false)
 		require.NoError(t, err)
 		return got[f.serverID]
 	}

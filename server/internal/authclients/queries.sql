@@ -338,3 +338,125 @@ INSERT INTO mcp_auth_client_headers (
   @value,
   @value_from_request_header
 );
+
+-- name: GetOrganizationUserSessionIssuer :one
+-- A sign-in in the organization: an organization issuer, or one of a live
+-- project's.
+SELECT usi.id,
+       usi.project_id
+FROM user_session_issuers AS usi
+LEFT JOIN projects AS p
+  ON p.id = usi.project_id
+WHERE usi.id = @id
+  AND usi.deleted IS FALSE
+  AND (
+    (usi.project_id IS NULL AND usi.organization_id = @organization_id::text)
+    OR (p.organization_id = @organization_id::text AND p.deleted IS FALSE)
+  );
+
+-- name: IsUserSessionClientOfIssuer :one
+SELECT EXISTS (
+  SELECT 1
+  FROM user_session_clients AS c
+  WHERE c.id = @id
+    AND c.user_session_issuer_id = @user_session_issuer_id
+    AND c.deleted IS FALSE
+)::boolean AS is_client;
+
+-- name: IsOrganizationWorkloadIssuer :one
+SELECT EXISTS (
+  SELECT 1
+  FROM workload_issuers AS w
+  WHERE w.id = @id
+    AND w.organization_id = @organization_id
+    AND w.deleted IS FALSE
+)::boolean AS is_issuer;
+
+-- name: LockIssuanceProfileForCaller :one
+SELECT p.*
+FROM issuance_selection_profiles AS p
+WHERE p.user_session_issuer_id = @user_session_issuer_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND (
+    (sqlc.narg('user_session_client_id')::uuid IS NOT NULL AND p.user_session_client_id = sqlc.narg('user_session_client_id')::uuid)
+    OR (sqlc.narg('workload_issuer_id')::uuid IS NOT NULL
+        AND p.workload_issuer_id = sqlc.narg('workload_issuer_id')::uuid
+        AND p.workload_subject = sqlc.narg('workload_subject')::text)
+  )
+FOR UPDATE OF p;
+
+-- name: CreateIssuanceProfile :one
+INSERT INTO issuance_selection_profiles (
+  organization_id,
+  project_id,
+  user_session_issuer_id,
+  user_session_client_id,
+  workload_issuer_id,
+  workload_subject,
+  name,
+  created_by_user_id
+) VALUES (
+  @organization_id,
+  sqlc.narg('project_id')::uuid,
+  @user_session_issuer_id,
+  sqlc.narg('user_session_client_id')::uuid,
+  sqlc.narg('workload_issuer_id')::uuid,
+  sqlc.narg('workload_subject')::text,
+  @name,
+  @created_by_user_id
+)
+RETURNING *;
+
+-- name: RenameIssuanceProfile :one
+UPDATE issuance_selection_profiles
+SET name = @name,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: LockIssuanceProfile :one
+SELECT p.*
+FROM issuance_selection_profiles AS p
+WHERE p.id = @id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+FOR UPDATE OF p;
+
+-- name: DeleteIssuanceProfile :exec
+UPDATE issuance_selection_profiles
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
+-- name: ListIssuanceProfiles :many
+SELECT p.*
+FROM issuance_selection_profiles AS p
+WHERE p.user_session_issuer_id = @user_session_issuer_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+ORDER BY p.name, p.id;
+
+-- name: ListIssuanceProfileChoices :many
+SELECT sel.credential_id AS profile_id,
+       sel.mcp_server_id,
+       sel.auth_client_id
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = 'issuance_profile'
+  AND sel.credential_id = ANY(@profile_ids::uuid[])
+  AND sel.organization_id = @organization_id
+  AND sel.deleted IS FALSE
+ORDER BY sel.credential_id, sel.mcp_server_id;
+
+-- name: ClearIssuanceProfileChoices :exec
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE credential_kind = 'issuance_profile'
+  AND credential_id = @profile_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;

@@ -84,6 +84,7 @@ var (
 	RemoteMcpServerV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_event_v1", "Emitted when changes to remote MCP servers are made")
 	RemoteMcpServerHeaderV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_header_event_v1", "Emitted when changes to remote MCP server headers are made")
 	AuthClientV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.auth_client_event_v1", "Emitted when changes to MCP auth clients or the servers offering them are made")
+	IssuanceSelectionProfileV1             = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.issuance_selection_profile_event_v1", "Emitted when the upstream credentials a headless caller's sessions use are configured")
 	RemoteSessionClientV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_client_event_v1", "Emitted when changes to remote session clients are made")
 	RemoteSessionV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_event_v1", "Emitted when changes to remote sessions are made")
 	RemoteSessionIssuerV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_issuer_event_v1", "Emitted when changes to remote session issuers are made")

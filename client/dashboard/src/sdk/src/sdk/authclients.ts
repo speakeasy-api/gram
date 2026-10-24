@@ -4,19 +4,24 @@
 
 import { authClientsAttachToMcpServer } from "../funcs/authClientsAttachToMcpServer.js";
 import { authClientsCreate } from "../funcs/authClientsCreate.js";
+import { authClientsDeleteIssuanceProfile } from "../funcs/authClientsDeleteIssuanceProfile.js";
 import { authClientsDetachFromMcpServer } from "../funcs/authClientsDetachFromMcpServer.js";
 import { authClientsGet } from "../funcs/authClientsGet.js";
 import { authClientsGetAudience } from "../funcs/authClientsGetAudience.js";
 import { authClientsGetMcpServerAuthentication } from "../funcs/authClientsGetMcpServerAuthentication.js";
 import { authClientsList } from "../funcs/authClientsList.js";
+import { authClientsListIssuanceProfiles } from "../funcs/authClientsListIssuanceProfiles.js";
 import { authClientsListMcpServerChoices } from "../funcs/authClientsListMcpServerChoices.js";
 import { authClientsSetAudience } from "../funcs/authClientsSetAudience.js";
 import { authClientsSetHeaders } from "../funcs/authClientsSetHeaders.js";
+import { authClientsSetIssuanceProfile } from "../funcs/authClientsSetIssuanceProfile.js";
 import { authClientsSetMcpServerUpstreamAuthRequirement } from "../funcs/authClientsSetMcpServerUpstreamAuthRequirement.js";
 import { authClientsUpdate } from "../funcs/authClientsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AuthClient } from "../models/components/authclient.js";
 import { AuthClientAudience } from "../models/components/authclientaudience.js";
+import { IssuanceProfile } from "../models/components/issuanceprofile.js";
+import { ListIssuanceProfilesResponseBody } from "../models/components/listissuanceprofilesresponsebody.js";
 import { ListMcpServerAuthClientChoicesResponseBody } from "../models/components/listmcpserverauthclientchoicesresponsebody.js";
 import { McpServerAuthentication } from "../models/components/mcpserverauthentication.js";
 import {
@@ -27,6 +32,10 @@ import {
   CreateAuthClientRequest,
   CreateAuthClientSecurity,
 } from "../models/operations/createauthclient.js";
+import {
+  DeleteIssuanceProfileRequest,
+  DeleteIssuanceProfileSecurity,
+} from "../models/operations/deleteissuanceprofile.js";
 import {
   DetachAuthClientFromMcpServerRequest,
   DetachAuthClientFromMcpServerSecurity,
@@ -49,6 +58,10 @@ import {
   ListAuthClientsSecurity,
 } from "../models/operations/listauthclients.js";
 import {
+  ListIssuanceProfilesRequest,
+  ListIssuanceProfilesSecurity,
+} from "../models/operations/listissuanceprofiles.js";
+import {
   ListMcpServerAuthClientChoicesRequest,
   ListMcpServerAuthClientChoicesSecurity,
 } from "../models/operations/listmcpserverauthclientchoices.js";
@@ -60,6 +73,10 @@ import {
   SetAuthClientHeadersRequest,
   SetAuthClientHeadersSecurity,
 } from "../models/operations/setauthclientheaders.js";
+import {
+  SetIssuanceProfileRequest,
+  SetIssuanceProfileSecurity,
+} from "../models/operations/setissuanceprofile.js";
 import {
   SetMcpServerUpstreamAuthRequirementRequest,
   SetMcpServerUpstreamAuthRequirementSecurity,
@@ -103,6 +120,25 @@ export class AuthClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AuthClient> {
     return unwrapAsync(authClientsCreate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deleteIssuanceProfile authClients
+   *
+   * @remarks
+   * Delete an issuance profile. Sessions already issued keep their choices; later sessions decide theirs without it. Requires org:admin.
+   */
+  async deleteIssuanceProfile(
+    request: DeleteIssuanceProfileRequest,
+    security?: DeleteIssuanceProfileSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(authClientsDeleteIssuanceProfile(
       this,
       request,
       security,
@@ -206,6 +242,25 @@ export class AuthClients extends ClientSDK {
   }
 
   /**
+   * listIssuanceProfiles authClients
+   *
+   * @remarks
+   * List the issuance profiles for headless callers signing in through a sign-in. Requires org:read.
+   */
+  async listIssuanceProfiles(
+    request: ListIssuanceProfilesRequest,
+    security?: ListIssuanceProfilesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListIssuanceProfilesResponseBody> {
+    return unwrapAsync(authClientsListIssuanceProfiles(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listMcpServerAuthClientChoices authClients
    *
    * @remarks
@@ -255,6 +310,25 @@ export class AuthClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AuthClient> {
     return unwrapAsync(authClientsSetHeaders(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setIssuanceProfile authClients
+   *
+   * @remarks
+   * Create or replace the issuance profile of one headless caller signing in through a sign-in: an OAuth client, or a workload issuer and subject. Each choice names a credential the server offers, or none for a server that needs no upstream authentication. A workload subject represents no person, so its profile names shared credentials only. Choices take effect on sessions issued afterwards; existing sessions keep theirs. Choosing a credential grants nothing: each issuance checks the caller may use it. Takes effect only where typed auth client resolution is enforced. Requires org:admin.
+   */
+  async setIssuanceProfile(
+    request: SetIssuanceProfileRequest,
+    security?: SetIssuanceProfileSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<IssuanceProfile> {
+    return unwrapAsync(authClientsSetIssuanceProfile(
       this,
       request,
       security,
