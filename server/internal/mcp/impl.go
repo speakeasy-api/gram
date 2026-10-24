@@ -1720,10 +1720,10 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 	schemes := describeToolSecurity(described.SecurityVariables)
 	if len(schemes) == 0 {
 		// No per-tool security annotations, but the toolset may still require
-		// OAuth at the server level (proxy or external). If so, require the
+		// external OAuth at the server level. If so, require the
 		// user to have provided a token — otherwise the 401 + WWW-Authenticate
 		// must be sent so MCP clients can initiate the OAuth flow.
-		oauthRequired := isPublic && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid)
+		oauthRequired := isPublic && toolset.ExternalOauthServerID.Valid
 		if oauthRequired {
 			for _, t := range payload.oauthTokenInputs {
 				if t.Token != "" {

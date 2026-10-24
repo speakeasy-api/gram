@@ -91946,7 +91946,6 @@ components:
                     description: Legacy authentication in force. Set only when the server has no user session issuer.
                     enum:
                         - external_oauth
-                        - oauth_proxy
                         - gram_private
                 server:
                     $ref: '#/components/schemas/AdminMcpServerHealthServer'

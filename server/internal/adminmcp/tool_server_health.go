@@ -30,7 +30,7 @@ var errServerHealthUnavailable = errors.New("MCP server health is unavailable")
 var (
 	healthSources             = []string{"toolset", "remote", "tunneled", "unproxied", "toolset_only"}
 	healthVisibilities        = []string{"disabled", "private", "public"}
-	healthLegacyAuth          = []string{"external_oauth", "oauth_proxy", "gram_private"}
+	healthLegacyAuth          = []string{"external_oauth", "gram_private"}
 	healthClassifications     = []string{"custom", "project_default_idp"}
 	healthAuthnChallengeModes = []string{"chain", "interactive"}
 	healthAttachmentScopes    = []string{"project", "organization", "global"}
