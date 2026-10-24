@@ -91,8 +91,21 @@ files or command output.
    external issuer must rotate it before renewal. Use a dedicated host directory
    containing no unrelated files, with owner-only directory permissions (`0700`)
    and assertion-file permissions (`0600`). The host-side issuer must retain these
-   permissions during rotation. Its directory is mounted read-only so atomic
-   token replacement remains visible. Each cold startup requires a new external
+   permissions during rotation. The directory and every replacement assertion
+   must be owned by the host identity that the configured container daemon maps
+   to guest UID `1000`; do not assume this is host UID `1000`. Rootless Docker
+   normally maps the invoking host owner to container root, which is not enough.
+   Configure projection ownership using the daemon's actual user-namespace
+   mapping, or use an engine whose supported mapping permits this ownership.
+   Do not run Kit as root, disable namespace isolation, or widen permissions.
+   Before gateway creation, a disposable probe in the pinned image verifies
+   access as `1000:1000` through the actual daemon. It has no network, uses a
+   read-only root filesystem and assertion mount, and only opens the file; it
+   does not copy or print assertion contents. A failed probe blocks creation
+   with ownership guidance. Keep this ownership invariant during rotation.
+   The image must provide `/bin/sh` for this check.
+   Its directory is mounted read-only so atomic token replacement remains
+   visible. Each cold startup requires a new external
    subject: previously admitted subjects cannot authorize a new generation.
    Local development uses the
    same workload exchange as GKE; there is no secret-authentication fallback.

@@ -70,7 +70,8 @@ its MCP and inference workload support.
 | `_kit/session/update_mcp` with `[]`                                   | No-op; retain all servers.                                                                            |
 | A submitted name colliding with a host- or plugin-owned server        | Reject the collision; host/plugin servers and built-ins remain protected.                             |
 
-The gateway's additive retention contract is distinct from the v0.2.19
+The gateway's additive retention contract was verified in `src/gateway.rs`
+for Kit v0.2.17 (commit `90a1805`); that provenance is distinct from the v0.2.19
 workload-authentication requirement. The Speakeasy adapter is deliberately stricter:
 an explicit list represents a desired set, and `[]` must not silently retain
 servers the caller intended to remove. Omission is the adapter's only retain form.

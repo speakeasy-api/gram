@@ -457,11 +457,14 @@ func TestKitWorkloadDBRetiredFenceAfterIdentityTombstone(t *testing.T) {
 			require.NoError(t, q.SetKitRuntimeMetadataFixture(t.Context(), assistantrepo.SetKitRuntimeMetadataFixtureParams{ProjectID: r.ProjectID, RuntimeID: r.ID, RuntimeVersion: 3, Metadata: r.BackendMetadataJSON}))
 			require.NoError(t, identityrepo.New(db).TombstoneAssistantBinding(t.Context(), identityrepo.TombstoneAssistantBindingParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID}))
 			require.NoError(t, q.DeleteAssistant(t.Context(), assistantrepo.DeleteAssistantParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID}))
+			admitted, err := workloadidentity.IsAdmitted(t.Context(), db, workloadidentity.AdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject})
+			require.NoError(t, err)
+			require.True(t, admitted, "retirement and identity tombstoning must not make the withdrawal regression vacuous")
 			// Exercise persisted metadata fallback, without an active identity resolver.
 			r.BackendMetadataJSON = nil
 			require.NoError(t, core.fenceKitRuntimeAlreadyLocked(t.Context(), r))
 			require.NoError(t, q.UpdateAssistantRuntimeMetadata(t.Context(), assistantrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: r.ProjectID, RuntimeID: r.ID, BackendMetadataJson: []byte("{}")}))
-			admitted, err := workloadidentity.IsAdmitted(t.Context(), db, workloadidentity.AdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject})
+			admitted, err = workloadidentity.IsAdmitted(t.Context(), db, workloadidentity.AdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject})
 			require.NoError(t, err)
 			require.False(t, admitted, "ordinary wake admission must remain denied after metadata clearing")
 			_, assigned, err := workloadidentity.ResolveAssignedAgent(t.Context(), db, workloadidentity.AssignmentParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject})
