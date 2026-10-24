@@ -5212,6 +5212,102 @@ type PublishOutboxDeadLetter struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type RegistryPromotionCandidate struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	RemoteMcpServerID uuid.NullUUID
+	// @access: confidential
+	SourceRevision string
+	// @access: confidential
+	Eligible bool
+	// @access: confidential
+	Reason string
+	// @access: confidential
+	ObservedSuccesses int64
+	// @access: confidential
+	ObservedFailures int64
+	// @access: confidential
+	ObservedDays int32
+	// @access: confidential
+	CheckedAt pgtype.Timestamptz
+	// @access: confidential
+	RegistryEntryID uuid.NullUUID
+	// Staff-reviewed public catalogue and documentation input.
+	// @access: opaque-restricted
+	PublicMetadata []byte
+	// @access: restricted
+	EndpointIdentity pgtype.Text
+	// @access: confidential
+	RequestDigest pgtype.Text
+	// @access: confidential
+	RetryKey pgtype.Text
+	// @access: confidential-pii
+	PromotedBy pgtype.Text
+	// @access: confidential
+	PromotedAt pgtype.Timestamptz
+	// @access: restricted
+	DocsUrl pgtype.Text
+	// @access: confidential
+	DocsQueuedAt pgtype.Timestamptz
+	// @access: confidential
+	DeliveryError pgtype.Text
+	// @access: confidential
+	DiscoveryLastAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DiscoveryNextAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DiscoveryFailures int32
+	// @access: confidential
+	DocsAttempts int32
+	// @access: confidential
+	DocsFailures int32
+	// @access: confidential
+	DocsLastAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DocsNextAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DocsNeedsAttention bool
+	// @access: confidential
+	DocsLeaseUntil pgtype.Timestamptz
+	// @access: confidential
+	DocsLeaseToken uuid.NullUUID
+	// @access: confidential
+	DocsRevision uuid.UUID
+	// @access: confidential
+	DocsRetryKey pgtype.Text
+	// @access: confidential
+	DocsRetryRevision pgtype.Text
+	// @access: confidential-pii
+	DocsRetryBy pgtype.Text
+	// Staff curation state, independent of observed eligibility.
+	// @access: confidential
+	CurationStatus string
+	// Compare-and-swap revision for staff curation changes.
+	// @access: confidential
+	CurationRevision uuid.UUID
+	// @access: confidential
+	CurationUpdatedAt pgtype.Timestamptz
+	// @access: confidential-pii
+	CurationUpdatedBy pgtype.Text
+	// @access: confidential
+	CurationRetryKey pgtype.Text
+	// @access: confidential
+	CurationRetryRevision pgtype.Text
+	// @access: confidential
+	CurationRetryAction pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type RemoteMcpServer struct {
 	// @access: confidential
 	ID uuid.UUID
