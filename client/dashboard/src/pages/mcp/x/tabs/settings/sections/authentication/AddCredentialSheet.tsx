@@ -85,7 +85,9 @@ function initialHeaders(choice: Choice): HeaderDraft[] {
       return [newHeaderDraft("stored", "Authorization")];
     case "pass_through":
       return [newHeaderDraft("forwarded", "Authorization")];
-    default:
+    case "existing":
+    case "service_account":
+    case "remote_session":
       return [];
   }
 }
