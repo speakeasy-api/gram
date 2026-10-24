@@ -72,8 +72,9 @@ const networkIngress = vi.hoisted(() => ({
 vi.mock("@gram/client/react-query/networkIngress.js", () => ({
   useNetworkIngress: () => ({ data: { ingress: networkIngress.current } }),
 }));
+const slugValidation = vi.hoisted(() => vi.fn((..._args: unknown[]) => null));
 vi.mock("../../../useMcpEndpointSlugValidation", () => ({
-  useMcpEndpointSlugValidation: () => null,
+  useMcpEndpointSlugValidation: slugValidation,
 }));
 const deleteEndpoint = vi.hoisted(() => vi.fn());
 vi.mock("@gram/client/react-query/deleteMcpEndpoint.js", () => ({
@@ -292,5 +293,32 @@ describe("ServerUrlSection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(screen.queryByText(/pending\.example\.com/)).toBeNull();
+  });
+
+  it("says no live domain is available to a public hosted server with only pending domains", () => {
+    domainsOverride.current = [
+      {
+        id: "domain-2",
+        domain: "pending.example.com",
+        verified: false,
+        activated: false,
+      },
+    ];
+    renderSection(hosted(), [platformEndpoint]);
+
+    expect(
+      screen.getByText("No verified, activated custom domain is available."),
+    ).toBeTruthy();
+  });
+
+  it("validates a hosted server's custom addresses against the hosted slug limit", () => {
+    renderSection(hosted(), [platformEndpoint, customEndpoint]);
+
+    expect(slugValidation).toHaveBeenCalledWith(
+      "example",
+      "domain-1",
+      "example",
+      true,
+    );
   });
 });

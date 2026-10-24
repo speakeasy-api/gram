@@ -386,7 +386,7 @@ func TestExportMcpMetadata_BySlugKeepsFrozenAliasIdentity(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, legacy.Slug, result.Slug, "the frozen alias keeps naming its toolset")
 
-	// A toolset created after the flip has no alias: its endpoint slug names it.
+	// A slug no toolset's mcp_slug holds names its endpoint's server.
 	_, err = mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID: other.ProjectID, McpServerID: uuid.NullUUID{UUID: otherServer.ID, Valid: true}, Slug: "endpoint-owner-second",
 	})

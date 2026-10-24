@@ -214,7 +214,11 @@ export function ServerUrlSection({
       customAddressEmptyState = (
         <SettingsInlineEmptyState
           title="No custom address"
-          description="Private network access keeps this server's addresses on its ingress namespace."
+          description={
+            hostedPrivate
+              ? "Private network access keeps this server's addresses on its ingress namespace."
+              : "No verified, activated custom domain is available."
+          }
         />
       );
     } else {
@@ -329,6 +333,7 @@ export function ServerUrlSection({
                     isLastEndpoint={isLast(endpoint)}
                     mustDisableFirst={mustDisableBeforeLastRemoval}
                     canManageDomainRoot={canManageDomains}
+                    hosted={!!hostedServerId}
                     onSaved={followHostedServer}
                   />
                 ))}
@@ -336,6 +341,7 @@ export function ServerUrlSection({
                   <NewCustomAddressRow
                     backend={backend}
                     domains={addableDomains}
+                    hosted={!!hostedServerId}
                     onCreated={followHostedServer}
                     onClose={() => setAddingCustom(false)}
                   />
@@ -438,6 +444,7 @@ function AddressRow({
   isLastEndpoint,
   mustDisableFirst = false,
   canManageDomainRoot = false,
+  hosted = false,
   onSaved,
 }: {
   backend: EndpointBackendRef;
@@ -446,6 +453,7 @@ function AddressRow({
   isLastEndpoint: boolean;
   mustDisableFirst?: boolean;
   canManageDomainRoot?: boolean;
+  hosted?: boolean;
   onSaved?: () => Promise<void>;
 }) {
   const { orgSlug } = useSlugs();
@@ -501,6 +509,7 @@ function AddressRow({
     fullSlug,
     endpoint.customDomainId ?? null,
     endpoint.slug,
+    hosted,
   );
 
   const dirty = fullSlug !== endpoint.slug;
@@ -848,11 +857,13 @@ function NewPlatformAddressRow({
 function NewCustomAddressRow({
   backend,
   domains,
+  hosted = false,
   onCreated,
   onClose,
 }: {
   backend: EndpointBackendRef;
   domains: CustomDomain[];
+  hosted?: boolean;
   onCreated?: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -861,7 +872,12 @@ function NewCustomAddressRow({
   const [slug, setSlug] = useState("");
   const queryClient = useQueryClient();
   const client = useSdkClient();
-  const slugError = useMcpEndpointSlugValidation(slug.trim(), domainId || null);
+  const slugError = useMcpEndpointSlugValidation(
+    slug.trim(),
+    domainId || null,
+    undefined,
+    hosted,
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);

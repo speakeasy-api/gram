@@ -140,9 +140,13 @@ export function useMcpServerCandidates({
         kind: "mcp_server",
         title: mcpServerDisplayName(server),
         detail: detailFor(server),
-        keywords: ["mcp", server.slug, server.toolset?.slug, server.id].filter(
-          (keyword): keyword is string => !!keyword,
-        ),
+        keywords: [
+          "mcp",
+          server.slug,
+          server.platformEndpointSlug,
+          server.toolset?.slug,
+          server.id,
+        ].filter((keyword): keyword is string => !!keyword),
         verbs: verbsFor(server, canWrite(server)),
         icon: "network",
         group: GROUP,

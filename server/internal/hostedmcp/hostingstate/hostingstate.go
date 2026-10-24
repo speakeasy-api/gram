@@ -1,5 +1,6 @@
 // Package hostingstate derives a toolset's MCP hosting state from the server row holding its id. The canonical
-// wrapper owns that state; the toolset's own hosting columns are a frozen alias that stands only without one.
+// wrapper owns that state; the toolset's own hosting columns stand only without one, apart from the legacy alias
+// address, which FollowAlias moves onto the endpoint holding it.
 package hostingstate
 
 import (

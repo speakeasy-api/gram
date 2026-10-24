@@ -103,7 +103,7 @@ WHERE project_id = @project_id
 ORDER BY created_at DESC;
 
 -- name: UpdateToolsetDetails :one
--- Leaves the MCP hosting columns alone: they are a frozen alias, and the canonical wrapper owns hosting state.
+-- Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state.
 UPDATE toolsets
 SET
     name = COALESCE(@name, name)
@@ -115,7 +115,8 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: UpdateToolset :one
--- Test fixture: also writes the frozen MCP hosting alias columns, which production code never writes.
+-- Test fixture: also writes the MCP hosting columns. Production code writes them only through MoveToolsetMCPAlias,
+-- the external MCP migration's DisableToolset and the issuer migration for toolsets without a wrapper.
 UPDATE toolsets
 SET
     name = COALESCE(@name, name)
@@ -294,7 +295,7 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE AND mcp_slug IS NOT NULL;
 
 -- name: UpdateToolsetUserSessionIssuer :one
--- Test fixture: production code never writes the frozen issuer alias column.
+-- Test fixture: production code writes the issuer column only through the issuer migration, for toolsets without a wrapper.
 UPDATE toolsets
 SET
     user_session_issuer_id = @user_session_issuer_id
