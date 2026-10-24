@@ -30,8 +30,7 @@ func ahpConfiguration(failOpen bool, uploadURL string) *ahp.Configuration {
 		event.SessionStart, event.SessionEnd, event.TurnEnd,
 		event.ModelResponseAfter, event.ToolAfter,
 	}
-	// Upload authentication uses the HTTP transport's configured headers. Never
-	// advertise credential values or invent a separate client auth binding.
+	// Uploads reuse the client's configured HTTP headers after discovery approval.
 	upload := content.NewUpload(uploadURL, json.Number(strconv.Itoa(ahpMaxUploadBytes)), ahpDefaultInterceptTimeout)
 	selection := content.NewSelection(ahp.ContentSelectionDefaultBody)
 	failurePolicy := subscription.FailClosed
