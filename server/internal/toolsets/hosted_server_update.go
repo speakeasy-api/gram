@@ -330,7 +330,7 @@ func applyHostedServerChange(ctx context.Context, tx pgx.Tx, auditLogger *audit.
 	switch {
 	case change.ClearUserSessionIssuer:
 		if canonical.UserSessionIssuerID.Valid {
-			if err := lifecycle.GuardEMABindings(ctx, tx, toolset.OrganizationID, toolset.ProjectID, canonical.UserSessionIssuerID.UUID); err != nil {
+			if err := lifecycle.GuardServerIssuerEMABindings(ctx, tx, toolset.OrganizationID, toolset.ProjectID, canonical.UserSessionIssuerID.UUID); err != nil {
 				return hostedServerWrite{}, err //nolint:wrapcheck // oops errors pass through.
 			}
 		}

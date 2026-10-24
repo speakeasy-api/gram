@@ -852,7 +852,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// was detached keeps none.
 	issuerID := ids.UserSessionIssuerID
 	if clearIssuer && existing.UserSessionIssuerID.Valid {
-		if err := lifecycle.GuardEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, existing.UserSessionIssuerID.UUID); err != nil {
+		if err := lifecycle.GuardServerIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, existing.UserSessionIssuerID.UUID); err != nil {
 			return nil, err //nolint:wrapcheck // oops errors pass through.
 		}
 	}
