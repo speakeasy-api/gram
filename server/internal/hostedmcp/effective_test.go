@@ -65,4 +65,8 @@ func TestWithServerStateDisabledReadsHowItReEnables(t *testing.T) {
 	withOAuth := public
 	withOAuth.ExternalOauthServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	require.True(t, WithServerState(withOAuth, disabled).McpIsPublic, "external OAuth re-enables public")
+
+	withProxy := public
+	withProxy.OauthProxyServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	require.True(t, WithServerState(withProxy, disabled).McpIsPublic, "OAuth proxy re-enables public")
 }
