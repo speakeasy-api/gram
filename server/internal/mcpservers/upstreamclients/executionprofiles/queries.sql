@@ -143,6 +143,7 @@ FROM upstream_client_selections AS sel
 WHERE sel.credential_kind = 'execution_profile_version'
   AND sel.credential_id = @from_version_id::uuid
   AND sel.organization_id = @organization_id
+  AND sel.project_id = @project_id
   AND sel.deleted IS FALSE;
 
 -- name: RecordProfileChoice :execrows
@@ -212,6 +213,68 @@ WHERE b.organization_id = @organization_id
   AND b.deleted IS FALSE
   AND b.trigger_id IS NOT NULL
 ORDER BY b.project_id, ab.assistant_id, b.trigger_id;
+
+-- name: ListAssistantProfileTargets :many
+-- The root triggers one assistant's turns run under: each trigger bound to
+-- its workload identity, and any trigger it already has a profile for.
+SELECT t.id AS trigger_id,
+       t.name AS trigger_name
+FROM trigger_instances AS t
+WHERE t.organization_id = @organization_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM trigger_workload_bindings AS b
+      JOIN assistant_agent_bindings AS ab
+        ON ab.id = b.assistant_binding_id
+       AND ab.deleted IS FALSE
+      WHERE b.trigger_id = t.id
+        AND b.deleted IS FALSE
+        AND ab.assistant_id = @assistant_id::uuid
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM execution_selection_profiles AS p
+      WHERE p.trigger_instance_id = t.id
+        AND p.assistant_id = @assistant_id::uuid
+        AND p.deleted IS FALSE
+    )
+  )
+ORDER BY t.name, t.id;
+
+-- name: ListVersionChoices :many
+-- A version's choices: an auth client, or no upstream authentication.
+SELECT sel.mcp_server_id,
+       sel.auth_client_id,
+       sel.no_auth,
+       sel.source
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = 'execution_profile_version'
+  AND sel.credential_id = @version_id
+  AND sel.organization_id = @organization_id
+  AND sel.deleted IS FALSE
+ORDER BY sel.mcp_server_id;
+
+-- name: CopyProfileVersionChoicesExcept :exec
+-- Carries every choice of one version into the next but one server's, which
+-- an administrator is replacing or clearing.
+INSERT INTO upstream_client_selections (
+    project_id, organization_id, credential_kind, credential_id, mcp_server_id,
+    remote_session_client_id, client_attachment_scope, no_auth,
+    auth_client_id, auth_client_attachment_scope, source
+)
+SELECT sel.project_id, sel.organization_id, sel.credential_kind, @to_version_id::uuid, sel.mcp_server_id,
+       sel.remote_session_client_id, sel.client_attachment_scope, sel.no_auth,
+       sel.auth_client_id, sel.auth_client_attachment_scope, sel.source
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = 'execution_profile_version'
+  AND sel.credential_id = @from_version_id::uuid
+  AND sel.organization_id = @organization_id
+  AND sel.project_id = @project_id
+  AND sel.mcp_server_id <> @except_mcp_server_id::uuid
+  AND sel.deleted IS FALSE;
 
 -- Test fixtures. Each seeds the one row its name says; nothing else uses them.
 
@@ -297,3 +360,21 @@ SELECT @organization_id, @project_id, @organization_id, @project_id,
        ab.id, @organization_id, @project_id, ab.id,
        1, generate_uuidv7(), 'workload', 1
 FROM ab;
+
+-- name: DisableAuthClientFixture :exec
+UPDATE mcp_auth_clients SET enabled = FALSE WHERE id = @id AND organization_id = @organization_id;
+
+-- name: SeedTriggerBindingFixture :exec
+-- Binds a trigger to an assistant's existing agent binding.
+INSERT INTO trigger_workload_bindings (
+  organization_id, project_id, project_ref_organization_id, project_ref_id,
+  original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
+  original_assistant_binding_id, assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id,
+  assistant_binding_generation, original_workload_issuer_id, subject, generation
+)
+SELECT @organization_id, @project_id, @organization_id, @project_id,
+       @trigger_id, @organization_id, @project_id, @trigger_id,
+       ab.id, @organization_id, @project_id, ab.id,
+       ab.generation, generate_uuidv7(), 'workload', 1
+FROM assistant_agent_bindings AS ab
+WHERE ab.assistant_id = @assistant_id AND ab.deleted IS FALSE;

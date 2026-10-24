@@ -238,6 +238,14 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				AuthClientID:   s.det("auth-client-github-token"),
 			})
 		}, 1, "demo seed postflight: expected the headless app's profile to choose the shared token on Linear, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDExecutionProfileChoices(ctx, repo.PostflightIDExecutionProfileChoicesParams{
+				ProjectID:      proj,
+				AssistantID:    s.det("assistant-bound"),
+				LinearServerID: s.det("mcpserver-linear"),
+				AuthClientID:   s.det("auth-client-github-token"),
+			})
+		}, 1, "demo seed postflight: expected the bound assistant's profile to choose the shared token on Linear, found %d"},
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.

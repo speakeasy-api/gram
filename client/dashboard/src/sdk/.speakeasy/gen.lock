@@ -172,7 +172,9 @@ trackedFiles:
   src/funcs/assistantsGetManaged.ts: {}
   src/funcs/assistantsInterruptTurn.ts: {}
   src/funcs/assistantsList.ts: {}
+  src/funcs/assistantsListExecutionProfiles.ts: {}
   src/funcs/assistantsSendMessage.ts: {}
+  src/funcs/assistantsSetExecutionProfileChoice.ts: {}
   src/funcs/assistantsUpdate.ts: {}
   src/funcs/assistantsUpgradeIdentity.ts: {}
   src/funcs/auditlogsList.ts: {}
@@ -979,6 +981,7 @@ trackedFiles:
   src/models/components/archiveskillrequestbody.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assistant.ts: {}
+  src/models/components/assistantexecutionprofile.ts: {}
   src/models/components/assistantmcpserverref.ts: {}
   src/models/components/assistantmemory.ts: {}
   src/models/components/assistantsessionsummary.ts: {}
@@ -1203,6 +1206,8 @@ trackedFiles:
   src/models/components/evolveform.ts: {}
   src/models/components/evolveresult.ts: {}
   src/models/components/exchangerequestbody.ts: {}
+  src/models/components/executionprofileoption.ts: {}
+  src/models/components/executionprofileserver.ts: {}
   src/models/components/explainedaccessdirectorysource.ts: {}
   src/models/components/explainedaccesslevel.ts: {}
   src/models/components/explainedaccessrule.ts: {}
@@ -1429,6 +1434,7 @@ trackedFiles:
   src/models/components/listenvironmentsresult.ts: {}
   src/models/components/listeventlogpayload.ts: {}
   src/models/components/listeventlogresult.ts: {}
+  src/models/components/listexecutionprofilesresult.ts: {}
   src/models/components/listexternalcredentialsresult.ts: {}
   src/models/components/listexternalkeysresult.ts: {}
   src/models/components/listfilteroptionspayload.ts: {}
@@ -1855,6 +1861,7 @@ trackedFiles:
   src/models/components/setdirectoryrolemappingsform.ts: {}
   src/models/components/setemaprovidersrequestbody.ts: {}
   src/models/components/setenabledrequestbody.ts: {}
+  src/models/components/setexecutionprofilechoicerequestbody.ts: {}
   src/models/components/setidentityproviderconnectionsetupmethodrequestbody.ts: {}
   src/models/components/setissuanceprofilerequestbody.ts: {}
   src/models/components/setkeyenabledrequestbody.ts: {}
@@ -2581,6 +2588,7 @@ trackedFiles:
   src/models/operations/listallowedorigins.ts: {}
   src/models/operations/listapikeys.ts: {}
   src/models/operations/listassets.ts: {}
+  src/models/operations/listassistantexecutionprofiles.ts: {}
   src/models/operations/listassistantmemories.ts: {}
   src/models/operations/listassistants.ts: {}
   src/models/operations/listattributekeys.ts: {}
@@ -2860,6 +2868,7 @@ trackedFiles:
   src/models/operations/sessioninfo.ts: {}
   src/models/operations/setaiintegrationscheduleenabled.ts: {}
   src/models/operations/setaitooldecision.ts: {}
+  src/models/operations/setassistantexecutionprofilechoice.ts: {}
   src/models/operations/setauthclientaudience.ts: {}
   src/models/operations/setauthclientheaders.ts: {}
   src/models/operations/setbillingemail.ts: {}
@@ -3073,6 +3082,8 @@ trackedFiles:
   src/react-query/approveAllSkillSuggestions.ts: {}
   src/react-query/approveSkillSuggestion.ts: {}
   src/react-query/archiveSkill.ts: {}
+  src/react-query/assistantExecutionProfiles.core.ts: {}
+  src/react-query/assistantExecutionProfiles.ts: {}
   src/react-query/assistantMemoriesDelete.ts: {}
   src/react-query/assistantSessionSummary.core.ts: {}
   src/react-query/assistantSessionSummary.ts: {}
@@ -3957,6 +3968,7 @@ trackedFiles:
   src/react-query/sessionInfo.ts: {}
   src/react-query/setAIIntegrationScheduleEnabled.ts: {}
   src/react-query/setAIToolDecision.ts: {}
+  src/react-query/setAssistantExecutionProfileChoice.ts: {}
   src/react-query/setAuthClientAudience.ts: {}
   src/react-query/setAuthClientHeaders.ts: {}
   src/react-query/setBillingEmail.ts: {}
@@ -9293,6 +9305,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listAssistantExecutionProfiles:
+    speakeasy-default-list-assistant-execution-profiles:
+      parameters:
+        query:
+          assistant_id: "7ac0789c-60b9-451d-b74e-e5324fd18e91"
+      responses:
+        "200":
+          application/json: {"profiles": [{"execution_context": "user_backed", "servers": [{"chosen": true, "mcp_server_id": "f3e824af-6009-4259-a903-642999b77617", "no_auth_allowed": true, "options": []}], "trigger_instance_id": "5cbe1a3d-44b6-4d8a-bb48-3b131fe67343", "trigger_name": "<value>", "version": 420338}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listAssistantMemories:
     speakeasy-default-list-assistant-memories:
       parameters:
@@ -12575,6 +12599,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setAssistantExecutionProfileChoice:
+    speakeasy-default-set-assistant-execution-profile-choice:
+      requestBody:
+        application/json: {"assistant_id": "34426c9b-7fbf-41a0-abb5-dc400354e475", "execution_context": "userless", "expected_version": 203959, "mcp_server_id": "5bf8cda6-a286-4fbc-a784-eeba9a289990", "trigger_instance_id": "b48483f7-405b-4980-ac02-9abc893f97c7"}
+      responses:
+        "200":
+          application/json: {"execution_context": "userless", "servers": [], "trigger_instance_id": "b364dde0-72fa-4470-a439-ad748a74bbbf", "trigger_name": "<value>", "version": 621886}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   setAuthClientAudience:
     speakeasy-default-set-auth-client-audience:
       requestBody:

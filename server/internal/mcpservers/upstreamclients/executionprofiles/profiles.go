@@ -55,6 +55,9 @@ const (
 
 	// SourceBackfill is a version decided by the offline backfill.
 	SourceBackfill = "backfill"
+
+	// SourceAdmin is a version an administrator changed a choice in.
+	SourceAdmin = "admin"
 )
 
 // Auth client types a decision distinguishes.
@@ -342,6 +345,7 @@ func bindTx(ctx context.Context, q *Queries, target Target, source string) (Bind
 			ToVersionID:    versionID,
 			FromVersionID:  profile.VersionID,
 			OrganizationID: target.OrganizationID,
+			ProjectID:      target.ProjectID,
 		}); err != nil {
 			return zero, fmt.Errorf("copy execution profile choices: %w", err)
 		}
