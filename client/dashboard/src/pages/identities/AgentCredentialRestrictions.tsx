@@ -10,22 +10,25 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
+import { collectPageItems } from "@/components/sessions/collectPageItems";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
-import { CLIENT_TYPES, clientTypeLabel } from "@/lib/auth-clients";
-import { invalidateAgentPolicy } from "@/pages/agents/agent-policy-grants";
+import {
+  CLIENT_TYPES,
+  clientTypeLabel,
+  useAllAuthClients,
+} from "@/lib/auth-clients";
+import {
+  AGENT_CREDENTIAL_BLOCK_SCOPE,
+  invalidateAgentPolicy,
+} from "@/pages/agents/agent-policy-grants";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicySelectorClientType } from "@gram/client/models/components/agentpolicyselector.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
-import {
-  invalidateAllAgentConnectionBlocks,
-  useAgentConnectionBlocks,
-} from "@gram/client/react-query/agentConnectionBlocks.js";
+import { invalidateAllAgentConnectionBlocks } from "@gram/client/react-query/agentConnectionBlocks.js";
 import { invalidateAllAgentsListPolicyGrants } from "@gram/client/react-query/agentsListPolicyGrants.js";
-import { useAuthClients } from "@gram/client/react-query/authClients.js";
 import { useBlockAgentOnConnectionMutation } from "@gram/client/react-query/blockAgentOnConnection.js";
-import { useRemoteSessions } from "@gram/client/react-query/remoteSessions.js";
 import { useRemoveAgentConnectionBlockMutation } from "@gram/client/react-query/removeAgentConnectionBlock.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
@@ -33,7 +36,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 
-const BLOCKED_AUTH = "mcp:blocked_auth";
 const TYPE_PREFIX = "type:";
 
 /**
@@ -72,15 +74,12 @@ function ManagerRestrictions({ agent }: { agent: ManagedAgent }): JSX.Element {
   });
   // Naming one credential needs the organization's list; without it, kinds
   // of credential can still be blocked.
-  const clients = useAuthClients({ limit: 100 }, undefined, {
-    enabled: hasScope("org:read"),
-    throwOnError: false,
-  });
+  const clients = useAllAuthClients({ enabled: hasScope("org:read") });
   const names = new Map(
-    (clients.data?.result.items ?? []).map((client) => [client.id, client]),
+    (clients.data ?? []).map((client) => [client.id, client]),
   );
   const restrictions = (grants.data ?? []).filter(
-    (grant) => grant.scope === BLOCKED_AUTH,
+    (grant) => grant.scope === AGENT_CREDENTIAL_BLOCK_SCOPE,
   );
   const refresh = () =>
     Promise.all([
@@ -93,7 +92,7 @@ function ManagerRestrictions({ agent }: { agent: ManagedAgent }): JSX.Element {
         createAgentPolicyGrantForm: {
           agentId: agent.id,
           effect: "allow",
-          scope: BLOCKED_AUTH,
+          scope: AGENT_CREDENTIAL_BLOCK_SCOPE,
           selector: value.startsWith(TYPE_PREFIX)
             ? {
                 resourceKind: "mcp_auth_client",
@@ -129,6 +128,7 @@ function ManagerRestrictions({ agent }: { agent: ManagedAgent }): JSX.Element {
 
   const describe = (grant: AgentPolicyGrant) => {
     const { selector } = grant;
+    if (selector.connectionOwner) return "A person's own connection";
     if (selector.resourceId === "*") {
       return selector.clientType
         ? `${clientTypeLabel(selector.clientType)} · every credential of this kind`
@@ -165,22 +165,31 @@ function ManagerRestrictions({ agent }: { agent: ManagedAgent }): JSX.Element {
               className="flex items-center justify-between gap-3 px-4 py-3"
             >
               <Text small>{describe(grant)}</Text>
-              <Button
-                variant="tertiary"
-                size="sm"
-                aria-label={`Remove restriction on ${describe(grant)}`}
-                disabled={remove.isPending}
-                onClick={() => remove.mutate(grant)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {grant.selector.connectionOwner ? (
+                <Text small muted>
+                  Only that person can lift it
+                </Text>
+              ) : (
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  aria-label={`Remove restriction on ${describe(grant)}`}
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate(grant)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </li>
           ))}
         </ul>
       )}
       <ConfirmDialog
         open={adding}
-        onOpenChange={setAdding}
+        onOpenChange={(open) => {
+          setAdding(open);
+          if (!open) setChoice("");
+        }}
         title={`Block ${agent.name} from a credential`}
         description="The agent can no longer use it on any server, whatever its keys allow."
         confirmLabel="Block"
@@ -223,19 +232,41 @@ function OwnConnectionBlocks({
 }: {
   agent: ManagedAgent;
 }): JSX.Element | null {
+  const organization = useOrganization();
   const { user } = useSession();
+  const sdk = useSdkClient();
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [choice, setChoice] = useState("");
-  const blocks = useAgentConnectionBlocks({ limit: 100 });
-  const sessions = useRemoteSessions(
-    { subjectUrn: `user:${user.id}`, limit: 100 },
-    undefined,
-    { throwOnError: false, retry: false },
-  );
+  const blocks = useQuery({
+    queryKey: ["@gram/client", "agents", "listConnectionBlocks", { all: true }],
+    queryFn: ({ signal }) =>
+      collectPageItems(
+        sdk.agents.listConnectionBlocks({ limit: 100 }, undefined, { signal }),
+      ),
+    throwOnError: false,
+  });
+  const sessions = useQuery({
+    queryKey: [
+      "@gram/client",
+      "remoteSessions",
+      "list",
+      { subjectUrn: `user:${user.id}`, all: true },
+    ],
+    queryFn: ({ signal }) =>
+      collectPageItems(
+        sdk.remoteSessions.list(
+          { subjectUrn: `user:${user.id}`, limit: 100 },
+          undefined,
+          { signal },
+        ),
+      ),
+    throwOnError: false,
+    retry: false,
+  });
   // One connection per upstream OAuth client; a person reconnecting keeps it.
   const connections = new Map<string, string>();
-  for (const session of sessions.data?.result.items ?? []) {
+  for (const session of sessions.data ?? []) {
     if (connections.has(session.remoteSessionClientId)) continue;
     connections.set(
       session.remoteSessionClientId,
@@ -244,14 +275,20 @@ function OwnConnectionBlocks({
         "A connected account",
     );
   }
-  const mine = (blocks.data?.result.items ?? []).filter(
+  const mine = (blocks.data ?? []).filter(
     (block) => block.agentId === agent.id,
   );
   const blockable = [...connections].filter(
     ([clientId]) =>
       !mine.some((block) => block.remoteSessionClientId === clientId),
   );
-  const refresh = () => invalidateAllAgentConnectionBlocks(queryClient);
+  // A connection block is also a grant in the agent's policy.
+  const refresh = () =>
+    Promise.all([
+      invalidateAllAgentConnectionBlocks(queryClient),
+      invalidateAgentPolicy(queryClient, organization.id, user.id, agent.id),
+      invalidateAllAgentsListPolicyGrants(queryClient),
+    ]);
   const add = useBlockAgentOnConnectionMutation({
     onSuccess: () => {
       setAdding(false);
@@ -329,7 +366,10 @@ function OwnConnectionBlocks({
       )}
       <ConfirmDialog
         open={adding}
-        onOpenChange={setAdding}
+        onOpenChange={(open) => {
+          setAdding(open);
+          if (!open) setChoice("");
+        }}
         title={`Block ${agent.name} on one of your connections`}
         description="When this agent acts for you, it can no longer use the connection you choose."
         confirmLabel="Block"
