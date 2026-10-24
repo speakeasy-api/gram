@@ -32,6 +32,11 @@ const (
 
 	// AuthClientBackfillWrittenKey counts records a typed auth client backfill wrote.
 	AuthClientBackfillWrittenKey = attribute.Key("gram.auth_client_backfill.written")
+
+	// ExecutionProfileVersionKey is the execution-selection profile version an assistant turn binds.
+	ExecutionProfileVersionKey = attribute.Key("gram.execution_profile.version")
+	// ExecutionProfileGapsKey counts MCP servers an execution-selection profile version has no choice for.
+	ExecutionProfileGapsKey = attribute.Key("gram.execution_profile.gaps")
 	// AuthClientBackfillPendingGrantsKey counts default auth permissions not yet granted.
 	AuthClientBackfillPendingGrantsKey = attribute.Key("gram.auth_client_backfill.pending_grants")
 	// AuthClientBackfillAPIKeysKey lists the API keys a run added policy grants to.
@@ -1143,6 +1148,16 @@ func SlogAuthClientBackfillKind(v string) slog.Attr {
 // SlogAuthClientBackfillDecided counts configured identities and server links decided.
 func SlogAuthClientBackfillDecided(v int) slog.Attr {
 	return slog.Int(string(AuthClientBackfillDecidedKey), v)
+}
+
+// SlogExecutionProfileVersion is the profile version a turn binds.
+func SlogExecutionProfileVersion(v int64) slog.Attr {
+	return slog.Int64(string(ExecutionProfileVersionKey), v)
+}
+
+// SlogExecutionProfileGaps counts servers a profile version has no choice for.
+func SlogExecutionProfileGaps(v int) slog.Attr {
+	return slog.Int(string(ExecutionProfileGapsKey), v)
 }
 
 // SlogAuthClientBackfillWritten counts records written.

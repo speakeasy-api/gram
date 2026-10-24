@@ -179,6 +179,34 @@ var AdminMcpServerToolCalls = Type("AdminMcpServerToolCalls", func() {
 	Attribute("daily", ArrayOf(AdminMcpServerToolCallBucket), "Tool calls per bucket, oldest first.")
 })
 
+var AdminMcpServerHealthAuthClient = Type("AdminMcpServerHealthAuthClient", func() {
+	Description("One auth client the server offers for reaching its upstream. Never carries its name or header values.")
+	Required("id", "client_type", "source", "enabled", "server_count", "header_count")
+
+	Attribute("id", String, "Auth client id.", func() { Format(FormatUUID) })
+	Attribute("client_type", String, "How the client authenticates upstream.", func() {
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema")
+	})
+	Attribute("source", String, "backfill when created from existing configuration, admin when an administrator created it.", func() {
+		Enum("backfill", "admin")
+	})
+	Attribute("enabled", Boolean, "Whether the client can be used.")
+	Attribute("remote_session_client_id", String, "The OAuth registration behind an OAuth-backed client.", func() { Format(FormatUUID) })
+	Attribute("server_count", Int, "Servers offering the client, this one included.")
+	Attribute("header_count", Int, "Headers the client sends upstream.")
+})
+
+var AdminMcpServerHealthUpstreamAuth = Type("AdminMcpServerHealthUpstreamAuth", func() {
+	Description("Whether the server's upstream needs authentication and the auth clients it offers.")
+	Required("status", "auth_clients")
+
+	Attribute("status", String, "configured, setup_incomplete (required with no enabled client), no_auth_required or undecided.", func() {
+		Enum("configured", "setup_incomplete", "no_auth_required", "undecided")
+	})
+	Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication. Omitted while undecided.")
+	Attribute("auth_clients", ArrayOf(AdminMcpServerHealthAuthClient))
+})
+
 var AdminMcpServerHealth = Type("AdminMcpServerHealth", func() {
 	Description("Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.")
 	Required("server", "correlation")
@@ -189,6 +217,7 @@ var AdminMcpServerHealth = Type("AdminMcpServerHealth", func() {
 		Enum("external_oauth", "oauth_proxy", "gram_private")
 	})
 	Attribute("user_session_issuer", AdminMcpServerHealthUserSessionIssuer)
+	Attribute("upstream_auth", AdminMcpServerHealthUpstreamAuth, "How the server reaches its upstream. Omitted for toolset-only servers.")
 })
 
 // MCP parity: both methods are exposed through Staff Admin MCP (S-1121), the

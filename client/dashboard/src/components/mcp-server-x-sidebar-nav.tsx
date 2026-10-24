@@ -56,6 +56,7 @@ import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { isNotNotFound } from "@/lib/query-errors";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
 import { McpServerNetworkAccessMode } from "@gram/client/models/components/mcpserver.js";
@@ -318,7 +319,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const { data: mcpServer } = useGetMcpServer(
     getMcpServerArgs(idOrSlug),
     undefined,
-    { enabled: idOrSlug !== "" },
+    { enabled: idOrSlug !== "", throwOnError: isNotNotFound },
   );
   const mcpServerId = mcpServer?.id ?? "";
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =

@@ -286,14 +286,8 @@ func (s *Service) authorizedToolsetConsentInventory(ctx context.Context, endpoin
 	if terr != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, terr, "load toolset for consent authorization").LogError(ctx, logger)
 	}
-	// Wrapper-governed endpoints (toolset-backed mcp_servers) take
-	// publicness from wrapper visibility alone (AIS-633); the legacy
-	// toolset-resolved endpoint keeps consulting the toolset flag so a
-	// mid-flow flip still closes the inventory.
+	// Publicness comes from the resolved endpoint: wrapper visibility, re-read on every resume.
 	private := !endpoint.IsPublic
-	if !endpoint.McpServerID.Valid {
-		private = !endpoint.IsPublic || !toolset.McpIsPublic
-	}
 	if private && challengeState.Subject.Kind == urn.SessionSubjectKindAnonymous {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 	}
