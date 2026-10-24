@@ -60,7 +60,7 @@ func TestArgumentsSectionStaysInsideSlackLimits(t *testing.T) {
 func TestArgumentsSectionShowsTextSlackWouldFormatAsCode(t *testing.T) {
 	t.Parallel()
 
-	section, ok := argumentsSection([]byte(`{"bold":"*Approved* by security","emoji":"all good :tada:","lines":"one\ntwo","nested":"{\"a\":1}","tick":"a` + "`" + `b"}`))
+	section, ok := argumentsSection([]byte(`{"bold":"*Approved* by security","check":":white_check_mark: Approved","emoji":"all good :tada:","lines":"one\ntwo","nested":"{\"a\":1}","snake":"dry_run","tick":"a` + "`" + `b"}`))
 	require.True(t, ok)
 	fields := make([]string, 0, len(section.Fields))
 	for _, field := range section.Fields {
@@ -70,9 +70,11 @@ func TestArgumentsSectionShowsTextSlackWouldFormatAsCode(t *testing.T) {
 	// preview stores for a nested value reads as code.
 	require.Equal(t, []string{
 		"*bold*\n`\"*Approved* by security\"`",
+		"*check*\n`\":white_check_mark: Approved\"`",
 		"*emoji*\n`\"all good :tada:\"`",
 		"*lines*\n`\"one\\ntwo\"`",
 		"*nested*\n`{\"a\":1}`",
+		"*snake*\ndry_run",
 		"*tick*\n`\"a'b\"`",
 	}, fields)
 }
@@ -132,4 +134,35 @@ func TestArgumentNamesCannotAddCardLines(t *testing.T) {
 	require.Equal(t, "`\"_foo_\"`\n`1`", section.Fields[0].Text)
 	require.Equal(t, "*dry_run*\n`true`", section.Fields[1].Text)
 	require.Equal(t, "`\"x*\\n*Requester*\\nCEO\"`\ny", section.Fields[2].Text)
+}
+
+func TestArgumentsSectionCountsArgumentsThePreviewLeftOut(t *testing.T) {
+	t.Parallel()
+
+	section, ok := argumentsSection([]byte(`{"a":1,"b":2,"…":"5 more arguments not shown"}`))
+	require.True(t, ok)
+	require.Len(t, section.Fields, 3)
+	require.Equal(t, "*More*\n5 more arguments, in Speakeasy", section.Fields[2].Text)
+
+	var pairs []string
+	for i := range 12 {
+		pairs = append(pairs, fmt.Sprintf(`"arg%02d":%d`, i, i))
+	}
+	section, ok = argumentsSection([]byte("{" + strings.Join(pairs, ",") + `,"…":"3 more arguments not shown"}`))
+	require.True(t, ok)
+	require.Len(t, section.Fields, maxArgumentFields)
+	require.Equal(t, "*More*\n6 more arguments, in Speakeasy", section.Fields[maxArgumentFields-1].Text)
+}
+
+func TestNamesSlackWouldFormatReadAsCode(t *testing.T) {
+	t.Parallel()
+
+	in := cardInput{
+		Approval:      repo.RiskPolicyApproval{ToolName: "send_message"},
+		Status:        approval.StatusPending,
+		PolicyName:    "Policy",
+		RequesterName: ":white_check_mark: *Pre-approved*\nby security",
+	}
+	require.Equal(t, "*Requester*\n`:white_check_mark: *Pre-approved* by security`", detailFields(in).Fields[0].Text)
+	require.Equal(t, "*Policy*\nPolicy", detailFields(in).Fields[1].Text)
 }

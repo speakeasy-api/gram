@@ -43,11 +43,15 @@ const (
 
 	// maxNameChars bounds a tool, person, server or policy name on a card.
 	maxNameChars = 200
+
+	// previewOmittedKey is the entry the arguments preview adds when it
+	// leaves top-level arguments out. Its value starts with how many.
+	previewOmittedKey = "…"
 )
 
 // emojiCode matches a Slack emoji code such as :tada:, which renders as an
 // emoji in mrkdwn.
-var emojiCode = regexp.MustCompile(`:[a-z0-9+'-]+:`)
+var emojiCode = regexp.MustCompile(`:[a-z0-9_+'-]+:`)
 
 // italicMarker matches an underscore at a word edge, where Slack reads it as
 // the start or end of italics. Underscores inside a word, as in dry_run, stay
@@ -181,8 +185,9 @@ type cardInput struct {
 
 // pendingCard asks an approver to decide.
 func pendingCard(in cardInput) card {
+	tool := code(in.Approval.ToolName, maxNameChars)
 	blocks := []block{
-		mrkdwnSection(":raised_hand: *Approval needed* to call " + code(in.Approval.ToolName, maxNameChars)),
+		mrkdwnSection(":raised_hand: *Approval needed* to call " + tool),
 		detailFields(in),
 	}
 	blocks = append(blocks, detailSections(in)...)
@@ -204,7 +209,7 @@ func pendingCard(in cardInput) card {
 		block{Type: "actions", BlockID: "risk_approval", Text: nil, Fields: nil, Elements: buttons},
 		contextBlock("Approve once lets this exact call run one time. The reason above was written by the agent."),
 	)
-	return card{Text: "Approval needed to call " + code(in.Approval.ToolName, maxNameChars), Blocks: blocks}
+	return card{Text: "Approval needed to call " + tool, Blocks: blocks}
 }
 
 // decidedCard replaces a pending card once the request is decided or lapses.
@@ -228,7 +233,7 @@ func decidedHeadline(in cardInput) (string, string) {
 	tool := code(in.Approval.ToolName, maxNameChars)
 	decider := ""
 	if in.DeciderName != "" {
-		decider = " by " + fit(in.DeciderName, maxNameChars)
+		decider = " by " + label(in.DeciderName)
 	}
 	switch in.Status {
 	case approval.StatusApproved:
@@ -242,17 +247,18 @@ func decidedHeadline(in cardInput) (string, string) {
 	case approval.StatusBlocked, approval.StatusPending:
 		return fmt.Sprintf(":raised_hand: *Waiting for a decision* on the call to %s", tool), fmt.Sprintf("Waiting for a decision on the call to %s", tool)
 	}
-	return fmt.Sprintf("The call to %s is %s", tool, fit(string(in.Status), maxNameChars)), fmt.Sprintf("The call to %s is %s", tool, fit(string(in.Status), maxNameChars))
+	other := fmt.Sprintf("The call to %s is %s", tool, fit(string(in.Status), maxNameChars))
+	return other, other
 }
 
 func detailFields(in cardInput) block {
 	fields := []textObject{
-		{Type: "mrkdwn", Text: "*Requester*\n" + fit(in.RequesterName, maxNameChars)},
+		{Type: "mrkdwn", Text: "*Requester*\n" + label(in.RequesterName)},
 	}
 	if in.ServerName != "" {
-		fields = append(fields, textObject{Type: "mrkdwn", Text: "*Server*\n" + fit(in.ServerName, maxNameChars)})
+		fields = append(fields, textObject{Type: "mrkdwn", Text: "*Server*\n" + label(in.ServerName)})
 	}
-	fields = append(fields, textObject{Type: "mrkdwn", Text: "*Policy*\n" + fit(in.PolicyName, maxNameChars)})
+	fields = append(fields, textObject{Type: "mrkdwn", Text: "*Policy*\n" + label(in.PolicyName)})
 	if in.Approval.ExpiresAt.Valid {
 		fields = append(fields, textObject{Type: "mrkdwn", Text: "*Expires*\n" + slackDate(in.Approval.ExpiresAt.Time)})
 	}
@@ -291,17 +297,27 @@ func argumentsSection(raw []byte) (block, bool) {
 	if !ok {
 		arguments = map[string]any{"value": preview}
 	}
-	if len(arguments) == 0 {
+	hidden := 0
+	if note, ok := arguments[previewOmittedKey].(string); ok {
+		if _, err := fmt.Sscanf(note, "%d", &hidden); err == nil {
+			delete(arguments, previewOmittedKey)
+		}
+	}
+	if len(arguments) == 0 && hidden == 0 {
 		return none, false
 	}
 	names := slices.Sorted(maps.Keys(arguments))
-	fields := make([]textObject, 0, min(len(names), maxArgumentFields))
-	for i, name := range names {
-		if i == maxArgumentFields-1 && len(names) > maxArgumentFields {
-			fields = append(fields, textObject{Type: "mrkdwn", Text: fmt.Sprintf("*More*\n%d more arguments, in Speakeasy", len(names)-i)})
-			break
-		}
+	// The last field says how many arguments are not shown, when any are.
+	if len(names) > maxArgumentFields || (len(names) == maxArgumentFields && hidden > 0) {
+		hidden += len(names) - (maxArgumentFields - 1)
+		names = names[:maxArgumentFields-1]
+	}
+	fields := make([]textObject, 0, len(names)+1)
+	for _, name := range names {
 		fields = append(fields, textObject{Type: "mrkdwn", Text: argumentName(name) + "\n" + argumentValue(arguments[name])})
+	}
+	if hidden > 0 {
+		fields = append(fields, textObject{Type: "mrkdwn", Text: fmt.Sprintf("*More*\n%d more arguments, in Speakeasy", hidden)})
 	}
 	return block{Type: "section", BlockID: "", Text: &textObject{Type: "mrkdwn", Text: "*Arguments*"}, Fields: fields, Elements: nil}, true
 }
@@ -316,7 +332,7 @@ func argumentValue(value any) string {
 	if isText && nestedArgument(text) {
 		return code(text, maxArgumentValueChars)
 	}
-	if isText && plainArgument(text) {
+	if isText && showsAsWritten(text) {
 		return fit(text, maxArgumentValueChars)
 	}
 	encoded, ok := compactJSON(value)
@@ -330,7 +346,7 @@ func argumentValue(value any) string {
 // Slack would format reads as code instead, so it cannot end the title early
 // or add lines that pass for the card's own.
 func argumentName(name string) string {
-	if strings.TrimSpace(name) != "" && !strings.ContainsAny(name, "*~`\r\n") && !emojiCode.MatchString(name) && !italicMarker.MatchString(name) {
+	if showsAsWritten(name) {
 		return "*" + fit(name, maxArgumentNameChars) + "*"
 	}
 	encoded, ok := compactJSON(name)
@@ -338,6 +354,17 @@ func argumentName(name string) string {
 		return "*Argument*"
 	}
 	return code(encoded, maxArgumentNameChars)
+}
+
+// label renders a person, server or policy name on one line: as text when
+// Slack shows it as written, as code otherwise, so a name cannot format
+// itself into the card's own wording.
+func label(text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if text == "" || showsAsWritten(text) {
+		return fit(text, maxNameChars)
+	}
+	return code(text, maxNameChars)
 }
 
 // compactJSON encodes value on one line, leaving <, > and & for fit to
@@ -352,10 +379,10 @@ func compactJSON(value any) (string, bool) {
 	return strings.TrimSpace(buf.String()), true
 }
 
-// plainArgument reports text that Slack shows as written: not blank, on one
+// showsAsWritten reports text that Slack shows as written: not blank, on one
 // line, with no formatting markers or emoji codes.
-func plainArgument(text string) bool {
-	return strings.TrimSpace(text) != "" && !strings.ContainsAny(text, "*_~`\r\n") && !emojiCode.MatchString(text)
+func showsAsWritten(text string) bool {
+	return strings.TrimSpace(text) != "" && !strings.ContainsAny(text, "*~`\r\n") && !emojiCode.MatchString(text) && !italicMarker.MatchString(text)
 }
 
 // nestedArgument reports the JSON text the preview stores for a nested value.
