@@ -55,6 +55,9 @@ const (
 
 	// SourceBackfill is a version decided by the offline backfill.
 	SourceBackfill = "backfill"
+
+	// SourceAdmin is a version an administrator changed a choice in.
+	SourceAdmin = "admin"
 )
 
 // Auth client types a decision distinguishes.

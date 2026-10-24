@@ -54,6 +54,7 @@ export const AUDIT_ACTIONS = [
   "auth-client:update-headers",
   "assistant:identity_provision",
   "assistant:tool_call",
+  "assistant:update_execution_profile",
   "aws_iam_credential:create",
   "aws_iam_credential:delete",
   "aws_iam_credential:update",
@@ -464,6 +465,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "gave a dedicated agent to assistant";
     case "assistant:tool_call":
       return "ran assistant tool";
+    case "assistant:update_execution_profile":
+      return "changed the upstream credentials of assistant";
 
     case "aws_iam_credential:create":
       return "added AWS IAM credential";

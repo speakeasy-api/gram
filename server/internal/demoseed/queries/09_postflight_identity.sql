@@ -272,6 +272,23 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
   AND u.mcp_server_id = @linear_server_id::uuid
   AND u.auth_client_id = @auth_client_id::uuid;
 
+-- The identity-bound assistant's person-backed turns use the shared token on
+-- Linear, by an administrator's choice.
+-- name: PostflightIDExecutionProfileChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+JOIN execution_selection_profile_versions v
+  ON v.id = u.credential_id
+JOIN execution_selection_profiles p
+  ON p.id = v.profile_id AND p.deleted IS FALSE
+WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'execution_profile_version'
+  AND u.source = 'admin'
+  AND p.assistant_id = @assistant_id::uuid
+  AND p.execution_context = 'user_backed'
+  AND u.mcp_server_id = @linear_server_id::uuid
+  AND u.auth_client_id = @auth_client_id::uuid;
+
 -- name: PostflightIDServiceAccountHeaders :one
 SELECT count(*)
 FROM remote_mcp_server_headers header

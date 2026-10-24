@@ -54,6 +54,19 @@ type Service interface {
 	// Get the project's built-in Project Assistant, provisioning it on first
 	// access. Idempotent — safe to call on every sidebar open.
 	EnsureManagedAssistant(context.Context, *EnsureManagedAssistantPayload) (res *types.Assistant, err error)
+	// List the upstream credentials an assistant's turns use on each MCP server it
+	// reaches, per root trigger and per whether the turn acts for a user. Each
+	// server shows its current choice, or why it has none, and the credentials
+	// that can be chosen. Requires assistant read access.
+	ListExecutionProfiles(context.Context, *ListExecutionProfilesPayload) (res *ListExecutionProfilesResult, err error)
+	// Choose the upstream credential an assistant's turns use on one MCP server,
+	// for one root trigger and execution context: an auth client, no upstream
+	// authentication, or back to the choice the next turn makes on its own. Turns
+	// already running keep their choice; later turns use the new one. Turns that
+	// act for nobody can use shared credentials only. Choosing grants nothing:
+	// each request checks the turn may use the credential. Requires assistant
+	// write access.
+	SetExecutionProfileChoice(context.Context, *SetExecutionProfileChoicePayload) (res *AssistantExecutionProfile, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -76,7 +89,22 @@ const ServiceName = "assistants"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"listAssistants", "getAssistant", "createAssistant", "upgradeAssistantIdentity", "updateAssistant", "deleteAssistant", "sendMessage", "interruptTurn", "getManagedAssistant", "ensureManagedAssistant"}
+var MethodNames = [12]string{"listAssistants", "getAssistant", "createAssistant", "upgradeAssistantIdentity", "updateAssistant", "deleteAssistant", "sendMessage", "interruptTurn", "getManagedAssistant", "ensureManagedAssistant", "listExecutionProfiles", "setExecutionProfileChoice"}
+
+// AssistantExecutionProfile is the result type of the assistants service
+// setExecutionProfileChoice method.
+type AssistantExecutionProfile struct {
+	// The root trigger.
+	TriggerInstanceID string
+	// The root trigger's name.
+	TriggerName string
+	// Whether the turns act for the user their event identified.
+	ExecutionContext string
+	// The latest version; 0 before the first turn or change.
+	Version int64
+	// Each server the turns reach.
+	Servers []*ExecutionProfileServer
+}
 
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
@@ -119,6 +147,34 @@ type DeleteAssistantPayload struct {
 type EnsureManagedAssistantPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// A credential a server offers that the profile's turns can use.
+type ExecutionProfileOption struct {
+	// The auth client.
+	AuthClientID string
+	// The auth client's name.
+	Name string
+	// The auth client's type.
+	ClientType string
+}
+
+// One MCP server an assistant's turns reach through Speakeasy.
+type ExecutionProfileServer struct {
+	// The MCP server.
+	McpServerID string
+	// Whether the server has a choice.
+	Chosen bool
+	// The chosen auth client. Absent with a choice means no upstream
+	// authentication.
+	AuthClientID *string
+	// How the choice was made: admin, issuance, backfill, or automatic for one the
+	// next turn makes on its own.
+	Source *string
+	// Why a server without a choice gets none on its own.
+	GapReason *string
+	// The credentials that can be chosen.
+	Options []*ExecutionProfileOption
 }
 
 // GetAssistantPayload is the payload type of the assistants service
@@ -175,6 +231,22 @@ type ListAssistantsResult struct {
 	Assistants []*types.Assistant
 }
 
+// ListExecutionProfilesPayload is the payload type of the assistants service
+// listExecutionProfiles method.
+type ListExecutionProfilesPayload struct {
+	// The assistant ID.
+	AssistantID      string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListExecutionProfilesResult is the result type of the assistants service
+// listExecutionProfiles method.
+type ListExecutionProfilesResult struct {
+	// Each root trigger and execution context.
+	Profiles []*AssistantExecutionProfile
+}
+
 type SendMessageAttachment struct {
 	// The chat attachment asset returned by assets.uploadChatAttachment.
 	AssetID string
@@ -213,6 +285,31 @@ type SendMessageResult struct {
 	ThreadID *string
 	// Whether the message was accepted and enqueued for processing.
 	Accepted bool
+}
+
+// SetExecutionProfileChoicePayload is the payload type of the assistants
+// service setExecutionProfileChoice method.
+type SetExecutionProfileChoicePayload struct {
+	// The assistant ID.
+	AssistantID string
+	// The root trigger.
+	TriggerInstanceID string
+	// Whether the turns act for the user their event identified.
+	ExecutionContext string
+	// The MCP server.
+	McpServerID string
+	// The auth client to use.
+	AuthClientID *string
+	// Use no upstream authentication.
+	NoAuth *bool
+	// Remove the choice so the next turn makes it from the server's configuration.
+	Automatic *bool
+	// The profile version the change was decided from, from a fresh
+	// listExecutionProfiles read. A profile that changed since is refused with a
+	// conflict.
+	ExpectedVersion  int64
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // UpdateAssistantPayload is the payload type of the assistants service

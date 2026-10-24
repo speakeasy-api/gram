@@ -590,6 +590,31 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo issuance profile choice: %w", err)
 	}
+
+	// The identity-bound assistant reaches Linear, which offers a person's own
+	// account and the shared token, so its person-backed turns need a choice.
+	if err := s.q.ServersAttachAssistantServer(ctx, repo.ServersAttachAssistantServerParams{
+		ID: s.det("assistant-bound-linear"), AssistantID: s.det("assistant-bound"), McpServerID: s.det("mcpserver-linear"), ProjectID: proj,
+	}); err != nil {
+		return fmt.Errorf("attach demo assistant server: %w", err)
+	}
+	if err := s.q.ServersInsertExecutionProfile(ctx, repo.ServersInsertExecutionProfileParams{
+		ID: s.det("execution-profile-bound"), OrgID: org, ProjectID: proj, AssistantID: s.det("assistant-bound"),
+		TriggerInstanceID: s.det("assistant-dashboard-bound"), ExecutionContext: "user_backed",
+	}); err != nil {
+		return fmt.Errorf("insert demo execution profile: %w", err)
+	}
+	if err := s.q.ServersInsertExecutionProfileVersion(ctx, repo.ServersInsertExecutionProfileVersionParams{
+		ID: s.det("execution-profile-bound-v1"), ProfileID: s.det("execution-profile-bound"), OrgID: org, ProjectID: proj,
+	}); err != nil {
+		return fmt.Errorf("insert demo execution profile version: %w", err)
+	}
+	if err := s.q.ServersInsertExecutionProfileChoice(ctx, repo.ServersInsertExecutionProfileChoiceParams{
+		ID: s.det("execution-profile-bound-v1-linear"), ProjectID: proj, OrgID: org, VersionID: s.det("execution-profile-bound-v1"),
+		McpServerID: s.det("mcpserver-linear"), AuthClientID: s.det("auth-client-github-token"),
+	}); err != nil {
+		return fmt.Errorf("insert demo execution profile choice: %w", err)
+	}
 	return nil
 }
 

@@ -324,6 +324,43 @@ func (q *Queries) PostflightIDEMACredentials(ctx context.Context, orgID string) 
 	return count, err
 }
 
+const postflightIDExecutionProfileChoices = `-- name: PostflightIDExecutionProfileChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+JOIN execution_selection_profile_versions v
+  ON v.id = u.credential_id
+JOIN execution_selection_profiles p
+  ON p.id = v.profile_id AND p.deleted IS FALSE
+WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'execution_profile_version'
+  AND u.source = 'admin'
+  AND p.assistant_id = $2::uuid
+  AND p.execution_context = 'user_backed'
+  AND u.mcp_server_id = $3::uuid
+  AND u.auth_client_id = $4::uuid
+`
+
+type PostflightIDExecutionProfileChoicesParams struct {
+	ProjectID      uuid.UUID
+	AssistantID    uuid.UUID
+	LinearServerID uuid.UUID
+	AuthClientID   uuid.UUID
+}
+
+// The identity-bound assistant's person-backed turns use the shared token on
+// Linear, by an administrator's choice.
+func (q *Queries) PostflightIDExecutionProfileChoices(ctx context.Context, arg PostflightIDExecutionProfileChoicesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDExecutionProfileChoices,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.LinearServerID,
+		arg.AuthClientID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDExternalOAuthMetadata = `-- name: PostflightIDExternalOAuthMetadata :one
 SELECT count(*) FROM external_oauth_server_metadata
 WHERE project_id = $1::uuid AND deleted IS FALSE

@@ -22,6 +22,7 @@ import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
 import { AssistantMCPServersSection } from "./AssistantMCPServersSection";
 import { AssistantIdentitySettings } from "./AssistantIdentitySettings";
+import { AssistantUpstreamCredentials } from "./AssistantUpstreamCredentials";
 import { AssistantOverviewSettings } from "./AssistantOverviewSettings";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AssistantSkillsSection } from "./AssistantSkillsSection";
@@ -221,11 +222,14 @@ export function AssistantDraftPanel(): JSX.Element {
             value="identity"
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
           >
-            <AssistantIdentitySettings
-              key={a.id}
-              assistant={a}
-              onUpdated={() => void draft.refetchAssistant()}
-            />
+            <Stack gap={6}>
+              <AssistantIdentitySettings
+                key={a.id}
+                assistant={a}
+                onUpdated={() => void draft.refetchAssistant()}
+              />
+              <AssistantUpstreamCredentials assistantId={a.id} />
+            </Stack>
           </TabsContent>
 
           <TabsContent
