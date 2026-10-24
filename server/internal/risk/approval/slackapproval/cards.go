@@ -49,6 +49,11 @@ const (
 // emoji in mrkdwn.
 var emojiCode = regexp.MustCompile(`:[a-z0-9+'-]+:`)
 
+// italicMarker matches an underscore at a word edge, where Slack reads it as
+// the start or end of italics. Underscores inside a word, as in dry_run, stay
+// literal.
+var italicMarker = regexp.MustCompile(`(^|[^\p{L}\p{N}])_|_($|[^\p{L}\p{N}])`)
+
 // block is the subset of a Slack Block Kit block the approval card uses.
 type block struct {
 	// Type is the block kind: section, actions or context.
@@ -199,7 +204,7 @@ func pendingCard(in cardInput) card {
 		block{Type: "actions", BlockID: "risk_approval", Text: nil, Fields: nil, Elements: buttons},
 		contextBlock("Approve once lets this exact call run one time. The reason above was written by the agent."),
 	)
-	return card{Text: "Approval needed to call " + fit(in.Approval.ToolName, maxNameChars), Blocks: blocks}
+	return card{Text: "Approval needed to call " + code(in.Approval.ToolName, maxNameChars), Blocks: blocks}
 }
 
 // decidedCard replaces a pending card once the request is decided or lapses.
@@ -218,27 +223,26 @@ func decidedCard(in cardInput) card {
 }
 
 func decidedHeadline(in cardInput) (string, string) {
-	tool := code(in.Approval.ToolName, maxNameChars)
-	// Slack reads the notification text as mrkdwn too, so the name is escaped
+	// Slack reads the notification text as mrkdwn too, so the name is code
 	// there as well.
-	plain := fit(in.Approval.ToolName, maxNameChars)
+	tool := code(in.Approval.ToolName, maxNameChars)
 	decider := ""
 	if in.DeciderName != "" {
 		decider = " by " + fit(in.DeciderName, maxNameChars)
 	}
 	switch in.Status {
 	case approval.StatusApproved:
-		return fmt.Sprintf(":white_check_mark: *Approved*%s: one call to %s", decider, tool), fmt.Sprintf("Approved: one call to %s", plain)
+		return fmt.Sprintf(":white_check_mark: *Approved*%s: one call to %s", decider, tool), fmt.Sprintf("Approved: one call to %s", tool)
 	case approval.StatusConsumed:
-		return fmt.Sprintf(":white_check_mark: *Approved*%s: the call to %s ran", decider, tool), fmt.Sprintf("Approved: the call to %s ran", plain)
+		return fmt.Sprintf(":white_check_mark: *Approved*%s: the call to %s ran", decider, tool), fmt.Sprintf("Approved: the call to %s ran", tool)
 	case approval.StatusDenied:
-		return fmt.Sprintf(":no_entry: *Denied*%s: the call to %s", decider, tool), fmt.Sprintf("Denied: the call to %s", plain)
+		return fmt.Sprintf(":no_entry: *Denied*%s: the call to %s", decider, tool), fmt.Sprintf("Denied: the call to %s", tool)
 	case approval.StatusExpired:
-		return fmt.Sprintf(":hourglass: *Expired*: nobody decided on the call to %s in time", tool), fmt.Sprintf("Expired: the call to %s", plain)
+		return fmt.Sprintf(":hourglass: *Expired*: nobody decided on the call to %s in time", tool), fmt.Sprintf("Expired: the call to %s", tool)
 	case approval.StatusBlocked, approval.StatusPending:
-		return fmt.Sprintf(":raised_hand: *Waiting for a decision* on the call to %s", tool), fmt.Sprintf("Waiting for a decision on the call to %s", plain)
+		return fmt.Sprintf(":raised_hand: *Waiting for a decision* on the call to %s", tool), fmt.Sprintf("Waiting for a decision on the call to %s", tool)
 	}
-	return fmt.Sprintf("The call to %s is %s", tool, fit(string(in.Status), maxNameChars)), fmt.Sprintf("The call to %s is %s", plain, fit(string(in.Status), maxNameChars))
+	return fmt.Sprintf("The call to %s is %s", tool, fit(string(in.Status), maxNameChars)), fmt.Sprintf("The call to %s is %s", tool, fit(string(in.Status), maxNameChars))
 }
 
 func detailFields(in cardInput) block {
@@ -326,7 +330,7 @@ func argumentValue(value any) string {
 // Slack would format reads as code instead, so it cannot end the title early
 // or add lines that pass for the card's own.
 func argumentName(name string) string {
-	if strings.TrimSpace(name) != "" && !strings.ContainsAny(name, "*~`\r\n") && !emojiCode.MatchString(name) {
+	if strings.TrimSpace(name) != "" && !strings.ContainsAny(name, "*~`\r\n") && !emojiCode.MatchString(name) && !italicMarker.MatchString(name) {
 		return "*" + fit(name, maxArgumentNameChars) + "*"
 	}
 	encoded, ok := compactJSON(name)

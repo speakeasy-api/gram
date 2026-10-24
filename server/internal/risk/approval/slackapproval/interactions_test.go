@@ -132,7 +132,7 @@ func TestClickApprovesForTheApproverItWasSentTo(t *testing.T) {
 	require.Equal(t, userURN(f.approverID), row.DecidedByUrn.String)
 	reply := f.responder.only(t)
 	require.True(t, reply.ReplaceOriginal)
-	require.Equal(t, "Approved: one call to slack__post_message", reply.Text)
+	require.Equal(t, "Approved: one call to `slack__post_message`", reply.Text)
 	for _, block := range reply.Blocks {
 		encoded, err := json.Marshal(block)
 		require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestClickDenies(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, f.send(t, clickPayload(f.message, "UAPPROVER", slackapproval.ActionDeny), testSigningSecret, time.Now()))
 	require.Equal(t, string(approval.StatusDenied), f.status(t).Status)
-	require.Equal(t, "Denied: the call to slack__post_message", f.responder.only(t).Text)
+	require.Equal(t, "Denied: the call to `slack__post_message`", f.responder.only(t).Text)
 }
 
 func TestClickRejectsForgedAndStaleSignatures(t *testing.T) {
@@ -240,7 +240,7 @@ func TestClickOnADecidedRequestShowsTheOutcome(t *testing.T) {
 	require.Equal(t, string(approval.StatusDenied), f.status(t).Status)
 	reply := f.responder.only(t)
 	require.True(t, reply.ReplaceOriginal)
-	require.Equal(t, "Denied: the call to slack__post_message", reply.Text)
+	require.Equal(t, "Denied: the call to `slack__post_message`", reply.Text)
 }
 
 func TestClickOnAnUnknownMessageIsRefused(t *testing.T) {
