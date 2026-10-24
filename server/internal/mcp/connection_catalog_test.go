@@ -468,8 +468,22 @@ func TestGatewayConsentReloadOverwritesCaptureAndInvalidatesOldPage(t *testing.T
 	form := url.Values{"state": {stateID}, "csrf_token": {csrf}, "action": {"approve"}, "tool_inventory_id": {first.Attempt}, "tool_catalog_mode": {"cached"}, "tool_filtering": {"off"}}
 	request := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	err = ti.service.ServeConsent(httptest.NewRecorder(), request, endpoint)
-	require.Error(t, err, "an older tab cannot approve a replaced capture")
+	recorder := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(recorder, request, endpoint))
+	requireConsentRestarted(t, recorder, slug, stateID, "an older tab cannot approve a replaced capture")
+	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err, "a refused approval must not consume the challenge")
+}
+
+// requireConsentRestarted asserts an approval was refused by sending the
+// browser back to the consent page instead of to the client's redirect URI.
+func requireConsentRestarted(t *testing.T, recorder *httptest.ResponseRecorder, slug, stateID, msg string) {
+	t.Helper()
+	require.Equal(t, http.StatusSeeOther, recorder.Code, msg)
+	location, err := url.Parse(recorder.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "/mcp/"+slug+"/connect", location.Path, msg)
+	require.Equal(t, stateID, location.Query().Get("state"), msg)
 }
 
 func TestGatewayConsentStaleCaptureCannotReplaceNewerReload(t *testing.T) {
@@ -549,7 +563,9 @@ func TestGatewayConsentFailedReloadInvalidatesOldPage(t *testing.T) {
 	form := url.Values{"state": {stateID}, "csrf_token": {csrf}, "action": {"approve"}, "tool_inventory_id": {first.Attempt}, "tool_catalog_mode": {"cached"}, "tool_filtering": {"off"}}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	require.Error(t, ti.service.ServeConsent(httptest.NewRecorder(), req, endpoint), "a failed reload invalidates approval from earlier tabs")
+	recorder := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(recorder, req, endpoint))
+	requireConsentRestarted(t, recorder, slug, stateID, "a failed reload invalidates approval from earlier tabs")
 }
 
 func TestConnectionCatalogPublicationFailurePreservesChallenge(t *testing.T) {

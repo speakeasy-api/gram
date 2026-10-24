@@ -1042,16 +1042,24 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeConflict, nil, "tool filtering is not available for this endpoint").LogWarn(ctx, logger)
 		}
 
+		// A missing or superseded capture (the page was reopened in another tab,
+		// or its capture expired) cannot be approved. Send the browser back to the
+		// consent page for a fresh capture instead of an error response; the
+		// challenge stays unconsumed.
 		attempt, aerr := consentAttemptID(r.PostForm.Get("tool_inventory_id"))
 		if aerr != nil {
-			return oops.E(oops.CodeConflict, aerr, "tool inventory is no longer available; reload the page and try again").LogWarn(ctx, logger)
+			logger.WarnContext(ctx, "consent approval has no tool inventory; restarting consent", attr.SlogError(aerr))
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
 		}
 		inventory, found, gerr := s.getCompletedConsentInventory(ctx, endpoint, stateID, attempt)
 		if gerr != nil {
 			return oops.E(oops.CodeUnavailable, gerr, "service temporarily unavailable").LogError(ctx, logger)
 		}
 		if !found {
-			return oops.E(oops.CodeConflict, nil, "tool inventory is no longer available; reload the page and try again").LogWarn(ctx, logger)
+			logger.WarnContext(ctx, "consent approval tool inventory is no longer current; restarting consent")
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
 		}
 		boundInventory = &inventory
 		if materializeGateway && len(inventory.MemberBindings) == 0 {
