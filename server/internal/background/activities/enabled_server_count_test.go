@@ -115,6 +115,38 @@ func TestEnabledServerCountReadsWrapperVisibility(t *testing.T) {
 	}
 }
 
+// A toolset whose id a non-canonical server kept after leaving it serves nothing, so its stale flags count as neither public nor private.
+func TestPlatformUsageMetricsSkipsKeptToolsetIDs(t *testing.T) {
+	t.Parallel()
+
+	db, err := infra.CloneTestDatabase(t, "usage_metrics_kept_id")
+	require.NoError(t, err)
+
+	orgID := createCountOrg(t, db)
+	project := createCountProject(t, db, orgID)
+	public := createCountToolset(t, db, orgID, project.ID, "kept-public", false, true)
+	private := createCountToolset(t, db, orgID, project.ID, "kept-private", false, false)
+	for _, toolset := range []toolsetsrepo.Toolset{public, private} {
+		remote, err := remotemcprepo.New(db).CreateServer(t.Context(), remotemcprepo.CreateServerParams{
+			ID: uuid.New(), ProjectID: project.ID, Name: pgtype.Text{}, Slug: pgtype.Text{},
+			TransportType: string(externalmcptypes.TransportTypeStreamableHTTP), Url: "https://remote.example.test/mcp",
+		})
+		require.NoError(t, err)
+		_, err = mcpserversrepo.New(db).CreateMCPServer(t.Context(), mcpserversrepo.CreateMCPServerParams{
+			ID: toolset.ID, ProjectID: project.ID, Name: pgtype.Text{}, Slug: pgtype.Text{},
+			EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{}, RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true},
+			TunneledMcpServerID: uuid.NullUUID{}, ToolsetID: uuid.NullUUID{}, UnproxiedMcpServerID: uuid.NullUUID{},
+			ToolVariationsGroupID: uuid.NullUUID{}, Visibility: visibility.Public, NetworkAccessMode: pgtype.Text{},
+		})
+		require.NoError(t, err)
+	}
+	createCountToolset(t, db, orgID, project.ID, "legacy-public", true, true)
+
+	metrics := collectOrgMetrics(t, db, orgID)
+	require.Equal(t, int64(1), metrics.PublicMCPServers, "only the unwrapped legacy toolset counts")
+	require.Equal(t, int64(0), metrics.PrivateMCPServers)
+}
+
 func collectOrgMetrics(t *testing.T, db *pgxpool.Pool, orgID string) activities.PlatformUsageMetrics {
 	t.Helper()
 

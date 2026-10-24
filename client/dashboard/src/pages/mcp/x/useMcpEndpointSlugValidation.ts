@@ -20,6 +20,7 @@ export function useMcpEndpointSlugValidation(
   draftSlug: string,
   customDomainId: string | null,
   currentSlug?: string,
+  hosted = false,
 ): string | null {
   const client = useSdkClient();
 
@@ -36,7 +37,7 @@ export function useMcpEndpointSlugValidation(
   // changed, so we skip both format and availability checks.
   let formatError: string | null = null;
   if (draftSlug !== currentSlug) {
-    formatError = validateSlugFormat(draftSlug, customDomainId);
+    formatError = validateSlugFormat(draftSlug, customDomainId, hosted);
   }
 
   const shouldCheck =
@@ -64,12 +65,14 @@ export function useMcpEndpointSlugValidation(
   return null;
 }
 
-function validateSlugFormat(
+export function validateSlugFormat(
   slug: string,
   customDomainId: string | null,
+  hosted: boolean,
 ): string | null {
+  // A hosted server's slugs keep the platform limit on every domain.
   let maxLength = PLATFORM_SLUG_MAX_LENGTH;
-  if (customDomainId) {
+  if (customDomainId && !hosted) {
     maxLength = CUSTOM_DOMAIN_SLUG_MAX_LENGTH;
   }
 
