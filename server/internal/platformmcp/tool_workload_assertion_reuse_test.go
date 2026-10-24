@@ -95,6 +95,7 @@ func assertionReuseTestContext(t *testing.T) (context.Context, Principal, uuid.U
 	p := Principal{OrganizationID: "test-org", UserID: "test-user"}
 	project, issuer := uuid.New(), uuid.New()
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: p.OrganizationID, UserID: p.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, p.UserID))
+	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, p.OrganizationID), authz.NewGrant(authz.ScopeWorkloadRead, p.OrganizationID), authz.NewGrant(authz.ScopeWorkloadWrite, p.OrganizationID)})
 	return ctx, p, project, issuer
 }
@@ -297,7 +298,9 @@ func TestWorkloadAssertionReuseDiscoveryUsesExistingScopes(t *testing.T) {
 		// workload:write implies workload:read, but cannot admit organization mutations alone.
 		{authz.ScopeWorkloadWrite, p.OrganizationID, false, []string{"get_workload_assertion_reuse"}},
 		{authz.ScopeWorkloadWrite, p.OrganizationID, true, []string{"get_workload_assertion_reuse", "set_workload_assertion_reuse"}},
-		{authz.ScopeWorkloadWrite, "other-org", true, nil},
+		// Discovery is coarse: a grant for any resource advertises the workflow.
+		// The management service checks the exact organization at invocation.
+		{authz.ScopeWorkloadWrite, "other-org", true, []string{"get_workload_assertion_reuse", "set_workload_assertion_reuse"}},
 	} {
 		grants := []authz.Grant{authz.NewGrant(tc.scope, tc.org)}
 		if tc.admin {
