@@ -82,7 +82,7 @@ function renderSheet(tunneled = false) {
             mcpServerId="this-server"
             projectId="project-1"
             tunneled={tunneled}
-            onOpenChange={vi.fn()}
+            onOpenChange={() => undefined}
           />
         </MemoryRouter>
       </TooltipProvider>
