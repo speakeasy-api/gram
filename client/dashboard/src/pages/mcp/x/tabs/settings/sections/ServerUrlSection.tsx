@@ -152,10 +152,17 @@ export function ServerUrlSection({
     () => domains.filter((d): d is CustomDomain => d != null),
     [domains],
   );
+  // New addresses go only on a verified, activated domain; existing rows on any domain stay listed.
   const addableDomains = useMemo(
-    () => availableDomains.filter((d) => canAddAt(d.id)),
+    () =>
+      availableDomains.filter(
+        (d) => d.verified && d.activated && canAddAt(d.id),
+      ),
     [availableDomains, canAddAt],
   );
+  // An enabled hosted server cannot lose its last address that can serve; it must be disabled first.
+  const mustDisableBeforeLastRemoval =
+    !!hostedServerId && mcpServer?.visibility !== "disabled";
   // Only addresses that can serve count toward the last one: the platform, or a verified, activated domain.
   // Every address counts while domains load, so a removal is never left unconfirmed.
   const servableIds = useMemo(
@@ -245,16 +252,42 @@ export function ServerUrlSection({
               {/* Hosted (platform) addresses. */}
               <Field>
                 <FieldLabel>Hosted Address</FieldLabel>
+                {platformEndpoints.map((endpoint) => (
+                  <AddressRow
+                    key={endpoint.id}
+                    backend={backend}
+                    endpoint={endpoint}
+                    isLastEndpoint={isLast(endpoint)}
+                    mustDisableFirst={mustDisableBeforeLastRemoval}
+                    onSaved={followHostedServer}
+                  />
+                ))}
                 {platformEndpoints.length > 0 ? (
-                  platformEndpoints.map((endpoint) => (
-                    <AddressRow
-                      key={endpoint.id}
+                  addingPlatform ? (
+                    <NewPlatformAddressRow
                       backend={backend}
-                      endpoint={endpoint}
-                      isLastEndpoint={isLast(endpoint)}
-                      onSaved={followHostedServer}
+                      onCreated={followHostedServer}
+                      onClose={() => setAddingPlatform(false)}
                     />
-                  ))
+                  ) : (
+                    hostedServerId &&
+                    canAddAt(undefined) && (
+                      <RequireScope scope="mcp:write" level="component">
+                        <div>
+                          <Button
+                            variant="secondary"
+                            aria-label="Add hosted address"
+                            onClick={() => setAddingPlatform(true)}
+                          >
+                            <Button.LeftIcon>
+                              <Plus className="size-4" />
+                            </Button.LeftIcon>
+                            <Button.Text>Add</Button.Text>
+                          </Button>
+                        </div>
+                      </RequireScope>
+                    )
+                  )
                 ) : addingPlatform ? (
                   <NewPlatformAddressRow
                     backend={backend}
@@ -294,6 +327,7 @@ export function ServerUrlSection({
                     endpoint={endpoint}
                     domains={availableDomains}
                     isLastEndpoint={isLast(endpoint)}
+                    mustDisableFirst={mustDisableBeforeLastRemoval}
                     canManageDomainRoot={canManageDomains}
                     onSaved={followHostedServer}
                   />
@@ -402,6 +436,7 @@ function AddressRow({
   endpoint,
   domains,
   isLastEndpoint,
+  mustDisableFirst = false,
   canManageDomainRoot = false,
   onSaved,
 }: {
@@ -409,6 +444,7 @@ function AddressRow({
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
   isLastEndpoint: boolean;
+  mustDisableFirst?: boolean;
   canManageDomainRoot?: boolean;
   onSaved?: () => Promise<void>;
 }) {
@@ -585,6 +621,7 @@ function AddressRow({
       <RemoveLastAddressDialog
         isOpen={confirmRemoveOpen}
         isLoading={remove.isPending}
+        mustDisableFirst={mustDisableFirst}
         onClose={() => setConfirmRemoveOpen(false)}
         onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
       />
@@ -645,14 +682,36 @@ function ConfirmDomainRootDialog({
 function RemoveLastAddressDialog({
   isOpen,
   isLoading,
+  mustDisableFirst,
   onClose,
   onConfirm,
 }: {
   isOpen: boolean;
   isLoading: boolean;
+  mustDisableFirst: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  if (mustDisableFirst) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>Disable this server first</Dialog.Title>
+            <Dialog.Description>
+              This is the last address clients can reach this server on. Disable
+              the server before you remove it, or add another address first.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button variant="secondary" onClick={onClose}>
+              <Button.Text>Close</Button.Text>
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    );
+  }
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="max-w-md">
