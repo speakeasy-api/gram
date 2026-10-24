@@ -43,6 +43,12 @@ func TestSelectConsentAuthClientPreselection(t *testing.T) {
 	require.Equal(t, forwarded, selected(forwarded, personal, nil), "the person's pick wins over the remembered choice")
 	require.Equal(t, engineering, selected(uuid.Nil, uuid.New(), nil), "a remembered client no longer offered is ignored")
 
+	ema := uuid.New()
+	withEMA := func(options []consentAuthClientOption) {
+		options[0] = option(ema, "Identity provider", authClientTypeEMA, consentClientReady)
+	}
+	require.Equal(t, ema, selected(uuid.Nil, uuid.Nil, withEMA), "a ready identity-provider client comes before everything else")
+
 	connectFirst := func(options []consentAuthClientOption) {
 		for i := range options {
 			if options[i].ID == personal {
@@ -111,6 +117,17 @@ func TestConsentAuthChoices(t *testing.T) {
 		require.Equal(t, consentClientSetup, auth.Options[0].State, "a registration this sign-in cannot connect needs setup")
 	})
 
+	t.Run("an expired personal connection asks to be reconnected", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+
+		auth := choices(t, f, user, []remoteSessionCard{{ClientID: f.registration.String(), Connected: true, Expired: true}}, uuid.Nil)
+		require.Equal(t, consentClientReconnect, auth.Options[0].State)
+		require.Equal(t, f.registration.String(), auth.Options[0].ConnectClientID)
+		require.False(t, auth.Approvable())
+	})
+
 	t.Run("a caller representing nobody is not offered a personal client", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
@@ -148,4 +165,20 @@ func TestConsentAuthChoices(t *testing.T) {
 		require.True(t, auth.Approvable())
 		require.Nil(t, auth.Selected())
 	})
+}
+
+func TestPersonalReadinessOfIdentityProviderClients(t *testing.T) {
+	t.Parallel()
+
+	registration := uuid.New()
+	readiness := func(card remoteSessionCard) (consentAuthClientState, string) {
+		card.ClientID = registration.String()
+		return personalReadiness(authClientTypeEMA, validUUID(registration), []remoteSessionCard{card})
+	}
+	state, connect := readiness(remoteSessionCard{})
+	require.Equal(t, consentClientConnect, state, "a person who has not signed in to the identity provider can connect it")
+	require.Equal(t, registration.String(), connect)
+	state, connect = readiness(remoteSessionCard{Connected: true, Expired: true})
+	require.Equal(t, consentClientReconnect, state)
+	require.Equal(t, registration.String(), connect)
 }
