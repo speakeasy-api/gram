@@ -755,13 +755,12 @@ LEFT JOIN meta_mcp_server_members AS m
  AND m.deleted IS FALSE
 WHERE s.id = ANY(@mcp_server_ids::uuid[])
   AND s.deleted IS FALSE
-  -- The subject and sign-in bound the lineage lookup to one person's
-  -- sessions, which an index serves.
+  -- The subject bounds the lineage lookup to one person's sessions, which an
+  -- index serves, across every sign-in the credential was rotated through.
   AND COALESCE(m.created_at, s.created_at) > (
     SELECT min(us.created_at)
     FROM user_sessions AS us
     WHERE us.subject_urn = @subject_urn::text
-      AND us.user_session_issuer_id = @user_session_issuer_id::uuid
       AND COALESCE(us.credential_id, us.id) = @credential_id::uuid
   );
 
