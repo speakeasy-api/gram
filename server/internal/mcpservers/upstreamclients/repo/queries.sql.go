@@ -264,6 +264,44 @@ func (q *Queries) CaptureSoleConsumerAssociations(ctx context.Context, arg Captu
 	return result.RowsAffected(), nil
 }
 
+const copyCredentialChoices = `-- name: CopyCredentialChoices :execrows
+INSERT INTO upstream_client_selections (
+    project_id, organization_id, credential_kind, credential_id, mcp_server_id,
+    remote_session_client_id, client_attachment_scope, no_auth, auth_client_id,
+    auth_client_attachment_scope, source
+)
+SELECT project_id, organization_id, credential_kind, $1::uuid, mcp_server_id,
+       remote_session_client_id, client_attachment_scope, no_auth, auth_client_id,
+       auth_client_attachment_scope, source
+FROM upstream_client_selections
+WHERE credential_kind = $2::text
+  AND credential_id = $3::uuid
+  AND organization_id = $4::text
+  AND deleted IS FALSE
+ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING
+`
+
+type CopyCredentialChoicesParams struct {
+	ToCredentialID   uuid.UUID
+	CredentialKind   string
+	FromCredentialID uuid.UUID
+	OrganizationID   string
+}
+
+// Gives a replacement credential the choices of the one it replaces.
+func (q *Queries) CopyCredentialChoices(ctx context.Context, arg CopyCredentialChoicesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, copyCredentialChoices,
+		arg.ToCredentialID,
+		arg.CredentialKind,
+		arg.FromCredentialID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const detachMCPServerRemoteSessionClient = `-- name: DetachMCPServerRemoteSessionClient :execrows
 UPDATE mcp_server_remote_session_clients
 SET deleted_at = clock_timestamp(),
@@ -614,6 +652,37 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 		return nil, err
 	}
 	return items, nil
+}
+
+const hasCredentialChoice = `-- name: HasCredentialChoice :one
+SELECT EXISTS (
+  SELECT 1
+  FROM upstream_client_selections
+  WHERE credential_kind = $1::text
+    AND credential_id = $2::uuid
+    AND mcp_server_id = $3::uuid
+    AND organization_id = $4::text
+    AND deleted IS FALSE
+)::boolean AS has_choice
+`
+
+type HasCredentialChoiceParams struct {
+	CredentialKind string
+	CredentialID   uuid.UUID
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) HasCredentialChoice(ctx context.Context, arg HasCredentialChoiceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasCredentialChoice,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.McpServerID,
+		arg.OrganizationID,
+	)
+	var has_choice bool
+	err := row.Scan(&has_choice)
+	return has_choice, err
 }
 
 const isSoleConsumerBinding = `-- name: IsSoleConsumerBinding :one
@@ -1183,7 +1252,7 @@ func (q *Queries) PruneUnservableAssociations(ctx context.Context, arg PruneUnse
 	return result.RowsAffected(), nil
 }
 
-const recordNewMemberSelection = `-- name: RecordNewMemberSelection :execrows
+const recordAuthClientChoice = `-- name: RecordAuthClientChoice :execrows
 INSERT INTO upstream_client_selections (
     project_id,
     organization_id,
@@ -1237,7 +1306,7 @@ WHERE s.id = $6::uuid
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING
 `
 
-type RecordNewMemberSelectionParams struct {
+type RecordAuthClientChoiceParams struct {
 	CredentialKind string
 	CredentialID   uuid.UUID
 	Source         string
@@ -1246,12 +1315,13 @@ type RecordNewMemberSelectionParams struct {
 	McpServerID    uuid.UUID
 }
 
-// Records a credential's choice for a gateway member added after it was
-// issued: the one auth client named, which must still be enabled and offered
-// by the server, or no-auth when none is. A choice already recorded, by a
-// concurrent request or otherwise, is kept.
-func (q *Queries) RecordNewMemberSelection(ctx context.Context, arg RecordNewMemberSelectionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, recordNewMemberSelection,
+// Records one credential's choice for one MCP server: the auth client named,
+// which must still be enabled and offered by the server, or no-auth when none
+// is. A choice already recorded, by a concurrent request or otherwise, is
+// kept. Callers validate the choice first; this only refuses one the server
+// no longer offers.
+func (q *Queries) RecordAuthClientChoice(ctx context.Context, arg RecordAuthClientChoiceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAuthClientChoice,
 		arg.CredentialKind,
 		arg.CredentialID,
 		arg.Source,

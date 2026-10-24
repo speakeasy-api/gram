@@ -329,6 +329,15 @@ type DetachAuthClientFromMcpServerResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// ListMcpServerAuthClientChoicesResponseBody is the type of the "authClients"
+// service "listMcpServerAuthClientChoices" endpoint HTTP response body.
+type ListMcpServerAuthClientChoicesResponseBody struct {
+	// Whether the upstream needs authentication. Omitted while undecided.
+	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	// The enabled shared credentials the server offers.
+	Choices []*AuthClientChoiceResponseBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+}
+
 // GetMcpServerAuthenticationResponseBody is the type of the "authClients"
 // service "getMcpServerAuthentication" endpoint HTTP response body.
 type GetMcpServerAuthenticationResponseBody struct {
@@ -1719,6 +1728,196 @@ type DetachAuthClientFromMcpServerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListMcpServerAuthClientChoicesUnauthorizedResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListMcpServerAuthClientChoicesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesForbiddenResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "forbidden" error.
+type ListMcpServerAuthClientChoicesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesBadRequestResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "bad_request" error.
+type ListMcpServerAuthClientChoicesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesNotFoundResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "not_found" error.
+type ListMcpServerAuthClientChoicesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesConflictResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "conflict" error.
+type ListMcpServerAuthClientChoicesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody is the type of
+// the "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesInvalidResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "invalid" error.
+type ListMcpServerAuthClientChoicesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesInvariantViolationResponseBody is the type of
+// the "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListMcpServerAuthClientChoicesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesUnexpectedResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unexpected" error.
+type ListMcpServerAuthClientChoicesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMcpServerAuthClientChoicesGatewayErrorResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListMcpServerAuthClientChoicesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetMcpServerAuthenticationUnauthorizedResponseBody is the type of the
 // "authClients" service "getMcpServerAuthentication" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -2563,6 +2762,16 @@ type AuthClientHeaderInputRequestBody struct {
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 	// The caller's request header to copy the value from, for pass-through headers.
 	ValueFromRequestHeader *string `form:"value_from_request_header,omitempty" json:"value_from_request_header,omitempty" xml:"value_from_request_header,omitempty"`
+}
+
+// AuthClientChoiceResponseBody is used to define fields on response body types.
+type AuthClientChoiceResponseBody struct {
+	// The auth client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The client's name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// How the client authenticates upstream.
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
 }
 
 // AuthClientAudienceEntryResponseBody is used to define fields on response
@@ -3987,6 +4196,174 @@ func NewDetachAuthClientFromMcpServerGatewayError(body *DetachAuthClientFromMcpS
 	return v
 }
 
+// NewListMcpServerAuthClientChoicesResultOK builds a "authClients" service
+// "listMcpServerAuthClientChoices" endpoint result from a HTTP "OK" response.
+func NewListMcpServerAuthClientChoicesResultOK(body *ListMcpServerAuthClientChoicesResponseBody) *authclients.ListMcpServerAuthClientChoicesResult {
+	v := &authclients.ListMcpServerAuthClientChoicesResult{
+		RequiresUpstreamAuth: body.RequiresUpstreamAuth,
+	}
+	v.Choices = make([]*types.AuthClientChoice, len(body.Choices))
+	for i, val := range body.Choices {
+		if val == nil {
+			v.Choices[i] = nil
+			continue
+		}
+		v.Choices[i] = unmarshalAuthClientChoiceResponseBodyToTypesAuthClientChoice(val)
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesUnauthorized builds a authClients service
+// listMcpServerAuthClientChoices endpoint unauthorized error.
+func NewListMcpServerAuthClientChoicesUnauthorized(body *ListMcpServerAuthClientChoicesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesForbidden builds a authClients service
+// listMcpServerAuthClientChoices endpoint forbidden error.
+func NewListMcpServerAuthClientChoicesForbidden(body *ListMcpServerAuthClientChoicesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesBadRequest builds a authClients service
+// listMcpServerAuthClientChoices endpoint bad_request error.
+func NewListMcpServerAuthClientChoicesBadRequest(body *ListMcpServerAuthClientChoicesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesNotFound builds a authClients service
+// listMcpServerAuthClientChoices endpoint not_found error.
+func NewListMcpServerAuthClientChoicesNotFound(body *ListMcpServerAuthClientChoicesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesConflict builds a authClients service
+// listMcpServerAuthClientChoices endpoint conflict error.
+func NewListMcpServerAuthClientChoicesConflict(body *ListMcpServerAuthClientChoicesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesUnsupportedMedia builds a authClients
+// service listMcpServerAuthClientChoices endpoint unsupported_media error.
+func NewListMcpServerAuthClientChoicesUnsupportedMedia(body *ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesInvalid builds a authClients service
+// listMcpServerAuthClientChoices endpoint invalid error.
+func NewListMcpServerAuthClientChoicesInvalid(body *ListMcpServerAuthClientChoicesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesInvariantViolation builds a authClients
+// service listMcpServerAuthClientChoices endpoint invariant_violation error.
+func NewListMcpServerAuthClientChoicesInvariantViolation(body *ListMcpServerAuthClientChoicesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesUnexpected builds a authClients service
+// listMcpServerAuthClientChoices endpoint unexpected error.
+func NewListMcpServerAuthClientChoicesUnexpected(body *ListMcpServerAuthClientChoicesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesGatewayError builds a authClients service
+// listMcpServerAuthClientChoices endpoint gateway_error error.
+func NewListMcpServerAuthClientChoicesGatewayError(body *ListMcpServerAuthClientChoicesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetMcpServerAuthenticationMcpServerAuthenticationOK builds a
 // "authClients" service "getMcpServerAuthentication" endpoint result from a
 // HTTP "OK" response.
@@ -5142,6 +5519,22 @@ func ValidateDetachAuthClientFromMcpServerResponseBody(body *DetachAuthClientFro
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesResponseBody runs the validations
+// defined on ListMcpServerAuthClientChoicesResponseBody
+func ValidateListMcpServerAuthClientChoicesResponseBody(body *ListMcpServerAuthClientChoicesResponseBody) (err error) {
+	if body.Choices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("choices", "body"))
+	}
+	for _, e := range body.Choices {
+		if e != nil {
+			if err2 := ValidateAuthClientChoiceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -6968,6 +7361,252 @@ func ValidateDetachAuthClientFromMcpServerGatewayErrorResponseBody(body *DetachA
 	return
 }
 
+// ValidateListMcpServerAuthClientChoicesUnauthorizedResponseBody runs the
+// validations defined on
+// listMcpServerAuthClientChoices_unauthorized_response_body
+func ValidateListMcpServerAuthClientChoicesUnauthorizedResponseBody(body *ListMcpServerAuthClientChoicesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesForbiddenResponseBody runs the
+// validations defined on listMcpServerAuthClientChoices_forbidden_response_body
+func ValidateListMcpServerAuthClientChoicesForbiddenResponseBody(body *ListMcpServerAuthClientChoicesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesBadRequestResponseBody runs the
+// validations defined on
+// listMcpServerAuthClientChoices_bad_request_response_body
+func ValidateListMcpServerAuthClientChoicesBadRequestResponseBody(body *ListMcpServerAuthClientChoicesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesNotFoundResponseBody runs the
+// validations defined on listMcpServerAuthClientChoices_not_found_response_body
+func ValidateListMcpServerAuthClientChoicesNotFoundResponseBody(body *ListMcpServerAuthClientChoicesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesConflictResponseBody runs the
+// validations defined on listMcpServerAuthClientChoices_conflict_response_body
+func ValidateListMcpServerAuthClientChoicesConflictResponseBody(body *ListMcpServerAuthClientChoicesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesUnsupportedMediaResponseBody runs the
+// validations defined on
+// listMcpServerAuthClientChoices_unsupported_media_response_body
+func ValidateListMcpServerAuthClientChoicesUnsupportedMediaResponseBody(body *ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesInvalidResponseBody runs the
+// validations defined on listMcpServerAuthClientChoices_invalid_response_body
+func ValidateListMcpServerAuthClientChoicesInvalidResponseBody(body *ListMcpServerAuthClientChoicesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesInvariantViolationResponseBody runs
+// the validations defined on
+// listMcpServerAuthClientChoices_invariant_violation_response_body
+func ValidateListMcpServerAuthClientChoicesInvariantViolationResponseBody(body *ListMcpServerAuthClientChoicesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesUnexpectedResponseBody runs the
+// validations defined on
+// listMcpServerAuthClientChoices_unexpected_response_body
+func ValidateListMcpServerAuthClientChoicesUnexpectedResponseBody(body *ListMcpServerAuthClientChoicesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMcpServerAuthClientChoicesGatewayErrorResponseBody runs the
+// validations defined on
+// listMcpServerAuthClientChoices_gateway_error_response_body
+func ValidateListMcpServerAuthClientChoicesGatewayErrorResponseBody(body *ListMcpServerAuthClientChoicesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetMcpServerAuthenticationUnauthorizedResponseBody runs the
 // validations defined on getMcpServerAuthentication_unauthorized_response_body
 func ValidateGetMcpServerAuthenticationUnauthorizedResponseBody(body *GetMcpServerAuthenticationUnauthorizedResponseBody) (err error) {
@@ -8061,6 +8700,29 @@ func ValidateAuthClientServerResponseBody(body *AuthClientServerResponseBody) (e
 func ValidateAuthClientHeaderInputRequestBody(body *AuthClientHeaderInputRequestBody) (err error) {
 	if utf8.RuneCountInString(body.Name) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+	}
+	return
+}
+
+// ValidateAuthClientChoiceResponseBody runs the validations defined on
+// AuthClientChoiceResponseBody
+func ValidateAuthClientChoiceResponseBody(body *AuthClientChoiceResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ClientType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_type", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ClientType != nil {
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema"}))
+		}
 	}
 	return
 }

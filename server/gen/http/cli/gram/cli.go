@@ -132,7 +132,7 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|upgrade-assistant-identity|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|logout-everywhere|register|info|transfer-out|transfer-in)",
-		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|create-auth-client|attach-auth-client-to-mcp-server|set-auth-client-headers|detach-auth-client-from-mcp-server|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
+		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|create-auth-client|attach-auth-client-to-mcp-server|set-auth-client-headers|detach-auth-client-from-mcp-server|list-mcp-server-auth-client-choices|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
@@ -986,6 +986,11 @@ func ParseEndpoint(
 		authClientsDetachAuthClientFromMcpServerBodyFlag         = authClientsDetachAuthClientFromMcpServerFlags.String("body", "REQUIRED", "")
 		authClientsDetachAuthClientFromMcpServerSessionTokenFlag = authClientsDetachAuthClientFromMcpServerFlags.String("session-token", "", "")
 		authClientsDetachAuthClientFromMcpServerApikeyTokenFlag  = authClientsDetachAuthClientFromMcpServerFlags.String("apikey-token", "", "")
+
+		authClientsListMcpServerAuthClientChoicesFlags            = flag.NewFlagSet("list-mcp-server-auth-client-choices", flag.ExitOnError)
+		authClientsListMcpServerAuthClientChoicesMcpServerIDFlag  = authClientsListMcpServerAuthClientChoicesFlags.String("mcp-server-id", "REQUIRED", "")
+		authClientsListMcpServerAuthClientChoicesSessionTokenFlag = authClientsListMcpServerAuthClientChoicesFlags.String("session-token", "", "")
+		authClientsListMcpServerAuthClientChoicesApikeyTokenFlag  = authClientsListMcpServerAuthClientChoicesFlags.String("apikey-token", "", "")
 
 		authClientsGetMcpServerAuthenticationFlags            = flag.NewFlagSet("get-mcp-server-authentication", flag.ExitOnError)
 		authClientsGetMcpServerAuthenticationMcpServerIDFlag  = authClientsGetMcpServerAuthenticationFlags.String("mcp-server-id", "REQUIRED", "")
@@ -5438,6 +5443,7 @@ func ParseEndpoint(
 	authClientsAttachAuthClientToMcpServerFlags.Usage = authClientsAttachAuthClientToMcpServerUsage
 	authClientsSetAuthClientHeadersFlags.Usage = authClientsSetAuthClientHeadersUsage
 	authClientsDetachAuthClientFromMcpServerFlags.Usage = authClientsDetachAuthClientFromMcpServerUsage
+	authClientsListMcpServerAuthClientChoicesFlags.Usage = authClientsListMcpServerAuthClientChoicesUsage
 	authClientsGetMcpServerAuthenticationFlags.Usage = authClientsGetMcpServerAuthenticationUsage
 	authClientsSetMcpServerUpstreamAuthRequirementFlags.Usage = authClientsSetMcpServerUpstreamAuthRequirementUsage
 	authClientsGetAuthClientAudienceFlags.Usage = authClientsGetAuthClientAudienceUsage
@@ -7089,6 +7095,9 @@ func ParseEndpoint(
 
 			case "detach-auth-client-from-mcp-server":
 				epf = authClientsDetachAuthClientFromMcpServerFlags
+
+			case "list-mcp-server-auth-client-choices":
+				epf = authClientsListMcpServerAuthClientChoicesFlags
 
 			case "get-mcp-server-authentication":
 				epf = authClientsGetMcpServerAuthenticationFlags
@@ -10287,6 +10296,9 @@ func ParseEndpoint(
 			case "detach-auth-client-from-mcp-server":
 				endpoint = c.DetachAuthClientFromMcpServer()
 				data, err = authclientsc.BuildDetachAuthClientFromMcpServerPayload(*authClientsDetachAuthClientFromMcpServerBodyFlag, *authClientsDetachAuthClientFromMcpServerSessionTokenFlag, *authClientsDetachAuthClientFromMcpServerApikeyTokenFlag)
+			case "list-mcp-server-auth-client-choices":
+				endpoint = c.ListMcpServerAuthClientChoices()
+				data, err = authclientsc.BuildListMcpServerAuthClientChoicesPayload(*authClientsListMcpServerAuthClientChoicesMcpServerIDFlag, *authClientsListMcpServerAuthClientChoicesSessionTokenFlag, *authClientsListMcpServerAuthClientChoicesApikeyTokenFlag)
 			case "get-mcp-server-authentication":
 				endpoint = c.GetMcpServerAuthentication()
 				data, err = authclientsc.BuildGetMcpServerAuthenticationPayload(*authClientsGetMcpServerAuthenticationMcpServerIDFlag, *authClientsGetMcpServerAuthenticationSessionTokenFlag, *authClientsGetMcpServerAuthenticationApikeyTokenFlag)
@@ -16249,6 +16261,7 @@ func authClientsUsage() {
 	fmt.Fprintln(os.Stderr, `    attach-auth-client-to-mcp-server: Offer an existing auth client on another MCP server instead of creating a copy. The client stays one client: changing or rotating it changes upstream behavior on every server that offers it. Offering a client grants nobody permission to use it or access to the server. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    set-auth-client-headers: Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    detach-auth-client-from-mcp-server: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-mcp-server-auth-client-choices: List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Only names and types are returned.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-authentication: Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    set-mcp-server-upstream-auth-requirement: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-auth-client-audience: List who may use an auth client: the rules naming it and the broader rules that reach it. Requires org:read.`)
@@ -16415,6 +16428,28 @@ func authClientsDetachAuthClientFromMcpServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients detach-auth-client-from-mcp-server --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsListMcpServerAuthClientChoicesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients list-mcp-server-auth-client-choices", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Only names and types are returned.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients list-mcp-server-auth-client-choices --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func authClientsGetMcpServerAuthenticationUsage() {
@@ -20274,7 +20309,7 @@ func keysCreateKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys create-key --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"name\": \"aaa\",\n      \"policy_grants\": [\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         }\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys create-key --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"auth_client_choices\": [\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"name\": \"aaa\",\n      \"policy_grants\": [\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         }\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func keysRotateKeyUsage() {

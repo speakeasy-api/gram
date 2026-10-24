@@ -10,6 +10,7 @@ import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/secti
 import { ChevronRight } from "lucide-react";
 import { useEffect, useState, type JSX } from "react";
 import { Link } from "react-router";
+import { KeyCredentialChoice } from "./KeyCredentialChoice";
 import { WizardStepHeader } from "./WizardChrome";
 import type { InventoryServer } from "./useServerInventory";
 
@@ -23,6 +24,8 @@ import type { InventoryServer } from "./useServerInventory";
 export interface ServerSelection {
   server: InventoryServer;
   tools?: string[];
+  /** The shared credential the key uses on a server that offers several. */
+  authClientId?: string;
 }
 
 export function StepServers({
@@ -250,6 +253,31 @@ export function StepServers({
                         </span>
                       </span>
                     </label>
+                    {checked &&
+                      !allServers &&
+                      (server.kind === "Remote" ||
+                        server.kind === "Tunneled") && (
+                        <div className="px-4 pb-3 pl-12">
+                          <KeyCredentialChoice
+                            serverId={server.id}
+                            serverName={server.name}
+                            value={
+                              selected.find(
+                                (entry) => entry.server.id === server.id,
+                              )?.authClientId
+                            }
+                            onChange={(authClientId) =>
+                              onChange(
+                                selected.map((entry) =>
+                                  entry.server.id === server.id
+                                    ? { ...entry, authClientId }
+                                    : entry,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      )}
                   </li>
                 );
               })}

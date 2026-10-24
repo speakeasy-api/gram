@@ -23932,6 +23932,104 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: AuthClients
+    /rpc/authClients.listMcpServerChoices:
+        get:
+            description: List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Only names and types are returned.
+            operationId: listMcpServerAuthClientChoices
+            parameters:
+                - allowEmptyValue: true
+                  description: The MCP server id.
+                  in: query
+                  name: mcp_server_id
+                  required: true
+                  schema:
+                    description: The MCP server id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMcpServerAuthClientChoicesResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: listMcpServerAuthClientChoices authClients
+            tags:
+                - authClients
+            x-speakeasy-name-override: listMcpServerChoices
+            x-speakeasy-react-hook:
+                name: McpServerAuthClientChoices
     /rpc/authClients.setAudience:
         post:
             description: Replace the rules naming an auth client. Use grants mcp:auth on the client and Blocked writes mcp:blocked_auth; both apply on every server that offers the client. Server access is unchanged and still needs mcp:connect. Administering a client gives nobody permission to use it. Requires org:admin.
@@ -94359,6 +94457,20 @@ components:
                     format: uuid
             required:
                 - agent_id
+        AgentKeyAuthClientChoice:
+            type: object
+            properties:
+                auth_client_id:
+                    type: string
+                    description: The auth client the key uses there. Omit for a server whose upstream needs no authentication.
+                    format: uuid
+                mcp_server_id:
+                    type: string
+                    description: The MCP server.
+                    format: uuid
+            description: The upstream credential an agent key uses on one MCP server.
+            required:
+                - mcp_server_id
         AgentMCPServer:
             type: object
             properties:
@@ -96361,6 +96473,30 @@ components:
             required:
                 - principal_urn
                 - level
+        AuthClientChoice:
+            type: object
+            properties:
+                client_type:
+                    type: string
+                    description: How the client authenticates upstream.
+                    enum:
+                        - remote_session
+                        - service_account
+                        - static_credential
+                        - pass_through
+                        - ema
+                id:
+                    type: string
+                    description: The auth client id.
+                    format: uuid
+                name:
+                    type: string
+                    description: The client's name.
+            description: A shared upstream credential a caller can choose for a credential of their own, such as an agent key.
+            required:
+                - id
+                - name
+                - client_type
         AuthClientHeader:
             type: object
             properties:
@@ -99123,6 +99259,12 @@ components:
                     type: string
                     description: First-class agent subject. Omit for an ordinary API key.
                     format: uuid
+                auth_client_choices:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentKeyAuthClientChoice'
+                    description: 'For an agent key: the upstream credential the key uses on each MCP server that offers several. Where typed upstream authentication is enforced, the key is served on a server with the credential chosen here, checked again on every request. Shared credentials only: an agent reaches a person''s own connection when it acts for them.'
+                    maxItems: 100
                 delegated_grants_version:
                     type: integer
                     description: Delegated policy format version. Required for agent keys.
@@ -108678,6 +108820,19 @@ components:
             description: Result type for listing MCP endpoints
             required:
                 - mcp_endpoints
+        ListMcpServerAuthClientChoicesResponseBody:
+            type: object
+            properties:
+                choices:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AuthClientChoice'
+                    description: The enabled shared credentials the server offers.
+                requires_upstream_auth:
+                    type: boolean
+                    description: Whether the upstream needs authentication. Omitted while undecided.
+            required:
+                - choices
         ListMcpServersResult:
             type: object
             properties:

@@ -9,6 +9,7 @@ import { authClientsGet } from "../funcs/authClientsGet.js";
 import { authClientsGetAudience } from "../funcs/authClientsGetAudience.js";
 import { authClientsGetMcpServerAuthentication } from "../funcs/authClientsGetMcpServerAuthentication.js";
 import { authClientsList } from "../funcs/authClientsList.js";
+import { authClientsListMcpServerChoices } from "../funcs/authClientsListMcpServerChoices.js";
 import { authClientsSetAudience } from "../funcs/authClientsSetAudience.js";
 import { authClientsSetHeaders } from "../funcs/authClientsSetHeaders.js";
 import { authClientsSetMcpServerUpstreamAuthRequirement } from "../funcs/authClientsSetMcpServerUpstreamAuthRequirement.js";
@@ -16,6 +17,7 @@ import { authClientsUpdate } from "../funcs/authClientsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AuthClient } from "../models/components/authclient.js";
 import { AuthClientAudience } from "../models/components/authclientaudience.js";
+import { ListMcpServerAuthClientChoicesResponseBody } from "../models/components/listmcpserverauthclientchoicesresponsebody.js";
 import { McpServerAuthentication } from "../models/components/mcpserverauthentication.js";
 import {
   AttachAuthClientToMcpServerRequest,
@@ -46,6 +48,10 @@ import {
   ListAuthClientsResponse,
   ListAuthClientsSecurity,
 } from "../models/operations/listauthclients.js";
+import {
+  ListMcpServerAuthClientChoicesRequest,
+  ListMcpServerAuthClientChoicesSecurity,
+} from "../models/operations/listmcpserverauthclientchoices.js";
 import {
   SetAuthClientAudienceRequest,
   SetAuthClientAudienceSecurity,
@@ -192,6 +198,25 @@ export class AuthClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PageIterator<ListAuthClientsResponse, { cursor: string }>> {
     return unwrapResultIterator(authClientsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listMcpServerAuthClientChoices authClients
+   *
+   * @remarks
+   * List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Only names and types are returned.
+   */
+  async listMcpServerChoices(
+    request: ListMcpServerAuthClientChoicesRequest,
+    security?: ListMcpServerAuthClientChoicesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListMcpServerAuthClientChoicesResponseBody> {
+    return unwrapAsync(authClientsListMcpServerChoices(
       this,
       request,
       security,

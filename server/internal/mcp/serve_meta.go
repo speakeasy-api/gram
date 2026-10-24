@@ -249,6 +249,13 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		gatePolicy = toolSelection
 		gateAuthentication = authentication
 	}
+	if gateMemberChoices == nil && membership.agentID != uuid.Nil {
+		agentKeyChoices, err := s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
+		}
+		gateMemberChoices = agentKeyChoices
+	}
 	if prepared.empty() {
 		return nil
 	}

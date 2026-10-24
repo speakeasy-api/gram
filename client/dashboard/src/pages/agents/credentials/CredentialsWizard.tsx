@@ -805,6 +805,38 @@ export function CredentialsWizard({
         );
       }
 
+      // A server offering several shared credentials needs the key to name
+      // the one it uses; the server would otherwise keep serving it the way
+      // it did before credentials could be chosen.
+      const picked = allServers
+        ? []
+        : selected.filter(
+            (entry) =>
+              entry.server.kind === "Remote" ||
+              entry.server.kind === "Tunneled",
+          );
+      const offered = await Promise.all(
+        picked.map((entry) =>
+          sdk.authClients
+            .listMcpServerChoices({ mcpServerId: entry.server.id })
+            .then((result) => ({ entry, count: result.choices.length }))
+            .catch(() => ({ entry, count: 0 })),
+        ),
+      );
+      const unchosen = offered.filter(
+        ({ entry, count }) => count > 1 && !entry.authClientId,
+      );
+      if (unchosen.length > 0) {
+        throw new Error(
+          `Choose which credential the key uses on ${unchosen.map(({ entry }) => entry.server.name).join(", ")}.`,
+        );
+      }
+      const authClientChoices = picked.flatMap((entry) =>
+        entry.authClientId
+          ? [{ mcpServerId: entry.server.id, authClientId: entry.authClientId }]
+          : [],
+      );
+
       const expiresAt = new Date(Date.now() + KEY_LIFETIME_DAYS * 86_400_000);
       const issued = await sdk.keys.create({
         createKeyForm: {
@@ -817,6 +849,7 @@ export function CredentialsWizard({
           delegatedGrantsVersion: 2,
           requestedGrants,
           scopes: [],
+          authClientChoices,
         },
       });
       keyID.current = issued.id;

@@ -185,6 +185,7 @@ trackedFiles:
   src/funcs/authClientsGetAudience.ts: {}
   src/funcs/authClientsGetMcpServerAuthentication.ts: {}
   src/funcs/authClientsList.ts: {}
+  src/funcs/authClientsListMcpServerChoices.ts: {}
   src/funcs/authClientsSetAudience.ts: {}
   src/funcs/authClientsSetHeaders.ts: {}
   src/funcs/authClientsSetMcpServerUpstreamAuthRequirement.ts: {}
@@ -903,6 +904,7 @@ trackedFiles:
   src/models/components/agentdelegatedpolicy.ts: {}
   src/models/components/agentexpectedpolicy.ts: {}
   src/models/components/agentidform.ts: {}
+  src/models/components/agentkeyauthclientchoice.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentmcpserver.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
@@ -987,6 +989,7 @@ trackedFiles:
   src/models/components/authclientaudience.ts: {}
   src/models/components/authclientaudienceentry.ts: {}
   src/models/components/authclientaudiencerule.ts: {}
+  src/models/components/authclientchoice.ts: {}
   src/models/components/authclientheader.ts: {}
   src/models/components/authclientheaderinput.ts: {}
   src/models/components/authclientserver.ts: {}
@@ -1438,6 +1441,7 @@ trackedFiles:
   src/models/components/listmanageddevicesresult.ts: {}
   src/models/components/listmcpendpointsresult.ts: {}
   src/models/components/listmcpplatformtoolsetsresult.ts: {}
+  src/models/components/listmcpserverauthclientchoicesresponsebody.ts: {}
   src/models/components/listmcpserversresult.ts: {}
   src/models/components/listmembersresponsebody.ts: {}
   src/models/components/listmembersresult.ts: {}
@@ -2621,6 +2625,7 @@ trackedFiles:
   src/models/operations/listmcpendpoints.ts: {}
   src/models/operations/listmcpplatformtoolsets.ts: {}
   src/models/operations/listmcpregistries.ts: {}
+  src/models/operations/listmcpserverauthclientchoices.ts: {}
   src/models/operations/listmcpservers.ts: {}
   src/models/operations/listmcpserversfororg.ts: {}
   src/models/operations/listmcpservertoolfilters.ts: {}
@@ -3598,6 +3603,8 @@ trackedFiles:
   src/react-query/mcpRegistriesClearCache.ts: {}
   src/react-query/mcpRegistriesGetServerDetails.core.ts: {}
   src/react-query/mcpRegistriesGetServerDetails.ts: {}
+  src/react-query/mcpServerAuthClientChoices.core.ts: {}
+  src/react-query/mcpServerAuthClientChoices.ts: {}
   src/react-query/mcpServerAuthentication.core.ts: {}
   src/react-query/mcpServerAuthentication.ts: {}
   src/react-query/mcpServers.core.ts: {}
@@ -9925,6 +9932,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listMcpServerAuthClientChoices:
+    speakeasy-default-list-mcp-server-auth-client-choices:
+      parameters:
+        query:
+          mcp_server_id: "8810e064-7540-4440-95fd-d8ba8e7584ab"
+      responses:
+        "200":
+          application/json: {"choices": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listMcpServerToolFilters:
     speakeasy-default-list-mcp-server-tool-filters:
       responses:

@@ -155,6 +155,14 @@ var CreateKeyForm = Type("CreateKeyForm", func() {
 	Attribute("requested_grants", ArrayOf(agentsdesign.PolicyGrantForm), "Exact allow grants approved for an agent credential")
 	Attribute("expires_at", String, "Agent credential expiry; defaults to 90 days and cannot exceed one year", func() { Format(FormatDateTime) })
 	Attribute("policy_grants", ArrayOf(APIKeyPolicyGrant), "Optional policy for an ordinary key: mcp:connect and mcp:auth grants, and mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth client access is evaluated against. Not yet enforced. Requires org admin.", func() { MaxLength(100) })
+	Attribute("auth_client_choices", ArrayOf(AgentKeyAuthClientChoice), "For an agent key: the upstream credential the key uses on each MCP server that offers several. Where typed upstream authentication is enforced, the key is served on a server with the credential chosen here, checked again on every request. Shared credentials only: an agent reaches a person's own connection when it acts for them.", func() { MaxLength(100) })
+})
+
+var AgentKeyAuthClientChoice = Type("AgentKeyAuthClientChoice", func() {
+	Description("The upstream credential an agent key uses on one MCP server.")
+	Required("mcp_server_id")
+	Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
+	Attribute("auth_client_id", String, "The auth client the key uses there. Omit for a server whose upstream needs no authentication.", func() { Format(FormatUUID) })
 })
 
 var RotateKeyForm = Type("RotateKeyForm", func() {

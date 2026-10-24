@@ -61,6 +61,10 @@ type Service interface {
 	// and does not remove the server's existing upstream OAuth association, which
 	// keeps serving elsewhere, including in shadow mode. Requires org:admin.
 	DetachAuthClientFromMcpServer(context.Context, *DetachAuthClientFromMcpServerPayload) (res *types.AuthClient, err error)
+	// List the shared upstream credentials an MCP server offers that a credential
+	// of the caller's, such as an agent key, can be set up to use. Requires access
+	// to connect to the server. Only names and types are returned.
+	ListMcpServerAuthClientChoices(context.Context, *ListMcpServerAuthClientChoicesPayload) (res *ListMcpServerAuthClientChoicesResult, err error)
 	// Get how an MCP server authenticates to its upstream: whether authentication
 	// is required and which auth clients it offers. Requires org:read.
 	GetMcpServerAuthentication(context.Context, *GetMcpServerAuthenticationPayload) (res *types.McpServerAuthentication, err error)
@@ -101,7 +105,7 @@ const ServiceName = "authClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"listAuthClients", "getAuthClient", "updateAuthClient", "createAuthClient", "attachAuthClientToMcpServer", "setAuthClientHeaders", "detachAuthClientFromMcpServer", "getMcpServerAuthentication", "setMcpServerUpstreamAuthRequirement", "getAuthClientAudience", "setAuthClientAudience"}
+var MethodNames = [12]string{"listAuthClients", "getAuthClient", "updateAuthClient", "createAuthClient", "attachAuthClientToMcpServer", "setAuthClientHeaders", "detachAuthClientFromMcpServer", "listMcpServerAuthClientChoices", "getMcpServerAuthentication", "setMcpServerUpstreamAuthRequirement", "getAuthClientAudience", "setAuthClientAudience"}
 
 // AttachAuthClientToMcpServerPayload is the payload type of the authClients
 // service attachAuthClientToMcpServer method.
@@ -222,6 +226,24 @@ type ListAuthClientsPayload struct {
 type ListAuthClientsResult struct {
 	Items      []*types.AuthClient
 	NextCursor *string
+}
+
+// ListMcpServerAuthClientChoicesPayload is the payload type of the authClients
+// service listMcpServerAuthClientChoices method.
+type ListMcpServerAuthClientChoicesPayload struct {
+	// The MCP server id.
+	McpServerID  string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// ListMcpServerAuthClientChoicesResult is the result type of the authClients
+// service listMcpServerAuthClientChoices method.
+type ListMcpServerAuthClientChoicesResult struct {
+	// Whether the upstream needs authentication. Omitted while undecided.
+	RequiresUpstreamAuth *bool
+	// The enabled shared credentials the server offers.
+	Choices []*types.AuthClientChoice
 }
 
 // SetAuthClientAudiencePayload is the payload type of the authClients service

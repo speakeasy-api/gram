@@ -756,11 +756,12 @@ WHERE s.id = ANY(@mcp_server_ids::uuid[])
     WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
   );
 
--- name: RecordNewMemberSelection :execrows
--- Records a credential's choice for a gateway member added after it was
--- issued: the one auth client named, which must still be enabled and offered
--- by the server, or no-auth when none is. A choice already recorded, by a
--- concurrent request or otherwise, is kept.
+-- name: RecordAuthClientChoice :execrows
+-- Records one credential's choice for one MCP server: the auth client named,
+-- which must still be enabled and offered by the server, or no-auth when none
+-- is. A choice already recorded, by a concurrent request or otherwise, is
+-- kept. Callers validate the choice first; this only refuses one the server
+-- no longer offers.
 INSERT INTO upstream_client_selections (
     project_id,
     organization_id,
@@ -812,3 +813,31 @@ WHERE s.id = @mcp_server_id::uuid
   AND (sqlc.narg('auth_client_id')::uuid IS NULL OR ac.id IS NOT NULL)
   AND (ac.remote_session_client_id IS NULL OR reg.id IS NOT NULL)
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: CopyCredentialChoices :execrows
+-- Gives a replacement credential the choices of the one it replaces.
+INSERT INTO upstream_client_selections (
+    project_id, organization_id, credential_kind, credential_id, mcp_server_id,
+    remote_session_client_id, client_attachment_scope, no_auth, auth_client_id,
+    auth_client_attachment_scope, source
+)
+SELECT project_id, organization_id, credential_kind, @to_credential_id::uuid, mcp_server_id,
+       remote_session_client_id, client_attachment_scope, no_auth, auth_client_id,
+       auth_client_attachment_scope, source
+FROM upstream_client_selections
+WHERE credential_kind = @credential_kind::text
+  AND credential_id = @from_credential_id::uuid
+  AND organization_id = @organization_id::text
+  AND deleted IS FALSE
+ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: HasCredentialChoice :one
+SELECT EXISTS (
+  SELECT 1
+  FROM upstream_client_selections
+  WHERE credential_kind = @credential_kind::text
+    AND credential_id = @credential_id::uuid
+    AND mcp_server_id = @mcp_server_id::uuid
+    AND organization_id = @organization_id::text
+    AND deleted IS FALSE
+)::boolean AS has_choice;

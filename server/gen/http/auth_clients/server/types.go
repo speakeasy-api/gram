@@ -329,6 +329,15 @@ type DetachAuthClientFromMcpServerResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// ListMcpServerAuthClientChoicesResponseBody is the type of the "authClients"
+// service "listMcpServerAuthClientChoices" endpoint HTTP response body.
+type ListMcpServerAuthClientChoicesResponseBody struct {
+	// Whether the upstream needs authentication. Omitted while undecided.
+	RequiresUpstreamAuth *bool `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	// The enabled shared credentials the server offers.
+	Choices []*AuthClientChoiceResponseBody `form:"choices" json:"choices" xml:"choices"`
+}
+
 // GetMcpServerAuthenticationResponseBody is the type of the "authClients"
 // service "getMcpServerAuthentication" endpoint HTTP response body.
 type GetMcpServerAuthenticationResponseBody struct {
@@ -1719,6 +1728,196 @@ type DetachAuthClientFromMcpServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListMcpServerAuthClientChoicesUnauthorizedResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListMcpServerAuthClientChoicesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesForbiddenResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "forbidden" error.
+type ListMcpServerAuthClientChoicesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesBadRequestResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "bad_request" error.
+type ListMcpServerAuthClientChoicesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesNotFoundResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "not_found" error.
+type ListMcpServerAuthClientChoicesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesConflictResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "conflict" error.
+type ListMcpServerAuthClientChoicesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody is the type of
+// the "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesInvalidResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "invalid" error.
+type ListMcpServerAuthClientChoicesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesInvariantViolationResponseBody is the type of
+// the "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListMcpServerAuthClientChoicesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesUnexpectedResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "unexpected" error.
+type ListMcpServerAuthClientChoicesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServerAuthClientChoicesGatewayErrorResponseBody is the type of the
+// "authClients" service "listMcpServerAuthClientChoices" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListMcpServerAuthClientChoicesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetMcpServerAuthenticationUnauthorizedResponseBody is the type of the
 // "authClients" service "getMcpServerAuthentication" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -2546,6 +2745,16 @@ type AuthClientServerResponseBody struct {
 	Public bool `form:"public" json:"public" xml:"public"`
 }
 
+// AuthClientChoiceResponseBody is used to define fields on response body types.
+type AuthClientChoiceResponseBody struct {
+	// The auth client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The client's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// How the client authenticates upstream.
+	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
+}
+
 // AuthClientAudienceEntryResponseBody is used to define fields on response
 // body types.
 type AuthClientAudienceEntryResponseBody struct {
@@ -2865,6 +3074,28 @@ func NewDetachAuthClientFromMcpServerResponseBody(res *types.AuthClient) *Detach
 		}
 	} else {
 		body.Servers = []*AuthClientServerResponseBody{}
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesResponseBody builds the HTTP response body
+// from the result of the "listMcpServerAuthClientChoices" endpoint of the
+// "authClients" service.
+func NewListMcpServerAuthClientChoicesResponseBody(res *authclients.ListMcpServerAuthClientChoicesResult) *ListMcpServerAuthClientChoicesResponseBody {
+	body := &ListMcpServerAuthClientChoicesResponseBody{
+		RequiresUpstreamAuth: res.RequiresUpstreamAuth,
+	}
+	if res.Choices != nil {
+		body.Choices = make([]*AuthClientChoiceResponseBody, len(res.Choices))
+		for i, val := range res.Choices {
+			if val == nil {
+				body.Choices[i] = nil
+				continue
+			}
+			body.Choices[i] = marshalTypesAuthClientChoiceToAuthClientChoiceResponseBody(val)
+		}
+	} else {
+		body.Choices = []*AuthClientChoiceResponseBody{}
 	}
 	return body
 }
@@ -4003,6 +4234,156 @@ func NewDetachAuthClientFromMcpServerGatewayErrorResponseBody(res *goa.ServiceEr
 	return body
 }
 
+// NewListMcpServerAuthClientChoicesUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesUnauthorizedResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesUnauthorizedResponseBody {
+	body := &ListMcpServerAuthClientChoicesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesForbiddenResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesForbiddenResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesForbiddenResponseBody {
+	body := &ListMcpServerAuthClientChoicesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesBadRequestResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesBadRequestResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesBadRequestResponseBody {
+	body := &ListMcpServerAuthClientChoicesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesNotFoundResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesNotFoundResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesNotFoundResponseBody {
+	body := &ListMcpServerAuthClientChoicesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesConflictResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesConflictResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesConflictResponseBody {
+	body := &ListMcpServerAuthClientChoicesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody {
+	body := &ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesInvalidResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesInvalidResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesInvalidResponseBody {
+	body := &ListMcpServerAuthClientChoicesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesInvariantViolationResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesInvariantViolationResponseBody {
+	body := &ListMcpServerAuthClientChoicesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesUnexpectedResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesUnexpectedResponseBody {
+	body := &ListMcpServerAuthClientChoicesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServerAuthClientChoicesGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+func NewListMcpServerAuthClientChoicesGatewayErrorResponseBody(res *goa.ServiceError) *ListMcpServerAuthClientChoicesGatewayErrorResponseBody {
+	body := &ListMcpServerAuthClientChoicesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetMcpServerAuthenticationUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "getMcpServerAuthentication" endpoint
 // of the "authClients" service.
@@ -4713,6 +5094,17 @@ func NewDetachAuthClientFromMcpServerPayload(body *DetachAuthClientFromMcpServer
 		ID:          *body.ID,
 		McpServerID: *body.McpServerID,
 	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewListMcpServerAuthClientChoicesPayload builds a authClients service
+// listMcpServerAuthClientChoices endpoint payload.
+func NewListMcpServerAuthClientChoicesPayload(mcpServerID string, sessionToken *string, apikeyToken *string) *authclients.ListMcpServerAuthClientChoicesPayload {
+	v := &authclients.ListMcpServerAuthClientChoicesPayload{}
+	v.McpServerID = mcpServerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 

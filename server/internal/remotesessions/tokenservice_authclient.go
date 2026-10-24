@@ -57,13 +57,18 @@ func (m *ChallengeManager) ResolveAuthClientAccessTokens(ctx context.Context, re
 	if req.ProjectID == uuid.Nil || req.OrganizationID == "" || req.RegistrationID == uuid.Nil || req.Subject.IsZero() {
 		return nil, ErrInvalidAuthorizationRequest
 	}
-	if attached, err := attachedCaller(ctx, req.Subject); err != nil {
+	attached, err := attachedCaller(ctx, req.Subject)
+	if err != nil {
 		return nil, err
-	} else if attached {
-		return m.ResolveClientAccessTokens(ctx, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
 	}
 	client, err := m.reachableClient(ctx, req.ProjectID, req.OrganizationID, req.RegistrationID)
-	if err != nil {
+	switch {
+	case attached && (errors.Is(err, ErrChosenClientUnbound) || (err == nil && client.CredentialOwner != string(CredentialOwnerSelf))):
+		// An attached caller reaches a person's connection through its
+		// attachment. A service account's token belongs to nobody, so no
+		// attachment applies to it.
+		return m.ResolveClientAccessTokens(ctx, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
+	case err != nil:
 		return nil, err
 	}
 	return m.resolveClientTokens(ctx, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.SkipUnusable)
