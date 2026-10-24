@@ -2,6 +2,8 @@ package demoseed
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -13,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 )
 
 // seedRiskAndChats: Risk policies, exclusions, chats, messages, findings.
@@ -74,6 +77,7 @@ func (s *seeder) seedRiskPolicies(ctx context.Context) error {
 			ShadowMcpDisposition: shadow,
 			AutoName:             autoName,
 			Score:                score,
+			ApprovalConfig:       nil,
 		}
 	}
 
@@ -166,10 +170,26 @@ func (s *seeder) seedRiskPolicies(ctx context.Context) error {
 			[]string{}, nil,
 			false, "quarantine", none, false, 9.5),
 	}
+	// Tool approval: posting to Slack waits for one of two approvers. No
+	// detectors; the MCP scope names the one tool it holds.
+	approvalPolicy := policy(s.policyAP(), "Approve Slack posts",
+		[]string{}, nil, empty, []string{},
+		riskJSON(map[string]any{
+			"servers": []map[string]any{{"mcp_server_id": s.det("mcpserver-slack").String(), "tools": []string{"send_message"}}},
+		}),
+		true, "require_approval", none, false, 7.0)
+	approvalPolicy.ApprovalConfig = riskJSON(map[string]any{
+		"approvers": []string{"user:" + s.userID("lucas"), "user:" + s.userID("priya")},
+	})
+	policies = append(policies, approvalPolicy)
+
 	for _, p := range policies {
 		if err := s.q.RiskInsertPolicy(ctx, p); err != nil {
 			return fmt.Errorf("insert demo risk policy %q: %w", p.Name, err)
 		}
+	}
+	if err := s.seedToolApprovals(ctx); err != nil {
+		return err
 	}
 
 	// The same canonical target has two grants, so Platform MCP demonstrates
@@ -400,6 +420,76 @@ func (s *seeder) riskFindingFor(i int) *riskFinding {
 func riskStrpos(haystack, needle string) int {
 	before, _, _ := strings.Cut(haystack, needle)
 	return utf8.RuneCountInString(before)
+}
+
+// approvalWindowMinutes is how long a seeded request waits for a decision: the
+// 24-hour maximum for the pending one, so it stays pending until a few minutes
+// before the next daily reseed replaces it, and the 30-minute default for the
+// rest.
+func approvalWindowMinutes(status string) int32 {
+	if status == "pending" {
+		return 24 * 60
+	}
+	return 30
+}
+
+// seedToolApprovals writes four held Slack posts for the Tool approvals tab:
+// waiting, approved and used, denied with a note, and expired.
+func (s *seeder) seedToolApprovals(ctx context.Context) error {
+	agent := "agent:" + s.det("managed-agent-1").String()
+	approver := "user:" + s.userID("lucas")
+	slackServer := s.det("mcpserver-slack").String()
+	requests := []struct {
+		key        string
+		args       map[string]any
+		reason     string
+		status     string
+		decided    bool
+		note       string
+		minutesAgo int32
+	}{
+		{"approval-pending", map[string]any{"channel": "C0DEMOSUPPORT", "text": "The billing export is back to normal. Sorry for the delay."}, "Tell the support channel the billing export recovered.", "pending", false, "", 4},
+		{"approval-used", map[string]any{"channel": "C0DEMORELEASES", "text": "Release 4.12 is live in all regions."}, "Announce the release the user just shipped.", "consumed", true, "", 95},
+		{"approval-denied", map[string]any{"channel": "C0DEMOGENERAL", "text": "Heads up: the on-call schedule changes next week."}, "Share the on-call change with the whole company.", "denied", true, "Post this in the on-call channel instead.", 240},
+		{"approval-expired", map[string]any{"channel": "C0DEMOSUPPORT", "text": "Closing the incident, thanks all."}, "Close out the incident thread.", "expired", false, "", 600},
+	}
+	for _, r := range requests {
+		args := riskJSON(r.args)
+		fingerprint, err := approval.CallFingerprint(slackServer, "send_message", args)
+		if err != nil {
+			return fmt.Errorf("fingerprint demo approval %s: %w", r.key, err)
+		}
+		sum := sha256.Sum256([]byte(s.name(r.key + "-token")))
+		params := repo.RiskInsertApprovalParams{
+			ID:               s.det(r.key),
+			OrganizationID:   s.orgID(),
+			ProjectID:        s.projectID(),
+			RiskPolicyID:     s.policyAP(),
+			Token:            approval.TokenPrefix + base64.RawURLEncoding.EncodeToString(sum[:]),
+			RequesterUrn:     agent,
+			ToolName:         "send_message",
+			CallFingerprint:  fingerprint,
+			ArgumentsPreview: args,
+			Reason:           riskText(r.reason),
+			Status:           r.status,
+			DecidedByUrn:     pgtype.Text{String: "", Valid: false},
+			DecidedVia:       pgtype.Text{String: "", Valid: false},
+			DecisionNote:     pgtype.Text{String: "", Valid: false},
+			HeldMinutesAgo:   r.minutesAgo,
+			WindowMinutes:    approvalWindowMinutes(r.status),
+		}
+		if r.decided {
+			params.DecidedByUrn = riskText(approver)
+			params.DecidedVia = riskText("dashboard")
+		}
+		if r.note != "" {
+			params.DecisionNote = riskText(r.note)
+		}
+		if err := s.q.RiskInsertApproval(ctx, params); err != nil {
+			return fmt.Errorf("insert demo approval %s: %w", r.key, err)
+		}
+	}
+	return nil
 }
 
 // seedRiskChats writes the bulk chats, their transcripts, and their findings.

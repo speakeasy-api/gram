@@ -31,6 +31,7 @@ const ACTION_LABELS = {
   warn: { chip: "Warn", label: "Warn & confirm" },
   block: { chip: "Deny", label: "Deny the request" },
   quarantine: { chip: "Quarantine", label: "Quarantine session" },
+  require_approval: { chip: "Approval", label: "Require approval" },
 } as const;
 
 // Chip labels for the summary; the full detector names are too long to sit
