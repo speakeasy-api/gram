@@ -99,6 +99,7 @@ vi.mock("@/components/page-layout", () => ({
     Toolbar: Object.assign(
       ({ children }: { children: ReactNode }) => <div>{children}</div>,
       {
+        Leading: ({ children }: { children: ReactNode }) => <>{children}</>,
         Refresh: ({ onRefresh }: { onRefresh: () => void }) => (
           <button type="button" onClick={onRefresh}>
             Refresh
