@@ -44,9 +44,11 @@ const (
 	// maxNameChars bounds a tool, person, server or policy name on a card.
 	maxNameChars = 200
 
-	// previewOmittedKey is the entry the arguments preview adds when it
-	// leaves top-level arguments out. Its value starts with how many.
-	previewOmittedKey = "…"
+	// previewOmittedMark makes up the key of the entry the arguments preview
+	// adds when it leaves top-level arguments out: one mark, or more when an
+	// argument already has that name. previewOmittedNote is its value.
+	previewOmittedMark = "…"
+	previewOmittedNote = "arguments not shown: %d"
 )
 
 // emojiCode matches a Slack emoji code such as :tada:, which renders as an
@@ -297,12 +299,7 @@ func argumentsSection(raw []byte) (block, bool) {
 	if !ok {
 		arguments = map[string]any{"value": preview}
 	}
-	hidden := 0
-	if note, ok := arguments[previewOmittedKey].(string); ok {
-		if _, err := fmt.Sscanf(note, "%d", &hidden); err == nil {
-			delete(arguments, previewOmittedKey)
-		}
-	}
+	hidden := takeOmitted(arguments)
 	if len(arguments) == 0 && hidden == 0 {
 		return none, false
 	}
@@ -320,6 +317,29 @@ func argumentsSection(raw []byte) (block, bool) {
 		fields = append(fields, textObject{Type: "mrkdwn", Text: fmt.Sprintf("*More*\n%d more arguments, in Speakeasy", hidden)})
 	}
 	return block{Type: "section", BlockID: "", Text: &textObject{Type: "mrkdwn", Text: "*Arguments*"}, Fields: fields, Elements: nil}, true
+}
+
+// takeOmitted removes the preview's entry for arguments it left out and
+// returns how many it left out. When an argument shares the mark, the
+// preview's entry has the longest key.
+func takeOmitted(arguments map[string]any) int {
+	marker := ""
+	hidden := 0
+	for key, value := range arguments {
+		note, isText := value.(string)
+		if !isText || key == "" || strings.Trim(key, previewOmittedMark) != "" || len(key) <= len(marker) {
+			continue
+		}
+		var count int
+		if _, err := fmt.Sscanf(note, previewOmittedNote, &count); err != nil {
+			continue
+		}
+		marker, hidden = key, count
+	}
+	if marker != "" {
+		delete(arguments, marker)
+	}
+	return hidden
 }
 
 // argumentValue renders one argument. Plain text reads as text. Everything

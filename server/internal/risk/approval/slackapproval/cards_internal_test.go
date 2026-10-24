@@ -139,16 +139,22 @@ func TestArgumentNamesCannotAddCardLines(t *testing.T) {
 func TestArgumentsSectionCountsArgumentsThePreviewLeftOut(t *testing.T) {
 	t.Parallel()
 
-	section, ok := argumentsSection([]byte(`{"a":1,"b":2,"…":"5 more arguments not shown"}`))
+	section, ok := argumentsSection([]byte(`{"a":1,"b":2,"…":"arguments not shown: 5"}`))
 	require.True(t, ok)
 	require.Len(t, section.Fields, 3)
 	require.Equal(t, "*More*\n5 more arguments, in Speakeasy", section.Fields[2].Text)
+
+	// An argument named like the mark stays an argument; the preview's entry
+	// has the longer key.
+	section, ok = argumentsSection([]byte(`{"…":"x","……":"arguments not shown: 2"}`))
+	require.True(t, ok)
+	require.Equal(t, []string{"*…*\nx", "*More*\n2 more arguments, in Speakeasy"}, []string{section.Fields[0].Text, section.Fields[1].Text})
 
 	var pairs []string
 	for i := range 12 {
 		pairs = append(pairs, fmt.Sprintf(`"arg%02d":%d`, i, i))
 	}
-	section, ok = argumentsSection([]byte("{" + strings.Join(pairs, ",") + `,"…":"3 more arguments not shown"}`))
+	section, ok = argumentsSection([]byte("{" + strings.Join(pairs, ",") + `,"…":"arguments not shown: 3"}`))
 	require.True(t, ok)
 	require.Len(t, section.Fields, maxArgumentFields)
 	require.Equal(t, "*More*\n6 more arguments, in Speakeasy", section.Fields[maxArgumentFields-1].Text)
