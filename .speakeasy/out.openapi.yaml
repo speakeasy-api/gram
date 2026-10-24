@@ -114590,6 +114590,9 @@ components:
     UpdateMcpServerForm:
       type: object
       properties:
+        clear_user_session_issuer:
+          type: boolean
+          description: Detach the current user session issuer, so the server no longer requires user sessions. Must not be true when user_session_issuer_id is set.
         environment_id:
           type: string
           description: The ID of the environment to associate with the server
@@ -114639,7 +114642,7 @@ components:
             - disabled
             - private
             - public
-      description: 'Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value; the slug is recomputed server-side from the resulting name.'
+      description: 'Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value, and set clear_user_session_issuer to detach the issuer; the slug is recomputed server-side from the resulting name.'
       required:
         - id
         - visibility

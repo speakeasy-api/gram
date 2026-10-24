@@ -28,6 +28,9 @@ type HostedServerUpdate struct {
 	// UserSessionIssuerID links an issuer when valid; invalid keeps the current one.
 	UserSessionIssuerID uuid.NullUUID
 
+	// ClearUserSessionIssuer detaches the issuer; UserSessionIssuerID is then invalid.
+	ClearUserSessionIssuer bool
+
 	// ToolVariationsGroupID replaces the tool filtering group; invalid clears it.
 	ToolVariationsGroupID uuid.NullUUID
 
@@ -83,12 +86,13 @@ func (s *Service) updateHostedServer(ctx context.Context, logger *slog.Logger, o
 	}
 
 	updated, err := s.hostedServers.UpdateHostedServer(ctx, HostedServerUpdate{
-		ToolsetID:             existing.ID,
-		Name:                  name,
-		Visibility:            string(payload.Visibility),
-		UserSessionIssuerID:   ids.UserSessionIssuerID,
-		ToolVariationsGroupID: ids.ToolVariationsGroupID,
-		NetworkAccessMode:     mode,
+		ToolsetID:              existing.ID,
+		Name:                   name,
+		Visibility:             string(payload.Visibility),
+		UserSessionIssuerID:    ids.UserSessionIssuerID,
+		ClearUserSessionIssuer: payload.ClearUserSessionIssuer != nil && *payload.ClearUserSessionIssuer,
+		ToolVariationsGroupID:  ids.ToolVariationsGroupID,
+		NetworkAccessMode:      mode,
 	})
 	if err != nil {
 		return nil, err //nolint:wrapcheck // The writer returns oops errors whose codes reach the caller.
