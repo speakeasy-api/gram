@@ -67,6 +67,7 @@ func TestWorkloadInference_OrganizationIssuerBindsTargetProject(t *testing.T) {
 			require.NoError(t, err)
 			require.False(t, row.ProjectID.Valid)
 			require.Equal(t, mcp.InferenceResource+":"+f.fx.target.ProjectID.String(), row.Resource.String)
+			require.False(t, row.ResourceIdentity.Valid, "inference sessions carry no gateway identity")
 			if tier == "project" {
 				affected, err := testrepo.New(f.ti.conn).SoftDeleteWorkloadAdmissionFixture(ctx, testrepo.SoftDeleteWorkloadAdmissionFixtureParams{OrganizationID: f.fx.orgID, WorkloadIssuerID: f.issuerID, Subject: f.subject})
 				require.NoError(t, err)
