@@ -17,7 +17,10 @@ services:
       # The dev server is a single Go process, so its footprint is governed by
       # the Go runtime rather than by cgroup limits. GOMEMLIMIT is a soft heap
       # target, not a hard RSS cap. Each server handles only this worktree.
-      GOMEMLIMIT: 256MiB
+      # 256MiB was too tight: after a day of schedule runs the live heap sat at
+      # about 250MB, and the runtime then collected garbage several times a
+      # second, burning all of GOMAXPROCS while the stack did nothing.
+      GOMEMLIMIT: 512MiB
       # Per-P allocator caches and GC workers scale with core count; the dev
       # server never needs the whole host.
       GOMAXPROCS: 4
