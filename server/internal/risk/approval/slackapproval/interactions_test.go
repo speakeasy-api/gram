@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
+	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -62,6 +63,7 @@ type clickFixture struct {
 func newClickFixture(t *testing.T) *clickFixture {
 	t.Helper()
 	f := newFixture(t)
+	f.connectWorkspace(t)
 	f.slack.mapUser(f.email(t, f.approverID), "UAPPROVER")
 	policy := f.addPolicy(t, userURN(f.approverID))
 	approvalID := f.pendingRequest(t, policy, "")
@@ -204,6 +206,7 @@ func TestClickByTheRequesterIsRefused(t *testing.T) {
 	// The approver made the call through their own session. They get no DM,
 	// so plant one to prove the click path refuses them too.
 	approvalID := f.pendingRequest(t, policy, f.approverID)
+	f.connectWorkspace(t)
 	message, err := repo.New(f.db).InsertApprovalMessage(t.Context(), repo.InsertApprovalMessageParams{
 		OrganizationID:  f.organizationID,
 		ProjectID:       f.projectID,
@@ -247,6 +250,20 @@ func TestClickOnAnUnknownMessageIsRefused(t *testing.T) {
 	unknown.SlackMessageTs = conv.ToPGText("1600000000.000001")
 
 	require.Equal(t, http.StatusOK, f.send(t, clickPayload(unknown, "UAPPROVER", slackapproval.ActionApprove), testSigningSecret, time.Now()))
+	require.Contains(t, f.responder.only(t).Text, "no longer available")
+	require.Equal(t, string(approval.StatusPending), f.status(t).Status)
+}
+
+func TestClickFromADisconnectedWorkspaceIsRefused(t *testing.T) {
+	t.Parallel()
+	f := newClickFixture(t)
+	connection := f.connectWorkspace(t)
+	_, err := slackrepo.New(f.db).DisconnectSlackDirectoryConnection(t.Context(), slackrepo.DisconnectSlackDirectoryConnectionParams{
+		Generation: uuid.New(), OrganizationID: f.organizationID, ID: connection.ID, ExpectedGeneration: connection.Generation,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, f.send(t, clickPayload(f.message, "UAPPROVER", slackapproval.ActionApprove), testSigningSecret, time.Now()))
 	require.Contains(t, f.responder.only(t).Text, "no longer available")
 	require.Equal(t, string(approval.StatusPending), f.status(t).Status)
 }

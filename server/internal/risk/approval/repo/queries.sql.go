@@ -326,14 +326,18 @@ func (q *Queries) GetApprovalByToken(ctx context.Context, token string) (RiskPol
 }
 
 const getApprovalMessageBySlackMessage = `-- name: GetApprovalMessageBySlackMessage :one
-SELECT id, organization_id, project_id, approval_id, provider, kind, recipient_user_id, slack_team_id, slack_user_id, slack_channel_id, slack_message_ts, created_at, updated_at, deleted_at, deleted
-FROM risk_policy_approval_messages
-WHERE provider = 'slack'
-  AND slack_team_id = $1
-  AND slack_channel_id = $2
-  AND slack_message_ts = $3
-  AND deleted IS FALSE
-ORDER BY created_at, id
+SELECT m.id, m.organization_id, m.project_id, m.approval_id, m.provider, m.kind, m.recipient_user_id, m.slack_team_id, m.slack_user_id, m.slack_channel_id, m.slack_message_ts, m.created_at, m.updated_at, m.deleted_at, m.deleted
+FROM risk_policy_approval_messages m
+JOIN slack_directory_connections c
+  ON c.organization_id = m.organization_id
+  AND c.slack_team_id = m.slack_team_id
+  AND c.disconnected_at IS NULL
+WHERE m.provider = 'slack'
+  AND m.slack_team_id = $1
+  AND m.slack_channel_id = $2
+  AND m.slack_message_ts = $3
+  AND m.deleted IS FALSE
+ORDER BY m.created_at, m.id
 LIMIT 1
 `
 
@@ -343,28 +347,33 @@ type GetApprovalMessageBySlackMessageParams struct {
 	SlackMessageTs pgtype.Text
 }
 
+type GetApprovalMessageBySlackMessageRow struct {
+	RiskPolicyApprovalMessage RiskPolicyApprovalMessage
+}
+
 // Resolves a Slack click to the DM it was made on. Slack signs the click, and
 // the click names its workspace, channel and message, so this lookup is not
-// tenant-scoped; the row it returns carries the tenant.
-func (q *Queries) GetApprovalMessageBySlackMessage(ctx context.Context, arg GetApprovalMessageBySlackMessageParams) (RiskPolicyApprovalMessage, error) {
+// tenant-scoped; the row it returns carries the tenant. A DM in a workspace
+// the organization has since disconnected finds no row.
+func (q *Queries) GetApprovalMessageBySlackMessage(ctx context.Context, arg GetApprovalMessageBySlackMessageParams) (GetApprovalMessageBySlackMessageRow, error) {
 	row := q.db.QueryRow(ctx, getApprovalMessageBySlackMessage, arg.SlackTeamID, arg.SlackChannelID, arg.SlackMessageTs)
-	var i RiskPolicyApprovalMessage
+	var i GetApprovalMessageBySlackMessageRow
 	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.ApprovalID,
-		&i.Provider,
-		&i.Kind,
-		&i.RecipientUserID,
-		&i.SlackTeamID,
-		&i.SlackUserID,
-		&i.SlackChannelID,
-		&i.SlackMessageTs,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
+		&i.RiskPolicyApprovalMessage.ID,
+		&i.RiskPolicyApprovalMessage.OrganizationID,
+		&i.RiskPolicyApprovalMessage.ProjectID,
+		&i.RiskPolicyApprovalMessage.ApprovalID,
+		&i.RiskPolicyApprovalMessage.Provider,
+		&i.RiskPolicyApprovalMessage.Kind,
+		&i.RiskPolicyApprovalMessage.RecipientUserID,
+		&i.RiskPolicyApprovalMessage.SlackTeamID,
+		&i.RiskPolicyApprovalMessage.SlackUserID,
+		&i.RiskPolicyApprovalMessage.SlackChannelID,
+		&i.RiskPolicyApprovalMessage.SlackMessageTs,
+		&i.RiskPolicyApprovalMessage.CreatedAt,
+		&i.RiskPolicyApprovalMessage.UpdatedAt,
+		&i.RiskPolicyApprovalMessage.DeletedAt,
+		&i.RiskPolicyApprovalMessage.Deleted,
 	)
 	return i, err
 }

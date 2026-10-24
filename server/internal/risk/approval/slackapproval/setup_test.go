@@ -79,6 +79,9 @@ type fixture struct {
 	agentURN   string
 	// serverID is the MCP server, Team Slack, that held calls go to.
 	serverID uuid.UUID
+	// connection is the fake workspace's connection, once connectWorkspace
+	// records it.
+	connection *slackrepo.SlackDirectoryConnection
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -280,19 +283,31 @@ func (f *fixture) addRole(t *testing.T, slug string, members ...string) string {
 	return role.RoleUrn
 }
 
+// connectWorkspace records the fake workspace as connected to the
+// organization, the first time it is called.
+func (f *fixture) connectWorkspace(t *testing.T) slackrepo.SlackDirectoryConnection {
+	t.Helper()
+	if f.connection != nil {
+		return *f.connection
+	}
+	connection, err := slackrepo.New(f.db).CreateSlackDirectoryConnection(t.Context(), slackrepo.CreateSlackDirectoryConnectionParams{
+		OrganizationID: f.organizationID, SlackTeamID: testTeamID, SlackTeamName: conv.ToPGText("Example workspace"),
+		CredentialsEncrypted: conv.ToPGTextEmpty(""), GrantedScopes: []string{}, Generation: uuid.New(),
+	})
+	require.NoError(t, err)
+	f.connection = &connection
+	return connection
+}
+
 // mapToSlack confirms userID as slackUserID in the fake workspace, the way an
 // admin maps people on the Slack workspaces page.
 func (f *fixture) mapToSlack(t *testing.T, userID, slackUserID string) {
 	t.Helper()
 	ctx := t.Context()
 	queries := slackrepo.New(f.db)
-	connection, err := queries.CreateSlackDirectoryConnection(ctx, slackrepo.CreateSlackDirectoryConnectionParams{
-		OrganizationID: f.organizationID, SlackTeamID: testTeamID, SlackTeamName: conv.ToPGText("Example workspace"),
-		CredentialsEncrypted: conv.ToPGTextEmpty(""), GrantedScopes: []string{}, Generation: uuid.New(),
-	})
-	require.NoError(t, err)
+	connection := f.connectWorkspace(t)
 	published := conv.ToPGTimestamptz(time.Now())
-	_, err = queries.PublishSlackDirectorySync(ctx, slackrepo.PublishSlackDirectorySyncParams{
+	_, err := queries.PublishSlackDirectorySync(ctx, slackrepo.PublishSlackDirectorySyncParams{
 		OrganizationID: f.organizationID, ID: connection.ID, Generation: connection.Generation, PublishedAt: published,
 	})
 	require.NoError(t, err)

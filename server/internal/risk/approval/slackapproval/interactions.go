@@ -168,6 +168,9 @@ func (h *Interactions) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
 		return
 	}
+	// An empty body with its length declared makes the 200 a whole response,
+	// so Slack has its answer once it is flushed, before the decision runs.
+	w.Header().Set("Content-Length", "0")
 	w.WriteHeader(http.StatusOK)
 	if payload.Type != "block_actions" || len(payload.Actions) != 1 {
 		return
@@ -190,7 +193,7 @@ func (h *Interactions) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Interactions) handleClick(ctx context.Context, payload interactionPayload, approve bool, value string) ResponseMessage {
-	message, err := repo.New(h.db).GetApprovalMessageBySlackMessage(ctx, repo.GetApprovalMessageBySlackMessageParams{
+	found, err := repo.New(h.db).GetApprovalMessageBySlackMessage(ctx, repo.GetApprovalMessageBySlackMessageParams{
 		SlackTeamID:    conv.ToPGText(payload.Team.ID),
 		SlackChannelID: conv.ToPGText(payload.Container.ChannelID),
 		SlackMessageTs: conv.ToPGText(payload.Container.MessageTS),
@@ -202,6 +205,7 @@ func (h *Interactions) handleClick(ctx context.Context, payload interactionPaylo
 		h.logger.ErrorContext(ctx, "look up approval DM", attr.SlogError(err))
 		return ephemeral("Something went wrong. Try again, or decide in Speakeasy.")
 	}
+	message := found.RiskPolicyApprovalMessage
 	// The DM went to one approver, so a click is theirs only when it comes
 	// from that Slack user and names the request the DM was sent for.
 	if message.SlackUserID.String != payload.User.ID || message.ApprovalID.String() != value {
