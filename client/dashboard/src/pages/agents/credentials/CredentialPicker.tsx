@@ -281,10 +281,11 @@ export function CredentialPicker({
             <Text muted small>
               Only when your platform already mints signed OIDC tokens for its
               workloads, such as a CI provider, a cluster or your own identity
-              service. If it mints none, use an API key.
+              service. Reuse an issuer you already trust or register a new one.
+              If it mints none, use an API key.
             </Text>
             <CredentialMeta>
-              No key minted · you enter the issuer URLs
+              No key minted · reuse or register an issuer
             </CredentialMeta>
           </RadioCard>
         </CollapsibleContent>
