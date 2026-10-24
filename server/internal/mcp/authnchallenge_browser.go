@@ -111,6 +111,9 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("load remote login browser state: %w", err)
 	}
+	if recovery, err := s.verifyConnectionRecoveryCompletion(r, remote); recovery {
+		return err
+	}
 	if remote.FinalRedirectURI != "" {
 		return nil
 	}
