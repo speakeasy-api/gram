@@ -733,3 +733,82 @@ WHERE sel.credential_kind = 'user_session'
   AND sel.auth_client_id IS NOT NULL
   AND sel.deleted IS FALSE
 ORDER BY sel.mcp_server_id, sel.created_at DESC;
+
+-- name: ListGatewayMembersAddedAfterIssuance :many
+-- The members, of those given, that joined the gateway after the credential
+-- was first issued: a server added to a gateway's member list since, or, for
+-- the organization gateway, which has no list, a server created since. A
+-- member present at issuance was considered then, whatever its choice.
+SELECT s.id
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.organization_id = @organization_id::text
+LEFT JOIN meta_mcp_server_members AS m
+  ON m.mcp_server_id = s.id
+ AND m.meta_mcp_server_id = sqlc.narg('meta_mcp_server_id')::uuid
+ AND m.deleted IS FALSE
+WHERE s.id = ANY(@mcp_server_ids::uuid[])
+  AND s.deleted IS FALSE
+  AND COALESCE(m.created_at, s.created_at) > (
+    SELECT min(us.created_at)
+    FROM user_sessions AS us
+    WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
+  );
+
+-- name: RecordNewMemberSelection :execrows
+-- Records a credential's choice for a gateway member added after it was
+-- issued: the one auth client named, which must still be enabled and offered
+-- by the server, or no-auth when none is. A choice already recorded, by a
+-- concurrent request or otherwise, is kept.
+INSERT INTO upstream_client_selections (
+    project_id,
+    organization_id,
+    credential_kind,
+    credential_id,
+    mcp_server_id,
+    remote_session_client_id,
+    client_attachment_scope,
+    no_auth,
+    auth_client_id,
+    auth_client_attachment_scope,
+    source
+)
+SELECT s.project_id,
+       p.organization_id,
+       @credential_kind::text,
+       @credential_id::uuid,
+       s.id,
+       ac.remote_session_client_id,
+       reg.attachment_scope,
+       ac.id IS NULL,
+       ac.id,
+       ac.attachment_scope,
+       @source::text
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.organization_id = @organization_id::text
+ AND p.deleted IS FALSE
+LEFT JOIN mcp_auth_clients AS ac
+  ON ac.id = sqlc.narg('auth_client_id')::uuid
+ AND ac.organization_id = p.organization_id
+ AND (ac.project_id IS NULL OR ac.project_id = s.project_id)
+ AND ac.deleted IS FALSE
+ AND ac.enabled
+ AND EXISTS (
+   SELECT 1
+   FROM mcp_server_auth_clients AS link
+   WHERE link.mcp_server_id = s.id
+     AND link.auth_client_id = ac.id
+     AND link.organization_id = p.organization_id
+     AND link.deleted IS FALSE
+ )
+LEFT JOIN remote_session_clients AS reg
+  ON reg.id = ac.remote_session_client_id
+ AND reg.deleted IS FALSE
+WHERE s.id = @mcp_server_id::uuid
+  AND s.deleted IS FALSE
+  AND (sqlc.narg('auth_client_id')::uuid IS NULL OR ac.id IS NOT NULL)
+  AND (ac.remote_session_client_id IS NULL OR reg.id IS NOT NULL)
+ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING;
