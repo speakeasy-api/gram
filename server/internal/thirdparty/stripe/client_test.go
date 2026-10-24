@@ -1656,7 +1656,7 @@ func TestCreateCheckoutSessionFormOmitsPageOnlyOptions(t *testing.T) {
 		ReturnURL:          returnURL,
 		BillingCycleAnchor: time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
 		ExpiresAt:          time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
-		IdempotencyKey:     "checkout", EmbeddedFormPrototype: true,
+		IdempotencyKey:     "checkout", EmbeddedForm: true,
 		EmbeddedBrandingV1: true, EmbeddedBrandingDarkV1: true,
 	})
 	require.NoError(t, err)
@@ -1669,33 +1669,44 @@ func TestCreateCheckoutSessionFormOmitsPageOnlyOptions(t *testing.T) {
 	require.Nil(t, params.CancelURL)
 }
 
-func TestCreateCheckoutSessionFormPreservesPromotionCodes(t *testing.T) {
+func TestCreateCheckoutSessionFormPreservesPromotionCodesWithoutPreset(t *testing.T) {
 	t.Parallel()
-	for _, promotionCodeID := range []string{"", "promo_test"} {
-		t.Run("promotion="+promotionCodeID, func(t *testing.T) {
-			t.Parallel()
-			api := &fakeStripeAPI{}
-			c := &client{api: api}
-			_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
-				CustomerID: "cus_test", PromotionCodeID: promotionCodeID,
-				ReturnURL:             "https://app.example.test/the-customer/billing?session_id={CHECKOUT_SESSION_ID}",
-				EmbeddedFormPrototype: true,
-				BillingCycleAnchor:    time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
-				ExpiresAt:             time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
-				IdempotencyKey:        "checkout",
-			})
-			require.NoError(t, err)
-			params := api.checkoutSessionParams
-			require.Equal(t, "form", stripesdk.StringValue(params.UIMode))
-			if promotionCodeID == "" {
-				require.True(t, stripesdk.BoolValue(params.AllowPromotionCodes))
-				require.Empty(t, params.Discounts)
-			} else {
-				require.Nil(t, params.AllowPromotionCodes)
-				require.Len(t, params.Discounts, 1)
-				require.Equal(t, promotionCodeID, stripesdk.StringValue(params.Discounts[0].PromotionCode))
-				require.Nil(t, params.Discounts[0].Coupon)
-			}
-		})
-	}
+	promotionCodeID := ""
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		CustomerID: "cus_test", PromotionCodeID: promotionCodeID,
+		ReturnURL:          "https://app.example.test/the-customer/billing?session_id={CHECKOUT_SESSION_ID}",
+		EmbeddedForm:       true,
+		BillingCycleAnchor: time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
+		ExpiresAt:          time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
+		IdempotencyKey:     "checkout",
+	})
+	require.NoError(t, err)
+	params := api.checkoutSessionParams
+	require.Equal(t, "form", stripesdk.StringValue(params.UIMode))
+	require.True(t, stripesdk.BoolValue(params.AllowPromotionCodes))
+	require.Empty(t, params.Discounts)
+}
+
+func TestCreateCheckoutSessionFormPreservesPromotionCodesWithPreset(t *testing.T) {
+	t.Parallel()
+	promotionCodeID := "promo_test"
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		CustomerID: "cus_test", PromotionCodeID: promotionCodeID,
+		ReturnURL:          "https://app.example.test/the-customer/billing?session_id={CHECKOUT_SESSION_ID}",
+		EmbeddedForm:       true,
+		BillingCycleAnchor: time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
+		ExpiresAt:          time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
+		IdempotencyKey:     "checkout",
+	})
+	require.NoError(t, err)
+	params := api.checkoutSessionParams
+	require.Equal(t, "form", stripesdk.StringValue(params.UIMode))
+	require.Nil(t, params.AllowPromotionCodes)
+	require.Len(t, params.Discounts, 1)
+	require.Equal(t, promotionCodeID, stripesdk.StringValue(params.Discounts[0].PromotionCode))
+	require.Nil(t, params.Discounts[0].Coupon)
 }

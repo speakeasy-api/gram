@@ -3128,50 +3128,69 @@ func TestStripeCheckoutRejectsMalformedIdentifiers(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, serveStripeWebhook(service, "malformed").Code)
 }
 
-func TestStripeCheckoutAsyncPaymentOutcomes(t *testing.T) {
+func TestStripeCheckoutAsyncPaymentOutcomesUnpaidCompletion(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name, eventType, paymentStatus, subscriptionStatus string
-		activated, failed                                  bool
-	}{
-		{"unpaid completion", "checkout.session.completed", "unpaid", "active", false, false},
-		{"trial completion", "checkout.session.completed", "no_payment_required", "trialing", true, false},
-		{"unpaid trial completion", "checkout.session.completed", "unpaid", "trialing", true, false},
-		{"async success", "checkout.session.async_payment_succeeded", "paid", "active", true, false},
-		{"unpaid async success", "checkout.session.async_payment_succeeded", "unpaid", "active", false, false},
-		{"async failure", "checkout.session.async_payment_failed", "unpaid", "active", false, true},
-		{"stale async failure", "checkout.session.async_payment_failed", "paid", "active", false, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			service, db := newStripeWebhookService(t, "customer_placeholder", nil)
-			configurePaygCheckout(t, service, "event_async", "subscription_async", tc.subscriptionStatus)
-			client, ok := service.stripeClient.(*fakeStripeWebhookClient)
-			require.True(t, ok)
-			verify := client.verify
-			client.verify = func(body []byte, signature string) (*stripeclient.WebhookEvent, error) {
-				event, err := verify(body, signature)
-				event.Type = tc.eventType
-				return event, err
-			}
-			client.checkout.PaymentStatus = tc.paymentStatus
-			metrics := &captureStripeWebhookMetrics{}
-			service.stripeMetrics = metrics
-			for range 2 {
-				require.Equal(t, http.StatusOK, serveStripeWebhook(service, "async outcome").Code)
-			}
-			metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
-			require.NoError(t, err)
-			require.Equal(t, tc.activated, metadata.StripeSubscriptionID.Valid)
-			if !tc.activated && !tc.failed && tc.paymentStatus == "unpaid" {
-				require.Zero(t, stripeWebhookReceiptCount(t, db), "pending payment must not record an activation receipt")
-			}
-			if tc.failed {
-				require.EqualValues(t, 1, metrics.invoicePaymentFailures.Load())
-			} else {
-				require.Zero(t, metrics.invoicePaymentFailures.Load())
-			}
-		})
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.completed", "unpaid", "active", false, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesTrialCompletion(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.completed", "no_payment_required", "trialing", true, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesUnpaidTrialCompletion(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.completed", "unpaid", "trialing", true, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesAsyncSuccess(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_succeeded", "paid", "active", true, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesUnpaidAsyncSuccess(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_succeeded", "unpaid", "active", false, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesAsyncFailure(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_failed", "unpaid", "active", false, true)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesStaleAsyncFailure(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_failed", "paid", "active", false, false)
+}
+
+func testStripeCheckoutAsyncPaymentOutcomes(t *testing.T, tcEventType string, tcPaymentStatus string, tcSubscriptionStatus string, tcActivated bool, tcFailed bool) {
+	t.Helper()
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_async", "subscription_async", tcSubscriptionStatus)
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	verify := client.verify
+	client.verify = func(body []byte, signature string) (*stripeclient.WebhookEvent, error) {
+		event, err := verify(body, signature)
+		event.Type = tcEventType
+		return event, err
+	}
+	client.checkout.PaymentStatus = tcPaymentStatus
+	metrics := &captureStripeWebhookMetrics{}
+	service.stripeMetrics = metrics
+	for range 2 {
+		require.Equal(t, http.StatusOK, serveStripeWebhook(service, "async outcome").Code)
+	}
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, tcActivated, metadata.StripeSubscriptionID.Valid)
+	if !tcActivated && !tcFailed && tcPaymentStatus == "unpaid" {
+		require.Zero(t, stripeWebhookReceiptCount(t, db), "pending payment must not record an activation receipt")
+	}
+	if tcFailed {
+		require.EqualValues(t, 1, metrics.invoicePaymentFailures.Load())
+	} else {
+		require.Zero(t, metrics.invoicePaymentFailures.Load())
 	}
 }
 

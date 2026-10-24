@@ -3,88 +3,157 @@ package usage
 import (
 	"fmt"
 	"net/http/httptest"
-
-	httpusage "github.com/speakeasy-api/gram/server/gen/http/usage/server"
-	goahttp "goa.design/goa/v3/http"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	httpusage "github.com/speakeasy-api/gram/server/gen/http/usage/server"
+	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 )
 
-func TestCheckoutSessionInputBrandingReplay(t *testing.T) {
+func TestCreateStripeCheckoutLightFormReplay(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
-	original := newStripeCheckoutIntent("<ORG_ID>", now, nil)
-	require.Contains(t, original.idempotencyKey, ":form-prototype:branding-v1:")
-	// Freeze historical formats independently of the current UI-mode marker.
-	legacyPrefix := fmt.Sprintf("checkout-session:<ORG_ID>:%d:%d:", original.billingCycleAnchor.Unix(), original.expiresAt.Unix())
-	for _, tc := range []struct {
-		name, key                      string
-		embedded, branding, dark, form bool
-	}{
-		{"new form", original.idempotencyKey, true, true, false, true},
-		{"dark form", withStripeCheckoutTheme(original, "dark").idempotencyKey, true, false, true, true},
-		{"legacy light embedded replay", legacyPrefix + "embedded:branding-v1:none", true, true, false, false},
-		{"legacy dark embedded replay", legacyPrefix + "embedded:branding-dark-v1:none", true, false, true, false},
-		{"legacy embedded replay", legacyPrefix + "embedded:none", true, false, false, false},
-		{"legacy hosted replay", legacyPrefix + "none", false, false, false, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			intent := original
-			intent.idempotencyKey = tc.key
-			intent, ok := withStripeCheckoutReturnBase(intent, "https://app.example.test")
-			require.True(t, ok)
-			require.Equal(t, "none", checkoutIntentTrialFingerprint(intent.idempotencyKey))
-			// Recover persisted fields exactly as a retry or stale-session recovery does.
-			recovered, err := checkoutIntentFromFields(
-				pgtype.Text{String: intent.idempotencyKey, Valid: true}, finiteTimestamptz(intent.billingCycleAnchor),
-				optionalTimestamptz(intent.trialEnd), finiteTimestamptz(intent.expiresAt),
-			)
-			require.NoError(t, err)
-			billingURL := "https://app.example.test/the-customer/billing"
-			input := checkoutSessionInput("cus_test", "<ORG_ID>", "the-customer", recovered, billingURL)
-			require.Equal(t, checkoutSessionInput("cus_test", "<ORG_ID>", "the-customer", intent, billingURL), input)
-			require.Equal(t, intent.idempotencyKey, input.IdempotencyKey)
-			require.Equal(t, tc.branding, input.EmbeddedBrandingV1)
-			require.Equal(t, tc.dark, input.EmbeddedBrandingDarkV1)
-			require.Equal(t, tc.form, input.EmbeddedFormPrototype)
-			require.Equal(t, tc.embedded, input.ReturnURL != "")
-			if !tc.embedded {
-				require.Equal(t, billingURL, input.SuccessURL)
-				require.Equal(t, billingURL, input.CancelURL)
-			}
-		})
-	}
+	testCreateStripeCheckoutFormReplay(t, "light", true, false)
 }
 
-func TestCheckoutThemePayload(t *testing.T) {
+func TestCreateStripeCheckoutDarkFormReplay(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name, query, want string
-		invalid           bool
-	}{
-		{"old bodyless request", "", "light", false},
-		{"explicit light", "?theme=light", "light", false},
-		{"dark", "?theme=dark", "dark", false},
-		{"invalid", "?theme=system", "", true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			decode := httpusage.DecodeCreateStripeCheckoutRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)
-			payload, err := decode(httptest.NewRequest("POST", "/rpc/usage.createStripeCheckout"+tc.query, nil))
-			if tc.invalid {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, tc.want, payload.Theme)
-			intent := withStripeCheckoutTheme(newStripeCheckoutIntent("<ORG_ID>", time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC), nil), payload.Theme)
-			input := checkoutSessionInput("cus_test", "<ORG_ID>", "the-customer", intent, "https://app.example.test/billing")
-			require.Equal(t, tc.want == "dark", input.EmbeddedBrandingDarkV1)
-			require.Equal(t, tc.want == "light", input.EmbeddedBrandingV1)
-		})
+	testCreateStripeCheckoutFormReplay(t, "dark", false, true)
+}
+
+func testCreateStripeCheckoutFormReplay(t *testing.T, theme string, light, dark bool) {
+	t.Helper()
+	ti := newStripeCheckoutTestInstance(t)
+	ti.service.now = func() time.Time { return time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC) }
+	first, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{Theme: theme})
+	require.NoError(t, err)
+	second, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	require.Equal(t, first, second)
+	_, _, inputs := ti.stripe.snapshot()
+	require.Len(t, inputs, 2)
+	require.Equal(t, inputs[0], inputs[1])
+	require.True(t, inputs[0].EmbeddedForm)
+	require.Equal(t, light, inputs[0].EmbeddedBrandingV1)
+	require.Equal(t, dark, inputs[0].EmbeddedBrandingDarkV1)
+	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing?session_id={CHECKOUT_SESSION_ID}", inputs[0].ReturnURL)
+}
+
+func TestCreateStripeCheckoutRecoversHistoricalLightEmbedded(t *testing.T) {
+	t.Parallel()
+	testCreateStripeCheckoutHistoricalReceipt(t, "embedded:branding-v1:none", true, true, false)
+}
+
+func TestCreateStripeCheckoutRecoversHistoricalDarkEmbedded(t *testing.T) {
+	t.Parallel()
+	testCreateStripeCheckoutHistoricalReceipt(t, "embedded:branding-dark-v1:none", true, false, true)
+}
+
+func TestCreateStripeCheckoutRecoversHistoricalUnbrandedEmbedded(t *testing.T) {
+	t.Parallel()
+	testCreateStripeCheckoutHistoricalReceipt(t, "embedded:none", true, false, false)
+}
+
+func TestCreateStripeCheckoutRecoversHistoricalHosted(t *testing.T) {
+	t.Parallel()
+	testCreateStripeCheckoutHistoricalReceipt(t, "none", false, false, false)
+}
+
+func testCreateStripeCheckoutHistoricalReceipt(t *testing.T, suffix string, embedded, light, dark bool) {
+	t.Helper()
+	ti := newStripeCheckoutTestInstance(t)
+	now := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
+	ti.service.now = func() time.Time { return now }
+	// Fixed persisted pre-form receipts, independent of the current intent constructor.
+	anchor := time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC)
+	expires := time.Date(2026, time.August, 14, 23, 55, 0, 0, time.UTC)
+	key := fmt.Sprintf("checkout-session:%s:1786752000:1786751700:%s", ti.orgID, suffix)
+	queries := repo.New(ti.db)
+	_, err := queries.StoreStripeCustomer(t.Context(), repo.StoreStripeCustomerParams{
+		OrganizationID: ti.orgID, StripeCustomerID: pgtype.Text{String: "cus_test", Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = queries.PrepareStripeCheckoutIntent(t.Context(), repo.PrepareStripeCheckoutIntentParams{
+		OrganizationID: ti.orgID, StripeCustomerID: "cus_test", PreparedAt: finiteTimestamptz(now), TrialFingerprint: "none",
+		StripeCheckoutIdempotencyKey: key, StripeCheckoutBillingCycleAnchor: finiteTimestamptz(anchor),
+		StripeCheckoutExpiresAt: finiteTimestamptz(expires),
+		StripeCheckoutTrialEnd:  pgtype.Timestamptz{}, ReplaceLifecycleIntentKey: pgtype.Text{}, ReplaceExpiredSessionID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	expected := stripeclient.CreateCheckoutSessionInput{
+		CustomerID: "cus_test", OrganizationID: ti.orgID, OrganizationSlug: ti.orgSlug,
+		IdempotencyKey: key, BillingCycleAnchor: anchor, ExpiresAt: expires,
+		EmbeddedBrandingV1: light, EmbeddedBrandingDarkV1: dark,
+		EmbeddedForm: false, PromotionCodeID: "", TrialEnd: nil, ReturnURL: "", SuccessURL: "", CancelURL: "",
 	}
+	if embedded {
+		expected.ReturnURL = "https://app.example.test/" + ti.orgSlug + "/billing?session_id={CHECKOUT_SESSION_ID}"
+	} else {
+		expected.SuccessURL = "https://app.example.test/" + ti.orgSlug + "/billing"
+		expected.CancelURL = "https://app.example.test/" + ti.orgSlug + "/billing"
+	}
+	// Stripe accepted the original request, but its session ID was not persisted.
+	original, err := ti.stripe.CreateCheckoutSession(t.Context(), expected)
+	require.NoError(t, err)
+	checkout, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{Theme: "dark"})
+	require.NoError(t, err)
+	require.NotEmpty(t, checkout.ClientSecret)
+	_, _, inputs := ti.stripe.snapshot()
+	require.Len(t, inputs, 3)
+	require.Equal(t, expected, inputs[1], "recovery must replay the historical Stripe input exactly")
+	require.Equal(t, []string{original.ID}, ti.stripe.expiredCheckoutIDs)
+	require.NotEqual(t, key, inputs[2].IdempotencyKey)
+	replacement := expected
+	replacement.IdempotencyKey = fmt.Sprintf("checkout-session:%s:1786752000:1786751940:form-prototype:branding-dark-v1:return-aHR0cHM6Ly9hcHAuZXhhbXBsZS50ZXN0:none", ti.orgID)
+	replacement.ExpiresAt = time.Date(2026, time.August, 14, 23, 59, 0, 0, time.UTC)
+	replacement.ReturnURL = "https://app.example.test/" + ti.orgSlug + "/billing?session_id={CHECKOUT_SESSION_ID}"
+	replacement.SuccessURL = ""
+	replacement.CancelURL = ""
+	replacement.EmbeddedForm = true
+	replacement.EmbeddedBrandingV1 = false
+	replacement.EmbeddedBrandingDarkV1 = true
+	require.Equal(t, replacement, inputs[2])
+	replay, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{Theme: "light"})
+	require.NoError(t, err)
+	require.Equal(t, checkout, replay)
+	_, _, inputs = ti.stripe.snapshot()
+	require.Len(t, inputs, 4)
+	require.Equal(t, replacement, inputs[3])
+	require.Equal(t, []string{original.ID}, ti.stripe.expiredCheckoutIDs)
+}
+
+func TestCheckoutThemePayloadOldBodylessRequest(t *testing.T) {
+	t.Parallel()
+	testCheckoutThemePayload(t, "", "light", false)
+}
+
+func TestCheckoutThemePayloadExplicitLight(t *testing.T) {
+	t.Parallel()
+	testCheckoutThemePayload(t, "?theme=light", "light", false)
+}
+
+func TestCheckoutThemePayloadDark(t *testing.T) {
+	t.Parallel()
+	testCheckoutThemePayload(t, "?theme=dark", "dark", false)
+}
+
+func TestCheckoutThemePayloadInvalid(t *testing.T) {
+	t.Parallel()
+	testCheckoutThemePayload(t, "?theme=system", "", true)
+}
+
+func testCheckoutThemePayload(t *testing.T, tcQuery string, tcWant string, tcInvalid bool) {
+	t.Helper()
+	decode := httpusage.DecodeCreateStripeCheckoutRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)
+	payload, err := decode(httptest.NewRequest("POST", "/rpc/usage.createStripeCheckout"+tcQuery, nil))
+	if tcInvalid {
+		require.Error(t, err)
+		return
+	}
+	require.NoError(t, err)
+	require.Equal(t, tcWant, payload.Theme)
 }

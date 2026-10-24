@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { parseTOML } from "confbox";
 import { test } from "node:test";
 import {
   persistStripeSettings,
@@ -822,10 +823,6 @@ test("setup preserves CLI credentials after they become persisted environment se
 });
 
 test("setup rejects an incomplete replacement key pair before provisioning or overwriting settings", async () => {
-  const saved = {
-    STRIPE_API_KEY: "sk_test_original",
-    STRIPE_PUBLISHABLE_KEY: "pk_test_original",
-  };
   for (const publishableKey of [
     undefined,
     "",
@@ -854,17 +851,12 @@ test("setup rejects an incomplete replacement key pair before provisioning or ov
         provision: async () => {
           assert.fail("must validate keys before provisioning");
         },
-        persist: async (settings) => {
-          Object.assign(saved, settings);
+        persist: async () => {
           assert.fail("must not overwrite a working configuration");
         },
       }),
       /matching sandbox publishable key/,
     );
-    assert.deepEqual(saved, {
-      STRIPE_API_KEY: "sk_test_original",
-      STRIPE_PUBLISHABLE_KEY: "pk_test_original",
-    });
   }
 });
 
@@ -882,9 +874,8 @@ function persistenceFixture(t: import("node:test").TestContext) {
     GRAM_SERVER_URL: "http://localhost:8080",
     GRAM_SERVER_PORT: "8080",
   };
-  const stagedFiles = () =>
-    readdirSync(root).filter((name) => name.startsWith("mise.stripe-"));
-  return { root, path, original, env, stagedFiles };
+  const entries = readdirSync(root).sort();
+  return { root, path, original, env, entries };
 }
 
 test("persistence atomically saves all settings and preserves unrelated config and mode", async (t) => {
@@ -910,7 +901,7 @@ test("persistence atomically saves all settings and preserves unrelated config a
     f.original + 'FIRST = "sk_test_synthetic"\nSECOND = ""\n',
   );
   assert.equal(lstatSync(f.path).mode & 0o777, 0o640);
-  assert.deepEqual(f.stagedFiles(), []);
+  assert.deepEqual(readdirSync(f.root).sort(), f.entries);
 });
 
 test("a mid-write failure leaves original config intact and cleans staging", async (t) => {
@@ -931,7 +922,7 @@ test("a mid-write failure leaves original config intact and cleans staging", asy
   );
   assert.equal(readFileSync(f.path, "utf8"), f.original);
   assert.equal(lstatSync(f.path).mode & 0o777, 0o640);
-  assert.deepEqual(f.stagedFiles(), []);
+  assert.deepEqual(readdirSync(f.root).sort(), f.entries);
 });
 
 test("persistence keeps concurrent edits and cleans staging", async (t) => {
@@ -952,7 +943,7 @@ test("persistence keeps concurrent edits and cleans staging", async (t) => {
   );
   assert.equal(readFileSync(f.path, "utf8"), "# concurrent edit\n");
   assert.equal(lstatSync(f.path).mode & 0o777, 0o600);
-  assert.deepEqual(f.stagedFiles(), []);
+  assert.deepEqual(readdirSync(f.root).sort(), f.entries);
 });
 
 test("persistence creates new config privately and refuses linked config", async (t) => {
@@ -986,7 +977,7 @@ test("persistence creates new config privately and refuses linked config", async
     readFileSync(join(f.root, ".gitignore"), "utf8"),
     "mise*.local.toml\n",
   );
-  assert.deepEqual(f.stagedFiles(), []);
+  assert.deepEqual(readdirSync(f.root).sort(), f.entries);
 });
 
 test("real mise persists with isolated trust and preserves comments and unrelated config", async (t) => {
@@ -996,6 +987,7 @@ test("real mise persists with isolated trust and preserves comments and unrelate
   }).trim();
   const home = join(f.root, "home");
   mkdirSync(home);
+  const entries = readdirSync(f.root).sort();
   const env = {
     ...f.env,
     PATH: `${dirname(mise)}:/usr/bin:/bin`,
@@ -1011,9 +1003,11 @@ test("real mise persists with isolated trust and preserves comments and unrelate
   );
   const saved = readFileSync(f.path, "utf8");
   assert.match(saved, /# Keep this comment/);
-  assert.match(saved, /UNRELATED = 'preserve'/);
-  assert.match(saved, /STRIPE_API_KEY = "sk_test_synthetic"/);
-  assert.match(saved, /STRIPE_PUBLISHABLE_KEY = ""/);
+  assert.deepEqual(parseTOML(saved).env, {
+    UNRELATED: "preserve",
+    STRIPE_API_KEY: "sk_test_synthetic",
+    STRIPE_PUBLISHABLE_KEY: "",
+  });
   assert.equal(lstatSync(f.path).mode & 0o777, 0o640);
-  assert.deepEqual(f.stagedFiles(), []);
+  assert.deepEqual(readdirSync(f.root).sort(), entries);
 });

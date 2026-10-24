@@ -55,13 +55,13 @@ export function PaygEmbeddedCheckout({
         },
       }}
     >
-      <FormPreview onComplete={onComplete} />
+      <BillingCheckoutForm onComplete={onComplete} />
     </CheckoutFormProvider>
   );
 }
 
 // Stripe documents amountSummary, but the installed SDK types do not include it yet.
-const formPreviewOptions = {
+const checkoutFormOptions = {
   layout: "expanded" as const,
   features: {
     promotionCodeCollection: "auto" as const,
@@ -69,7 +69,7 @@ const formPreviewOptions = {
   },
 };
 
-function FormPreview({ onComplete }: { onComplete: () => void }) {
+function BillingCheckoutForm({ onComplete }: { onComplete: () => void }) {
   const checkout = useCheckoutForm();
   const confirming = useRef(false);
   const [confirmationError, setConfirmationError] = useState<string | null>(
@@ -122,7 +122,7 @@ function FormPreview({ onComplete }: { onComplete: () => void }) {
           <PaygCheckoutSummary checkout={checkout.checkout} />
         </div>
         <div className="order-4 w-full max-w-lg space-y-8 lg:justify-self-end">
-          <CheckoutForm options={formPreviewOptions} onConfirm={onConfirm} />
+          <CheckoutForm options={checkoutFormOptions} onConfirm={onConfirm} />
           {confirmationError && (
             <p role="alert" className="text-sm text-destructive">
               {confirmationError}

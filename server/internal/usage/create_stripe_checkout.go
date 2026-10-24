@@ -43,8 +43,8 @@ const (
 	// stripeCheckoutEmbeddedMarker marks intents created for embedded Checkout.
 	// Hosted intents lack it, so a live hosted session is expired instead of
 	// replayed: Stripe rejects an idempotency key whose parameters changed.
-	stripeCheckoutEmbeddedMarker      = "embedded"
-	stripeCheckoutFormPrototypeMarker = "form-prototype"
+	stripeCheckoutEmbeddedMarker = "embedded"
+	stripeCheckoutFormMarker     = "form-prototype"
 	// Persist the appearance version so older intents keep their original parameters.
 	stripeCheckoutBrandingV1Marker     = "branding-v1"
 	stripeCheckoutBrandingDarkV1Marker = "branding-dark-v1"
@@ -214,7 +214,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, payload *gen.CreateS
 	// A live embedded receipt can be replayed. A hosted receipt cannot: Stripe
 	// returns no client secret for it, and this endpoint rejects that response.
 	// Leave the new embedded intent so the hosted session is expired and replaced.
-	if legacyReplay != nil && checkoutIntentFormPrototype(legacyReplay.intent.idempotencyKey) {
+	if legacyReplay != nil && checkoutIntentUsesForm(legacyReplay.intent.idempotencyKey) {
 		proposedIntent = legacyReplay.intent
 	} else if proposedIntent.trialEnd != nil && proposedIntent.trialEnd.Sub(now) <= minimumStripeCheckoutTrialLead {
 		proposedIntent, _ = withStripeCheckoutReturnBase(
@@ -382,7 +382,7 @@ func checkoutSessionInput(customerID, organizationID, organizationSlug string, i
 		PromotionCodeID:        "",
 		EmbeddedBrandingV1:     false,
 		EmbeddedBrandingDarkV1: false,
-		EmbeddedFormPrototype:  false,
+		EmbeddedForm:           false,
 		CustomerID:             customerID,
 		OrganizationID:         organizationID,
 		OrganizationSlug:       organizationSlug,
@@ -396,7 +396,7 @@ func checkoutSessionInput(customerID, organizationID, organizationSlug string, i
 	}
 	if checkoutIntentEmbedded(intent.idempotencyKey) {
 		input.ReturnURL = stripeCheckoutEmbeddedReturnURL(billingURL)
-		input.EmbeddedFormPrototype = checkoutIntentFormPrototype(intent.idempotencyKey)
+		input.EmbeddedForm = checkoutIntentUsesForm(intent.idempotencyKey)
 		input.EmbeddedBrandingV1 = strings.Contains(intent.idempotencyKey, ":"+stripeCheckoutBrandingV1Marker+":")
 		input.EmbeddedBrandingDarkV1 = strings.Contains(intent.idempotencyKey, ":"+stripeCheckoutBrandingDarkV1Marker+":")
 		return input
@@ -407,11 +407,11 @@ func checkoutSessionInput(customerID, organizationID, organizationSlug string, i
 }
 
 func checkoutIntentEmbedded(idempotencyKey string) bool {
-	return strings.Contains(idempotencyKey, ":"+stripeCheckoutEmbeddedMarker+":") || checkoutIntentFormPrototype(idempotencyKey)
+	return strings.Contains(idempotencyKey, ":"+stripeCheckoutEmbeddedMarker+":") || checkoutIntentUsesForm(idempotencyKey)
 }
 
-func checkoutIntentFormPrototype(key string) bool {
-	return strings.Contains(key, ":"+stripeCheckoutFormPrototypeMarker+":")
+func checkoutIntentUsesForm(key string) bool {
+	return strings.Contains(key, ":"+stripeCheckoutFormMarker+":")
 }
 
 func stripeCheckoutEmbeddedReturnURL(billingURL string) string {
@@ -556,7 +556,7 @@ func (s *Service) expireLifecycleStaleCheckoutSession(
 	sameLifecycle := metadata.StripeCheckoutIdempotencyKey.Valid &&
 		checkoutIntentTrialFingerprint(metadata.StripeCheckoutIdempotencyKey.String) == checkoutIntentTrialFingerprint(proposed.idempotencyKey) &&
 		checkoutIntentEmbedded(metadata.StripeCheckoutIdempotencyKey.String) == checkoutIntentEmbedded(proposed.idempotencyKey) &&
-		checkoutIntentFormPrototype(metadata.StripeCheckoutIdempotencyKey.String) == checkoutIntentFormPrototype(proposed.idempotencyKey)
+		checkoutIntentUsesForm(metadata.StripeCheckoutIdempotencyKey.String) == checkoutIntentUsesForm(proposed.idempotencyKey)
 	if !metadata.StripeCheckoutIdempotencyKey.Valid || !metadata.StripeCheckoutExpiresAt.Valid ||
 		!metadata.StripeCheckoutExpiresAt.Time.After(now) || sameLifecycle {
 		return pgtype.Text{String: "", Valid: false}, nil
@@ -719,7 +719,7 @@ func newStripeCheckoutIntentForTrial(organizationID string, now time.Time, produ
 	}
 
 	return stripeCheckoutIntent{
-		idempotencyKey:     fmt.Sprintf("checkout-session:%s:%d:%d:%s:%s:%s", organizationID, anchor.Unix(), expiresAt.Unix(), stripeCheckoutFormPrototypeMarker, stripeCheckoutBrandingV1Marker, stripeCheckoutTrialFingerprintDigest(trial)),
+		idempotencyKey:     fmt.Sprintf("checkout-session:%s:%d:%d:%s:%s:%s", organizationID, anchor.Unix(), expiresAt.Unix(), stripeCheckoutFormMarker, stripeCheckoutBrandingV1Marker, stripeCheckoutTrialFingerprintDigest(trial)),
 		billingCycleAnchor: anchor,
 		trialEnd:           stripeTrialEnd,
 		expiresAt:          expiresAt,

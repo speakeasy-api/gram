@@ -25,7 +25,7 @@ export function PaygCheckoutHeader(): JSX.Element {
   );
 }
 
-/** PROTOTYPE: order summary sourced from the active Stripe session. */
+/** Order summary sourced from the active Stripe session. */
 export function PaygCheckoutSummary({
   checkout,
 }: {

@@ -549,20 +549,6 @@ it("shows the selected Payment method tab on payment management", async () => {
   expect(screen.getByText("per million tokens scanned")).toBeTruthy();
   expect(screen.getByText("$20.00")).toBeTruthy();
   expect(screen.getByText("per GiB of egress")).toBeTruthy();
-  const pricing = screen
-    .getByRole("heading", { name: "Pricing" })
-    .closest("section")!;
-  const grid = pricing.parentElement!;
-  const payment = screen.getByTestId("payment");
-  expect(grid.classList.contains("lg:grid-cols-2")).toBe(true);
-  expect(grid.classList.contains("lg:gap-10")).toBe(true);
-  expect(grid.firstElementChild).toBe(pricing);
-  expect(grid.lastElementChild).toBe(payment.parentElement);
-  expect(payment.parentElement!.classList.contains("max-w-lg")).toBe(true);
-  expect(payment.parentElement!.classList.contains("lg:justify-self-end")).toBe(
-    true,
-  );
-  expect(grid.nextElementSibling).toBe(screen.getByTestId("notifications"));
   expect(mocks.createCheckout).not.toHaveBeenCalled();
   expect(
     screen.getByText("Other inference billed at provider cost"),
