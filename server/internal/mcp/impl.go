@@ -656,9 +656,6 @@ func NewService(
 		tunnelPublic:           newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:            metaRuntimeConfig.withDefaults(),
 	}
-	// Discovery and token dispatch share this production issuer. Only explicitly
-	// provisioned, live assistant workload registrations can obtain tokens.
-	service.assistantWorkloadTokens = &registeredAssistantWorkloadIssuer{service: service}
 	return service, nil
 }
 

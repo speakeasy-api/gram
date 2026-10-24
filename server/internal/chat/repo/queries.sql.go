@@ -609,21 +609,6 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 	return err
 }
 
-const deleteKitCompletionBindingFixture = `-- name: DeleteKitCompletionBindingFixture :exec
-DELETE FROM assistant_inference_credentials WHERE api_key_id = $1::uuid AND project_id = $2
-`
-
-type DeleteKitCompletionBindingFixtureParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-// Test fixture: remove only the binding, keeping the principal API key live.
-func (q *Queries) DeleteKitCompletionBindingFixture(ctx context.Context, arg DeleteKitCompletionBindingFixtureParams) error {
-	_, err := q.db.Exec(ctx, deleteKitCompletionBindingFixture, arg.ID, arg.ProjectID)
-	return err
-}
-
 const disableRiskPoliciesForTest = `-- name: DisableRiskPoliciesForTest :exec
 UPDATE risk_policies SET enabled = FALSE WHERE project_id = $1
 `
@@ -1821,6 +1806,31 @@ func (q *Queries) InsertSubsessionLink(ctx context.Context, arg InsertSubsession
 		arg.ProjectID,
 		arg.ParentSessionID,
 		arg.ChildSessionID,
+	)
+	return err
+}
+
+const insertSupersededKitKeyFixture = `-- name: InsertSupersededKitKeyFixture :exec
+INSERT INTO assistant_inference_credentials (api_key_id, project_id, assistant_id, runtime_id, identity_json, revoked_at)
+VALUES ($1, $2, $3, $4, '{}'::jsonb, $5::timestamptz)
+`
+
+type InsertSupersededKitKeyFixtureParams struct {
+	ApiKeyID    uuid.UUID
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	RuntimeID   uuid.UUID
+	RevokedAt   pgtype.Timestamptz
+}
+
+// Historical credential fixture for permanent rejection at the shared auth boundary.
+func (q *Queries) InsertSupersededKitKeyFixture(ctx context.Context, arg InsertSupersededKitKeyFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertSupersededKitKeyFixture,
+		arg.ApiKeyID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.RuntimeID,
+		arg.RevokedAt,
 	)
 	return err
 }
@@ -4282,22 +4292,6 @@ func (q *Queries) RenameChat(ctx context.Context, arg RenameChatParams) error {
 	return err
 }
 
-const revokeKitCompletionBindingFixture = `-- name: RevokeKitCompletionBindingFixture :exec
-UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
-WHERE api_key_id = $1::uuid AND project_id = $2
-`
-
-type RevokeKitCompletionBindingFixtureParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-// Test fixture: revoke only the binding, keeping the principal API key live.
-func (q *Queries) RevokeKitCompletionBindingFixture(ctx context.Context, arg RevokeKitCompletionBindingFixtureParams) error {
-	_, err := q.db.Exec(ctx, revokeKitCompletionBindingFixture, arg.ID, arg.ProjectID)
-	return err
-}
-
 const seedAssistant = `-- name: SeedAssistant :one
 INSERT INTO assistants (project_id, organization_id, name, model, instructions)
 VALUES ($1, $2, $3, 'anthropic/claude-opus-4.8', 'be helpful')
@@ -4611,6 +4605,33 @@ func (q *Queries) SetChatPinned(ctx context.Context, arg SetChatPinnedParams) er
 	return err
 }
 
+const setHistoricalKitKeyProfileFixture = `-- name: SetHistoricalKitKeyProfileFixture :exec
+UPDATE api_keys SET scopes = ARRAY[]::text[], subject_urn = $1,
+  delegated_grants = $2::jsonb, delegated_grants_version = $3,
+  expires_at = clock_timestamp() + interval '1 hour'
+WHERE id = $4 AND project_id = $5
+`
+
+type SetHistoricalKitKeyProfileFixtureParams struct {
+	SubjectUrn             pgtype.Text
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+	ApiKeyID               uuid.UUID
+	ProjectID              uuid.NullUUID
+}
+
+// Reproduce the former project's native principal-key profile without an issuer.
+func (q *Queries) SetHistoricalKitKeyProfileFixture(ctx context.Context, arg SetHistoricalKitKeyProfileFixtureParams) error {
+	_, err := q.db.Exec(ctx, setHistoricalKitKeyProfileFixture,
+		arg.SubjectUrn,
+		arg.DelegatedGrants,
+		arg.DelegatedGrantsVersion,
+		arg.ApiKeyID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const setInferenceActorKey = `-- name: SetInferenceActorKey :exec
 UPDATE chats SET inference_actor_key = $1
 WHERE id = $2 AND project_id = $3
@@ -4643,7 +4664,7 @@ type SetKitCompletionRuntimeFixtureParams struct {
 	ProjectID      uuid.UUID
 }
 
-// Test fixture: exercise live runtime admission independently of key validity.
+// Test fixture: exercise live runtime admission independently of workload verification.
 func (q *Queries) SetKitCompletionRuntimeFixture(ctx context.Context, arg SetKitCompletionRuntimeFixtureParams) error {
 	_, err := q.db.Exec(ctx, setKitCompletionRuntimeFixture,
 		arg.RuntimeVersion,
