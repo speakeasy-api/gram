@@ -453,17 +453,17 @@ type clientHeader struct {
 	keepStored             bool
 }
 
-// validateClientHeaders checks a client's complete header set. storedSecrets
-// maps lower-cased names of secret headers already storing a value to that
-// ciphertext; a secret header given no value keeps it. A returned error's
-// message is shown to the administrator as is, so it names the header and how
-// to fix it, never a value.
 // headerKey is a header name's identity: names match regardless of case, and
 // '_' matches '-'.
 func headerKey(name string) string {
 	return strings.ToLower(strings.ReplaceAll(strings.Trim(name, " "), "_", "-"))
 }
 
+// validateClientHeaders checks a client's complete header set. storedSecrets
+// maps lower-cased names of secret headers already storing a value to that
+// ciphertext; a secret header given no value keeps it. A returned error's
+// message is shown to the administrator as is, so it names the header and how
+// to fix it, never a value.
 func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInput, storedSecrets map[string]pgtype.Text) ([]clientHeader, error) {
 	if len(inputs) > maxHeadersPerClient {
 		return nil, fmt.Errorf("an auth client can send at most %d headers", maxHeadersPerClient)
