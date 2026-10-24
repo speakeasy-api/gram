@@ -20,6 +20,7 @@ INSERT INTO risk_policies (
   , user_message
   , prompt
   , model_config
+  , approval_config
   , score
   , version
 )
@@ -44,6 +45,7 @@ VALUES (
   , @user_message
   , sqlc.narg(prompt)::text
   , sqlc.narg(model_config)::jsonb
+  , sqlc.narg(approval_config)::jsonb
   , COALESCE(sqlc.narg(score)::double precision, 5.0)
   , 1
 )
@@ -202,6 +204,7 @@ SET name = @name
   , user_message = @user_message
   , prompt = sqlc.narg(prompt)::text
   , model_config = sqlc.narg(model_config)::jsonb
+  , approval_config = sqlc.narg(approval_config)::jsonb
   -- Descriptive severity: preserve on omit, never contributes to the version bump.
   , score = COALESCE(sqlc.narg(score)::double precision, score)
   , version = CASE
@@ -216,6 +219,7 @@ SET name = @name
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
         OR model_config IS DISTINCT FROM sqlc.narg(model_config)::jsonb
+        OR approval_config IS DISTINCT FROM sqlc.narg(approval_config)::jsonb
         OR audience_type IS DISTINCT FROM @audience_type
       THEN version + 1
       ELSE version

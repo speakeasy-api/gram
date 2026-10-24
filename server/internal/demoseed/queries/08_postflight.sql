@@ -510,3 +510,9 @@ WHERE organization_id = @org_id::text AND project_id = @project_id::uuid
 -- name: PostflightCountAuthClientAssociations :one
 SELECT count(*) FROM mcp_server_auth_clients
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
+
+-- name: PostflightCountApprovals :one
+-- The Tool approvals tab needs its four seeded approval requests: pending,
+-- used, denied and expired.
+SELECT count(*) FROM risk_policy_approvals
+WHERE organization_id = @org_id::text AND deleted IS FALSE;

@@ -189,6 +189,10 @@ type DisconnectResponseBody struct {
 	Generation string `form:"generation" json:"generation" xml:"generation"`
 	// Permissions granted by Slack.
 	GrantedScopes []string `form:"granted_scopes" json:"granted_scopes" xml:"granted_scopes"`
+	// Permissions Speakeasy asks for that this install has not granted.
+	// Reinstalling the app grants them. Without chat:write, approval requests do
+	// not reach approvers in Slack.
+	MissingScopes []string `form:"missing_scopes" json:"missing_scopes" xml:"missing_scopes"`
 	// Bounded authorization failure code, when known.
 	LastErrorCode *string `form:"last_error_code,omitempty" json:"last_error_code,omitempty" xml:"last_error_code,omitempty"`
 	// When credentials were removed.
@@ -1870,6 +1874,10 @@ type SlackDirectoryConnectionResponseBody struct {
 	Generation string `form:"generation" json:"generation" xml:"generation"`
 	// Permissions granted by Slack.
 	GrantedScopes []string `form:"granted_scopes" json:"granted_scopes" xml:"granted_scopes"`
+	// Permissions Speakeasy asks for that this install has not granted.
+	// Reinstalling the app grants them. Without chat:write, approval requests do
+	// not reach approvers in Slack.
+	MissingScopes []string `form:"missing_scopes" json:"missing_scopes" xml:"missing_scopes"`
 	// Bounded authorization failure code, when known.
 	LastErrorCode *string `form:"last_error_code,omitempty" json:"last_error_code,omitempty" xml:"last_error_code,omitempty"`
 	// When credentials were removed.
@@ -2128,6 +2136,14 @@ func NewDisconnectResponseBody(res *slackdirectoryconnections.SlackDirectoryConn
 		}
 	} else {
 		body.GrantedScopes = []string{}
+	}
+	if res.MissingScopes != nil {
+		body.MissingScopes = make([]string, len(res.MissingScopes))
+		for i, val := range res.MissingScopes {
+			body.MissingScopes[i] = val
+		}
+	} else {
+		body.MissingScopes = []string{}
 	}
 	return body
 }

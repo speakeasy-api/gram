@@ -219,7 +219,7 @@ VALUES
 
 -- name: DeployInsertAgent :exec
 INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)
-VALUES (@id, @organization_id::text, @project_id::uuid, @owner_user_id, 'Identity-bound assistant agent');
+VALUES (@id, @organization_id::text, @project_id::uuid, @owner_user_id, @name::text);
 
 -- name: DeployInsertPrincipalGrant :exec
 INSERT INTO principal_grants

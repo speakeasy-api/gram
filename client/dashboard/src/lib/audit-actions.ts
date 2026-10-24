@@ -255,6 +255,9 @@ export const AUDIT_ACTIONS = [
   "risk_exclusion:create",
   "risk_exclusion:delete",
   "risk_exclusion:update",
+  "risk_policy:approval_approve",
+  "risk_policy:approval_deny",
+  "risk_policy:approval_request",
   "risk_policy:bypass_request_approve",
   "risk_policy:bypass_request_create",
   "risk_policy:bypass_request_deny",
@@ -912,6 +915,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "deleted risk policy";
     case "risk_policy:trigger":
       return "triggered risk policy";
+    case "risk_policy:approval_request":
+      return "requested approval of a tool call under";
+    case "risk_policy:approval_approve":
+      return "approved a held tool call under";
+    case "risk_policy:approval_deny":
+      return "denied a held tool call under";
     case "risk_policy:bypass_request_create":
       return "requested a bypass for";
     case "risk_policy:bypass_request_approve":

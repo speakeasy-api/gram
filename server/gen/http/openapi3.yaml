@@ -16909,7 +16909,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/AgentPolicyGrantIDForm'
+                            $ref: '#/components/schemas/DeleteAgentPolicyGrantForm'
                 required: true
             responses:
                 "204":
@@ -64634,6 +64634,112 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskCreatePolicyBypassRequest
                 type: mutation
+    /rpc/risk.decideApproval:
+        post:
+            description: Approve or deny a pending tool approval request. Only a listed approver may decide, and never the person who made the call. An approval releases one retry of the exact call.
+            operationId: decideRiskPolicyApproval
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskPolicyApprovalDecisionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicyApproval'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: decideRiskPolicyApproval risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.approvals
+            x-speakeasy-name-override: decide
+            x-speakeasy-react-hook:
+                name: RiskDecideApproval
+                type: mutation
     /rpc/risk.declinePolicyChallenge:
         post:
             description: 'Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.'
@@ -65237,6 +65343,114 @@ paths:
             x-speakeasy-name-override: analysisStatus
             x-speakeasy-react-hook:
                 name: RiskAnalysisStatus
+    /rpc/risk.getApproval:
+        get:
+            description: Get one tool approval request, including a preview of the call's arguments.
+            operationId: getRiskPolicyApproval
+            parameters:
+                - allowEmptyValue: true
+                  description: The approval request ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The approval request ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicyApproval'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getRiskPolicyApproval risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.approvals
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: RiskGetApproval
     /rpc/risk.getBlock:
         get:
             description: Get a tool call block by its risk result ID for the durable block page.
@@ -66109,6 +66323,138 @@ paths:
             x-speakeasy-name-override: userBreakdown
             x-speakeasy-react-hook:
                 name: RiskUserBreakdown
+    /rpc/risk.listApprovals:
+        get:
+            description: List tool approval requests held by require_approval policies, newest first. Org admins see every request; others see requests they can approve and their own.
+            operationId: listRiskPolicyApprovals
+            parameters:
+                - allowEmptyValue: true
+                  description: Optional status filter. An open request past its window counts as expired.
+                  in: query
+                  name: status
+                  schema:
+                    description: Optional status filter. An open request past its window counts as expired.
+                    enum:
+                        - blocked
+                        - pending
+                        - approved
+                        - denied
+                        - consumed
+                        - expired
+                    type: string
+                - allowEmptyValue: true
+                  description: Continue after this approval request ID.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Continue after this approval request ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of requests to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Maximum number of requests to return.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskPolicyApprovalsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listRiskPolicyApprovals risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.approvals
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: RiskListApprovals
     /rpc/risk.listBuiltinExclusions:
         get:
             description: List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
@@ -94511,7 +94857,7 @@ components:
                     minLength: 1
                 project_scoped:
                     type: boolean
-                    description: Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+                    description: Admit the subject for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.
                     default: false
                 subject:
                     type: string
@@ -94582,6 +94928,18 @@ components:
             required:
                 - requested
                 - effective
+        AgentExpectedPolicy:
+            type: object
+            properties:
+                scope:
+                    type: string
+                    description: Scope of the grant originally read
+                    minLength: 1
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+            required:
+                - scope
+                - selector
         AgentIDForm:
             type: object
             properties:
@@ -94800,7 +95158,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).
+                    description: Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -94816,6 +95174,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - mcp_auth_client
                         - '*'
@@ -100087,13 +100446,16 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+                    description: 'Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
                     default: flag
                     enum:
                         - flag
                         - warn
                         - block
                         - quarantine
+                        - require_approval
+                approval_config:
+                    $ref: '#/components/schemas/RiskPolicyApprovalConfig'
                 approved_email_domains:
                     type: array
                     items:
@@ -100691,6 +101053,13 @@ components:
                     enum:
                         - chain
                         - interactive
+                authorization_server_mode:
+                    type: string
+                    description: Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+                    default: endpoint
+                    enum:
+                        - endpoint
+                        - shared
                 session_duration_hours:
                     type: integer
                     description: Maximum issued user session lifetime, in hours.
@@ -101228,6 +101597,22 @@ components:
             required:
                 - status
                 - count
+        DeleteAgentPolicyGrantForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: First-class agent identifier
+                    format: uuid
+                expected_policy:
+                    $ref: '#/components/schemas/AgentExpectedPolicy'
+                grant_id:
+                    type: string
+                    description: Direct policy grant identifier
+                    format: uuid
+            required:
+                - grant_id
+                - agent_id
         DeleteAiScanTargetRequestBody:
             type: object
             properties:
@@ -109216,6 +109601,19 @@ components:
                     description: The list of risk policies.
             required:
                 - policies
+        ListRiskPolicyApprovalsResult:
+            type: object
+            properties:
+                approvals:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskPolicyApproval'
+                    description: Approval requests, newest first.
+                next_cursor:
+                    type: string
+                    description: Pass as cursor to fetch the next page. Absent on the last page.
+            required:
+                - approvals
         ListRiskPolicyBypassRequestsResult:
             type: object
             properties:
@@ -109322,6 +109720,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -109378,6 +109777,7 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - inference:execute
                             - log:read
                             - agent:read
                             - agent:write
@@ -115525,7 +115925,7 @@ components:
                     maxLength: 100
                 project_scoped:
                     type: boolean
-                    description: Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+                    description: Register the issuer for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.
                     default: false
                 tags:
                     type: array
@@ -116474,6 +116874,7 @@ components:
                         - risk_policy:bypass
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -117549,13 +117950,16 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+                    description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
                     default: flag
                     enum:
                         - flag
                         - warn
                         - block
                         - quarantine
+                        - require_approval
+                approval_config:
+                    $ref: '#/components/schemas/RiskPolicyApprovalConfig'
                 approved_email_domains:
                     type: array
                     items:
@@ -117685,6 +118089,148 @@ components:
                 - version
                 - created_at
                 - updated_at
+        RiskPolicyApproval:
+            type: object
+            properties:
+                arguments_preview:
+                    type: object
+                    description: 'A shortened preview of the call''s arguments: long strings are cut and only the first keys are kept.'
+                    additionalProperties: true
+                can_decide:
+                    type: boolean
+                    description: Whether the caller can decide this request now.
+                chat_id:
+                    type: string
+                    description: The chat the call belongs to, when known.
+                    format: uuid
+                consumed_at:
+                    type: string
+                    description: When a retry used the approval.
+                    format: date-time
+                created_at:
+                    type: string
+                    description: When the call was first held.
+                    format: date-time
+                decided_at:
+                    type: string
+                    description: When an approver decided.
+                    format: date-time
+                decided_by_urn:
+                    type: string
+                    description: The approver who decided.
+                decided_via:
+                    type: string
+                    description: Where the decision came from.
+                    enum:
+                        - slack
+                        - dashboard
+                        - api
+                decision_note:
+                    type: string
+                    description: The approver's message for the agent.
+                expires_at:
+                    type: string
+                    description: When the request stops waiting for a decision, or the approval stops covering a retry.
+                    format: date-time
+                granted_scope:
+                    type: string
+                    description: What the approver granted, once approved.
+                id:
+                    type: string
+                    description: The approval request ID.
+                    format: uuid
+                policy_id:
+                    type: string
+                    description: The require_approval risk policy that held the call.
+                    format: uuid
+                policy_name:
+                    type: string
+                    description: The policy's name.
+                policy_version:
+                    type: integer
+                    description: The policy version when the call was held.
+                    format: int64
+                reason:
+                    type: string
+                    description: The agent's reason, once it requested approval.
+                requested_at:
+                    type: string
+                    description: When the agent requested approval.
+                    format: date-time
+                requested_scope:
+                    type: string
+                    description: What the agent asked to be approved, such as exact_once.
+                requester_urn:
+                    type: string
+                    description: 'The principal that made the call: agent:<id> or user:<id>.'
+                status:
+                    type: string
+                    description: The request's status. An open request past its window is expired.
+                    enum:
+                        - blocked
+                        - pending
+                        - approved
+                        - denied
+                        - consumed
+                        - expired
+                surface:
+                    type: string
+                    description: The MCP surface that received the call.
+                tool_name:
+                    type: string
+                    description: The tool that was called.
+                toolset_id:
+                    type: string
+                    description: The hosted toolset that served the call, when known.
+                    format: uuid
+                updated_at:
+                    type: string
+                    description: Last update timestamp.
+                    format: date-time
+            required:
+                - id
+                - policy_id
+                - policy_name
+                - policy_version
+                - status
+                - requester_urn
+                - surface
+                - tool_name
+                - arguments_preview
+                - can_decide
+                - created_at
+                - updated_at
+        RiskPolicyApprovalConfig:
+            type: object
+            properties:
+                approvers:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Principal URNs that may approve held calls: specific users (user:...) or roles (role:...). Everyone is not allowed.'
+                    minItems: 1
+            required:
+                - approvers
+        RiskPolicyApprovalDecisionRequestBody:
+            type: object
+            properties:
+                decision:
+                    type: string
+                    description: The decision.
+                    enum:
+                        - approve
+                        - deny
+                id:
+                    type: string
+                    description: The approval request ID.
+                    format: uuid
+                note:
+                    type: string
+                    description: Optional message for the agent.
+                    maxLength: 500
+            required:
+                - id
+                - decision
         RiskPolicyBypassApprovalRequestBody:
             type: object
             properties:
@@ -118625,6 +119171,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -118991,6 +119538,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - workload
                         - mcp_auth_client
@@ -119033,6 +119581,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -119527,7 +120076,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
+                    description: Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -119543,6 +120092,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - workload
                         - mcp_auth_client
@@ -122637,6 +123187,11 @@ components:
                     type: integer
                     description: Members observed in the last complete snapshot, including guests and bots.
                     format: int64
+                missing_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Permissions Speakeasy asks for that this install has not granted. Reinstalling the app grants them. Without chat:write, approval requests do not reach approvers in Slack.
                 status:
                     type: string
                     description: Authorization status, independent of directory sync.
@@ -122683,6 +123238,7 @@ components:
                 - status
                 - generation
                 - granted_scopes
+                - missing_scopes
                 - updated_at
                 - member_count
                 - directory_status
@@ -128021,12 +128577,15 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+                    description: 'Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
                     enum:
                         - flag
                         - warn
                         - block
                         - quarantine
+                        - require_approval
+                approval_config:
+                    $ref: '#/components/schemas/RiskPolicyApprovalConfig'
                 approved_email_domains:
                     type: array
                     items:

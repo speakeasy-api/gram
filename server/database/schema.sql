@@ -9828,6 +9828,10 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   tunneled_mcp_server_id uuid,
   toolset_id uuid,
   unproxied_mcp_server_id uuid,
+  -- A first-party backend Speakeasy serves itself, such as 'approvals' for the
+  -- server agents call request_approval on. Allowed values are validated in
+  -- application code.
+  builtin_backend TEXT,
   -- Optionally enables a variations group for runtime filtering and
   -- modifications. Otherwise defaults to project global (source-level)
   -- variations for runtime modifications.
@@ -9856,7 +9860,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
-  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id) = 1)
+  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend) = 1)
 );
 
 COMMENT ON COLUMN mcp_servers.id IS '@access: confidential';
@@ -9869,6 +9873,7 @@ COMMENT ON COLUMN mcp_servers.remote_session_issuer_id IS '@access: confidential
 COMMENT ON COLUMN mcp_servers.remote_mcp_server_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.toolset_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.unproxied_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.builtin_backend IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.tool_variations_group_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.visibility IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.network_access_mode IS '@access: confidential';
@@ -9906,7 +9911,7 @@ CREATE INDEX IF NOT EXISTS mcp_servers_tunneled_mcp_server_id_idx
 ON mcp_servers (tunneled_mcp_server_id)
 WHERE tunneled_mcp_server_id IS NOT NULL;
 
-COMMENT ON COLUMN mcp_servers.tunneled_mcp_server_id IS 'Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
+COMMENT ON COLUMN mcp_servers.tunneled_mcp_server_id IS 'Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, or builtin_backend must be set.
 @access: confidential';
 
 CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
@@ -9916,6 +9921,12 @@ WHERE toolset_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS mcp_servers_unproxied_mcp_server_id_idx
 ON mcp_servers (unproxied_mcp_server_id)
 WHERE unproxied_mcp_server_id IS NOT NULL;
+
+-- At most one live server per project for each first-party backend, so the
+-- first approval policy can create the approvals server idempotently.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_builtin_backend_key
+ON mcp_servers (project_id, builtin_backend)
+WHERE builtin_backend IS NOT NULL AND deleted IS FALSE;
 
 -- Upstream OAuth clients an MCP server is configured to use. Many-to-many:
 -- one client can serve several servers, and one server can offer several

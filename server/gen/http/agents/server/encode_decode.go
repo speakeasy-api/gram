@@ -4530,6 +4530,21 @@ func marshalAgentsAgentPolicySelectorToAgentPolicySelectorResponseBody(v *agents
 	return res
 }
 
+// unmarshalAgentExpectedPolicyRequestBodyRequestBodyToAgentsAgentExpectedPolicy
+// builds a value of type *agents.AgentExpectedPolicy from a value of type
+// *AgentExpectedPolicyRequestBodyRequestBody.
+func unmarshalAgentExpectedPolicyRequestBodyRequestBodyToAgentsAgentExpectedPolicy(v *AgentExpectedPolicyRequestBodyRequestBody) *agents.AgentExpectedPolicy {
+	if v == nil {
+		return nil
+	}
+	res := &agents.AgentExpectedPolicy{
+		Scope: *v.Scope,
+	}
+	res.Selector = unmarshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector(v.Selector)
+
+	return res
+}
+
 // marshalAgentsAgentConnectionBlockToAgentConnectionBlockResponseBody builds a
 // value of type *AgentConnectionBlockResponseBody from a value of type
 // *agents.AgentConnectionBlock.

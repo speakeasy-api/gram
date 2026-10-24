@@ -912,6 +912,7 @@ func newWorkerCommand() *cli.Command {
 				ExpectedARecords:               customDomainARecords,
 				GitHubEvidenceToken:            c.String("github-evidence-token"),
 				SiteURL:                        siteURL,
+				ServerURL:                      serverURL,
 				OrgHosts:                       orgHosts,
 				BillingTracker:                 billingTracker,
 				BillingRepository:              billingRepo,

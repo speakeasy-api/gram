@@ -1,4 +1,3 @@
-import { Checkbox } from "@/components/ui/Checkbox";
 import {
   ToolSelectionPanel,
   type ToolAnnotation,
@@ -92,9 +91,7 @@ export function GrantRuleDrawerContent({
   const organization = useOrganization();
   const inventory = useOrgMcpServers(resourceType === "mcp");
   const mcpServers = inventory.groups;
-  const assistantInventory = useOrgAssistants(
-    isProjectFilteredResourceType(resourceType),
-  );
+  const assistantInventory = useOrgAssistants(resourceType === "assistant");
   // Project slug per id, so the tool picker can name each remote server's
   // project when fetching its (project-scoped) stored tool metadata.
   const projectSlugById = useMemo(
@@ -193,16 +190,6 @@ export function GrantRuleDrawerContent({
     return projects.filter((p) => allowedProjectIds.has(p.id));
   }, [organization.projects, mcpServers, allowFilter]);
 
-  const filteredProjectList = useMemo(
-    () =>
-      resourceSearch
-        ? projectList.filter((p) =>
-            p.name.toLowerCase().includes(resourceSearch.toLowerCase()),
-          )
-        : projectList,
-    [projectList, resourceSearch],
-  );
-
   // Pre-filter mcpServers by allow scope, then apply search
   const scopedMcpServers = useMemo(() => {
     if (!allowFilter) return mcpServers;
@@ -275,6 +262,26 @@ export function GrantRuleDrawerContent({
     () => projectList.filter((p) => selectedResourceIds.has(p.id)),
     [projectList, selectedResourceIds],
   );
+
+  // Selected projects already have pinned rows above the searchable list.
+  // Keep them visible through search without rendering a second toggle.
+  const filteredProjectList = useMemo(() => {
+    const pinnedIds = projectSelectable
+      ? selectedResourceIds
+      : selectedProjectIds;
+    const query = resourceSearch.toLowerCase();
+    return projectList.filter(
+      (project) =>
+        !pinnedIds.has(project.id) &&
+        project.name.toLowerCase().includes(query),
+    );
+  }, [
+    projectList,
+    projectSelectable,
+    selectedResourceIds,
+    selectedProjectIds,
+    resourceSearch,
+  ]);
 
   const selectedServerRows = useMemo(() => {
     if (selectedResourceIds.size === 0) return [];
@@ -424,8 +431,16 @@ export function GrantRuleDrawerContent({
     <div className="border-border divide-border shrink-0 divide-y border">
       {!isDenyProp && isPanelAllowed("all") && (
         <ScopeOption
-          label={allScopeLabel(projectSelectable, projectFiltered)}
-          description={allScopeDescription(projectSelectable, projectFiltered)}
+          label={
+            resourceType === "inference"
+              ? "All projects"
+              : allScopeLabel(projectSelectable, projectFiltered)
+          }
+          description={
+            resourceType === "inference"
+              ? "Run inference in every project"
+              : allScopeDescription(projectSelectable, projectFiltered)
+          }
           selected={activePanel === "all"}
           onClick={() => switchPanel("all")}
         />
@@ -435,15 +450,17 @@ export function GrantRuleDrawerContent({
           <ScopeOption
             label="Specific projects"
             description={
-              projectFiltered
-                ? "Give access to assistants within specific projects in your org"
-                : "Give access to servers within specific projects in your org"
+              resourceType === "inference"
+                ? "Run inference within specific projects in your org"
+                : projectFiltered
+                  ? "Give access to assistants within specific projects in your org"
+                  : "Give access to servers within specific projects in your org"
             }
             selected={activePanel === "projects"}
             onClick={() => switchPanel("projects")}
           />
         )}
-      {isPanelAllowed("servers") && (
+      {resourceType !== "inference" && isPanelAllowed("servers") && (
         <ScopeOption
           label={
             projectFiltered
@@ -538,7 +555,8 @@ export function GrantRuleDrawerContent({
           </SelectedGroup>
         )}
         {projectSelectable ? (
-          filteredProjectList.length === 0 ? (
+          filteredProjectList.length === 0 &&
+          selectedResourceProjects.length === 0 ? (
             <div className="text-muted-foreground px-3 py-3 text-sm">
               {projectList.length === 0
                 ? "No projects found"
@@ -708,7 +726,8 @@ export function GrantRuleDrawerContent({
             />
           ))}
         </SelectedGroup>
-        {filteredProjectList.length === 0 ? (
+        {filteredProjectList.length === 0 &&
+        selectedProjectRows.length === 0 ? (
           <div className="text-muted-foreground px-3 py-3 text-sm">
             {projectList.length === 0
               ? "No projects found"
@@ -842,11 +861,13 @@ export function GrantRuleDrawerContent({
           <div className="border-border text-muted-foreground flex flex-1 items-center justify-center border px-6 text-center text-sm">
             {isDenyProp
               ? "This exception covers everything the allow rule permits."
-              : projectFiltered
-                ? "This role reaches every assistant in every project."
-                : projectSelectable
-                  ? "This role reaches every project in the organization."
-                  : "This role reaches every server in every project."}
+              : resourceType === "inference"
+                ? "This role can run inference in every project."
+                : projectFiltered
+                  ? "This role reaches every assistant in every project."
+                  : projectSelectable
+                    ? "This role reaches every project in the organization."
+                    : "This role reaches every server in every project."}
           </div>
         ) : (
           <>
@@ -1252,17 +1273,23 @@ function ResourceCheckbox({
     <button
       type="button"
       onClick={() => onToggle(id)}
+      role="checkbox"
+      aria-checked={checked}
       className={cn(
         "hover:bg-accent flex w-full cursor-pointer items-center gap-3 px-4",
         compact ? "h-9 text-sm" : "py-1.5 text-sm",
         checked && "font-medium",
       )}
     >
-      <Checkbox
-        checked={checked}
-        className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-        tabIndex={-1}
-      />
+      <span
+        aria-hidden="true"
+        className={cn(
+          "border-primary flex size-4 shrink-0 items-center justify-center border",
+          checked && "bg-primary text-primary-foreground",
+        )}
+      >
+        {checked && <Check className="size-3" />}
+      </span>
       <span className="truncate">{name}</span>
       {qualifier && <span className="sr-only">in {qualifier}</span>}
     </button>

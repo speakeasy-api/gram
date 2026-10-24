@@ -95,6 +95,7 @@ func newMCPRiskEvaluator(
 	publishers *background.Publishers,
 	shadowMCPClient *shadowmcp.Client,
 	toolIOLogsEnabled telemetry.FeatureChecker,
+	approvals mcpriskscan.ApprovalGate,
 ) (*mcpriskscan.Evaluator, *risk.Scanner, error) {
 	var piiScanner ra.PIIScanner
 	if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
@@ -137,6 +138,7 @@ func newMCPRiskEvaluator(
 		publishers.RiskFindings,
 		mcpriskscan.DefaultPolicyConfig,
 		mcpriskscan.WithMCPFindingEvidenceWriter(risk.NewMCPFindingEvidenceStore(db, enc), toolIOLogsEnabled),
+		mcpriskscan.WithApprovalGate(approvals),
 	)
 	return evaluator, scanner, nil
 }

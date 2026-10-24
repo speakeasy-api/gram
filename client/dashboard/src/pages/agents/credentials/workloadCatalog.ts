@@ -104,14 +104,17 @@ export function useCatalogEntries(enabled = true): {
     enabled,
     throwOnError: false,
   });
+  // Disabled means the caller may not read the catalog, so nothing cached from
+  // before, entries or an error, is reported. A disabled query also stays
+  // pending forever without loading anything.
   const entries = useMemo(
-    () => (query.data?.platforms ?? []).map(toCatalogEntry),
-    [query.data],
+    () => (enabled ? (query.data?.platforms ?? []).map(toCatalogEntry) : []),
+    [enabled, query.data],
   );
   return {
     entries,
-    isPending: query.isPending,
-    isError: query.isError,
+    isPending: enabled && query.isPending,
+    isError: enabled && query.isError,
     refetch: () => void query.refetch(),
   };
 }
@@ -220,21 +223,22 @@ export function subjectRule(
 }
 
 /**
- * The organization-wide access rule already admitting this rule under the
- * entry's issuer, if there is one. The server refuses a second one, so the
+ * The access rule already admitting this rule under the issuer and tier,
+ * defaulting to organization-wide catalog flows. The server refuses a second one, so the
  * setup says so before the operator gets that far.
  */
 export function existingRule(
   issuer: string,
   admissions: WorkloadAdmission[],
   rule: SubjectRule,
+  projectId = "",
 ): WorkloadAdmission | undefined {
   return admissions.find(
     (admission) =>
       admission.issuer === issuer &&
       admission.subject === rule.subject &&
       admission.matchKind === rule.matchKind &&
-      admission.projectId === "",
+      admission.projectId === projectId,
   );
 }
 

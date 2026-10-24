@@ -64,10 +64,12 @@ func MintServerUserSessionIssuer(
 	}
 
 	issuer, err := usersessionsrepo.New(dbtx).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
-		ProjectID:          projectID,
-		OrganizationID:     conv.ToPGText(organizationID),
-		Slug:               issuerSlug,
-		AuthnChallengeMode: "interactive",
+		AuthorizationServerMode: pgtype.Text{String: "", Valid: false},
+		UseAuthenticationHost:   pgtype.Bool{Bool: false, Valid: false},
+		ProjectID:               projectID,
+		OrganizationID:          conv.ToPGText(organizationID),
+		Slug:                    issuerSlug,
+		AuthnChallengeMode:      "interactive",
 		SessionDuration: pgtype.Interval{
 			Microseconds: mintedIssuerSessionDuration.Microseconds(),
 			Days:         0,

@@ -182,6 +182,8 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-acme", slug: "acme" }),
+  useSession: () => ({ user: { id: "user_example" } }),
+  useIsPlatformAdmin: () => false,
   useProject: () => ({ id: "project-default", slug: "default" }),
 }));
 vi.mock("@/hooks/usePluginWriteAccess", () => ({
@@ -270,6 +272,9 @@ vi.mock("../recentlyVisited", () => ({
   getRecentLabelOverride: () => undefined,
 }));
 vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    access: { roles: { href: () => "/acme/access/roles" } },
+  }),
   useRoutes: () => ({
     toolset: { goTo: mocks.goToToolsetDetails },
     plugins: {
