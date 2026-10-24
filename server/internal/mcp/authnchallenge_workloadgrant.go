@@ -17,7 +17,9 @@ import (
 
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -41,6 +43,7 @@ import (
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
+	workloadpolicy_repo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
 // workloadAssertionMaxLifetime bounds how far ahead an accepted assertion's
@@ -211,9 +214,11 @@ func workloadGrantStageUnavailable(reason string, err error) error {
 // the iss and sub it presented, and the issuer row iss resolved to once it
 // has. It is what a rejection log line records.
 type presentedWorkload struct {
-	issuerURL string
-	subject   string
-	issuerID  uuid.UUID
+	issuerURL              string
+	subject                string
+	issuerID               uuid.UUID
+	assertionPolicyChecked bool
+	allowAssertionReuse    bool
 }
 
 // admitWorkloadAssertion runs the grant's verification stages in order:
@@ -231,7 +236,10 @@ func admitWorkloadAssertion(
 	audiences []string,
 	raw string,
 ) (presentedWorkload, error) {
-	presented := presentedWorkload{issuerURL: "", subject: "", issuerID: uuid.Nil}
+	presented := presentedWorkload{
+		issuerURL: "", subject: "", issuerID: uuid.Nil,
+		assertionPolicyChecked: false, allowAssertionReuse: false,
+	}
 
 	token, err := assertioncore.ParseSigned(raw, workloadAssertionMaxBytes)
 	if err != nil {
@@ -267,6 +275,8 @@ func admitWorkloadAssertion(
 		return presented, workloadGrantStageUnavailable("issuer_lookup_unavailable", err)
 	}
 	presented.issuerID = issuer.ID
+	presented.assertionPolicyChecked = true
+	presented.allowAssertionReuse = issuer.AllowAssertionReuse.Valid && issuer.AllowAssertionReuse.Bool
 
 	keyID := ""
 	if len(token.Headers) == 1 {
@@ -278,13 +288,14 @@ func admitWorkloadAssertion(
 	}
 
 	if _, err := grant.verifier.Verify(ctx, raw, workload.Expectation{
-		Issuer:       issuer.Issuer,
-		Subject:      claims.Subject,
-		KeySource:    source,
-		ReplayIssuer: tenancy.UserSessionIssuerID.String(),
-		ReplayParty:  issuer.ID.String(),
-		Audiences:    audiences,
-		MaxLifetime:  workloadAssertionMaxLifetime,
+		Issuer:              issuer.Issuer,
+		Subject:             claims.Subject,
+		KeySource:           source,
+		ReplayIssuer:        tenancy.UserSessionIssuerID.String(),
+		ReplayParty:         issuer.ID.String(),
+		Audiences:           audiences,
+		MaxLifetime:         workloadAssertionMaxLifetime,
+		AllowAssertionReuse: presented.allowAssertionReuse,
 	}); err != nil {
 		reason := workload.ReasonOf(err)
 		switch {
@@ -584,6 +595,78 @@ func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.Response
 	return nil
 }
 
+// lockWorkloadAssertionPolicy fences issuer-policy changes through commit.
+// The transaction must use REPEATABLE READ: an issuer update while acquiring its
+// lock fails closed. Admission and assignment are evaluated in that consistent
+// snapshot, not promised to include child-only changes committed during a lock
+// wait (those mutations need not update the issuer row).
+func lockWorkloadAssertionPolicy(ctx context.Context, dbtx pgx.Tx, organizationID string, projectIDPtr *uuid.UUID, presented presentedWorkload) error {
+	if presented.assertionPolicyChecked {
+		// Policy and admission writes take this same issuer lock. Hold it through
+		// snapshot-based admission and commit; verification's earlier policy read
+		// alone cannot authorize an exchange racing a policy disable.
+		if _, err := workloadpolicy_repo.New(dbtx).LockWorkloadIssuerForWrite(ctx, workloadpolicy_repo.LockWorkloadIssuerForWriteParams{
+			OrganizationID: organizationID, ID: presented.issuerID,
+		}); err != nil {
+			if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == pgerrcode.SerializationFailure {
+				return refuseWorkloadGrant("issuer_policy_changed", err)
+			}
+			if errors.Is(err, pgx.ErrNoRows) {
+				return refuseWorkloadGrant("issuer_untrusted", err)
+			}
+			return workloadGrantStageUnavailable("issuer_lookup_unavailable", err)
+		}
+		projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		if projectIDPtr != nil {
+			projectID = uuid.NullUUID{UUID: *projectIDPtr, Valid: true}
+		}
+		issuer, err := workloadidentity.ResolveIssuerByURL(ctx, dbtx, workloadidentity.ResolveIssuerParams{
+			OrganizationID: organizationID,
+			ProjectID:      projectID,
+			IssuerURL:      presented.issuerURL,
+		})
+		if errors.Is(err, workloadidentity.ErrIssuerNotFound) {
+			return refuseWorkloadGrant("issuer_untrusted", err)
+		}
+		if err != nil {
+			return workloadGrantStageUnavailable("issuer_lookup_unavailable", err)
+		}
+		if issuer.ID != presented.issuerID || (issuer.AllowAssertionReuse.Valid && issuer.AllowAssertionReuse.Bool) != presented.allowAssertionReuse {
+			return refuseWorkloadGrant("issuer_policy_changed", errors.New("workload issuer policy changed during verification"))
+		}
+		admitted, err := workloadidentity.IsAdmitted(ctx, dbtx, workloadidentity.AdmissionParams{
+			OrganizationID: organizationID, ProjectID: projectID,
+			WorkloadIssuerID: issuer.ID, Subject: presented.subject,
+		})
+		if err != nil {
+			return workloadGrantStageUnavailable("subject_admission_unavailable", err)
+		}
+		if !admitted {
+			return refuseWorkloadGrant("subject_not_admitted", errWorkloadNotAdmitted)
+		}
+	}
+
+	return nil
+}
+
+// admitWorkloadGrantInTx revalidates assignment and R/A/O policies without
+// acquiring a second pool connection while the issuer row is locked.
+func (s *Service) admitWorkloadGrantInTx(ctx context.Context, tx pgx.Tx, organizationID string, subject urn.SessionSubject, credential workloadSessionCredential) (context.Context, error) {
+	ctx, err := s.prepareWorkloadSessionContext(ctx, organizationID, subject, credential)
+	if err != nil {
+		return ctx, err
+	}
+	admission, err := runtimepolicy.AdmitWorkloadSessionInTx(ctx, tx)
+	if err != nil {
+		return ctx, fmt.Errorf("admit workload grant in issuance transaction: %w", err)
+	}
+	admitted, err := authz.WithWorkloadSessionAdmission(ctx, admission)
+	if err != nil {
+		return ctx, fmt.Errorf("install workload grant admission: %w", err)
+	}
+	return admitted, nil
+}
+
 // mintWorkloadGrantSession shares live workload admission and transactional issuance.
 func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Logger, grant workloadGrantIssuance) (*mintedSession, error) {
 	organizationID := grant.session.OrganizationID
@@ -611,11 +694,26 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	// A database that cannot start or commit the transaction is an outage,
 	// not a verdict on the assertion: the caller is told to retry rather than
 	// handed a permanent failure.
-	dbtx, err := s.db.Begin(ctx)
+	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		return nil, workloadGrantStageUnavailable("session_persist_unavailable", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	if err := lockWorkloadAssertionPolicy(ctx, dbtx, organizationID, grant.projectID, grant.presented); err != nil {
+		return nil, err
+	}
+	// All database work after the lock uses dbtx, never another pool connection.
+	authorizationCtx, err = s.admitWorkloadGrantInTx(authorizationCtx, dbtx, organizationID, subject, grant.credential)
+	if err == nil && grant.endpoint != nil {
+		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
+	}
+	if err != nil {
+		if errors.Is(err, errCredentialRejected) || isCredentialDenial(err) {
+			return nil, refuseWorkloadGrant("agent_admission_denied", err)
+		}
+		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
+	}
 
 	minted, err := s.issueSession(authorizationCtx, grant.client, usersessions_repo.New(dbtx), grant.session, logger)
 	if err != nil {
