@@ -130,7 +130,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			s.Skipped++
 			continue
 		}
-		if entry.V != spoolEntryVersion {
+		if entry.V != spoolEntryVersion && entry.V != spoolEntryVersionV1 {
 			// A newer binary wrote it — not this one's to interpret or delete.
 			s.Skipped++
 			continue
@@ -146,6 +146,17 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			cl = newReplayClient(entry.ServerURL)
 			clients[entry.ServerURL] = cl
 		}
+		if a.c.Source == credToken && (entry.TokenProject != a.c.Project || !validHooksProjectSlug(entry.TokenProject)) {
+			// A token box replays only events bound to its current configured
+			// hooks project: one captured for another project, or a pre-binding
+			// (v1) entry with no project at all, must not land in this one.
+			if removeSpoolEntry(path) {
+				s.Dropped++
+			} else {
+				s.Skipped++
+			}
+			continue
+		}
 		res := cl.send(ctx, a.c, entry.Envelope, entry.IdempotencyKey)
 		replayCreds := a.c
 		if res.authRejected {
@@ -154,6 +165,18 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			// Mirror the live path's one fallback (a rejected cached key
 			// retries through the config's shared org key), then skip the
 			// deployment's remaining entries. Never delete on auth rejection.
+			if a.c.Source == credToken {
+				// The same recovery as a live send: one fresh token and one
+				// resend in the same project, else record the refusal. Never
+				// fall back to a key.
+				cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: envDebugLog(), ConfigPath: entry.ConfigPath, ConfigError: ""}
+				res, replayCreds = recoverTokenRejection(cfg, a.c, res, func(fresh creds) ingestResult {
+					return cl.send(ctx, fresh, entry.Envelope, entry.IdempotencyKey)
+				})
+				if !res.authRejected {
+					auths[key] = drainAuth{c: replayCreds, ok: true, orgKey: ""}
+				}
+			}
 			if a.c.Source == credCache && a.orgKey != "" {
 				org := creds{ServerURL: entry.ServerURL, APIKey: a.orgKey, Project: entry.ProjectSlug, Email: "", Org: entry.OrgID, Source: credOrg}
 				res = cl.send(ctx, org, entry.Envelope, entry.IdempotencyKey)
@@ -167,6 +190,9 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 				s.Skipped++
 				continue
 			}
+		}
+		if replayCreds.Source == credToken && res.accepted() {
+			clearTokenRejected()
 		}
 		switch {
 		case res.accepted():
@@ -380,7 +406,10 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 				}
 			}
 		}
-		if a.ok && entry.ProjectSlug != "" {
+		// A token's project is the box's configured hooks project; the
+		// project recorded at spool time came from the plugin config and is
+		// not the token's to use.
+		if a.ok && entry.ProjectSlug != "" && a.c.Source != credToken {
 			// The stored deployment identity is the replay routing truth: a
 			// SPEAKEASY_AI_HOOKS_PROJECT_SLUG (or cached project) inherited from the
 			// spawning session must not reroute another project's entries.
@@ -470,10 +499,10 @@ func (r *Relay) maybeSpawnDrain() {
 // finishExchange runs the spool bookkeeping for a final exchange result: an
 // unsent payload is kept for replay; a healthy exchange flushes any backlog
 // via a detached drain.
-func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, res ingestResult) {
+func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, res ingestResult, tokenProject string) {
 	switch {
 	case res.unsent():
-		r.spoolUnsent(idemKey, payload)
+		r.spoolUnsent(idemKey, payload, tokenProject)
 	case res.accepted():
 		r.maybeSpawnDrain()
 	}
