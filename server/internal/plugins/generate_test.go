@@ -1617,6 +1617,90 @@ func TestHooksBootstrapColdAndWarmPathsPreserveInput(t *testing.T) {
 	}
 }
 
+// TestHooksBootstrapFallsBackToPython3WithoutUnzip checks that a machine with
+// neither unzip nor busybox, like the official OpenClaw image, still installs
+// the binary through python3's zipfile module.
+func TestHooksBootstrapFallsBackToPython3WithoutUnzip(t *testing.T) {
+	t.Parallel()
+	path := hooksBootstrapToolPath(t)
+	require.NoError(t, os.Symlink(workingPython3(t), filepath.Join(path, "python3")))
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n"))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	out, err := runHooksBootstrapWithEnv(t, script, []string{
+		"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(),
+		"PATH=" + path,
+	}, "", "--first")
+	require.NoError(t, err, string(out))
+	require.Equal(t, "args:--first\n", string(out))
+}
+
+// TestHooksBootstrapNamesUnpackToolsWhenNoneInstalled checks that a machine
+// with no way to unpack the archive fails with a message naming the tools that
+// would work, without running anything.
+func TestHooksBootstrapNamesUnpackToolsWhenNoneInstalled(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\necho ran\n"))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	out, err := runHooksBootstrapWithEnv(t, script, []string{
+		"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(),
+		"PATH=" + hooksBootstrapToolPath(t),
+	}, "")
+	require.Error(t, err)
+	require.Contains(t, string(out), "unzip, busybox or python3 is required for first install")
+	require.NotContains(t, string(out), "ran")
+}
+
+// workingPython3 returns the interpreter behind the first python3 on PATH that
+// can import zipfile. Version-manager shims such as mise's resolve their
+// version from the environment, which the bootstrap's restricted PATH lacks,
+// so the test links the real executable rather than the shim.
+func workingPython3(t *testing.T) string {
+	t.Helper()
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		out, err := exec.Command(filepath.Join(dir, "python3"), "-c", "import sys, zipfile; print(sys.executable)").Output()
+		if exe := strings.TrimSpace(string(out)); err == nil && exe != "" {
+			return exe
+		}
+	}
+	require.FailNow(t, "no working python3 on PATH; it is needed to test the zipfile fallback")
+	return ""
+}
+
+// hooksBootstrapToolPath returns a PATH directory holding only the tools the
+// bootstrap needs to download and verify an archive, so a test can simulate a
+// machine without unzip or busybox.
+func hooksBootstrapToolPath(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, tool := range []string{"uname", "dirname", "mkdir", "mktemp", "curl", "sha256sum", "shasum", "cut", "chmod", "mv", "rm"} {
+		resolved, err := exec.LookPath(tool)
+		if err != nil {
+			// sha256sum and shasum are alternatives: each platform has one.
+			continue
+		}
+		require.NoError(t, os.Symlink(resolved, filepath.Join(dir, tool)))
+	}
+	return dir
+}
+
 // TestHooksBootstrapHonorsHooksHomeNames checks the bootstrap caches the
 // binary under SPEAKEASY_AI_HOOKS_HOME, still honors the deprecated
 // GRAM_HOOKS_HOME, and prefers the new name when both are set.
