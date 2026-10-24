@@ -75,6 +75,7 @@ func TestIssuanceProfilesForClientsAndWorkloads(t *testing.T) {
 		"no caller":          {UserSessionIssuerID: issuerID.String(), Name: "x"},
 		"subject only":       {UserSessionIssuerID: issuerID.String(), WorkloadSubject: new("x"), Name: "x"},
 		"no-auth where auth": {UserSessionIssuerID: issuerID.String(), UserSessionClientID: new(client.ID.String()), Name: "x", Choices: []*types.IssuanceProfileChoice{{McpServerID: server.id.String()}}},
+		"empty choice":       {UserSessionIssuerID: issuerID.String(), UserSessionClientID: new(client.ID.String()), Name: "x", Choices: []*types.IssuanceProfileChoice{nil}},
 	}
 	for _, payload := range invalid {
 		_, err := ti.service.SetIssuanceProfile(ctx, payload)

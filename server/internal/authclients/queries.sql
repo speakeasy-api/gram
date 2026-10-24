@@ -359,13 +359,26 @@ WHERE usi.id = @id
   );
 
 -- name: IsUserSessionClientOfIssuer :one
+-- A live client of the issuer, in the organization: its own, or one of a
+-- live project's.
 SELECT EXISTS (
   SELECT 1
   FROM user_session_clients AS c
+  LEFT JOIN projects AS p
+    ON p.id = c.project_id
   WHERE c.id = @id
     AND c.user_session_issuer_id = @user_session_issuer_id
     AND c.deleted IS FALSE
+    AND (
+      (c.project_id IS NULL AND c.organization_id = @organization_id::text)
+      OR (p.organization_id = @organization_id::text AND p.deleted IS FALSE)
+    )
 )::boolean AS is_client;
+
+-- name: LockIssuanceProfileCaller :exec
+-- Serializes writes to one caller's profile on one sign-in, including the
+-- first, which has no row to lock yet.
+SELECT pg_advisory_xact_lock(hashtextextended('issuance_selection_profiles:' || @user_session_issuer_id::text || ':' || @caller_key::text, 0));
 
 -- name: IsOrganizationWorkloadIssuer :one
 SELECT EXISTS (

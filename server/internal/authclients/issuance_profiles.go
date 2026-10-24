@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -56,8 +57,6 @@ func (s *Service) SetIssuanceProfile(ctx context.Context, payload *gen.SetIssuan
 	if err != nil {
 		return nil, err
 	}
-	organizationID := authCtx.ActiveOrganizationID
-
 	issuerID, err := uuid.Parse(payload.UserSessionIssuerID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user session issuer id").LogWarn(ctx, logger)
@@ -70,112 +69,170 @@ func (s *Service) SetIssuanceProfile(ctx context.Context, payload *gen.SetIssuan
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid workload issuer id").LogWarn(ctx, logger)
 	}
-	workloadSubject := strings.TrimSpace(conv.PtrValOr(payload.WorkloadSubject, ""))
-	workload := workloadIssuerID.Valid || workloadSubject != ""
-	switch {
-	case clientID.Valid == workload:
-		return nil, oops.E(oops.CodeBadRequest, nil, "a profile applies to exactly one caller: an OAuth client, or a workload issuer and subject").LogWarn(ctx, logger)
-	case workload && (!workloadIssuerID.Valid || workloadSubject == ""):
-		return nil, oops.E(oops.CodeBadRequest, nil, "a workload's profile needs both its issuer and its subject").LogWarn(ctx, logger)
-	}
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "a profile needs a name").LogWarn(ctx, logger)
 	}
-
-	dbtx, err := s.db.Begin(ctx)
+	profile, err := WriteIssuanceProfile(ctx, s.db, s.audit, IssuanceProfileWrite{
+		OrganizationID: authCtx.ActiveOrganizationID, ActorUserID: authCtx.UserID, ActorDisplayName: authCtx.Email,
+		UserSessionIssuerID: issuerID, ClientID: clientID, WorkloadIssuerID: workloadIssuerID,
+		WorkloadSubject: conv.PtrValOr(payload.WorkloadSubject, ""), Name: name,
+		Choices: func([]*types.IssuanceProfileChoice) []*types.IssuanceProfileChoice { return payload.Choices },
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+		if _, ok := errors.AsType[*oops.ShareableError](err); ok {
+			return nil, err
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "write issuance profile").LogError(ctx, logger)
+	}
+	return profile, nil
+}
+
+// IssuanceProfileWrite is one change to a headless caller's issuance profile:
+// an OAuth client, or a workload issuer and subject, on one sign-in.
+type IssuanceProfileWrite struct {
+	OrganizationID   string
+	ActorUserID      string
+	ActorDisplayName *string
+
+	UserSessionIssuerID uuid.UUID
+	ClientID            uuid.NullUUID
+	WorkloadIssuerID    uuid.NullUUID
+	// WorkloadSubject is an opaque identity key, compared exactly.
+	WorkloadSubject string
+
+	// Name names a new profile and renames an existing one; empty keeps an
+	// existing profile's name.
+	Name string
+
+	// Choices returns every choice the profile should hold, given the ones it
+	// holds now (none for a new profile).
+	Choices func(current []*types.IssuanceProfileChoice) []*types.IssuanceProfileChoice
+}
+
+// WriteIssuanceProfile creates or updates a caller's profile and records the
+// audit event in the same transaction. Writes for one caller are serialized,
+// so a change computed from the current choices never loses a concurrent one.
+// It performs no authorization: callers check that the actor administers the
+// organization. Refusals are *oops.ShareableError.
+func WriteIssuanceProfile(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Logger, w IssuanceProfileWrite) (*types.IssuanceProfile, error) {
+	organizationID := w.OrganizationID
+	workload := w.WorkloadIssuerID.Valid || w.WorkloadSubject != ""
+	switch {
+	case w.ClientID.Valid == workload:
+		return nil, oops.E(oops.CodeBadRequest, nil, "a profile applies to exactly one caller: an OAuth client, or a workload issuer and subject")
+	case workload && (!w.WorkloadIssuerID.Valid || w.WorkloadSubject == ""):
+		return nil, oops.E(oops.CodeBadRequest, nil, "a workload's profile needs both its issuer and its subject")
+	}
+
+	dbtx, err := db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
 
-	issuer, err := queries.GetOrganizationUserSessionIssuer(ctx, repo.GetOrganizationUserSessionIssuerParams{ID: issuerID, OrganizationID: organizationID})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "sign-in not found").LogWarn(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get sign-in").LogError(ctx, logger)
+	issuer, err := queries.GetOrganizationUserSessionIssuer(ctx, repo.GetOrganizationUserSessionIssuerParams{ID: w.UserSessionIssuerID, OrganizationID: organizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeNotFound, err, "sign-in not found")
 	}
-	if clientID.Valid {
-		ok, err := queries.IsUserSessionClientOfIssuer(ctx, repo.IsUserSessionClientOfIssuerParams{ID: clientID.UUID, UserSessionIssuerID: issuerID})
+	if err != nil {
+		return nil, fmt.Errorf("get sign-in: %w", err)
+	}
+	if w.ClientID.Valid {
+		ok, err := queries.IsUserSessionClientOfIssuer(ctx, repo.IsUserSessionClientOfIssuerParams{ID: w.ClientID.UUID, UserSessionIssuerID: w.UserSessionIssuerID, OrganizationID: organizationID})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "check client").LogError(ctx, logger)
+			return nil, fmt.Errorf("check client: %w", err)
 		}
 		if !ok {
-			return nil, oops.E(oops.CodeNotFound, nil, "the client does not sign in through this sign-in").LogWarn(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, nil, "the client does not sign in through this sign-in")
 		}
 	} else {
-		ok, err := queries.IsOrganizationWorkloadIssuer(ctx, repo.IsOrganizationWorkloadIssuerParams{ID: workloadIssuerID.UUID, OrganizationID: organizationID})
+		ok, err := queries.IsOrganizationWorkloadIssuer(ctx, repo.IsOrganizationWorkloadIssuerParams{ID: w.WorkloadIssuerID.UUID, OrganizationID: organizationID})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "check workload issuer").LogError(ctx, logger)
+			return nil, fmt.Errorf("check workload issuer: %w", err)
 		}
 		if !ok {
-			return nil, oops.E(oops.CodeNotFound, nil, "workload issuer not found").LogWarn(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, nil, "workload issuer not found")
 		}
 	}
 
+	callerKey := "client:" + w.ClientID.UUID.String()
+	if workload {
+		callerKey = "workload:" + w.WorkloadIssuerID.UUID.String() + ":" + w.WorkloadSubject
+	}
+	if err := queries.LockIssuanceProfileCaller(ctx, repo.LockIssuanceProfileCallerParams{UserSessionIssuerID: w.UserSessionIssuerID.String(), CallerKey: callerKey}); err != nil {
+		return nil, fmt.Errorf("lock issuance profile caller: %w", err)
+	}
 	existing, err := queries.LockIssuanceProfileForCaller(ctx, repo.LockIssuanceProfileForCallerParams{
-		UserSessionIssuerID: issuerID, OrganizationID: organizationID,
-		UserSessionClientID: clientID, WorkloadIssuerID: workloadIssuerID, WorkloadSubject: conv.ToPGTextEmpty(workloadSubject),
+		UserSessionIssuerID: w.UserSessionIssuerID, OrganizationID: organizationID,
+		UserSessionClientID: w.ClientID, WorkloadIssuerID: w.WorkloadIssuerID, WorkloadSubject: conv.ToPGTextEmpty(w.WorkloadSubject),
 	})
 	creating := errors.Is(err, pgx.ErrNoRows)
 	if err != nil && !creating {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock issuance profile").LogError(ctx, logger)
+		return nil, fmt.Errorf("lock issuance profile: %w", err)
 	}
 
 	var before *types.IssuanceProfile
+	current := []*types.IssuanceProfileChoice{}
 	var profile repo.IssuanceSelectionProfile
 	if creating {
+		if w.Name == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "a new profile needs a name")
+		}
 		profile, err = queries.CreateIssuanceProfile(ctx, repo.CreateIssuanceProfileParams{
-			OrganizationID: organizationID, ProjectID: issuer.ProjectID, UserSessionIssuerID: issuerID,
-			UserSessionClientID: clientID, WorkloadIssuerID: workloadIssuerID, WorkloadSubject: conv.ToPGTextEmpty(workloadSubject),
-			Name: name, CreatedByUserID: conv.ToPGTextEmpty(authCtx.UserID),
+			OrganizationID: organizationID, ProjectID: issuer.ProjectID, UserSessionIssuerID: w.UserSessionIssuerID,
+			UserSessionClientID: w.ClientID, WorkloadIssuerID: w.WorkloadIssuerID, WorkloadSubject: conv.ToPGTextEmpty(w.WorkloadSubject),
+			Name: w.Name, CreatedByUserID: conv.ToPGTextEmpty(w.ActorUserID),
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "create issuance profile").LogError(ctx, logger)
+			return nil, fmt.Errorf("create issuance profile: %w", err)
 		}
 	} else {
 		views, err := issuanceProfileViews(ctx, queries, organizationID, []repo.IssuanceSelectionProfile{existing})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "build issuance profile view").LogError(ctx, logger)
+			return nil, fmt.Errorf("build issuance profile view: %w", err)
 		}
 		before = views[0]
+		current = before.Choices
+		name := w.Name
+		if name == "" {
+			name = existing.Name
+		}
 		profile, err = queries.RenameIssuanceProfile(ctx, repo.RenameIssuanceProfileParams{Name: name, ID: existing.ID, OrganizationID: organizationID})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "update issuance profile").LogError(ctx, logger)
+			return nil, fmt.Errorf("update issuance profile: %w", err)
 		}
 		if err := queries.ClearIssuanceProfileChoices(ctx, repo.ClearIssuanceProfileChoicesParams{ProfileID: profile.ID, OrganizationID: organizationID}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "clear issuance profile choices").LogError(ctx, logger)
+			return nil, fmt.Errorf("clear issuance profile choices: %w", err)
 		}
 	}
 
-	if err := recordProfileChoices(ctx, dbtx, organizationID, profile.ID, workload, payload.Choices); err != nil {
+	if err := recordProfileChoices(ctx, dbtx, organizationID, profile.ID, workload, w.Choices(current)); err != nil {
 		return nil, err
 	}
 
 	views, err := issuanceProfileViews(ctx, queries, organizationID, []repo.IssuanceSelectionProfile{profile})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build issuance profile view").LogError(ctx, logger)
+		return nil, fmt.Errorf("build issuance profile view: %w", err)
 	}
 	after := views[0]
 
 	event := audit.LogIssuanceSelectionProfileEvent{
 		OrganizationID: organizationID, ProjectID: profile.ProjectID.UUID,
-		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, ActorSlug: nil,
+		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, w.ActorUserID), ActorDisplayName: w.ActorDisplayName, ActorSlug: nil,
 		IssuanceSelectionProfileURN: urn.NewIssuanceSelectionProfile(profile.ID), IssuanceSelectionProfileName: profile.Name,
 		IssuanceSelectionProfileSnapshotBefore: before, IssuanceSelectionProfileSnapshotAfter: after,
 	}
-	logEvent := s.audit.LogIssuanceSelectionProfileUpdate
+	logEvent := auditLogger.LogIssuanceSelectionProfileUpdate
 	if creating {
-		logEvent = s.audit.LogIssuanceSelectionProfileCreate
+		logEvent = auditLogger.LogIssuanceSelectionProfileCreate
 	}
 	if err := logEvent(ctx, dbtx, event); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log issuance profile change").LogError(ctx, logger)
+		return nil, fmt.Errorf("log issuance profile change: %w", err)
 	}
-
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 	return after, nil
 }
@@ -234,6 +291,9 @@ func recordProfileChoices(ctx context.Context, dbtx pgx.Tx, organizationID strin
 	queries := upstreamclientsrepo.New(dbtx)
 	seen := make(map[uuid.UUID]bool, len(choices))
 	for _, choice := range choices {
+		if choice == nil {
+			return oops.E(oops.CodeBadRequest, nil, "a choice entry is empty: name the MCP server for each choice")
+		}
 		serverID, err := uuid.Parse(choice.McpServerID)
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "invalid mcp server id")
@@ -308,4 +368,16 @@ func issuanceProfileViews(ctx context.Context, queries *repo.Queries, organizati
 		})
 	}
 	return views, nil
+}
+
+// ListIssuanceProfilesForIssuer lists the profiles of callers signing in
+// through one of the organization's sign-ins, with their choices. It performs
+// no authorization.
+func ListIssuanceProfilesForIssuer(ctx context.Context, db repo.DBTX, organizationID string, issuerID uuid.UUID) ([]*types.IssuanceProfile, error) {
+	queries := repo.New(db)
+	profiles, err := queries.ListIssuanceProfiles(ctx, repo.ListIssuanceProfilesParams{UserSessionIssuerID: issuerID, OrganizationID: organizationID})
+	if err != nil {
+		return nil, fmt.Errorf("list issuance profiles: %w", err)
+	}
+	return issuanceProfileViews(ctx, queries, organizationID, profiles)
 }

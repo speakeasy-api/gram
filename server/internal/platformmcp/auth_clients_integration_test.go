@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestPlatformMCPReportsUpstreamAuthClients(t *testing.T) {
@@ -308,6 +309,83 @@ func TestPlatformMCPOffersUpstreamCredentialOnAnotherServer(t *testing.T) {
 	require.Equal(t, "not_found", mutationErr.Code)
 
 	audits, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAuthClientAttachMcpServer)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), audits)
+}
+
+func TestPlatformMCPChoosesAHeadlessCallersCredential(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_headless_credential")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+
+	organization, err := organizationsrepo.New(conn).GetOrganizationMetadata(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID: principal.OrganizationID, Name: organization.Name, Slug: organization.Slug,
+		WorkosID: conv.ToPGText("workos-" + uuid.NewString()), Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	rows, err := platformrepo.New(conn).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID: principal.OrganizationID, ConnectionID: uuid.NullUUID{}, ConnectionGeneration: uuid.NullUUID{}, SkipAuthorizationFilter: true,
+		UserID: inventoryText(principal.UserID), ActingSurface: inventoryText(string(principal.surface())),
+		ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}, AfterMcpID: uuid.NullUUID{}, QueryText: "", ReadinessState: pgtype.Text{}, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	target := rows[0]
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: target.McpServerID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.True(t, server.UserSessionIssuerID.Valid, "the fixture server signs in through its own issuer")
+	client, err := usersessionsrepo.New(conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
+		ClientID: "headless-" + uuid.NewString()[:8], ClientName: "Nightly job", RedirectUris: []string{}, TokenEndpointAuthMethod: "none", UserSessionIssuerID: server.UserSessionIssuerID.UUID,
+	})
+	require.NoError(t, err)
+	shared, err := testrepo.New(conn).CreateAuthClientFixture(ctx, testrepo.CreateAuthClientFixtureParams{
+		OrganizationID: principal.OrganizationID, ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true},
+		ClientType: authz.AuthClientTypeServiceAccount, Name: "Operations service account",
+	})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).AssociateAuthClientFixture(ctx, testrepo.AssociateAuthClientFixtureParams{ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: target.McpServerID, AuthClientID: shared}))
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
+	logger := testenv.NewLogger(t)
+	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
+	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard())
+	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
+	require.NoError(t, err)
+	service.WithAuthClientAudit(audit.NewLogger())
+
+	input := ChooseMCPHeadlessCallerCredentialInput{ProjectID: project.ID.String(), MCPID: target.McpServerID.String(), UserSessionClientID: client.ID.String(), AuthClientID: shared.String(), Name: "Nightly job"}
+	preview, err := service.ChooseHeadlessCallerCredential(ctx, principal, input)
+	require.NoError(t, err)
+	require.Empty(t, preview.Callers, "a preview changes nothing")
+
+	input.Confirmed = true
+	got, err := service.ChooseHeadlessCallerCredential(ctx, principal, input)
+	require.NoError(t, err)
+	require.Len(t, got.Callers, 1)
+	require.Equal(t, shared.String(), got.Callers[0].AuthClientID)
+	require.Equal(t, client.ID.String(), got.Callers[0].UserSessionClientID)
+
+	var mutationErr *AccessRoleMutationError
+	both := input
+	both.NoAuth = true
+	_, err = service.ChooseHeadlessCallerCredential(ctx, principal, both)
+	require.ErrorAs(t, err, &mutationErr)
+	require.Equal(t, "invalid_request", mutationErr.Code)
+
+	remove := input
+	remove.AuthClientID, remove.Remove = "", true
+	got, err = service.ChooseHeadlessCallerCredential(ctx, principal, remove)
+	require.NoError(t, err)
+	require.Empty(t, got.Callers)
+
+	audits, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionIssuanceSelectionProfileCreate)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), audits)
 }
