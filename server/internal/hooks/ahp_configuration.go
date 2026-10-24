@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"time"
@@ -74,6 +75,10 @@ func (s *Service) ahpResolveConfiguration(ctx context.Context) (*ahp.Configurati
 	base, err := url.Parse(requestorigin.BaseURL(ctx, fallback))
 	if err != nil || base.Host == "" || base.User != nil || (base.Scheme != "https" && base.Scheme != "http") {
 		return nil, errors.New("AHP upload origin unavailable")
+	}
+	// Match the SDK upload transport: HTTP is only suitable for local development.
+	if base.Scheme == "http" && base.Hostname() != "localhost" && !net.ParseIP(base.Hostname()).IsLoopback() {
+		return nil, errors.New("AHP upload origin requires HTTPS")
 	}
 	endpoint := base.JoinPath(ahpUploadPath)
 	endpoint.RawQuery = ""
