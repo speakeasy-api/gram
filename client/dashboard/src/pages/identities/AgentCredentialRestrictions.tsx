@@ -14,11 +14,8 @@ import { collectPageItems } from "@/components/sessions/collectPageItems";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
-import {
-  CLIENT_TYPES,
-  clientTypeLabel,
-  useAllAuthClients,
-} from "@/lib/auth-clients";
+import { CLIENT_TYPES, clientTypeLabel } from "@/lib/auth-clients";
+import { useAllAuthClients } from "@/lib/useAllAuthClients";
 import {
   AGENT_CREDENTIAL_BLOCK_SCOPE,
   invalidateAgentPolicy,
