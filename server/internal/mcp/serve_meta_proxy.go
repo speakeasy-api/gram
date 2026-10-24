@@ -510,7 +510,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 			NextCursor string           `json:"nextCursor"`
 		}
 		if uerr := json.Unmarshal(upstreamResult, &listing); uerr != nil {
-			return nil, &metaMemberError{message: fmt.Sprintf("server %q returned a tool listing the meta MCP could not read", member.slug)}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q returned a tool listing the meta MCP could not read", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 		}
 		for _, entry := range listing.Tools {
 			if entry == nil || entry.Name == "" {
@@ -534,7 +534,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 			break
 		}
 		if listing.NextCursor == cursor || seenCursors[listing.NextCursor] {
-			return nil, &metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug)}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 		}
 		seenCursors[listing.NextCursor] = true
 		cursor = listing.NextCursor

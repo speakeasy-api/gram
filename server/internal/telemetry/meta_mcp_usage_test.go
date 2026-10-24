@@ -2,6 +2,7 @@ package telemetry_test
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +27,8 @@ type gatewayEvent struct {
 	tool     string
 	status   int
 	at       time.Time
+	// traceID groups rows written by one request; defaults to a fresh trace.
+	traceID string
 }
 
 // logGatewayEvent writes one row the way the meta surface emits it: discovery
@@ -35,8 +38,12 @@ type gatewayEvent struct {
 func logGatewayEvent(t *testing.T, ctx context.Context, ti *testInstance, e gatewayEvent) {
 	t.Helper()
 
+	traceID := e.traceID
+	if traceID == "" {
+		traceID = strings.ReplaceAll(uuid.NewString(), "-", "")
+	}
 	attrs := telemetry.HTTPLogAttributes{
-		attr.TraceIDKey: strings.ReplaceAll(uuid.NewString(), "-", ""),
+		attr.TraceIDKey: traceID,
 	}
 	if e.gatewayID != "" {
 		attrs[attr.MetaMcpServerIDKey] = e.gatewayID
@@ -120,6 +127,96 @@ func TestGetMetaMcpServerUsage_FunnelAndMembers(t *testing.T) {
 	require.Equal(t, int64(1), result.Members[1].ToolCalls)
 	require.Equal(t, int64(0), result.Members[1].ErrorCount)
 	require.NotNil(t, result.Members[0].LastCalledAt)
+}
+
+func TestGetMetaMcpServerUsage_DiscoveryFailures(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	from := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	to := from.Add(time.Hour)
+	gatewayID := uuid.NewString()
+	omission := func(projectID, gatewayID string, at time.Time, traceID string) {
+		logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: projectID, gatewayID: gatewayID, memberID: "", tool: "tools/list", status: 429, at: at, traceID: traceID})
+	}
+
+	// One listing that left out three members shares a trace; each counts.
+	listing := strings.ReplaceAll(uuid.NewString(), "-", "")
+	for range 3 {
+		omission(ti.projectID, gatewayID, from.Add(5*time.Minute+10*time.Second), listing)
+	}
+	omission(ti.projectID, gatewayID, from, "")
+	// The window end, before the window, another gateway, and another project: none may count.
+	omission(ti.projectID, gatewayID, to, "")
+	omission(ti.projectID, gatewayID, from.Add(-time.Second), "")
+	omission(ti.projectID, uuid.NewString(), from.Add(5*time.Minute), "")
+	omission(uuid.NewString(), gatewayID, from.Add(5*time.Minute), "")
+	// A member call that happens to be named tools/list is not a discovery failure.
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: uuid.NewString(), tool: "tools/list", status: 502, at: from.Add(5 * time.Minute)})
+	// The funnel keeps counting its stages, including at the window end.
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: "", tool: "list_servers", status: 200, at: from.Add(5 * time.Minute)})
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: "", tool: "list_servers", status: 200, at: to})
+	logGatewayEvent(t, ctx, ti, gatewayEvent{projectID: ti.projectID, gatewayID: gatewayID, memberID: "", tool: "describe_server", status: 200, at: from.Add(5 * time.Minute)})
+
+	result, err := ti.service.GetMetaMcpServerUsage(ctx, &gen.GetMetaMcpServerUsagePayload{
+		MetaMcpServerID: gatewayID,
+		From:            from.Format(time.RFC3339),
+		To:              to.Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, int64(2), result.Funnel.ListServers)
+	require.Equal(t, int64(1), result.Funnel.DescribeServer)
+	require.Equal(t, int64(0), result.Funnel.DescribeTools)
+	require.Equal(t, int64(1), result.Funnel.ExecuteTool)
+
+	failures := result.DiscoveryFailures
+	require.NotNil(t, failures)
+	require.Equal(t, int64(60), failures.IntervalSeconds)
+	require.Len(t, failures.Buckets, 60)
+	counts := map[int]int64{}
+	for i, bucket := range failures.Buckets {
+		require.Equal(t, strconv.FormatInt(from.Add(time.Duration(i)*time.Minute).UnixNano(), 10), bucket.BucketTimeUnixNano)
+		if bucket.Count != 0 {
+			counts[i] = bucket.Count
+		}
+	}
+	require.Equal(t, map[int]int64{0: 1, 5: 3}, counts)
+}
+
+func TestGetMetaMcpServerUsage_DiscoveryFailureBucketsAreBounded(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	gatewayID := uuid.NewString()
+	to := time.Now().UTC().Truncate(time.Second)
+
+	for _, tc := range []struct {
+		name     string
+		window   time.Duration
+		interval int64
+		buckets  int
+	}{
+		{name: "it uses minute buckets for an hour", window: time.Hour, interval: 60, buckets: 60},
+		{name: "it uses quarter hour buckets for a day", window: 24 * time.Hour, interval: 900, buckets: 96},
+		{name: "it uses hour buckets for a week", window: 7 * 24 * time.Hour, interval: 3600, buckets: 168},
+		{name: "it uses six hour buckets for a month", window: 30 * 24 * time.Hour, interval: 21600, buckets: 120},
+		{name: "it uses day buckets for a quarter", window: 90 * 24 * time.Hour, interval: 86400, buckets: 90},
+		{name: "it widens buckets past a year", window: 1000 * 24 * time.Hour, interval: 236066, buckets: 366},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := ti.service.GetMetaMcpServerUsage(ctx, &gen.GetMetaMcpServerUsagePayload{
+				MetaMcpServerID: gatewayID,
+				From:            to.Add(-tc.window).Format(time.RFC3339),
+				To:              to.Format(time.RFC3339),
+			})
+			require.NoError(t, err)
+			require.Equal(t, tc.interval, result.DiscoveryFailures.IntervalSeconds)
+			require.Len(t, result.DiscoveryFailures.Buckets, tc.buckets)
+		})
+	}
 }
 
 func TestGetMetaMcpServerUsage_RejectsEmptyGatewayID(t *testing.T) {

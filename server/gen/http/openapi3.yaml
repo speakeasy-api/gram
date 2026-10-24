@@ -104360,6 +104360,8 @@ components:
         GetMetaMcpServerUsageResult:
             type: object
             properties:
+                discovery_failures:
+                    $ref: '#/components/schemas/MetaMcpDiscoveryFailures'
                 funnel:
                     $ref: '#/components/schemas/MetaMcpDiscoveryFunnel'
                 members:
@@ -110591,6 +110593,36 @@ components:
                 - tool_selection_mode
                 - external_mcp_slugs
                 - external_mcp_proxy_only
+        MetaMcpDiscoveryFailureBucket:
+            type: object
+            properties:
+                bucket_time_unix_nano:
+                    type: string
+                    description: Bucket start time in Unix nanoseconds (string for JS precision)
+                count:
+                    type: integer
+                    description: Members left out of a tool listing in this bucket. A listing that left out several members counts each of them.
+                    format: int64
+            description: Members left out of the gateway's tool listings during one time bucket.
+            required:
+                - bucket_time_unix_nano
+                - count
+        MetaMcpDiscoveryFailures:
+            type: object
+            properties:
+                buckets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MetaMcpDiscoveryFailureBucket'
+                    description: Buckets covering the requested window in ascending time order, gap-filled with zeros. The first bucket starts at the window start, and failures are counted up to but excluding the window end, so the last bucket may be partial.
+                interval_seconds:
+                    type: integer
+                    description: Bucket width in seconds, chosen from the length of the requested window
+                    format: int64
+            description: Time series of members the gateway left out of its tool listings because they could not be listed.
+            required:
+                - interval_seconds
+                - buckets
         MetaMcpDiscoveryFunnel:
             type: object
             properties:
