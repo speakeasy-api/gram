@@ -460,7 +460,7 @@ WITH selected AS (
     AND organization_id = @organization_id::text
     AND deleted IS FALSE
   UNION ALL
-  SELECT sqlc.narg('proposed_registration_id')::uuid IS NULL,
+  SELECT sqlc.narg('proposed_registration_id')::uuid IS NULL AND sqlc.narg('proposed_auth_client_id')::uuid IS NULL,
          candidates.auth_client_id,
          sqlc.narg('proposed_registration_id')::uuid, m.id, m.project_id, p.organization_id,
          candidates.ambiguous
@@ -477,11 +477,17 @@ WITH selected AS (
      AND c.deleted IS FALSE
     WHERE link.mcp_server_id = m.id AND link.organization_id = p.organization_id
       AND link.deleted IS FALSE
-      AND ((sqlc.narg('proposed_registration_id')::uuid IS NOT NULL
-            AND c.remote_session_client_id = sqlc.narg('proposed_registration_id')::uuid
-            AND c.client_type IN ('remote_session', 'service_account'))
-           OR (sqlc.narg('proposed_registration_id')::uuid IS NULL
-               AND c.client_type IN ('static_credential', 'pass_through')))
+      AND (
+        -- A named client is the only candidate, whatever its type.
+        (sqlc.narg('proposed_auth_client_id')::uuid IS NOT NULL
+         AND c.id = sqlc.narg('proposed_auth_client_id')::uuid)
+        OR (sqlc.narg('proposed_auth_client_id')::uuid IS NULL
+            AND ((sqlc.narg('proposed_registration_id')::uuid IS NOT NULL
+                  AND c.remote_session_client_id = sqlc.narg('proposed_registration_id')::uuid
+                  AND c.client_type IN ('remote_session', 'service_account'))
+                 OR (sqlc.narg('proposed_registration_id')::uuid IS NULL
+                     AND c.client_type IN ('static_credential', 'pass_through'))))
+      )
   ) AS candidates
   WHERE @proposed::boolean AND m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE
 )
@@ -679,3 +685,51 @@ WHERE h.auth_client_id = ANY(@auth_client_ids::uuid[])
   AND h.organization_id = @organization_id::text
   AND h.deleted IS FALSE
 ORDER BY h.name, h.id;
+
+-- name: ListServerConsentAuthClients :many
+-- The enabled auth clients each MCP server offers, for the consent screen to
+-- choose among, with whether the server needs upstream authentication. A
+-- server with no enabled client still has a row, with no client, so the
+-- screen can tell no-auth from incomplete setup.
+SELECT m.id AS mcp_server_id,
+       m.requires_upstream_auth,
+       c.id AS auth_client_id,
+       c.name AS auth_client_name,
+       c.client_type,
+       c.remote_session_client_id
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = @organization_id::text
+ AND p.deleted IS FALSE
+LEFT JOIN mcp_server_auth_clients AS link
+  ON link.mcp_server_id = m.id
+ AND link.organization_id = p.organization_id
+ AND link.deleted IS FALSE
+LEFT JOIN mcp_auth_clients AS c
+  ON c.id = link.auth_client_id
+ AND c.organization_id = link.organization_id
+ AND (c.project_id IS NULL OR c.project_id = m.project_id)
+ AND c.deleted IS FALSE
+ AND c.enabled
+WHERE m.id = ANY(@mcp_server_ids::uuid[])
+  AND m.deleted IS FALSE
+ORDER BY m.id, c.name, c.id;
+
+-- name: ListRememberedAuthClients :many
+-- The auth client a subject most recently approved for each MCP server
+-- through any of their user sessions. It only prefills a new consent and is
+-- checked again before use.
+SELECT DISTINCT ON (sel.mcp_server_id)
+       sel.mcp_server_id,
+       sel.auth_client_id::uuid AS auth_client_id
+FROM upstream_client_selections AS sel
+JOIN user_sessions AS us
+  ON COALESCE(us.credential_id, us.id) = sel.credential_id
+ AND us.subject_urn = @subject_urn::text
+WHERE sel.credential_kind = 'user_session'
+  AND sel.organization_id = @organization_id::text
+  AND sel.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND sel.auth_client_id IS NOT NULL
+  AND sel.deleted IS FALSE
+ORDER BY sel.mcp_server_id, sel.created_at DESC;

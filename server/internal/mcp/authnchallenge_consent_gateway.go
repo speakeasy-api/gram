@@ -70,6 +70,10 @@ type gatewayServer struct {
 	ConnectClientID string
 	// cardIDs are the services the server signs in through.
 	cardIDs []string
+
+	// Auth is the server's upstream credential choice, where typed auth
+	// client resolution is enforced.
+	Auth *consentServerAuth
 }
 
 // Ready reports whether the server works without any further action.
@@ -130,6 +134,9 @@ func (g gatewayServer) NotSetUp() bool {
 type gatewayConsentView struct {
 	members []metaMember
 	cards   []remoteSessionCard
+	// auth is each proxied member's credential choice, by server, where
+	// typed auth client resolution is enforced.
+	auth map[uuid.UUID]*consentServerAuth
 	// Servers are the servers the person can reach through the gateway,
 	// those needing action first.
 	Servers    []gatewayServer
@@ -186,9 +193,9 @@ func (s *Service) gatewayConsent(
 // server, from the member's own project unless no project owns it, the same
 // match clientServesAnyMember makes.
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
-	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, members: members, cards: cards}
+	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", cardIDs: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", cardIDs: nil, Auth: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
@@ -221,6 +228,12 @@ func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 		for _, outcome := range outcomes {
 			if outcome.Slug == server.Slug {
 				server.Status = outcome.Status
+				break
+			}
+		}
+		for _, member := range v.members {
+			if member.slug == server.Slug {
+				server.Auth = v.auth[member.serverID]
 				break
 			}
 		}

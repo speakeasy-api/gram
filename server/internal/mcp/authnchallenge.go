@@ -293,7 +293,12 @@ type UserSessionGrant struct {
 	// the consent page for each MCP server offering several, keyed by server.
 	// The credential this grant mints records it as its choice.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID `json:"upstream_client_picks,omitempty"`
-	CreatedAt           time.Time               `json:"created_at"`
+	// AuthClientPicks is the typed auth client the subject picked on the
+	// consent page for each MCP server, keyed by server, where typed auth
+	// client resolution is enforced. The credential this grant mints records
+	// it as its choice, with the client's registration in UpstreamClientPicks.
+	AuthClientPicks map[uuid.UUID]uuid.UUID `json:"auth_client_picks,omitempty"`
+	CreatedAt       time.Time               `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)

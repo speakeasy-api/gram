@@ -180,9 +180,19 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		return nil, nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any gateway members"), ""))
 	}
 	picks := chooseConsentUpstreamClientPicks(endpoint, members, view.cards)
+	memberAuth, err := s.gatewayConsentAuthChoices(ctx, r, endpoint, subject, members, view.cards)
+	if err != nil {
+		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "read gateway credential choices").LogError(ctx, logger)
+	}
+	view.auth = memberAuth
 	for i := range members {
 		member := &members[i]
 		if member.backend != metaMemberBackendProxied {
+			continue
+		}
+		if memberAuth != nil {
+			res, resolveErr := s.resolveMemberAuthChoice(ctx, endpoint, *member, memberAuth[member.serverID], subject)
+			s.applyMemberAuthClient(ctx, member, res, resolveErr)
 			continue
 		}
 		clientID, chosen := picks[member.serverID]
@@ -251,7 +261,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 				status = gatewayServerNoAccess
 			}
 		}
-		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", cardIDs: nil}).StatusLabel()})
+		outcomes = append(outcomes, consentMemberOutcome{Slug: member.slug, Name: conv.Default(member.name, member.slug), Status: status, Label: (gatewayServer{Slug: member.slug, Name: member.name, Status: status, ConnectClientID: "", cardIDs: nil, Auth: nil}).StatusLabel()})
 	}
 	tools := make([]consentInventoryTool, 0, len(inventory))
 	toolMembers := map[string]connectionCatalogMember{}

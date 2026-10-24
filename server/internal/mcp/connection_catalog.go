@@ -124,21 +124,18 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 	if err != nil {
 		return nil, err
 	}
+	typedChoices, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
 	members := make(map[string]connectionCatalogMember, len(inventory.MemberBindings))
 	for slug, member := range inventory.MemberBindings {
 		if member.ServerID == uuid.Nil || hashes[member.ServerID] != member.BackendHash {
 			return nil, errConsentConfigurationChanged
 		}
 		if member.Auth != nil {
-			if member.Auth.RegistrationID.UUID != upstreamPicks[member.ServerID] {
-				return nil, errConsentConfigurationChanged
-			}
-			resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.RegistrationID, *state.Subject)
-			if err != nil {
+			if err := s.validateCatalogMemberAuth(ctx, endpoint, *state.Subject, member, upstreamPicks, typedChoices); err != nil {
 				return nil, err
-			}
-			if resolved.outcome == authClientGap || resolved.outcome == authClientNoAccess || resolved.clientID != member.Auth.ClientID {
-				return nil, errConsentConfigurationChanged
 			}
 		}
 		members[slug] = member
@@ -341,4 +338,44 @@ func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationI
 		hashes[row.ID] = row.ConfigurationHash
 	}
 	return hashes, nil
+}
+
+// validateCatalogMemberAuth checks that a member's captured credential can
+// still be used as it was approved. Where typed auth client resolution is
+// enforced the person picked the typed client, so it is checked by itself;
+// elsewhere the captured client must still be the one the person's connected
+// service maps to.
+func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, member connectionCatalogMember, upstreamPicks map[uuid.UUID]uuid.UUID, typedChoices bool) error {
+	if typedChoices && member.Auth.ClientID == uuid.Nil {
+		// The member was approved needing no upstream authentication.
+		resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject)
+		if err != nil {
+			return err
+		}
+		if resolved.outcome != authClientNoAuth || member.Auth.RegistrationID.Valid {
+			return errConsentConfigurationChanged
+		}
+		return nil
+	}
+	if typedChoices {
+		resolved, err := s.resolveAuthClientChoiceForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.ClientID, subject)
+		if err != nil {
+			return err
+		}
+		if resolved.outcome == authClientGap || resolved.outcome == authClientNoAccess || resolved.choice.clientID != member.Auth.RegistrationID {
+			return errConsentConfigurationChanged
+		}
+		return nil
+	}
+	if member.Auth.RegistrationID.UUID != upstreamPicks[member.ServerID] {
+		return errConsentConfigurationChanged
+	}
+	resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.RegistrationID, subject)
+	if err != nil {
+		return err
+	}
+	if resolved.outcome == authClientGap || resolved.outcome == authClientNoAccess || resolved.clientID != member.Auth.ClientID {
+		return errConsentConfigurationChanged
+	}
+	return nil
 }

@@ -550,6 +550,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UpstreamClientPicks:    nil,
+		AuthClientPicks:        nil,
 		Catalog:                nil,
 	}
 }

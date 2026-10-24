@@ -133,6 +133,9 @@ type mintSessionParams struct {
 	// UpstreamClientPicks is the consent page's upstream client pick per MCP
 	// server, recorded as a new credential's choices.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID
+	// AuthClientPicks is the typed auth client picked per MCP server, recorded
+	// with the registration UpstreamClientPicks names for it.
+	AuthClientPicks map[uuid.UUID]uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
 }
@@ -617,6 +620,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		Subject:                result.Subject,
 		ToolSelection:          nil,
 		UpstreamClientPicks:    nil,
+		AuthClientPicks:        nil,
 		Catalog:                nil,
 	}, logger)
 	if err != nil {
@@ -925,6 +929,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 		UpstreamClientPicks:    grant.UpstreamClientPicks,
+		AuthClientPicks:        grant.AuthClientPicks,
 		Catalog:                catalog,
 	}, logger)
 	if err != nil {
@@ -1382,6 +1387,7 @@ func (s *Service) rotateRefreshToken(
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 		UpstreamClientPicks:    nil,
+		AuthClientPicks:        nil,
 		Catalog:                nil,
 	}, logger)
 	if err != nil {
@@ -1917,6 +1923,7 @@ func (s *Service) mintSession(
 		DesiredSessionDuration: params.DesiredSessionDuration,
 		Replayable:             params.Replayable,
 		UpstreamClientPicks:    params.UpstreamClientPicks,
+		AuthClientPicks:        params.AuthClientPicks,
 		Catalog:                params.Catalog,
 	}, logger)
 }
@@ -1992,6 +1999,9 @@ type sessionIssuance struct {
 	// UpstreamClientPicks is the consent page's upstream client pick per MCP
 	// server, recorded with a new credential's choices.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID
+	// AuthClientPicks is the typed auth client picked per MCP server, recorded
+	// with the registration UpstreamClientPicks names for it.
+	AuthClientPicks map[uuid.UUID]uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
 }
@@ -2132,6 +2142,17 @@ func (s *Service) issueSession(
 			for serverID, clientID := range issuance.UpstreamClientPicks {
 				pickedServers = append(pickedServers, serverID)
 				pickedClients = append(pickedClients, clientID)
+				// The zero id is read as no typed pick.
+				pickedAuthClients = append(pickedAuthClients, issuance.AuthClientPicks[serverID])
+			}
+			for serverID, authClientID := range issuance.AuthClientPicks {
+				if _, ok := issuance.UpstreamClientPicks[serverID]; ok {
+					continue
+				}
+				// A headers-only client has no registration.
+				pickedServers = append(pickedServers, serverID)
+				pickedClients = append(pickedClients, uuid.Nil)
+				pickedAuthClients = append(pickedAuthClients, authClientID)
 			}
 		}
 		if _, err := queries.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
