@@ -11,17 +11,15 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * How the client authenticates upstream.
+ * How the client authenticates upstream. Only shared types are offered.
  */
 export const AuthClientChoiceClientType = {
-  RemoteSession: "remote_session",
   ServiceAccount: "service_account",
   StaticCredential: "static_credential",
   PassThrough: "pass_through",
-  Ema: "ema",
 } as const;
 /**
- * How the client authenticates upstream.
+ * How the client authenticates upstream. Only shared types are offered.
  */
 export type AuthClientChoiceClientType = OpenEnum<
   typeof AuthClientChoiceClientType
@@ -32,7 +30,7 @@ export type AuthClientChoiceClientType = OpenEnum<
  */
 export type AuthClientChoice = {
   /**
-   * How the client authenticates upstream.
+   * How the client authenticates upstream. Only shared types are offered.
    */
   clientType: AuthClientChoiceClientType;
   /**

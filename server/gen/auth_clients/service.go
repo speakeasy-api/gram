@@ -63,7 +63,8 @@ type Service interface {
 	DetachAuthClientFromMcpServer(context.Context, *DetachAuthClientFromMcpServerPayload) (res *types.AuthClient, err error)
 	// List the shared upstream credentials an MCP server offers that a credential
 	// of the caller's, such as an agent key, can be set up to use. Requires access
-	// to connect to the server. Only names and types are returned.
+	// to connect to the server. Returns each choice's id, name and client_type,
+	// and whether the upstream requires authentication; no headers or credentials.
 	ListMcpServerAuthClientChoices(context.Context, *ListMcpServerAuthClientChoicesPayload) (res *ListMcpServerAuthClientChoicesResult, err error)
 	// Get how an MCP server authenticates to its upstream: whether authentication
 	// is required and which auth clients it offers. Requires org:read.

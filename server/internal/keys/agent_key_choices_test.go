@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
@@ -44,12 +45,37 @@ func TestKeysService_AgentKeyRecordsCredentialChoices(t *testing.T) {
 		"a client the server lacks":        {McpServerID: serverID.String(), AuthClientID: new(uuid.NewString())},
 	}
 	for name, choice := range refused {
-		payload := agentKeyPayload(agentID, projectID)
-		payload.Name = "refused " + name
-		payload.AuthClientChoices = []*gen.AgentKeyAuthClientChoice{choice}
-		_, err := ti.service.CreateKey(ctx, payload)
-		requireOopsCode(t, err, oops.CodeBadRequest)
+		t.Run(name, func(t *testing.T) {
+			payload := agentKeyPayload(agentID, projectID)
+			payload.Name = "refused " + name
+			payload.AuthClientChoices = []*gen.AgentKeyAuthClientChoice{choice}
+			_, err := ti.service.CreateKey(ctx, payload)
+			requireOopsCode(t, err, oops.CodeBadRequest)
+		})
 	}
+
+	// A second server needing no upstream authentication takes a no-auth choice.
+	noAuthRemote := uuid.New()
+	require.NoError(t, fixtures.CreateRemoteMCPBackendFixture(ctx, testrepo.CreateRemoteMCPBackendFixtureParams{ID: noAuthRemote, ProjectID: projectID, Url: "https://open.example.com/" + noAuthRemote.String()}))
+	noAuthServer := uuid.New()
+	require.NoError(t, fixtures.CreateRemoteBackedMCPServerFixture(ctx, testrepo.CreateRemoteBackedMCPServerFixtureParams{
+		ID: noAuthServer, ProjectID: projectID, Slug: conv.ToPGText("open-" + noAuthServer.String()[:8]), RemoteMcpServerID: uuid.NullUUID{UUID: noAuthRemote, Valid: true}, Visibility: "private",
+	}))
+	require.NoError(t, clients.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: noAuthServer, RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}}))
+
+	// One refused choice refuses the whole key, so the valid one before it is
+	// not recorded either and the name stays free.
+	partial := agentKeyPayload(agentID, projectID)
+	partial.Name = "all or nothing"
+	partial.AuthClientChoices = []*gen.AgentKeyAuthClientChoice{{McpServerID: noAuthServer.String()}, refused["a personal connection"]}
+	_, err := ti.service.CreateKey(ctx, partial)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	partial.AuthClientChoices = partial.AuthClientChoices[:1]
+	open, err := ti.service.CreateKey(ctx, partial)
+	require.NoError(t, err, "the refused key left nothing behind")
+	openChoice, err := clients.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: uuid.MustParse(open.ID), McpServerID: noAuthServer})
+	require.NoError(t, err)
+	require.True(t, openChoice.NoAuth, "a server needing no authentication takes a no-auth choice")
 
 	payload := agentKeyPayload(agentID, projectID)
 	payload.AuthClientChoices = []*gen.AgentKeyAuthClientChoice{{McpServerID: serverID.String(), AuthClientID: new(shared.String())}}

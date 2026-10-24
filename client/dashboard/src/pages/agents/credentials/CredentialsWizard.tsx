@@ -819,20 +819,30 @@ export function CredentialsWizard({
         picked.map((entry) =>
           sdk.authClients
             .listMcpServerChoices({ mcpServerId: entry.server.id })
-            .then((result) => ({ entry, count: result.choices.length }))
-            .catch(() => ({ entry, count: 0 })),
+            .then((result) => ({
+              entry,
+              ids: result.choices.map((choice) => choice.id),
+            }))
+            .catch(() => {
+              throw new Error(
+                `The credentials ${entry.server.name} offers could not be loaded. Try again.`,
+              );
+            }),
         ),
       );
+      // A pick the server no longer offers counts as no pick.
       const unchosen = offered.filter(
-        ({ entry, count }) => count > 1 && !entry.authClientId,
+        ({ entry, ids }) =>
+          ids.length > 1 &&
+          (!entry.authClientId || !ids.includes(entry.authClientId)),
       );
       if (unchosen.length > 0) {
         throw new Error(
           `Choose which credential the key uses on ${unchosen.map(({ entry }) => entry.server.name).join(", ")}.`,
         );
       }
-      const authClientChoices = picked.flatMap((entry) =>
-        entry.authClientId
+      const authClientChoices = offered.flatMap(({ entry, ids }) =>
+        entry.authClientId && ids.includes(entry.authClientId)
           ? [{ mcpServerId: entry.server.id, authClientId: entry.authClientId }]
           : [],
       );

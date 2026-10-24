@@ -124,6 +124,20 @@ func TestAgentKeySelectorReadsOnlyTheKeysOwnChoices(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, selector, "a key with no choice for the server keeps the issuer-derived path")
 
+	// A sibling key's choice for this server, and this key's choice for
+	// another server, are not this key's choice here.
+	otherServer, _ := f.server()
+	for _, other := range []upstreamclientsrepo.RecordAuthClientChoiceParams{
+		{CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: uuid.New(), Source: upstreamclients.SelectionSourceIssuance, OrganizationID: f.orgID, AuthClientID: validUUID(clientID), McpServerID: f.serverID},
+		{CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: keyID, Source: upstreamclients.SelectionSourceIssuance, OrganizationID: f.orgID, AuthClientID: uuid.NullUUID{}, McpServerID: otherServer},
+	} {
+		_, err = upstreamclientsrepo.New(pool).RecordAuthClientChoice(ctx, other)
+		require.NoError(t, err)
+	}
+	selector, err = f.service.agentKeySelectorFor(keyCtx, endpoint)
+	require.NoError(t, err)
+	require.Nil(t, selector, "other keys' choices and this key's other servers do not apply")
+
 	_, err = upstreamclientsrepo.New(pool).RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{
 		CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: keyID, Source: upstreamclients.SelectionSourceIssuance,
 		OrganizationID: f.orgID, AuthClientID: validUUID(clientID), McpServerID: f.serverID,
