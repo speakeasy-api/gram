@@ -59,13 +59,14 @@ export function AgentFederatedAccess({
         footer={
           mine.length === 0
             ? undefined
-            : "Each platform signs its own tokens. Speakeasy trades them for a session as this agent."
+            : "Each platform signs its own short-lived tokens, so no key is minted. Speakeasy trades them for a session as this agent."
         }
       >
         {mine.length === 0 ? (
           <IdentityPanelEmpty>
-            No platform signs in as this agent. Agents reached this way carry no
-            key of their own.
+            No platform signs in as this agent. A platform that already mints
+            tokens for its workloads can sign in as it, with no key to mint or
+            store.
           </IdentityPanelEmpty>
         ) : (
           mine.map((admission) => (

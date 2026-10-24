@@ -297,7 +297,7 @@ export function formatAuditActionLabel(action: string): string {
   const phrase = isAuditAction(action)
     ? staticActionPhrase(action)
     : describeUnknownAction(action);
-  const trimmed = phrase.replace(/\s+(for|to|from|on)$/, "");
+  const trimmed = phrase.replace(/\s+(for|to|from|on|under)$/, "");
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
