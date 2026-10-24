@@ -1648,6 +1648,83 @@ func TestHooksBootstrapHonorsHooksHomeNames(t *testing.T) {
 	require.NoFileExists(t, marker(ignoredCache))
 }
 
+// hooksBootstrapToolDir returns a directory holding only the host tools a cold
+// bootstrap install needs, so a PATH built from it has no unzip or busybox.
+func hooksBootstrapToolDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, tool := range []string{"uname", "mkdir", "dirname", "mktemp", "find", "sleep", "curl", "sha256sum", "cut", "chmod", "mv", "rm"} {
+		resolved, err := exec.LookPath(tool)
+		require.NoError(t, err, "%s is required to run the hooks bootstrap", tool)
+		require.NoError(t, os.Symlink(resolved, filepath.Join(dir, tool)))
+	}
+	return dir
+}
+
+// TestHooksBootstrapInstallsWithoutUnzipOrBusybox covers slim images such as
+// the official OpenClaw one, which ship neither unzip nor busybox.
+func TestHooksBootstrapInstallsWithoutUnzipOrBusybox(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nprintf 'installed\\n'\n"))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+	script := renderHooksBootstrapForRelease("no-unzip", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	binary := func(cache string) string {
+		return filepath.Join(cache, "no-unzip", target, "speakeasy-hooks")
+	}
+	run := func(t *testing.T, cache string, path ...string) ([]byte, error) {
+		t.Helper()
+		path = append(path, hooksBootstrapToolDir(t))
+		return runHooksBootstrapWithEnv(t, script, []string{
+			"SPEAKEASY_AI_HOOKS_HOME=" + cache,
+			"PATH=" + strings.Join(path, string(os.PathListSeparator)),
+		}, "")
+	}
+
+	t.Run("python3", func(t *testing.T) {
+		t.Parallel()
+		cache := t.TempDir()
+		out, err := run(t, cache, realPythonBinDir(t))
+		require.NoError(t, err, string(out))
+		require.Equal(t, "installed\n", string(out))
+		require.FileExists(t, binary(cache))
+	})
+
+	t.Run("bsdtar", func(t *testing.T) {
+		t.Parallel()
+		// bsdtar is rarely installed on CI hosts, so a stub stands in for it:
+		// it asserts the bsdtar extract-to-stdout invocation and serves the
+		// member with the real interpreter.
+		python := filepath.Join(realPythonBinDir(t), "python3")
+		calls := filepath.Join(t.TempDir(), "bsdtar.calls")
+		stubDir := t.TempDir()
+		stub := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$*\" >> %q\n[ \"$1\" = -xOf ] || exit 2\nexec %q -c 'import sys, zipfile; sys.stdout.buffer.write(zipfile.ZipFile(sys.argv[1]).read(sys.argv[2]))' \"$2\" \"$3\"\n", calls, python)
+		require.NoError(t, os.WriteFile(filepath.Join(stubDir, "bsdtar"), []byte(stub), 0o755))
+
+		cache := t.TempDir()
+		out, err := run(t, cache, stubDir)
+		require.NoError(t, err, string(out))
+		require.Equal(t, "installed\n", string(out))
+		require.FileExists(t, binary(cache))
+		require.Regexp(t, `^-xOf \S+/hooks\.zip speakeasy-hooks\n$`, string(requireFileBytes(t, calls)))
+	})
+
+	t.Run("no extractor", func(t *testing.T) {
+		t.Parallel()
+		cache := t.TempDir()
+		out, err := run(t, cache)
+		require.Error(t, err)
+		require.Contains(t, string(out), "unzip, busybox, python3, or bsdtar is required for first install")
+		require.NoFileExists(t, binary(cache))
+	})
+}
+
 func TestCodexBootstrapPersistsCompletePayloadBeforeRelayExecution(t *testing.T) {
 	t.Parallel()
 	target := currentHooksBootstrapTarget(t)
