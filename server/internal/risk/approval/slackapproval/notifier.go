@@ -337,6 +337,9 @@ func (n *Notifier) recipients(ctx context.Context, row repo.RiskPolicyApproval, 
 	if err != nil {
 		return nil, fmt.Errorf("list approval recipients: %w", err)
 	}
+	if expandRoles && len(members) == maxRoleMembers {
+		n.logger.WarnContext(ctx, "approval request role approvers expand past the members checked for DMs", attr.SlogRiskPolicyApprovalID(row.ID.String()))
+	}
 	named := make(map[string]bool, len(userIDs))
 	for _, id := range userIDs {
 		named[id] = true
