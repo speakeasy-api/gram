@@ -3,6 +3,7 @@ package testenv
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -27,7 +28,7 @@ func LinkRetiredOAuthProxy(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 		UPDATE toolsets SET oauth_proxy_server_id = (SELECT id FROM proxy)
 		WHERE id = $3 AND project_id = $1`,
 		projectID, "retired-proxy-"+uuid.NewString()[:8], toolsetID)
-	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UndefinedColumn {
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UndefinedColumn && strings.Contains(pgErr.Message, "oauth_proxy_server_id") {
 		return
 	}
 	require.NoError(t, err)
