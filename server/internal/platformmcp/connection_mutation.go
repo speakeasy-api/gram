@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -166,8 +167,8 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 	if err != nil {
 		return MCPConnectionMutationOutput{}, err
 	}
-	if input.Slug == "" || len(input.Slug) > 253 {
-		return MCPConnectionMutationOutput{}, connectionMutationInvalid("Provide a valid endpoint slug.")
+	if !constants.SlugPatternRE.MatchString(input.Slug) {
+		return MCPConnectionMutationOutput{}, connectionMutationInvalid("Provide an endpoint slug of 1 to 128 lowercase letters, digits, hyphens or underscores.")
 	}
 	endpointID := uuid.Nil
 	if input.EndpointID != "" {

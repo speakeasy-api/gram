@@ -109,6 +109,14 @@ func requireConnectionRefusal(t *testing.T, err error, code, message string) map
 	return payload
 }
 
+// stale returns a well-formed version that differs from version.
+func stale(version string) string {
+	if version[0] == '0' {
+		return "1" + version[1:]
+	}
+	return "0" + version[1:]
+}
+
 func countAudit(t *testing.T, ctx context.Context, f connectionMutationFixture, action audit.Action) int64 {
 	t.Helper()
 	count, err := audittest.AuditLogCountByAction(ctx, f.conn, action)
@@ -140,12 +148,14 @@ func TestSetMCPAddressPreviewWritesNothing(t *testing.T) {
 	payload := requireConnectionRefusal(t, err, "confirmation_required", "Nothing was changed")
 	require.NotNil(t, payload["preview"])
 
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", f.orgSlug+"-docs#broken", "", false)
+	requireConnectionRefusal(t, err, "invalid_request", "lowercase letters")
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", "unprefixed", "", false)
 	requireConnectionRefusal(t, err, "invalid_request", "organization slug")
 	other, _ := seedRegistrationLifecycle(t, ctx, f.conn)
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", f.orgSlug+"-docs", f.seedDomain(t, ctx, other.OrganizationID, true, true).String(), false)
 	requireConnectionRefusal(t, err, "invalid_request", "organization's custom domains")
-	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, "0"+before.Version[1:], "", f.orgSlug+"-second", "", false)
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, stale(before.Version), "", f.orgSlug+"-second", "", false)
 	require.ErrorIs(t, err, ErrMCPConnectionMutationConflict, "a preview of a stale version is refused")
 
 	after := f.settings(t, ctx, MCPConnectionSettingsMCPServer, f.hostedID)

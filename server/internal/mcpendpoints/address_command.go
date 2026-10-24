@@ -88,6 +88,9 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint")
 	}
 	if hostedServer != nil {
+		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, hostedServer.ID.String(), authCtx.ProjectID.String())); err != nil {
+			return nil, err
+		}
 		if err := checkHostedNewAddress(ctx, tx, s.logger, authCtx, *hostedServer, input.Slug, input.CustomDomainID); err != nil {
 			return nil, err
 		}
