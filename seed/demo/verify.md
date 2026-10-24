@@ -589,6 +589,11 @@ open their effective assignments; the dropdown always offers compact member sear
     - Reconnect: the consent screen opens with the previous choice selected.
     - Repeat on the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it): its picker groups tools from every project you can reach, and the chosen tools are the only ones listed, described or callable.
 
+33. **Gateway Debug**
+    - Open Acme Agent Gateway → Debug: the two seeded gateway sessions are listed; the Linear, Slack and partner sessions are not.
+    - Search narrows the list and keeps the term in the URL; a search with no match shows "No connections match your search". Clear it.
+    - Command K "Debug this gateway" opens the same page; a viewer without project read access sees no Debug item.
+
 ## On failure
 
 Fix the seed (see rules in `PAGES.md`), then re-run the target that owns

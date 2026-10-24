@@ -6,6 +6,7 @@ import { GatewayDebugTab } from "./GatewayDebugTab";
 
 const state = vi.hoisted(() => ({
   calls: [] as Array<Record<string, unknown>>,
+  options: [] as Array<Record<string, unknown>>,
   result: {} as Record<string, unknown>,
 }));
 
@@ -19,8 +20,13 @@ vi.mock("@/hooks/useSessionAgents", () => ({
   useSessionAgents: (sessions: unknown[]) => sessions,
 }));
 vi.mock("@gram/client/react-query/userSessions.js", () => ({
-  useUserSessionsInfinite: (request: Record<string, unknown>) => {
+  useUserSessionsInfinite: (
+    request: Record<string, unknown>,
+    _security: unknown,
+    options: Record<string, unknown>,
+  ) => {
     state.calls.push(request);
+    state.options.push(options);
     return {
       data: { pages: [{ result: { items: [] } }] },
       refetch: vi.fn(),
@@ -56,7 +62,11 @@ vi.mock("@/components/page-layout", () => ({
             onChange={(event) => onChange(event.target.value)}
           />
         ),
-        Refresh: () => null,
+        Refresh: ({ onRefresh }: { onRefresh: () => void }) => (
+          <button type="button" onClick={onRefresh}>
+            Refresh
+          </button>
+        ),
       },
     ),
   },
@@ -65,6 +75,7 @@ vi.mock("@/components/page-layout", () => ({
 afterEach(() => {
   cleanup();
   state.calls = [];
+  state.options = [];
   state.result = {};
 });
 
@@ -92,7 +103,7 @@ it("lists only the gateway's sessions and keeps the search in the URL", () => {
   });
   expect(
     screen.getByText(
-      "Sessions issued for this gateway. Sessions without a recorded origin are not shown.",
+      "Sessions issued for this gateway, identified by their recorded origin or consent selection. Unattributed sessions are not shown.",
     ),
   ).toBeTruthy();
 
@@ -138,4 +149,67 @@ it("keeps the rows and retries a failed next page", () => {
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   expect(fetchNextPage).toHaveBeenCalledOnce();
   expect(refetch).not.toHaveBeenCalled();
+});
+
+it("does not request an overlong search and leaves nothing to act on", () => {
+  const refetch = vi.fn();
+  const fetchNextPage = vi.fn();
+  state.result = {
+    ...withRows,
+    hasNextPage: true,
+    isError: true,
+    isRefetchError: true,
+    refetch,
+    fetchNextPage,
+  };
+  const overlong = "a".repeat(201);
+  renderAt(`/debug?q=${overlong}`);
+
+  expect(state.options.at(-1)).toMatchObject({ enabled: false });
+  expect(state.calls.at(-1)?.search).toBeUndefined();
+  expect(
+    screen.getByText("Search must be 200 characters or fewer."),
+  ).toBeTruthy();
+  expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe(
+    overlong,
+  );
+  expect(screen.getByTestId("location").textContent).toBe(`?q=${overlong}`);
+  expect(screen.queryByText("s1")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+  expect(refetch).not.toHaveBeenCalled();
+  expect(fetchNextPage).not.toHaveBeenCalled();
+
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "dana" } });
+  expect(state.options.at(-1)).toMatchObject({ enabled: true });
+  expect(state.calls.at(-1)?.search).toBe("dana");
+});
+
+it("counts the limit in code points, not UTF-16 units", () => {
+  const astral = "\u{1D49C}";
+  renderAt(`/debug?q=${encodeURIComponent(astral.repeat(200))}`);
+  expect(state.options.at(-1)).toMatchObject({ enabled: true });
+  expect(state.calls.at(-1)?.search).toBe(astral.repeat(200));
+  cleanup();
+
+  renderAt(`/debug?q=${encodeURIComponent(astral.repeat(201))}`);
+  expect(state.options.at(-1)).toMatchObject({ enabled: false });
+  expect(state.calls.at(-1)?.search).toBeUndefined();
+});
+
+it("shows loading, not an empty state, while a cleared search reloads", () => {
+  state.result = { isPlaceholderData: true };
+  renderAt("/debug");
+  expect(
+    screen.queryByText(
+      "No connections have been recorded for this gateway yet",
+    ),
+  ).toBeNull();
+  expect(screen.queryByText("No connections match your search")).toBeNull();
+});
+
+it("keeps load failures inline rather than in the error boundary", () => {
+  renderAt("/debug");
+  expect(state.options.at(-1)).toMatchObject({ throwOnError: false });
 });

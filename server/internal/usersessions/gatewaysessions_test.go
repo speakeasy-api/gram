@@ -188,6 +188,21 @@ func TestPlatformListUserSessions_GatewayScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{mine}, got)
 
-	_, err = call(map[string]any{"meta_mcp_server_id": uuid.NewString()})
-	requireOopsCode(t, err, oops.CodeNotFound)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	foreign, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           createSiblingProject(t, ctx, ti.conn, "platform-gateway-foreign"),
+		Name:                "Foreign platform gateway",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	for id, code := range map[string]oops.Code{
+		uuid.NewString():    oops.CodeNotFound,
+		foreign.ID.String(): oops.CodeNotFound,
+		"not-a-gateway-id":  oops.CodeBadRequest,
+	} {
+		_, err = call(map[string]any{"meta_mcp_server_id": id})
+		requireOopsCode(t, err, code)
+	}
 }

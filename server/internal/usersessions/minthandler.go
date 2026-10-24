@@ -205,7 +205,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		ExpiresAt:        pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
 		ToolSelection:    toolPolicy,
-		// Dashboard sessions are issuer-scoped, never bound to one resource.
+		// Dashboard sessions are issuer-scoped, so no RFC 8707 resource binds them.
 		Resource:         pgtype.Text{String: "", Valid: false},
 		ResourceIdentity: conv.ToPGText(target.resourceIdentity),
 		SignInID:         signInID,

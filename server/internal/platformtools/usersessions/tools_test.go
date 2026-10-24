@@ -27,6 +27,7 @@ func TestListToolDescriptor(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(desc.InputSchema, &schema))
 	require.Contains(t, schema.Properties, "search")
+	require.Contains(t, schema.Properties, "meta_mcp_server_id")
 }
 
 func TestListToolRejectsOverlongSearch(t *testing.T) {
