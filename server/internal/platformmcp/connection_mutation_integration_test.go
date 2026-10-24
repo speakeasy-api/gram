@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -150,6 +151,10 @@ func TestSetMCPAddressPreviewWritesNothing(t *testing.T) {
 
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", f.orgSlug+"-docs#broken", "", false)
 	requireConnectionRefusal(t, err, "invalid_request", "lowercase letters")
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", f.orgSlug+"-"+strings.Repeat("x", 41), "", false)
+	requireConnectionRefusal(t, err, "invalid_request", "at most 40 characters")
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", f.orgSlug+"-docs", f.seedDomain(t, ctx, f.principal.OrganizationID, false, false).String(), false)
+	requireConnectionRefusal(t, err, "invalid_request", "verified custom domain")
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", "unprefixed", "", false)
 	requireConnectionRefusal(t, err, "invalid_request", "organization slug")
 	other, _ := seedRegistrationLifecycle(t, ctx, f.conn)
@@ -337,10 +342,7 @@ func TestSetMCPNetworkAccessChecksEntitlementAndIngress(t *testing.T) {
 
 	ctx, f := seedConnectionMutationFixture(t, "platform_mcp_network_access_ingress", allowConnectionNetworkAccess{})
 	_, err = setMode(ctx, f, MCPConnectionSettingsMCPServer, f.hostedID, "private_only", false)
-	var preview *connectionMutationPreviewError
-	require.ErrorAs(t, err, &preview)
-	require.Equal(t, "public_only", preview.Preview.NetworkModeBefore)
-	require.Equal(t, "private_only", preview.Preview.NetworkModeAfter)
+	requireConnectionRefusal(t, err, "invalid_request", "online private network ingress is required")
 
 	_, err = setMode(ctx, f, MCPConnectionSettingsMCPServer, f.hostedID, "dual", true)
 	requireConnectionRefusal(t, err, "invalid_request", "online private network ingress is required")
@@ -350,6 +352,12 @@ func TestSetMCPNetworkAccessChecksEntitlementAndIngress(t *testing.T) {
 	requireConnectionRefusal(t, err, "invalid_request", "online private network ingress is required")
 
 	require.NoError(t, testrepo.New(f.conn).SetNetworkIngressObservationFixture(ctx, testrepo.SetNetworkIngressObservationFixtureParams{OrganizationID: f.principal.OrganizationID, Status: "online"}))
+	_, err = setMode(ctx, f, MCPConnectionSettingsMCPServer, f.hostedID, "private_only", false)
+	var preview *connectionMutationPreviewError
+	require.ErrorAs(t, err, &preview, "a preview runs the confirmed checks and writes nothing")
+	require.Equal(t, "public_only", preview.Preview.NetworkModeBefore)
+	require.Equal(t, "private_only", preview.Preview.NetworkModeAfter)
+	require.Equal(t, "public_only", f.settings(t, ctx, MCPConnectionSettingsMCPServer, f.hostedID).NetworkMode)
 	out, err := setMode(ctx, f, MCPConnectionSettingsMCPServer, f.hostedID, "private_only", true)
 	require.NoError(t, err)
 	require.Equal(t, "private_only", out.Settings.NetworkMode)

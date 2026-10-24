@@ -188,11 +188,8 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 	if (endpointID == uuid.Nil) != (input.EndpointID == "") {
 		return MCPConnectionMutationOutput{}, connectionMutationInvalid("Provide either no endpoint ID to create an address or the exact endpoint ID to update.")
 	}
-	if !input.Confirmed {
-		return MCPConnectionMutationOutput{}, s.addressPreview(ctx, principal, current, input.ExpectedVersion, endpointID, input.Slug, domainID)
-	}
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, EndpointID: input.EndpointID, Slug: input.Slug, CustomDomainID: input.CustomDomainID}
-	result, receipt, err := s.execute(ctx, principal, project, operationSetMCPAddress, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
+	mutate := func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
 		settings, err := s.lockAndCheck(ctx, tx, principal, project, kind, targetID, input.ExpectedVersion)
 		if err != nil {
 			return connectionMutationReceipt{}, err
@@ -240,7 +237,11 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 			return connectionMutationReceipt{}, fmt.Errorf("request MCP address publication: %w", err)
 		}
 		return connectionMutationReceipt{PublicationRequest: string(outcome)}, nil
-	})
+	}
+	if !input.Confirmed {
+		return MCPConnectionMutationOutput{}, s.preview(ctx, s.addressPreview(ctx, principal, current, input.ExpectedVersion, endpointID, input.Slug, domainID), mutate)
+	}
+	result, receipt, err := s.execute(ctx, principal, project, operationSetMCPAddress, input.IdempotencyKey, normalized, mutate)
 	if err != nil {
 		return MCPConnectionMutationOutput{}, err
 	}
@@ -262,11 +263,8 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 	if err != nil {
 		return MCPConnectionMutationOutput{}, err
 	}
-	if !input.Confirmed {
-		return MCPConnectionMutationOutput{}, networkAccessPreview(current, input.ExpectedVersion, mode)
-	}
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, Mode: string(mode)}
-	result, receipt, err := s.execute(ctx, principal, project, operationSetMCPNetworkAccess, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
+	mutate := func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
 		var clearedRootDomainIDs []uuid.UUID
 		prepared, err := s.eligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: principal.OrganizationID, Mode: mode})
 		if err != nil {
@@ -309,7 +307,11 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 			return connectionMutationReceipt{}, fmt.Errorf("request MCP network access publication: %w", err)
 		}
 		return connectionMutationReceipt{PublicationRequest: string(outcome), ClearedRootDomainIDs: clearedRootDomainIDs}, nil
-	})
+	}
+	if !input.Confirmed {
+		return MCPConnectionMutationOutput{}, s.preview(ctx, networkAccessPreview(current, input.ExpectedVersion, mode), mutate)
+	}
+	result, receipt, err := s.execute(ctx, principal, project, operationSetMCPNetworkAccess, input.IdempotencyKey, normalized, mutate)
 	if err != nil {
 		return MCPConnectionMutationOutput{}, err
 	}
@@ -361,7 +363,7 @@ func (s *MCPConnectionMutationService) validateInput(ctx context.Context, princi
 }
 
 // addressPreview reports the address change a confirmed call would make, against the settings it would lock. It
-// refuses what the confirmed call would refuse from this data; the endpoint writer's rules run only on confirm.
+// refuses what it can tell from this data before preview dry-runs the write.
 func (s *MCPConnectionMutationService) addressPreview(ctx context.Context, principal Principal, current MCPConnectionSettings, expectedVersion string, endpointID uuid.UUID, slug string, domainID uuid.NullUUID) error {
 	if !hmac.Equal([]byte(current.Version), []byte(expectedVersion)) {
 		return ErrMCPConnectionMutationConflict
@@ -444,6 +446,23 @@ func networkAccessPreview(current MCPConnectionSettings, expectedVersion string,
 	preview.Change = "set_network_access"
 	preview.NetworkModeAfter = string(mode)
 	return &connectionMutationPreviewError{Preview: preview}
+}
+
+// preview returns a preview only when the confirmed write would succeed now: it runs that write in a transaction it
+// rolls back, so the preview and the confirm refuse the same changes. Post-commit steps do not run.
+func (s *MCPConnectionMutationService) preview(ctx context.Context, preview error, mutate func(context.Context, pgx.Tx) (connectionMutationReceipt, error)) error {
+	if _, ok := errors.AsType[*connectionMutationPreviewError](preview); !ok {
+		return preview
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return connectionMutationUnavailable(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := mutate(ctx, tx); err != nil {
+		return err
+	}
+	return preview
 }
 
 func newConnectionMutationPreview(current MCPConnectionSettings) MCPConnectionMutationPreview {
