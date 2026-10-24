@@ -35,6 +35,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -353,7 +354,7 @@ func disableFixtureServer(t *testing.T, ctx context.Context, fixture toolExposur
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := toolsetsrepo.New(tx)
-	require.NoError(t, q.SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
+	require.NoError(t, testrepo.New(tx).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{
 		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
 	}))
 	toolset, err := q.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: fixture.toolsetID, ProjectID: fixture.project.ID})

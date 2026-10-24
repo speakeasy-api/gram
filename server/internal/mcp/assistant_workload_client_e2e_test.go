@@ -149,6 +149,8 @@ func TestAssistantWorkloadClientCredentialsEndToEnd(t *testing.T) {
 			require.True(t, strings.HasPrefix(workloadResponseString(t, claims, "sub"), "workload:"))
 			session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: fx.target.UserSessionIssuerID, Jti: workloadResponseString(t, claims, "jti")})
 			require.NoError(t, err)
+			require.True(t, session.DelegatedGrantsVersion.Valid)
+			require.Equal(t, int32(5), session.DelegatedGrantsVersion.Int32, "assistant MCP issuance must remain readable by pre-inference replicas")
 			require.True(t, session.UserSessionClientID.Valid)
 			require.Equal(t, client.RegistrationID, session.UserSessionClientID.UUID)
 			require.False(t, session.AuthorizerUserID.Valid)

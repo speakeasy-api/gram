@@ -192,7 +192,9 @@ function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
       <div className="flex min-w-0 flex-col">
         {row.server ? (
           <Link
-            to={routes.mcp.x.overview.href(mcpServerRouteParam(row.server))}
+            to={routes.mcp.details.overview.href(
+              mcpServerRouteParam(row.server),
+            )}
             className="truncate font-medium hover:underline"
           >
             {name}

@@ -898,6 +898,7 @@ trackedFiles:
   src/models/components/agentconnectionblockidform.ts: {}
   src/models/components/agentdelegatedgrant.ts: {}
   src/models/components/agentdelegatedpolicy.ts: {}
+  src/models/components/agentexpectedpolicy.ts: {}
   src/models/components/agentidform.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentmcpserver.ts: {}
@@ -908,7 +909,6 @@ trackedFiles:
   src/models/components/agentpluginserver.ts: {}
   src/models/components/agentpolicygrant.ts: {}
   src/models/components/agentpolicygrantform.ts: {}
-  src/models/components/agentpolicygrantidform.ts: {}
   src/models/components/agentpolicyselector.ts: {}
   src/models/components/agentpollingprincipal.ts: {}
   src/models/components/agentsession.ts: {}
@@ -1112,6 +1112,7 @@ trackedFiles:
   src/models/components/deactivateprescriptionrequestbody.ts: {}
   src/models/components/declineriskpolicychallengeresponsebody.ts: {}
   src/models/components/delegationstatuscount.ts: {}
+  src/models/components/deleteagentpolicygrantform.ts: {}
   src/models/components/deleteaiscantargetrequestbody.ts: {}
   src/models/components/deleteaiscantargetresult.ts: {}
   src/models/components/deleteconfigrequestbody.ts: {}
@@ -5652,7 +5653,7 @@ examples:
   createUserSessionIssuer:
     speakeasy-default-create-user-session-issuer:
       requestBody:
-        application/json: {"authn_challenge_mode": "chain", "session_duration_hours": 781659, "slug": "<value>"}
+        application/json: {"authn_challenge_mode": "chain", "authorization_server_mode": "endpoint", "session_duration_hours": 781659, "slug": "<value>"}
       responses:
         "200":
           application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "endpoint", "client_id_metadata_admission_mode": "presets", "created_at": "2025-05-29T23:01:32.237Z", "id": "97212a9f-79fe-45b4-98c8-19febc817858", "issuer_url_pinned": false, "organization_id": "<id>", "project_id": "6111c8e2-ed9c-4ca7-8b34-30333d4acfad", "session_duration_hours": 80015, "slug": "<value>", "updated_at": "2024-11-04T03:29:29.080Z", "use_authentication_host": true}

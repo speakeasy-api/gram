@@ -1248,6 +1248,7 @@ func newStartCommand() *cli.Command {
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
 			chatRiskFindings := chatfindings.New(db, riskchrepo.New(chDB))
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger).
+				WithWorkloadInference(mcpService).
 				WithTurnStream(turnStream).
 				WithRiskFindingsClickHouse(chatRiskFindings, featureFlags)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)

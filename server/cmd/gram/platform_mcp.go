@@ -485,6 +485,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
 	}
+	accessRoleMutations = accessRoleMutations.WithAuthClientAudit(config.AuditLogger)
 	distributions := newPlatformMCPDistributionService(config, pluginInventory).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithShadowMCPStanding(distributionAdmissionReads, shadowReviewLinks).
@@ -1197,6 +1198,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if accessRoleMutationErr != nil {
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
 	}
+	accessRoleMutations = accessRoleMutations.WithAuthClientAudit(config.AuditLogger)
 	distributions := newPlatformMCPDistributionService(config, pluginInventory).
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithShadowMCPStanding(distributionAdmissionReads, shadowReviewLinks).

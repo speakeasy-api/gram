@@ -195,7 +195,7 @@ function GeneralSectionContent({
         // args and the page-level not-found guard doesn't bounce the user
         // back to /mcp.
         const nextParam = mcpServerRouteParam(updated);
-        void navigate(routes.mcp.x.settings.href(nextParam), {
+        void navigate(routes.mcp.details.settings.href(nextParam), {
           replace: true,
         });
         await Promise.all([

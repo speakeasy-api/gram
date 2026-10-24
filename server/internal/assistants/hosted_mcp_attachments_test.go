@@ -384,8 +384,8 @@ func TestHostedAttachmentByServerSlugLeavesMCPOff(t *testing.T) {
 	})
 }
 
-// A hosted attachment follows the toolset when the wrapper has drifted from it.
-func TestHostedAttachmentFollowsToolsetOverWrapper(t *testing.T) {
+// A hosted attachment follows its canonical wrapper when the toolset columns have drifted from it.
+func TestHostedAttachmentFollowsWrapperOverToolset(t *testing.T) {
 	t.Parallel()
 	f := newHostedAttachmentFixture(t, "hosted_drift")
 	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
@@ -405,12 +405,12 @@ func TestHostedAttachmentFollowsToolsetOverWrapper(t *testing.T) {
 		_, err := mcpendpointsrepo.New(f.db).DeleteMCPEndpoint(t.Context(), mcpendpointsrepo.DeleteMCPEndpointParams{ID: e.ID, ProjectID: f.projectID})
 		require.NoError(t, err)
 	}
-	require.Equal(t, want, f.runtime(t), "disabled, endpointless wrapper; toolset still on")
+	require.Empty(t, f.runtime(t), "disabled, endpointless wrapper; toolset still on")
 
 	wrapper.Visibility = "public"
 	f.updateWrapper(t, wrapper)
 	f.setToolsetMCPEnabledNoSync(t, false)
-	require.Empty(t, f.runtime(t), "toolset MCP off; wrapper still public")
+	require.Equal(t, want, f.runtime(t), "toolset MCP off; wrapper public keeps the legacy alias")
 }
 
 func runtimeIDs(servers []runtimeMCPServer) []string {

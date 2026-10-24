@@ -168,9 +168,8 @@ func (s *Service) HandleSharedAuthorize(w http.ResponseWriter, r *http.Request) 
 
 // rejectSharedAuthorizeResource answers an authorization request whose
 // resource indicator was refused with invalid_target (RFC 8707 §2). It is
-// redirected to the client only when the client and its redirect_uri check out
-// against the issuer's registrations, the same condition the per-endpoint
-// authorization endpoint redirects under; otherwise it is rendered inline.
+// Eligible callbacks must match the issuer's registrations; automatic redirects
+// additionally require a loopback destination before authentication.
 func (s *Service) rejectSharedAuthorizeResource(w http.ResponseWriter, r *http.Request, issuer *sharedIssuer, rejection sharedResourceRejection) error {
 	ctx := r.Context()
 	logger := issuer.logger
@@ -196,8 +195,10 @@ func (s *Service) rejectSharedAuthorizeResource(w http.ResponseWriter, r *http.R
 	if !redirectURIMatches(&client, req.RedirectURI) {
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, description)
 	}
-	return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer.authorizationServer.issuer, req.RedirectURI, req.State, string(rejection),
-		&oauthwire.Error{Code: oautherr.CodeInvalidTarget, Description: description})
+	// The rejected resource names no server this issuer will identify, so the
+	// page names only the client.
+	return writePreAuthenticationAuthorizeError(ctx, w, r, logger, issuer.authorizationServer.issuer, req.RedirectURI, req.State, string(rejection),
+		authorizationErrorPage(&client, req.ClientID, ""), &oauthwire.Error{Code: oautherr.CodeInvalidTarget, Description: description})
 }
 
 // sharedResourceDescription is the error_description for a refused resource
@@ -338,6 +339,9 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
 		}
 		resources := r.PostForm[oauthwire.ParamResource]
+		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 1 && resources[0] == InferenceResource && extractClientCredentials(r).clientless(r) {
+			return s.handleInferenceWorkloadGrant(ctx, w, r, issuer)
+		}
 		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 && extractClientCredentials(r).clientless(r) {
 			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)
 		}

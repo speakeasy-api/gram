@@ -573,3 +573,37 @@ WHERE ss.project_id = @project_id::uuid AND ss.deleted IS FALSE
 SELECT count(DISTINCT user_session_issuer_id)::bigint
 FROM meta_mcp_servers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- Only the dedicated workload and its owner may receive inference grants.
+-- name: PostflightIDInferenceGrants :one
+SELECT count(*) FROM principal_grants
+WHERE organization_id = @org_id::text AND scope = 'inference:execute';
+
+-- Verify admission, assignment, active agent and both explicit grant ceilings
+-- together, rather than accepting unrelated rows that happen to meet counts.
+-- name: PostflightIDInferenceWorkload :one
+SELECT count(*)
+FROM workload_issuers i
+JOIN workload_identity_admissions a
+  ON a.organization_id = i.organization_id AND a.workload_issuer_id = i.id
+JOIN workload_agent_assignments w
+  ON w.organization_id = a.organization_id AND w.workload_issuer_id = a.workload_issuer_id
+  AND w.subject = a.subject AND w.match_kind = a.match_kind
+JOIN agents ag ON ag.organization_id = w.organization_id AND ag.id = w.agent_id
+JOIN principal_grants agent_grant
+  ON agent_grant.organization_id = ag.organization_id AND agent_grant.principal_urn = 'agent:' || ag.id::text
+JOIN principal_grants owner_grant
+  ON owner_grant.organization_id = ag.organization_id AND owner_grant.principal_urn = 'user:' || ag.owner_user_id
+WHERE i.organization_id = @org_id::text AND i.id = @issuer_id::uuid
+  AND i.deleted IS FALSE AND i.project_id IS NULL
+  AND i.issuer = 'https://inference.example.com'
+  AND i.jwks_uri = 'https://inference.example.com/.well-known/jwks.json'
+  AND i.allow_wildcard_admission IS FALSE
+  AND a.deleted IS FALSE AND a.project_id = @project_id::uuid
+  AND a.subject = 'service:acme:summary-worker' AND a.match_kind = 'exact'
+  AND w.deleted IS FALSE AND ag.id = @agent_id::uuid
+  AND ag.project_id = @project_id::uuid AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
+  AND agent_grant.scope = 'inference:execute' AND owner_grant.scope = agent_grant.scope
+  AND agent_grant.selectors = jsonb_build_object(
+    'resource_kind', 'inference', 'resource_id', '*', 'project_id', ag.project_id::text)
+  AND owner_grant.selectors = agent_grant.selectors;

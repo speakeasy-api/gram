@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
@@ -427,7 +428,7 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			return
 		}
 		if err := request.ValidatePostRedirect(); err != nil {
-			redirectOAuthError(w, r, request.RedirectURI, request.State, err)
+			writePreAuthenticationOAuthError(w, r, client, request.ClientID, request.RedirectURI, request.State, err)
 			return
 		}
 
@@ -1520,6 +1521,34 @@ func writeRequestOAuthError(w http.ResponseWriter, status int, err error) {
 		return
 	}
 	writeOAuthError(w, status, "invalid_request", "invalid request")
+}
+
+// writePreAuthenticationOAuthError requires a user click for registered callbacks
+// outside loopback; later browser legs retain their existing redirect behavior.
+// clientID is the value the request presented.
+func writePreAuthenticationOAuthError(w http.ResponseWriter, r *http.Request, client platformoauth.Client, clientID, redirectURI, state string, err error) {
+	if oauthwire.MayAutoRedirectBeforeAuthentication(redirectURI) {
+		redirectOAuthError(w, r, redirectURI, state, err)
+		return
+	}
+	oauthError, ok := errors.AsType[*oauthwire.Error](err)
+	if !ok {
+		oauthError = &oauthwire.Error{Code: oautherr.CodeInvalidRequest, Description: "invalid request"}
+	}
+	setOAuthTelemetryOutcome(w, oauthError.Code)
+	callback := redirectURL(redirectURI, "", state, oauthError.Code, oauthError.Description)
+	page := oauthui.AuthorizationError{
+		CallbackURL:    callback,
+		Code:           oauthError.Code,
+		Description:    oauthError.Description,
+		ClientName:     client.Name,
+		ClientID:       clientID,
+		ClientIDOrigin: clientIDOrigin(client),
+		ServerName:     "Speakeasy",
+	}
+	if err := oauthui.WriteAuthorizationError(r.Context(), w, page); err != nil {
+		writeOAuthError(w, http.StatusInternalServerError, oautherr.CodeServerError, "could not render authorization page")
+	}
 }
 
 func redirectOAuthError(w http.ResponseWriter, r *http.Request, redirectURI, state string, err error) {

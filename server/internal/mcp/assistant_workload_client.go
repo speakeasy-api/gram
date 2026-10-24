@@ -192,7 +192,7 @@ func (i *registeredAssistantWorkloadIssuer) IssueAssistantWorkloadToken(ctx cont
 	if !ok {
 		return zero, errors.New("resource cannot admit assistant workloads")
 	}
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
+	version := runtimepolicy.AssistantIssuedPolicyVersion
 	policy, err := encodeAgentSessionPolicy(*target, version)
 	if err != nil {
 		return zero, err

@@ -7529,6 +7529,160 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/upstreamOAuthMigration.disableEnforcement:
+        post:
+            description: 'Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.'
+            operationId: adminDisableUpstreamAuthEnforcement
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DisableUpstreamAuthEnforcementRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: disableUpstreamAuthEnforcement admin
+            tags:
+                - admin
+            x-speakeasy-name-override: disableUpstreamAuthEnforcement
+    /admin/upstreamOAuthMigration.enableEnforcement:
+        post:
+            description: 'Enables upstream auth enforcement for one organization: its direct proxied servers and assistant turns are served by the typed auth client resolver, and using the chosen auth client requires mcp:auth. Refused unless the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that can name an auth client does, and its assistant profiles are recorded. Choices left ambiguous and profile gaps are not blocking: those credentials are asked to reconnect and those turns are refused with the reason. Shadow parity and the cross-organization denial notice are confirmed by the caller, since they are read from telemetry and communication outside the database. Enabled enforcement does not depend on the auth-client-resolver flags.'
+            operationId: adminEnableUpstreamAuthEnforcement
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/EnableUpstreamAuthEnforcementRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: enableUpstreamAuthEnforcement admin
+            tags:
+                - admin
+            x-speakeasy-name-override: enableUpstreamAuthEnforcement
     /admin/upstreamOAuthMigration.organizations:
         get:
             description: Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.
@@ -16348,7 +16502,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/AgentPolicyGrantIDForm'
+                            $ref: '#/components/schemas/DeleteAgentPolicyGrantForm'
                 required: true
             responses:
                 "204":
@@ -91796,12 +91950,59 @@ components:
                         - gram_private
                 server:
                     $ref: '#/components/schemas/AdminMcpServerHealthServer'
+                upstream_auth:
+                    $ref: '#/components/schemas/AdminMcpServerHealthUpstreamAuth'
                 user_session_issuer:
                     $ref: '#/components/schemas/AdminMcpServerHealthUserSessionIssuer'
             description: 'Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.'
             required:
                 - server
                 - correlation
+        AdminMcpServerHealthAuthClient:
+            type: object
+            properties:
+                client_type:
+                    type: string
+                    description: How the client authenticates upstream.
+                    enum:
+                        - remote_session
+                        - service_account
+                        - static_credential
+                        - pass_through
+                        - ema
+                enabled:
+                    type: boolean
+                    description: Whether the client can be used.
+                header_count:
+                    type: integer
+                    description: Headers the client sends upstream.
+                    format: int64
+                id:
+                    type: string
+                    description: Auth client id.
+                    format: uuid
+                remote_session_client_id:
+                    type: string
+                    description: The OAuth registration behind an OAuth-backed client.
+                    format: uuid
+                server_count:
+                    type: integer
+                    description: Servers offering the client, this one included.
+                    format: int64
+                source:
+                    type: string
+                    description: backfill when created from existing configuration, admin when an administrator created it.
+                    enum:
+                        - backfill
+                        - admin
+            description: One auth client the server offers for reaching its upstream. Never carries its name or header values.
+            required:
+                - id
+                - client_type
+                - source
+                - enabled
+                - server_count
+                - header_count
         AdminMcpServerHealthCorrelation:
             type: object
             properties:
@@ -92037,6 +92238,28 @@ components:
             required:
                 - issuer_id
                 - client_id
+        AdminMcpServerHealthUpstreamAuth:
+            type: object
+            properties:
+                auth_clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminMcpServerHealthAuthClient'
+                requires_upstream_auth:
+                    type: boolean
+                    description: Whether the upstream needs authentication. Omitted while undecided.
+                status:
+                    type: string
+                    description: configured, setup_incomplete (required with no enabled client), no_auth_required or undecided.
+                    enum:
+                        - configured
+                        - setup_incomplete
+                        - no_auth_required
+                        - undecided
+            description: Whether the server's upstream needs authentication and the auth clients it offers.
+            required:
+                - status
+                - auth_clients
         AdminMcpServerHealthUserSessionIssuer:
             type: object
             properties:
@@ -93204,6 +93427,25 @@ components:
                 - id
                 - customer_id
                 - status
+        AdminUpstreamAuthEnforcement:
+            type: object
+            properties:
+                blockers:
+                    type: array
+                    items:
+                        type: string
+                    description: What keeps enforcement from being turned on, empty when ready.
+                enabled:
+                    type: boolean
+                    description: Whether enforcement is on.
+                ready:
+                    type: boolean
+                    description: Whether the coverage enforcement needs is in place, so it can be turned on.
+            description: One organization's upstream auth enforcement.
+            required:
+                - enabled
+                - ready
+                - blockers
         AdminUpstreamOAuthMigrationAuthClientKind:
             type: object
             properties:
@@ -93269,6 +93511,10 @@ components:
                 pending_clients:
                     type: integer
                     description: Auth clients not yet recorded.
+                    format: int64
+                pending_grants:
+                    type: integer
+                    description: Default auth permission grants (mcp:auth) the organization's roles, users, agents and API keys are missing, which a run adds. Enforcement needs them, so existing callers keep their access.
                     format: int64
                 pending_headers:
                     type: integer
@@ -93567,6 +93813,8 @@ components:
                     type: integer
                     description: Live user session credentials scanned.
                     format: int64
+                enforcement:
+                    $ref: '#/components/schemas/AdminUpstreamAuthEnforcement'
                 execution_profiles:
                     $ref: '#/components/schemas/AdminUpstreamOAuthMigrationExecutionProfiles'
                 migrated:
@@ -93734,7 +93982,7 @@ components:
                     minLength: 1
                 project_scoped:
                     type: boolean
-                    description: Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+                    description: Admit the subject for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.
                     default: false
                 subject:
                     type: string
@@ -93805,6 +94053,18 @@ components:
             required:
                 - requested
                 - effective
+        AgentExpectedPolicy:
+            type: object
+            properties:
+                scope:
+                    type: string
+                    description: Scope of the grant originally read
+                    minLength: 1
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+            required:
+                - scope
+                - selector
         AgentIDForm:
             type: object
             properties:
@@ -94023,7 +94283,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).
+                    description: Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -94039,6 +94299,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - mcp_auth_client
                         - '*'
@@ -99914,6 +100175,13 @@ components:
                     enum:
                         - chain
                         - interactive
+                authorization_server_mode:
+                    type: string
+                    description: Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+                    default: endpoint
+                    enum:
+                        - endpoint
+                        - shared
                 session_duration_hours:
                     type: integer
                     description: Maximum issued user session lifetime, in hours.
@@ -100426,6 +100694,22 @@ components:
             required:
                 - status
                 - count
+        DeleteAgentPolicyGrantForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: First-class agent identifier
+                    format: uuid
+                expected_policy:
+                    $ref: '#/components/schemas/AgentExpectedPolicy'
+                grant_id:
+                    type: string
+                    description: Direct policy grant identifier
+                    format: uuid
+            required:
+                - grant_id
+                - agent_id
         DeleteAiScanTargetRequestBody:
             type: object
             properties:
@@ -101502,6 +101786,14 @@ components:
                     minLength: 1
             required:
                 - id
+        DisableUpstreamAuthEnforcementRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: The organization ID.
+            required:
+                - organization_id
         DisconnectSlackDirectoryConnectionRequestBody:
             type: object
             properties:
@@ -101926,6 +102218,22 @@ components:
                     minLength: 1
             required:
                 - id
+        EnableUpstreamAuthEnforcementRequestBody:
+            type: object
+            properties:
+                cross_organization_denial_communicated:
+                    type: boolean
+                    description: The organization was told that valid credentials from another organization are refused on its public servers once enforcement is on, instead of being served anonymously.
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                shadow_parity_confirmed:
+                    type: boolean
+                    description: The caller checked the organization's mandatory authorization shadow (mcp.authz.mandatory_shadow) and found no unexplained new denial.
+            required:
+                - organization_id
+                - shadow_parity_confirmed
+                - cross_organization_denial_communicated
         EnsureServerReviewRequestBody:
             type: object
             properties:
@@ -108481,6 +108789,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -108537,6 +108846,7 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - inference:execute
                             - log:read
                             - agent:read
                             - agent:write
@@ -114641,7 +114951,7 @@ components:
                     maxLength: 100
                 project_scoped:
                     type: boolean
-                    description: Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+                    description: Register the issuer for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.
                     default: false
                 tags:
                     type: array
@@ -115590,6 +115900,7 @@ components:
                         - risk_policy:bypass
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -117723,6 +118034,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -118089,6 +118401,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - workload
                         - mcp_auth_client
@@ -118131,6 +118444,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -118625,7 +118939,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
+                    description: Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -118641,6 +118955,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - workload
                         - mcp_auth_client

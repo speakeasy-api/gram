@@ -53,6 +53,10 @@ export type AdminUpstreamOAuthMigrationAuthClients = {
    */
   pendingClients: number;
   /**
+   * Default auth permission grants (mcp:auth) the organization's roles, users, agents and API keys are missing, which a run adds. Enforcement needs them, so existing callers keep their access.
+   */
+  pendingGrants?: number | undefined;
+  /**
    * Header copies and EMA scope sets not yet up to date.
    */
   pendingHeaders: number;
@@ -116,6 +120,7 @@ export const AdminUpstreamOAuthMigrationAuthClients$inboundSchema:
       in_progress: z.boolean(),
       kinds: z.array(AdminUpstreamOAuthMigrationAuthClientKind$inboundSchema),
       pending_clients: z.int(),
+      pending_grants: z.optional(z.int()),
       pending_headers: z.int(),
       pending_links: z.int(),
       pending_marked_servers: z.int(),
@@ -142,6 +147,7 @@ export const AdminUpstreamOAuthMigrationAuthClients$inboundSchema:
         "failed_phases": "failedPhases",
         "in_progress": "inProgress",
         "pending_clients": "pendingClients",
+        "pending_grants": "pendingGrants",
         "pending_headers": "pendingHeaders",
         "pending_links": "pendingLinks",
         "pending_marked_servers": "pendingMarkedServers",

@@ -25,6 +25,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -596,6 +597,9 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	authorizationCtx, err = s.admitWorkloadSession(authorizationCtx, organizationID, subject, grant.credential)
 	if err == nil && grant.endpoint != nil {
 		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
+	}
+	if err == nil && grant.session.Audience == InferenceResource {
+		err = s.authz.Require(authorizationCtx, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
 	}
 	switch {
 	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):

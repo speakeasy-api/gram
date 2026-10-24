@@ -76,6 +76,11 @@ type metaMember struct {
 	// authentication for this member.
 	upstreamNoAuth bool
 
+	// typedAuthClient reports that chosenClientID is the registration of a
+	// typed auth client the resolver checked against the member, which
+	// authorizes it without a sign-in link.
+	typedAuthClient bool
+
 	// upstreamUnavailable is why the credential cannot reach this member
 	// under its choices, nil otherwise.
 	upstreamUnavailable error
@@ -490,6 +495,7 @@ func (s *Service) admitMetaMembers(
 			chosenClientID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			upstreamNoAuth:             false,
 			upstreamUnavailable:        nil,
+			typedAuthClient:            false,
 			associatedClients:          nil,
 		})
 	}

@@ -4185,8 +4185,9 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	}
 	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
 	for _, toolset := range toolsets {
-		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
-			// Not served now, but its past calls still need their server id.
+		// The slug is the legacy alias; whether it serves is the server's state, so the slug matches either way.
+		if !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+			// No alias, but its past calls still need their server id.
 			if serverID := toolsetServerIDs[toolset.ID]; serverID != "" {
 				hostedMatchers = append(hostedMatchers, repo.HostedMCPMatcher{
 					ToolsetSlug: toolset.Slug,
