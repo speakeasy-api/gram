@@ -54,6 +54,25 @@ type ListFacetsResponseBody struct {
 	Servers []*UserSessionFacetOptionResponseBody `form:"servers" json:"servers" xml:"servers"`
 }
 
+// QueryFacetsResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body.
+type QueryFacetsResponseBody struct {
+	// Session subjects.
+	Identity *UserSessionFilterFacetResponseBody `form:"identity" json:"identity" xml:"identity"`
+	// Session subject kinds.
+	IdentityType *UserSessionFilterFacetResponseBody `form:"identity_type" json:"identity_type" xml:"identity_type"`
+	// Sign-in servers (user_session_issuer ids) the sessions came from.
+	McpServer *UserSessionFilterFacetResponseBody `form:"mcp_server" json:"mcp_server" xml:"mcp_server"`
+	// Connecting clients.
+	Client *UserSessionFilterFacetResponseBody `form:"client" json:"client" xml:"client"`
+	// How each client registered.
+	ClientRegistration *UserSessionFilterFacetResponseBody `form:"client_registration" json:"client_registration" xml:"client_registration"`
+	// With meta_mcp_server_id: sessions on the gateway's current sign-in server
+	// that match the other filters but recorded no origin and have no consent
+	// selection naming a resource. 0 for a gateway without a sign-in server.
+	UnattributedCount *int64 `form:"unattributed_count,omitempty" json:"unattributed_count,omitempty" xml:"unattributed_count,omitempty"`
+}
+
 // MintUserSessionResponseBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP response body.
 type MintUserSessionResponseBody struct {
@@ -421,6 +440,190 @@ type ListFacetsUnexpectedResponseBody struct {
 // ListFacetsGatewayErrorResponseBody is the type of the "userSessions" service
 // "listFacets" endpoint HTTP response body for the "gateway_error" error.
 type ListFacetsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryFacetsUnauthorizedResponseBody is the type of the "userSessions"
+// service "queryFacets" endpoint HTTP response body for the "unauthorized"
+// error.
+type QueryFacetsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryFacetsForbiddenResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "forbidden" error.
+type QueryFacetsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryFacetsBadRequestResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "bad_request" error.
+type QueryFacetsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryFacetsNotFoundResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "not_found" error.
+type QueryFacetsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryFacetsConflictResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "conflict" error.
+type QueryFacetsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryFacetsUnsupportedMediaResponseBody is the type of the "userSessions"
+// service "queryFacets" endpoint HTTP response body for the
+// "unsupported_media" error.
+type QueryFacetsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryFacetsInvalidResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "invalid" error.
+type QueryFacetsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryFacetsInvariantViolationResponseBody is the type of the "userSessions"
+// service "queryFacets" endpoint HTTP response body for the
+// "invariant_violation" error.
+type QueryFacetsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryFacetsUnexpectedResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "unexpected" error.
+type QueryFacetsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryFacetsGatewayErrorResponseBody is the type of the "userSessions"
+// service "queryFacets" endpoint HTTP response body for the "gateway_error"
+// error.
+type QueryFacetsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -963,6 +1166,29 @@ type UserSessionFacetOptionResponseBody struct {
 	Count int64 `form:"count" json:"count" xml:"count"`
 }
 
+// UserSessionFilterFacetResponseBody is used to define fields on response body
+// types.
+type UserSessionFilterFacetResponseBody struct {
+	// The most common values, then any selected value outside them.
+	Values []*UserSessionFilterFacetValueResponseBody `form:"values" json:"values" xml:"values"`
+	// How many distinct values match the field search.
+	DistinctCount int64 `form:"distinct_count" json:"distinct_count" xml:"distinct_count"`
+}
+
+// UserSessionFilterFacetValueResponseBody is used to define fields on response
+// body types.
+type UserSessionFilterFacetValueResponseBody struct {
+	// The value to filter by.
+	Value string `form:"value" json:"value" xml:"value"`
+	// The label for the value, when one is visible to the caller.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Sessions with this value under the other filters.
+	Count int64 `form:"count" json:"count" xml:"count"`
+	// Whether the value is one of the distinct_count values matching the field
+	// search. False for a selected value returned only so it stays removable.
+	MatchesSearch bool `form:"matches_search" json:"matches_search" xml:"matches_search"`
+}
+
 // NewListUserSessionsResponseBody builds the HTTP response body from the
 // result of the "listUserSessions" endpoint of the "userSessions" service.
 func NewListUserSessionsResponseBody(res *usersessions.ListUserSessionsResult) *ListUserSessionsResponseBody {
@@ -1023,6 +1249,30 @@ func NewListFacetsResponseBody(res *usersessions.ListUserSessionFacetsResult) *L
 		}
 	} else {
 		body.Servers = []*UserSessionFacetOptionResponseBody{}
+	}
+	return body
+}
+
+// NewQueryFacetsResponseBody builds the HTTP response body from the result of
+// the "queryFacets" endpoint of the "userSessions" service.
+func NewQueryFacetsResponseBody(res *usersessions.UserSessionFilterFacets) *QueryFacetsResponseBody {
+	body := &QueryFacetsResponseBody{
+		UnattributedCount: res.UnattributedCount,
+	}
+	if res.Identity != nil {
+		body.Identity = marshalUsersessionsUserSessionFilterFacetToUserSessionFilterFacetResponseBody(res.Identity)
+	}
+	if res.IdentityType != nil {
+		body.IdentityType = marshalUsersessionsUserSessionFilterFacetToUserSessionFilterFacetResponseBody(res.IdentityType)
+	}
+	if res.McpServer != nil {
+		body.McpServer = marshalUsersessionsUserSessionFilterFacetToUserSessionFilterFacetResponseBody(res.McpServer)
+	}
+	if res.Client != nil {
+		body.Client = marshalUsersessionsUserSessionFilterFacetToUserSessionFilterFacetResponseBody(res.Client)
+	}
+	if res.ClientRegistration != nil {
+		body.ClientRegistration = marshalUsersessionsUserSessionFilterFacetToUserSessionFilterFacetResponseBody(res.ClientRegistration)
 	}
 	return body
 }
@@ -1311,6 +1561,146 @@ func NewListFacetsUnexpectedResponseBody(res *goa.ServiceError) *ListFacetsUnexp
 // result of the "listFacets" endpoint of the "userSessions" service.
 func NewListFacetsGatewayErrorResponseBody(res *goa.ServiceError) *ListFacetsGatewayErrorResponseBody {
 	body := &ListFacetsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryFacetsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "queryFacets" endpoint of the "userSessions" service.
+func NewQueryFacetsUnauthorizedResponseBody(res *goa.ServiceError) *QueryFacetsUnauthorizedResponseBody {
+	body := &QueryFacetsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryFacetsForbiddenResponseBody builds the HTTP response body from the
+// result of the "queryFacets" endpoint of the "userSessions" service.
+func NewQueryFacetsForbiddenResponseBody(res *goa.ServiceError) *QueryFacetsForbiddenResponseBody {
+	body := &QueryFacetsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryFacetsBadRequestResponseBody builds the HTTP response body from the
+// result of the "queryFacets" endpoint of the "userSessions" service.
+func NewQueryFacetsBadRequestResponseBody(res *goa.ServiceError) *QueryFacetsBadRequestResponseBody {
+	body := &QueryFacetsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryFacetsNotFoundResponseBody builds the HTTP response body from the
+// result of the "queryFacets" endpoint of the "userSessions" service.
+func NewQueryFacetsNotFoundResponseBody(res *goa.ServiceError) *QueryFacetsNotFoundResponseBody {
+	body := &QueryFacetsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryFacetsConflictResponseBody builds the HTTP response body from the
+// result of the "queryFacets" endpoint of the "userSessions" service.
+func NewQueryFacetsConflictResponseBody(res *goa.ServiceError) *QueryFacetsConflictResponseBody {
+	body := &QueryFacetsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryFacetsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "queryFacets" endpoint of the "userSessions" service.
+func NewQueryFacetsUnsupportedMediaResponseBody(res *goa.ServiceError) *QueryFacetsUnsupportedMediaResponseBody {
+	body := &QueryFacetsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryFacetsInvalidResponseBody builds the HTTP response body from the
+// result of the "queryFacets" endpoint of the "userSessions" service.
+func NewQueryFacetsInvalidResponseBody(res *goa.ServiceError) *QueryFacetsInvalidResponseBody {
+	body := &QueryFacetsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryFacetsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "queryFacets" endpoint of the "userSessions" service.
+func NewQueryFacetsInvariantViolationResponseBody(res *goa.ServiceError) *QueryFacetsInvariantViolationResponseBody {
+	body := &QueryFacetsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryFacetsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "queryFacets" endpoint of the "userSessions" service.
+func NewQueryFacetsUnexpectedResponseBody(res *goa.ServiceError) *QueryFacetsUnexpectedResponseBody {
+	body := &QueryFacetsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryFacetsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "queryFacets" endpoint of the "userSessions" service.
+func NewQueryFacetsGatewayErrorResponseBody(res *goa.ServiceError) *QueryFacetsGatewayErrorResponseBody {
+	body := &QueryFacetsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1613,7 +2003,7 @@ func NewRevokeUserSessionGatewayErrorResponseBody(res *goa.ServiceError) *Revoke
 
 // NewListUserSessionsPayload builds a userSessions service listUserSessions
 // endpoint payload.
-func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string, status *string, clientID *string, search *string, metaMcpServerID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
+func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string, status *string, clientID *string, search *string, metaMcpServerID *string, identities []string, excludeIdentities []string, identityTypes []string, excludeIdentityTypes []string, servers []string, excludeServers []string, clients []string, excludeClients []string, clientRegistrations []string, excludeClientRegistrations []string, lastUsedWithin *int, lastUsedOlderThan *int, lastUsedNever *bool, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
 	v := &usersessions.ListUserSessionsPayload{}
 	v.SubjectUrn = subjectUrn
 	v.UserSessionIssuerID = userSessionIssuerID
@@ -1621,6 +2011,19 @@ func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string,
 	v.ClientID = clientID
 	v.Search = search
 	v.MetaMcpServerID = metaMcpServerID
+	v.Identities = identities
+	v.ExcludeIdentities = excludeIdentities
+	v.IdentityTypes = identityTypes
+	v.ExcludeIdentityTypes = excludeIdentityTypes
+	v.Servers = servers
+	v.ExcludeServers = excludeServers
+	v.Clients = clients
+	v.ExcludeClients = excludeClients
+	v.ClientRegistrations = clientRegistrations
+	v.ExcludeClientRegistrations = excludeClientRegistrations
+	v.LastUsedWithin = lastUsedWithin
+	v.LastUsedOlderThan = lastUsedOlderThan
+	v.LastUsedNever = lastUsedNever
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
@@ -1634,6 +2037,38 @@ func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string,
 // payload.
 func NewListFacetsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListFacetsPayload {
 	v := &usersessions.ListFacetsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewQueryFacetsPayload builds a userSessions service queryFacets endpoint
+// payload.
+func NewQueryFacetsPayload(subjectUrn *string, userSessionIssuerID *string, status *string, clientID *string, search *string, metaMcpServerID *string, identities []string, excludeIdentities []string, identityTypes []string, excludeIdentityTypes []string, servers []string, excludeServers []string, clients []string, excludeClients []string, clientRegistrations []string, excludeClientRegistrations []string, lastUsedWithin *int, lastUsedOlderThan *int, lastUsedNever *bool, field *string, fieldSearch *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.QueryFacetsPayload {
+	v := &usersessions.QueryFacetsPayload{}
+	v.SubjectUrn = subjectUrn
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.Status = status
+	v.ClientID = clientID
+	v.Search = search
+	v.MetaMcpServerID = metaMcpServerID
+	v.Identities = identities
+	v.ExcludeIdentities = excludeIdentities
+	v.IdentityTypes = identityTypes
+	v.ExcludeIdentityTypes = excludeIdentityTypes
+	v.Servers = servers
+	v.ExcludeServers = excludeServers
+	v.Clients = clients
+	v.ExcludeClients = excludeClients
+	v.ClientRegistrations = clientRegistrations
+	v.ExcludeClientRegistrations = excludeClientRegistrations
+	v.LastUsedWithin = lastUsedWithin
+	v.LastUsedOlderThan = lastUsedOlderThan
+	v.LastUsedNever = lastUsedNever
+	v.Field = field
+	v.FieldSearch = fieldSearch
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

@@ -16,7 +16,6 @@ import (
 
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
@@ -29,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/sessionfilter"
 )
 
 const workloadGrantJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer"
@@ -149,17 +149,9 @@ func (f workloadGrantFixture) exchange(t *testing.T, assertion string, resources
 func (f workloadGrantFixture) workloadSessions(t *testing.T) []usersessionsrepo.ListUserSessionsByProjectIDRow {
 	t.Helper()
 
-	rows, err := usersessionsrepo.New(f.ti.conn).ListUserSessionsByProjectID(t.Context(), usersessionsrepo.ListUserSessionsByProjectIDParams{
-		ProjectID:           f.fx.target.ProjectID,
-		OrganizationID:      f.fx.orgID,
-		Status:              pgtype.Text{String: "", Valid: false},
-		SubjectUrn:          pgtype.Text{String: urn.NewWorkloadSubject(f.issuerID, f.subject).String(), Valid: true},
-		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ClientID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ID:                  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Cursor:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		LimitValue:          10,
-	})
+	filter, err := sessionfilter.Parse(sessionfilter.Input{SubjectURN: new(urn.NewWorkloadSubject(f.issuerID, f.subject).String())})
+	require.NoError(t, err)
+	rows, err := usersessionsrepo.New(f.ti.conn).ListUserSessionsByProjectID(t.Context(), filter.ListParams(f.fx.target.ProjectID, f.fx.orgID, nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, 10))
 	require.NoError(t, err)
 	return rows
 }

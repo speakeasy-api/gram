@@ -28,9 +28,13 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  ListUserSessionsQueryParamStatus,
+  ClientRegistrations,
+  ExcludeClientRegistrations,
+  ExcludeIdentityTypes,
+  IdentityTypes,
   ListUserSessionsRequest,
   ListUserSessionsSecurity,
+  QueryParamStatus,
 } from "../models/operations/listusersessions.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -203,10 +207,25 @@ export function setUserSessionsData(
     parameters: {
       subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
-      status?: ListUserSessionsQueryParamStatus | undefined;
+      status?: QueryParamStatus | undefined;
       clientId?: string | undefined;
       search?: string | undefined;
       metaMcpServerId?: string | undefined;
+      identities?: Array<string> | undefined;
+      excludeIdentities?: Array<string> | undefined;
+      identityTypes?: Array<IdentityTypes> | undefined;
+      excludeIdentityTypes?: Array<ExcludeIdentityTypes> | undefined;
+      servers?: Array<string> | undefined;
+      excludeServers?: Array<string> | undefined;
+      clients?: Array<string> | undefined;
+      excludeClients?: Array<string> | undefined;
+      clientRegistrations?: Array<ClientRegistrations> | undefined;
+      excludeClientRegistrations?:
+        | Array<ExcludeClientRegistrations>
+        | undefined;
+      lastUsedWithin?: number | undefined;
+      lastUsedOlderThan?: number | undefined;
+      lastUsedNever?: boolean | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
@@ -227,10 +246,25 @@ export function invalidateUserSessions(
     [parameters: {
       subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
-      status?: ListUserSessionsQueryParamStatus | undefined;
+      status?: QueryParamStatus | undefined;
       clientId?: string | undefined;
       search?: string | undefined;
       metaMcpServerId?: string | undefined;
+      identities?: Array<string> | undefined;
+      excludeIdentities?: Array<string> | undefined;
+      identityTypes?: Array<IdentityTypes> | undefined;
+      excludeIdentityTypes?: Array<ExcludeIdentityTypes> | undefined;
+      servers?: Array<string> | undefined;
+      excludeServers?: Array<string> | undefined;
+      clients?: Array<string> | undefined;
+      excludeClients?: Array<string> | undefined;
+      clientRegistrations?: Array<ClientRegistrations> | undefined;
+      excludeClientRegistrations?:
+        | Array<ExcludeClientRegistrations>
+        | undefined;
+      lastUsedWithin?: number | undefined;
+      lastUsedOlderThan?: number | undefined;
+      lastUsedNever?: boolean | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;

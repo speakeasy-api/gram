@@ -80304,6 +80304,157 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: Only sessions whose subject URN is one of these.
+          in: query
+          name: identities
+          schema:
+            description: Only sessions whose subject URN is one of these.
+            items:
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Leave out sessions whose subject URN is one of these.
+          in: query
+          name: exclude_identities
+          schema:
+            description: Leave out sessions whose subject URN is one of these.
+            items:
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Only sessions whose subject is one of these kinds.
+          in: query
+          name: identity_types
+          schema:
+            description: Only sessions whose subject is one of these kinds.
+            items:
+              enum:
+                - user
+                - agent
+                - workload
+                - apikey
+                - anonymous
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Leave out sessions whose subject is one of these kinds.
+          in: query
+          name: exclude_identity_types
+          schema:
+            description: Leave out sessions whose subject is one of these kinds.
+            items:
+              enum:
+                - user
+                - agent
+                - workload
+                - apikey
+                - anonymous
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Only sessions from one of these sign-in servers (user_session_issuer ids).
+          in: query
+          name: servers
+          schema:
+            description: Only sessions from one of these sign-in servers (user_session_issuer ids).
+            items:
+              format: uuid
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Leave out sessions from these sign-in servers (user_session_issuer ids).
+          in: query
+          name: exclude_servers
+          schema:
+            description: Leave out sessions from these sign-in servers (user_session_issuer ids).
+            items:
+              format: uuid
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: 'Only sessions from one of these clients: a client id, "dashboard" for dashboard sessions, or "none" for sessions with no client.'
+          in: query
+          name: clients
+          schema:
+            description: 'Only sessions from one of these clients: a client id, "dashboard" for dashboard sessions, or "none" for sessions with no client.'
+            items:
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Leave out sessions from these clients, using the same values as clients.
+          in: query
+          name: exclude_clients
+          schema:
+            description: Leave out sessions from these clients, using the same values as clients.
+            items:
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: 'Only sessions whose client registered this way: cimd (metadata document), dcr (dynamic registration), assistant (an assistant workload client), or none (no client).'
+          in: query
+          name: client_registrations
+          schema:
+            description: 'Only sessions whose client registered this way: cimd (metadata document), dcr (dynamic registration), assistant (an assistant workload client), or none (no client).'
+            items:
+              enum:
+                - cimd
+                - dcr
+                - assistant
+                - none
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Leave out sessions whose client registered this way.
+          in: query
+          name: exclude_client_registrations
+          schema:
+            description: Leave out sessions whose client registered this way.
+            items:
+              enum:
+                - cimd
+                - dcr
+                - assistant
+                - none
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match.
+          in: query
+          name: last_used_within
+          schema:
+            description: Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match.
+            format: int64
+            maximum: 3.1536e+08
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Only sessions last used more than this many seconds ago. Sessions with no recorded use never match.
+          in: query
+          name: last_used_older_than
+          schema:
+            description: Only sessions last used more than this many seconds ago. Sessions with no recorded use never match.
+            format: int64
+            maximum: 3.1536e+08
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Only sessions with no recorded use.
+          in: query
+          name: last_used_never
+          schema:
+            description: Only sessions with no recorded use.
+            type: boolean
+        - allowEmptyValue: true
           description: 'Pagination cursor: id of the last item from the previous page.'
           in: query
           name: cursor
@@ -80616,6 +80767,328 @@ paths:
       x-speakeasy-name-override: mint
       x-speakeasy-react-hook:
         name: MintUserSession
+  /rpc/userSessions.queryFacets:
+    get:
+      description: Count the values of each session filter field over the sessions userSessions.list would return for the same filters. Each field ignores its own selection and applies every other filter. Returns the top values per field plus any selected value.
+      operationId: queryUserSessionFacets
+      parameters:
+        - allowEmptyValue: true
+          description: Exact-match filter on subject URN.
+          in: query
+          name: subject_urn
+          schema:
+            description: Exact-match filter on subject URN.
+            type: string
+        - allowEmptyValue: true
+          description: Filter by user_session_issuer id.
+          in: query
+          name: user_session_issuer_id
+          schema:
+            description: Filter by user_session_issuer id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Filter by session status.
+          in: query
+          name: status
+          schema:
+            description: Filter by session status.
+            enum:
+              - active
+              - expired
+              - revoked
+              - all
+            type: string
+        - allowEmptyValue: true
+          description: Filter by the connecting client id.
+          in: query
+          name: client_id
+          schema:
+            description: Filter by the connecting client id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Case-insensitive substring match on the person, agent, API key, workload, client, MCP server, or upstream provider shown for a session.
+          in: query
+          name: search
+          schema:
+            description: Case-insensitive substring match on the person, agent, API key, workload, client, MCP server, or upstream provider shown for a session.
+            maxLength: 200
+            type: string
+        - allowEmptyValue: true
+          description: Only sessions issued for this gateway, by the gateway they recorded or, for sessions that recorded none, the gateway their consent selection names. Sessions with neither are left out.
+          in: query
+          name: meta_mcp_server_id
+          schema:
+            description: Only sessions issued for this gateway, by the gateway they recorded or, for sessions that recorded none, the gateway their consent selection names. Sessions with neither are left out.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Only sessions whose subject URN is one of these.
+          in: query
+          name: identities
+          schema:
+            description: Only sessions whose subject URN is one of these.
+            items:
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Leave out sessions whose subject URN is one of these.
+          in: query
+          name: exclude_identities
+          schema:
+            description: Leave out sessions whose subject URN is one of these.
+            items:
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Only sessions whose subject is one of these kinds.
+          in: query
+          name: identity_types
+          schema:
+            description: Only sessions whose subject is one of these kinds.
+            items:
+              enum:
+                - user
+                - agent
+                - workload
+                - apikey
+                - anonymous
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Leave out sessions whose subject is one of these kinds.
+          in: query
+          name: exclude_identity_types
+          schema:
+            description: Leave out sessions whose subject is one of these kinds.
+            items:
+              enum:
+                - user
+                - agent
+                - workload
+                - apikey
+                - anonymous
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Only sessions from one of these sign-in servers (user_session_issuer ids).
+          in: query
+          name: servers
+          schema:
+            description: Only sessions from one of these sign-in servers (user_session_issuer ids).
+            items:
+              format: uuid
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Leave out sessions from these sign-in servers (user_session_issuer ids).
+          in: query
+          name: exclude_servers
+          schema:
+            description: Leave out sessions from these sign-in servers (user_session_issuer ids).
+            items:
+              format: uuid
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: 'Only sessions from one of these clients: a client id, "dashboard" for dashboard sessions, or "none" for sessions with no client.'
+          in: query
+          name: clients
+          schema:
+            description: 'Only sessions from one of these clients: a client id, "dashboard" for dashboard sessions, or "none" for sessions with no client.'
+            items:
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Leave out sessions from these clients, using the same values as clients.
+          in: query
+          name: exclude_clients
+          schema:
+            description: Leave out sessions from these clients, using the same values as clients.
+            items:
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: 'Only sessions whose client registered this way: cimd (metadata document), dcr (dynamic registration), assistant (an assistant workload client), or none (no client).'
+          in: query
+          name: client_registrations
+          schema:
+            description: 'Only sessions whose client registered this way: cimd (metadata document), dcr (dynamic registration), assistant (an assistant workload client), or none (no client).'
+            items:
+              enum:
+                - cimd
+                - dcr
+                - assistant
+                - none
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Leave out sessions whose client registered this way.
+          in: query
+          name: exclude_client_registrations
+          schema:
+            description: Leave out sessions whose client registered this way.
+            items:
+              enum:
+                - cimd
+                - dcr
+                - assistant
+                - none
+              type: string
+            maxItems: 50
+            type: array
+        - allowEmptyValue: true
+          description: Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match.
+          in: query
+          name: last_used_within
+          schema:
+            description: Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match.
+            format: int64
+            maximum: 3.1536e+08
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Only sessions last used more than this many seconds ago. Sessions with no recorded use never match.
+          in: query
+          name: last_used_older_than
+          schema:
+            description: Only sessions last used more than this many seconds ago. Sessions with no recorded use never match.
+            format: int64
+            maximum: 3.1536e+08
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Only sessions with no recorded use.
+          in: query
+          name: last_used_never
+          schema:
+            description: Only sessions with no recorded use.
+            type: boolean
+        - allowEmptyValue: true
+          description: Narrow this field's values with field_search.
+          in: query
+          name: field
+          schema:
+            description: Narrow this field's values with field_search.
+            enum:
+              - identity
+              - identity_type
+              - mcp_server
+              - client
+              - client_registration
+            type: string
+        - allowEmptyValue: true
+          description: Case-insensitive substring match on the values and labels of field.
+          in: query
+          name: field_search
+          schema:
+            description: Case-insensitive substring match on the values and labels of field.
+            maxLength: 200
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionFilterFacets'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: queryFacets userSessions
+      tags:
+        - userSessions
+      x-speakeasy-name-override: queryFacets
+      x-speakeasy-react-hook:
+        name: UserSessionFilterFacets
   /rpc/userSessions.revoke:
     post:
       description: Push the session's jti into the revocation cache and soft-delete the row.
@@ -117203,6 +117676,64 @@ components:
         - value
         - display_name
         - count
+    UserSessionFilterFacet:
+      type: object
+      properties:
+        distinct_count:
+          type: integer
+          description: How many distinct values match the field search.
+          format: int64
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionFilterFacetValue'
+          description: The most common values, then any selected value outside them.
+      required:
+        - values
+        - distinct_count
+    UserSessionFilterFacetValue:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Sessions with this value under the other filters.
+          format: int64
+        display_name:
+          type: string
+          description: The label for the value, when one is visible to the caller.
+        matches_search:
+          type: boolean
+          description: Whether the value is one of the distinct_count values matching the field search. False for a selected value returned only so it stays removable.
+        value:
+          type: string
+          description: The value to filter by.
+      required:
+        - value
+        - count
+        - matches_search
+    UserSessionFilterFacets:
+      type: object
+      properties:
+        client:
+          $ref: '#/components/schemas/UserSessionFilterFacet'
+        client_registration:
+          $ref: '#/components/schemas/UserSessionFilterFacet'
+        identity:
+          $ref: '#/components/schemas/UserSessionFilterFacet'
+        identity_type:
+          $ref: '#/components/schemas/UserSessionFilterFacet'
+        mcp_server:
+          $ref: '#/components/schemas/UserSessionFilterFacet'
+        unattributed_count:
+          type: integer
+          description: 'With meta_mcp_server_id: sessions on the gateway''s current sign-in server that match the other filters but recorded no origin and have no consent selection naming a resource. 0 for a gateway without a sign-in server.'
+          format: int64
+      required:
+        - identity
+        - identity_type
+        - mcp_server
+        - client
+        - client_registration
     UserSessionIssuer:
       type: object
       properties:

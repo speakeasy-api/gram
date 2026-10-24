@@ -1634,134 +1634,23 @@ WHERE (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.org
   AND (sqlc.narg('user_session_issuer_id')::uuid IS NULL OR s.user_session_issuer_id = sqlc.narg('user_session_issuer_id')::uuid)
   AND (sqlc.narg('client_id')::uuid IS NULL OR s.user_session_client_id = sqlc.narg('client_id')::uuid)
   AND (sqlc.narg('id')::uuid IS NULL OR s.id = sqlc.narg('id')::uuid)
-  AND (
-    sqlc.narg('search')::text IS NULL
-    OR s.subject_urn::text = ANY(sqlc.arg('agent_subject_urns')::text[])
-    OR (CASE
-          WHEN s.subject_urn::text LIKE 'user:%' THEN COALESCE(NULLIF(u.display_name, ''), NULLIF(u.email, ''), s.subject_urn::text)
-          WHEN s.subject_urn::text LIKE 'apikey:%' THEN COALESCE(NULLIF(k.name, ''), 'API key')
-          WHEN s.subject_urn::text LIKE 'anonymous%' THEN 'Anonymous client'
-          WHEN s.subject_urn::text LIKE 'workload:%' THEN substr(s.subject_urn::text, 47)
-          ELSE s.subject_urn::text
-        END) ILIKE sqlc.narg('search')::text
-    OR COALESCE(c.client_name, CASE WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN sqlc.arg('first_party_client_name')::text END) ILIKE sqlc.narg('search')::text
-    OR iss.slug ILIKE sqlc.narg('search')::text
-    OR (
-      s.subject_urn::text LIKE 'workload:%'
-      AND (
-        EXISTS (
-          SELECT 1
-          FROM workload_issuers AS wi
-          WHERE wi.id = substr(s.subject_urn::text, 10, 36)::uuid
-            AND wi.organization_id = @organization_id::text
-            AND (wi.project_id = @project_id::uuid OR wi.project_id IS NULL)
-            AND wi.deleted IS FALSE
-            AND (wi.name ILIKE sqlc.narg('search')::text OR wi.issuer ILIKE sqlc.narg('search')::text)
-        )
-        OR EXISTS (
-          SELECT 1
-          FROM workload_issuers AS live
-          JOIN workload_agent_assignments AS wa
-            ON wa.organization_id = live.organization_id
-            AND wa.workload_issuer_id = live.id
-            AND wa.deleted IS FALSE
-          JOIN agents AS a
-            ON a.organization_id = wa.organization_id
-            AND a.id = wa.agent_id
-            AND a.deleted IS FALSE
-          WHERE live.id = substr(s.subject_urn::text, 10, 36)::uuid
-            AND live.organization_id = @organization_id::text
-            AND live.deleted IS FALSE
-            AND wa.subject = substr(s.subject_urn::text, 47)
-            AND a.name ILIKE sqlc.narg('search')::text
-        )
-      )
-    )
-    OR (
-      s.subject_urn::text NOT LIKE 'agent:%'
-      AND EXISTS (
-        SELECT 1
-        FROM remote_sessions AS rs
-        JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
-        JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-        WHERE ri.slug ILIKE sqlc.narg('search')::text
-          AND rs.subject_urn = s.subject_urn::text
-          AND (rc.project_id = @project_id::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id::text)))
-          AND (
-            EXISTS (
-              SELECT 1
-              FROM remote_session_client_user_session_issuers AS blink
-              WHERE blink.remote_session_client_id = rs.remote_session_client_id
-                AND blink.user_session_issuer_id = s.user_session_issuer_id
-            )
-            OR rs.user_session_issuer_id = s.user_session_issuer_id
-          )
-          AND rs.deleted IS FALSE
-          AND rc.deleted IS FALSE
-          AND ri.deleted IS FALSE
-      )
-    )
-    OR (
-      s.subject_urn::text LIKE 'agent:%'
-      AND EXISTS (
-        SELECT 1
-        FROM remote_sessions AS rs
-        JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
-        JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-        WHERE ri.slug ILIKE sqlc.narg('search')::text
-          AND EXISTS (
-            SELECT 1
-            FROM principal_remote_session_bindings AS b
-            JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
-              AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
-              AND a.owner_reassignment_required_at IS NULL
-            JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
-            JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
-              AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
-            JOIN remote_sessions AS bs ON bs.id = b.remote_session_id
-              AND bs.subject_urn = 'user:' || a.owner_user_id
-              AND b.attached_by_subject_id = bs.subject_urn
-              AND bs.grant_generation = b.grant_generation
-              AND bs.remote_session_client_id = b.remote_session_client_id
-            JOIN remote_session_clients AS bc ON bc.id = bs.remote_session_client_id
-            JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
-            JOIN user_session_issuers AS provenance ON provenance.id = bs.user_session_issuer_id
-            JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
-            JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = bc.id AND link.user_session_issuer_id = target.id
-            JOIN remote_session_issuers AS issuer ON issuer.id = bc.remote_session_issuer_id
-            WHERE b.project_id = @project_id::uuid
-              AND b.organization_id = @organization_id::text
-              AND 'agent:' || b.principal_id::text = s.subject_urn::text
-              AND b.user_session_issuer_id = s.user_session_issuer_id
-              AND b.remote_session_client_id = rs.remote_session_client_id
-              AND b.revoked_at IS NULL
-              AND bs.deleted IS FALSE
-              AND bc.deleted IS FALSE
-              AND target.deleted IS FALSE
-              AND provenance.deleted IS FALSE
-              AND issuer.deleted IS FALSE
-              AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
-              AND (provenance.project_id = @project_id::uuid OR (provenance.project_id IS NULL AND provenance.organization_id = @organization_id::text))
-              AND (target.project_id = @project_id::uuid OR (target.project_id IS NULL AND target.organization_id = @organization_id::text))
-              AND (bc.project_id = @project_id::uuid OR (bc.project_id IS NULL AND (bc.organization_id IS NULL OR bc.organization_id = @organization_id::text)))
-              AND bs.id = rs.id
-          )
-          AND (rc.project_id = @project_id::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id::text)))
-          AND (
-            EXISTS (
-              SELECT 1
-              FROM remote_session_client_user_session_issuers AS blink
-              WHERE blink.remote_session_client_id = rs.remote_session_client_id
-                AND blink.user_session_issuer_id = s.user_session_issuer_id
-            )
-            OR rs.user_session_issuer_id = s.user_session_issuer_id
-          )
-          AND rs.deleted IS FALSE
-          AND rc.deleted IS FALSE
-          AND ri.deleted IS FALSE
-      )
-    )
+  AND s.id IN (
+    SELECT v.user_session_id
+    FROM visible_user_session_ids(@project_id::uuid, @organization_id::text, sqlc.narg('search')::text, sqlc.arg('agent_subject_urns')::text[], sqlc.arg('first_party_client_name')::text) AS v
   )
+  AND (cardinality(sqlc.arg('identities')::text[]) = 0 OR s.subject_urn::text = ANY(sqlc.arg('identities')::text[]))
+  AND NOT s.subject_urn::text = ANY(sqlc.arg('exclude_identities')::text[])
+  AND (cardinality(sqlc.arg('identity_types')::text[]) = 0 OR split_part(s.subject_urn::text, ':', 1) = ANY(sqlc.arg('identity_types')::text[]))
+  AND NOT split_part(s.subject_urn::text, ':', 1) = ANY(sqlc.arg('exclude_identity_types')::text[])
+  AND (cardinality(sqlc.arg('servers')::uuid[]) = 0 OR s.user_session_issuer_id = ANY(sqlc.arg('servers')::uuid[]))
+  AND NOT s.user_session_issuer_id = ANY(sqlc.arg('exclude_servers')::uuid[])
+  AND (cardinality(sqlc.arg('clients')::text[]) = 0 OR (CASE WHEN s.user_session_client_id IS NOT NULL THEN s.user_session_client_id::text WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN 'dashboard' ELSE 'none' END) = ANY(sqlc.arg('clients')::text[]))
+  AND NOT (CASE WHEN s.user_session_client_id IS NOT NULL THEN s.user_session_client_id::text WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN 'dashboard' ELSE 'none' END) = ANY(sqlc.arg('exclude_clients')::text[])
+  AND (cardinality(sqlc.arg('client_registrations')::text[]) = 0 OR (CASE WHEN c.id IS NULL THEN 'none' WHEN c.client_id_metadata_uri IS NOT NULL THEN 'cimd' WHEN c.assistant_runtime_id IS NOT NULL OR c.assistant_trigger_workload_binding_id IS NOT NULL THEN 'assistant' ELSE 'dcr' END) = ANY(sqlc.arg('client_registrations')::text[]))
+  AND NOT (CASE WHEN c.id IS NULL THEN 'none' WHEN c.client_id_metadata_uri IS NOT NULL THEN 'cimd' WHEN c.assistant_runtime_id IS NOT NULL OR c.assistant_trigger_workload_binding_id IS NOT NULL THEN 'assistant' ELSE 'dcr' END) = ANY(sqlc.arg('exclude_client_registrations')::text[])
+  AND (sqlc.narg('last_used_within')::interval IS NULL OR s.last_used_at >= now() - sqlc.narg('last_used_within')::interval)
+  AND (sqlc.narg('last_used_older_than')::interval IS NULL OR s.last_used_at < now() - sqlc.narg('last_used_older_than')::interval)
+  AND (sqlc.arg('last_used_never')::boolean IS FALSE OR s.last_used_at IS NULL)
   AND (
     sqlc.narg('resource_identity')::text IS NULL
     OR s.resource_identity = sqlc.narg('resource_identity')::text
@@ -2229,6 +2118,126 @@ SELECT
     @remote_set_hash
 FROM client
 RETURNING *;
+
+-- name: ListUserSessionFilterFacets :many
+-- Counts for each filter field over the sessions the list would show. A
+-- field's counts ignore that field's own selection and apply every other
+-- filter, so choosing a value never hides its alternatives. Each field returns
+-- its top facet_limit values plus any selected value, and distinct_count
+-- counts every value that matched. The unattributed row counts sessions on
+-- the gateway's current sign-in server with no recorded origin, under the same
+-- filters.
+WITH base AS MATERIALIZED (
+  SELECT s.subject_urn::text AS identity,
+         CASE
+           WHEN s.subject_urn::text LIKE 'user:%' THEN COALESCE(NULLIF(u.display_name, ''), NULLIF(u.email, ''))
+           WHEN s.subject_urn::text LIKE 'apikey:%' THEN NULLIF(k.name, '')
+           WHEN s.subject_urn::text LIKE 'workload:%' THEN substr(s.subject_urn::text, 47)
+         END AS identity_label,
+         split_part(s.subject_urn::text, ':', 1) AS identity_type,
+         s.user_session_issuer_id::text AS server,
+         iss.slug AS server_label,
+         CASE WHEN s.user_session_client_id IS NOT NULL THEN s.user_session_client_id::text WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN 'dashboard' ELSE 'none' END AS client,
+         COALESCE(c.client_name, CASE WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN sqlc.arg('first_party_client_name')::text END) AS client_label,
+         CASE WHEN c.id IS NULL THEN 'none' WHEN c.client_id_metadata_uri IS NOT NULL THEN 'cimd' WHEN c.assistant_runtime_id IS NOT NULL OR c.assistant_trigger_workload_binding_id IS NOT NULL THEN 'assistant' ELSE 'dcr' END AS client_registration,
+         (sqlc.narg('last_used_within')::interval IS NULL OR s.last_used_at >= now() - sqlc.narg('last_used_within')::interval)
+           AND (sqlc.narg('last_used_older_than')::interval IS NULL OR s.last_used_at < now() - sqlc.narg('last_used_older_than')::interval)
+           AND (sqlc.arg('last_used_never')::boolean IS FALSE OR s.last_used_at IS NULL) AS last_used_ok,
+         COALESCE(s.resource_identity IS NULL AND s.tool_selection->>'resource' IS NULL AND s.user_session_issuer_id = sqlc.narg('unattributed_issuer_id')::uuid, FALSE) AS unattributed
+  FROM user_sessions AS s
+  JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+  LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id
+  LEFT JOIN users AS u
+    ON s.subject_urn::text LIKE 'user:%'
+    AND u.id = split_part(s.subject_urn::text, ':', 2)
+  LEFT JOIN api_keys AS k
+    ON k.id = CASE
+               WHEN s.subject_urn::text LIKE 'apikey:%'
+               THEN split_part(s.subject_urn::text, ':', 2)::uuid
+             END
+  WHERE (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+    AND iss.deleted IS FALSE
+    AND CASE sqlc.narg('status')::text
+          WHEN 'active'  THEN (s.deleted IS FALSE AND s.refresh_expires_at > now())
+          WHEN 'expired' THEN (s.deleted IS FALSE AND s.refresh_expires_at <= now())
+          WHEN 'revoked' THEN (s.deleted IS TRUE)
+          WHEN 'all'     THEN TRUE
+          ELSE (s.deleted IS FALSE)
+        END
+    AND (sqlc.narg('subject_urn')::text IS NULL OR s.subject_urn = sqlc.narg('subject_urn')::text)
+    AND (sqlc.narg('user_session_issuer_id')::uuid IS NULL OR s.user_session_issuer_id = sqlc.narg('user_session_issuer_id')::uuid)
+    AND (sqlc.narg('client_id')::uuid IS NULL OR s.user_session_client_id = sqlc.narg('client_id')::uuid)
+    AND s.id IN (
+      SELECT v.user_session_id
+      FROM visible_user_session_ids(@project_id::uuid, @organization_id::text, sqlc.narg('search')::text, sqlc.arg('agent_subject_urns')::text[], sqlc.arg('first_party_client_name')::text) AS v
+    )
+    AND (
+      sqlc.narg('resource_identity')::text IS NULL
+      OR s.resource_identity = sqlc.narg('resource_identity')::text
+      OR (s.resource_identity IS NULL AND s.tool_selection->>'resource' = sqlc.narg('resource_identity')::text)
+      OR (s.resource_identity IS NULL AND s.tool_selection->>'resource' IS NULL AND s.user_session_issuer_id = sqlc.narg('unattributed_issuer_id')::uuid)
+    )
+),
+flagged AS MATERIALIZED (
+  SELECT base.*,
+         (cardinality(sqlc.arg('identities')::text[]) = 0 OR identity = ANY(sqlc.arg('identities')::text[])) AND NOT identity = ANY(sqlc.arg('exclude_identities')::text[]) AS identity_ok,
+         (cardinality(sqlc.arg('identity_types')::text[]) = 0 OR identity_type = ANY(sqlc.arg('identity_types')::text[])) AND NOT identity_type = ANY(sqlc.arg('exclude_identity_types')::text[]) AS identity_type_ok,
+         (cardinality(sqlc.arg('servers')::uuid[]) = 0 OR server = ANY(sqlc.arg('servers')::uuid[]::text[])) AND NOT server = ANY(sqlc.arg('exclude_servers')::uuid[]::text[]) AS server_ok,
+         (cardinality(sqlc.arg('clients')::text[]) = 0 OR client = ANY(sqlc.arg('clients')::text[])) AND NOT client = ANY(sqlc.arg('exclude_clients')::text[]) AS client_ok,
+         (cardinality(sqlc.arg('client_registrations')::text[]) = 0 OR client_registration = ANY(sqlc.arg('client_registrations')::text[])) AND NOT client_registration = ANY(sqlc.arg('exclude_client_registrations')::text[]) AS client_registration_ok
+  FROM base
+  WHERE last_used_ok
+),
+counts AS (
+  SELECT 'identity' AS field, identity AS value, max(identity_label) AS label, count(*) AS n
+  FROM flagged WHERE NOT unattributed AND identity_type_ok AND server_ok AND client_ok AND client_registration_ok
+  GROUP BY identity
+  UNION ALL
+  SELECT 'identity_type', identity_type, NULL, count(*)
+  FROM flagged WHERE NOT unattributed AND identity_ok AND server_ok AND client_ok AND client_registration_ok
+  GROUP BY identity_type
+  UNION ALL
+  SELECT 'mcp_server', server, max(server_label), count(*)
+  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND client_ok AND client_registration_ok
+  GROUP BY server
+  UNION ALL
+  SELECT 'client', client, max(client_label), count(*)
+  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_registration_ok
+  GROUP BY client
+  UNION ALL
+  SELECT 'client_registration', client_registration, NULL, count(*)
+  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_ok
+  GROUP BY client_registration
+  UNION ALL
+  SELECT 'unattributed', '', NULL, count(*)
+  FROM flagged WHERE unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_ok AND client_registration_ok
+),
+marked AS (
+  SELECT counts.*,
+         CASE field
+           WHEN 'identity' THEN value = ANY(sqlc.arg('identities')::text[] || sqlc.arg('exclude_identities')::text[])
+           WHEN 'identity_type' THEN value = ANY(sqlc.arg('identity_types')::text[] || sqlc.arg('exclude_identity_types')::text[])
+           WHEN 'mcp_server' THEN value = ANY(sqlc.arg('servers')::uuid[]::text[] || sqlc.arg('exclude_servers')::uuid[]::text[])
+           WHEN 'client' THEN value = ANY(sqlc.arg('clients')::text[] || sqlc.arg('exclude_clients')::text[])
+           ELSE value = ANY(sqlc.arg('client_registrations')::text[] || sqlc.arg('exclude_client_registrations')::text[])
+         END AS selected,
+         sqlc.narg('field_search')::text IS NULL
+           OR field <> sqlc.arg('search_field')::text
+           OR label ILIKE sqlc.narg('field_search')::text
+           OR value ILIKE sqlc.narg('field_search')::text
+           OR (field = 'identity' AND value = ANY(sqlc.arg('field_search_agent_subject_urns')::text[])) AS matches
+  FROM counts
+),
+ranked AS (
+  SELECT marked.*,
+         count(*) FILTER (WHERE matches) OVER (PARTITION BY field) AS distinct_count,
+         row_number() OVER (PARTITION BY field, matches ORDER BY n DESC, label ASC NULLS LAST, value ASC) AS rank
+  FROM marked
+)
+SELECT field::text AS field, value::text AS value, COALESCE(label, '')::text AS label, n::bigint AS count, distinct_count::bigint AS distinct_count, matches::boolean AS matches_search
+FROM ranked
+WHERE (matches AND rank <= sqlc.arg('facet_limit')::bigint) OR selected
+ORDER BY field, NOT matches, rank;
 
 -- name: ListUserSessionServerFacets :many
 SELECT s.user_session_issuer_id::text AS value, iss.slug AS display_name, COUNT(*)::bigint AS count

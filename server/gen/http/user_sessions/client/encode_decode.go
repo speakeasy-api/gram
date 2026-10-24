@@ -74,6 +74,45 @@ func EncodeListUserSessionsRequest(encoder func(*http.Request) goahttp.Encoder) 
 		if p.MetaMcpServerID != nil {
 			values.Add("meta_mcp_server_id", *p.MetaMcpServerID)
 		}
+		for _, value := range p.Identities {
+			values.Add("identities", value)
+		}
+		for _, value := range p.ExcludeIdentities {
+			values.Add("exclude_identities", value)
+		}
+		for _, value := range p.IdentityTypes {
+			values.Add("identity_types", value)
+		}
+		for _, value := range p.ExcludeIdentityTypes {
+			values.Add("exclude_identity_types", value)
+		}
+		for _, value := range p.Servers {
+			values.Add("servers", value)
+		}
+		for _, value := range p.ExcludeServers {
+			values.Add("exclude_servers", value)
+		}
+		for _, value := range p.Clients {
+			values.Add("clients", value)
+		}
+		for _, value := range p.ExcludeClients {
+			values.Add("exclude_clients", value)
+		}
+		for _, value := range p.ClientRegistrations {
+			values.Add("client_registrations", value)
+		}
+		for _, value := range p.ExcludeClientRegistrations {
+			values.Add("exclude_client_registrations", value)
+		}
+		if p.LastUsedWithin != nil {
+			values.Add("last_used_within", fmt.Sprintf("%v", *p.LastUsedWithin))
+		}
+		if p.LastUsedOlderThan != nil {
+			values.Add("last_used_older_than", fmt.Sprintf("%v", *p.LastUsedOlderThan))
+		}
+		if p.LastUsedNever != nil {
+			values.Add("last_used_never", fmt.Sprintf("%v", *p.LastUsedNever))
+		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
@@ -518,6 +557,309 @@ func DecodeListFacetsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("userSessions", "listFacets", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildQueryFacetsRequest instantiates a HTTP request object with method and
+// path set to call the "userSessions" service "queryFacets" endpoint
+func (c *Client) BuildQueryFacetsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: QueryFacetsUserSessionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("userSessions", "queryFacets", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeQueryFacetsRequest returns an encoder for requests sent to the
+// userSessions queryFacets server.
+func EncodeQueryFacetsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usersessions.QueryFacetsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("userSessions", "queryFacets", "*usersessions.QueryFacetsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.SubjectUrn != nil {
+			values.Add("subject_urn", *p.SubjectUrn)
+		}
+		if p.UserSessionIssuerID != nil {
+			values.Add("user_session_issuer_id", *p.UserSessionIssuerID)
+		}
+		if p.Status != nil {
+			values.Add("status", *p.Status)
+		}
+		if p.ClientID != nil {
+			values.Add("client_id", *p.ClientID)
+		}
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		if p.MetaMcpServerID != nil {
+			values.Add("meta_mcp_server_id", *p.MetaMcpServerID)
+		}
+		for _, value := range p.Identities {
+			values.Add("identities", value)
+		}
+		for _, value := range p.ExcludeIdentities {
+			values.Add("exclude_identities", value)
+		}
+		for _, value := range p.IdentityTypes {
+			values.Add("identity_types", value)
+		}
+		for _, value := range p.ExcludeIdentityTypes {
+			values.Add("exclude_identity_types", value)
+		}
+		for _, value := range p.Servers {
+			values.Add("servers", value)
+		}
+		for _, value := range p.ExcludeServers {
+			values.Add("exclude_servers", value)
+		}
+		for _, value := range p.Clients {
+			values.Add("clients", value)
+		}
+		for _, value := range p.ExcludeClients {
+			values.Add("exclude_clients", value)
+		}
+		for _, value := range p.ClientRegistrations {
+			values.Add("client_registrations", value)
+		}
+		for _, value := range p.ExcludeClientRegistrations {
+			values.Add("exclude_client_registrations", value)
+		}
+		if p.LastUsedWithin != nil {
+			values.Add("last_used_within", fmt.Sprintf("%v", *p.LastUsedWithin))
+		}
+		if p.LastUsedOlderThan != nil {
+			values.Add("last_used_older_than", fmt.Sprintf("%v", *p.LastUsedOlderThan))
+		}
+		if p.LastUsedNever != nil {
+			values.Add("last_used_never", fmt.Sprintf("%v", *p.LastUsedNever))
+		}
+		if p.Field != nil {
+			values.Add("field", *p.Field)
+		}
+		if p.FieldSearch != nil {
+			values.Add("field_search", *p.FieldSearch)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeQueryFacetsResponse returns a decoder for responses returned by the
+// userSessions queryFacets endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeQueryFacetsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeQueryFacetsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body QueryFacetsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "queryFacets", err)
+			}
+			err = ValidateQueryFacetsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "queryFacets", err)
+			}
+			res := NewQueryFacetsUserSessionFilterFacetsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body QueryFacetsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "queryFacets", err)
+			}
+			err = ValidateQueryFacetsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "queryFacets", err)
+			}
+			return nil, NewQueryFacetsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body QueryFacetsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "queryFacets", err)
+			}
+			err = ValidateQueryFacetsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "queryFacets", err)
+			}
+			return nil, NewQueryFacetsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body QueryFacetsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "queryFacets", err)
+			}
+			err = ValidateQueryFacetsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "queryFacets", err)
+			}
+			return nil, NewQueryFacetsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body QueryFacetsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "queryFacets", err)
+			}
+			err = ValidateQueryFacetsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "queryFacets", err)
+			}
+			return nil, NewQueryFacetsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body QueryFacetsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "queryFacets", err)
+			}
+			err = ValidateQueryFacetsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "queryFacets", err)
+			}
+			return nil, NewQueryFacetsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body QueryFacetsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "queryFacets", err)
+			}
+			err = ValidateQueryFacetsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "queryFacets", err)
+			}
+			return nil, NewQueryFacetsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body QueryFacetsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "queryFacets", err)
+			}
+			err = ValidateQueryFacetsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "queryFacets", err)
+			}
+			return nil, NewQueryFacetsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body QueryFacetsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "queryFacets", err)
+				}
+				err = ValidateQueryFacetsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "queryFacets", err)
+				}
+				return nil, NewQueryFacetsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body QueryFacetsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "queryFacets", err)
+				}
+				err = ValidateQueryFacetsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "queryFacets", err)
+				}
+				return nil, NewQueryFacetsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("userSessions", "queryFacets", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body QueryFacetsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "queryFacets", err)
+			}
+			err = ValidateQueryFacetsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "queryFacets", err)
+			}
+			return nil, NewQueryFacetsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("userSessions", "queryFacets", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1100,6 +1442,39 @@ func unmarshalUserSessionFacetOptionResponseBodyToUsersessionsUserSessionFacetOp
 		Value:       *v.Value,
 		DisplayName: *v.DisplayName,
 		Count:       *v.Count,
+	}
+
+	return res
+}
+
+// unmarshalUserSessionFilterFacetResponseBodyToUsersessionsUserSessionFilterFacet
+// builds a value of type *usersessions.UserSessionFilterFacet from a value of
+// type *UserSessionFilterFacetResponseBody.
+func unmarshalUserSessionFilterFacetResponseBodyToUsersessionsUserSessionFilterFacet(v *UserSessionFilterFacetResponseBody) *usersessions.UserSessionFilterFacet {
+	res := &usersessions.UserSessionFilterFacet{
+		DistinctCount: *v.DistinctCount,
+	}
+	res.Values = make([]*usersessions.UserSessionFilterFacetValue, len(v.Values))
+	for i, val := range v.Values {
+		if val == nil {
+			res.Values[i] = nil
+			continue
+		}
+		res.Values[i] = unmarshalUserSessionFilterFacetValueResponseBodyToUsersessionsUserSessionFilterFacetValue(val)
+	}
+
+	return res
+}
+
+// unmarshalUserSessionFilterFacetValueResponseBodyToUsersessionsUserSessionFilterFacetValue
+// builds a value of type *usersessions.UserSessionFilterFacetValue from a
+// value of type *UserSessionFilterFacetValueResponseBody.
+func unmarshalUserSessionFilterFacetValueResponseBodyToUsersessionsUserSessionFilterFacetValue(v *UserSessionFilterFacetValueResponseBody) *usersessions.UserSessionFilterFacetValue {
+	res := &usersessions.UserSessionFilterFacetValue{
+		Value:         *v.Value,
+		DisplayName:   v.DisplayName,
+		Count:         *v.Count,
+		MatchesSearch: *v.MatchesSearch,
 	}
 
 	return res

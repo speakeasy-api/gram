@@ -5,10 +5,12 @@
 import { userSessionsList } from "../funcs/userSessionsList.js";
 import { userSessionsListFacets } from "../funcs/userSessionsListFacets.js";
 import { userSessionsMint } from "../funcs/userSessionsMint.js";
+import { userSessionsQueryFacets } from "../funcs/userSessionsQueryFacets.js";
 import { userSessionsRevoke } from "../funcs/userSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListUserSessionFacetsResult } from "../models/components/listusersessionfacetsresult.js";
 import { MintUserSessionResponseBody } from "../models/components/mintusersessionresponsebody.js";
+import { UserSessionFilterFacets } from "../models/components/usersessionfilterfacets.js";
 import {
   ListUserSessionFacetsRequest,
   ListUserSessionFacetsSecurity,
@@ -22,6 +24,10 @@ import {
   MintUserSessionRequest,
   MintUserSessionSecurity,
 } from "../models/operations/mintusersession.js";
+import {
+  QueryUserSessionFacetsRequest,
+  QueryUserSessionFacetsSecurity,
+} from "../models/operations/queryusersessionfacets.js";
 import {
   RevokeUserSessionRequest,
   RevokeUserSessionSecurity,
@@ -80,6 +86,25 @@ export class UserSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<MintUserSessionResponseBody> {
     return unwrapAsync(userSessionsMint(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * queryFacets userSessions
+   *
+   * @remarks
+   * Count the values of each session filter field over the sessions userSessions.list would return for the same filters. Each field ignores its own selection and applies every other filter. Returns the top values per field plus any selected value.
+   */
+  async queryFacets(
+    request?: QueryUserSessionFacetsRequest | undefined,
+    security?: QueryUserSessionFacetsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<UserSessionFilterFacets> {
+    return unwrapAsync(userSessionsQueryFacets(
       this,
       request,
       security,

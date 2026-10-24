@@ -25,6 +25,10 @@ type Client struct {
 	// endpoint.
 	ListFacetsDoer goahttp.Doer
 
+	// QueryFacets Doer is the HTTP client used to make requests to the queryFacets
+	// endpoint.
+	QueryFacetsDoer goahttp.Doer
+
 	// MintUserSession Doer is the HTTP client used to make requests to the
 	// mintUserSession endpoint.
 	MintUserSessionDoer goahttp.Doer
@@ -55,6 +59,7 @@ func NewClient(
 	return &Client{
 		ListUserSessionsDoer:  doer,
 		ListFacetsDoer:        doer,
+		QueryFacetsDoer:       doer,
 		MintUserSessionDoer:   doer,
 		RevokeUserSessionDoer: doer,
 		RestoreResponseBody:   restoreBody,
@@ -108,6 +113,30 @@ func (c *Client) ListFacets() goa.Endpoint {
 		resp, err := c.ListFacetsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("userSessions", "listFacets", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// QueryFacets returns an endpoint that makes HTTP requests to the userSessions
+// service queryFacets server.
+func (c *Client) QueryFacets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeQueryFacetsRequest(c.encoder)
+		decodeResponse = DecodeQueryFacetsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildQueryFacetsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.QueryFacetsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessions", "queryFacets", err)
 		}
 		return decodeResponse(resp)
 	}
