@@ -359,6 +359,35 @@ func (q *Queries) FixtureRebindAHPSessionProject(ctx context.Context, arg Fixtur
 	return err
 }
 
+const fixtureSetAHPAuthorizationTimes = `-- name: FixtureSetAHPAuthorizationTimes :exec
+UPDATE ahp_connections
+SET authorization_expires_at = NULL,
+    authorized_at = $1,
+    reauthorized_at = $2
+WHERE organization_id = $3
+  AND project_id = $4
+  AND id = $5
+`
+
+type FixtureSetAHPAuthorizationTimesParams struct {
+	AuthorizedAt   pgtype.Timestamptz
+	ReauthorizedAt pgtype.Timestamptz
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ConnectionID   uuid.UUID
+}
+
+func (q *Queries) FixtureSetAHPAuthorizationTimes(ctx context.Context, arg FixtureSetAHPAuthorizationTimesParams) error {
+	_, err := q.db.Exec(ctx, fixtureSetAHPAuthorizationTimes,
+		arg.AuthorizedAt,
+		arg.ReauthorizedAt,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ConnectionID,
+	)
+	return err
+}
+
 const getAHPAuthorizationGrantForConsume = `-- name: GetAHPAuthorizationGrantForConsume :one
 SELECT
     auth_grant.id, auth_grant.organization_id, auth_grant.project_id, auth_grant.authorization_code_hash, auth_grant.oauth_client_id, auth_grant.connection_id, auth_grant.connection_generation, auth_grant.redirect_uri, auth_grant.code_challenge, auth_grant.expires_at, auth_grant.consumed_at, auth_grant.revoked_at, auth_grant.created_at, auth_grant.updated_at,
@@ -947,7 +976,10 @@ WHERE session.organization_id = $1
   AND session.expires_at > clock_timestamp()
   AND session.revoked_at IS NULL
   AND connection.reauthorization_required_at IS NULL
-  AND connection.authorization_expires_at > clock_timestamp()
+  AND COALESCE(
+      connection.authorization_expires_at,
+      COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+  ) > clock_timestamp()
   AND connection.revoked_at IS NULL
   AND connection.active_generation = session.connection_generation
   AND client.revoked_at IS NULL

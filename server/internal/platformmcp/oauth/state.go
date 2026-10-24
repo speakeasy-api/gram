@@ -742,7 +742,7 @@ func (s *InMemoryStore) validateConnection(connection Connection, clientID strin
 	if err != nil {
 		return err
 	}
-	if connection.ClientID != clientID || stored.ClientID != clientID || stored.Subject != connection.Subject || stored.OrganizationID != connection.OrganizationID {
+	if connection.ClientID != clientID || stored.ClientID != clientID || stored.Subject != connection.Subject || stored.OrganizationID != connection.OrganizationID || stored.ProjectID != connection.ProjectID || stored.ResourceURI != connection.ResourceURI {
 		return ErrClientMismatch
 	}
 	if stored.Generation != connection.Generation {

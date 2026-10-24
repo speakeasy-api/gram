@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/ahprepo"
@@ -131,4 +132,53 @@ func TestAHPOAuthStoreDatabaseLifecycle(t *testing.T) {
 	require.ErrorIs(t, err, platformoauth.ErrNotFound)
 	_, err = mcp.GetClient(ctx, client.ID)
 	require.NoError(t, err)
+}
+
+func TestAHPOAuthStoreNullableAuthorizationExpiry(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name            string
+		authorizedAge   time.Duration
+		reauthorizedAge *time.Duration
+		active          bool
+	}{
+		{name: "authorized_valid", authorizedAge: 89 * 24 * time.Hour, active: true},
+		{name: "authorized_expired", authorizedAge: 91 * 24 * time.Hour},
+		{name: "reauthorized_valid", authorizedAge: 180 * 24 * time.Hour, reauthorizedAge: new(89 * 24 * time.Hour), active: true},
+		{name: "reauthorized_expired", authorizedAge: 180 * 24 * time.Hour, reauthorizedAge: new(91 * 24 * time.Hour)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			db, err := platformMCPInfra.CloneTestDatabase(t, "ahp_nullable_expiry")
+			require.NoError(t, err)
+			principal, project := seedRegistrationLifecycle(t, ctx, db)
+			store := NewPostgresAHPOAuthStore(db)
+			client := platformoauth.Client{ID: uuid.NewString(), Name: "AHP expiry client", RedirectURIs: []string{"https://example.com/callback"}}
+			require.NoError(t, store.RegisterClient(ctx, client))
+			now := time.Now().UTC()
+			connection := platformoauth.Connection{ID: uuid.NewString(), ClientID: client.ID, Subject: "user:" + principal.UserID, OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), ResourceURI: "https://example.com/ahp/" + project.ID.String(), Generation: uuid.NewString(), AuthorizationExpiresAt: now.Add(time.Hour)}
+			require.NoError(t, store.RegisterConnection(ctx, connection))
+			session := platformoauth.Session{ID: uuid.NewString(), ClientID: client.ID, Connection: connection, JTI: uuid.NewString(), RefreshHash: opaqueHash(uuid.NewString()), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}
+			require.NoError(t, store.CreateSession(ctx, session))
+			reauthorizedAt := pgtype.Timestamptz{}
+			if tc.reauthorizedAge != nil {
+				reauthorizedAt = timestamp(now.Add(-*tc.reauthorizedAge))
+			}
+			require.NoError(t, ahprepo.New(db).FixtureSetAHPAuthorizationTimes(ctx, ahprepo.FixtureSetAHPAuthorizationTimesParams{
+				OrganizationID: principal.OrganizationID, ProjectID: project.ID, ConnectionID: uuid.MustParse(connection.ID),
+				AuthorizedAt: timestamp(now.Add(-tc.authorizedAge)), ReauthorizedAt: reauthorizedAt,
+			}))
+			active, err := store.GetActiveSession(ctx, principal.OrganizationID, session.JTI)
+			if tc.active {
+				require.NoError(t, err)
+				require.Equal(t, connection.ProjectID, active.Connection.ProjectID)
+				require.Equal(t, connection.ResourceURI, active.Connection.ResourceURI)
+			} else {
+				require.ErrorIs(t, err, platformoauth.ErrNotFound)
+			}
+			_, err = store.GetActiveSession(ctx, "other-organization", session.JTI)
+			require.ErrorIs(t, err, platformoauth.ErrNotFound)
+		})
+	}
 }

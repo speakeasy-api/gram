@@ -20,12 +20,14 @@ import (
 type ahpOAuthStub struct {
 	calls   int
 	project string
+	token   string
 	err     error
 }
 
 func (a *ahpOAuthStub) AuthenticateAHP(ctx context.Context, token, project string) (context.Context, error) {
 	a.calls++
 	a.project = project
+	a.token = token
 	return ctx, a.err
 }
 
@@ -69,6 +71,7 @@ func TestAHPOAuthAdmission(t *testing.T) {
 			require.Equal(t, tc.calls, oauth.calls)
 			if tc.calls > 0 {
 				require.Equal(t, tc.project, oauth.project)
+				require.Equal(t, tc.bearer, oauth.token)
 			}
 			if tc.status == 401 && (tc.calls > 0 || (tc.bearer == "" && tc.key == "")) {
 				require.Equal(t, `Bearer resource_metadata="https://gateway.example.test/.well-known/oauth-protected-resource/ahp"`, response.Header().Get("WWW-Authenticate"))

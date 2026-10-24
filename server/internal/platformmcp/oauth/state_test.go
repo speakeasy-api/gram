@@ -579,3 +579,51 @@ func pkceChallenge(verifier string) string {
 	hash := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(hash[:])
 }
+
+func TestInMemoryStore_RejectsMismatchedProjectResource(t *testing.T) {
+	t.Parallel()
+	for _, dimension := range []string{"project", "resource"} {
+		for _, operation := range []string{"grant", "session", "exchange", "refresh"} {
+			t.Run(dimension+"/"+operation, func(t *testing.T) {
+				t.Parallel()
+				_, grant := seededGrant(t)
+				grant.Connection.ProjectID = "project-1"
+				grant.Connection.ResourceURI = "https://api.example.test/ahp"
+				store := platformoauth.NewInMemoryStore()
+				require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: grant.ClientID}))
+				require.NoError(t, store.RegisterConnection(t.Context(), grant.Connection))
+				require.NoError(t, store.IssueGrant(t.Context(), grant))
+				altered := grant.Connection
+				if dimension == "project" {
+					altered.ProjectID = "project-2"
+				} else {
+					altered.ResourceURI = "https://api.example.test/platform-mcp"
+				}
+				session := sessionFor(altered, grant.ClientID, "refresh-altered")
+				switch operation {
+				case "grant":
+					alteredGrant := grant
+					alteredGrant.Code = "altered-code"
+					alteredGrant.Connection = altered
+					require.ErrorIs(t, store.IssueGrant(t.Context(), alteredGrant), platformoauth.ErrClientMismatch)
+				case "session":
+					require.ErrorIs(t, store.CreateSession(t.Context(), session), platformoauth.ErrClientMismatch)
+				case "exchange":
+					_, err := store.ExchangeGrant(t.Context(), platformoauth.ExchangeGrantInput{ConsumeGrantInput: consumeInput(grant), Session: session})
+					require.ErrorIs(t, err, platformoauth.ErrClientMismatch)
+				case "refresh":
+					original := sessionFor(grant.Connection, grant.ClientID, "refresh-original")
+					require.NoError(t, store.CreateSession(t.Context(), original))
+					_, err := store.RotateSession(t.Context(), platformoauth.RotateSessionInput{OrganizationID: grant.Connection.OrganizationID, RefreshHash: original.RefreshHash, ClientID: grant.ClientID, Generation: grant.Connection.Generation, Now: time.Now(), Replacement: session})
+					require.ErrorIs(t, err, platformoauth.ErrClientMismatch)
+					prepared, err := store.PrepareRefresh(t.Context(), platformoauth.PrepareRefreshInput{OrganizationID: grant.Connection.OrganizationID, RefreshHash: original.RefreshHash, ClientID: grant.ClientID, Now: time.Now()})
+					require.NoError(t, err)
+					require.Equal(t, grant.Connection, prepared.Connection)
+				}
+				valid, err := store.ValidateGrant(t.Context(), consumeInput(grant))
+				require.NoError(t, err)
+				require.Equal(t, grant.Connection, valid.Connection)
+			})
+		}
+	}
+}

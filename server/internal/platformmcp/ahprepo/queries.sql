@@ -441,7 +441,10 @@ WHERE session.organization_id = @organization_id
   AND session.expires_at > clock_timestamp()
   AND session.revoked_at IS NULL
   AND connection.reauthorization_required_at IS NULL
-  AND connection.authorization_expires_at > clock_timestamp()
+  AND COALESCE(
+      connection.authorization_expires_at,
+      COALESCE(connection.reauthorized_at, connection.authorized_at) + INTERVAL '90 days'
+  ) > clock_timestamp()
   AND connection.revoked_at IS NULL
   AND connection.active_generation = session.connection_generation
   AND client.revoked_at IS NULL;
@@ -460,3 +463,12 @@ SET project_id = @replacement_project_id
 WHERE organization_id = @organization_id
   AND project_id = @project_id
   AND connection_id = @connection_id;
+
+-- name: FixtureSetAHPAuthorizationTimes :exec
+UPDATE ahp_connections
+SET authorization_expires_at = NULL,
+    authorized_at = @authorized_at,
+    reauthorized_at = sqlc.narg('reauthorized_at')
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND id = @connection_id;

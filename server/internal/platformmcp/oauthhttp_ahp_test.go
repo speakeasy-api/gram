@@ -88,10 +88,10 @@ func ahpProtocolConsent(t *testing.T, s *OAuthHTTP) (url.Values, string) {
 	form.Set("action", "approve")
 	return form, w.Body.String()
 }
-func ahpProtocolCode(t *testing.T, s *OAuthHTTP) string {
+func ahpProtocolCode(t *testing.T, s *OAuthHTTP, projectID string) string {
 	t.Helper()
 	form, _ := ahpProtocolConsent(t, s)
-	form.Set("project_id", "project-1")
+	form.Set("project_id", projectID)
 	w := ahpProtocolPost(s.ConnectHandler(), "/ahp/connect", form)
 	require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
 	location, err := url.Parse(w.Header().Get("Location"))
@@ -147,16 +147,25 @@ func TestOAuthHTTPAHPConsentProjects(t *testing.T) {
 }
 func TestOAuthHTTPAHPTokenAndLiveProjectRevocation(t *testing.T) {
 	t.Parallel()
-	for _, revokeBeforeExchange := range []bool{false, true} {
-		t.Run(map[bool]string{false: "refresh", true: "exchange"}[revokeBeforeExchange], func(t *testing.T) {
+	for _, tc := range []struct {
+		name                 string
+		projectID            string
+		revokeBeforeExchange bool
+	}{
+		{"default refresh", "project-1", false},
+		{"default exchange", "project-1", true},
+		{"nondefault refresh", "project-2", false},
+		{"nondefault exchange", "project-2", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s, p := newAHPProtocolHTTP(t, []AHPProjectOption{{ID: "project-1", Slug: "default"}})
-			code := ahpProtocolCode(t, s)
-			if revokeBeforeExchange {
+			s, p := newAHPProtocolHTTP(t, []AHPProjectOption{{ID: "project-1", Slug: "default"}, {ID: "project-2", Slug: "other"}})
+			code := ahpProtocolCode(t, s, tc.projectID)
+			if tc.revokeBeforeExchange {
 				p.revoked = true
 			}
 			w := ahpProtocolExchange(s, code, ahpTestResource)
-			if revokeBeforeExchange {
+			if tc.revokeBeforeExchange {
 				require.NotEqual(t, http.StatusOK, w.Code)
 				require.Contains(t, w.Body.String(), "invalid_grant")
 				return
@@ -167,6 +176,12 @@ func TestOAuthHTTPAHPTokenAndLiveProjectRevocation(t *testing.T) {
 				RefreshToken string `json:"refresh_token"`
 			}
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &tokens))
+			{
+				stored, err := s.store.GetSessionByRefreshHash(t.Context(), "org-1", opaqueHash(tokens.RefreshToken))
+				require.NoError(t, err)
+				require.Equal(t, tc.projectID, stored.Connection.ProjectID)
+				require.Equal(t, ahpTestResource, stored.Connection.ResourceURI)
+			}
 			claims, err := s.signer.ValidateExactAudience(tokens.AccessToken, ahpTestResource)
 			require.NoError(t, err)
 			require.Equal(t, []string{ahpTestResource}, []string(claims.Audience))
@@ -177,6 +192,12 @@ func TestOAuthHTTPAHPTokenAndLiveProjectRevocation(t *testing.T) {
 			w = ahpProtocolPost(s.TokenHandler(), "/ahp/token", refresh)
 			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &tokens))
+			{
+				stored, err := s.store.GetSessionByRefreshHash(t.Context(), "org-1", opaqueHash(tokens.RefreshToken))
+				require.NoError(t, err)
+				require.Equal(t, tc.projectID, stored.Connection.ProjectID)
+				require.Equal(t, ahpTestResource, stored.Connection.ResourceURI)
+			}
 			_, err = s.signer.ValidateExactAudience(tokens.AccessToken, ahpTestResource)
 			require.NoError(t, err)
 			p.revoked = true
@@ -184,7 +205,7 @@ func TestOAuthHTTPAHPTokenAndLiveProjectRevocation(t *testing.T) {
 			w = ahpProtocolPost(s.TokenHandler(), "/ahp/token", refresh)
 			require.NotEqual(t, http.StatusOK, w.Code)
 			require.Contains(t, w.Body.String(), "invalid_grant")
-			require.Equal(t, []string{"project-1", "project-1", "project-1", "project-1"}, p.authorized)
+			require.Equal(t, []string{tc.projectID, tc.projectID, tc.projectID, tc.projectID}, p.authorized)
 		})
 	}
 }
@@ -223,7 +244,7 @@ func TestOAuthHTTPAHPResourceAndNamespaceIsolation(t *testing.T) {
 	mcp.ConnectHandler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/platform-mcp/connect?state=33333333-3333-4333-8333-333333333333", nil))
 	require.Equal(t, http.StatusOK, w.Code)
 
-	code := ahpProtocolCode(t, s)
+	code := ahpProtocolCode(t, s, "project-1")
 	w = ahpProtocolExchange(s, code, "https://gram.example/platform-mcp")
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "invalid_target")

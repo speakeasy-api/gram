@@ -25,10 +25,18 @@ func TestOAuthChallengeRejectsPrefixedStateWithoutConsumption(t *testing.T) {
 			ahp, _ := newAHPProtocolHTTP(t, []AHPProjectOption{{ID: "project-1", Slug: "default"}})
 			form, _ := ahpProtocolConsent(t, ahp)
 			state := form.Get("state")
+			workspace := route.path == "create-workspace" || route.path == "join-workspace"
+			if workspace {
+				challenge, err := ahp.readChallenge(t.Context(), state, false)
+				require.NoError(t, err)
+				challenge.OrganizationID = ""
+				challenge.VerifiedEmail = testVerifiedEmail
+				require.NoError(t, ahp.cache.Store(t.Context(), challenge))
+			}
 			mcp := *ahp
 			mcp.ahpProjects = nil
 			mcp.workspaces = &workspaceTestState{}
-			attack := url.Values{"state": {"ahp:" + state}, "csrf_token": {form.Get("csrf_token")}, "action": {"approve"}, "organization_id": {"org-1"}, "code": {"idp-code"}}
+			attack := url.Values{"state": {"ahp:" + state}, "csrf_token": {form.Get("csrf_token")}, "action": {"approve"}, "organization_id": {"org-1"}, "code": {"idp-code"}, "workspace_name": {"Workspace"}, "invitation_id": {"invitation-1"}}
 			target := "/platform-mcp/" + route.path
 			req := httptest.NewRequest(route.method, target+"?"+attack.Encode(), strings.NewReader(attack.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -38,6 +46,13 @@ func TestOAuthChallengeRejectsPrefixedStateWithoutConsumption(t *testing.T) {
 			require.GreaterOrEqual(t, response.Code, 400)
 			_, err := ahp.readChallenge(t.Context(), state, false)
 			require.NoError(t, err, "foreign state must not consume the AHP challenge")
+			if workspace {
+				challenge, err := ahp.readChallenge(t.Context(), state, false)
+				require.NoError(t, err)
+				require.Empty(t, challenge.OrganizationID)
+				challenge.OrganizationID = "org-1"
+				require.NoError(t, ahp.cache.Store(t.Context(), challenge))
+			}
 			valid := httptest.NewRecorder()
 			ahp.ConnectHandler().ServeHTTP(valid, httptest.NewRequest(http.MethodGet, "/ahp/connect?state="+state, nil))
 			require.Equal(t, http.StatusOK, valid.Code)

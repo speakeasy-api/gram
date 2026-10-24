@@ -173,29 +173,31 @@
             <dd class="mt-1 ml-0 text-sm">{{.OrganizationName}}</dd>
           </div>
           {{if .AHP}}
-          <div class="flex flex-col gap-2">
-            <label class="text-eyebrow" for="project_id">Project</label>
-            {{$hasSelection := false}}
-            {{range .Projects}}{{if eq .ID $.SelectedProjectID}}{{$hasSelection = true}}{{end}}{{end}}
-            <select
-              id="project_id"
-              name="project_id"
-              form="ahp-approve"
-              required
-              {{if not .Projects}}disabled{{end}}
-              class="bg-background w-full border px-4 py-3 text-sm"
-            >
-              <option value="" disabled {{if not $hasSelection}}selected{{end}}>Choose a project</option>
-              {{range .Projects}}
-              <option value="{{.ID}}" {{if eq .ID $.SelectedProjectID}}selected{{end}}>{{.Name}} ({{.Slug}})</option>
+          <div>
+            <dt class="text-eyebrow"><label for="project_id">Project</label></dt>
+            <dd class="mt-1 ml-0 flex flex-col gap-2">
+              {{$hasSelection := false}}
+              {{range .Projects}}{{if eq .ID $.SelectedProjectID}}{{$hasSelection = true}}{{end}}{{end}}
+              <select
+                id="project_id"
+                name="project_id"
+                form="ahp-approve"
+                required
+                {{if not .Projects}}disabled{{end}}
+                class="bg-background w-full border px-4 py-3 text-sm"
+              >
+                <option value="" disabled {{if not $hasSelection}}selected{{end}}>Choose a project</option>
+                {{range .Projects}}
+                <option value="{{.ID}}" {{if eq .ID $.SelectedProjectID}}selected{{end}}>{{.Name}} ({{.Slug}})</option>
+                {{end}}
+              </select>
+              {{if not .Projects}}
+              <p class="text-sm text-muted-foreground">
+                No eligible projects are available. Ask your organization administrator
+                for access to a project, then try connecting again. You can cancel below.
+              </p>
               {{end}}
-            </select>
-            {{if not .Projects}}
-            <p class="text-sm text-muted-foreground">
-              No eligible projects are available. Ask your organization administrator
-              for access to a project, then try connecting again. You can cancel below.
-            </p>
-            {{end}}
+            </dd>
           </div>
           {{end}}
           {{if .ClientIDOrigin}}
