@@ -144,9 +144,9 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 	registration := uuid.NullUUID{UUID: upstreamClient, Valid: true}
 	var typedClientID uuid.UUID
 	for _, kind := range []string{"remote_session", "ema"} {
-		id, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: "admin", RemoteSessionClientID: registration})
+		id, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: "backfill", RemoteSessionClientID: registration})
 		require.NoError(t, err)
-		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: memberID, AuthClientID: id}))
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: memberID, AuthClientID: id, Source: "backfill"}))
 		if kind == "remote_session" {
 			typedClientID = id
 		}

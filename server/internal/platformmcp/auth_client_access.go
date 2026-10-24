@@ -144,3 +144,81 @@ func (s *AccessRoleMutationService) SetRoleAuthClientAccess(ctx context.Context,
 	}
 	return SetMCPRoleAuthClientAccessOutput{Role: updated.Name, AuthClient: access[index]}, nil
 }
+
+const operationOfferMCPUpstreamCredential = "offer_mcp_upstream_credential" //nolint:gosec // G101 false positive: a tool name, not a credential.
+
+type OfferMCPUpstreamCredentialInput struct {
+	ProjectID    string `json:"project_id" jsonschema:"explicit project ID that owns the configured MCP that should offer the credential"`
+	MCPID        string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp"`
+	AuthClientID string `json:"auth_client_id" jsonschema:"credential ID another server reports in get_mcp_connection_settings upstream_authentication"`
+	Confirmed    bool   `json:"confirmed" jsonschema:"set true only after the user confirms this exact credential and server; the credential stays one credential, so changing or rotating it changes every server that offers it"`
+}
+
+type OfferMCPUpstreamCredentialOutput struct {
+	UpstreamAuthentication *MCPUpstreamAuthentication `json:"upstream_authentication" jsonschema:"the server's upstream authentication after the change"`
+}
+
+// OfferUpstreamCredential lets one more server offer an existing upstream
+// credential, through the same write the dashboard uses. It grants nobody
+// permission to use the credential or access to the server.
+func (s *AccessRoleMutationService) OfferUpstreamCredential(ctx context.Context, principal Principal, input OfferMCPUpstreamCredentialInput) (OfferMCPUpstreamCredentialOutput, error) {
+	if !input.Confirmed {
+		return OfferMCPUpstreamCredentialOutput{}, &AccessRoleMutationError{Code: "confirmation_required", Message: "Show the credential, the server that will offer it, and every server already offering it; ask the user to confirm, then retry with confirmed: true.", Cause: ErrAccessRoleMutationInvalid}
+	}
+	if !s.valid() || s.audit == nil {
+		return OfferMCPUpstreamCredentialOutput{}, accessRoleMutationUnavailable(nil)
+	}
+	project, _, err := s.admit(ctx, principal, input.ProjectID)
+	if err != nil {
+		return OfferMCPUpstreamCredentialOutput{}, err
+	}
+	mcpID, err := uuid.Parse(strings.TrimSpace(input.MCPID))
+	if err != nil {
+		return OfferMCPUpstreamCredentialOutput{}, accessRoleMutationNotFound()
+	}
+	clientID, err := uuid.Parse(strings.TrimSpace(input.AuthClientID))
+	if err != nil {
+		return OfferMCPUpstreamCredentialOutput{}, accessRoleMutationNotFound()
+	}
+
+	if _, err := platformrepo.New(s.reads.db).GetPlatformMCPInventoryItem(ctx, platformrepo.GetPlatformMCPInventoryItemParams{
+		OrganizationID:       principal.OrganizationID,
+		ConnectionID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ConnectionGeneration: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserID:               inventoryText(principal.UserID),
+		ActingSurface:        inventoryText(string(principal.surface())),
+		McpServerID:          mcpID,
+		ProjectID:            project.ID,
+	}); errors.Is(err, pgx.ErrNoRows) {
+		return OfferMCPUpstreamCredentialOutput{}, accessRoleMutationNotFound()
+	} else if err != nil {
+		return OfferMCPUpstreamCredentialOutput{}, accessRoleMutationUnavailable(err)
+	}
+
+	if err := s.budget.AllowConnectionOrOrganization(ctx, principal); err != nil {
+		if errors.Is(err, ErrOperationRateLimited) {
+			return OfferMCPUpstreamCredentialOutput{}, &AccessRoleMutationError{Code: "rate_limited", Message: "The access role mutation rate limit was reached.", Cause: err}
+		}
+		return OfferMCPUpstreamCredentialOutput{}, accessRoleMutationUnavailable(err)
+	}
+	if _, err := authclients.AttachToServer(ctx, s.reads.db, s.audit, principal.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), nil, clientID, mcpID); err != nil {
+		var refusal *authclients.AttachRefusedError
+		if !errors.As(err, &refusal) {
+			return OfferMCPUpstreamCredentialOutput{}, accessRoleMutationUnavailable(err)
+		}
+		switch refusal.Code {
+		case authclients.AttachNotFound:
+			return OfferMCPUpstreamCredentialOutput{}, accessRoleMutationNotFound()
+		case authclients.AttachConflict:
+			return OfferMCPUpstreamCredentialOutput{}, accessRoleMutationConflict(refusal.Message)
+		case authclients.AttachInvalid:
+		}
+		return OfferMCPUpstreamCredentialOutput{}, accessRoleMutationInvalid(refusal.Message)
+	}
+
+	upstream, err := upstreamAuthentication(ctx, s.reads.db, principal.OrganizationID, mcpID)
+	if err != nil {
+		return OfferMCPUpstreamCredentialOutput{}, fmt.Errorf("read upstream authentication after offering credential: %w", err)
+	}
+	return OfferMCPUpstreamCredentialOutput{UpstreamAuthentication: upstream}, nil
+}

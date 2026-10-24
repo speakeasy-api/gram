@@ -15203,6 +15203,198 @@ paths:
       x-speakeasy-name-override: transferOut
       x-speakeasy-react-hook:
         disabled: true
+  /rpc/authClients.attachToMcpServer:
+    post:
+      description: 'Offer an existing auth client on another MCP server instead of creating a copy. The client stays one client: changing or rotating it changes upstream behavior on every server that offers it. Offering a client grants nobody permission to use it or access to the server. Takes effect only where typed auth client resolution is enforced. Requires org:admin.'
+      operationId: attachAuthClientToMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachAuthClientToMcpServerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: attachAuthClientToMcpServer authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: attachToMcpServer
+      x-speakeasy-react-hook:
+        name: AttachAuthClientToMcpServer
+  /rpc/authClients.create:
+    post:
+      description: 'Create an auth client and, optionally, offer it on MCP servers. A remote_session or service_account client authenticates through an existing OAuth registration whose credential owner matches its type; a static_credential or pass_through client authenticates with its own headers. Creating a client gives nobody permission to use it: set its audience to decide who may. Takes effect only where typed auth client resolution is enforced. Requires org:admin.'
+      operationId: createAuthClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAuthClientRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: createAuthClient authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateAuthClient
   /rpc/authClients.detachFromMcpServer:
     post:
       description: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.
@@ -15829,6 +16021,102 @@ paths:
       x-speakeasy-name-override: setAudience
       x-speakeasy-react-hook:
         name: SetAuthClientAudience
+  /rpc/authClients.setHeaders:
+    post:
+      description: Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.
+      operationId: setAuthClientHeaders
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAuthClientHeadersRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: setAuthClientHeaders authClients
+      tags:
+        - authClients
+      x-speakeasy-name-override: setHeaders
+      x-speakeasy-react-hook:
+        name: SetAuthClientHeaders
   /rpc/authClients.setMcpServerUpstreamAuthRequirement:
     post:
       description: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.
@@ -85639,6 +85927,20 @@ components:
           description: The toolset slug exposed to the assistant.
       required:
         - toolset_slug
+    AttachAuthClientToMcpServerRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The auth client id.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The MCP server id.
+          format: uuid
+      required:
+        - id
+        - mcp_server_id
     AttachBindingRequestBody:
       type: object
       properties:
@@ -85950,6 +86252,33 @@ components:
         - is_required
         - is_secret
         - has_stored_value
+    AuthClientHeaderInput:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What the header is for.
+        is_required:
+          type: boolean
+          description: Whether a caller must supply the header when it is copied from the request.
+          default: false
+        is_secret:
+          type: boolean
+          description: Whether the value is secret. Secret values are stored encrypted and never returned.
+          default: false
+        name:
+          type: string
+          description: The header name.
+          minLength: 1
+        value:
+          type: string
+          description: The value to send. Omit it on a secret header that already stores one to keep the stored value.
+        value_from_request_header:
+          type: string
+          description: The caller's request header to copy the value from, for pass-through headers.
+      description: A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a secret header already storing a value may omit both to keep it.
+      required:
+        - name
     AuthClientServer:
       type: object
       properties:
@@ -87808,6 +88137,43 @@ components:
         - model
         - instructions
         - toolsets
+    CreateAuthClientRequestBody:
+      type: object
+      properties:
+        client_type:
+          type: string
+          description: How the client authenticates upstream.
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientHeaderInput'
+          description: The headers the client sends upstream. Required for static_credential and pass_through clients. Token-generating clients produce their own Authorization header, which cannot be configured.
+        mcp_server_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: MCP servers that should offer the client.
+        name:
+          type: string
+          description: The client's name.
+          minLength: 1
+        project_id:
+          type: string
+          description: Confine the client to one project. Omit to share it across the organization's projects.
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The OAuth registration behind a remote_session or service_account client.
+          format: uuid
+      required:
+        - client_type
+        - name
     CreateAwsIamCredentialForm:
       type: object
       properties:
@@ -108344,6 +108710,21 @@ components:
         - id
         - expected_version
         - entries
+    SetAuthClientHeadersRequestBody:
+      type: object
+      properties:
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthClientHeaderInput'
+          description: Every header the client should send.
+        id:
+          type: string
+          description: The auth client id.
+          format: uuid
+      required:
+        - id
+        - headers
     SetAuthenticationHostRequestBody:
       type: object
       properties:
