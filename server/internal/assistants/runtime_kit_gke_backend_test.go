@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -51,8 +52,8 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 	input.Command, input.Args = KitGatewayCommand(int(input.GuestPort))
 	fences := new(int)
 	k, err := NewKitGKERuntimeBackend(KitGKERuntimeConfig{GKE: GKERuntimeConfig{Dynamic: client, Namespace: input.Identity.Namespace, ServerURL: &url.URL{Scheme: "https", Host: "example.invalid"}}, Provision: input, AuthorityStore: newKitGKEAuthorityTestStore(),
-		Bootstrap: func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error) {
-			return KitLocalBootstrap{AgentsMD: input.AgentsMD, InferenceJSON: input.InferenceJSON, MCPJSON: input.MCPJSON, GatewayToken: []byte(uuid.NewString())}, nil
+		Bootstrap: func(_ context.Context, r assistantRuntimeRecord) (KitLocalBootstrap, error) {
+			return KitLocalBootstrap{Model: input.Model, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: input.InferenceEndpoint, Workload: &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "test-subject", ServiceAccount: "kit-workload-" + uuid.NewString(), Audience: input.WorkloadAudience}, AgentsMD: input.AgentsMD, MCPJSON: input.MCPJSON, GatewayToken: []byte(uuid.NewString())}, nil
 		},
 		Fence: func(context.Context, assistantRuntimeRecord) error { *fences++; return nil },
 		Protocol: func(_ context.Context, _ assistantRuntimeRecord, endpoint *url.URL) (runtimeProtocol, error) {
@@ -76,7 +77,13 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 			labels[gkeClaimUIDLabel] = string(obj.GetUID())
 			pod.SetLabels(labels)
 			pod.SetAnnotations(obj.GetAnnotations())
-			pod.Object["spec"] = map[string]any{"containers": []any{map[string]any{"name": "kit", "image": k.ImageRef()}, map[string]any{"name": "acp-tls", "image": kitGKETLSProxyImage}}}
+			template, err := client.Tracker().Get(kitTemplateGVR, k.config.GKE.Namespace, kitGKEName(r))
+			require.NoError(t, err)
+			templateObject, ok := template.(*unstructured.Unstructured)
+			require.True(t, ok)
+			spec, _, err := unstructured.NestedMap(templateObject.Object, "spec", "podTemplate", "spec")
+			require.NoError(t, err)
+			pod.Object["spec"] = spec
 			pod.Object["status"] = map[string]any{"phase": "Running", "podIP": "10.1.2.3", "containerStatuses": []any{map[string]any{"name": "kit", "ready": true, "restartCount": int64(0), "imageID": "containerd://sha256:" + strings.Repeat("a", 64), "containerID": "containerd://instance"}, map[string]any{"name": "acp-tls", "ready": true, "restartCount": int64(0), "imageID": "containerd://sha256:" + strings.Repeat("c", 64)}}}
 			require.NoError(t, client.Tracker().Create(gkePodGVR, pod, k.config.GKE.Namespace))
 		}
@@ -212,6 +219,7 @@ func TestKitGKEBackendCheckpointRestorePersistsAuthority(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "stopped", state.Phase)
 	require.Equal(t, "sha256:"+strings.Repeat("c", 64), state.Metadata.ProxyImageDigest)
+	previousWorkload, previousSAUID := state.Metadata.Workload, state.Metadata.ServiceAccountUID
 	previousCertificate := append([]byte(nil), state.Metadata.TLSCertificate...)
 	require.NotEmpty(t, previousCertificate)
 	require.Equal(t, types.UID("snapshot-uid"), state.SnapshotUID)
@@ -228,6 +236,10 @@ func TestKitGKEBackendCheckpointRestorePersistsAuthority(t *testing.T) {
 	require.Equal(t, "active", state.Phase)
 	require.Equal(t, "sha256:"+strings.Repeat("c", 64), state.Metadata.ProxyImageDigest)
 	require.NotEqual(t, previousCertificate, state.Metadata.TLSCertificate)
+	require.NotEqual(t, previousWorkload.ServiceAccount, state.Metadata.Workload.ServiceAccount)
+	require.NotEqual(t, previousSAUID, state.Metadata.ServiceAccountUID)
+	_, err = client.Resource(kitServiceAccountGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), previousWorkload.ServiceAccount, metav1.GetOptions{})
+	require.True(t, apierrors.IsNotFound(err))
 	_, err = kitGKETLSConfig(state.Metadata.TLSCertificate, kitGKEName(r)+".kit.internal")
 	require.NoError(t, err)
 	template, err := client.Resource(kitTemplateGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
@@ -496,4 +508,79 @@ func TestKitGKEBackendRestoreRejectsProxyImageDrift(t *testing.T) {
 	})
 	_, err = k.Ensure(t.Context(), r)
 	require.ErrorContains(t, err, "TLS proxy image digest compatibility mismatch")
+}
+
+func TestKitGKEWorkloadServiceAccountOwnership(t *testing.T) {
+	t.Parallel()
+	k, client, r, fences := kitGKEBackendFixture(t)
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	m, err := k.metadata(r)
+	require.NoError(t, err)
+	require.NotNil(t, m.Workload)
+	require.NotEmpty(t, m.ServiceAccountUID)
+	sa, err := client.Resource(kitServiceAccountGVR).Namespace(m.Namespace).Get(t.Context(), m.Workload.ServiceAccount, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, m.ServiceAccountUID, sa.GetUID())
+	sa.SetUID("unowned-replacement")
+	_, err = client.Resource(kitServiceAccountGVR).Namespace(m.Namespace).Update(t.Context(), sa, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	_, err = k.Ensure(t.Context(), r)
+	require.ErrorContains(t, err, "authority mismatch")
+	require.ErrorContains(t, k.Reap(t.Context(), r), "authority mismatch")
+	require.Zero(t, *fences)
+}
+
+func TestKitGKEWorkloadCollisionIsNotAdopted(t *testing.T) {
+	t.Parallel()
+	k, client, r, _ := kitGKEBackendFixture(t)
+	bootstrap := k.config.Bootstrap
+	b, err := bootstrap(t.Context(), r)
+	require.NoError(t, err)
+	k.config.Bootstrap = func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error) { return b, nil }
+	input := k.config.Provision
+	input.Identity = k.identity(r)
+	input.WorkloadServiceAccount = b.Workload.ServiceAccount
+	sa := kitWorkloadServiceAccount(input)
+	sa.SetUID("unowned")
+	require.NoError(t, client.Tracker().Create(kitServiceAccountGVR, sa, input.Identity.Namespace))
+	var fenced *KitWorkloadBinding
+	k.config.Fence = func(_ context.Context, record assistantRuntimeRecord) error {
+		var m kitGKEBackendMetadata
+		require.NoError(t, json.Unmarshal(record.BackendMetadataJSON, &m))
+		fenced = m.Workload
+		return nil
+	}
+	_, err = k.Ensure(t.Context(), r)
+	require.Error(t, err)
+	require.Equal(t, b.Workload, fenced)
+	existing, err := client.Resource(kitServiceAccountGVR).Namespace(input.Identity.Namespace).Get(t.Context(), sa.GetName(), metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, types.UID("unowned"), existing.GetUID())
+	for _, action := range client.Actions() {
+		require.NotEqual(t, "delete", action.GetVerb())
+	}
+}
+
+func TestKitGKELegacyAuthorityReprovisions(t *testing.T) {
+	t.Parallel()
+	k, client, r, fences := kitGKEBackendFixture(t)
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	var m kitGKEBackendMetadata
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &m))
+	require.NoError(t, client.Resource(kitServiceAccountGVR).Namespace(m.Namespace).Delete(t.Context(), m.Workload.ServiceAccount, metav1.DeleteOptions{}))
+	m.Workload, m.ServiceAccountUID = nil, ""
+	legacy, err := json.Marshal(m)
+	require.NoError(t, err)
+	require.NoError(t, k.config.AuthorityStore.Save(t.Context(), r.LifecycleTx, r, result.BackendMetadataJSON, legacy))
+	r.BackendMetadataJSON = legacy
+	result, err = k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	require.True(t, result.ColdStart)
+	require.Equal(t, 1, *fences)
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &m))
+	require.NotNil(t, m.Workload)
+	require.NotEmpty(t, m.ServiceAccountUID)
 }

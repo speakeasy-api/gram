@@ -207,10 +207,6 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 // like KeyType, never from client-claimed headers — so a caller cannot pick
 // another slot's customer key.
 func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
-	return s.directAuthorizeWithKitAdmission(ctx, r, false)
-}
-
-func (s *Service) directAuthorizeWithKitAdmission(ctx context.Context, r *http.Request, allowKit bool) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
 	if token := r.Header.Get("Authorization"); token != "" {
 		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
 		if err == nil {
@@ -236,7 +232,6 @@ func (s *Service) directAuthorizeWithKitAdmission(ctx context.Context, r *http.R
 
 	authorizedCtx, err := s.auth.Authorize(ctx, r.Header.Get(constants.SessionHeader), &sc)
 
-	requireKitBinding := false
 	// Try API key auth if session auth fails
 	if err != nil {
 		sc := security.APIKeyScheme{
@@ -245,17 +240,7 @@ func (s *Service) directAuthorizeWithKitAdmission(ctx context.Context, r *http.R
 			Scopes:         []string{},
 		}
 		authorizedCtx, err = s.auth.Authorize(ctx, r.Header.Get(constants.APIKeyHeader), &sc)
-		if err != nil && allowKit && r.Header.Get(constants.APIKeyHeader) != "" {
-			// Principal keys cannot enter chat transports. Completion alone may
-			// authenticate through the ordinary consumer transport, provided the
-			// managed runtime binding is verified below before any model work.
-			sc.RequiredScopes = []string{"consumer"}
-			kitCtx, kitErr := s.auth.Authorize(ctx, r.Header.Get(constants.APIKeyHeader), &sc)
-			if _, principal := contextvalues.PrincipalCredentialAuthorization(kitCtx); kitErr == nil && principal {
-				authorizedCtx, err = kitCtx, nil
-				requireKitBinding = true
-			}
-		}
+
 	}
 
 	// Try Chat Sessions auth if API key auth fails
@@ -274,13 +259,7 @@ func (s *Service) directAuthorizeWithKitAdmission(ctx context.Context, r *http.R
 		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
-	if requireKitBinding {
-		// Runtime identity, rather than a generic project:read grant, admits
-		// this model-only request. Tenant/project binding is still enforced.
-		authorizedCtx, err = s.auth.AuthorizeWithHandlerProjectAccess(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
-	} else {
-		authorizedCtx, err = s.auth.Authorize(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
-	}
+	authorizedCtx, err = s.auth.Authorize(authorizedCtx, r.Header.Get(constants.ProjectHeader), &sc)
 	if err != nil {
 		return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, err, "unauthorized access")
 	}
@@ -292,20 +271,6 @@ func (s *Service) directAuthorizeWithKitAdmission(ctx context.Context, r *http.R
 
 	if authCtx.ProjectID == nil {
 		return authorizedCtx, nil, "", oops.E(oops.CodeUnauthorized, nil, "unauthorized: project id is required")
-	}
-
-	if allowKit {
-		var managed bool
-		authorizedCtx, managed, err = s.assistantTokens.AuthorizeKitAPIKey(authorizedCtx)
-		if err != nil {
-			return authorizedCtx, nil, "", fmt.Errorf("authorize Kit API key: %w", err)
-		}
-		if requireKitBinding && !managed {
-			return authorizedCtx, nil, "", oops.C(oops.CodeUnauthorized)
-		}
-		if managed {
-			keySlot = billing.ModelUsageSourceAssistants
-		}
 	}
 
 	return authorizedCtx, authCtx, keySlot, nil
@@ -1876,7 +1841,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	// Extract HTTP metadata for message tracking
 	metadata := extractHTTPMetadata(r)
-	if isWorkloadInference(ctx) {
+	if isWorkloadInference(ctx) && !assistanttokens.InferenceTranscriptOwned(ctx) {
 		metadata.Source = string(workloadInferenceSource)
 		keySlot = workloadInferenceSource
 	}
@@ -1913,7 +1878,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if source == billing.ModelUsageSourceAssistants {
 		keySlot = billing.ModelUsageSourceAssistants
 	}
-	if isWorkloadInference(ctx) {
+	if isWorkloadInference(ctx) && !assistanttokens.InferenceTranscriptOwned(ctx) {
 		source = workloadInferenceSource
 		keySlot = workloadInferenceSource
 	}
@@ -1988,11 +1953,10 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
-	// Released Kit 2c4a35e maps its provider session ID to this header in
-	// SpeakeasyProvider::preprocess_request; it is not a canonical chat UUID.
+	// Ordinary callers may supply a chat header; managed workloads cannot.
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
 	if assistanttokens.InferenceTranscriptOwned(ctx) {
-		id, err := uuid.Parse(chatIDHeader)
+		id, err := kitCompletionSessionID(reqBody)
 		if err != nil {
 			return oops.C(oops.CodeForbidden)
 		}
@@ -3656,10 +3620,13 @@ func clampUint64ToInt64(value uint64) int64 {
 // authentication.
 func (s *Service) authorizeCompletion(r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
 	if ctx, authCtx, handled, err := s.authorizeWorkloadCompletion(r); handled || err != nil {
+		if assistanttokens.InferenceTranscriptOwned(ctx) {
+			return ctx, authCtx, billing.ModelUsageSourceAssistants, err
+		}
 		return ctx, authCtx, workloadInferenceSource, err
 	}
 	if !assistanttokens.IsRuntimeCredential(r.Header.Get("Authorization")) {
-		return s.directAuthorizeWithKitAdmission(r.Context(), r, true)
+		return s.directAuthorize(r.Context(), r)
 	}
 	ctx, _, err := s.assistantTokens.AuthorizeRuntime(r.Context(), r.Header.Get("Authorization"))
 	if err != nil {

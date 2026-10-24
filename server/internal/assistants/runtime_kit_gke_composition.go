@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"net/netip"
 	"net/url"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -59,6 +57,7 @@ func validateKitGKEComposition(c KitGKECompositionConfig) error {
 // Platform MCP parity: provisioning/checkpoint operations are internal lifecycle
 // machinery, not member operations. Existing assistant tools remain unchanged.
 func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
+	c.WorkloadNamespace = c.GKE.Namespace
 	if err := validateKitGKEComposition(c); err != nil {
 		return err
 	}
@@ -116,24 +115,17 @@ func (s *ServiceCore) fenceKitRuntimeAlreadyLocked(ctx context.Context, r assist
 	if row.AssistantID != r.AssistantID || row.RuntimeVersion != 3 {
 		return ErrKitRuntimeBinding
 	}
-	if err := tokenrepo.New(db).RevokeRuntimeInferenceCredentials(ctx, tokenrepo.RevokeRuntimeInferenceCredentialsParams{ProjectID: r.ProjectID, RuntimeID: r.ID}); err != nil {
-		return fmt.Errorf("revoke kit runtime inference authority: %w", err)
+	if len(r.BackendMetadataJSON) == 0 {
+		r.BackendMetadataJSON = row.BackendMetadataJson
+	}
+	if err := s.revokeKitWorkload(ctx, db, r); err != nil {
+		return err
 	}
 	// Retirement is already a durable admission fence for workload OAuth and
 	// gateway binding reads. Do not try to issue a new gateway key for a row
 	// which the canonical credential query correctly refuses to resurrect.
 	if row.Ended || row.Deleted {
 		return nil
-	}
-	a, err := q.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID})
-	if err != nil {
-		return fmt.Errorf("read kit assistant before workload fence: %w", err)
-	}
-	_, err = usersessionsrepo.New(db).RevokeAssistantRuntimeWorkloadClients(ctx, usersessionsrepo.RevokeAssistantRuntimeWorkloadClientsParams{
-		RuntimeID: uuid.NullUUID{UUID: r.ID, Valid: true}, OrganizationID: conv.ToPGText(a.OrganizationID), ProjectID: r.ProjectID,
-	})
-	if err != nil {
-		return fmt.Errorf("fence Kit workload credentials: %w", err)
 	}
 	_, err = s.rotateKitGatewayTokenAlreadyLocked(ctx, r)
 	return err

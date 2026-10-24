@@ -451,5 +451,5 @@ func TestWorkloadAssertionGrant_AdvertisedFromTheEndpointAlone(t *testing.T) {
 
 	grants, ok := fetchASMetadata(t, f.ti, slug)["grant_types_supported"].([]any)
 	require.True(t, ok)
-	require.ElementsMatch(t, []any{"authorization_code", "refresh_token", "client_credentials", workloadGrantJWTBearer}, grants)
+	require.ElementsMatch(t, []any{"authorization_code", "refresh_token", workloadGrantJWTBearer}, grants)
 }

@@ -3,8 +3,10 @@ package assistants
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"maps"
@@ -17,7 +19,7 @@ import (
 
 	"github.com/distribution/reference"
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -74,7 +76,10 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 		p.Command, p.Args = KitGatewayCommand(int(p.GuestPort))
 	}
 	if p.Identity.CompatibilityGeneration == "" {
-		p.Identity.CompatibilityGeneration = "kit-acp-v2-rootfs-tls-v3"
+		p.Identity.CompatibilityGeneration = "kit-acp-v2-rootfs-workload-v4"
+	} else if !strings.HasSuffix(p.Identity.CompatibilityGeneration, "-workload-v4") && !strings.HasPrefix(p.Identity.CompatibilityGeneration, "kit-workload-v4-") {
+		// Scope even caller-defined generations away from legacy automatic snapshots.
+		p.Identity.CompatibilityGeneration = fmt.Sprintf("kit-workload-v4-%x", sha256.Sum256([]byte(p.Identity.CompatibilityGeneration)))[:63]
 	}
 	p.Command = slices.Clone(p.Command)
 	p.Args = slices.Clone(p.Args)
@@ -111,13 +116,11 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	p.Name = ""
 	p.Model = ""
 	p.AgentsMD = nil
-	p.InferenceJSON = nil
 	p.MCPJSON = nil
 	p.GatewayToken = nil
-	p.MCPFiles = nil
 	p.TLSCertificate, p.TLSPrivateKey = nil, nil
 	raw, err := json.Marshal(map[string]any{
-		"tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1,
+		"tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1, "workload_generation": 4,
 		"identity": p.Identity.labels(), "namespace": p.Identity.Namespace, "image": p.Image,
 		"ingress_cidr": p.IngressCIDR, "guest_port": p.GuestPort, "command": p.Command, "args": p.Args,
 		"allow_insecure_http": p.AllowInsecureHTTP, "resources": p.Resources, "work_size_limit": p.WorkSizeLimit,
@@ -144,27 +147,28 @@ func (k *KitGKERuntimeBackend) validate(r assistantRuntimeRecord) error {
 }
 
 type kitGKEBackendMetadata struct {
-	Checkpoint        json.RawMessage `json:"checkpoint,omitempty"`
-	TLSCertificate    []byte          `json:"tls_certificate"`
-	Provisioning      bool            `json:"provisioning,omitempty"`
-	CheckpointMarker  string          `json:"checkpoint_marker"`
-	ProxyImageDigest  string          `json:"proxy_image_digest"`
-	ImageDigest       string          `json:"image_digest"`
-	ContainerID       string          `json:"container_id"`
-	AuthorityUID      types.UID       `json:"authority_uid,omitempty"`
-	AuthorityNotAfter time.Time       `json:"authority_not_after"`
-	RuntimeID         uuid.UUID       `json:"runtime_id"`
-	AssistantID       uuid.UUID       `json:"assistant_id"`
-	ProjectID         uuid.UUID       `json:"project_id"`
-	Version           int16           `json:"runtime_version"`
-	Namespace         string          `json:"namespace"`
-	Fingerprint       string          `json:"compatibility"`
-	ClaimUID          types.UID       `json:"claim_uid"`
-	TemplateUID       types.UID       `json:"template_uid"`
-	SecretUID         types.UID       `json:"secret_uid"`
-	SecretName        string          `json:"secret_name"`
-	PodName           string          `json:"pod_name"`
-	PodUID            types.UID       `json:"pod_uid"`
+	Workload          *KitWorkloadBinding `json:"workload,omitempty"`
+	ServiceAccountUID types.UID           `json:"service_account_uid,omitempty"`
+	Checkpoint        json.RawMessage     `json:"checkpoint,omitempty"`
+	TLSCertificate    []byte              `json:"tls_certificate"`
+	Provisioning      bool                `json:"provisioning,omitempty"`
+	CheckpointMarker  string              `json:"checkpoint_marker"`
+	ProxyImageDigest  string              `json:"proxy_image_digest"`
+	ImageDigest       string              `json:"image_digest"`
+	ContainerID       string              `json:"container_id"`
+	AuthorityUID      types.UID           `json:"authority_uid,omitempty"`
+	RuntimeID         uuid.UUID           `json:"runtime_id"`
+	AssistantID       uuid.UUID           `json:"assistant_id"`
+	ProjectID         uuid.UUID           `json:"project_id"`
+	Version           int16               `json:"runtime_version"`
+	Namespace         string              `json:"namespace"`
+	Fingerprint       string              `json:"compatibility"`
+	ClaimUID          types.UID           `json:"claim_uid"`
+	TemplateUID       types.UID           `json:"template_uid"`
+	SecretUID         types.UID           `json:"secret_uid"`
+	SecretName        string              `json:"secret_name"`
+	PodName           string              `json:"pod_name"`
+	PodUID            types.UID           `json:"pod_uid"`
 }
 
 func (k *KitGKERuntimeBackend) metadata(r assistantRuntimeRecord) (kitGKEBackendMetadata, error) {
@@ -175,7 +179,7 @@ func (k *KitGKERuntimeBackend) metadata(r assistantRuntimeRecord) (kitGKEBackend
 	if err := json.Unmarshal(r.BackendMetadataJSON, &m); err != nil {
 		return m, fmt.Errorf("decode Kit GKE authority: %w", err)
 	}
-	if m.CheckpointMarker == "" || m.AuthorityNotAfter.IsZero() || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.SecretUID == "" || m.SecretName == "" || (!m.Provisioning && (m.ImageDigest == "" || m.ProxyImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "")) {
+	if m.CheckpointMarker == "" || m.Workload == nil || m.Workload.ServiceAccount == "" || m.Workload.Audience == "" || m.Workload.IssuerID == uuid.Nil || m.Workload.Subject == "" || m.ServiceAccountUID == "" || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.SecretUID == "" || m.SecretName == "" || (!m.Provisioning && (m.ImageDigest == "" || m.ProxyImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "")) {
 		return m, fmt.Errorf("kit GKE authority or exact compatibility mismatch; explicit fenced reset required")
 	}
 	return m, nil
@@ -222,6 +226,14 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 		return RuntimeBackendEnsureResult{}, ErrKitRuntimeBinding
 	}
 	if !kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
+		var prior kitGKEBackendMetadata
+		if json.Unmarshal(r.BackendMetadataJSON, &prior) == nil && prior.Workload == nil && prior.RuntimeID == r.ID {
+			if err := k.invalidateLegacy(ctx, r, prior); err != nil {
+				return RuntimeBackendEnsureResult{}, err
+			}
+			r.BackendMetadataJSON = []byte("{}")
+			return k.Ensure(ctx, r)
+		}
 		m, err := k.metadata(r)
 		if err != nil {
 			return RuntimeBackendEnsureResult{}, err
@@ -236,11 +248,15 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 		if state.Phase != "active" {
 			return k.restore(ctx, r, state, obj)
 		}
-		if !time.Now().Before(state.Metadata.AuthorityNotAfter) {
-			// Renew only through durable checkpoint and fresh-process restore;
-			// never rotate credentials beneath an existing process.
+		renewTLS, err := kitGKETLSRenewalDue(state.Metadata.TLSCertificate, kitGKEName(r)+".kit.internal", time.Now())
+		if err != nil {
+			return RuntimeBackendEnsureResult{}, err
+		}
+		if renewTLS {
+			// Renew the actual gateway certificate while settlement can still
+			// authenticate. Projected workload token rotation never restarts Kit.
 			if err := k.Stop(ctx, r); err != nil {
-				return RuntimeBackendEnsureResult{}, fmt.Errorf("checkpoint expired Kit authority: %w", err)
+				return RuntimeBackendEnsureResult{}, fmt.Errorf("checkpoint expiring Kit TLS certificate: %w", err)
 			}
 			state, obj, err = k.loadAuthority(ctx, r)
 			if err != nil {
@@ -297,18 +313,25 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 		}
 	}()
 	b, err := k.config.Bootstrap(ctx, r)
+	if b.Workload != nil {
+		r.BackendMetadataJSON, _ = json.Marshal(map[string]any{"workload": b.Workload})
+	}
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
+	r.BackendMetadataJSON, _ = json.Marshal(map[string]any{"workload": b.Workload})
+	if b.Workload == nil {
+		return RuntimeBackendEnsureResult{}, fmt.Errorf("kit workload binding is required")
+	}
 	in := k.config.Provision
+	in.WorkloadServiceAccount, in.WorkloadAudience = b.Workload.ServiceAccount, b.Workload.Audience
+	in.Workload, in.InferenceEndpoint = b.Workload, b.InferenceEndpoint
 	in.Identity = k.identity(r)
 	in.Name = name
 	in.Model = b.Model
 	in.AgentsMD = b.AgentsMD
-	in.InferenceJSON = b.InferenceJSON
 	in.MCPJSON = b.MCPJSON
 	in.GatewayToken = b.GatewayToken
-	in.MCPFiles = b.MCPFiles
 	in.CheckpointMarker = []byte(uuid.NewString())
 	in.TLSCertificate, in.TLSPrivateKey, err = newKitGKETLSCertificate(in.Name + ".kit.internal")
 	if err != nil {
@@ -331,12 +354,12 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	}
 	maps.Copy(podAnnotations, annotations)
 	_ = unstructured.SetNestedStringMap(objects.Template.Object, podAnnotations, "spec", "podTemplate", "metadata", "annotations")
-	m := kitGKEBackendMetadata{Checkpoint: nil, TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ProxyImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", AuthorityNotAfter: time.Now().Add(assistanttokens.MaxInferenceLifetime - time.Hour), SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
+	m := kitGKEBackendMetadata{ServiceAccountUID: "", Checkpoint: nil, TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ProxyImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", Workload: b.Workload, SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
 	for _, step := range []struct {
 		gvr schema.GroupVersionResource
 		obj *unstructured.Unstructured
 		uid *types.UID
-	}{{kitSecretGVR, objects.Secret, &m.SecretUID}, {kitTemplateGVR, objects.Template, &m.TemplateUID}, {gkeSandboxClaimGVR, objects.Claim, &m.ClaimUID}} {
+	}{{kitServiceAccountGVR, kitWorkloadServiceAccount(in), &m.ServiceAccountUID}, {kitSecretGVR, objects.Secret, &m.SecretUID}, {kitTemplateGVR, objects.Template, &m.TemplateUID}, {gkeSandboxClaimGVR, objects.Claim, &m.ClaimUID}} {
 		step.obj.SetLabels(labels)
 		step.obj.SetAnnotations(annotations)
 		created, e := k.config.GKE.Dynamic.Resource(step.gvr).Namespace(in.Identity.Namespace).Create(ctx, step.obj, metav1.CreateOptions{})
@@ -373,6 +396,7 @@ func (e kitGKEAdmissionTerminalError) Unwrap() error { return e.error }
 // The caller persists exact create-response UIDs before waiting for a process.
 // Retrying this phase never adopts resources discovered by labels or names.
 func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata, resumable bool) (result RuntimeBackendEnsureResult, ensureErr error) {
+	r.BackendMetadataJSON, _ = json.Marshal(m)
 	defer func() {
 		var terminal kitGKEAdmissionTerminalError
 		if ensureErr != nil && (!resumable || errors.As(ensureErr, &terminal)) {
@@ -384,7 +408,7 @@ func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assist
 		gvr  schema.GroupVersionResource
 		name string
 		uid  types.UID
-	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, kitGKEName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}} {
+	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, kitGKEName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}, {kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID}} {
 		if _, err := k.get(ctx, r, step.gvr, step.name, step.uid); err != nil {
 			return RuntimeBackendEnsureResult{}, err
 		}
@@ -504,6 +528,11 @@ func (k *KitGKERuntimeBackend) checkPod(r assistantRuntimeRecord, p *unstructure
 	if (m.PodName != "" && p.GetName() != m.PodName) || p.GetLabels()[gkeClaimUIDLabel] != string(m.ClaimUID) {
 		return fmt.Errorf("kit GKE source pod was replaced outside admission")
 	}
+	serviceAccount, _, _ := unstructured.NestedString(p.Object, "spec", "serviceAccountName")
+	automount, found, _ := unstructured.NestedBool(p.Object, "spec", "automountServiceAccountToken")
+	if m.Workload == nil || serviceAccount != m.Workload.ServiceAccount || !found || automount {
+		return fmt.Errorf("kit workload pod identity mismatch")
+	}
 	containers, _, _ := unstructured.NestedSlice(p.Object, "spec", "containers")
 	if len(containers) != 2 {
 		return fmt.Errorf("unexpected Kit GKE pod containers")
@@ -522,9 +551,8 @@ func (k *KitGKERuntimeBackend) protocol(ctx context.Context, r assistantRuntimeR
 	return k.protocolForLifecycle(ctx, r, false)
 }
 
-// Expired inference authority forbids turns, not authenticated settlement and
-// durability operations needed to checkpoint and renew that authority.
-func (k *KitGKERuntimeBackend) protocolForLifecycle(ctx context.Context, r assistantRuntimeRecord, allowExpired bool) (runtimeProtocol, error) {
+// Workload tokens rotate independently of gateway process authority.
+func (k *KitGKERuntimeBackend) protocolForLifecycle(ctx context.Context, r assistantRuntimeRecord, _ bool) (runtimeProtocol, error) {
 	state, _, err := k.loadAuthority(ctx, r)
 	if err != nil {
 		return nil, err
@@ -533,14 +561,11 @@ func (k *KitGKERuntimeBackend) protocolForLifecycle(ctx context.Context, r assis
 		return nil, fmt.Errorf("kit GKE authority is fenced in phase %s", state.Phase)
 	}
 	m := state.Metadata
-	if !allowExpired && !time.Now().Before(m.AuthorityNotAfter) {
-		return nil, fmt.Errorf("kit GKE startup authority expired; checkpoint and refresh required")
-	}
 	for _, s := range []struct {
 		gvr  schema.GroupVersionResource
 		name string
 		uid  types.UID
-	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, kitGKEName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}} {
+	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, kitGKEName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}, {kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID}} {
 		if _, err = k.get(ctx, r, s.gvr, s.name, s.uid); err != nil {
 			return nil, err
 		}
@@ -732,4 +757,100 @@ func (k *KitGKERuntimeBackend) fenceColdAdmissionFailure(ctx context.Context, r 
 		return errors.Join(cause, fmt.Errorf("fence failed Kit cold admission: %w", err))
 	}
 	return cause
+}
+
+var kitServiceAccountGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "serviceaccounts"}
+
+func kitWorkloadServiceAccount(in KitGKEProvisionInput) *unstructured.Unstructured {
+	o := kitObject("ServiceAccount", "v1", in.WorkloadServiceAccount, in.Identity)
+	o.Object["automountServiceAccountToken"] = false
+	return o
+}
+
+// Legacy startup bearer credentials cannot be admitted as workload authority.
+// Verify every recorded UID before fencing and deleting; never discover or adopt
+// resources by name alone. The authority CAS makes a completed reset retryable.
+func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) error {
+	if m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Namespace != k.config.GKE.Namespace || m.Version != 3 || m.Fingerprint == "" {
+		return ErrKitRuntimeBinding
+	}
+	raw, err := k.config.AuthorityStore.Load(ctx, r.LifecycleTx, r)
+	if err != nil {
+		return fmt.Errorf("load legacy Kit authority: %w", err)
+	}
+	if !kitGKEEqualMetadata(raw, r.BackendMetadataJSON) {
+		return ErrKitRuntimeBinding
+	}
+	steps := []struct {
+		gvr  schema.GroupVersionResource
+		name string
+		uid  types.UID
+	}{
+		{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {gkePodGVR, m.PodName, m.PodUID},
+		{kitTemplateGVR, kitGKEName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID},
+	}
+	for _, step := range steps {
+		if step.uid == "" {
+			continue
+		}
+		o, e := k.config.GKE.Dynamic.Resource(step.gvr).Namespace(m.Namespace).Get(ctx, step.name, metav1.GetOptions{})
+		if apierrors.IsNotFound(e) {
+			continue
+		}
+		if e != nil {
+			return fmt.Errorf("read legacy Kit resource: %w", e)
+		}
+		labels := o.GetLabels()
+		if o.GetUID() != step.uid || labels["gram.ai/assistant-id"] != r.AssistantID.String() || labels["gram.ai/runtime-lineage"] != r.ID.String() || labels["gram.ai/project-id"] != r.ProjectID.String() || o.GetAnnotations()["speakeasy.com/kit-spec"] != m.Fingerprint {
+			return ErrKitRuntimeBinding
+		}
+	}
+	if err = k.config.Fence(ctx, r); err != nil {
+		return err
+	}
+	for _, step := range steps {
+		if step.uid != "" {
+			if err = k.deleteOwned(ctx, step.gvr, step.name, step.uid); err != nil {
+				return err
+			}
+		}
+	}
+	var checkpoint kitGKEAuthority
+	if len(m.Checkpoint) != 0 {
+		if err = json.Unmarshal(m.Checkpoint, &checkpoint); err != nil {
+			return fmt.Errorf("decode legacy Kit checkpoint: %w", err)
+		}
+		refs := slices.Clone(checkpoint.PriorCheckpoints)
+		refs = append(refs, kitGKECheckpointRef{TriggerName: checkpoint.TriggerName, TriggerUID: checkpoint.TriggerUID, SnapshotName: checkpoint.SnapshotName, SnapshotUID: checkpoint.SnapshotUID})
+		for _, ref := range refs {
+			if ref.TriggerUID != "" {
+				if err = k.deleteOwned(ctx, kitGKETriggerGVR, ref.TriggerName, ref.TriggerUID); err != nil {
+					return err
+				}
+			}
+			if ref.SnapshotUID != "" {
+				if err = k.deleteOwned(ctx, kitGKESnapshotGVR, ref.SnapshotName, ref.SnapshotUID); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if err := k.config.AuthorityStore.Save(ctx, r.LifecycleTx, r, raw, []byte("{}")); err != nil {
+		return fmt.Errorf("reset legacy Kit authority: %w", err)
+	}
+	return nil
+}
+
+// The trusted persisted certificate, not inference-token lifetime, controls
+// gateway renewal. Already expired or invalid certificates remain fail-closed.
+func kitGKETLSRenewalDue(certPEM []byte, serverName string, now time.Time) (bool, error) {
+	if _, err := kitGKETLSConfig(certPEM, serverName); err != nil {
+		return false, err
+	}
+	block, _ := pem.Decode(certPEM)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false, fmt.Errorf("parse Kit TLS renewal certificate: %w", err)
+	}
+	return !now.Add(24 * time.Hour).Before(cert.NotAfter), nil
 }
