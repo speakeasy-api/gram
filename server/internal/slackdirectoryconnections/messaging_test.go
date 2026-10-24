@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -63,7 +64,7 @@ func TestMessagingWorkspacesReportsABusySync(t *testing.T) {
 	conn, err := f.db.Acquire(ctx)
 	require.NoError(t, err)
 	defer conn.Release()
-	lockKey := "slack_directory_sync:" + c.ID
+	lockKey := slackdirectoryconnections.SyncLockKeyForTest(uuid.MustParse(c.ID))
 	locked, err := repo.New(conn).TryLockSlackDirectorySync(ctx, lockKey)
 	require.NoError(t, err)
 	require.True(t, locked)

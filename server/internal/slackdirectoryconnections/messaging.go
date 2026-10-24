@@ -90,7 +90,7 @@ func (s *DirectorySync) refreshForMessaging(ctx context.Context, organizationID 
 	}
 	defer conn.Release()
 	queries := repo.New(conn)
-	lockKey := "slack_directory_sync:" + connectionID.String()
+	lockKey := syncLockKey(connectionID)
 	locked, err := queries.TryLockSlackDirectorySync(ctx, lockKey)
 	if err != nil {
 		return nil, fmt.Errorf("lock Slack token refresh: %w", err)
@@ -125,6 +125,12 @@ func (s *DirectorySync) refreshForMessaging(ctx context.Context, organizationID 
 		return nil, err
 	}
 	return tokens, nil
+}
+
+// syncLockKey names the advisory lock a workspace's directory sync and token
+// renewal hold.
+func syncLockKey(connectionID uuid.UUID) string {
+	return "slack_directory_sync:" + connectionID.String()
 }
 
 // SlackAccounts lists a person's confirmed Slack accounts in workspaces that
