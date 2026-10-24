@@ -22856,6 +22856,476 @@ func DecodeRunUpstreamOAuthMigrationResponse(decoder func(*http.Response) goahtt
 	}
 }
 
+// BuildEnableUpstreamAuthEnforcementRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "enableUpstreamAuthEnforcement" endpoint
+func (c *Client) BuildEnableUpstreamAuthEnforcementRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: EnableUpstreamAuthEnforcementAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "enableUpstreamAuthEnforcement", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeEnableUpstreamAuthEnforcementRequest returns an encoder for requests
+// sent to the admin enableUpstreamAuthEnforcement server.
+func EncodeEnableUpstreamAuthEnforcementRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.EnableUpstreamAuthEnforcementPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "enableUpstreamAuthEnforcement", "*admin.EnableUpstreamAuthEnforcementPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewEnableUpstreamAuthEnforcementRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "enableUpstreamAuthEnforcement", err)
+		}
+		return nil
+	}
+}
+
+// DecodeEnableUpstreamAuthEnforcementResponse returns a decoder for responses
+// returned by the admin enableUpstreamAuthEnforcement endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeEnableUpstreamAuthEnforcementResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeEnableUpstreamAuthEnforcementResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body EnableUpstreamAuthEnforcementResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateEnableUpstreamAuthEnforcementResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			res := NewEnableUpstreamAuthEnforcementAdminUpstreamOAuthMigrationStatusOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body EnableUpstreamAuthEnforcementUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateEnableUpstreamAuthEnforcementUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewEnableUpstreamAuthEnforcementUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body EnableUpstreamAuthEnforcementForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateEnableUpstreamAuthEnforcementForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewEnableUpstreamAuthEnforcementForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body EnableUpstreamAuthEnforcementBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateEnableUpstreamAuthEnforcementBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewEnableUpstreamAuthEnforcementBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body EnableUpstreamAuthEnforcementNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateEnableUpstreamAuthEnforcementNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewEnableUpstreamAuthEnforcementNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body EnableUpstreamAuthEnforcementConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateEnableUpstreamAuthEnforcementConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewEnableUpstreamAuthEnforcementConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body EnableUpstreamAuthEnforcementUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateEnableUpstreamAuthEnforcementUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewEnableUpstreamAuthEnforcementUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body EnableUpstreamAuthEnforcementInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateEnableUpstreamAuthEnforcementInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewEnableUpstreamAuthEnforcementInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body EnableUpstreamAuthEnforcementInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "enableUpstreamAuthEnforcement", err)
+				}
+				err = ValidateEnableUpstreamAuthEnforcementInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "enableUpstreamAuthEnforcement", err)
+				}
+				return nil, NewEnableUpstreamAuthEnforcementInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body EnableUpstreamAuthEnforcementUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "enableUpstreamAuthEnforcement", err)
+				}
+				err = ValidateEnableUpstreamAuthEnforcementUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "enableUpstreamAuthEnforcement", err)
+				}
+				return nil, NewEnableUpstreamAuthEnforcementUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "enableUpstreamAuthEnforcement", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body EnableUpstreamAuthEnforcementGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateEnableUpstreamAuthEnforcementGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewEnableUpstreamAuthEnforcementGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "enableUpstreamAuthEnforcement", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDisableUpstreamAuthEnforcementRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "disableUpstreamAuthEnforcement" endpoint
+func (c *Client) BuildDisableUpstreamAuthEnforcementRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DisableUpstreamAuthEnforcementAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "disableUpstreamAuthEnforcement", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDisableUpstreamAuthEnforcementRequest returns an encoder for requests
+// sent to the admin disableUpstreamAuthEnforcement server.
+func EncodeDisableUpstreamAuthEnforcementRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.DisableUpstreamAuthEnforcementPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "disableUpstreamAuthEnforcement", "*admin.DisableUpstreamAuthEnforcementPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewDisableUpstreamAuthEnforcementRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "disableUpstreamAuthEnforcement", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDisableUpstreamAuthEnforcementResponse returns a decoder for responses
+// returned by the admin disableUpstreamAuthEnforcement endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeDisableUpstreamAuthEnforcementResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDisableUpstreamAuthEnforcementResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DisableUpstreamAuthEnforcementResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateDisableUpstreamAuthEnforcementResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			res := NewDisableUpstreamAuthEnforcementAdminUpstreamOAuthMigrationStatusOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DisableUpstreamAuthEnforcementUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateDisableUpstreamAuthEnforcementUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewDisableUpstreamAuthEnforcementUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DisableUpstreamAuthEnforcementForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateDisableUpstreamAuthEnforcementForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewDisableUpstreamAuthEnforcementForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DisableUpstreamAuthEnforcementBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateDisableUpstreamAuthEnforcementBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewDisableUpstreamAuthEnforcementBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DisableUpstreamAuthEnforcementNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateDisableUpstreamAuthEnforcementNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewDisableUpstreamAuthEnforcementNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DisableUpstreamAuthEnforcementConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateDisableUpstreamAuthEnforcementConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewDisableUpstreamAuthEnforcementConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DisableUpstreamAuthEnforcementUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateDisableUpstreamAuthEnforcementUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewDisableUpstreamAuthEnforcementUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DisableUpstreamAuthEnforcementInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateDisableUpstreamAuthEnforcementInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewDisableUpstreamAuthEnforcementInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DisableUpstreamAuthEnforcementInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "disableUpstreamAuthEnforcement", err)
+				}
+				err = ValidateDisableUpstreamAuthEnforcementInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "disableUpstreamAuthEnforcement", err)
+				}
+				return nil, NewDisableUpstreamAuthEnforcementInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DisableUpstreamAuthEnforcementUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "disableUpstreamAuthEnforcement", err)
+				}
+				err = ValidateDisableUpstreamAuthEnforcementUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "disableUpstreamAuthEnforcement", err)
+				}
+				return nil, NewDisableUpstreamAuthEnforcementUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "disableUpstreamAuthEnforcement", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DisableUpstreamAuthEnforcementGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			err = ValidateDisableUpstreamAuthEnforcementGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "disableUpstreamAuthEnforcement", err)
+			}
+			return nil, NewDisableUpstreamAuthEnforcementGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "disableUpstreamAuthEnforcement", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -23876,6 +24346,46 @@ func unmarshalAdminMcpServerHealthRemoteSessionsResponseBodyToAdminAdminMcpServe
 	return res
 }
 
+// unmarshalAdminMcpServerHealthUpstreamAuthResponseBodyToAdminAdminMcpServerHealthUpstreamAuth
+// builds a value of type *admin.AdminMcpServerHealthUpstreamAuth from a value
+// of type *AdminMcpServerHealthUpstreamAuthResponseBody.
+func unmarshalAdminMcpServerHealthUpstreamAuthResponseBodyToAdminAdminMcpServerHealthUpstreamAuth(v *AdminMcpServerHealthUpstreamAuthResponseBody) *admin.AdminMcpServerHealthUpstreamAuth {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminMcpServerHealthUpstreamAuth{
+		Status:               *v.Status,
+		RequiresUpstreamAuth: v.RequiresUpstreamAuth,
+	}
+	res.AuthClients = make([]*admin.AdminMcpServerHealthAuthClient, len(v.AuthClients))
+	for i, val := range v.AuthClients {
+		if val == nil {
+			res.AuthClients[i] = nil
+			continue
+		}
+		res.AuthClients[i] = unmarshalAdminMcpServerHealthAuthClientResponseBodyToAdminAdminMcpServerHealthAuthClient(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerHealthAuthClientResponseBodyToAdminAdminMcpServerHealthAuthClient
+// builds a value of type *admin.AdminMcpServerHealthAuthClient from a value of
+// type *AdminMcpServerHealthAuthClientResponseBody.
+func unmarshalAdminMcpServerHealthAuthClientResponseBodyToAdminAdminMcpServerHealthAuthClient(v *AdminMcpServerHealthAuthClientResponseBody) *admin.AdminMcpServerHealthAuthClient {
+	res := &admin.AdminMcpServerHealthAuthClient{
+		ID:                    *v.ID,
+		ClientType:            *v.ClientType,
+		Source:                *v.Source,
+		Enabled:               *v.Enabled,
+		RemoteSessionClientID: v.RemoteSessionClientID,
+		ServerCount:           *v.ServerCount,
+		HeaderCount:           *v.HeaderCount,
+	}
+
+	return res
+}
+
 // unmarshalAdminMcpServerToolCallOutcomesResponseBodyToAdminAdminMcpServerToolCallOutcomes
 // builds a value of type *admin.AdminMcpServerToolCallOutcomes from a value of
 // type *AdminMcpServerToolCallOutcomesResponseBody.
@@ -24432,6 +24942,7 @@ func unmarshalAdminUpstreamOAuthMigrationAuthClientsResponseBodyToAdminAdminUpst
 		Unresolved:               *v.Unresolved,
 		SelectionsComplete:       v.SelectionsComplete,
 		PendingSelectionMappings: v.PendingSelectionMappings,
+		PendingGrants:            v.PendingGrants,
 		SelectionGapCount:        v.SelectionGapCount,
 	}
 	res.UnresolvedAssociations = make([]*admin.AdminUpstreamOAuthMigrationUnresolvedAssociation, len(v.UnresolvedAssociations))
@@ -24614,6 +25125,25 @@ func unmarshalAdminUpstreamOAuthMigrationExecutionProfileGapResponseBodyToAdminA
 	return res
 }
 
+// unmarshalAdminUpstreamAuthEnforcementResponseBodyToAdminAdminUpstreamAuthEnforcement
+// builds a value of type *admin.AdminUpstreamAuthEnforcement from a value of
+// type *AdminUpstreamAuthEnforcementResponseBody.
+func unmarshalAdminUpstreamAuthEnforcementResponseBodyToAdminAdminUpstreamAuthEnforcement(v *AdminUpstreamAuthEnforcementResponseBody) *admin.AdminUpstreamAuthEnforcement {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminUpstreamAuthEnforcement{
+		Enabled: *v.Enabled,
+		Ready:   *v.Ready,
+	}
+	res.Blockers = make([]string, len(v.Blockers))
+	for i, val := range v.Blockers {
+		res.Blockers[i] = val
+	}
+
+	return res
+}
+
 // unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamOAuthMigrationStatus
 // builds a value of type *admin.AdminUpstreamOAuthMigrationStatus from a value
 // of type *AdminUpstreamOAuthMigrationStatusResponseBody.
@@ -24640,6 +25170,9 @@ func unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamO
 	}
 	if v.ExecutionProfiles != nil {
 		res.ExecutionProfiles = unmarshalAdminUpstreamOAuthMigrationExecutionProfilesResponseBodyToAdminAdminUpstreamOAuthMigrationExecutionProfiles(v.ExecutionProfiles)
+	}
+	if v.Enforcement != nil {
+		res.Enforcement = unmarshalAdminUpstreamAuthEnforcementResponseBodyToAdminAdminUpstreamAuthEnforcement(v.Enforcement)
 	}
 
 	return res

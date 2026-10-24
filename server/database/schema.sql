@@ -10976,6 +10976,11 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- (model id, temperature, fail-mode, etc.) as a JSON object. NULL for
   -- standard policies.
   model_config JSONB,
+  -- For action = 'require_approval': who may approve and how they are
+  -- notified, as a JSON object ({approvers: [urn, ...], notify: {...},
+  -- self_approval: bool, ...}). NULL for every other action. Shape is
+  -- validated in the application layer.
+  approval_config JSONB,
   -- CVSS-style severity (0.1-10) the policy author assigns to findings this
   -- policy produces. Purely descriptive; changing it does NOT bump `version`
   -- or re-scan messages. Bounds are validated in the application layer.
@@ -11014,6 +11019,7 @@ COMMENT ON COLUMN risk_policies.auto_name IS '@access: confidential';
 COMMENT ON COLUMN risk_policies.user_message IS '@access: opaque-restricted';
 COMMENT ON COLUMN risk_policies.prompt IS '@access: opaque-restricted';
 COMMENT ON COLUMN risk_policies.model_config IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.approval_config IS '@access: opaque-restricted';
 COMMENT ON COLUMN risk_policies.score IS '@access: confidential';
 COMMENT ON COLUMN risk_policies.version IS '@access: confidential';
 COMMENT ON COLUMN risk_policies.created_at IS '@access: confidential';
@@ -11672,6 +11678,236 @@ ON risk_policy_challenges (project_id);
 
 CREATE INDEX IF NOT EXISTS risk_policy_challenges_risk_policy_id_idx
 ON risk_policy_challenges (risk_policy_id);
+
+-- Speakeasy Approvals: a tool call held by a require_approval risk policy.
+--
+-- The gateway or hooks path blocks the call and records a row here in status
+-- 'blocked'. The agent then calls request_approval on the Approvals MCP server
+-- with the row's token, which moves it to 'pending' and notifies approvers. An
+-- approver decides it ('approved' or 'denied'); a retry of the same call by the
+-- same principal consumes an exact-once approval ('consumed'). Unanswered rows
+-- move to 'expired'. Valid statuses are enforced in the application layer.
+CREATE TABLE IF NOT EXISTS risk_policy_approvals (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  risk_policy_id uuid NOT NULL,
+  -- risk_policies.version at the time the call was blocked.
+  policy_version BIGINT NOT NULL,
+
+  -- The one value agents see: 'apr_' plus 32 random bytes (base64url). It names
+  -- the request in the block message and in request_approval, and is the
+  -- watcher's bearer token. Stored as is so a repeated block can show it again;
+  -- it only reveals this row's status word.
+  token TEXT NOT NULL,
+
+  -- The principal that made the blocked call (agent:... or user:...). The
+  -- request, the watcher and the retry all bind to it.
+  requester_urn TEXT NOT NULL,
+  -- Set only when a person called through their own OAuth session; that person
+  -- cannot approve their own request. NULL for agent keys, so an agent's owner
+  -- may approve it.
+  requester_user_id TEXT,
+
+  -- Entry point that blocked the call: 'mcp_gateway' or 'hooks'.
+  surface TEXT NOT NULL,
+  -- Client that sent the call when known, such as 'claude-code' or 'openclaw'.
+  source_adapter TEXT,
+  session_id TEXT,
+  chat_id uuid,
+
+  toolset_id uuid,
+  -- The MCP server the call went to, so approvers see where the tool lives.
+  mcp_server_id uuid,
+  server_url TEXT,
+  tool_name TEXT NOT NULL,
+  -- SHA-256 (hex) of server, tool and canonical arguments, computed the way
+  -- warn computes it. Matches an exact-once approval to its retry and keeps one
+  -- open request per call.
+  call_fingerprint TEXT NOT NULL,
+  -- Redacted, size-capped copy of the arguments shown to approvers.
+  arguments_preview JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- The agent's one-sentence reason from request_approval.
+  reason TEXT,
+
+  status TEXT NOT NULL DEFAULT 'blocked',
+  -- What the agent asked for and what the approver granted, for example
+  -- {"kind": "exact_once"}. A grant wider than one exact call also writes an
+  -- always-allow rule.
+  requested_scope JSONB,
+  granted_scope JSONB,
+
+  decided_by_urn TEXT,
+  -- Where the decision came from: 'slack', 'dashboard' or 'api'.
+  decided_via TEXT,
+  decision_note TEXT,
+
+  requested_at timestamptz,
+  decided_at timestamptz,
+  expires_at timestamptz,
+  consumed_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_policy_approvals_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policy_approvals_arguments_preview_check CHECK (jsonb_typeof(arguments_preview) = 'object'),
+  CONSTRAINT risk_policy_approvals_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_approvals_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_approvals_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_approvals_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE SET NULL,
+  CONSTRAINT risk_policy_approvals_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE SET NULL,
+  CONSTRAINT risk_policy_approvals_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE SET NULL
+);
+
+COMMENT ON TABLE risk_policy_approvals IS 'Speakeasy Approvals: a tool call held by a require_approval risk policy, from block through request, decision and consumption.';
+COMMENT ON COLUMN risk_policy_approvals.id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.organization_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.project_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.risk_policy_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.policy_version IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.token IS '@access: secret-restricted';
+COMMENT ON COLUMN risk_policy_approvals.requester_urn IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.requester_user_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.surface IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.source_adapter IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.session_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.chat_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.server_url IS '@access: restricted';
+COMMENT ON COLUMN risk_policy_approvals.tool_name IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.call_fingerprint IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.arguments_preview IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_policy_approvals.reason IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_policy_approvals.status IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.requested_scope IS '@access: opaque-confidential';
+COMMENT ON COLUMN risk_policy_approvals.granted_scope IS '@access: opaque-confidential';
+COMMENT ON COLUMN risk_policy_approvals.decided_by_urn IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.decided_via IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.decision_note IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_policy_approvals.requested_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.decided_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.expires_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.consumed_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.created_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.updated_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approvals.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_approvals_token_key
+ON risk_policy_approvals (token);
+
+-- Target of the tenant-pinned foreign key from risk_policy_approval_messages,
+-- so a message cannot point at another project's request.
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_approvals_project_id_id_key
+ON risk_policy_approvals (project_id, id);
+
+-- One open request per call, so a retry before the decision lands on the same row.
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_approvals_open_call_key
+ON risk_policy_approvals (project_id, risk_policy_id, requester_urn, tool_name, call_fingerprint)
+WHERE deleted IS FALSE AND status IN ('blocked', 'pending');
+
+CREATE INDEX IF NOT EXISTS risk_policy_approvals_lookup_idx
+ON risk_policy_approvals (project_id, requester_urn, call_fingerprint, status)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policy_approvals_project_status_updated_idx
+ON risk_policy_approvals (project_id, status, updated_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policy_approvals_status_expires_at_idx
+ON risk_policy_approvals (status, expires_at)
+WHERE deleted IS FALSE;
+
+-- Non-partial indexes backing the foreign keys.
+CREATE INDEX IF NOT EXISTS risk_policy_approvals_organization_id_idx
+ON risk_policy_approvals (organization_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_approvals_project_id_idx
+ON risk_policy_approvals (project_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_approvals_risk_policy_id_idx
+ON risk_policy_approvals (risk_policy_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_approvals_chat_id_idx
+ON risk_policy_approvals (chat_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_approvals_toolset_id_idx
+ON risk_policy_approvals (toolset_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_approvals_mcp_server_id_idx
+ON risk_policy_approvals (mcp_server_id);
+
+-- One notification sent for an approval request, such as the Slack DM to one
+-- approver. Kept so decisions can update every message and so a click can be
+-- matched to the DM it came from.
+CREATE TABLE IF NOT EXISTS risk_policy_approval_messages (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  approval_id uuid NOT NULL,
+
+  -- Notification channel, 'slack' for now. Valid values enforced in the
+  -- application layer.
+  provider TEXT NOT NULL,
+  -- 'dm' for now.
+  kind TEXT NOT NULL,
+  -- The Speakeasy user the message was sent to.
+  recipient_user_id TEXT NOT NULL,
+  slack_team_id TEXT,
+  slack_user_id TEXT,
+  slack_channel_id TEXT,
+  slack_message_ts TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_policy_approval_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policy_approval_messages_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_approval_messages_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  -- Pinned to the project, so a message cannot carry a different tenant than
+  -- its request.
+  CONSTRAINT risk_policy_approval_messages_project_id_approval_id_fkey FOREIGN KEY (project_id, approval_id) REFERENCES risk_policy_approvals (project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE risk_policy_approval_messages IS 'Notifications sent for a Speakeasy Approvals request, such as one Slack DM per approver.';
+COMMENT ON COLUMN risk_policy_approval_messages.id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.organization_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.project_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.approval_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.provider IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.kind IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.recipient_user_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.slack_team_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.slack_user_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.slack_channel_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.slack_message_ts IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.created_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.updated_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_approval_messages.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_approval_messages_approval_recipient_key
+ON risk_policy_approval_messages (approval_id, provider, recipient_user_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policy_approval_messages_slack_message_idx
+ON risk_policy_approval_messages (slack_channel_id, slack_message_ts)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policy_approval_messages_organization_id_idx
+ON risk_policy_approval_messages (organization_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_approval_messages_project_id_idx
+ON risk_policy_approval_messages (project_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_approval_messages_project_id_approval_id_idx
+ON risk_policy_approval_messages (project_id, approval_id);
 
 -- MCP approval workflow.
 --

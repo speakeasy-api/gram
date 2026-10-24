@@ -501,3 +501,7 @@ WHERE organization_id = @org_id::text AND deleted IS FALSE;
 -- name: PostflightCountPersonalAccounts :one
 SELECT count(*) FROM user_accounts
 WHERE organization_id = @org_id::text AND account_type = 'personal';
+
+-- name: PostflightCountAuthClientAssociations :one
+SELECT count(*) FROM mcp_server_auth_clients
+WHERE organization_id = @org_id::text AND deleted IS FALSE;

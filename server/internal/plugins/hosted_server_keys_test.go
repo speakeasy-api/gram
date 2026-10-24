@@ -46,7 +46,7 @@ func TestPluginsService_PublishPlugins_HostedEntryPublishesDomainAndUserHeaders(
 	require.True(t, ok)
 
 	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "hosted-domain")
-	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
 	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
 		OrganizationID: ac.ActiveOrganizationID, Domain: "hosted-" + uuid.NewString()[:8] + ".example.test", ProvisionerKind: "ingress", IpAllowlist: []string{},
 	})
@@ -119,7 +119,7 @@ func TestPluginsService_PublishPlugins_EndpointlessHostedEntryKeepsToolsetAddres
 	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
 
 	toolset := createUnwrappedTestToolset(t, ctx, ti.conn, "endpointless")
-	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
 	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Endpointless"})
 	require.NoError(t, err)
@@ -174,18 +174,14 @@ func TestPluginsService_AddPluginServer_StoresToolsetsUnderTheirServer(t *testin
 
 	disabled := createUnwrappedTestToolset(t, ctx, ti.conn, "drifted")
 	createCanonicalWrapper(t, ctx, ti, disabled, "disabled", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-	added, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(disabled.ID.String()), Policy: "required"})
-	require.NoError(t, err)
-	stored, err = pluginsrepo.New(ti.conn).ListPluginServers(ctx, uuid.MustParse(plugin.ID))
-	require.NoError(t, err)
-	idx := -1
-	for i, row := range stored {
-		if row.ID.String() == added.ID {
-			idx = i
-		}
-	}
-	require.GreaterOrEqual(t, idx, 0)
-	require.Equal(t, uuid.NullUUID{UUID: disabled.ID, Valid: true}, stored[idx].McpServerID)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(disabled.ID.String()), Policy: "required"})
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code, "the canonical wrapper owns hosting state, so a disabled server cannot be added through its toolset")
+
+	aliasOnly := createUnwrappedTestToolset(t, ctx, ti.conn, "alias-only")
+	createCanonicalWrapper(t, ctx, ti, aliasOnly, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(aliasOnly.ID.String()), Policy: "required"})
+	require.NoError(t, err, "an enabled server without an endpoint still serves on its legacy slug")
 }
 
 // A server that holds a toolset's id without being its canonical wrapper does not lend its metadata to the toolset environment.

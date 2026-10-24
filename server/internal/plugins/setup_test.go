@@ -36,6 +36,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
@@ -354,13 +355,9 @@ func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 }
 
 // setTestToolsetMCPPublic sets a toolset's MCP visibility and mirrors it onto its canonical server.
-func setTestToolsetMCPPublic(ctx context.Context, conn *pgxpool.Pool, params toolsetsrepo.SetToolsetMCPPublicByIDParams) error {
-	if err := toolsetsrepo.New(conn).SetToolsetMCPPublicByID(ctx, params); err != nil {
+func setTestToolsetMCPPublic(ctx context.Context, conn *pgxpool.Pool, params testrepo.SetToolsetMCPPublicByIDParams) error {
+	if err := testrepo.New(conn).SetToolsetMCPPublicByID(ctx, params); err != nil {
 		return fmt.Errorf("set toolset mcp public: %w", err)
-	}
-	//nolint:glint // notestingrawsql: mirrors hostedmcp.Sync without its audit and address checks.
-	if _, err := conn.Exec(ctx, `UPDATE mcp_servers SET visibility = CASE WHEN $1 THEN 'public' ELSE 'private' END WHERE id = $2 AND toolset_id = $2 AND visibility <> 'disabled'`, params.McpIsPublic, params.ID); err != nil {
-		return fmt.Errorf("sync canonical server visibility: %w", err)
 	}
 	return nil
 }
@@ -417,7 +414,7 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 	// check; the plugin path does not distinguish remote- vs toolset-backed.
 	backing := createUnwrappedTestToolset(t, ctx, conn, name+"-backing")
 	if visibility == mcpservers.VisibilityPublic {
-		err := toolsetsrepo.New(conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: backing.ID, ProjectID: backing.ProjectID})
+		err := testrepo.New(conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: backing.ID, ProjectID: backing.ProjectID})
 		require.NoError(t, err)
 	}
 

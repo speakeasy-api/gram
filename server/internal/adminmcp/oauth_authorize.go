@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -114,20 +115,20 @@ func (s *StaffOAuthAuthorization) AuthorizeHandler() http.Handler {
 			return
 		}
 		if err := request.ValidatePostRedirect(); err != nil {
-			staffRedirectError(w, r, request.RedirectURI, request.State, err)
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, err)
 			return
 		}
 		if err := oauthwire.ValidateResourceIndicators(request.Resources, s.resource); err != nil {
-			staffRedirectError(w, r, request.RedirectURI, request.State, err)
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, err)
 			return
 		}
 		if !validStaffPKCEChallenge(request.CodeChallenge) {
-			staffRedirectError(w, r, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_request", Description: "invalid PKCE S256 challenge"})
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_request", Description: "invalid PKCE S256 challenge"})
 			return
 		}
 		scopes, ok := normalizeRequestedScopes(r.URL.Query().Get("scope"), s.writes.WritesAvailable())
 		if !ok {
-			staffRedirectError(w, r, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
+			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
 			return
 		}
 		csrf, err := staffOpaqueToken()
@@ -389,24 +390,56 @@ func staffRequestError(w http.ResponseWriter, err error) {
 	}
 }
 
-func staffRedirectError(w http.ResponseWriter, r *http.Request, redirectURI, state string, err error) {
-	var oauthErr *oauthwire.Error
-	if !errors.As(err, &oauthErr) {
-		oauthErr = &oauthwire.Error{Code: "invalid_request", Description: "invalid request"}
-	}
-	callback, parseErr := url.Parse(redirectURI)
-	if parseErr != nil {
+func staffPreAuthenticationError(w http.ResponseWriter, r *http.Request, client staffOAuthClient, redirectURI, state string, err error) {
+	callback, oauthErr, buildErr := staffErrorCallback(redirectURI, state, err)
+	if buildErr != nil {
 		staffOAuthError(w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
 		return
 	}
+	if oauthwire.MayAutoRedirectBeforeAuthentication(redirectURI) {
+		http.Redirect(w, r, callback, http.StatusSeeOther)
+		return
+	}
+	page := oauthui.AuthorizationError{
+		CallbackURL:    callback,
+		Code:           oauthErr.Code,
+		Description:    oauthErr.Description,
+		ClientName:     client.Name,
+		ClientID:       client.ID,
+		ClientIDOrigin: "",
+		ServerName:     "Speakeasy Admin",
+	}
+	if err := oauthui.WriteAuthorizationError(r.Context(), w, page); err != nil {
+		staffOAuthError(w, http.StatusInternalServerError, oautherr.CodeServerError, "could not render authorization page")
+	}
+}
+
+func staffRedirectError(w http.ResponseWriter, r *http.Request, redirectURI, state string, err error) {
+	callback, oauthErr, buildErr := staffErrorCallback(redirectURI, state, err)
+	if buildErr != nil {
+		staffOAuthError(w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
+		return
+	}
+	http.Redirect(w, r, callback, http.StatusSeeOther)
+}
+
+func staffErrorCallback(redirectURI, state string, err error) (string, *oauthwire.Error, error) {
+	oauthErr, ok := errors.AsType[*oauthwire.Error](err)
+	if !ok {
+		oauthErr = &oauthwire.Error{Code: oautherr.CodeInvalidRequest, Description: "invalid request"}
+	}
+	callback, parseErr := url.Parse(redirectURI)
+	if parseErr != nil {
+		return "", oauthErr, fmt.Errorf("parse authorization error callback: %w", parseErr)
+	}
 	query := callback.Query()
-	query.Set("error", oauthErr.Code)
-	query.Set("error_description", oauthErr.Description)
+	query.Set(oauthwire.ParamError, oauthErr.Code)
+	query.Set(oauthwire.ParamErrorDescription, oauthErr.Description)
 	if state != "" {
-		query.Set("state", state)
+		query.Set(oauthwire.ParamState, state)
 	}
 	callback.RawQuery = query.Encode()
-	http.Redirect(w, r, callback.String(), http.StatusSeeOther)
+	return callback.String(), oauthErr, nil
 }
 
 func validStaffPKCEChallenge(challenge string) bool {

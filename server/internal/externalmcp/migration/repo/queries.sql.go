@@ -206,14 +206,16 @@ scoped_toolsets AS (
     t.name,
     t.slug,
     t.mcp_slug,
-    t.mcp_enabled,
+    -- The canonical wrapper owns hosting state; the toolset columns stand only without one,
+    -- and a server that kept the toolset's id but left it leaves the toolset disabled.
+    (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' WHEN kept.id IS NOT NULL THEN FALSE ELSE t.mcp_enabled END)::boolean AS mcp_enabled,
     t.custom_domain_id,
-    t.user_session_issuer_id,
+    COALESCE(cw.user_session_issuer_id, CASE WHEN cw.id IS NULL THEN t.user_session_issuer_id END) AS user_session_issuer_id,
     t.external_oauth_server_id,
     t.oauth_proxy_server_id,
     t.tool_variations_group_id,
     (
-      t.mcp_enabled
+      (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' WHEN kept.id IS NOT NULL THEN FALSE ELSE t.mcp_enabled END)
       OR EXISTS (
         SELECT 1
         FROM mcp_servers AS ms
@@ -222,6 +224,8 @@ scoped_toolsets AS (
     ) AS live
   FROM toolsets AS t
   JOIN projects AS p ON p.id = t.project_id AND p.deleted IS FALSE
+  LEFT JOIN mcp_servers AS cw ON cw.id = t.id AND cw.toolset_id = t.id AND cw.project_id = t.project_id AND cw.deleted IS FALSE
+  LEFT JOIN mcp_servers AS kept ON kept.id = t.id AND kept.toolset_id IS DISTINCT FROM t.id AND kept.project_id = t.project_id AND kept.deleted IS FALSE
   WHERE t.deleted IS FALSE
     AND ($1::uuid[] IS NULL OR t.id = ANY($1::uuid[]))
 ),
@@ -392,10 +396,12 @@ SELECT
     SELECT count(*)
     FROM toolsets AS other
     JOIN projects AS op ON op.id = other.project_id AND op.deleted IS FALSE
-    WHERE other.user_session_issuer_id = t.user_session_issuer_id
+    LEFT JOIN mcp_servers AS ocw ON ocw.id = other.id AND ocw.toolset_id = other.id AND ocw.project_id = other.project_id AND ocw.deleted IS FALSE
+    LEFT JOIN mcp_servers AS okept ON okept.id = other.id AND okept.toolset_id IS DISTINCT FROM other.id AND okept.project_id = other.project_id AND okept.deleted IS FALSE
+    WHERE COALESCE(ocw.user_session_issuer_id, CASE WHEN ocw.id IS NULL THEN other.user_session_issuer_id END) = t.user_session_issuer_id
       AND other.id <> t.id
       AND other.deleted IS FALSE
-      AND other.mcp_enabled
+      AND (CASE WHEN ocw.id IS NOT NULL THEN ocw.visibility <> 'disabled' WHEN okept.id IS NOT NULL THEN FALSE ELSE other.mcp_enabled END)
   )::bigint AS other_toolsets_on_issuer,
   COALESCE((
     SELECT array_agg(DISTINCT rtrim(rs.resource, '/') ORDER BY rtrim(rs.resource, '/'))

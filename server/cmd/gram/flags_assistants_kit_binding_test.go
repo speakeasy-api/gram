@@ -30,6 +30,7 @@ type kitBindingDB struct {
 	organization string
 	toolset      *toolsetsrepo.Toolset
 	domain       *customdomainsrepo.CustomDomain
+	noServer     bool
 }
 
 type kitBindingRow struct {
@@ -64,6 +65,9 @@ func (db *kitBindingDB) QueryRow(_ context.Context, query string, _ ...any) pgx.
 	case strings.Contains(query, "-- name: GetMetaMCPServerByIDAndProjectID"):
 		return kitBindingRow{values: kitBindingValues(db.meta)}
 	case strings.Contains(query, "-- name: GetMCPServerByIDAndProjectID"):
+		if db.noServer {
+			return kitBindingRow{err: pgx.ErrNoRows}
+		}
 		return kitBindingRow{values: kitBindingValues(db.server)}
 	case strings.Contains(query, "-- name: GetToolsetByMcpSlugAndProjectAndCustomDomain"):
 		if db.toolset != nil {
@@ -93,7 +97,7 @@ func kitBindingURL(t *testing.T, raw string) *url.URL {
 
 func TestKitMCPAuthoritativeBinding(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"valid", "platform-host-case", "custom-host-case", "wrong-issuer-id", "wrong-issuer-url", "foreign-origin", "ungated", "disabled", "meta-private-network", "meta-invalid-network", "meta-dual-network", "private-network", "invalid-network", "dual-network", "public-tunnel", "foreign-project", "foreign-issuer-tenant", "shared", "wrong-shared-pin", "auth-host", "local-relay", "escaped-path", "legacy", "legacy-disabled", "custom-domain", "inactive-domain"} {
+	for _, scenario := range []string{"valid", "platform-host-case", "custom-host-case", "wrong-issuer-id", "wrong-issuer-url", "foreign-origin", "ungated", "disabled", "meta-private-network", "meta-invalid-network", "meta-dual-network", "private-network", "invalid-network", "dual-network", "public-tunnel", "foreign-project", "foreign-issuer-tenant", "shared", "wrong-shared-pin", "auth-host", "local-relay", "escaped-path", "legacy", "legacy-disabled", "legacy-unwrapped", "legacy-unwrapped-disabled", "legacy-drifted", "legacy-kept", "custom-domain", "inactive-domain"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			project, issuer, serverID := uuid.New(), uuid.New(), uuid.New()
@@ -166,8 +170,23 @@ func TestKitMCPAuthoritativeBinding(t *testing.T) {
 				localOrigin = kitBindingURL(t, "https://host.docker.internal:8443")
 				good = true
 			case "legacy", "legacy-disabled":
-				db.toolset = &toolsetsrepo.Toolset{ProjectID: project, McpEnabled: scenario == "legacy", UserSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
+				db.toolset = &toolsetsrepo.Toolset{ID: serverID, ProjectID: project, McpEnabled: scenario == "legacy", UserSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
+				db.server.ToolsetID = uuid.NullUUID{UUID: serverID, Valid: true}
+				if scenario == "legacy-disabled" {
+					db.server.Visibility = "disabled"
+				}
 				good = scenario == "legacy"
+			case "legacy-unwrapped", "legacy-unwrapped-disabled":
+				// Without a canonical wrapper the toolset's own columns stand.
+				db.toolset = &toolsetsrepo.Toolset{ID: serverID, ProjectID: project, McpEnabled: scenario == "legacy-unwrapped", UserSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
+				db.noServer = true
+				good = scenario == "legacy-unwrapped"
+			case "legacy-drifted":
+				db.toolset = &toolsetsrepo.Toolset{ID: serverID, ProjectID: project, McpEnabled: true, UserSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
+				db.server.ToolsetID = uuid.NullUUID{UUID: serverID, Valid: true}
+				db.server.Visibility = "public"
+			case "legacy-kept":
+				db.toolset = &toolsetsrepo.Toolset{ID: serverID, ProjectID: project, McpEnabled: true, UserSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
 			case "custom-domain", "inactive-domain":
 				resource = kitBindingURL(t, "https://mcp.customer.example/mcp/attached")
 				expected = resource

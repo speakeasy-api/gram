@@ -69,12 +69,12 @@ vi.mock("sonner", () => ({
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
-      x: {
-        overview: { href: (slug: string) => `/mcp/x/${slug}` },
-        inspect: { href: (slug: string) => `/mcp/x/${slug}/inspect` },
-        teamAccess: { href: (slug: string) => `/mcp/x/${slug}/team-access` },
-        sessions: { href: (slug: string) => `/mcp/x/${slug}/sessions` },
-        settings: { href: (slug: string) => `/mcp/x/${slug}/settings` },
+      details: {
+        overview: { href: (slug: string) => `/mcp/${slug}` },
+        inspect: { href: (slug: string) => `/mcp/${slug}/inspect` },
+        teamAccess: { href: (slug: string) => `/mcp/${slug}/team-access` },
+        sessions: { href: (slug: string) => `/mcp/${slug}/sessions` },
+        settings: { href: (slug: string) => `/mcp/${slug}/settings` },
       },
     },
     remoteIdentityProviders: {

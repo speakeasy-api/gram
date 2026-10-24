@@ -5744,10 +5744,116 @@ type RiskPolicy struct {
 	Prompt pgtype.Text
 	// @access: confidential
 	ModelConfig []byte
+	// @access: opaque-restricted
+	ApprovalConfig []byte
 	// @access: confidential
 	Score float64
 	// @access: confidential
 	Version int64
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+// Speakeasy Approvals: a tool call held by a require_approval risk policy, from block through request, decision and consumption.
+type RiskPolicyApproval struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	RiskPolicyID uuid.UUID
+	// @access: confidential
+	PolicyVersion int64
+	// @access: secret-restricted
+	Token string
+	// @access: confidential
+	RequesterUrn string
+	// @access: confidential
+	RequesterUserID pgtype.Text
+	// @access: confidential
+	Surface string
+	// @access: confidential
+	SourceAdapter pgtype.Text
+	// @access: confidential
+	SessionID pgtype.Text
+	// @access: confidential
+	ChatID uuid.NullUUID
+	// @access: confidential
+	ToolsetID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: restricted
+	ServerUrl pgtype.Text
+	// @access: confidential
+	ToolName string
+	// @access: confidential
+	CallFingerprint string
+	// @access: opaque-restricted
+	ArgumentsPreview []byte
+	// @access: opaque-restricted
+	Reason pgtype.Text
+	// @access: confidential
+	Status string
+	// @access: opaque-confidential
+	RequestedScope []byte
+	// @access: opaque-confidential
+	GrantedScope []byte
+	// @access: confidential
+	DecidedByUrn pgtype.Text
+	// @access: confidential
+	DecidedVia pgtype.Text
+	// @access: opaque-restricted
+	DecisionNote pgtype.Text
+	// @access: confidential
+	RequestedAt pgtype.Timestamptz
+	// @access: confidential
+	DecidedAt pgtype.Timestamptz
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	ConsumedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+// Notifications sent for a Speakeasy Approvals request, such as one Slack DM per approver.
+type RiskPolicyApprovalMessage struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ApprovalID uuid.UUID
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	RecipientUserID string
+	// @access: confidential
+	SlackTeamID pgtype.Text
+	// @access: confidential
+	SlackUserID pgtype.Text
+	// @access: confidential
+	SlackChannelID pgtype.Text
+	// @access: confidential
+	SlackMessageTs pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

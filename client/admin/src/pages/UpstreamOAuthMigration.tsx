@@ -28,6 +28,8 @@ import {
 import { errorMessage } from "@/lib/gramAdminApi";
 import { needsMigrationRun } from "@/lib/upstreamOAuthMigration";
 import {
+  disableUpstreamAuthEnforcement,
+  enableUpstreamAuthEnforcement,
   runUpstreamOAuthMigration,
   upstreamOAuthMigrationOrganizationsQuery,
   upstreamOAuthMigrationStatusQuery,
@@ -41,7 +43,8 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
   const [confirm, confirmDialog] = useConfirmDialog();
   const organizations = useQuery(upstreamOAuthMigrationOrganizationsQuery());
   const [filter, setFilter] = useState("");
-  const [running, setRunning] = useState<Set<string>>(new Set());
+  // What each busy organization is doing, by id.
+  const [running, setRunning] = useState<Map<string, string>>(new Map());
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(
     null,
   );
@@ -80,7 +83,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
   const pendingCount = statuses.filter((s) => needsMigrationRun(s.data)).length;
 
   async function migrate(org: AdminUpstreamOAuthMigrationOrganization) {
-    setRunning((current) => new Set(current).add(org.id));
+    setRunning((current) => new Map(current).set(org.id, "Migrating"));
     try {
       const run = await runUpstreamOAuthMigration(org.id);
       client.setQueryData(
@@ -90,7 +93,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
       return run;
     } finally {
       setRunning((current) => {
-        const next = new Set(current);
+        const next = new Map(current);
         next.delete(org.id);
         return next;
       });
@@ -117,6 +120,53 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
       }
     } catch (e) {
       toast.error(`${org.name}: ${errorMessage(e)}`);
+    }
+  }
+
+  async function toggleEnforcement(
+    org: AdminUpstreamOAuthMigrationOrganization,
+    enable: boolean,
+  ) {
+    const ok = await confirm(
+      enable
+        ? {
+            title: `Enforce upstream auth for ${org.name}?`,
+            description:
+              "Its servers and assistant turns are served by the auth client each credential chose, and using it requires permission. Confirm that its mandatory authorization shadow shows no unexplained new denial, and that it was told valid credentials from another organization are refused on its public servers instead of served anonymously. Credentials with an ambiguous choice are asked to reconnect.",
+            confirmLabel: "Enforce",
+          }
+        : {
+            title: `Stop enforcing upstream auth for ${org.name}?`,
+            description:
+              "Requests go back to the upstream client choice within a minute. Choices keep being recorded, so enforcement can be turned on again later.",
+            confirmLabel: "Stop enforcing",
+          },
+    );
+    if (!ok) return;
+    setRunning((current) =>
+      new Map(current).set(org.id, "Updating enforcement"),
+    );
+    try {
+      const status = enable
+        ? await enableUpstreamAuthEnforcement(org.id)
+        : await disableUpstreamAuthEnforcement(org.id);
+      client.setQueryData(
+        upstreamOAuthMigrationStatusQuery(org.id).queryKey,
+        status,
+      );
+      toast.success(
+        enable
+          ? `Enforcing upstream auth for ${org.name}`
+          : `Stopped enforcing upstream auth for ${org.name}`,
+      );
+    } catch (e) {
+      toast.error(`${org.name}: ${errorMessage(e)}`);
+    } finally {
+      setRunning((current) => {
+        const next = new Map(current);
+        next.delete(org.id);
+        return next;
+      });
     }
   }
 
@@ -241,7 +291,8 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
             ) : (
               visible.map((org) => {
                 const status = statusByID.get(org.id);
-                const busy = running.has(org.id);
+                const activity = running.get(org.id);
+                const busy = activity !== undefined;
                 return (
                   <TableRow key={org.id}>
                     <TableCell>
@@ -254,17 +305,38 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
                       {org.servers}
                     </TableCell>
                     <TableCell>
-                      <MigrationStatus status={status} busy={busy} />
+                      <MigrationStatus status={status} activity={activity} />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void migrateOne(org)}
-                        disabled={busy || bulk !== null}
-                      >
-                        {status?.data?.migrated ? "Run again" : "Migrate"}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void migrateOne(org)}
+                          disabled={busy || bulk !== null}
+                        >
+                          {status?.data?.migrated ? "Run again" : "Migrate"}
+                        </Button>
+                        {status?.data?.enforcement?.enabled ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void toggleEnforcement(org, false)}
+                            disabled={busy || bulk !== null}
+                          >
+                            Stop enforcing
+                          </Button>
+                        ) : status?.data?.enforcement?.ready ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void toggleEnforcement(org, true)}
+                            disabled={busy || bulk !== null}
+                          >
+                            Enforce
+                          </Button>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -280,16 +352,16 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
 
 function MigrationStatus({
   status,
-  busy,
+  activity,
 }: {
   status: UseQueryResult<AdminUpstreamOAuthMigrationStatus> | undefined;
-  busy: boolean;
+  activity: string | undefined;
 }): JSX.Element {
-  if (busy) {
+  if (activity !== undefined) {
     return (
       <span className="text-muted-foreground inline-flex items-center gap-1.5">
         <Loader2Icon aria-hidden="true" className="size-4 animate-spin" />
-        Migrating
+        {activity}
       </span>
     );
   }
@@ -306,6 +378,7 @@ function MigrationStatus({
     <>
       <AuthClientStatus status={s} />
       <ExecutionProfileStatus status={s} />
+      <EnforcementStatus status={s} />
     </>
   );
   const reconnect =
@@ -612,6 +685,40 @@ function ExecutionProfileStatus({
         </ul>
       ) : null}
     </div>
+  );
+}
+
+// Whether upstream auth is enforced for the organization, and what keeps it
+// from being enforced. Enforcing refuses valid credentials from another
+// organization on its public servers instead of serving them anonymously.
+function EnforcementStatus({
+  status,
+}: {
+  status: AdminUpstreamOAuthMigrationStatus;
+}): JSX.Element | null {
+  const e = status.enforcement;
+  if (!e) {
+    return null;
+  }
+  if (e.enabled) {
+    return (
+      <p className="text-xs text-emerald-600 dark:text-emerald-400">
+        Upstream auth enforced. Valid credentials from another organization are
+        refused on its public servers.
+      </p>
+    );
+  }
+  if (e.ready) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Ready to enforce upstream auth once its shadow evaluation agrees.
+      </p>
+    );
+  }
+  return (
+    <p className="text-muted-foreground text-xs">
+      Not ready to enforce: {e.blockers.join(" ")}
+    </p>
   );
 }
 
