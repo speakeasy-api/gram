@@ -3,6 +3,7 @@ package mcpservers_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -177,4 +179,154 @@ func usersessionsIssuerForTest(t *testing.T, ctx context.Context, f *hostedFixtu
 		return "", err //nolint:wrapcheck // test helper
 	}
 	return issuer.ID.String(), nil
+}
+
+func createOrganizationIssuer(t *testing.T, ctx context.Context, ti *testInstance, organizationID string) string {
+	t.Helper()
+
+	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               pgtype.Text{String: organizationID, Valid: true},
+		Slug:                         "org-clear-" + uuid.NewString()[:8],
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: 14 * 24 * 60 * 60 * 1_000_000, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	return issuer.ID.String()
+}
+
+// linkRemoteClient configures an upstream OAuth client on a user session issuer and resyncs, so servers carrying the
+// issuer get a derived remote issuer.
+func linkRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, issuerID string) uuid.UUID {
+	t.Helper()
+
+	q := remoterepo.New(ti.conn)
+	slug := "clear-remote-" + uuid.NewString()[:8]
+	remoteIssuer, err := q.CreateRemoteSessionIssuer(ctx, remoterepo.CreateRemoteSessionIssuerParams{
+		ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(organizationID), Slug: slug, Issuer: "https://" + slug + ".example.com",
+		AuthorizationEndpoint: conv.ToPGText("https://" + slug + ".example.com/authorize"), TokenEndpoint: conv.ToPGText("https://" + slug + ".example.com/token"),
+		ScopesSupported: []string{"openid"}, GrantTypesSupported: []string{"authorization_code", "refresh_token"}, ResponseTypesSupported: []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"}, CodeChallengeMethodsSupported: []string{"S256"},
+	})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(ctx, remoterepo.CreateRemoteSessionClientParams{
+		ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(organizationID), RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID: slug + "-client", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID, UserSessionIssuerID: uuid.MustParse(issuerID),
+	}))
+	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, organizationID, projectID, []uuid.UUID{uuid.MustParse(issuerID)}))
+	return remoteIssuer.ID
+}
+
+func storedServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, id string) mcpserversrepo.McpServer {
+	t.Helper()
+
+	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(id), ProjectID: projectID})
+	require.NoError(t, err)
+	return server
+}
+
+// Clearing one server of a shared, OAuth-configured issuer clears only its own derived state.
+func TestUpdateMcpServer_ClearSharedOrganizationIssuerKeepsOtherServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	issuer := createOrganizationIssuer(t, ctx, ti, authCtx.ActiveOrganizationID)
+	servers := make([]string, 0, 2)
+	backends := make([]string, 0, 2)
+	for _, name := range []string{"shared one", "shared two"} {
+		remoteID := seedRemoteMcpServer(t, ctx, ti.conn, projectID).String()
+		created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{Name: name, RemoteMcpServerID: &remoteID, UserSessionIssuerID: &issuer, Visibility: types.McpServerVisibility("disabled")})
+		require.NoError(t, err)
+		servers = append(servers, created.ID)
+		backends = append(backends, remoteID)
+	}
+	remoteIssuerID := linkRemoteClient(t, ctx, ti, authCtx.ActiveOrganizationID, projectID, issuer)
+	for _, id := range servers {
+		require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, storedServer(t, ctx, ti, projectID, id).RemoteSessionIssuerID, "the derived remote issuer starts populated")
+	}
+
+	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: servers[0], RemoteMcpServerID: &backends[0], ClearUserSessionIssuer: new(true), Visibility: types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err, "an organization-owned issuer can be detached")
+	requireNoIssuer(t, ctx, ti, projectID, servers[0])
+	other := storedServer(t, ctx, ti, projectID, servers[1])
+	require.Equal(t, issuer, other.UserSessionIssuerID.UUID.String())
+	require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, other.RemoteSessionIssuerID, "the other server keeps its derived state")
+}
+
+func TestUpdateMcpServer_MintBoundary(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, projectID).String()
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{Name: "mint boundary", RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("disabled")})
+	require.NoError(t, err)
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{ID: created.ID, RemoteMcpServerID: &remoteID, ClearUserSessionIssuer: new(true), Visibility: types.McpServerVisibility("disabled")})
+	require.NoError(t, err)
+
+	saved, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{ID: created.ID, RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("disabled")})
+	require.NoError(t, err)
+	require.Nil(t, saved.UserSessionIssuerID, "an issuerless server saved on the same backend does not mint")
+
+	replacement := seedRemoteMcpServer(t, ctx, ti.conn, projectID).String()
+	switched, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{ID: created.ID, RemoteMcpServerID: &replacement, Visibility: types.McpServerVisibility("disabled")})
+	require.NoError(t, err)
+	require.NotNil(t, switched.UserSessionIssuerID, "replacing the remote backend mints, even after a clear")
+
+	staffCtx := withStaffEmail(t, ctx)
+	unproxiedID := seedUnproxiedMcpServer(t, ctx, ti.conn, projectID).String()
+	unproxied, err := ti.service.CreateMcpServer(staffCtx, &gen.CreateMcpServerPayload{Name: "unproxied to remote", UnproxiedMcpServerID: &unproxiedID, Visibility: types.McpServerVisibility("disabled")})
+	require.NoError(t, err)
+	require.Nil(t, unproxied.UserSessionIssuerID)
+	onto := seedRemoteMcpServer(t, ctx, ti.conn, projectID).String()
+	moved, err := ti.service.UpdateMcpServer(staffCtx, &gen.UpdateMcpServerPayload{ID: unproxied.ID, RemoteMcpServerID: &onto, Visibility: types.McpServerVisibility("disabled")})
+	require.NoError(t, err)
+	require.NotNil(t, moved.UserSessionIssuerID, "switching an unproxied server onto a remote backend mints")
+}
+
+func TestUpdateMcpServer_ClearsHostedOrganizationIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedFixture(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer := createOrganizationIssuer(t, ctx, f.ti, authCtx.ActiveOrganizationID)
+
+	_, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.UserSessionIssuerID = &issuer }))
+	require.NoError(t, err)
+	updated, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.ClearUserSessionIssuer = new(true) }))
+	require.NoError(t, err, "an organization-owned issuer can be detached from a hosted server")
+	require.Nil(t, updated.UserSessionIssuerID)
+}
+
+func TestUpdateMcpServer_HostedClearRefusedWhileEMABound(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedFixture(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer, err := usersessionsIssuerForTest(t, ctx, f, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.UserSessionIssuerID = &issuer }))
+	require.NoError(t, err)
+
+	q := remoterepo.New(f.ti.conn)
+	remoteIssuer, err := q.CreateRemoteSessionIssuer(ctx, remoterepo.CreateRemoteSessionIssuerParams{ProjectID: conv.ToNullUUID(f.projectID), Slug: "hosted-clear-ema", Issuer: "https://authorization.example.com", ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{}, TokenEndpointAuthMethodsSupported: []string{}})
+	require.NoError(t, err)
+	key := remoterepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: authCtx.ActiveOrganizationID, UserSessionIssuerID: uuid.MustParse(issuer), RemoteSessionIssuerID: remoteIssuer.ID, Resource: "https://resource.example.com/"}
+	require.NoError(t, q.EnsureEMABinding(ctx, remoterepo.EnsureEMABindingParams(key)))
+
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.ClearUserSessionIssuer = new(true) }))
+	requireOopsCode(t, err, oops.CodeConflict)
+	stored := storedServer(t, ctx, f.ti, f.projectID, f.toolset.ID.String())
+	require.Equal(t, issuer, stored.UserSessionIssuerID.UUID.String(), "a refused clear keeps the issuer")
 }
