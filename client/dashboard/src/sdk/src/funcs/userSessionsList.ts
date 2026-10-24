@@ -121,6 +121,8 @@ async function $do(
     "client_id": payload?.client_id,
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "meta_mcp_server_id": payload?.meta_mcp_server_id,
+    "search": payload?.search,
     "status": payload?.status,
     "subject_urn": payload?.subject_urn,
     "user_session_issuer_id": payload?.user_session_issuer_id,

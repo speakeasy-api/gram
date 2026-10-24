@@ -5,6 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -100,4 +101,13 @@ func TestPtrStripNULToPGTextTrimmed(t *testing.T) {
 
 	// Trimming alone must continue to preserve NUL bytes for other callers.
 	require.Equal(t, "a\x00b", conv.PtrToPGTextTrimmed(conv.PtrEmpty(" a\x00b ")).String)
+}
+
+func TestContainsPattern(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, pgtype.Text{String: `%50\%\_off \\ x%`, Valid: true}, conv.ContainsPattern(` 50%_off \ x `))
+	require.Equal(t, pgtype.Text{String: "%da na%", Valid: true}, conv.ContainsPattern(" da\x00 na\x00 "))
+	require.False(t, conv.ContainsPattern("   ").Valid)
+	require.False(t, conv.ContainsPattern("\x00 \x00").Valid)
 }

@@ -505,12 +505,12 @@ VALUES
 -- name: ServersInsertUserSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
-   subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at,
+   subject_urn, resource_identity, jti, refresh_token_hash, refresh_expires_at, expires_at,
    last_used_at, created_at)
 VALUES
   (@id::uuid, @project_id::uuid, @org_id::text,
    @user_session_issuer_id::uuid, @user_session_client_id::uuid,
-   'user:' || @user_id::text, @jti::text,
+   'user:' || @user_id::text, @resource_identity::text, @jti::text,
    @refresh_token_hash::text,
    now() + (@refresh_expires_in::text)::interval, now() + (@expires_in::text)::interval,
    now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);

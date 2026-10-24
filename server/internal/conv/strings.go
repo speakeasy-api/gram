@@ -1,6 +1,10 @@
 package conv
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/jackc/pgx/v5/pgtype"
+)
 
 // NormalizeEmail canonicalizes an email address for comparison and map keys.
 func NormalizeEmail(email string) string {
@@ -85,4 +89,26 @@ func PtrStripNUL(s *string) *string {
 	}
 	stripped := StripNUL(*s)
 	return &stripped
+}
+
+var likeEscaper = strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`)
+
+// EscapeLike escapes LIKE wildcards so a search matches them literally.
+func EscapeLike(search string) string {
+	return likeEscaper.Replace(search)
+}
+
+// SearchTerm normalizes user search text: NUL bytes removed, then trimmed.
+func SearchTerm(search string) string {
+	return strings.TrimSpace(StripNUL(search))
+}
+
+// ContainsPattern turns a search into a LIKE pattern that matches it
+// literally anywhere in a value. A blank search yields no pattern.
+func ContainsPattern(search string) pgtype.Text {
+	trimmed := SearchTerm(search)
+	if trimmed == "" {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	return pgtype.Text{String: "%" + EscapeLike(trimmed) + "%", Valid: true}
 }

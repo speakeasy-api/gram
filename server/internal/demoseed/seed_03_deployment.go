@@ -330,6 +330,7 @@ func (s *seeder) seedDeploymentConnections(ctx context.Context) error {
 			UserSessionIssuerID: s.usIssuer(),
 			UserSessionClientID: us.client,
 			SubjectUrn:          "user:" + s.userID(us.user.handle),
+			ResourceIdentity:    s.partnerResourceIdentity(),
 			Jti:                 "demo-jti-" + n,
 			RefreshTokenHash:    s.det("user-session-refresh-" + n).String(),
 			RefreshExpiresIn:    us.refreshExpires,
@@ -348,6 +349,7 @@ func (s *seeder) seedDeploymentConnections(ctx context.Context) error {
 		UserSessionIssuerID: s.usIssuer(),
 		UserSessionClientID: s.uscPublic(),
 		SubjectUrn:          "agent:" + s.det("managed-agent-1").String(),
+		ResourceIdentity:    s.partnerResourceIdentity(),
 		AuthorizerUserID:    s.userID(demoUsers[0].handle),
 		Jti:                 s.det("managed-agent-jti-1").String(),
 		RefreshTokenHash:    "DEMO-NOT-A-VALID-HASH-" + s.det("managed-agent-refresh-1").String(),
@@ -471,6 +473,7 @@ func (s *seeder) seedDeploymentWorkloads(ctx context.Context) error {
 			OrganizationID:      org,
 			UserSessionIssuerID: s.usIssuer(),
 			SubjectUrn:          "workload:" + ciIssuer.String() + ":" + ws.subject,
+			ResourceIdentity:    s.partnerResourceIdentity(),
 			Jti:                 s.det("workload-jti-" + ws.n).String(),
 			RefreshTokenHash:    "DEMO-NOT-A-VALID-HASH-" + s.det("workload-refresh-"+ws.n).String(),
 			RefreshExpiresIn:    ws.refreshExpiresIn,
@@ -616,4 +619,11 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 		return fmt.Errorf("insert demo assistant assignment: %w", err)
 	}
 	return nil
+}
+
+// partnerResourceIdentity is the resource the partner gateway's sessions are
+// recorded for: the hosted MCP server wrapping its toolset, which shares the
+// toolset's id.
+func (s *seeder) partnerResourceIdentity() string {
+	return "mcp_server:" + s.toolset3().String()
 }

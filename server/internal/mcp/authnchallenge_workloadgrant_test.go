@@ -230,6 +230,7 @@ func TestWorkloadAssertionGrant_AdmittedWorkloadReceivesASession(t *testing.T) {
 	require.False(t, stored.UserSessionClientID.Valid, "a workload session has no client")
 	require.False(t, stored.AuthorizerUserID.Valid, "a workload session records no approving human")
 	require.False(t, stored.RefreshTokenHash.Valid, "a workload session stores no refresh token hash")
+	require.Equal(t, "toolset:"+f.fx.toolset.ID.String(), stored.ResourceIdentity.String)
 	require.True(t, stored.RefreshExpiresAt.Time.Equal(stored.ExpiresAt.Time), "the session is live exactly as long as its access token")
 
 	accessToken, ok := resp["access_token"].(string)

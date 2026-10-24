@@ -88,6 +88,13 @@ type ListUserSessionsPayload struct {
 	Status *string
 	// Filter by the connecting client id.
 	ClientID *string
+	// Case-insensitive substring match on the person, agent, API key, workload,
+	// client, MCP server, or upstream provider shown for a session.
+	Search *string
+	// Only sessions issued for this gateway, by the gateway they recorded or, for
+	// sessions that recorded none, the gateway their consent selection names.
+	// Sessions with neither are left out.
+	MetaMcpServerID *string
 	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).

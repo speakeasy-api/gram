@@ -239,6 +239,7 @@ func TestTokenIDJAGExchangeMintsResourceBoundAccessOnlySession(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(session.RefreshTokenHash.String, "id-jag:"))
+	require.Equal(t, "toolset:"+toolset.ID.String(), session.ResourceIdentity.String)
 
 	replay := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
 	require.Equal(t, http.StatusBadRequest, replay.Code, replay.Body.String())

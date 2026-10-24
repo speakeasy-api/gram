@@ -1613,12 +1613,14 @@ func NewRevokeUserSessionGatewayErrorResponseBody(res *goa.ServiceError) *Revoke
 
 // NewListUserSessionsPayload builds a userSessions service listUserSessions
 // endpoint payload.
-func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string, status *string, clientID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
+func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string, status *string, clientID *string, search *string, metaMcpServerID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
 	v := &usersessions.ListUserSessionsPayload{}
 	v.SubjectUrn = subjectUrn
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.Status = status
 	v.ClientID = clientID
+	v.Search = search
+	v.MetaMcpServerID = metaMcpServerID
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken

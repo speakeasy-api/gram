@@ -206,7 +206,11 @@ func (i *registeredAssistantWorkloadIssuer) IssueAssistantWorkloadToken(ctx cont
 	if err != nil {
 		return zero, err
 	}
-	issuance := workloadSessionIssuance(workloadSessionTarget{userSessionIssuerID: r.IssuerID, projectID: r.ProjectID, organizationID: r.OrganizationID, issuer: issuer, audience: r.Resource}, subject, credential)
+	resourceIdentity, err := endpointResourceIdentity(r.endpoint)
+	if err != nil {
+		return zero, fmt.Errorf("provision assistant workload client: %w", err)
+	}
+	issuance := workloadSessionIssuance(workloadSessionTarget{userSessionIssuerID: r.IssuerID, projectID: r.ProjectID, organizationID: r.OrganizationID, issuer: issuer, audience: r.Resource, resourceIdentity: resourceIdentity}, subject, credential)
 	issuance.Resource = r.Resource
 	grant := workloadGrantIssuance{
 		client: r.client, presented: presentedWorkload{issuerID: identity.IssuerID, subject: identity.Subject, issuerURL: ""},

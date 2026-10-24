@@ -1514,15 +1514,15 @@ func (q *Queries) ServersInsertUpstreamClientChoice(ctx context.Context, arg Ser
 const serversInsertUserSession = `-- name: ServersInsertUserSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
-   subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at,
+   subject_urn, resource_identity, jti, refresh_token_hash, refresh_expires_at, expires_at,
    last_used_at, created_at)
 VALUES
   ($1::uuid, $2::uuid, $3::text,
    $4::uuid, $5::uuid,
-   'user:' || $6::text, $7::text,
-   $8::text,
-   now() + ($9::text)::interval, now() + ($10::text)::interval,
-   now() - ($11::text)::interval, now() - ($12::text)::interval)
+   'user:' || $6::text, $7::text, $8::text,
+   $9::text,
+   now() + ($10::text)::interval, now() + ($11::text)::interval,
+   now() - ($12::text)::interval, now() - ($13::text)::interval)
 `
 
 type ServersInsertUserSessionParams struct {
@@ -1532,6 +1532,7 @@ type ServersInsertUserSessionParams struct {
 	UserSessionIssuerID uuid.UUID
 	UserSessionClientID uuid.UUID
 	UserID              string
+	ResourceIdentity    string
 	Jti                 string
 	RefreshTokenHash    string
 	RefreshExpiresIn    string
@@ -1550,6 +1551,7 @@ func (q *Queries) ServersInsertUserSession(ctx context.Context, arg ServersInser
 		arg.UserSessionIssuerID,
 		arg.UserSessionClientID,
 		arg.UserID,
+		arg.ResourceIdentity,
 		arg.Jti,
 		arg.RefreshTokenHash,
 		arg.RefreshExpiresIn,

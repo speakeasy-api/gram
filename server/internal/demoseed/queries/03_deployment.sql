@@ -149,11 +149,11 @@ VALUES
 -- name: DeployInsertUserSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
-   subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at,
+   subject_urn, resource_identity, jti, refresh_token_hash, refresh_expires_at, expires_at,
    last_used_at, created_at)
 VALUES
   (@id, @project_id::uuid, @organization_id::text, @user_session_issuer_id::uuid, @user_session_client_id::uuid,
-   @subject_urn::text, @jti, @refresh_token_hash::text,
+   @subject_urn::text, @resource_identity::text, @jti, @refresh_token_hash::text,
    now() + (@refresh_expires_in::text)::interval, now() + (@expires_in::text)::interval,
    now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);
 
@@ -163,13 +163,13 @@ VALUES
 -- name: DeployInsertManagedAgentSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id,
-   user_session_client_id, subject_urn, authorizer_user_id, delegated_grants,
+   user_session_client_id, subject_urn, resource_identity, authorizer_user_id, delegated_grants,
    delegated_grants_version, jti, refresh_token_hash, refresh_expires_at,
    expires_at, last_used_at, created_at)
 VALUES
   (@id, @project_id::uuid, @organization_id::text,
    @user_session_issuer_id::uuid, @user_session_client_id::uuid,
-   @subject_urn::text, @authorizer_user_id::text, '[]'::jsonb, 1,
+   @subject_urn::text, @resource_identity::text, @authorizer_user_id::text, '[]'::jsonb, 1,
    @jti, @refresh_token_hash::text,
    now() + interval '7 days', now() - interval '10 minutes',
    now() - interval '20 minutes', now() - interval '3 days');
@@ -199,13 +199,13 @@ VALUES
 -- name: DeployInsertWorkloadSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id,
-   user_session_client_id, subject_urn, authorizer_user_id, delegated_grants,
+   user_session_client_id, subject_urn, resource_identity, authorizer_user_id, delegated_grants,
    delegated_grants_version, jti, refresh_token_hash, refresh_expires_at,
    expires_at, last_used_at, created_at)
 VALUES
   (@id, @project_id::uuid, @organization_id::text,
    @user_session_issuer_id::uuid, NULL,
-   @subject_urn::text, NULL, '[]'::jsonb, 1,
+   @subject_urn::text, @resource_identity::text, NULL, '[]'::jsonb, 1,
    @jti, @refresh_token_hash::text,
    now() + (@refresh_expires_in::text)::interval, now() - (@expired_ago::text)::interval,
    now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);

@@ -32,6 +32,7 @@ func TestMintGatewayDiscoveryOverride(t *testing.T) {
 	require.NotNil(t, policy.Gateway)
 	require.NotNil(t, policy.Gateway.DiscoveryMode)
 	require.Equal(t, "meta_mcp_server:"+gateway.ID.String(), policy.Resource)
+	require.Equal(t, "meta_mcp_server:"+gateway.ID.String(), row.ResourceIdentity.String)
 	require.Equal(t, metamcp.DiscoveryModeDirect, *policy.Gateway.DiscoveryMode)
 	require.Nil(t, policy.Selection)
 
@@ -43,4 +44,5 @@ func TestMintGatewayDiscoveryOverride(t *testing.T) {
 	row, err = repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{UserSessionIssuerID: issuerID, Jti: claims.ID})
 	require.NoError(t, err)
 	require.Empty(t, row.ToolSelection, "the gateway default must remain live, not copied into a session")
+	require.Equal(t, "meta_mcp_server:"+gateway.ID.String(), row.ResourceIdentity.String)
 }
