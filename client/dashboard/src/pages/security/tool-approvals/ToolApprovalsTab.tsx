@@ -11,7 +11,7 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskGetApproval } from "@gram/client/react-query/riskGetApproval.js";
 import { useRiskListApprovals } from "@gram/client/react-query/riskListApprovals.js";
 import { formatDistanceToNow } from "date-fns";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { APPROVAL_STATUS_BADGE, requesterLabel } from "./approval-labels";
 import { ToolApprovalSheet } from "./ToolApprovalSheet";
@@ -32,15 +32,21 @@ const QUEUE_LIMIT = 100;
  */
 export function ToolApprovalsTab(): JSX.Element {
   const [filter, setFilter] = useState<StatusFilter>("pending");
-  // A Slack card's Open in Speakeasy link names the request to open.
+  // The open request lives in the URL, so a Slack card's Open in Speakeasy
+  // link opens it and Back past the link closes it.
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedID = searchParams.get("request");
-  const [selectedID, setSelectedID] = useState<string | null>(requestedID);
-  // Follow the link both ways: a new ?request= opens that request, and Back
-  // past it closes the sheet.
-  useEffect(() => {
-    setSelectedID(requestedID);
-  }, [requestedID]);
+  const selectedID = searchParams.get("request");
+  const setSelectedID = (id: string | null) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("request");
+        if (id) next.set("request", id);
+        return next;
+      },
+      { replace: true },
+    );
+  };
   const approvalsQuery = useRiskListApprovals(
     filter === "pending"
       ? { status: "pending", limit: QUEUE_LIMIT }
@@ -66,27 +72,16 @@ export function ToolApprovalsTab(): JSX.Element {
       : (openQuery.data ??
         approvals.find((approval) => approval.id === selectedID) ??
         null);
-  // A linked request that is already decided is only in the All list.
-  const linked =
-    requestedID !== null && requestedID === selectedID
-      ? openQuery.data
-      : undefined;
+  // A request opened from a link that is already decided is only in the
+  // All list, so the list behind its sheet switches once it loads.
+  const linkedID = useRef(selectedID);
   useEffect(() => {
-    if (!linked || linked.status === "pending" || filter !== "pending") return;
-    setFilter("all");
-  }, [linked, filter]);
-  const closeRequest = () => {
-    setSelectedID(null);
-    if (!requestedID) return;
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete("request");
-        return next;
-      },
-      { replace: true },
-    );
-  };
+    const loaded = openQuery.data;
+    if (!loaded || loaded.id !== linkedID.current) return;
+    linkedID.current = null;
+    if (loaded.status !== "pending") setFilter("all");
+  }, [openQuery.data]);
+  const closeRequest = () => setSelectedID(null);
 
   const columns: Column<RiskPolicyApproval>[] = [
     {
