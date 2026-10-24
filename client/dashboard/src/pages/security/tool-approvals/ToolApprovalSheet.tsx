@@ -21,7 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useId, useState } from "react";
 import { toast } from "sonner";
-import { APPROVAL_STATUS_BADGE, requesterLabel } from "./approval-labels";
+import { approvalStatusBadge, requesterLabel } from "./approval-labels";
 
 type Decision = "approve" | "deny";
 
@@ -131,7 +131,7 @@ function ToolApprovalDetails({
   approval: RiskPolicyApproval;
   members: AccessMember[];
   onDecided: () => void;
-}): JSX.Element | null {
+}): JSX.Element {
   const queryClient = useQueryClient();
   const noteID = useId();
   const [note, setNote] = useState("");
@@ -166,8 +166,7 @@ function ToolApprovalDetails({
     });
   };
 
-  const status = APPROVAL_STATUS_BADGE[approval.status];
-  if (!status) return null;
+  const status = approvalStatusBadge(approval.status);
   return (
     <>
       <SheetHeader>

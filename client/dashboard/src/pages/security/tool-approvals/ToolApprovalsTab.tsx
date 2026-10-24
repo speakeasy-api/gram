@@ -13,7 +13,7 @@ import { useRiskListApprovals } from "@gram/client/react-query/riskListApprovals
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { APPROVAL_STATUS_BADGE, requesterLabel } from "./approval-labels";
+import { approvalStatusBadge, requesterLabel } from "./approval-labels";
 import { ToolApprovalSheet } from "./ToolApprovalSheet";
 
 type StatusFilter = "pending" | "all";
@@ -129,7 +129,7 @@ export function ToolApprovalsTab(): JSX.Element {
       header: "Status",
       width: "0.8fr",
       render: (approval) => {
-        const status = APPROVAL_STATUS_BADGE[approval.status];
+        const status = approvalStatusBadge(approval.status);
         return (
           <Badge variant={status.variant}>
             <Badge.Text>{status.label}</Badge.Text>

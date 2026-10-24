@@ -5,17 +5,32 @@ import { memberDisplayName } from "../audience-principals";
 
 export type ApprovalStatus = RiskPolicyApproval["status"];
 
-export const APPROVAL_STATUS_BADGE: Record<
-  ApprovalStatus,
-  { label: string; variant: NonNullable<BadgeProps["variant"]> }
-> = {
-  blocked: { label: "Not requested", variant: "neutral" },
-  pending: { label: "Pending", variant: "warning" },
-  approved: { label: "Approved", variant: "success" },
-  consumed: { label: "Used", variant: "success" },
-  denied: { label: "Denied", variant: "destructive" },
-  expired: { label: "Expired", variant: "neutral" },
+type ApprovalStatusBadge = {
+  label: string;
+  variant: NonNullable<BadgeProps["variant"]>;
 };
+
+/** The badge for a request's status. A status this dashboard does not know
+ *  yet reads as Unknown instead of breaking the queue. */
+export function approvalStatusBadge(
+  status: ApprovalStatus,
+): ApprovalStatusBadge {
+  switch (status) {
+    case "blocked":
+      return { label: "Not requested", variant: "neutral" };
+    case "pending":
+      return { label: "Pending", variant: "warning" };
+    case "approved":
+      return { label: "Approved", variant: "success" };
+    case "consumed":
+      return { label: "Used", variant: "success" };
+    case "denied":
+      return { label: "Denied", variant: "destructive" };
+    case "expired":
+      return { label: "Expired", variant: "neutral" };
+  }
+  return { label: "Unknown", variant: "neutral" };
+}
 
 /** Who made the held call: a person by name when they are a member, else the
  *  agent or user id from the principal URN. */

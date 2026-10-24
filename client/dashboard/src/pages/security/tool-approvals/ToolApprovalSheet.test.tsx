@@ -1,7 +1,8 @@
 import type { RiskPolicyApproval } from "@gram/client/models/components/riskpolicyapproval.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { requesterLabel } from "./approval-labels";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
+import { approvalStatusBadge, requesterLabel } from "./approval-labels";
 import { ToolApprovalSheet } from "./ToolApprovalSheet";
 
 const mocks = vi.hoisted(() => ({
@@ -147,5 +148,18 @@ describe("requesterLabel", () => {
       requesterLabel("agent:3f6c0d2e-0000-4000-8000-000000000003", []),
     ).toBe("Agent 3f6c0d2e");
     expect(requesterLabel("user:someone", [])).toBe("user:someone");
+  });
+});
+
+describe("approvalStatusBadge", () => {
+  it("reads a status the dashboard does not know yet as Unknown", () => {
+    expect(approvalStatusBadge("consumed")).toEqual({
+      label: "Used",
+      variant: "success",
+    });
+    expect(approvalStatusBadge(unrecognized("paused"))).toEqual({
+      label: "Unknown",
+      variant: "neutral",
+    });
   });
 });
