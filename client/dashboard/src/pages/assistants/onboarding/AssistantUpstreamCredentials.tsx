@@ -30,7 +30,7 @@ const CONTEXT_LABELS: Record<string, string> = {
 };
 
 const GAP_LABELS: Record<string, string> = {
-  selection_required: "Several credentials fit. Choose one.",
+  selection_required: "No credential chosen yet. Choose one.",
   personal_requires_user:
     "Only a personal account fits, and these turns act for nobody.",
   no_client: "No credential fits yet.",
@@ -166,8 +166,9 @@ function ServerChoice({
     onError: (error) =>
       toast.error(error.message || "The change could not be saved. Try again."),
   });
-  const automaticLabel =
-    server.source === AUTOMATIC
+  const automaticLabel = server.gapReason
+    ? "Not chosen"
+    : server.source === AUTOMATIC
       ? `Automatic (${server.authClientId ? (server.options.find((o) => o.authClientId === server.authClientId)?.name ?? "one credential") : "no sign-in"})`
       : "Automatic";
 

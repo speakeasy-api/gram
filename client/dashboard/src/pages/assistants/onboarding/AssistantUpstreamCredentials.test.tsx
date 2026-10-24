@@ -89,7 +89,7 @@ describe("AssistantUpstreamCredentials", () => {
     expect(screen.getByText("Dashboard")).toBeTruthy();
     expect(screen.getByText("When acting for a person")).toBeTruthy();
     expect(
-      screen.getByText("Several credentials fit. Choose one."),
+      screen.getByText("No credential chosen yet. Choose one."),
     ).toBeTruthy();
   });
 
