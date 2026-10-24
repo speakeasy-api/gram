@@ -119,7 +119,9 @@ type recipient struct {
 
 // Notify DMs each approver who has not been sent the request yet. It is safe
 // to repeat: approvers with a recorded DM are skipped. A Slack failure worth
-// retrying is returned after every other approver has been tried.
+// retrying is returned after every other approver has been tried. Once the
+// recorded DMs are known, every return reports them, errors included, so a
+// run that stops retrying still gives those DMs the outcome.
 func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, error) {
 	none := NotifyResult{Sent: 0, ExpiresAt: time.Time{}}
 	row, err := n.approvals.Get(ctx, target.OrganizationID, target.ProjectID, target.ApprovalID)
@@ -128,34 +130,6 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 	}
 	if err != nil {
 		return none, fmt.Errorf("get approval: %w", err)
-	}
-	if n.approvals.EffectiveStatus(row) != approval.StatusPending {
-		return none, nil
-	}
-	policy, err := n.cards.policy(ctx, row)
-	if errors.Is(err, approval.ErrNotFound) || (err == nil && policy.ApprovalConfig == nil) {
-		return none, nil
-	}
-	if err != nil {
-		return none, err
-	}
-	logger := n.logger.With(attr.SlogOrganizationID(target.OrganizationID), attr.SlogRiskPolicyApprovalID(target.ApprovalID.String()))
-
-	// Workspaces that cannot be used right now come back as a retryable error
-	// next to the ones that can. The DMs go out through those, and the retry
-	// reaches the rest.
-	workspaces, unavailable := n.workspaces.MessagingWorkspaces(ctx, target.OrganizationID, slackscopes.ChatWrite)
-	if len(workspaces) == 0 && unavailable != nil {
-		return none, fmt.Errorf("list Slack workspaces: %w", unavailable)
-	}
-	if len(workspaces) == 0 {
-		logger.InfoContext(ctx, "no Slack workspace can send approval DMs")
-		return none, nil
-	}
-
-	recipients, err := n.recipients(ctx, row, policy.ApprovalConfig)
-	if err != nil {
-		return none, err
 	}
 	queries := repo.New(n.db)
 	sentRows, err := queries.ListApprovalMessages(ctx, repo.ListApprovalMessagesParams{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, ApprovalID: row.ID})
@@ -168,10 +142,45 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 			sent[message.RecipientUserID] = true
 		}
 	}
+	recorded := func() NotifyResult {
+		result := NotifyResult{Sent: len(sent), ExpiresAt: time.Time{}}
+		if row.ExpiresAt.Valid {
+			result.ExpiresAt = row.ExpiresAt.Time
+		}
+		return result
+	}
 
+	if n.approvals.EffectiveStatus(row) != approval.StatusPending {
+		return recorded(), nil
+	}
+	policy, err := n.cards.policy(ctx, row)
+	if errors.Is(err, approval.ErrNotFound) || (err == nil && policy.ApprovalConfig == nil) {
+		return recorded(), nil
+	}
+	if err != nil {
+		return recorded(), err
+	}
+	logger := n.logger.With(attr.SlogOrganizationID(target.OrganizationID), attr.SlogRiskPolicyApprovalID(target.ApprovalID.String()))
+
+	// Workspaces that cannot be used right now come back as a retryable error
+	// next to the ones that can. The DMs go out through those, and the retry
+	// reaches the rest.
+	workspaces, unavailable := n.workspaces.MessagingWorkspaces(ctx, target.OrganizationID, slackscopes.ChatWrite)
+	if len(workspaces) == 0 && unavailable != nil {
+		return recorded(), fmt.Errorf("list Slack workspaces: %w", unavailable)
+	}
+	if len(workspaces) == 0 {
+		logger.InfoContext(ctx, "no Slack workspace can send approval DMs")
+		return recorded(), nil
+	}
+
+	recipients, err := n.recipients(ctx, row, policy.ApprovalConfig)
+	if err != nil {
+		return recorded(), err
+	}
 	content, err := n.cards.input(ctx, row, policy.Name)
 	if err != nil {
-		return none, err
+		return recorded(), err
 	}
 	pending := pendingCard(content)
 
@@ -211,18 +220,14 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 			SlackMessageTs:  conv.ToPGText(posted.TS),
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return none, fmt.Errorf("record approval message: %w", err)
+			return recorded(), fmt.Errorf("record approval message: %w", err)
 		}
 		sent[person.userID] = true
 	}
-	result := NotifyResult{Sent: len(sent), ExpiresAt: time.Time{}}
-	if row.ExpiresAt.Valid {
-		result.ExpiresAt = row.ExpiresAt.Time
-	}
 	if retry != nil {
-		return result, fmt.Errorf("send approval DMs: %w", retry)
+		return recorded(), fmt.Errorf("send approval DMs: %w", retry)
 	}
-	return result, nil
+	return recorded(), nil
 }
 
 // Finish replaces every DM of a request that is no longer pending with the
@@ -324,9 +329,11 @@ func (n *Notifier) recipients(ctx context.Context, row repo.RiskPolicyApproval, 
 		}
 		expandRoles = true
 	}
+	// One member past the cap tells a role that expands further apart from
+	// one that fits exactly.
 	limit := int32(maxRecipients)
 	if expandRoles {
-		limit = maxRoleMembers
+		limit = maxRoleMembers + 1
 	}
 	members, err := repo.New(n.db).ListApprovalRecipientMembers(ctx, repo.ListApprovalRecipientMembersParams{
 		OrganizationID: row.OrganizationID,
@@ -337,8 +344,9 @@ func (n *Notifier) recipients(ctx context.Context, row repo.RiskPolicyApproval, 
 	if err != nil {
 		return nil, fmt.Errorf("list approval recipients: %w", err)
 	}
-	if expandRoles && len(members) == maxRoleMembers {
+	if expandRoles && len(members) > maxRoleMembers {
 		n.logger.WarnContext(ctx, "approval request role approvers expand past the members checked for DMs", attr.SlogRiskPolicyApprovalID(row.ID.String()))
+		members = members[:maxRoleMembers]
 	}
 	named := make(map[string]bool, len(userIDs))
 	for _, id := range userIDs {

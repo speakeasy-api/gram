@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"go.temporal.io/api/enums/v1"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
@@ -78,23 +80,28 @@ func RiskApprovalSlackWorkflow(ctx workflow.Context, target slackapproval.Target
 }
 
 type riskApprovalSlackActivities struct {
+	logger   *slog.Logger
 	notifier *slackapproval.Notifier
 }
 
 func (a *riskApprovalSlackActivities) NotifyRiskApprovalApprovers(ctx context.Context, target slackapproval.Target) (slackapproval.NotifyResult, error) {
 	result, err := a.notifier.Notify(ctx, target)
-	return keepSentOnLastAttempt(result, err, activity.GetInfo(ctx).Attempt)
-}
-
-// keepSentOnLastAttempt lets the last send attempt succeed with the DMs it
-// has, so the run still waits and gives those DMs the outcome instead of
-// failing and leaving their buttons live. Earlier attempts return the error,
-// and the retry reaches the approvers still missing a DM.
-func keepSentOnLastAttempt(result slackapproval.NotifyResult, err error, attempt int32) (slackapproval.NotifyResult, error) {
-	if err == nil || (result.Sent > 0 && attempt >= riskApprovalSlackActivityAttempts) {
+	if err == nil {
+		return result, nil
+	}
+	if keepsSentDMs(result, activity.GetInfo(ctx).Attempt) {
+		a.logger.WarnContext(ctx, "some approvers got no approval DM", attr.SlogRiskPolicyApprovalID(target.ApprovalID.String()), attr.SlogError(err))
 		return result, nil
 	}
 	return result, fmt.Errorf("notify approvers: %w", err)
+}
+
+// keepsSentDMs reports a failed send that ends successfully with the DMs it
+// has: on the last attempt, the run still waits and gives those DMs the
+// outcome instead of failing and leaving their buttons live. Earlier attempts
+// fail, and the retry reaches the approvers still missing a DM.
+func keepsSentDMs(result slackapproval.NotifyResult, attempt int32) bool {
+	return result.Sent > 0 && attempt >= riskApprovalSlackActivityAttempts
 }
 
 func (a *riskApprovalSlackActivities) FinishRiskApprovalCards(ctx context.Context, target slackapproval.Target) error {

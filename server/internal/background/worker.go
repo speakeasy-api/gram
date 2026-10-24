@@ -733,7 +733,7 @@ func NewTemporalWorker(
 			approvals := approval.NewService(logger, opts.DB, opts.ServerURL, opts.AuditLogger)
 			cards := slackapproval.NewCards(opts.DB, approvals, opts.OrgHosts)
 			notifier := slackapproval.NewNotifier(logger, cards, slackDirectory.sync, slackapi.NewClient("", opts.GuardianPolicy.PooledClient()))
-			riskApprovalSlack := &riskApprovalSlackActivities{notifier: notifier}
+			riskApprovalSlack := &riskApprovalSlackActivities{logger: logger, notifier: notifier}
 			temporalWorker.RegisterActivity(riskApprovalSlack.NotifyRiskApprovalApprovers)
 			temporalWorker.RegisterActivity(riskApprovalSlack.FinishRiskApprovalCards)
 		}

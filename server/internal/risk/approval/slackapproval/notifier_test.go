@@ -241,8 +241,29 @@ func TestNotifySendsThroughTheWorkspacesItCanUse(t *testing.T) {
 	require.Len(t, f.slack.callsTo("chat.postMessage"), 1)
 
 	f.workspaces.workspaces = nil
-	_, err = f.notifier.Notify(t.Context(), f.target(approvalID))
+	result, err = f.notifier.Notify(t.Context(), f.target(approvalID))
 	require.ErrorContains(t, err, "sync_busy", "with no usable workspace, the busy one is still retried")
+	require.Equal(t, 1, result.Sent, "a failed attempt still reports the DM sent before it")
+}
+
+func TestNotifyAfterADecisionReportsTheDMsSent(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.slack.mapUser(f.email(t, f.approverID), "UAPPROVER")
+	policy := f.addPolicy(t, userURN(f.approverID))
+	approvalID := f.pendingRequest(t, policy, "")
+	result, err := f.notifier.Notify(t.Context(), f.target(approvalID))
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Sent)
+	_, err = f.approvals.Decide(t.Context(), approval.DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: approvalID, Approve: true, DeciderUserID: f.approverID, DeciderDisplayName: nil, Via: approval.DecidedViaDashboard, Note: ""})
+	require.NoError(t, err)
+
+	// A retry that finds the request decided still reports the DM, so the run
+	// goes on to give it the outcome.
+	result, err = f.notifier.Notify(t.Context(), f.target(approvalID))
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Sent)
+	require.Len(t, f.slack.callsTo("chat.postMessage"), 1)
 }
 
 func TestNotifyWithoutAWorkspaceSendsNothing(t *testing.T) {
@@ -348,7 +369,7 @@ func TestFinishReplacesEveryDMWithTheOutcome(t *testing.T) {
 	updates := f.slack.callsTo("chat.update")
 	require.Len(t, updates, 2)
 	for _, update := range updates {
-		require.Equal(t, "Approved: one call to slack__post_message", update.Form.Get("text"))
+		require.Equal(t, "Approved: one call to `slack__post_message`", update.Form.Get("text"))
 		require.Empty(t, buttonActions(cardBlocks(t, update)))
 		require.Contains(t, cardText(t, update), "*Approved* by Reviewer")
 		require.Contains(t, cardText(t, update), "Go ahead.")
