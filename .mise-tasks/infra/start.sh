@@ -212,10 +212,17 @@ wait_for "ClickHouse" clickhouse \
 # retention. The recurring schedules start several runs a minute, so a day of
 # them grows the server's SQLite file to hundreds of MB and pushes its heap
 # toward GOMEMLIMIT. Nobody inspects local runs that old: keep an hour. The
-# update is idempotent, so running it on every start and wake is cheap.
+# update is idempotent, so running it on every start and wake is cheap. A
+# healthy server can still be registering the namespace it was started with,
+# so retry briefly before giving up; the next start tries again.
 temporal_namespace="${TEMPORAL_NAMESPACE:-default}"
-if ! run_bounded 15 docker compose exec -T gram-temporal temporal operator namespace update \
-    --namespace "$temporal_namespace" --retention 1h > /dev/null 2>&1; then
-    echo "⚠️  Could not shorten Temporal retention for $temporal_namespace; it keeps 24 hours of workflow runs." >&2
-fi
+retention_deadline=$((SECONDS + 20))
+until run_bounded 5 docker compose exec -T gram-temporal temporal operator namespace update \
+    --namespace "$temporal_namespace" --retention 1h > /dev/null 2>&1; do
+    if ((SECONDS >= retention_deadline)); then
+        echo "⚠️  Could not shorten Temporal retention for $temporal_namespace; it keeps 24 hours of workflow runs." >&2
+        break
+    fi
+    sleep 1
+done
 
