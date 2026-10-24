@@ -16,7 +16,7 @@ export function AssertionReuseField({
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
-}) {
+}): JSX.Element {
   const descriptionId = useId();
   return (
     <div className="space-y-2 text-sm">
@@ -42,7 +42,11 @@ export function AssertionReuseField({
   );
 }
 
-export function WorkloadIssuerPolicy({ issuer }: { issuer: WorkloadIssuer }) {
+export function WorkloadIssuerPolicy({
+  issuer,
+}: {
+  issuer: WorkloadIssuer;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [allowAssertionReuse, setAllowAssertionReuse] = useState(false);

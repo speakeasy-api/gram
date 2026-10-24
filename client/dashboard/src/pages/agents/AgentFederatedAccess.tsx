@@ -48,6 +48,12 @@ export function AgentFederatedAccess({
   });
 
   const mine = identities.admissions;
+  const firstAdmissionByIssuer = new Map<string, string>();
+  for (const admission of mine) {
+    if (!firstAdmissionByIssuer.has(admission.workloadIssuerId)) {
+      firstAdmissionByIssuer.set(admission.workloadIssuerId, admission.id);
+    }
+  }
 
   return (
     <>
@@ -96,7 +102,9 @@ export function AgentFederatedAccess({
                 <div className="flex items-center gap-2">
                   {identities.issuers
                     .filter(
-                      (issuer) => issuer.id === admission.workloadIssuerId,
+                      (issuer) =>
+                        issuer.id === admission.workloadIssuerId &&
+                        firstAdmissionByIssuer.get(issuer.id) === admission.id,
                     )
                     .map((issuer) => (
                       <WorkloadIssuerPolicy key={issuer.id} issuer={issuer} />

@@ -14,6 +14,7 @@ func TestVerifyAssertionReusePolicy(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []string{"jti", "uti", "digest"} {
 		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
 			signer := newTestSigner(t, "JWT")
 			verifier, keys, _, expect := newTestVerifier(t, signer)
 			claims := testClaims()
@@ -86,6 +87,7 @@ func TestVerifyOptInStillChecksEveryAssertion(t *testing.T) {
 	t.Parallel()
 	for _, invalid := range []string{"expiry", "issuer", "audience", "signature", "store"} {
 		t.Run(invalid, func(t *testing.T) {
+			t.Parallel()
 			signer := newTestSigner(t, "JWT")
 			verifier, _, guard, expect := newTestVerifier(t, signer)
 			expect.AllowAssertionReuse = true
