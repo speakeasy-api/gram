@@ -18,6 +18,7 @@ export type UserSessionFilterFacets = {
   identity: UserSessionFilterFacet;
   identityType: UserSessionFilterFacet;
   mcpServer: UserSessionFilterFacet;
+  provider: UserSessionFilterFacet;
   /**
    * With meta_mcp_server_id: sessions on the gateway's current sign-in server that match the other filters but recorded no origin and have no consent selection naming a resource. 0 for a gateway without a sign-in server.
    */
@@ -35,6 +36,7 @@ export const UserSessionFilterFacets$inboundSchema: z.ZodMiniType<
     identity: UserSessionFilterFacet$inboundSchema,
     identity_type: UserSessionFilterFacet$inboundSchema,
     mcp_server: UserSessionFilterFacet$inboundSchema,
+    provider: UserSessionFilterFacet$inboundSchema,
     unattributed_count: z.optional(z.int()),
   }),
   z.transform((v) => {

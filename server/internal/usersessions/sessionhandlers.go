@@ -151,6 +151,8 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		ExcludeClients:             payload.ExcludeClients,
 		ClientRegistrations:        payload.ClientRegistrations,
 		ExcludeClientRegistrations: payload.ExcludeClientRegistrations,
+		Providers:                  payload.Providers,
+		ExcludeProviders:           payload.ExcludeProviders,
 		LastUsedWithin:             payload.LastUsedWithin,
 		LastUsedOlderThan:          payload.LastUsedOlderThan,
 		LastUsedNever:              conv.PtrValOr(payload.LastUsedNever, false),
@@ -245,6 +247,8 @@ func (s *Service) QueryFacets(ctx context.Context, payload *gen.QueryFacetsPaylo
 		ExcludeClients:             payload.ExcludeClients,
 		ClientRegistrations:        payload.ClientRegistrations,
 		ExcludeClientRegistrations: payload.ExcludeClientRegistrations,
+		Providers:                  payload.Providers,
+		ExcludeProviders:           payload.ExcludeProviders,
 		LastUsedWithin:             payload.LastUsedWithin,
 		LastUsedOlderThan:          payload.LastUsedOlderThan,
 		LastUsedNever:              conv.PtrValOr(payload.LastUsedNever, false),
@@ -423,7 +427,7 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 func buildUserSessionFilterFacets(rows []repo.ListUserSessionFilterFacetsRow, filter sessionfilter.Filter) *gen.UserSessionFilterFacets {
 	var unattributed *int64
 	facets := map[string]*gen.UserSessionFilterFacet{}
-	for _, field := range []string{"identity", "identity_type", "mcp_server", "client", "client_registration"} {
+	for _, field := range []string{"identity", "identity_type", "mcp_server", "client", "client_registration", sessionfilter.FieldProvider} {
 		facets[field] = &gen.UserSessionFilterFacet{Values: []*gen.UserSessionFilterFacetValue{}, DistinctCount: 0}
 	}
 	for _, row := range rows {
@@ -455,6 +459,7 @@ func buildUserSessionFilterFacets(rows []repo.ListUserSessionFilterFacetsRow, fi
 		McpServer:          facets["mcp_server"],
 		Client:             facets["client"],
 		ClientRegistration: facets["client_registration"],
+		Provider:           facets[sessionfilter.FieldProvider],
 		UnattributedCount:  unattributed,
 	}
 }

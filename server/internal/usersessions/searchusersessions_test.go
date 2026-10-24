@@ -376,9 +376,22 @@ func TestListUserSessions_OrganizationTierAgentBindingStaysInItsProject(t *testi
 	}
 
 	provider := "orgtier.example.com"
+	providerFacet := func() map[string]int64 {
+		t.Helper()
+		facets, err := ti.service.QueryFacets(ctx, &gen.QueryFacetsPayload{})
+		require.NoError(t, err)
+		return facetValues(facets.Provider)
+	}
 	attach(otherProject)
 	require.NotContains(t, searchSessionIDs(t, ctx, ti, &gen.ListUserSessionsPayload{Search: &provider}), agentSession.ID.String(), "a binding made in another project is not this project's upstream")
+	require.Equal(t, map[string]int64{"none": 1}, providerFacet(), "nor is it counted as this project's provider")
 
 	attach(*authCtx.ProjectID)
 	require.Contains(t, searchSessionIDs(t, ctx, ti, &gen.ListUserSessionsPayload{Search: &provider}), agentSession.ID.String())
+	counts := providerFacet()
+	require.Len(t, counts, 1)
+	for providerID, count := range counts {
+		require.Equal(t, int64(1), count)
+		require.Equal(t, []string{agentSession.ID.String()}, searchSessionIDs(t, ctx, ti, &gen.ListUserSessionsPayload{Providers: []string{providerID}}))
+	}
 }

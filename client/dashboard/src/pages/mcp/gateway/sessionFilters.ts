@@ -10,7 +10,8 @@ export type SessionFacetField =
   | "identity_type"
   | "mcp_server"
   | "client"
-  | "client_registration";
+  | "client_registration"
+  | "provider";
 
 export const SESSION_FILTER_FIELDS: (FilterKeyOption & {
   key: SessionFacetField | "last_used";
@@ -40,6 +41,11 @@ export const SESSION_FILTER_FIELDS: (FilterKeyOption & {
     key: "client_registration",
     label: "Client registration",
     description: "cimd | dcr | assistant | none",
+  },
+  {
+    key: "provider",
+    label: "Provider",
+    description: "Upstream provider signed in to, or Speakeasy only",
   },
   {
     key: "last_used",
@@ -81,6 +87,12 @@ export const CLIENT_REGISTRATION_LABELS: Record<string, string> = {
 export const CLIENT_VALUE_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
   none: "No client",
+};
+
+// "none" means no admitted provider sign-in; it says nothing about static
+// credentials a server may use upstream.
+export const PROVIDER_VALUE_LABELS: Record<string, string> = {
+  none: "Speakeasy only",
 };
 
 /** A label from a fixed map, ignoring inherited keys such as `toString`. */
@@ -154,6 +166,7 @@ const QUERY_KEYS: Record<SessionFacetField, FieldQuery> = {
     include: "clientRegistrations",
     exclude: "excludeClientRegistrations",
   },
+  provider: { include: "providers", exclude: "excludeProviders" },
 };
 
 export type SessionFilterQuery = Pick<
@@ -168,6 +181,8 @@ export type SessionFilterQuery = Pick<
   | "excludeClients"
   | "clientRegistrations"
   | "excludeClientRegistrations"
+  | "providers"
+  | "excludeProviders"
   | "lastUsedWithin"
   | "lastUsedOlderThan"
   | "lastUsedNever"
@@ -235,6 +250,8 @@ const VALID_VALUE: Record<SessionFacetField, (value: string) => boolean> = {
     Object.hasOwn(CLIENT_VALUE_LABELS, value) || UUID.test(value),
   client_registration: (value) =>
     Object.hasOwn(CLIENT_REGISTRATION_LABELS, value),
+  provider: (value) =>
+    Object.hasOwn(PROVIDER_VALUE_LABELS, value) || UUID.test(value),
 };
 
 /** The server's cap on each include and exclude list. */

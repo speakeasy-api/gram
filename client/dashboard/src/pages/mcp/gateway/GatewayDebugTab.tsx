@@ -37,6 +37,7 @@ import {
   CLIENT_REGISTRATION_LABELS,
   CLIENT_VALUE_LABELS,
   IDENTITY_TYPE_LABELS,
+  PROVIDER_VALUE_LABELS,
   LAST_USED_OPTIONS,
   SESSION_FILTER_FIELDS,
   SESSION_FILTER_PARAM,
@@ -62,6 +63,7 @@ const MAX_SEARCH_LENGTH = 200;
 const GROUPING_LABELS: Record<ConnectionGrouping, string> = {
   ...CONNECTION_GROUPING_LABELS,
   issuer: "Sign-in server",
+  client: "Client",
 };
 
 const GROUPING_OPTIONS = (
@@ -73,6 +75,7 @@ const RAIL_FIELDS: SessionFacetField[] = [
   "mcp_server",
   "client",
   "client_registration",
+  "provider",
 ];
 
 const FACET_KEYS: Record<
@@ -84,6 +87,7 @@ const FACET_KEYS: Record<
   mcp_server: "mcpServer",
   client: "client",
   client_registration: "clientRegistration",
+  provider: "provider",
 };
 
 type Surface = "rail" | "builder";
@@ -308,6 +312,9 @@ export function GatewayDebugTab({
     }
     if (field === "client" && ownLabel(CLIENT_VALUE_LABELS, value)) {
       return ownLabel(CLIENT_VALUE_LABELS, value)!;
+    }
+    if (field === "provider" && ownLabel(PROVIDER_VALUE_LABELS, value)) {
+      return ownLabel(PROVIDER_VALUE_LABELS, value)!;
     }
     const named = facetQueries
       .flatMap((query) =>

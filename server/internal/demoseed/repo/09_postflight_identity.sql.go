@@ -1267,7 +1267,7 @@ WITH live AS (
   WHERE project_id = $6::uuid AND deleted IS FALSE
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 8
+WHERE (SELECT count(*) FROM live) = 10
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY($1::uuid[])

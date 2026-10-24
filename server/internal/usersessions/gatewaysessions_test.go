@@ -254,6 +254,7 @@ func TestQueryFacets_GatewayScope(t *testing.T) {
 		"a recorded identity outranks consent, and unattributed sessions are not counted as the gateway's")
 	require.Equal(t, map[string]int64{shared.String(): 2, former.String(): 1}, facetValues(scoped.McpServer), "former sign-in servers stay listed")
 	require.Equal(t, new(int64(2)), scoped.UnattributedCount, "live sessions on the current sign-in server with no origin or consent resource")
+	require.Equal(t, map[string]int64{"none": 3}, facetValues(scoped.Provider), "providers are counted over the gateway's sessions only")
 
 	g3Scoped := facets(gen.QueryFacetsPayload{MetaMcpServerID: &g3ID})
 	require.Equal(t, subjects("facet-consent-g3"), facetValues(g3Scoped.Identity), "consent counts only without a recorded identity")

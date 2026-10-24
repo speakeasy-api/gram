@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -636,6 +637,18 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 				require.Contains(t, bySubject, agent.String(), "attachment projection must retain the agent subject")
 				require.Empty(t, bySubject[unattached.String()], "a sibling agent never inherits another agent's attachment")
 				requireUpstreamSearchMatchesListing(t, ctx, ti, bySubject, "attachment.example.com")
+				requireProviderFilterMatchesListing(t, ctx, ti, bySubject)
+				// The listing's agent arm and the runtime token lookup admit
+				// exactly the same attachment.
+				runtime, err := q.GetPrincipalRemoteSessionBinding(ctx, remotesessions_repo.GetPrincipalRemoteSessionBindingParams{
+					ProjectID: projectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agentID, UserSessionIssuerID: requesting, RemoteSessionClientID: clientID,
+				})
+				if len(bySubject[agent.String()]) == 0 {
+					require.ErrorIs(t, err, pgx.ErrNoRows)
+				} else {
+					require.NoError(t, err)
+					require.Equal(t, runtime.ID.String(), bySubject[agent.String()][0].RemoteSessionID)
+				}
 				return bySubject
 			}
 			before := list()
@@ -705,6 +718,40 @@ func requireUpstreamSearchMatchesListing(t *testing.T, ctx context.Context, ti *
 		got = append(got, item.SubjectUrn)
 	}
 	require.ElementsMatch(t, want, got)
+}
+
+// requireProviderFilterMatchesListing checks that filtering by each listed
+// provider, and by none, finds exactly the sessions whose listed upstreams say
+// so, and that the provider facet counts the same sessions.
+func requireProviderFilterMatchesListing(t *testing.T, ctx context.Context, ti *testInstance, listed map[string][]*types.UserSessionUpstream) {
+	t.Helper()
+
+	want := map[string][]string{"none": {}}
+	for subject, upstreams := range listed {
+		if len(upstreams) == 0 {
+			want["none"] = append(want["none"], subject)
+		}
+		seen := map[string]bool{}
+		for _, upstream := range upstreams {
+			if !seen[upstream.RemoteSessionIssuerID] {
+				seen[upstream.RemoteSessionIssuerID] = true
+				want[upstream.RemoteSessionIssuerID] = append(want[upstream.RemoteSessionIssuerID], subject)
+			}
+		}
+	}
+	facets, err := ti.service.QueryFacets(ctx, &gen.QueryFacetsPayload{})
+	require.NoError(t, err)
+	counts := facetValues(facets.Provider)
+	for provider, subjects := range want {
+		res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{Providers: []string{provider}})
+		require.NoError(t, err)
+		got := make([]string, 0, len(res.Items))
+		for _, item := range res.Items {
+			got = append(got, item.SubjectUrn)
+		}
+		require.ElementsMatch(t, subjects, got, "provider %s", provider)
+		require.Equal(t, int64(len(subjects)), counts[provider], "facet count for provider %s", provider)
+	}
 }
 
 // attachmentFixtureArgs identifies the isolated rows owned by each projection case.
@@ -781,5 +828,112 @@ func TestListUserSessions_ProviderSearchFollowsTheCallersClients(t *testing.T) {
 		"moved-provider":        {moved.ID.String()},
 	} {
 		require.ElementsMatch(t, want, searchSessionIDs(t, ctx, ti, &gen.ListUserSessionsPayload{Search: &search}), "search %q", search)
+	}
+}
+
+// Sessions of one subject on one sign-in server share the providers that pair
+// is admitted to. A provider reached through two clients counts once, an
+// expired grant still names its provider, and a deleted one leaves the
+// session with none.
+func TestListUserSessions_ProviderFilterAndFacet(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	auth := mustAuth(t, ctx)
+	issuerID := seedIssuer(t, ctx, ti, "provider-filter")
+	q := remotesessions_repo.New(ti.conn)
+	provider := func(slug string) uuid.UUID {
+		t.Helper()
+		p, err := q.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
+			ProjectID: conv.ToNullUUID(*auth.ProjectID), Slug: slug, Issuer: "https://" + slug,
+			ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{}, TokenEndpointAuthMethodsSupported: []string{},
+		})
+		require.NoError(t, err)
+		return p.ID
+	}
+	client := func(providerID uuid.UUID, name string) uuid.UUID {
+		t.Helper()
+		c, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+			ProjectID: conv.ToNullUUID(*auth.ProjectID), RemoteSessionIssuerID: providerID, ClientID: name,
+		})
+		require.NoError(t, err)
+		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: c.ID, UserSessionIssuerID: issuerID,
+		}))
+		return c.ID
+	}
+	expired := pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite}
+	session := func(name string, grants ...uuid.UUID) (urn.SessionSubject, string) {
+		t.Helper()
+		subject := urn.NewUserSubject(name)
+		s, err := seedUserSession(t, ctx, ti.conn, issuerID, subject)
+		require.NoError(t, err)
+		for _, clientID := range grants {
+			params := remotesessions_repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: clientID, AccessTokenEncrypted: "encrypted-access", Scopes: []string{}}
+			if name == "provider-expired" {
+				params.AccessExpiresAt, params.RefreshExpiresAt = expired, expired
+			}
+			_, err := q.UpsertRemoteSession(ctx, params)
+			require.NoError(t, err)
+		}
+		return subject, s.ID.String()
+	}
+
+	linear, notion := provider("linear.example.com"), provider("notion.example.com")
+	linearA, linearB, notionC := client(linear, "linear-a"), client(linear, "linear-b"), client(notion, "notion-c")
+	_, multi := session("provider-multi", linearA, notionC)
+	_, twice := session("provider-twice", linearA, linearB)
+	_, stale := session("provider-expired", linearA)
+	deletedSubject, deleted := session("provider-deleted", notionC)
+	_, none := session("provider-none")
+	_, err := q.SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx, remotesessions_repo.SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams{
+		SubjectUrn: deletedSubject, UserSessionIssuerID: issuerID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	for name, tc := range map[string]struct {
+		payload gen.ListUserSessionsPayload
+		want    []string
+	}{
+		"one provider":         {gen.ListUserSessionsPayload{Providers: []string{linear.String()}}, []string{multi, twice, stale}},
+		"another provider":     {gen.ListUserSessionsPayload{Providers: []string{notion.String()}}, []string{multi}},
+		"speakeasy only":       {gen.ListUserSessionsPayload{Providers: []string{"none"}}, []string{deleted, none}},
+		"provider or none":     {gen.ListUserSessionsPayload{Providers: []string{notion.String(), "none"}}, []string{multi, deleted, none}},
+		"exclude none":         {gen.ListUserSessionsPayload{ExcludeProviders: []string{"none"}}, []string{multi, twice, stale}},
+		"exclude any provider": {gen.ListUserSessionsPayload{ExcludeProviders: []string{linear.String()}}, []string{deleted, none}},
+	} {
+		require.ElementsMatch(t, tc.want, searchSessionIDs(t, ctx, ti, &tc.payload), name)
+	}
+
+	all, err := ti.service.QueryFacets(ctx, &gen.QueryFacetsPayload{})
+	require.NoError(t, err)
+	require.Equal(t, map[string]int64{linear.String(): 3, notion.String(): 1, "none": 2}, facetValues(all.Provider))
+	for _, v := range all.Provider.Values {
+		if v.Value == linear.String() {
+			require.Equal(t, "linear.example.com", conv.PtrValOr(v.DisplayName, ""))
+		}
+	}
+
+	for search, want := range map[string]string{"speakeasy": "none", "linear": linear.String()} {
+		found, err := ti.service.QueryFacets(ctx, &gen.QueryFacetsPayload{Field: new("provider"), FieldSearch: new(search)})
+		require.NoError(t, err)
+		var matched []string
+		for _, v := range found.Provider.Values {
+			if v.MatchesSearch {
+				matched = append(matched, v.Value)
+			}
+		}
+		require.Equal(t, []string{want}, matched, "search %q finds the provider by its shown label", search)
+	}
+
+	unknown := uuid.NewString()
+	selected, err := ti.service.QueryFacets(ctx, &gen.QueryFacetsPayload{Providers: []string{notion.String(), unknown}})
+	require.NoError(t, err)
+	require.Equal(t, map[string]int64{linear.String(): 3, notion.String(): 1, "none": 2, unknown: 0}, facetValues(selected.Provider), "the field ignores its own selection")
+	require.Len(t, selected.Identity.Values, 1, "other fields apply the provider selection")
+	for _, v := range selected.Provider.Values {
+		if v.Value == unknown {
+			require.Nil(t, v.DisplayName, "a selected value the counts did not return is never named")
+		}
 	}
 }

@@ -182,6 +182,7 @@ const facets = (over: Record<string, unknown> = {}) => ({
   mcpServer: facet(),
   client: facet(),
   clientRegistration: facet(),
+  provider: facet(),
   unattributedCount: 0,
   ...over,
 });
@@ -720,6 +721,32 @@ it("calls the issuer the sign-in server and lists former ones", async () => {
   expect(screen.getByTestId("grouping-header").textContent).toBe(
     "Sign-in server",
   );
+});
+
+it("filters by provider, naming sessions with none Speakeasy only", async () => {
+  const PROVIDER = "0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e03";
+  server.list.mockResolvedValue(page(["s1"]));
+  server.facets.mockResolvedValue(
+    facets({
+      provider: facet([
+        value(PROVIDER, 2, "linear.example.com"),
+        value("none", 1),
+      ]),
+    }),
+  );
+  renderAt();
+  await screen.findByText("s1");
+  openGroup("Provider");
+  expect(await screen.findByText("linear.example.com")).toBeTruthy();
+  fireEvent.click(screen.getByText("Speakeasy only"));
+  await waitFor(() =>
+    expect(lastList()).toMatchObject({ providers: ["none"] }),
+  );
+  expect(params().get("sf")).toBe("provider:eq:none");
+
+  const grouping = screen.getByRole("group", { name: "Group connections by" });
+  expect(within(grouping).getByText("Client")).toBeTruthy();
+  expect(within(grouping).queryByText("Agent")).toBeNull();
 });
 
 it("hides the unattributed notice when there are none", async () => {

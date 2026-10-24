@@ -515,6 +515,25 @@ VALUES
    now() + (@refresh_expires_in::text)::interval, now() + (@expires_in::text)::interval,
    now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);
 
+-- One managed-agent session through the gateway. The agent's upstream
+-- attachments are on the Linear sign-in server only, so on the gateway it is
+-- admitted to no provider and reads as Speakeasy only. Inert like the
+-- deployment's managed-agent session: an empty delegation, an invalid refresh
+-- hash and a jti no token carries.
+-- name: ServersInsertGatewayAgentSession :exec
+INSERT INTO user_sessions
+  (id, project_id, organization_id, user_session_issuer_id,
+   user_session_client_id, subject_urn, resource_identity, authorizer_user_id, delegated_grants,
+   delegated_grants_version, jti, refresh_token_hash, refresh_expires_at,
+   expires_at, last_used_at, created_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @organization_id::text,
+   @user_session_issuer_id::uuid, @user_session_client_id::uuid,
+   @subject_urn::text, @resource_identity::text, @authorizer_user_id::text, '[]'::jsonb, 1,
+   @jti::text, @refresh_token_hash::text,
+   now() + interval '7 days', now() - interval '10 minutes',
+   now() - interval '25 minutes', now() - interval '2 days');
+
 -- Inert upstream account, owned by the human on Linear session 6. Both
 -- active release agents share that human owner. The explicit client link
 -- makes this exact session reachable from the requesting session's issuer.

@@ -1656,6 +1656,43 @@ WHERE (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.org
     OR s.resource_identity = sqlc.narg('resource_identity')::text
     OR (s.resource_identity IS NULL AND s.tool_selection->>'resource' = sqlc.narg('resource_identity')::text)
   )
+  -- Providers are the sign-ins the session's (subject, sign-in server) pair is
+  -- admitted to; none selects pairs admitted to no provider.
+  AND (
+    cardinality(sqlc.arg('providers')::text[]) = 0
+    OR EXISTS (
+      SELECT 1
+      FROM session_upstreams(@project_id::uuid, @organization_id::text) AS up
+      WHERE up.subject_urn = s.subject_urn::text
+        AND up.user_session_issuer_id = s.user_session_issuer_id
+        AND up.remote_session_issuer_id::text = ANY(sqlc.arg('providers')::text[])
+    )
+    OR (
+      'none' = ANY(sqlc.arg('providers')::text[])
+      AND NOT EXISTS (
+        SELECT 1
+        FROM session_upstreams(@project_id::uuid, @organization_id::text) AS up
+        WHERE up.subject_urn = s.subject_urn::text
+          AND up.user_session_issuer_id = s.user_session_issuer_id
+      )
+    )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM session_upstreams(@project_id::uuid, @organization_id::text) AS up
+    WHERE up.subject_urn = s.subject_urn::text
+      AND up.user_session_issuer_id = s.user_session_issuer_id
+      AND up.remote_session_issuer_id::text = ANY(sqlc.arg('exclude_providers')::text[])
+  )
+  AND NOT (
+    'none' = ANY(sqlc.arg('exclude_providers')::text[])
+    AND NOT EXISTS (
+      SELECT 1
+      FROM session_upstreams(@project_id::uuid, @organization_id::text) AS up
+      WHERE up.subject_urn = s.subject_urn::text
+        AND up.user_session_issuer_id = s.user_session_issuer_id
+    )
+  )
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
 ORDER BY s.id DESC
 LIMIT sqlc.arg('limit_value');
@@ -2126,9 +2163,10 @@ RETURNING *;
 -- its top facet_limit values plus any selected value, and distinct_count
 -- counts every value that matched. The unattributed row counts sessions on
 -- the gateway's current sign-in server with no recorded origin, under the same
--- filters.
+-- filters. A session counts once under each provider its (subject, sign-in
+-- server) pair is admitted to, or once under none when it has no provider.
 WITH base AS MATERIALIZED (
-  SELECT s.subject_urn::text AS identity,
+  SELECT s.subject_urn::text AS identity, s.id AS session_id, s.user_session_issuer_id AS server_id,
          CASE
            WHEN s.subject_urn::text LIKE 'user:%' THEN COALESCE(NULLIF(u.display_name, ''), NULLIF(u.email, ''))
            WHEN s.subject_urn::text LIKE 'apikey:%' THEN NULLIF(k.name, '')
@@ -2178,39 +2216,59 @@ WITH base AS MATERIALIZED (
       OR (s.resource_identity IS NULL AND s.tool_selection->>'resource' IS NULL AND s.user_session_issuer_id = sqlc.narg('unattributed_issuer_id')::uuid)
     )
 ),
+pair_upstreams AS MATERIALIZED (
+  SELECT DISTINCT up.subject_urn, up.user_session_issuer_id, up.remote_session_issuer_id::text AS provider, up.provider_slug
+  FROM session_upstreams(@project_id::uuid, @organization_id::text) AS up(subject_urn, user_session_issuer_id, remote_session_id, remote_session_issuer_id, provider_slug)
+  WHERE (up.subject_urn, up.user_session_issuer_id) IN (SELECT identity, server_id FROM base)
+),
+provider_sets AS (
+  SELECT subject_urn, user_session_issuer_id, array_agg(DISTINCT provider) AS providers
+  FROM pair_upstreams
+  GROUP BY subject_urn, user_session_issuer_id
+),
 flagged AS MATERIALIZED (
   SELECT base.*,
          (cardinality(sqlc.arg('identities')::text[]) = 0 OR identity = ANY(sqlc.arg('identities')::text[])) AND NOT identity = ANY(sqlc.arg('exclude_identities')::text[]) AS identity_ok,
          (cardinality(sqlc.arg('identity_types')::text[]) = 0 OR identity_type = ANY(sqlc.arg('identity_types')::text[])) AND NOT identity_type = ANY(sqlc.arg('exclude_identity_types')::text[]) AS identity_type_ok,
          (cardinality(sqlc.arg('servers')::uuid[]) = 0 OR server = ANY(sqlc.arg('servers')::uuid[]::text[])) AND NOT server = ANY(sqlc.arg('exclude_servers')::uuid[]::text[]) AS server_ok,
          (cardinality(sqlc.arg('clients')::text[]) = 0 OR client = ANY(sqlc.arg('clients')::text[])) AND NOT client = ANY(sqlc.arg('exclude_clients')::text[]) AS client_ok,
-         (cardinality(sqlc.arg('client_registrations')::text[]) = 0 OR client_registration = ANY(sqlc.arg('client_registrations')::text[])) AND NOT client_registration = ANY(sqlc.arg('exclude_client_registrations')::text[]) AS client_registration_ok
+         (cardinality(sqlc.arg('client_registrations')::text[]) = 0 OR client_registration = ANY(sqlc.arg('client_registrations')::text[])) AND NOT client_registration = ANY(sqlc.arg('exclude_client_registrations')::text[]) AS client_registration_ok,
+         (cardinality(sqlc.arg('providers')::text[]) = 0 OR COALESCE(ps.providers, ARRAY['none']) && sqlc.arg('providers')::text[])
+           AND NOT COALESCE(ps.providers, ARRAY['none']) && sqlc.arg('exclude_providers')::text[] AS provider_ok
   FROM base
+  LEFT JOIN provider_sets AS ps ON ps.subject_urn = base.identity AND ps.user_session_issuer_id = base.server_id
   WHERE last_used_ok
 ),
 counts AS (
   SELECT 'identity' AS field, identity AS value, max(identity_label) AS label, count(*) AS n
-  FROM flagged WHERE NOT unattributed AND identity_type_ok AND server_ok AND client_ok AND client_registration_ok
+  FROM flagged WHERE NOT unattributed AND identity_type_ok AND server_ok AND client_ok AND client_registration_ok AND provider_ok
   GROUP BY identity
   UNION ALL
   SELECT 'identity_type', identity_type, NULL, count(*)
-  FROM flagged WHERE NOT unattributed AND identity_ok AND server_ok AND client_ok AND client_registration_ok
+  FROM flagged WHERE NOT unattributed AND identity_ok AND server_ok AND client_ok AND client_registration_ok AND provider_ok
   GROUP BY identity_type
   UNION ALL
   SELECT 'mcp_server', server, max(server_label), count(*)
-  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND client_ok AND client_registration_ok
+  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND client_ok AND client_registration_ok AND provider_ok
   GROUP BY server
   UNION ALL
   SELECT 'client', client, max(client_label), count(*)
-  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_registration_ok
+  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_registration_ok AND provider_ok
   GROUP BY client
   UNION ALL
   SELECT 'client_registration', client_registration, NULL, count(*)
-  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_ok
+  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_ok AND provider_ok
   GROUP BY client_registration
   UNION ALL
   SELECT 'unattributed', '', NULL, count(*)
-  FROM flagged WHERE unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_ok AND client_registration_ok
+  FROM flagged WHERE unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_ok AND client_registration_ok AND provider_ok
+  UNION ALL
+  -- none carries the label the dashboard shows, so a field search finds it.
+  SELECT 'provider', COALESCE(pu.provider, 'none'), COALESCE(max(pu.provider_slug), 'Speakeasy only'), count(DISTINCT f.session_id)
+  FROM flagged AS f
+  LEFT JOIN pair_upstreams AS pu ON pu.subject_urn = f.identity AND pu.user_session_issuer_id = f.server_id
+  WHERE NOT f.unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_ok AND client_registration_ok
+  GROUP BY 2
 ),
 marked AS (
   SELECT counts.*,
@@ -2219,6 +2277,7 @@ marked AS (
            WHEN 'identity_type' THEN value = ANY(sqlc.arg('identity_types')::text[] || sqlc.arg('exclude_identity_types')::text[])
            WHEN 'mcp_server' THEN value = ANY(sqlc.arg('servers')::uuid[]::text[] || sqlc.arg('exclude_servers')::uuid[]::text[])
            WHEN 'client' THEN value = ANY(sqlc.arg('clients')::text[] || sqlc.arg('exclude_clients')::text[])
+           WHEN 'provider' THEN value = ANY(sqlc.arg('providers')::text[] || sqlc.arg('exclude_providers')::text[])
            ELSE value = ANY(sqlc.arg('client_registrations')::text[] || sqlc.arg('exclude_client_registrations')::text[])
          END AS selected,
          COALESCE(
@@ -2294,118 +2353,39 @@ WHERE (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id
   AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);
 
 -- name: ListRemoteSessionUpstreamsForSubjects :many
--- The outbound leg of the brokered connections on one page of user_sessions.
--- A remote_session is one shared upstream grant per (subject_urn,
--- remote_session_client_id); its own user_session_issuer_id is provenance
--- only. The match therefore goes through the issuer's client bindings: a
--- user_session under issuer B lists every upstream grant the subject holds on
--- a client bound to B, including grants first minted through a sibling
--- issuer. It also keeps listing a grant minted through the page's issuer whose
--- client was since detached from it: those tokens are still live upstream and
--- SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer still destroys them,
--- so hiding them would show an empty page for a revoke that is not a no-op.
--- Agents instead use the exact live owner attachment relationship from
--- GetPrincipalRemoteSessionBinding: no direct subject match or provenance-only
--- fallback, and no credential-specific attachment. Keep its authority, tenant,
--- client and grant-generation predicates aligned with that canonical lookup.
--- Expiry is deliberately not filtered: refreshable grants retain lineage and
--- the existing view computes status without fetching or refreshing tokens.
--- Only the requesting actor is projected, never the attached owner identity.
--- EXISTS prevents duplicate rows for the same actor and upstream grant.
--- The projected user_session_issuer_id is the requesting issuer, which is the
--- key the caller indexes by.
+-- The outbound leg of the brokered connections on one page of user_sessions,
+-- through session_upstreams: the grants each (subject, sign-in server) pair is
+-- admitted to, whether held directly or through an exact live agent
+-- attachment. Expiry is not filtered: refreshable grants keep their lineage and
+-- the view computes status without fetching or refreshing tokens.
 -- Takes the page's pairs as parallel arrays rather than two independent IN
 -- lists: filtering on subjects and issuers separately would return the cross
 -- product, attributing one subject's upstream session to another subject who
 -- happens to share an issuer.
 -- Token material is never projected — only expiry metadata and a boolean for
 -- whether a refresh grant exists.
--- Scoped by the binding issuer's tenancy, at whichever tier owns it: an
--- upstream established through an organization-level or global client, whose
--- project_id is NULL, still belongs to the tenant whose user_session_issuer
--- the client is bound to. Filtering
--- on the client's project would silently drop those upstreams and report a
--- brokered session as having none. A client that does carry a project must
--- still match, so a row that somehow paired one project's client with another
--- project's issuer stays invisible rather than being read as a shared one.
 SELECT rs.id,
        pair.subject_urn::text AS subject_urn,
-       usi.id AS user_session_issuer_id,
+       up.user_session_issuer_id::uuid AS user_session_issuer_id,
        rs.remote_session_client_id,
-       rc.remote_session_issuer_id,
-       ri.slug AS issuer_slug,
+       up.remote_session_issuer_id::uuid AS remote_session_issuer_id,
+       up.provider_slug::text AS issuer_slug,
        rs.access_expires_at,
        rs.refresh_expires_at,
        rs.authorization_expires_at,
-       -- Cast so sqlc types this as bool rather than interface{}; the token
-       -- itself is never projected, only whether a refresh grant exists.
        (rs.refresh_token_encrypted IS NOT NULL)::boolean AS has_refresh_token,
        rs.auto_refresh,
        rs.last_used_at,
        rs.scopes
-FROM remote_sessions AS rs
-JOIN (
+FROM (
        SELECT unnest(@subject_urns::text[]) AS subject_urn,
               unnest(@issuer_ids::uuid[]) AS issuer_id
      ) AS pair
-  ON (
-    (pair.subject_urn NOT LIKE 'agent:%' AND rs.subject_urn = pair.subject_urn)
-    OR EXISTS (
-      SELECT 1
-      FROM principal_remote_session_bindings AS b
-      JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
-        AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
-        AND a.owner_reassignment_required_at IS NULL
-      JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
-      JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
-        AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
-      JOIN remote_sessions AS s ON s.id = b.remote_session_id
-        AND s.subject_urn = 'user:' || a.owner_user_id
-        AND b.attached_by_subject_id = s.subject_urn
-        AND s.grant_generation = b.grant_generation
-        AND s.remote_session_client_id = b.remote_session_client_id
-      JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
-      JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
-      JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id
-      JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
-      JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
-      JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
-      WHERE b.project_id = @project_id::uuid
-        AND b.organization_id = @organization_id::text
-        AND 'agent:' || b.principal_id::text = pair.subject_urn
-        AND b.user_session_issuer_id = pair.issuer_id
-        AND b.remote_session_client_id = rs.remote_session_client_id
-        AND b.revoked_at IS NULL
-        AND s.deleted IS FALSE
-        AND c.deleted IS FALSE
-        AND target.deleted IS FALSE
-        AND provenance.deleted IS FALSE
-        AND issuer.deleted IS FALSE
-        AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
-        AND (provenance.project_id = @project_id::uuid OR (provenance.project_id IS NULL AND provenance.organization_id = @organization_id::text))
-        AND (target.project_id = @project_id::uuid OR (target.project_id IS NULL AND target.organization_id = @organization_id::text))
-        AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
-        AND s.id = rs.id
-    )
-  )
-JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
-JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
-JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-WHERE (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
-  AND (rc.project_id = @project_id::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id)))
-  AND (
-    EXISTS (
-      SELECT 1
-      FROM remote_session_client_user_session_issuers AS blink
-      WHERE blink.remote_session_client_id = rs.remote_session_client_id
-        AND blink.user_session_issuer_id = pair.issuer_id
-    )
-    OR rs.user_session_issuer_id = pair.issuer_id
-  )
-  AND rs.deleted IS FALSE
-  AND rc.deleted IS FALSE
-  AND ri.deleted IS FALSE
-ORDER BY ri.slug ASC, rs.id ASC;
+JOIN session_upstreams(@project_id::uuid, @organization_id::text) AS up(subject_urn, user_session_issuer_id, remote_session_id, remote_session_issuer_id, provider_slug)
+  ON up.subject_urn = pair.subject_urn
+  AND up.user_session_issuer_id = pair.issuer_id
+JOIN remote_sessions AS rs ON rs.id = up.remote_session_id
+ORDER BY up.provider_slug ASC, rs.id ASC;
 
 -- name: ClearUserSessionClientAuthMethod :one
 -- TEST FIXTURE ONLY. Never call this from application code: it un-sets the

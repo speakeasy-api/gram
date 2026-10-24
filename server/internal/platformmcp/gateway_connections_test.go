@@ -95,9 +95,9 @@ func TestGatewayConnectionsToolKeepsOneContract(t *testing.T) {
 func TestListGatewayConnectionsReadsThroughTheScopedSessionService(t *testing.T) {
 	t.Parallel()
 
-	project, gateway, server, otherServer := uuid.New(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	project, gateway, server, otherServer, otherProvider := uuid.New(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	fake := &gatewaySessionsFake{items: []*types.UserSession{
-		{ID: "s-1", UserSessionIssuerID: "issuer-1", SubjectUrn: "user:u-1", SubjectType: "user", SubjectDisplayName: new("Ada Lovelace"), Jti: "jti-secret", IssuerSlug: "sign-in", ClientName: new("Editor"), UserSessionClientID: new("c-1"), CreatedAt: "2026-10-01T00:00:00Z", LastUsedAt: new("2026-10-20T00:00:00Z"), RevokedAt: new("2026-10-21T00:00:00Z"), RefreshExpiresAt: "2026-11-01T00:00:00Z", Upstreams: []*types.UserSessionUpstream{{IssuerSlug: "mcp.example.com", RemoteSessionID: "remote-session-1", HasRefreshToken: true}}},
+		{ID: "s-1", UserSessionIssuerID: "issuer-1", SubjectUrn: "user:u-1", SubjectType: "user", SubjectDisplayName: new("Ada Lovelace"), Jti: "jti-secret", IssuerSlug: "sign-in", ClientName: new("Editor"), UserSessionClientID: new("c-1"), CreatedAt: "2026-10-01T00:00:00Z", LastUsedAt: new("2026-10-20T00:00:00Z"), RevokedAt: new("2026-10-21T00:00:00Z"), RefreshExpiresAt: "2026-11-01T00:00:00Z", Upstreams: []*types.UserSessionUpstream{{IssuerSlug: "mcp.example.com", RemoteSessionIssuerID: "provider-1", RemoteSessionID: "remote-session-1", HasRefreshToken: true}}},
 		{ID: "s-2", SubjectUrn: "agent:a-1", SubjectType: "agent", SubjectDisplayName: new("Hidden agent"), Upstreams: []*types.UserSessionUpstream{}},
 	}}
 	service := gatewayConnectionsTestService(fake, project, nil)
@@ -109,6 +109,7 @@ func TestListGatewayConnectionsReadsThroughTheScopedSessionService(t *testing.T)
 		Servers: []string{server}, ExcludeServers: []string{otherServer},
 		Clients: []string{"none"}, ExcludeClients: []string{"dashboard"},
 		ClientRegistrations: []string{"dcr"}, ExcludeRegistrations: []string{"cimd"},
+		Providers: []string{"none"}, ExcludeProviders: []string{otherProvider},
 		LastUsedWithin: new(86400), LastUsedOlderThan: new(3600),
 		Cursor: "cursor-1", Limit: 25,
 	})
@@ -130,6 +131,8 @@ func TestListGatewayConnectionsReadsThroughTheScopedSessionService(t *testing.T)
 		"exclude_clients":        {[]string{"dashboard"}, fake.list.ExcludeClients, fake.facets.ExcludeClients},
 		"client_registrations":   {[]string{"dcr"}, fake.list.ClientRegistrations, fake.facets.ClientRegistrations},
 		"exclude_registrations":  {[]string{"cimd"}, fake.list.ExcludeClientRegistrations, fake.facets.ExcludeClientRegistrations},
+		"providers":              {[]string{"none"}, fake.list.Providers, fake.facets.Providers},
+		"exclude_providers":      {[]string{otherProvider}, fake.list.ExcludeProviders, fake.facets.ExcludeProviders},
 		"last_used_within":       {86400, *fake.list.LastUsedWithin, *fake.facets.LastUsedWithin},
 		"last_used_older_than":   {3600, *fake.list.LastUsedOlderThan, *fake.facets.LastUsedOlderThan},
 		"last_used_never":        {false, *fake.list.LastUsedNever, *fake.facets.LastUsedNever},
@@ -145,7 +148,7 @@ func TestListGatewayConnectionsReadsThroughTheScopedSessionService(t *testing.T)
 	require.Equal(t, "cursor-2", out.NextCursor)
 	require.Equal(t, GatewayConnection{
 		ID: "s-1", Identity: "user:u-1", IdentityType: "user", DisplayName: "Ada Lovelace", ClientID: "c-1", ClientName: "Editor",
-		SignInServerID: "issuer-1", SignInServer: "sign-in", UpstreamProviders: []string{"mcp.example.com"},
+		SignInServerID: "issuer-1", SignInServer: "sign-in", UpstreamProviders: []string{"mcp.example.com"}, UpstreamProviderIDs: []string{"provider-1"},
 		CreatedAt: "2026-10-01T00:00:00Z", ExpiresAt: "2026-11-01T00:00:00Z", LastUsedAt: "2026-10-20T00:00:00Z", RevokedAt: "2026-10-21T00:00:00Z",
 	}, out.Connections[0])
 	require.Empty(t, out.Connections[1].DisplayName, "agents are not named")

@@ -71,6 +71,8 @@ export function buildUserSessionFilterFacetsQuery(
       excludeClients: request?.excludeClients,
       clientRegistrations: request?.clientRegistrations,
       excludeClientRegistrations: request?.excludeClientRegistrations,
+      providers: request?.providers,
+      excludeProviders: request?.excludeProviders,
       lastUsedWithin: request?.lastUsedWithin,
       lastUsedOlderThan: request?.lastUsedOlderThan,
       lastUsedNever: request?.lastUsedNever,
@@ -124,6 +126,8 @@ export function queryKeyUserSessionFilterFacets(
     excludeClientRegistrations?:
       | Array<QueryParamExcludeClientRegistrations>
       | undefined;
+    providers?: Array<string> | undefined;
+    excludeProviders?: Array<string> | undefined;
     lastUsedWithin?: number | undefined;
     lastUsedOlderThan?: number | undefined;
     lastUsedNever?: boolean | undefined;

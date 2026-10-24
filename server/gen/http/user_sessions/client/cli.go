@@ -19,7 +19,7 @@ import (
 
 // BuildListUserSessionsPayload builds the payload for the userSessions
 // listUserSessions endpoint from CLI flags.
-func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsStatus string, userSessionsListUserSessionsClientID string, userSessionsListUserSessionsSearch string, userSessionsListUserSessionsMetaMcpServerID string, userSessionsListUserSessionsIdentities string, userSessionsListUserSessionsExcludeIdentities string, userSessionsListUserSessionsIdentityTypes string, userSessionsListUserSessionsExcludeIdentityTypes string, userSessionsListUserSessionsServers string, userSessionsListUserSessionsExcludeServers string, userSessionsListUserSessionsClients string, userSessionsListUserSessionsExcludeClients string, userSessionsListUserSessionsClientRegistrations string, userSessionsListUserSessionsExcludeClientRegistrations string, userSessionsListUserSessionsLastUsedWithin string, userSessionsListUserSessionsLastUsedOlderThan string, userSessionsListUserSessionsLastUsedNever string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
+func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsStatus string, userSessionsListUserSessionsClientID string, userSessionsListUserSessionsSearch string, userSessionsListUserSessionsMetaMcpServerID string, userSessionsListUserSessionsIdentities string, userSessionsListUserSessionsExcludeIdentities string, userSessionsListUserSessionsIdentityTypes string, userSessionsListUserSessionsExcludeIdentityTypes string, userSessionsListUserSessionsServers string, userSessionsListUserSessionsExcludeServers string, userSessionsListUserSessionsClients string, userSessionsListUserSessionsExcludeClients string, userSessionsListUserSessionsClientRegistrations string, userSessionsListUserSessionsExcludeClientRegistrations string, userSessionsListUserSessionsProviders string, userSessionsListUserSessionsExcludeProviders string, userSessionsListUserSessionsLastUsedWithin string, userSessionsListUserSessionsLastUsedOlderThan string, userSessionsListUserSessionsLastUsedNever string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
 	var err error
 	var subjectUrn *string
 	{
@@ -257,6 +257,36 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 			}
 		}
 	}
+	var providers []string
+	{
+		if userSessionsListUserSessionsProviders != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsProviders), &providers)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for providers, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(providers) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("providers", providers, len(providers), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeProviders []string
+	{
+		if userSessionsListUserSessionsExcludeProviders != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsExcludeProviders), &excludeProviders)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeProviders, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(excludeProviders) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_providers", excludeProviders, len(excludeProviders), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var lastUsedWithin *int
 	{
 		if userSessionsListUserSessionsLastUsedWithin != "" {
@@ -367,6 +397,8 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 	v.ExcludeClients = excludeClients
 	v.ClientRegistrations = clientRegistrations
 	v.ExcludeClientRegistrations = excludeClientRegistrations
+	v.Providers = providers
+	v.ExcludeProviders = excludeProviders
 	v.LastUsedWithin = lastUsedWithin
 	v.LastUsedOlderThan = lastUsedOlderThan
 	v.LastUsedNever = lastUsedNever
@@ -410,7 +442,7 @@ func BuildListFacetsPayload(userSessionsListFacetsSessionToken string, userSessi
 
 // BuildQueryFacetsPayload builds the payload for the userSessions queryFacets
 // endpoint from CLI flags.
-func BuildQueryFacetsPayload(userSessionsQueryFacetsSubjectUrn string, userSessionsQueryFacetsUserSessionIssuerID string, userSessionsQueryFacetsStatus string, userSessionsQueryFacetsClientID string, userSessionsQueryFacetsSearch string, userSessionsQueryFacetsMetaMcpServerID string, userSessionsQueryFacetsIdentities string, userSessionsQueryFacetsExcludeIdentities string, userSessionsQueryFacetsIdentityTypes string, userSessionsQueryFacetsExcludeIdentityTypes string, userSessionsQueryFacetsServers string, userSessionsQueryFacetsExcludeServers string, userSessionsQueryFacetsClients string, userSessionsQueryFacetsExcludeClients string, userSessionsQueryFacetsClientRegistrations string, userSessionsQueryFacetsExcludeClientRegistrations string, userSessionsQueryFacetsLastUsedWithin string, userSessionsQueryFacetsLastUsedOlderThan string, userSessionsQueryFacetsLastUsedNever string, userSessionsQueryFacetsField string, userSessionsQueryFacetsFieldSearch string, userSessionsQueryFacetsSessionToken string, userSessionsQueryFacetsApikeyToken string, userSessionsQueryFacetsProjectSlugInput string) (*usersessions.QueryFacetsPayload, error) {
+func BuildQueryFacetsPayload(userSessionsQueryFacetsSubjectUrn string, userSessionsQueryFacetsUserSessionIssuerID string, userSessionsQueryFacetsStatus string, userSessionsQueryFacetsClientID string, userSessionsQueryFacetsSearch string, userSessionsQueryFacetsMetaMcpServerID string, userSessionsQueryFacetsIdentities string, userSessionsQueryFacetsExcludeIdentities string, userSessionsQueryFacetsIdentityTypes string, userSessionsQueryFacetsExcludeIdentityTypes string, userSessionsQueryFacetsServers string, userSessionsQueryFacetsExcludeServers string, userSessionsQueryFacetsClients string, userSessionsQueryFacetsExcludeClients string, userSessionsQueryFacetsClientRegistrations string, userSessionsQueryFacetsExcludeClientRegistrations string, userSessionsQueryFacetsProviders string, userSessionsQueryFacetsExcludeProviders string, userSessionsQueryFacetsLastUsedWithin string, userSessionsQueryFacetsLastUsedOlderThan string, userSessionsQueryFacetsLastUsedNever string, userSessionsQueryFacetsField string, userSessionsQueryFacetsFieldSearch string, userSessionsQueryFacetsSessionToken string, userSessionsQueryFacetsApikeyToken string, userSessionsQueryFacetsProjectSlugInput string) (*usersessions.QueryFacetsPayload, error) {
 	var err error
 	var subjectUrn *string
 	{
@@ -648,6 +680,36 @@ func BuildQueryFacetsPayload(userSessionsQueryFacetsSubjectUrn string, userSessi
 			}
 		}
 	}
+	var providers []string
+	{
+		if userSessionsQueryFacetsProviders != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsProviders), &providers)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for providers, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(providers) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("providers", providers, len(providers), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeProviders []string
+	{
+		if userSessionsQueryFacetsExcludeProviders != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsExcludeProviders), &excludeProviders)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeProviders, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(excludeProviders) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_providers", excludeProviders, len(excludeProviders), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var lastUsedWithin *int
 	{
 		if userSessionsQueryFacetsLastUsedWithin != "" {
@@ -705,8 +767,8 @@ func BuildQueryFacetsPayload(userSessionsQueryFacetsSubjectUrn string, userSessi
 	{
 		if userSessionsQueryFacetsField != "" {
 			field = &userSessionsQueryFacetsField
-			if !(*field == "identity" || *field == "identity_type" || *field == "mcp_server" || *field == "client" || *field == "client_registration") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("field", *field, []any{"identity", "identity_type", "mcp_server", "client", "client_registration"}))
+			if !(*field == "identity" || *field == "identity_type" || *field == "mcp_server" || *field == "client" || *field == "client_registration" || *field == "provider") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("field", *field, []any{"identity", "identity_type", "mcp_server", "client", "client_registration", "provider"}))
 			}
 			if err != nil {
 				return nil, err
@@ -760,6 +822,8 @@ func BuildQueryFacetsPayload(userSessionsQueryFacetsSubjectUrn string, userSessi
 	v.ExcludeClients = excludeClients
 	v.ClientRegistrations = clientRegistrations
 	v.ExcludeClientRegistrations = excludeClientRegistrations
+	v.Providers = providers
+	v.ExcludeProviders = excludeProviders
 	v.LastUsedWithin = lastUsedWithin
 	v.LastUsedOlderThan = lastUsedOlderThan
 	v.LastUsedNever = lastUsedNever

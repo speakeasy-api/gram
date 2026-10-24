@@ -152,6 +152,8 @@ func TestListUserSessions_FilterRejectsOversizedAndInvalidValues(t *testing.T) {
 		"server not a uuid":    {Servers: []string{"not-a-uuid"}},
 		"unknown client value": {Clients: []string{"somewhere"}},
 		"unknown registration": {ClientRegistrations: []string{"preregistered"}},
+		"provider not a uuid":  {Providers: []string{"linear"}},
+		"client-only sentinel": {ExcludeProviders: []string{"dashboard"}},
 		"zero seconds":         {LastUsedWithin: new(0)},
 		"empty identity":       {Identities: []string{""}},
 		"empty exclusion":      {ExcludeClients: []string{" "}},
@@ -376,6 +378,16 @@ func TestPlatformListUserSessions_FiltersMatchTheAPI(t *testing.T) {
 	got, err = call(map[string]any{"client_registrations": []string{"cimd"}, "last_used_never": true})
 	require.NoError(t, err)
 	require.Equal(t, []string{f.unused}, got)
+
+	// The fixture holds no upstream grants, so every session is Speakeasy only.
+	got, err = call(map[string]any{"providers": []string{"none"}, "exclude_servers": []string{f.serverB.String()}})
+	require.NoError(t, err)
+	require.ElementsMatch(t, searchSessionIDs(t, ctx, ti, &gen.ListUserSessionsPayload{ExcludeServers: []string{f.serverB.String()}}), got)
+	got, err = call(map[string]any{"exclude_providers": []string{"none"}})
+	require.NoError(t, err)
+	require.Empty(t, got)
+	_, err = call(map[string]any{"providers": []string{"linear"}})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	tooMany := make([]string, 51)
 	for i := range tooMany {

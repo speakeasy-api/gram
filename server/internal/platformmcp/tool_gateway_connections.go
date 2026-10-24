@@ -41,7 +41,7 @@ func registerGatewayConnectionsTool(reg *Registrar, service *GatewayConnectionsS
 		Name:  listGatewayConnectionsToolName,
 		Title: "List a Gateway's Connections",
 		Description: "List the sessions people, agents, API keys and workloads hold on one gateway in an explicit project, as the gateway's Debug tab shows them: who is connected, from which client, to which upstream providers, and when each session was created, last used, expires or was revoked. " +
-			"Use the gateway_id that create_gateway returns, or that get_plugin returns as target_id for a member whose backend is gateway. Narrow with search and the include and exclude filters; omitting status leaves out revoked sessions. Pages hold 50 sessions unless limit says otherwise, up to 100. " +
+			"Use the gateway_id that create_gateway returns, or that get_plugin returns as target_id for a member whose backend is gateway. Narrow with search and the include and exclude filters; providers takes ids from upstream_provider_ids, or none for sessions with no admitted provider sign-in. Omitting status leaves out revoked sessions. Pages hold 50 sessions unless limit says otherwise, up to 100. " +
 			"unattributed_count is how many sessions on the gateway's sign-in server match the same filters but recorded no gateway, so they cannot be listed here. " +
 			"Read-only: it never revokes. Never returns tokens, token hashes or credentials. Agents are listed by identity without a name.",
 		Annotations: readOnlyAnnotations(),

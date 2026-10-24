@@ -95,7 +95,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 			return s.q.PostflightIDInertUpstreamSessions(ctx, s.det("remote-identity-client-linear"))
 		}, 6, "demo seed postflight: expected 6 inert validated-spread upstream sessions, found %d"},
 		{byOrg(s.q.PostflightIDAgents), 6, "demo seed postflight: expected 6 managed agents, found %d"},
-		{byOrg(s.q.PostflightIDAgentSessions), 1, "demo seed postflight: expected 1 managed agent session, found %d"},
+		{byOrg(s.q.PostflightIDAgentSessions), 2, "demo seed postflight: expected 2 managed agent sessions, found %d"},
 		// This External OAuth row drives the metadata recommendation. Keep its
 		// count stable so a rerun cannot duplicate it or silently drop the demo
 		// surface.
@@ -211,17 +211,18 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// Linear's two clients, and each EMA service's own client.
 		{byProj(s.q.PostflightIDServerClientAssociations), 4, "demo seed postflight: expected 4 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Linear and Slack
-		// sign-ins on their own server, the gateway sign-ins on both members.
+		// sign-ins on their own server, the gateway sign-ins (two people and
+		// one managed agent) on both members.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
 				ProjectID:        proj,
-				LinearSessionIds: []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11")},
-				SlackSessionIds:  []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11")},
+				LinearSessionIds: []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11"), s.det("gateway-agent-session")},
+				SlackSessionIds:  []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11"), s.det("gateway-agent-session")},
 				LinearServerID:   s.det("mcpserver-linear"),
 				SlackServerID:    s.det("mcpserver-slack"),
 				LinearClientID:   s.det("remote-identity-client-linear"),
 			})
-		}, 8, "demo seed postflight: expected exactly 8 matching upstream client choices, found %d"},
+		}, 10, "demo seed postflight: expected exactly 10 matching upstream client choices, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				ProjectID:      proj,
@@ -233,7 +234,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.
-		{byProj(s.q.PostflightIDProjectAgentSessions), 1, "demo seed postflight: expected 1 project-scoped managed agent session, found %d"},
+		{byProj(s.q.PostflightIDProjectAgentSessions), 2, "demo seed postflight: expected 2 project-scoped managed agent sessions, found %d"},
 		{byProj(s.q.PostflightIDConnections), 11, "demo seed postflight: expected 11 MCP connections, found %d"},
 		// Spread across servers, not pooled on one: the connections tab groups
 		// by MCP server, and a single group makes that view look broken.

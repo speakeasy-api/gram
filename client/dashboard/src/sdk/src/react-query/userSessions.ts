@@ -223,6 +223,8 @@ export function setUserSessionsData(
       excludeClientRegistrations?:
         | Array<ExcludeClientRegistrations>
         | undefined;
+      providers?: Array<string> | undefined;
+      excludeProviders?: Array<string> | undefined;
       lastUsedWithin?: number | undefined;
       lastUsedOlderThan?: number | undefined;
       lastUsedNever?: boolean | undefined;
@@ -262,6 +264,8 @@ export function invalidateUserSessions(
       excludeClientRegistrations?:
         | Array<ExcludeClientRegistrations>
         | undefined;
+      providers?: Array<string> | undefined;
+      excludeProviders?: Array<string> | undefined;
       lastUsedWithin?: number | undefined;
       lastUsedOlderThan?: number | undefined;
       lastUsedNever?: boolean | undefined;
