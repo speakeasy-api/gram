@@ -306,7 +306,7 @@ func requireHostedSlugPrefix(ctx context.Context, logger *slog.Logger, authCtx *
 // followHostedSlug renames a hosted server to its single address's new slug, as pods that compare it with the
 // toolset's mcp_slug expect. It follows only while the server slug and the toolset's address slug both still name
 // the address being replaced (from; the toolset's own address when nil), so a server with several endpoints or a
-// slug of its own keeps it. A slug another server holds is left alone rather than failing the address write.
+// slug of its own keeps it. A slug another server holds is refused.
 func (s *Service) followHostedSlug(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, from *repo.McpEndpoint, slug string) error {
 	if !server.Slug.Valid || server.Slug.String == slug {
 		return nil
@@ -329,7 +329,8 @@ func (s *Service) followHostedSlug(ctx context.Context, tx pgx.Tx, logger *slog.
 	holder, err := serversRepo.GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: pgtype.Text{String: slug, Valid: true}, ProjectID: server.ProjectID})
 	switch {
 	case err == nil && holder.ID != server.ID:
-		return nil
+		// Pods that still sync the server slug from the toolset's mcp_slug would fail on the taken name.
+		return oops.E(oops.CodeConflict, nil, "name is taken by another MCP server in the project").LogWarn(ctx, logger)
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return oops.E(oops.CodeUnexpected, err, "check hosted MCP server slug").LogError(ctx, logger)
 	}

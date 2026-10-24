@@ -563,7 +563,7 @@ func TestUpdateMcpEndpointHostedLeavesIndependentServerSlug(t *testing.T) {
 }
 
 // A new address whose slug another server already uses as its name still saves; the server keeps its own slug.
-func TestUpdateMcpEndpointHostedSkipsSlugFollowOnCollision(t *testing.T) {
+func TestUpdateMcpEndpointHostedRefusesSlugTakenByAnotherServer(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedAddressFixture(t, "pro")
 	taken := f.authCtx.OrganizationSlug + "-taken"
@@ -579,9 +579,9 @@ func TestUpdateMcpEndpointHostedSkipsSlugFollowOnCollision(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(taken, nil))
-	require.NoError(t, err)
-	require.Equal(t, taken, f.requireProjected(t, ctx).Slug)
+	requireOopsCode(t, err, oops.CodeConflict)
 	after, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	require.Equal(t, before.Slug, after.Slug)
+	require.NotEqual(t, taken, f.requireProjected(t, ctx).Slug, "the address keeps its slug")
 }
