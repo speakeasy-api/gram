@@ -175,7 +175,7 @@ func TestConsentPost_ChoosesAnAdministratorOfferedPersonalClient(t *testing.T) {
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
 	})
 	fx.ti.service.manual = true
-	fx.ti.service.PermitAllAuthClients()
+	fx.ti.service.SetAuthClientPermitted(true)
 	serverID := fx.endpoint.McpServerID.UUID
 	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-offered", "", nil)
 	fixtures := authclientfixtures.New(fx.ti.conn)
