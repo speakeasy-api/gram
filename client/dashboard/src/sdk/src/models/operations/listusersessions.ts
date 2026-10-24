@@ -44,6 +44,42 @@ export type ListUserSessionsQueryParamStatus = ClosedEnum<
   typeof ListUserSessionsQueryParamStatus
 >;
 
+export const IdentityTypes = {
+  User: "user",
+  Agent: "agent",
+  Workload: "workload",
+  Apikey: "apikey",
+  Anonymous: "anonymous",
+} as const;
+export type IdentityTypes = ClosedEnum<typeof IdentityTypes>;
+
+export const ExcludeIdentityTypes = {
+  User: "user",
+  Agent: "agent",
+  Workload: "workload",
+  Apikey: "apikey",
+  Anonymous: "anonymous",
+} as const;
+export type ExcludeIdentityTypes = ClosedEnum<typeof ExcludeIdentityTypes>;
+
+export const ClientRegistrations = {
+  Cimd: "cimd",
+  Dcr: "dcr",
+  Assistant: "assistant",
+  None: "none",
+} as const;
+export type ClientRegistrations = ClosedEnum<typeof ClientRegistrations>;
+
+export const ExcludeClientRegistrations = {
+  Cimd: "cimd",
+  Dcr: "dcr",
+  Assistant: "assistant",
+  None: "none",
+} as const;
+export type ExcludeClientRegistrations = ClosedEnum<
+  typeof ExcludeClientRegistrations
+>;
+
 export type ListUserSessionsRequest = {
   /**
    * Exact-match filter on subject URN.
@@ -69,6 +105,58 @@ export type ListUserSessionsRequest = {
    * Only sessions issued for this gateway, by the gateway they recorded or, for sessions that recorded none, the gateway their consent selection names. Sessions with neither are left out.
    */
   metaMcpServerId?: string | undefined;
+  /**
+   * Only sessions whose subject URN is one of these.
+   */
+  identities?: Array<string> | undefined;
+  /**
+   * Leave out sessions whose subject URN is one of these.
+   */
+  excludeIdentities?: Array<string> | undefined;
+  /**
+   * Only sessions whose subject is one of these kinds.
+   */
+  identityTypes?: Array<IdentityTypes> | undefined;
+  /**
+   * Leave out sessions whose subject is one of these kinds.
+   */
+  excludeIdentityTypes?: Array<ExcludeIdentityTypes> | undefined;
+  /**
+   * Only sessions from one of these sign-in servers (user_session_issuer ids).
+   */
+  servers?: Array<string> | undefined;
+  /**
+   * Leave out sessions from these sign-in servers (user_session_issuer ids).
+   */
+  excludeServers?: Array<string> | undefined;
+  /**
+   * Only sessions from one of these clients: a client id, "dashboard" for dashboard sessions, or "none" for sessions with no client.
+   */
+  clients?: Array<string> | undefined;
+  /**
+   * Leave out sessions from these clients, using the same values as clients.
+   */
+  excludeClients?: Array<string> | undefined;
+  /**
+   * Only sessions whose client registered this way: cimd (metadata document), dcr (dynamic registration), assistant (an assistant workload client), or none (no client).
+   */
+  clientRegistrations?: Array<ClientRegistrations> | undefined;
+  /**
+   * Leave out sessions whose client registered this way.
+   */
+  excludeClientRegistrations?: Array<ExcludeClientRegistrations> | undefined;
+  /**
+   * Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match.
+   */
+  lastUsedWithin?: number | undefined;
+  /**
+   * Only sessions last used more than this many seconds ago. Sessions with no recorded use never match.
+   */
+  lastUsedOlderThan?: number | undefined;
+  /**
+   * Only sessions with no recorded use.
+   */
+  lastUsedNever?: boolean | undefined;
   /**
    * Pagination cursor: id of the last item from the previous page.
    */
@@ -202,6 +290,25 @@ export const ListUserSessionsQueryParamStatus$outboundSchema: z.ZodMiniEnum<
 > = z.enum(ListUserSessionsQueryParamStatus);
 
 /** @internal */
+export const IdentityTypes$outboundSchema: z.ZodMiniEnum<typeof IdentityTypes> =
+  z.enum(IdentityTypes);
+
+/** @internal */
+export const ExcludeIdentityTypes$outboundSchema: z.ZodMiniEnum<
+  typeof ExcludeIdentityTypes
+> = z.enum(ExcludeIdentityTypes);
+
+/** @internal */
+export const ClientRegistrations$outboundSchema: z.ZodMiniEnum<
+  typeof ClientRegistrations
+> = z.enum(ClientRegistrations);
+
+/** @internal */
+export const ExcludeClientRegistrations$outboundSchema: z.ZodMiniEnum<
+  typeof ExcludeClientRegistrations
+> = z.enum(ExcludeClientRegistrations);
+
+/** @internal */
 export type ListUserSessionsRequest$Outbound = {
   subject_urn?: string | undefined;
   user_session_issuer_id?: string | undefined;
@@ -209,6 +316,19 @@ export type ListUserSessionsRequest$Outbound = {
   client_id?: string | undefined;
   search?: string | undefined;
   meta_mcp_server_id?: string | undefined;
+  identities?: Array<string> | undefined;
+  exclude_identities?: Array<string> | undefined;
+  identity_types?: Array<string> | undefined;
+  exclude_identity_types?: Array<string> | undefined;
+  servers?: Array<string> | undefined;
+  exclude_servers?: Array<string> | undefined;
+  clients?: Array<string> | undefined;
+  exclude_clients?: Array<string> | undefined;
+  client_registrations?: Array<string> | undefined;
+  exclude_client_registrations?: Array<string> | undefined;
+  last_used_within?: number | undefined;
+  last_used_older_than?: number | undefined;
+  last_used_never?: boolean | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
   "Gram-Session"?: string | undefined;
@@ -228,6 +348,25 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
     clientId: z.optional(z.string()),
     search: z.optional(z.string()),
     metaMcpServerId: z.optional(z.string()),
+    identities: z.optional(z.array(z.string())),
+    excludeIdentities: z.optional(z.array(z.string())),
+    identityTypes: z.optional(z.array(IdentityTypes$outboundSchema)),
+    excludeIdentityTypes: z.optional(
+      z.array(ExcludeIdentityTypes$outboundSchema),
+    ),
+    servers: z.optional(z.array(z.string())),
+    excludeServers: z.optional(z.array(z.string())),
+    clients: z.optional(z.array(z.string())),
+    excludeClients: z.optional(z.array(z.string())),
+    clientRegistrations: z.optional(
+      z.array(ClientRegistrations$outboundSchema),
+    ),
+    excludeClientRegistrations: z.optional(
+      z.array(ExcludeClientRegistrations$outboundSchema),
+    ),
+    lastUsedWithin: z.optional(z.int()),
+    lastUsedOlderThan: z.optional(z.int()),
+    lastUsedNever: z.optional(z.boolean()),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramSession: z.optional(z.string()),
@@ -240,6 +379,16 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
       userSessionIssuerId: "user_session_issuer_id",
       clientId: "client_id",
       metaMcpServerId: "meta_mcp_server_id",
+      excludeIdentities: "exclude_identities",
+      identityTypes: "identity_types",
+      excludeIdentityTypes: "exclude_identity_types",
+      excludeServers: "exclude_servers",
+      excludeClients: "exclude_clients",
+      clientRegistrations: "client_registrations",
+      excludeClientRegistrations: "exclude_client_registrations",
+      lastUsedWithin: "last_used_within",
+      lastUsedOlderThan: "last_used_older_than",
+      lastUsedNever: "last_used_never",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

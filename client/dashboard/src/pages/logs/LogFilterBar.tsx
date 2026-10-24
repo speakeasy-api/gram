@@ -69,15 +69,54 @@ const OP_OPTIONS: { value: Op; label: string; description: string }[] = [
   },
 ];
 
+export interface FilterKeyOption {
+  key: string;
+  label?: string;
+  description?: string;
+  count?: number;
+}
+
+export interface FilterValueOption {
+  value: string;
+  label: string;
+  count?: number;
+}
+
 interface LogFilterBarProps {
   filters: ActiveLogFilter[];
   onChange: (filters: ActiveLogFilter[]) => void;
   attributeKeys: string[];
+  keyOptions?: FilterKeyOption[];
+  /** A field with a single operator skips choosing it. */
+  operatorsFor?: (key: string) => Op[];
+  /** Reads typed filter expressions the built-in syntax cannot express. */
+  parseExpression?: (
+    input: string,
+  ) => { key: string; op: Op; value: string } | null;
+  valueOptions?: FilterValueOption[];
+  onValueInputChange?: (key: string, text: string) => void;
+  formatValue?: (path: string, value: string, op: Op) => string;
+  /** A message refuses the filter; `next` is the list the change would leave. */
+  validateFilter?: (
+    path: string,
+    op: Op,
+    value: string | undefined,
+    next: ActiveLogFilter[],
+  ) => string | null;
+  valueNotice?: string;
+  /** Encodes an offered value as a single `in` item. */
+  encodeInValue?: (value: string) => string;
+  /** Fields whose values are opaque and never trimmed. */
+  exactValue?: (path: string) => boolean;
+  samples?: { value: string; label: string }[];
+  placeholder?: string;
   isLoadingKeys?: boolean;
   searchInput: string;
   onSearchInputChange: (value: string) => void;
   /** Called with the current search text when user explicitly submits (Enter/Tab/clear). */
   onSearchSubmit: (query: string) => void;
+  /** Shown as a removable chip whenever the box holds a different draft. */
+  appliedSearch?: string;
 }
 
 export function LogFilterBar({
@@ -88,12 +127,26 @@ export function LogFilterBar({
   searchInput,
   onSearchInputChange,
   onSearchSubmit,
+  appliedSearch,
+  parseExpression,
+  keyOptions,
+  operatorsFor,
+  valueOptions,
+  onValueInputChange,
+  formatValue,
+  validateFilter,
+  valueNotice,
+  encodeInValue,
+  exactValue,
+  samples = FILTER_QUERY_SAMPLES,
+  placeholder = "Search by URN or filter (e.g. http.response.status_code != 200)",
 }: LogFilterBarProps): JSX.Element {
   const [step, setStep] = useState<Step>("key");
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedOp, setSelectedOp] = useState<Op | null>(null);
   const [filterValue, setFilterValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverContentRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -105,20 +158,35 @@ export function LogFilterBar({
     };
   }, []);
 
+  const keys = keyOptions?.map((option) => option.key) ?? attributeKeys;
+  const keyLabel = (key: string) =>
+    keyOptions?.find((option) => option.key === key)?.label ?? key;
+  // Clearing a draft leaves a separately applied search in place.
+  const clearsAppliedSearch =
+    appliedSearch === undefined || searchInput.trim() === appliedSearch;
   // Filter attribute keys by typed text (only relevant in key step)
   const filteredKeys =
     step === "key"
       ? searchInput.length > 0
-        ? attributeKeys.filter((k) =>
-            k.toLowerCase().includes(searchInput.toLowerCase()),
+        ? keys.filter((k) =>
+            [k, keyLabel(k)].some((text) =>
+              text.toLowerCase().includes(searchInput.toLowerCase()),
+            ),
           )
-        : attributeKeys
+        : keys
       : [];
+  const operatorOptions = operatorsFor
+    ? OP_OPTIONS.filter((option) =>
+        operatorsFor(selectedKey).includes(option.value),
+      )
+    : OP_OPTIONS;
+  const valueSuggestions = step === "value" ? (valueOptions ?? []) : [];
 
   // Show popover when there are matching suggestions or picking operator
   const popoverOpen =
     (step === "key" && inputFocused && filteredKeys.length > 0) ||
-    step === "operator";
+    step === "operator" ||
+    valueSuggestions.length > 0;
 
   const focusMainInput = useCallback(() => {
     // Use rAF to wait for React to commit the render (CmdkRoot.Input may remount)
@@ -126,20 +194,28 @@ export function LogFilterBar({
   }, []);
 
   const resetFlow = useCallback(() => {
+    if (selectedKey) onValueInputChange?.(selectedKey, "");
+    setProblem(null);
     setStep("key");
     setSelectedKey("");
     setSelectedOp(null);
     setFilterValue("");
     focusMainInput();
-  }, [focusMainInput]);
+  }, [focusMainInput, onValueInputChange, selectedKey]);
 
   const addFilter = useCallback(
     (path: string, op: Op, value?: string) => {
-      onChange(applyFilterAdd(filters, { path, op, value }));
+      const next = applyFilterAdd(filters, { path, op, value });
+      const refused = validateFilter?.(path, op, value, next) ?? null;
+      if (refused) {
+        setProblem(refused);
+        return;
+      }
+      onChange(next);
       onSearchInputChange("");
       resetFlow();
     },
-    [filters, onChange, onSearchInputChange, resetFlow],
+    [filters, onChange, onSearchInputChange, resetFlow, validateFilter],
   );
 
   const removeFilter = useCallback(
@@ -161,21 +237,33 @@ export function LogFilterBar({
     resetFlow();
   };
 
-  const handleKeySelect = (key: string) => {
-    setSelectedKey(key);
-    setStep("operator");
-    onSearchInputChange("");
-    focusMainInput();
-  };
-
   const handleOpSelect = useCallback(
-    (op: Op) => {
+    (op: Op, key = selectedKey) => {
       setSelectedOp(op);
       setStep("value");
       setFilterValue("");
       onSearchInputChange("");
+      onValueInputChange?.(key, "");
     },
-    [onSearchInputChange],
+    [onSearchInputChange, onValueInputChange, selectedKey],
+  );
+
+  const handleKeySelect = (key: string) => {
+    setSelectedKey(key);
+    const only = operatorsFor?.(key);
+    if (only?.length === 1) {
+      handleOpSelect(only[0]!, key);
+    } else {
+      setStep("operator");
+      onSearchInputChange("");
+    }
+    focusMainInput();
+  };
+
+  const parse = useCallback(
+    (input: string) =>
+      parseExpression?.(input) ?? tryParseFilterExpression(input),
+    [parseExpression],
   );
 
   // Wraps the parent onSearchInputChange. During the operator step, if the
@@ -192,31 +280,42 @@ export function LogFilterBar({
           return;
         }
       }
+      setProblem(null);
       onSearchInputChange(value);
       // Emptying the box clears the applied search without needing the ×
       // button, so results refresh as soon as the query is gone.
-      if (step === "key" && value === "") {
+      if (step === "key" && value === "" && clearsAppliedSearch) {
         onSearchSubmit("");
       }
     },
-    [step, onSearchInputChange, handleOpSelect, onSearchSubmit],
+    [
+      step,
+      onSearchInputChange,
+      handleOpSelect,
+      onSearchSubmit,
+      clearsAppliedSearch,
+    ],
   );
 
   const handleValueSubmit = () => {
     if (!selectedOp || !filterValue.trim()) return;
-    addFilter(selectedKey, selectedOp, filterValue.trim());
+    addFilter(
+      selectedKey,
+      selectedOp,
+      exactValue?.(selectedKey) ? filterValue : filterValue.trim(),
+    );
   };
 
   const submitOrParse = useCallback(
     (raw: string) => {
-      const parsed = tryParseFilterExpression(raw);
+      const parsed = parse(raw);
       if (parsed) {
         addFilter(parsed.key, parsed.op, parsed.value);
       } else {
         onSearchSubmit(raw);
       }
     },
-    [addFilter, onSearchSubmit],
+    [addFilter, onSearchSubmit, parse],
   );
 
   // During the operator step the user may type the operator + value directly
@@ -225,14 +324,14 @@ export function LogFilterBar({
   const trySubmitOperatorInput = useCallback(
     (raw: string): boolean => {
       if (!selectedKey || !raw) return false;
-      const parsed = tryParseFilterExpression(`${selectedKey} ${raw}`);
+      const parsed = parse(`${selectedKey} ${raw}`);
       if (parsed) {
         addFilter(parsed.key, parsed.op, parsed.value);
         return true;
       }
       return false;
     },
-    [selectedKey, addFilter],
+    [selectedKey, addFilter, parse],
   );
 
   // True when focus is moving to something outside the filter bar (e.g. the
@@ -252,7 +351,7 @@ export function LogFilterBar({
     const raw = searchInput.trim();
     if (!raw) return false;
     if (step === "key") {
-      const parsed = tryParseFilterExpression(raw);
+      const parsed = parse(raw);
       if (parsed) {
         addFilter(parsed.key, parsed.op, parsed.value);
         return true;
@@ -263,7 +362,7 @@ export function LogFilterBar({
       return trySubmitOperatorInput(raw);
     }
     return false;
-  }, [searchInput, step, addFilter, trySubmitOperatorInput]);
+  }, [searchInput, step, addFilter, trySubmitOperatorInput, parse]);
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
     switch (e.key) {
@@ -316,7 +415,7 @@ export function LogFilterBar({
           e.stopPropagation();
           onSearchInputChange("");
           resetFlow();
-          onSearchSubmit("");
+          if (clearsAppliedSearch) onSearchSubmit("");
         }
         break;
       case "Backspace":
@@ -343,6 +442,8 @@ export function LogFilterBar({
         onOpenChange={(open) => {
           // Allow clicking outside to dismiss the operator step
           if (!open && step === "operator") resetFlow();
+          // A typed value is saved by the value input's blur.
+          if (!open && step === "value" && !filterValue.trim()) resetFlow();
         }}
       >
         <PopoverAnchor asChild>
@@ -360,27 +461,74 @@ export function LogFilterBar({
                 filter={filter}
                 onEdit={editFilter}
                 onRemove={removeFilter}
+                formatValue={formatValue}
+                formatKey={keyLabel}
+                operatorsFor={operatorsFor}
+                validateFilter={
+                  validateFilter &&
+                  ((path, op, value) =>
+                    validateFilter(
+                      path,
+                      op,
+                      value,
+                      applyFilterEdit(filters, filter.id, { op, value }),
+                    ))
+                }
+                exactValue={exactValue}
               />
             ))}
+            {appliedSearch && searchInput.trim() !== appliedSearch && (
+              <span className="border-border bg-background text-foreground inline-flex shrink-0 items-center border font-mono text-xs">
+                <span className="max-w-60 truncate py-0.5 pr-1 pl-2">
+                  search: {appliedSearch}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Remove search"
+                  onClick={() => onSearchSubmit("")}
+                  className="text-muted-foreground hover:text-foreground hover:bg-muted px-1.5 py-0.5 transition-colors"
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            )}
             {step === "operator" && (
               <span className="border-ring bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-1 border px-2 py-0.5 font-mono text-xs">
-                {selectedKey}
+                {keyLabel(selectedKey)}
               </span>
             )}
             {step === "value" ? (
               <span className="border-ring bg-accent text-accent-foreground inline-flex shrink-0 items-center border px-2 py-0.5 font-mono text-xs">
                 <span>
-                  {selectedKey} {selectedOp && OP_LABELS[selectedOp]}
+                  {keyLabel(selectedKey)}
+                  {operatorsFor?.(selectedKey).length === 1
+                    ? ""
+                    : ` ${selectedOp ? OP_LABELS[selectedOp] : ""}`}
                   {"\u00A0"}
                 </span>
                 <input
                   type="text"
                   value={filterValue}
-                  onChange={(e) => setFilterValue(e.target.value)}
+                  onChange={(e) => {
+                    setProblem(null);
+                    setFilterValue(e.target.value);
+                    onValueInputChange?.(selectedKey, e.target.value);
+                  }}
                   onKeyDown={(e) => {
                     switch (e.key) {
-                      case "Enter":
                       case "Tab":
+                        e.preventDefault();
+                        if (valueSuggestions.length > 0) {
+                          (popoverContentRef.current ?? document)
+                            .querySelector<HTMLElement>(
+                              "[cmdk-item][aria-selected='true']",
+                            )
+                            ?.click();
+                        } else {
+                          handleValueSubmit();
+                        }
+                        break;
+                      case "Enter":
                         e.preventDefault();
                         handleValueSubmit();
                         break;
@@ -433,7 +581,7 @@ export function LogFilterBar({
                     ? "Type operator + value (e.g. != 200) or select below..."
                     : filters.length > 0
                       ? "Add filter..."
-                      : "Search by URN or filter (e.g. http.response.status_code != 200)"
+                      : placeholder
                 }
                 className="min-h-[24px] min-w-[120px] flex-1 bg-transparent text-sm outline-none"
               />
@@ -441,7 +589,7 @@ export function LogFilterBar({
             <QuerySamplesPopover
               title="Sample filter queries"
               ariaLabel="Show sample filter queries"
-              samples={FILTER_QUERY_SAMPLES}
+              samples={samples}
               onSelect={(sample) => {
                 onSearchInputChange(sample.value);
                 requestAnimationFrame(() => inputRef.current?.focus());
@@ -452,7 +600,7 @@ export function LogFilterBar({
                 onClick={() => {
                   onSearchInputChange("");
                   resetFlow();
-                  onSearchSubmit("");
+                  if (clearsAppliedSearch) onSearchSubmit("");
                 }}
                 className="text-muted-foreground hover:text-foreground shrink-0 transition-opacity"
                 aria-label="Clear search"
@@ -479,6 +627,9 @@ export function LogFilterBar({
           style={{ width: "var(--radix-popover-trigger-width)" }}
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
+          onInteractOutside={(e) => {
+            if (barRef.current?.contains(e.target as Node)) e.preventDefault();
+          }}
         >
           {step === "key" && (
             <CommandList>
@@ -494,14 +645,65 @@ export function LogFilterBar({
                     : "Available filters"
                 }
               >
-                {filteredKeys.map((key) => (
+                {filteredKeys.map((key) => {
+                  const option = keyOptions?.find((o) => o.key === key);
+                  return (
+                    <CommandItem
+                      key={key}
+                      value={key}
+                      onSelect={() => handleKeySelect(key)}
+                      className="cursor-pointer"
+                    >
+                      <span className="w-40 shrink-0 font-mono text-xs">
+                        {keyLabel(key)}
+                      </span>
+                      {option?.description && (
+                        <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
+                          {option.description}
+                        </span>
+                      )}
+                      {option?.count !== undefined && (
+                        <span className="text-muted-foreground ml-auto font-mono text-xs tabular-nums">
+                          {option.count.toLocaleString()}
+                        </span>
+                      )}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          )}
+
+          {valueSuggestions.length > 0 && (
+            <CommandList>
+              <CommandGroup heading={keyLabel(selectedKey)}>
+                {valueSuggestions.map((option) => (
                   <CommandItem
-                    key={key}
-                    value={key}
-                    onSelect={() => handleKeySelect(key)}
+                    key={option.value}
+                    value={option.value}
+                    // Keeps the value input focused, so its blur commit cannot
+                    // add the typed text before this selection.
+                    onMouseDown={(e) => e.preventDefault()}
+                    onSelect={() => {
+                      if (!selectedOp) return;
+                      addFilter(
+                        selectedKey,
+                        selectedOp,
+                        selectedOp === Op.In && encodeInValue
+                          ? encodeInValue(option.value)
+                          : option.value,
+                      );
+                    }}
                     className="cursor-pointer"
                   >
-                    <span className="font-mono text-xs">{key}</span>
+                    <span className="min-w-0 flex-1 truncate text-xs">
+                      {option.label}
+                    </span>
+                    {option.count !== undefined && (
+                      <span className="text-muted-foreground font-mono text-xs tabular-nums">
+                        {option.count.toLocaleString()}
+                      </span>
+                    )}
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -511,7 +713,7 @@ export function LogFilterBar({
           {step === "operator" && (
             <CommandList>
               <CommandGroup heading="Operator">
-                {OP_OPTIONS.map((op) => (
+                {operatorOptions.map((op) => (
                   <CommandItem
                     key={op.value}
                     value={op.label}
@@ -533,21 +735,49 @@ export function LogFilterBar({
           )}
         </PopoverContent>
       </Popover>
+      {(problem ?? (step === "value" ? valueNotice : undefined)) && (
+        <p role="status" className="text-muted-foreground mt-1 text-xs">
+          {problem ?? valueNotice}
+        </p>
+      )}
     </CmdkRoot>
   );
+}
+
+/** A single-operator field omits it: `Last used > 7d`, `Last used: No recorded use`. */
+function chipText(key: string, op: Op | null, value?: string): string {
+  if (value === undefined) return op ? `${key} ${OP_LABELS[op]}` : key;
+  if (op) return `${key} ${OP_LABELS[op]} ${value}`;
+  return /^[<>]/.test(value) ? `${key} ${value}` : `${key}: ${value}`;
 }
 
 interface EditableFilterChipProps {
   filter: ActiveLogFilter;
   onEdit: (id: string, op: Op, value?: string) => void;
   onRemove: (id: string) => void;
+  formatValue?: (path: string, value: string, op: Op) => string;
+  formatKey: (path: string) => string;
+  operatorsFor?: (key: string) => Op[];
+  validateFilter?: (path: string, op: Op, value?: string) => string | null;
+  exactValue?: (path: string) => boolean;
 }
 
 function EditableFilterChip({
   filter,
   onEdit,
   onRemove,
+  formatValue,
+  formatKey,
+  operatorsFor,
+  validateFilter,
+  exactValue,
 }: EditableFilterChipProps) {
+  const [problem, setProblem] = useState<string | null>(null);
+  const ops = operatorsFor
+    ? OP_OPTIONS.filter((option) =>
+        operatorsFor(filter.path).includes(option.value),
+      )
+    : OP_OPTIONS;
   const [open, setOpen] = useState(false);
   const [op, setOp] = useState<Op>(filter.op);
   const [value, setValue] = useState(filter.value ?? "");
@@ -556,12 +786,16 @@ function EditableFilterChip({
     if (open) {
       setOp(filter.op);
       setValue(filter.value ?? "");
+      setProblem(null);
     }
   }, [open, filter.op, filter.value]);
 
   const save = () => {
-    const trimmed = value.trim();
-    if (!trimmed) return;
+    if (!value.trim()) return;
+    const trimmed = exactValue?.(filter.path) ? value : value.trim();
+    const refused = validateFilter?.(filter.path, op, trimmed) ?? null;
+    setProblem(refused);
+    if (refused) return;
     onEdit(filter.id, op, trimmed);
     setOpen(false);
   };
@@ -574,16 +808,23 @@ function EditableFilterChip({
         <PopoverTrigger asChild>
           <button
             type="button"
-            aria-label={`Edit filter ${filter.path}`}
+            aria-label={`Edit filter ${formatKey(filter.path)}`}
             className="hover:bg-muted cursor-pointer py-0.5 pr-1 pl-2 transition-colors"
           >
-            {filter.path} {OP_LABELS[filter.op]}
-            {filter.value !== undefined ? ` ${filter.value}` : ""}
+            {chipText(
+              formatKey(filter.path),
+              ops.length === 1 ? null : filter.op,
+              filter.value === undefined
+                ? undefined
+                : formatValue
+                  ? formatValue(filter.path, filter.value, filter.op)
+                  : filter.value,
+            )}
           </button>
         </PopoverTrigger>
         <button
           type="button"
-          aria-label={`Remove filter ${filter.path}`}
+          aria-label={`Remove filter ${formatKey(filter.path)}`}
           onClick={(e) => {
             e.stopPropagation();
             onRemove(filter.id);
@@ -602,7 +843,7 @@ function EditableFilterChip({
           className="text-muted-foreground mb-2 font-mono text-xs break-all"
           title={filter.path}
         >
-          {filter.path}
+          {formatKey(filter.path)}
         </div>
         <div className="mb-3 flex gap-2">
           <Select value={op} onValueChange={(v) => setOp(v as Op)}>
@@ -610,7 +851,7 @@ function EditableFilterChip({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {OP_OPTIONS.map((option) => (
+              {ops.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   <span className="font-mono text-xs">
                     {OP_LABELS[option.value]}
@@ -640,6 +881,11 @@ function EditableFilterChip({
             autoFocus
           />
         </div>
+        {problem && (
+          <p role="status" className="text-muted-foreground mb-3 text-xs">
+            {problem}
+          </p>
+        )}
         <div className="flex items-center justify-between">
           <Button
             type="button"

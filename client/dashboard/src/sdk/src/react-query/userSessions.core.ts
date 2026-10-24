@@ -12,6 +12,10 @@ import { userSessionsList } from "../funcs/userSessionsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
+  ClientRegistrations,
+  ExcludeClientRegistrations,
+  ExcludeIdentityTypes,
+  IdentityTypes,
   ListUserSessionsQueryParamStatus,
   ListUserSessionsRequest,
   ListUserSessionsResponse,
@@ -86,6 +90,19 @@ export function buildUserSessionsQuery(
       clientId: request?.clientId,
       search: request?.search,
       metaMcpServerId: request?.metaMcpServerId,
+      identities: request?.identities,
+      excludeIdentities: request?.excludeIdentities,
+      identityTypes: request?.identityTypes,
+      excludeIdentityTypes: request?.excludeIdentityTypes,
+      servers: request?.servers,
+      excludeServers: request?.excludeServers,
+      clients: request?.clients,
+      excludeClients: request?.excludeClients,
+      clientRegistrations: request?.clientRegistrations,
+      excludeClientRegistrations: request?.excludeClientRegistrations,
+      lastUsedWithin: request?.lastUsedWithin,
+      lastUsedOlderThan: request?.lastUsedOlderThan,
+      lastUsedNever: request?.lastUsedNever,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -135,6 +152,19 @@ export function buildUserSessionsInfiniteQuery(
       clientId: request?.clientId,
       search: request?.search,
       metaMcpServerId: request?.metaMcpServerId,
+      identities: request?.identities,
+      excludeIdentities: request?.excludeIdentities,
+      identityTypes: request?.identityTypes,
+      excludeIdentityTypes: request?.excludeIdentityTypes,
+      servers: request?.servers,
+      excludeServers: request?.excludeServers,
+      clients: request?.clients,
+      excludeClients: request?.excludeClients,
+      clientRegistrations: request?.clientRegistrations,
+      excludeClientRegistrations: request?.excludeClientRegistrations,
+      lastUsedWithin: request?.lastUsedWithin,
+      lastUsedOlderThan: request?.lastUsedOlderThan,
+      lastUsedNever: request?.lastUsedNever,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -181,6 +211,19 @@ export function queryKeyUserSessions(
     clientId?: string | undefined;
     search?: string | undefined;
     metaMcpServerId?: string | undefined;
+    identities?: Array<string> | undefined;
+    excludeIdentities?: Array<string> | undefined;
+    identityTypes?: Array<IdentityTypes> | undefined;
+    excludeIdentityTypes?: Array<ExcludeIdentityTypes> | undefined;
+    servers?: Array<string> | undefined;
+    excludeServers?: Array<string> | undefined;
+    clients?: Array<string> | undefined;
+    excludeClients?: Array<string> | undefined;
+    clientRegistrations?: Array<ClientRegistrations> | undefined;
+    excludeClientRegistrations?: Array<ExcludeClientRegistrations> | undefined;
+    lastUsedWithin?: number | undefined;
+    lastUsedOlderThan?: number | undefined;
+    lastUsedNever?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
@@ -199,6 +242,19 @@ export function queryKeyUserSessionsInfinite(
     clientId?: string | undefined;
     search?: string | undefined;
     metaMcpServerId?: string | undefined;
+    identities?: Array<string> | undefined;
+    excludeIdentities?: Array<string> | undefined;
+    identityTypes?: Array<IdentityTypes> | undefined;
+    excludeIdentityTypes?: Array<ExcludeIdentityTypes> | undefined;
+    servers?: Array<string> | undefined;
+    excludeServers?: Array<string> | undefined;
+    clients?: Array<string> | undefined;
+    excludeClients?: Array<string> | undefined;
+    clientRegistrations?: Array<ClientRegistrations> | undefined;
+    excludeClientRegistrations?: Array<ExcludeClientRegistrations> | undefined;
+    lastUsedWithin?: number | undefined;
+    lastUsedOlderThan?: number | undefined;
+    lastUsedNever?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;

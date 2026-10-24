@@ -344,3 +344,41 @@ func TestPlatformListUserSessions_SearchesLiterally(t *testing.T) {
 	require.Equal(t, []string{literalSession.ID.String()}, ids)
 	require.NotContains(t, ids, sp.sessionID.String())
 }
+
+func TestListUserSessions_OrganizationTierAgentBindingStaysInItsProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	fixtures := testrepo.New(ti.conn)
+
+	issuerID := seedOrganizationTierIssuer(t, ctx, ti.conn, "org-tier-attachment")
+	owner := urn.NewUserSubject(authCtx.UserID)
+	agentID := uuid.New()
+	_, err := fixtures.CreateAttachmentUpstreamAgentFixture(ctx, testrepo.CreateAttachmentUpstreamAgentFixtureParams{ID: agentID, OrganizationID: authCtx.ActiveOrganizationID, OwnerUserID: authCtx.UserID})
+	require.NoError(t, err)
+	agentSession, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewAgentSubject(agentID))
+	require.NoError(t, err)
+	clientID := seedUpstream(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, issuerID, owner, "orgtier.example.com")
+	sourceID, err := fixtures.GetAttachmentSourceIDFixture(ctx, testrepo.GetAttachmentSourceIDFixtureParams{RemoteSessionClientID: clientID, SubjectUrn: owner})
+	require.NoError(t, err)
+
+	otherProject := uuid.New()
+	_, err = fixtures.CreateAttachmentForeignProjectFixture(ctx, testrepo.CreateAttachmentForeignProjectFixtureParams{ID: otherProject, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	attach := func(project uuid.UUID) {
+		t.Helper()
+		_, err := fixtures.InsertAttachmentFromSourceFixture(ctx, testrepo.InsertAttachmentFromSourceFixtureParams{
+			Project: project, Organization: authCtx.ActiveOrganizationID, Agent: agentID, Requesting: issuerID, Client: clientID, Source: sourceID,
+		})
+		require.NoError(t, err)
+	}
+
+	provider := "orgtier.example.com"
+	attach(otherProject)
+	require.NotContains(t, searchSessionIDs(t, ctx, ti, &gen.ListUserSessionsPayload{Search: &provider}), agentSession.ID.String(), "a binding made in another project is not this project's upstream")
+
+	attach(*authCtx.ProjectID)
+	require.Contains(t, searchSessionIDs(t, ctx, ti, &gen.ListUserSessionsPayload{Search: &provider}), agentSession.ID.String())
+}

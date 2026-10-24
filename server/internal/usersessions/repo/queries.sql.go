@@ -3826,6 +3826,226 @@ func (q *Queries) ListUserSessionConsentsByProjectID(ctx context.Context, arg Li
 	return items, nil
 }
 
+const listUserSessionFilterFacets = `-- name: ListUserSessionFilterFacets :many
+WITH base AS MATERIALIZED (
+  SELECT s.subject_urn::text AS identity,
+         CASE
+           WHEN s.subject_urn::text LIKE 'user:%' THEN COALESCE(NULLIF(u.display_name, ''), NULLIF(u.email, ''))
+           WHEN s.subject_urn::text LIKE 'apikey:%' THEN NULLIF(k.name, '')
+           WHEN s.subject_urn::text LIKE 'workload:%' THEN substr(s.subject_urn::text, 47)
+         END AS identity_label,
+         split_part(s.subject_urn::text, ':', 1) AS identity_type,
+         s.user_session_issuer_id::text AS server,
+         iss.slug AS server_label,
+         CASE WHEN s.user_session_client_id IS NOT NULL THEN s.user_session_client_id::text WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN 'dashboard' ELSE 'none' END AS client,
+         COALESCE(c.client_name, CASE WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN $2::text WHEN s.user_session_client_id IS NULL THEN 'No client' END) AS client_label,
+         CASE WHEN c.id IS NULL THEN 'none' WHEN c.client_id_metadata_uri IS NOT NULL THEN 'cimd' WHEN c.assistant_runtime_id IS NOT NULL OR c.assistant_trigger_workload_binding_id IS NOT NULL THEN 'assistant' ELSE 'dcr' END AS client_registration,
+         ($3::interval IS NULL OR s.last_used_at >= now() - $3::interval)
+           AND ($4::interval IS NULL OR s.last_used_at < now() - $4::interval)
+           AND ($5::boolean IS FALSE OR s.last_used_at IS NULL) AS last_used_ok,
+         COALESCE(s.resource_identity IS NULL AND s.tool_selection->>'resource' IS NULL AND s.user_session_issuer_id = $6::uuid, FALSE) AS unattributed
+  FROM user_sessions AS s
+  JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+  LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id
+  LEFT JOIN users AS u
+    ON s.subject_urn::text LIKE 'user:%'
+    AND u.id = split_part(s.subject_urn::text, ':', 2)
+  LEFT JOIN api_keys AS k
+    ON k.id = CASE
+               WHEN s.subject_urn::text LIKE 'apikey:%'
+               THEN split_part(s.subject_urn::text, ':', 2)::uuid
+             END
+  WHERE (iss.project_id = $7::uuid OR (iss.project_id IS NULL AND iss.organization_id = $8::text))
+    AND iss.deleted IS FALSE
+    AND CASE $9::text
+          WHEN 'active'  THEN (s.deleted IS FALSE AND s.refresh_expires_at > now())
+          WHEN 'expired' THEN (s.deleted IS FALSE AND s.refresh_expires_at <= now())
+          WHEN 'revoked' THEN (s.deleted IS TRUE)
+          WHEN 'all'     THEN TRUE
+          ELSE (s.deleted IS FALSE)
+        END
+    AND ($10::text IS NULL OR s.subject_urn = $10::text)
+    AND ($11::uuid IS NULL OR s.user_session_issuer_id = $11::uuid)
+    AND ($12::uuid IS NULL OR s.user_session_client_id = $12::uuid)
+    AND s.id IN (
+      SELECT v.user_session_id
+      FROM visible_user_session_ids($7::uuid, $8::text, $13::text, $14::text[], $2::text) AS v
+    )
+    AND (
+      $15::text IS NULL
+      OR s.resource_identity = $15::text
+      OR (s.resource_identity IS NULL AND s.tool_selection->>'resource' = $15::text)
+      OR (s.resource_identity IS NULL AND s.tool_selection->>'resource' IS NULL AND s.user_session_issuer_id = $6::uuid)
+    )
+),
+flagged AS MATERIALIZED (
+  SELECT base.identity, base.identity_label, base.identity_type, base.server, base.server_label, base.client, base.client_label, base.client_registration, base.last_used_ok, base.unattributed,
+         (cardinality($16::text[]) = 0 OR identity = ANY($16::text[])) AND NOT identity = ANY($17::text[]) AS identity_ok,
+         (cardinality($18::text[]) = 0 OR identity_type = ANY($18::text[])) AND NOT identity_type = ANY($19::text[]) AS identity_type_ok,
+         (cardinality($20::uuid[]) = 0 OR server = ANY($20::uuid[]::text[])) AND NOT server = ANY($21::uuid[]::text[]) AS server_ok,
+         (cardinality($22::text[]) = 0 OR client = ANY($22::text[])) AND NOT client = ANY($23::text[]) AS client_ok,
+         (cardinality($24::text[]) = 0 OR client_registration = ANY($24::text[])) AND NOT client_registration = ANY($25::text[]) AS client_registration_ok
+  FROM base
+  WHERE last_used_ok
+),
+counts AS (
+  SELECT 'identity' AS field, identity AS value, max(identity_label) AS label, count(*) AS n
+  FROM flagged WHERE NOT unattributed AND identity_type_ok AND server_ok AND client_ok AND client_registration_ok
+  GROUP BY identity
+  UNION ALL
+  SELECT 'identity_type', identity_type, NULL, count(*)
+  FROM flagged WHERE NOT unattributed AND identity_ok AND server_ok AND client_ok AND client_registration_ok
+  GROUP BY identity_type
+  UNION ALL
+  SELECT 'mcp_server', server, max(server_label), count(*)
+  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND client_ok AND client_registration_ok
+  GROUP BY server
+  UNION ALL
+  SELECT 'client', client, max(client_label), count(*)
+  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_registration_ok
+  GROUP BY client
+  UNION ALL
+  SELECT 'client_registration', client_registration, NULL, count(*)
+  FROM flagged WHERE NOT unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_ok
+  GROUP BY client_registration
+  UNION ALL
+  SELECT 'unattributed', '', NULL, count(*)
+  FROM flagged WHERE unattributed AND identity_ok AND identity_type_ok AND server_ok AND client_ok AND client_registration_ok
+),
+marked AS (
+  SELECT counts.field, counts.value, counts.label, counts.n,
+         CASE field
+           WHEN 'identity' THEN value = ANY($16::text[] || $17::text[])
+           WHEN 'identity_type' THEN value = ANY($18::text[] || $19::text[])
+           WHEN 'mcp_server' THEN value = ANY($20::uuid[]::text[] || $21::uuid[]::text[])
+           WHEN 'client' THEN value = ANY($22::text[] || $23::text[])
+           ELSE value = ANY($24::text[] || $25::text[])
+         END AS selected,
+         COALESCE(
+           $26::text IS NULL
+           OR field <> $27::text
+           OR label ILIKE $26::text
+           OR value ILIKE $26::text
+           OR (field = 'identity' AND value = ANY($28::text[])),
+           FALSE
+         ) AS matches
+  FROM counts
+),
+ranked AS (
+  SELECT marked.field, marked.value, marked.label, marked.n, marked.selected, marked.matches,
+         count(*) FILTER (WHERE matches) OVER (PARTITION BY field) AS distinct_count,
+         row_number() OVER (PARTITION BY field, matches ORDER BY n DESC, label ASC NULLS LAST, value ASC) AS rank
+  FROM marked
+)
+SELECT field::text AS field, value::text AS value, COALESCE(label, '')::text AS label, n::bigint AS count, distinct_count::bigint AS distinct_count, matches::boolean AS matches_search
+FROM ranked
+WHERE (matches AND rank <= $1::bigint) OR selected
+ORDER BY field, NOT matches, rank
+`
+
+type ListUserSessionFilterFacetsParams struct {
+	FacetLimit                  int64
+	FirstPartyClientName        string
+	LastUsedWithin              pgtype.Interval
+	LastUsedOlderThan           pgtype.Interval
+	LastUsedNever               bool
+	UnattributedIssuerID        uuid.NullUUID
+	ProjectID                   uuid.UUID
+	OrganizationID              string
+	Status                      pgtype.Text
+	SubjectUrn                  pgtype.Text
+	UserSessionIssuerID         uuid.NullUUID
+	ClientID                    uuid.NullUUID
+	Search                      pgtype.Text
+	AgentSubjectUrns            []string
+	ResourceIdentity            pgtype.Text
+	Identities                  []string
+	ExcludeIdentities           []string
+	IdentityTypes               []string
+	ExcludeIdentityTypes        []string
+	Servers                     []uuid.UUID
+	ExcludeServers              []uuid.UUID
+	Clients                     []string
+	ExcludeClients              []string
+	ClientRegistrations         []string
+	ExcludeClientRegistrations  []string
+	FieldSearch                 pgtype.Text
+	SearchField                 string
+	FieldSearchAgentSubjectUrns []string
+}
+
+type ListUserSessionFilterFacetsRow struct {
+	Field         string
+	Value         string
+	Label         string
+	Count         int64
+	DistinctCount int64
+	MatchesSearch bool
+}
+
+// Counts for each filter field over the sessions the list would show. A
+// field's counts ignore that field's own selection and apply every other
+// filter, so choosing a value never hides its alternatives. Each field returns
+// its top facet_limit values plus any selected value, and distinct_count
+// counts every value that matched. The unattributed row counts sessions on
+// the gateway's current sign-in server with no recorded origin, under the same
+// filters.
+func (q *Queries) ListUserSessionFilterFacets(ctx context.Context, arg ListUserSessionFilterFacetsParams) ([]ListUserSessionFilterFacetsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionFilterFacets,
+		arg.FacetLimit,
+		arg.FirstPartyClientName,
+		arg.LastUsedWithin,
+		arg.LastUsedOlderThan,
+		arg.LastUsedNever,
+		arg.UnattributedIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Status,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
+		arg.ClientID,
+		arg.Search,
+		arg.AgentSubjectUrns,
+		arg.ResourceIdentity,
+		arg.Identities,
+		arg.ExcludeIdentities,
+		arg.IdentityTypes,
+		arg.ExcludeIdentityTypes,
+		arg.Servers,
+		arg.ExcludeServers,
+		arg.Clients,
+		arg.ExcludeClients,
+		arg.ClientRegistrations,
+		arg.ExcludeClientRegistrations,
+		arg.FieldSearch,
+		arg.SearchField,
+		arg.FieldSearchAgentSubjectUrns,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionFilterFacetsRow
+	for rows.Next() {
+		var i ListUserSessionFilterFacetsRow
+		if err := rows.Scan(
+			&i.Field,
+			&i.Value,
+			&i.Label,
+			&i.Count,
+			&i.DistinctCount,
+			&i.MatchesSearch,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionIssuerCimdClientsByIssuerID = `-- name: ListUserSessionIssuerCimdClientsByIssuerID :many
 SELECT cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
 FROM user_session_issuer_cimd_clients AS cimd
@@ -4139,158 +4359,60 @@ WHERE (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization
   AND ($5::uuid IS NULL OR s.user_session_issuer_id = $5::uuid)
   AND ($6::uuid IS NULL OR s.user_session_client_id = $6::uuid)
   AND ($7::uuid IS NULL OR s.id = $7::uuid)
-  AND (
-    $8::text IS NULL
-    OR s.subject_urn::text = ANY($9::text[])
-    OR (CASE
-          WHEN s.subject_urn::text LIKE 'user:%' THEN COALESCE(NULLIF(u.display_name, ''), NULLIF(u.email, ''), s.subject_urn::text)
-          WHEN s.subject_urn::text LIKE 'apikey:%' THEN COALESCE(NULLIF(k.name, ''), 'API key')
-          WHEN s.subject_urn::text LIKE 'anonymous%' THEN 'Anonymous client'
-          WHEN s.subject_urn::text LIKE 'workload:%' THEN substr(s.subject_urn::text, 47)
-          ELSE s.subject_urn::text
-        END) ILIKE $8::text
-    OR COALESCE(c.client_name, CASE WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN $10::text END) ILIKE $8::text
-    OR iss.slug ILIKE $8::text
-    OR (
-      s.subject_urn::text LIKE 'workload:%'
-      AND (
-        EXISTS (
-          SELECT 1
-          FROM workload_issuers AS wi
-          WHERE wi.id = substr(s.subject_urn::text, 10, 36)::uuid
-            AND wi.organization_id = $2::text
-            AND (wi.project_id = $1::uuid OR wi.project_id IS NULL)
-            AND wi.deleted IS FALSE
-            AND (wi.name ILIKE $8::text OR wi.issuer ILIKE $8::text)
-        )
-        OR EXISTS (
-          SELECT 1
-          FROM workload_issuers AS live
-          JOIN workload_agent_assignments AS wa
-            ON wa.organization_id = live.organization_id
-            AND wa.workload_issuer_id = live.id
-            AND wa.deleted IS FALSE
-          JOIN agents AS a
-            ON a.organization_id = wa.organization_id
-            AND a.id = wa.agent_id
-            AND a.deleted IS FALSE
-          WHERE live.id = substr(s.subject_urn::text, 10, 36)::uuid
-            AND live.organization_id = $2::text
-            AND live.deleted IS FALSE
-            AND wa.subject = substr(s.subject_urn::text, 47)
-            AND a.name ILIKE $8::text
-        )
-      )
-    )
-    OR (
-      s.subject_urn::text NOT LIKE 'agent:%'
-      AND EXISTS (
-        SELECT 1
-        FROM remote_sessions AS rs
-        JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
-        JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-        WHERE ri.slug ILIKE $8::text
-          AND rs.subject_urn = s.subject_urn::text
-          AND (rc.project_id = $1::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $2::text)))
-          AND (
-            EXISTS (
-              SELECT 1
-              FROM remote_session_client_user_session_issuers AS blink
-              WHERE blink.remote_session_client_id = rs.remote_session_client_id
-                AND blink.user_session_issuer_id = s.user_session_issuer_id
-            )
-            OR rs.user_session_issuer_id = s.user_session_issuer_id
-          )
-          AND rs.deleted IS FALSE
-          AND rc.deleted IS FALSE
-          AND ri.deleted IS FALSE
-      )
-    )
-    OR (
-      s.subject_urn::text LIKE 'agent:%'
-      AND EXISTS (
-        SELECT 1
-        FROM remote_sessions AS rs
-        JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
-        JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-        WHERE ri.slug ILIKE $8::text
-          AND EXISTS (
-            SELECT 1
-            FROM principal_remote_session_bindings AS b
-            JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
-              AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
-              AND a.owner_reassignment_required_at IS NULL
-            JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
-            JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
-              AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
-            JOIN remote_sessions AS bs ON bs.id = b.remote_session_id
-              AND bs.subject_urn = 'user:' || a.owner_user_id
-              AND b.attached_by_subject_id = bs.subject_urn
-              AND bs.grant_generation = b.grant_generation
-              AND bs.remote_session_client_id = b.remote_session_client_id
-            JOIN remote_session_clients AS bc ON bc.id = bs.remote_session_client_id
-            JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
-            JOIN user_session_issuers AS provenance ON provenance.id = bs.user_session_issuer_id
-            JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
-            JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = bc.id AND link.user_session_issuer_id = target.id
-            JOIN remote_session_issuers AS issuer ON issuer.id = bc.remote_session_issuer_id
-            WHERE b.project_id = $1::uuid
-              AND b.organization_id = $2::text
-              AND 'agent:' || b.principal_id::text = s.subject_urn::text
-              AND b.user_session_issuer_id = s.user_session_issuer_id
-              AND b.remote_session_client_id = rs.remote_session_client_id
-              AND b.revoked_at IS NULL
-              AND bs.deleted IS FALSE
-              AND bc.deleted IS FALSE
-              AND target.deleted IS FALSE
-              AND provenance.deleted IS FALSE
-              AND issuer.deleted IS FALSE
-              AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
-              AND (provenance.project_id = $1::uuid OR (provenance.project_id IS NULL AND provenance.organization_id = $2::text))
-              AND (target.project_id = $1::uuid OR (target.project_id IS NULL AND target.organization_id = $2::text))
-              AND (bc.project_id = $1::uuid OR (bc.project_id IS NULL AND (bc.organization_id IS NULL OR bc.organization_id = $2::text)))
-              AND bs.id = rs.id
-          )
-          AND (rc.project_id = $1::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $2::text)))
-          AND (
-            EXISTS (
-              SELECT 1
-              FROM remote_session_client_user_session_issuers AS blink
-              WHERE blink.remote_session_client_id = rs.remote_session_client_id
-                AND blink.user_session_issuer_id = s.user_session_issuer_id
-            )
-            OR rs.user_session_issuer_id = s.user_session_issuer_id
-          )
-          AND rs.deleted IS FALSE
-          AND rc.deleted IS FALSE
-          AND ri.deleted IS FALSE
-      )
-    )
+  AND s.id IN (
+    SELECT v.user_session_id
+    FROM visible_user_session_ids($1::uuid, $2::text, $8::text, $9::text[], $10::text) AS v
   )
+  AND (cardinality($11::text[]) = 0 OR s.subject_urn::text = ANY($11::text[]))
+  AND NOT s.subject_urn::text = ANY($12::text[])
+  AND (cardinality($13::text[]) = 0 OR split_part(s.subject_urn::text, ':', 1) = ANY($13::text[]))
+  AND NOT split_part(s.subject_urn::text, ':', 1) = ANY($14::text[])
+  AND (cardinality($15::uuid[]) = 0 OR s.user_session_issuer_id = ANY($15::uuid[]))
+  AND NOT s.user_session_issuer_id = ANY($16::uuid[])
+  AND (cardinality($17::text[]) = 0 OR (CASE WHEN s.user_session_client_id IS NOT NULL THEN s.user_session_client_id::text WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN 'dashboard' ELSE 'none' END) = ANY($17::text[]))
+  AND NOT (CASE WHEN s.user_session_client_id IS NOT NULL THEN s.user_session_client_id::text WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN 'dashboard' ELSE 'none' END) = ANY($18::text[])
+  AND (cardinality($19::text[]) = 0 OR (CASE WHEN c.id IS NULL THEN 'none' WHEN c.client_id_metadata_uri IS NOT NULL THEN 'cimd' WHEN c.assistant_runtime_id IS NOT NULL OR c.assistant_trigger_workload_binding_id IS NOT NULL THEN 'assistant' ELSE 'dcr' END) = ANY($19::text[]))
+  AND NOT (CASE WHEN c.id IS NULL THEN 'none' WHEN c.client_id_metadata_uri IS NOT NULL THEN 'cimd' WHEN c.assistant_runtime_id IS NOT NULL OR c.assistant_trigger_workload_binding_id IS NOT NULL THEN 'assistant' ELSE 'dcr' END) = ANY($20::text[])
+  AND ($21::interval IS NULL OR s.last_used_at >= now() - $21::interval)
+  AND ($22::interval IS NULL OR s.last_used_at < now() - $22::interval)
+  AND ($23::boolean IS FALSE OR s.last_used_at IS NULL)
   AND (
-    $11::text IS NULL
-    OR s.resource_identity = $11::text
-    OR (s.resource_identity IS NULL AND s.tool_selection->>'resource' = $11::text)
+    $24::text IS NULL
+    OR s.resource_identity = $24::text
+    OR (s.resource_identity IS NULL AND s.tool_selection->>'resource' = $24::text)
   )
-  AND ($12::uuid IS NULL OR s.id < $12::uuid)
+  AND ($25::uuid IS NULL OR s.id < $25::uuid)
 ORDER BY s.id DESC
-LIMIT $13
+LIMIT $26
 `
 
 type ListUserSessionsByProjectIDParams struct {
-	ProjectID            uuid.UUID
-	OrganizationID       string
-	Status               pgtype.Text
-	SubjectUrn           pgtype.Text
-	UserSessionIssuerID  uuid.NullUUID
-	ClientID             uuid.NullUUID
-	ID                   uuid.NullUUID
-	Search               pgtype.Text
-	AgentSubjectUrns     []string
-	FirstPartyClientName string
-	ResourceIdentity     pgtype.Text
-	Cursor               uuid.NullUUID
-	LimitValue           int32
+	ProjectID                  uuid.UUID
+	OrganizationID             string
+	Status                     pgtype.Text
+	SubjectUrn                 pgtype.Text
+	UserSessionIssuerID        uuid.NullUUID
+	ClientID                   uuid.NullUUID
+	ID                         uuid.NullUUID
+	Search                     pgtype.Text
+	AgentSubjectUrns           []string
+	FirstPartyClientName       string
+	Identities                 []string
+	ExcludeIdentities          []string
+	IdentityTypes              []string
+	ExcludeIdentityTypes       []string
+	Servers                    []uuid.UUID
+	ExcludeServers             []uuid.UUID
+	Clients                    []string
+	ExcludeClients             []string
+	ClientRegistrations        []string
+	ExcludeClientRegistrations []string
+	LastUsedWithin             pgtype.Interval
+	LastUsedOlderThan          pgtype.Interval
+	LastUsedNever              bool
+	ResourceIdentity           pgtype.Text
+	Cursor                     uuid.NullUUID
+	LimitValue                 int32
 }
 
 type ListUserSessionsByProjectIDRow struct {
@@ -4332,6 +4454,19 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 		arg.Search,
 		arg.AgentSubjectUrns,
 		arg.FirstPartyClientName,
+		arg.Identities,
+		arg.ExcludeIdentities,
+		arg.IdentityTypes,
+		arg.ExcludeIdentityTypes,
+		arg.Servers,
+		arg.ExcludeServers,
+		arg.Clients,
+		arg.ExcludeClients,
+		arg.ClientRegistrations,
+		arg.ExcludeClientRegistrations,
+		arg.LastUsedWithin,
+		arg.LastUsedOlderThan,
+		arg.LastUsedNever,
 		arg.ResourceIdentity,
 		arg.Cursor,
 		arg.LimitValue,

@@ -592,6 +592,7 @@ open their effective assignments; the dropdown always offers compact member sear
 33. **Gateway Debug**
     - Open Acme Agent Gateway → Debug: the two seeded gateway sessions are listed; the Linear, Slack and partner sessions are not.
     - Search narrows the list and keeps the term in the URL; a search with no match shows "No connections match your search". Clear it.
+    - Filters: open Identity type in the rail: Person, 2. Open Sign-in server: the gateway's server, 2. Type `last_used < 24h` and press Enter: the chip reads "Last used < 24h" and, after a fresh seed, both sessions remain; replacing it with `last_used > 7d` empties the list. Add a search beside it: both stay applied, the search shows as its own chip, and each removes on its own. Reload keeps both. No "no recorded origin" notice appears.
     - Command K "Debug this gateway" opens the same page; a viewer without project read access sees no Debug item.
 
 ## On failure

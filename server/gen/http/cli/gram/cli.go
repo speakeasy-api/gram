@@ -210,7 +210,7 @@ func UsageCommands() []string {
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|get-attach-impact|delete-user-session-issuer)",
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
-		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
+		"user-sessions (list-user-sessions|list-facets|query-facets|mint-user-session|revoke-user-session)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject|create-device-join-token|register-device)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
@@ -5118,23 +5118,62 @@ func ParseEndpoint(
 
 		userSessionsFlags = flag.NewFlagSet("user-sessions", flag.ContinueOnError)
 
-		userSessionsListUserSessionsFlags                   = flag.NewFlagSet("list-user-sessions", flag.ExitOnError)
-		userSessionsListUserSessionsSubjectUrnFlag          = userSessionsListUserSessionsFlags.String("subject-urn", "", "")
-		userSessionsListUserSessionsUserSessionIssuerIDFlag = userSessionsListUserSessionsFlags.String("user-session-issuer-id", "", "")
-		userSessionsListUserSessionsStatusFlag              = userSessionsListUserSessionsFlags.String("status", "", "")
-		userSessionsListUserSessionsClientIDFlag            = userSessionsListUserSessionsFlags.String("client-id", "", "")
-		userSessionsListUserSessionsSearchFlag              = userSessionsListUserSessionsFlags.String("search", "", "")
-		userSessionsListUserSessionsMetaMcpServerIDFlag     = userSessionsListUserSessionsFlags.String("meta-mcp-server-id", "", "")
-		userSessionsListUserSessionsCursorFlag              = userSessionsListUserSessionsFlags.String("cursor", "", "")
-		userSessionsListUserSessionsLimitFlag               = userSessionsListUserSessionsFlags.String("limit", "", "")
-		userSessionsListUserSessionsSessionTokenFlag        = userSessionsListUserSessionsFlags.String("session-token", "", "")
-		userSessionsListUserSessionsApikeyTokenFlag         = userSessionsListUserSessionsFlags.String("apikey-token", "", "")
-		userSessionsListUserSessionsProjectSlugInputFlag    = userSessionsListUserSessionsFlags.String("project-slug-input", "", "")
+		userSessionsListUserSessionsFlags                          = flag.NewFlagSet("list-user-sessions", flag.ExitOnError)
+		userSessionsListUserSessionsSubjectUrnFlag                 = userSessionsListUserSessionsFlags.String("subject-urn", "", "")
+		userSessionsListUserSessionsUserSessionIssuerIDFlag        = userSessionsListUserSessionsFlags.String("user-session-issuer-id", "", "")
+		userSessionsListUserSessionsStatusFlag                     = userSessionsListUserSessionsFlags.String("status", "", "")
+		userSessionsListUserSessionsClientIDFlag                   = userSessionsListUserSessionsFlags.String("client-id", "", "")
+		userSessionsListUserSessionsSearchFlag                     = userSessionsListUserSessionsFlags.String("search", "", "")
+		userSessionsListUserSessionsMetaMcpServerIDFlag            = userSessionsListUserSessionsFlags.String("meta-mcp-server-id", "", "")
+		userSessionsListUserSessionsIdentitiesFlag                 = userSessionsListUserSessionsFlags.String("identities", "", "")
+		userSessionsListUserSessionsExcludeIdentitiesFlag          = userSessionsListUserSessionsFlags.String("exclude-identities", "", "")
+		userSessionsListUserSessionsIdentityTypesFlag              = userSessionsListUserSessionsFlags.String("identity-types", "", "")
+		userSessionsListUserSessionsExcludeIdentityTypesFlag       = userSessionsListUserSessionsFlags.String("exclude-identity-types", "", "")
+		userSessionsListUserSessionsServersFlag                    = userSessionsListUserSessionsFlags.String("servers", "", "")
+		userSessionsListUserSessionsExcludeServersFlag             = userSessionsListUserSessionsFlags.String("exclude-servers", "", "")
+		userSessionsListUserSessionsClientsFlag                    = userSessionsListUserSessionsFlags.String("clients", "", "")
+		userSessionsListUserSessionsExcludeClientsFlag             = userSessionsListUserSessionsFlags.String("exclude-clients", "", "")
+		userSessionsListUserSessionsClientRegistrationsFlag        = userSessionsListUserSessionsFlags.String("client-registrations", "", "")
+		userSessionsListUserSessionsExcludeClientRegistrationsFlag = userSessionsListUserSessionsFlags.String("exclude-client-registrations", "", "")
+		userSessionsListUserSessionsLastUsedWithinFlag             = userSessionsListUserSessionsFlags.String("last-used-within", "", "")
+		userSessionsListUserSessionsLastUsedOlderThanFlag          = userSessionsListUserSessionsFlags.String("last-used-older-than", "", "")
+		userSessionsListUserSessionsLastUsedNeverFlag              = userSessionsListUserSessionsFlags.String("last-used-never", "", "")
+		userSessionsListUserSessionsCursorFlag                     = userSessionsListUserSessionsFlags.String("cursor", "", "")
+		userSessionsListUserSessionsLimitFlag                      = userSessionsListUserSessionsFlags.String("limit", "", "")
+		userSessionsListUserSessionsSessionTokenFlag               = userSessionsListUserSessionsFlags.String("session-token", "", "")
+		userSessionsListUserSessionsApikeyTokenFlag                = userSessionsListUserSessionsFlags.String("apikey-token", "", "")
+		userSessionsListUserSessionsProjectSlugInputFlag           = userSessionsListUserSessionsFlags.String("project-slug-input", "", "")
 
 		userSessionsListFacetsFlags                = flag.NewFlagSet("list-facets", flag.ExitOnError)
 		userSessionsListFacetsSessionTokenFlag     = userSessionsListFacetsFlags.String("session-token", "", "")
 		userSessionsListFacetsApikeyTokenFlag      = userSessionsListFacetsFlags.String("apikey-token", "", "")
 		userSessionsListFacetsProjectSlugInputFlag = userSessionsListFacetsFlags.String("project-slug-input", "", "")
+
+		userSessionsQueryFacetsFlags                          = flag.NewFlagSet("query-facets", flag.ExitOnError)
+		userSessionsQueryFacetsSubjectUrnFlag                 = userSessionsQueryFacetsFlags.String("subject-urn", "", "")
+		userSessionsQueryFacetsUserSessionIssuerIDFlag        = userSessionsQueryFacetsFlags.String("user-session-issuer-id", "", "")
+		userSessionsQueryFacetsStatusFlag                     = userSessionsQueryFacetsFlags.String("status", "", "")
+		userSessionsQueryFacetsClientIDFlag                   = userSessionsQueryFacetsFlags.String("client-id", "", "")
+		userSessionsQueryFacetsSearchFlag                     = userSessionsQueryFacetsFlags.String("search", "", "")
+		userSessionsQueryFacetsMetaMcpServerIDFlag            = userSessionsQueryFacetsFlags.String("meta-mcp-server-id", "", "")
+		userSessionsQueryFacetsIdentitiesFlag                 = userSessionsQueryFacetsFlags.String("identities", "", "")
+		userSessionsQueryFacetsExcludeIdentitiesFlag          = userSessionsQueryFacetsFlags.String("exclude-identities", "", "")
+		userSessionsQueryFacetsIdentityTypesFlag              = userSessionsQueryFacetsFlags.String("identity-types", "", "")
+		userSessionsQueryFacetsExcludeIdentityTypesFlag       = userSessionsQueryFacetsFlags.String("exclude-identity-types", "", "")
+		userSessionsQueryFacetsServersFlag                    = userSessionsQueryFacetsFlags.String("servers", "", "")
+		userSessionsQueryFacetsExcludeServersFlag             = userSessionsQueryFacetsFlags.String("exclude-servers", "", "")
+		userSessionsQueryFacetsClientsFlag                    = userSessionsQueryFacetsFlags.String("clients", "", "")
+		userSessionsQueryFacetsExcludeClientsFlag             = userSessionsQueryFacetsFlags.String("exclude-clients", "", "")
+		userSessionsQueryFacetsClientRegistrationsFlag        = userSessionsQueryFacetsFlags.String("client-registrations", "", "")
+		userSessionsQueryFacetsExcludeClientRegistrationsFlag = userSessionsQueryFacetsFlags.String("exclude-client-registrations", "", "")
+		userSessionsQueryFacetsLastUsedWithinFlag             = userSessionsQueryFacetsFlags.String("last-used-within", "", "")
+		userSessionsQueryFacetsLastUsedOlderThanFlag          = userSessionsQueryFacetsFlags.String("last-used-older-than", "", "")
+		userSessionsQueryFacetsLastUsedNeverFlag              = userSessionsQueryFacetsFlags.String("last-used-never", "", "")
+		userSessionsQueryFacetsFieldFlag                      = userSessionsQueryFacetsFlags.String("field", "", "")
+		userSessionsQueryFacetsFieldSearchFlag                = userSessionsQueryFacetsFlags.String("field-search", "", "")
+		userSessionsQueryFacetsSessionTokenFlag               = userSessionsQueryFacetsFlags.String("session-token", "", "")
+		userSessionsQueryFacetsApikeyTokenFlag                = userSessionsQueryFacetsFlags.String("apikey-token", "", "")
+		userSessionsQueryFacetsProjectSlugInputFlag           = userSessionsQueryFacetsFlags.String("project-slug-input", "", "")
 
 		userSessionsMintUserSessionFlags                = flag.NewFlagSet("mint-user-session", flag.ExitOnError)
 		userSessionsMintUserSessionBodyFlag             = userSessionsMintUserSessionFlags.String("body", "REQUIRED", "")
@@ -6359,6 +6398,7 @@ func ParseEndpoint(
 	userSessionsFlags.Usage = userSessionsUsage
 	userSessionsListUserSessionsFlags.Usage = userSessionsListUserSessionsUsage
 	userSessionsListFacetsFlags.Usage = userSessionsListFacetsUsage
+	userSessionsQueryFacetsFlags.Usage = userSessionsQueryFacetsUsage
 	userSessionsMintUserSessionFlags.Usage = userSessionsMintUserSessionUsage
 	userSessionsRevokeUserSessionFlags.Usage = userSessionsRevokeUserSessionUsage
 
@@ -9683,6 +9723,9 @@ func ParseEndpoint(
 			case "list-facets":
 				epf = userSessionsListFacetsFlags
 
+			case "query-facets":
+				epf = userSessionsQueryFacetsFlags
+
 			case "mint-user-session":
 				epf = userSessionsMintUserSessionFlags
 
@@ -12890,10 +12933,13 @@ func ParseEndpoint(
 			switch epn {
 			case "list-user-sessions":
 				endpoint = c.ListUserSessions()
-				data, err = usersessionsc.BuildListUserSessionsPayload(*userSessionsListUserSessionsSubjectUrnFlag, *userSessionsListUserSessionsUserSessionIssuerIDFlag, *userSessionsListUserSessionsStatusFlag, *userSessionsListUserSessionsClientIDFlag, *userSessionsListUserSessionsSearchFlag, *userSessionsListUserSessionsMetaMcpServerIDFlag, *userSessionsListUserSessionsCursorFlag, *userSessionsListUserSessionsLimitFlag, *userSessionsListUserSessionsSessionTokenFlag, *userSessionsListUserSessionsApikeyTokenFlag, *userSessionsListUserSessionsProjectSlugInputFlag)
+				data, err = usersessionsc.BuildListUserSessionsPayload(*userSessionsListUserSessionsSubjectUrnFlag, *userSessionsListUserSessionsUserSessionIssuerIDFlag, *userSessionsListUserSessionsStatusFlag, *userSessionsListUserSessionsClientIDFlag, *userSessionsListUserSessionsSearchFlag, *userSessionsListUserSessionsMetaMcpServerIDFlag, *userSessionsListUserSessionsIdentitiesFlag, *userSessionsListUserSessionsExcludeIdentitiesFlag, *userSessionsListUserSessionsIdentityTypesFlag, *userSessionsListUserSessionsExcludeIdentityTypesFlag, *userSessionsListUserSessionsServersFlag, *userSessionsListUserSessionsExcludeServersFlag, *userSessionsListUserSessionsClientsFlag, *userSessionsListUserSessionsExcludeClientsFlag, *userSessionsListUserSessionsClientRegistrationsFlag, *userSessionsListUserSessionsExcludeClientRegistrationsFlag, *userSessionsListUserSessionsLastUsedWithinFlag, *userSessionsListUserSessionsLastUsedOlderThanFlag, *userSessionsListUserSessionsLastUsedNeverFlag, *userSessionsListUserSessionsCursorFlag, *userSessionsListUserSessionsLimitFlag, *userSessionsListUserSessionsSessionTokenFlag, *userSessionsListUserSessionsApikeyTokenFlag, *userSessionsListUserSessionsProjectSlugInputFlag)
 			case "list-facets":
 				endpoint = c.ListFacets()
 				data, err = usersessionsc.BuildListFacetsPayload(*userSessionsListFacetsSessionTokenFlag, *userSessionsListFacetsApikeyTokenFlag, *userSessionsListFacetsProjectSlugInputFlag)
+			case "query-facets":
+				endpoint = c.QueryFacets()
+				data, err = usersessionsc.BuildQueryFacetsPayload(*userSessionsQueryFacetsSubjectUrnFlag, *userSessionsQueryFacetsUserSessionIssuerIDFlag, *userSessionsQueryFacetsStatusFlag, *userSessionsQueryFacetsClientIDFlag, *userSessionsQueryFacetsSearchFlag, *userSessionsQueryFacetsMetaMcpServerIDFlag, *userSessionsQueryFacetsIdentitiesFlag, *userSessionsQueryFacetsExcludeIdentitiesFlag, *userSessionsQueryFacetsIdentityTypesFlag, *userSessionsQueryFacetsExcludeIdentityTypesFlag, *userSessionsQueryFacetsServersFlag, *userSessionsQueryFacetsExcludeServersFlag, *userSessionsQueryFacetsClientsFlag, *userSessionsQueryFacetsExcludeClientsFlag, *userSessionsQueryFacetsClientRegistrationsFlag, *userSessionsQueryFacetsExcludeClientRegistrationsFlag, *userSessionsQueryFacetsLastUsedWithinFlag, *userSessionsQueryFacetsLastUsedOlderThanFlag, *userSessionsQueryFacetsLastUsedNeverFlag, *userSessionsQueryFacetsFieldFlag, *userSessionsQueryFacetsFieldSearchFlag, *userSessionsQueryFacetsSessionTokenFlag, *userSessionsQueryFacetsApikeyTokenFlag, *userSessionsQueryFacetsProjectSlugInputFlag)
 			case "mint-user-session":
 				endpoint = c.MintUserSession()
 				data, err = usersessionsc.BuildMintUserSessionPayload(*userSessionsMintUserSessionBodyFlag, *userSessionsMintUserSessionSessionTokenFlag, *userSessionsMintUserSessionProjectSlugInputFlag)
@@ -35006,6 +35052,7 @@ func userSessionsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-user-sessions: List issued user_sessions in the caller's project. refresh_token_hash is never returned.`)
 	fmt.Fprintln(os.Stderr, `    list-facets: List available user session facet values (clients, users, servers) in the caller's project.`)
+	fmt.Fprintln(os.Stderr, `    query-facets: Count the values of each session filter field over the sessions userSessions.list would return for the same filters. Each field ignores its own selection and applies every other filter. Returns the top values per field plus any selected value.`)
 	fmt.Fprintln(os.Stderr, `    mint-user-session: Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: an MCP server, a meta MCP server, or a legacy toolset without an mcp_servers wrapper. Exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.`)
 	fmt.Fprintln(os.Stderr, `    revoke-user-session: Push the session's jti into the revocation cache and soft-delete the row.`)
 	fmt.Fprintln(os.Stderr)
@@ -35021,6 +35068,19 @@ func userSessionsListUserSessionsUsage() {
 	fmt.Fprint(os.Stderr, " -client-id STRING")
 	fmt.Fprint(os.Stderr, " -search STRING")
 	fmt.Fprint(os.Stderr, " -meta-mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -identities JSON")
+	fmt.Fprint(os.Stderr, " -exclude-identities JSON")
+	fmt.Fprint(os.Stderr, " -identity-types JSON")
+	fmt.Fprint(os.Stderr, " -exclude-identity-types JSON")
+	fmt.Fprint(os.Stderr, " -servers JSON")
+	fmt.Fprint(os.Stderr, " -exclude-servers JSON")
+	fmt.Fprint(os.Stderr, " -clients JSON")
+	fmt.Fprint(os.Stderr, " -exclude-clients JSON")
+	fmt.Fprint(os.Stderr, " -client-registrations JSON")
+	fmt.Fprint(os.Stderr, " -exclude-client-registrations JSON")
+	fmt.Fprint(os.Stderr, " -last-used-within INT")
+	fmt.Fprint(os.Stderr, " -last-used-older-than INT")
+	fmt.Fprint(os.Stderr, " -last-used-never BOOL")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -35039,6 +35099,19 @@ func userSessionsListUserSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    -client-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -search STRING: `)
 	fmt.Fprintln(os.Stderr, `    -meta-mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -identities JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-identities JSON: `)
+	fmt.Fprintln(os.Stderr, `    -identity-types JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-identity-types JSON: `)
+	fmt.Fprintln(os.Stderr, `    -servers JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-servers JSON: `)
+	fmt.Fprintln(os.Stderr, `    -clients JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-clients JSON: `)
+	fmt.Fprintln(os.Stderr, `    -client-registrations JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-client-registrations JSON: `)
+	fmt.Fprintln(os.Stderr, `    -last-used-within INT: `)
+	fmt.Fprintln(os.Stderr, `    -last-used-older-than INT: `)
+	fmt.Fprintln(os.Stderr, `    -last-used-never BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -35047,7 +35120,7 @@ func userSessionsListUserSessionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions list-user-sessions --subject-urn \"abc123\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions list-user-sessions --subject-urn \"abc123\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --exclude-identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --exclude-servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --exclude-client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --last-used-within 2 --last-used-older-than 2 --last-used-never false --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionsListFacetsUsage() {
@@ -35070,6 +35143,70 @@ func userSessionsListFacetsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions list-facets --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionsQueryFacetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-sessions query-facets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -subject-urn STRING")
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -client-id STRING")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -meta-mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -identities JSON")
+	fmt.Fprint(os.Stderr, " -exclude-identities JSON")
+	fmt.Fprint(os.Stderr, " -identity-types JSON")
+	fmt.Fprint(os.Stderr, " -exclude-identity-types JSON")
+	fmt.Fprint(os.Stderr, " -servers JSON")
+	fmt.Fprint(os.Stderr, " -exclude-servers JSON")
+	fmt.Fprint(os.Stderr, " -clients JSON")
+	fmt.Fprint(os.Stderr, " -exclude-clients JSON")
+	fmt.Fprint(os.Stderr, " -client-registrations JSON")
+	fmt.Fprint(os.Stderr, " -exclude-client-registrations JSON")
+	fmt.Fprint(os.Stderr, " -last-used-within INT")
+	fmt.Fprint(os.Stderr, " -last-used-older-than INT")
+	fmt.Fprint(os.Stderr, " -last-used-never BOOL")
+	fmt.Fprint(os.Stderr, " -field STRING")
+	fmt.Fprint(os.Stderr, " -field-search STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Count the values of each session filter field over the sessions userSessions.list would return for the same filters. Each field ignores its own selection and applies every other filter. Returns the top values per field plus any selected value.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -subject-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -client-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -meta-mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -identities JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-identities JSON: `)
+	fmt.Fprintln(os.Stderr, `    -identity-types JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-identity-types JSON: `)
+	fmt.Fprintln(os.Stderr, `    -servers JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-servers JSON: `)
+	fmt.Fprintln(os.Stderr, `    -clients JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-clients JSON: `)
+	fmt.Fprintln(os.Stderr, `    -client-registrations JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-client-registrations JSON: `)
+	fmt.Fprintln(os.Stderr, `    -last-used-within INT: `)
+	fmt.Fprintln(os.Stderr, `    -last-used-older-than INT: `)
+	fmt.Fprintln(os.Stderr, `    -last-used-never BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -field STRING: `)
+	fmt.Fprintln(os.Stderr, `    -field-search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions query-facets --subject-urn \"abc123\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --exclude-identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --exclude-servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --exclude-client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --last-used-within 2 --last-used-older-than 2 --last-used-never false --field \"identity_type\" --field-search \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionsMintUserSessionUsage() {

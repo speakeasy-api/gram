@@ -19,7 +19,7 @@ import (
 
 // BuildListUserSessionsPayload builds the payload for the userSessions
 // listUserSessions endpoint from CLI flags.
-func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsStatus string, userSessionsListUserSessionsClientID string, userSessionsListUserSessionsSearch string, userSessionsListUserSessionsMetaMcpServerID string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
+func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsStatus string, userSessionsListUserSessionsClientID string, userSessionsListUserSessionsSearch string, userSessionsListUserSessionsMetaMcpServerID string, userSessionsListUserSessionsIdentities string, userSessionsListUserSessionsExcludeIdentities string, userSessionsListUserSessionsIdentityTypes string, userSessionsListUserSessionsExcludeIdentityTypes string, userSessionsListUserSessionsServers string, userSessionsListUserSessionsExcludeServers string, userSessionsListUserSessionsClients string, userSessionsListUserSessionsExcludeClients string, userSessionsListUserSessionsClientRegistrations string, userSessionsListUserSessionsExcludeClientRegistrations string, userSessionsListUserSessionsLastUsedWithin string, userSessionsListUserSessionsLastUsedOlderThan string, userSessionsListUserSessionsLastUsedNever string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
 	var err error
 	var subjectUrn *string
 	{
@@ -81,6 +81,235 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 			}
 		}
 	}
+	var identities []string
+	{
+		if userSessionsListUserSessionsIdentities != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsIdentities), &identities)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for identities, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(identities) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("identities", identities, len(identities), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeIdentities []string
+	{
+		if userSessionsListUserSessionsExcludeIdentities != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsExcludeIdentities), &excludeIdentities)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeIdentities, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(excludeIdentities) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_identities", excludeIdentities, len(excludeIdentities), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var identityTypes []string
+	{
+		if userSessionsListUserSessionsIdentityTypes != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsIdentityTypes), &identityTypes)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for identityTypes, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]'")
+			}
+			if len(identityTypes) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("identity_types", identityTypes, len(identityTypes), 50, false))
+			}
+			for _, e := range identityTypes {
+				if !(e == "user" || e == "agent" || e == "workload" || e == "apikey" || e == "anonymous") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("identity_types[*]", e, []any{"user", "agent", "workload", "apikey", "anonymous"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeIdentityTypes []string
+	{
+		if userSessionsListUserSessionsExcludeIdentityTypes != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsExcludeIdentityTypes), &excludeIdentityTypes)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeIdentityTypes, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]'")
+			}
+			if len(excludeIdentityTypes) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_identity_types", excludeIdentityTypes, len(excludeIdentityTypes), 50, false))
+			}
+			for _, e := range excludeIdentityTypes {
+				if !(e == "user" || e == "agent" || e == "workload" || e == "apikey" || e == "anonymous") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("exclude_identity_types[*]", e, []any{"user", "agent", "workload", "apikey", "anonymous"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var servers []string
+	{
+		if userSessionsListUserSessionsServers != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsServers), &servers)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for servers, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]'")
+			}
+			if len(servers) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("servers", servers, len(servers), 50, false))
+			}
+			for _, e := range servers {
+				err = goa.MergeErrors(err, goa.ValidateFormat("servers[*]", e, goa.FormatUUID))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeServers []string
+	{
+		if userSessionsListUserSessionsExcludeServers != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsExcludeServers), &excludeServers)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeServers, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]'")
+			}
+			if len(excludeServers) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_servers", excludeServers, len(excludeServers), 50, false))
+			}
+			for _, e := range excludeServers {
+				err = goa.MergeErrors(err, goa.ValidateFormat("exclude_servers[*]", e, goa.FormatUUID))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var clients []string
+	{
+		if userSessionsListUserSessionsClients != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsClients), &clients)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for clients, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(clients) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("clients", clients, len(clients), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeClients []string
+	{
+		if userSessionsListUserSessionsExcludeClients != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsExcludeClients), &excludeClients)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeClients, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(excludeClients) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_clients", excludeClients, len(excludeClients), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var clientRegistrations []string
+	{
+		if userSessionsListUserSessionsClientRegistrations != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsClientRegistrations), &clientRegistrations)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for clientRegistrations, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]'")
+			}
+			if len(clientRegistrations) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("client_registrations", clientRegistrations, len(clientRegistrations), 50, false))
+			}
+			for _, e := range clientRegistrations {
+				if !(e == "cimd" || e == "dcr" || e == "assistant" || e == "none") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("client_registrations[*]", e, []any{"cimd", "dcr", "assistant", "none"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeClientRegistrations []string
+	{
+		if userSessionsListUserSessionsExcludeClientRegistrations != "" {
+			err = json.Unmarshal([]byte(userSessionsListUserSessionsExcludeClientRegistrations), &excludeClientRegistrations)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeClientRegistrations, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]'")
+			}
+			if len(excludeClientRegistrations) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_client_registrations", excludeClientRegistrations, len(excludeClientRegistrations), 50, false))
+			}
+			for _, e := range excludeClientRegistrations {
+				if !(e == "cimd" || e == "dcr" || e == "assistant" || e == "none") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("exclude_client_registrations[*]", e, []any{"cimd", "dcr", "assistant", "none"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var lastUsedWithin *int
+	{
+		if userSessionsListUserSessionsLastUsedWithin != "" {
+			var v int64
+			v, err = strconv.ParseInt(userSessionsListUserSessionsLastUsedWithin, 10, strconv.IntSize)
+			val := int(v)
+			lastUsedWithin = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for lastUsedWithin, must be INT")
+			}
+			if *lastUsedWithin < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_within", *lastUsedWithin, 1, true))
+			}
+			if *lastUsedWithin > 3.1536e+08 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_within", *lastUsedWithin, 3.1536e+08, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var lastUsedOlderThan *int
+	{
+		if userSessionsListUserSessionsLastUsedOlderThan != "" {
+			var v int64
+			v, err = strconv.ParseInt(userSessionsListUserSessionsLastUsedOlderThan, 10, strconv.IntSize)
+			val := int(v)
+			lastUsedOlderThan = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for lastUsedOlderThan, must be INT")
+			}
+			if *lastUsedOlderThan < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_older_than", *lastUsedOlderThan, 1, true))
+			}
+			if *lastUsedOlderThan > 3.1536e+08 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_older_than", *lastUsedOlderThan, 3.1536e+08, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var lastUsedNever *bool
+	{
+		if userSessionsListUserSessionsLastUsedNever != "" {
+			var val bool
+			val, err = strconv.ParseBool(userSessionsListUserSessionsLastUsedNever)
+			lastUsedNever = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for lastUsedNever, must be BOOL")
+			}
+		}
+	}
 	var cursor *string
 	{
 		if userSessionsListUserSessionsCursor != "" {
@@ -128,6 +357,19 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 	v.ClientID = clientID
 	v.Search = search
 	v.MetaMcpServerID = metaMcpServerID
+	v.Identities = identities
+	v.ExcludeIdentities = excludeIdentities
+	v.IdentityTypes = identityTypes
+	v.ExcludeIdentityTypes = excludeIdentityTypes
+	v.Servers = servers
+	v.ExcludeServers = excludeServers
+	v.Clients = clients
+	v.ExcludeClients = excludeClients
+	v.ClientRegistrations = clientRegistrations
+	v.ExcludeClientRegistrations = excludeClientRegistrations
+	v.LastUsedWithin = lastUsedWithin
+	v.LastUsedOlderThan = lastUsedOlderThan
+	v.LastUsedNever = lastUsedNever
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
@@ -159,6 +401,370 @@ func BuildListFacetsPayload(userSessionsListFacetsSessionToken string, userSessi
 		}
 	}
 	v := &usersessions.ListFacetsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildQueryFacetsPayload builds the payload for the userSessions queryFacets
+// endpoint from CLI flags.
+func BuildQueryFacetsPayload(userSessionsQueryFacetsSubjectUrn string, userSessionsQueryFacetsUserSessionIssuerID string, userSessionsQueryFacetsStatus string, userSessionsQueryFacetsClientID string, userSessionsQueryFacetsSearch string, userSessionsQueryFacetsMetaMcpServerID string, userSessionsQueryFacetsIdentities string, userSessionsQueryFacetsExcludeIdentities string, userSessionsQueryFacetsIdentityTypes string, userSessionsQueryFacetsExcludeIdentityTypes string, userSessionsQueryFacetsServers string, userSessionsQueryFacetsExcludeServers string, userSessionsQueryFacetsClients string, userSessionsQueryFacetsExcludeClients string, userSessionsQueryFacetsClientRegistrations string, userSessionsQueryFacetsExcludeClientRegistrations string, userSessionsQueryFacetsLastUsedWithin string, userSessionsQueryFacetsLastUsedOlderThan string, userSessionsQueryFacetsLastUsedNever string, userSessionsQueryFacetsField string, userSessionsQueryFacetsFieldSearch string, userSessionsQueryFacetsSessionToken string, userSessionsQueryFacetsApikeyToken string, userSessionsQueryFacetsProjectSlugInput string) (*usersessions.QueryFacetsPayload, error) {
+	var err error
+	var subjectUrn *string
+	{
+		if userSessionsQueryFacetsSubjectUrn != "" {
+			subjectUrn = &userSessionsQueryFacetsSubjectUrn
+		}
+	}
+	var userSessionIssuerID *string
+	{
+		if userSessionsQueryFacetsUserSessionIssuerID != "" {
+			userSessionIssuerID = &userSessionsQueryFacetsUserSessionIssuerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", *userSessionIssuerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var status *string
+	{
+		if userSessionsQueryFacetsStatus != "" {
+			status = &userSessionsQueryFacetsStatus
+			if !(*status == "active" || *status == "expired" || *status == "revoked" || *status == "all") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"active", "expired", "revoked", "all"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var clientID *string
+	{
+		if userSessionsQueryFacetsClientID != "" {
+			clientID = &userSessionsQueryFacetsClientID
+			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var search *string
+	{
+		if userSessionsQueryFacetsSearch != "" {
+			search = &userSessionsQueryFacetsSearch
+			if utf8.RuneCountInString(*search) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var metaMcpServerID *string
+	{
+		if userSessionsQueryFacetsMetaMcpServerID != "" {
+			metaMcpServerID = &userSessionsQueryFacetsMetaMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var identities []string
+	{
+		if userSessionsQueryFacetsIdentities != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsIdentities), &identities)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for identities, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(identities) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("identities", identities, len(identities), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeIdentities []string
+	{
+		if userSessionsQueryFacetsExcludeIdentities != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsExcludeIdentities), &excludeIdentities)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeIdentities, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(excludeIdentities) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_identities", excludeIdentities, len(excludeIdentities), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var identityTypes []string
+	{
+		if userSessionsQueryFacetsIdentityTypes != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsIdentityTypes), &identityTypes)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for identityTypes, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]'")
+			}
+			if len(identityTypes) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("identity_types", identityTypes, len(identityTypes), 50, false))
+			}
+			for _, e := range identityTypes {
+				if !(e == "user" || e == "agent" || e == "workload" || e == "apikey" || e == "anonymous") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("identity_types[*]", e, []any{"user", "agent", "workload", "apikey", "anonymous"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeIdentityTypes []string
+	{
+		if userSessionsQueryFacetsExcludeIdentityTypes != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsExcludeIdentityTypes), &excludeIdentityTypes)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeIdentityTypes, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]'")
+			}
+			if len(excludeIdentityTypes) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_identity_types", excludeIdentityTypes, len(excludeIdentityTypes), 50, false))
+			}
+			for _, e := range excludeIdentityTypes {
+				if !(e == "user" || e == "agent" || e == "workload" || e == "apikey" || e == "anonymous") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("exclude_identity_types[*]", e, []any{"user", "agent", "workload", "apikey", "anonymous"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var servers []string
+	{
+		if userSessionsQueryFacetsServers != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsServers), &servers)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for servers, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]'")
+			}
+			if len(servers) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("servers", servers, len(servers), 50, false))
+			}
+			for _, e := range servers {
+				err = goa.MergeErrors(err, goa.ValidateFormat("servers[*]", e, goa.FormatUUID))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeServers []string
+	{
+		if userSessionsQueryFacetsExcludeServers != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsExcludeServers), &excludeServers)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeServers, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]'")
+			}
+			if len(excludeServers) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_servers", excludeServers, len(excludeServers), 50, false))
+			}
+			for _, e := range excludeServers {
+				err = goa.MergeErrors(err, goa.ValidateFormat("exclude_servers[*]", e, goa.FormatUUID))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var clients []string
+	{
+		if userSessionsQueryFacetsClients != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsClients), &clients)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for clients, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(clients) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("clients", clients, len(clients), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeClients []string
+	{
+		if userSessionsQueryFacetsExcludeClients != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsExcludeClients), &excludeClients)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeClients, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(excludeClients) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_clients", excludeClients, len(excludeClients), 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var clientRegistrations []string
+	{
+		if userSessionsQueryFacetsClientRegistrations != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsClientRegistrations), &clientRegistrations)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for clientRegistrations, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]'")
+			}
+			if len(clientRegistrations) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("client_registrations", clientRegistrations, len(clientRegistrations), 50, false))
+			}
+			for _, e := range clientRegistrations {
+				if !(e == "cimd" || e == "dcr" || e == "assistant" || e == "none") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("client_registrations[*]", e, []any{"cimd", "dcr", "assistant", "none"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var excludeClientRegistrations []string
+	{
+		if userSessionsQueryFacetsExcludeClientRegistrations != "" {
+			err = json.Unmarshal([]byte(userSessionsQueryFacetsExcludeClientRegistrations), &excludeClientRegistrations)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeClientRegistrations, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]'")
+			}
+			if len(excludeClientRegistrations) > 50 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_client_registrations", excludeClientRegistrations, len(excludeClientRegistrations), 50, false))
+			}
+			for _, e := range excludeClientRegistrations {
+				if !(e == "cimd" || e == "dcr" || e == "assistant" || e == "none") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("exclude_client_registrations[*]", e, []any{"cimd", "dcr", "assistant", "none"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var lastUsedWithin *int
+	{
+		if userSessionsQueryFacetsLastUsedWithin != "" {
+			var v int64
+			v, err = strconv.ParseInt(userSessionsQueryFacetsLastUsedWithin, 10, strconv.IntSize)
+			val := int(v)
+			lastUsedWithin = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for lastUsedWithin, must be INT")
+			}
+			if *lastUsedWithin < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_within", *lastUsedWithin, 1, true))
+			}
+			if *lastUsedWithin > 3.1536e+08 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_within", *lastUsedWithin, 3.1536e+08, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var lastUsedOlderThan *int
+	{
+		if userSessionsQueryFacetsLastUsedOlderThan != "" {
+			var v int64
+			v, err = strconv.ParseInt(userSessionsQueryFacetsLastUsedOlderThan, 10, strconv.IntSize)
+			val := int(v)
+			lastUsedOlderThan = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for lastUsedOlderThan, must be INT")
+			}
+			if *lastUsedOlderThan < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_older_than", *lastUsedOlderThan, 1, true))
+			}
+			if *lastUsedOlderThan > 3.1536e+08 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_older_than", *lastUsedOlderThan, 3.1536e+08, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var lastUsedNever *bool
+	{
+		if userSessionsQueryFacetsLastUsedNever != "" {
+			var val bool
+			val, err = strconv.ParseBool(userSessionsQueryFacetsLastUsedNever)
+			lastUsedNever = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for lastUsedNever, must be BOOL")
+			}
+		}
+	}
+	var field *string
+	{
+		if userSessionsQueryFacetsField != "" {
+			field = &userSessionsQueryFacetsField
+			if !(*field == "identity" || *field == "identity_type" || *field == "mcp_server" || *field == "client" || *field == "client_registration") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("field", *field, []any{"identity", "identity_type", "mcp_server", "client", "client_registration"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var fieldSearch *string
+	{
+		if userSessionsQueryFacetsFieldSearch != "" {
+			fieldSearch = &userSessionsQueryFacetsFieldSearch
+			if utf8.RuneCountInString(*fieldSearch) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("field_search", *fieldSearch, utf8.RuneCountInString(*fieldSearch), 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionsQueryFacetsSessionToken != "" {
+			sessionToken = &userSessionsQueryFacetsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if userSessionsQueryFacetsApikeyToken != "" {
+			apikeyToken = &userSessionsQueryFacetsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionsQueryFacetsProjectSlugInput != "" {
+			projectSlugInput = &userSessionsQueryFacetsProjectSlugInput
+		}
+	}
+	v := &usersessions.QueryFacetsPayload{}
+	v.SubjectUrn = subjectUrn
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.Status = status
+	v.ClientID = clientID
+	v.Search = search
+	v.MetaMcpServerID = metaMcpServerID
+	v.Identities = identities
+	v.ExcludeIdentities = excludeIdentities
+	v.IdentityTypes = identityTypes
+	v.ExcludeIdentityTypes = excludeIdentityTypes
+	v.Servers = servers
+	v.ExcludeServers = excludeServers
+	v.Clients = clients
+	v.ExcludeClients = excludeClients
+	v.ClientRegistrations = clientRegistrations
+	v.ExcludeClientRegistrations = excludeClientRegistrations
+	v.LastUsedWithin = lastUsedWithin
+	v.LastUsedOlderThan = lastUsedOlderThan
+	v.LastUsedNever = lastUsedNever
+	v.Field = field
+	v.FieldSearch = fieldSearch
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

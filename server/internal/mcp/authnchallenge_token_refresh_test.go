@@ -37,6 +37,7 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/sessionfilter"
 )
 
 func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) {
@@ -110,16 +111,9 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, ti.serverURL.JoinPath("mcp", otherSlug).String(), claims.Issuer)
 
-	activeSessions, err := usersessions_repo.New(ti.conn).ListUserSessionsByProjectID(ctx, usersessions_repo.ListUserSessionsByProjectIDParams{
-		ProjectID:           issuer.ProjectID.UUID,
-		Status:              pgtype.Text{String: "active", Valid: true},
-		SubjectUrn:          pgtype.Text{},
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		ClientID:            uuid.NullUUID{UUID: client.ID, Valid: true},
-		ID:                  uuid.NullUUID{},
-		Cursor:              uuid.NullUUID{},
-		LimitValue:          10,
-	})
+	activeFilter, err := sessionfilter.Parse(sessionfilter.Input{Status: new("active"), IssuerID: new(issuer.ID.String()), ClientID: new(client.ID.String())})
+	require.NoError(t, err)
+	activeSessions, err := usersessions_repo.New(ti.conn).ListUserSessionsByProjectID(ctx, activeFilter.ListParams(issuer.ProjectID.UUID, "", nil, uuid.NullUUID{}, 10))
 	require.NoError(t, err)
 	require.Len(t, activeSessions, 1)
 	require.Equal(t, activeSessions[0].Jti, claims.ID)
@@ -218,10 +212,9 @@ func TestHandleToken_RefreshSerializationConflictReplaysDelayedWinner(t *testing
 			t.Fatal("refresh did not complete after winner publication")
 		}
 	}
-	active, err := usersessions_repo.New(ti.conn).ListUserSessionsByProjectID(ctx, usersessions_repo.ListUserSessionsByProjectIDParams{
-		ProjectID: issuer.ProjectID.UUID, Status: conv.ToPGText("active"),
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, LimitValue: 10,
-	})
+	activeFilter, err := sessionfilter.Parse(sessionfilter.Input{Status: new("active"), IssuerID: new(issuer.ID.String())})
+	require.NoError(t, err)
+	active, err := usersessions_repo.New(ti.conn).ListUserSessionsByProjectID(ctx, activeFilter.ListParams(issuer.ProjectID.UUID, "", nil, uuid.NullUUID{}, 10))
 	require.NoError(t, err)
 	require.Len(t, active, 1, "only one successor may be persisted")
 	_, lockKey := refreshReplayKeys(issuer.ID, refreshToken)

@@ -8,7 +8,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -16,12 +15,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
-	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/clientcred"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/gatewayscope"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/sessionfilter"
 )
 
 const maxLimit = 100
@@ -30,14 +29,27 @@ const maxLimit = 100
 const maxSearchLength = 200
 
 type listInput struct {
-	Status              string `json:"status,omitempty" jsonschema:"Filter by status: active, expired, revoked, or all. Defaults to live sessions."`
-	UserSessionIssuerID string `json:"user_session_issuer_id,omitempty" jsonschema:"Filter to one issuer/server id (UUID)."`
-	SubjectURN          string `json:"subject_urn,omitempty" jsonschema:"Exact subject URN to filter by (e.g. user:<id>)."`
-	ClientID            string `json:"client_id,omitempty" jsonschema:"Filter to one connecting client id (UUID)."`
-	MetaMcpServerID     string `json:"meta_mcp_server_id,omitempty" jsonschema:"Only sessions issued for this gateway (UUID): those that recorded it and, when none was recorded, those whose consent selection names it."`
-	Search              string `json:"search,omitempty" jsonschema:"Case-insensitive substring match on the person, API key, workload, client, MCP server, or upstream provider of a session. Workload issuer and assignment labels and upstream provider labels may match without being included in the response."`
-	Cursor              string `json:"cursor,omitempty" jsonschema:"Pagination cursor: id of the last item from the previous page."`
-	Limit               int    `json:"limit,omitempty" jsonschema:"Page size (default 50, max 100)."`
+	Status                     string   `json:"status,omitempty" jsonschema:"Filter by status: active, expired, revoked, or all. Defaults to live sessions."`
+	UserSessionIssuerID        string   `json:"user_session_issuer_id,omitempty" jsonschema:"Filter to one issuer/server id (UUID)."`
+	SubjectURN                 string   `json:"subject_urn,omitempty" jsonschema:"Exact subject URN to filter by (e.g. user:<id>)."`
+	ClientID                   string   `json:"client_id,omitempty" jsonschema:"Filter to one connecting client id (UUID)."`
+	MetaMcpServerID            string   `json:"meta_mcp_server_id,omitempty" jsonschema:"Only sessions issued for this gateway (UUID): those that recorded it and, when none was recorded, those whose consent selection names it."`
+	Search                     string   `json:"search,omitempty" jsonschema:"Case-insensitive substring match on the person, API key, workload, client, MCP server, or upstream provider of a session. Workload issuer and assignment labels and upstream provider labels may match without being included in the response."`
+	Identities                 []string `json:"identities,omitempty" jsonschema:"Only sessions whose subject URN is one of these."`
+	ExcludeIdentities          []string `json:"exclude_identities,omitempty" jsonschema:"Leave out sessions whose subject URN is one of these."`
+	IdentityTypes              []string `json:"identity_types,omitempty" jsonschema:"Only sessions whose subject is one of these kinds: user, agent, workload, apikey, anonymous."`
+	ExcludeIdentityTypes       []string `json:"exclude_identity_types,omitempty" jsonschema:"Leave out sessions whose subject is one of these kinds."`
+	Servers                    []string `json:"servers,omitempty" jsonschema:"Only sessions issued by one of these sign-in servers (issuer UUIDs)."`
+	ExcludeServers             []string `json:"exclude_servers,omitempty" jsonschema:"Leave out sessions issued by these sign-in servers (issuer UUIDs)."`
+	Clients                    []string `json:"clients,omitempty" jsonschema:"Only sessions from one of these clients: a client UUID, dashboard, or none."`
+	ExcludeClients             []string `json:"exclude_clients,omitempty" jsonschema:"Leave out sessions from these clients."`
+	ClientRegistrations        []string `json:"client_registrations,omitempty" jsonschema:"Only sessions whose client registered this way: cimd, dcr, assistant, or none."`
+	ExcludeClientRegistrations []string `json:"exclude_client_registrations,omitempty" jsonschema:"Leave out sessions whose client registered this way."`
+	LastUsedWithin             *int     `json:"last_used_within,omitempty" jsonschema:"Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match."`
+	LastUsedOlderThan          *int     `json:"last_used_older_than,omitempty" jsonschema:"Only sessions last used more than this many seconds ago. Sessions with no recorded use never match."`
+	LastUsedNever              bool     `json:"last_used_never,omitempty" jsonschema:"Only sessions with no recorded use."`
+	Cursor                     string   `json:"cursor,omitempty" jsonschema:"Pagination cursor: id of the last item from the previous page."`
+	Limit                      int      `json:"limit,omitempty" jsonschema:"Page size (default 50, max 100)."`
 }
 
 type getInput struct {
@@ -165,6 +177,18 @@ func (t *ListTool) Descriptor() core.ToolDescriptor {
 		InputSchema: core.BuildInputSchema[listInput](
 			core.WithPropertyEnum("status", "active", "expired", "revoked", "all"),
 			core.WithPropertyNumberRange("limit", 1, maxLimit),
+			core.WithPropertyItemsRange("identities", 0, sessionfilter.MaxValues),
+			core.WithPropertyItemsRange("exclude_identities", 0, sessionfilter.MaxValues),
+			core.WithPropertyItemsRange("identity_types", 0, sessionfilter.MaxValues),
+			core.WithPropertyItemsRange("exclude_identity_types", 0, sessionfilter.MaxValues),
+			core.WithPropertyItemsRange("servers", 0, sessionfilter.MaxValues),
+			core.WithPropertyItemsRange("exclude_servers", 0, sessionfilter.MaxValues),
+			core.WithPropertyItemsRange("clients", 0, sessionfilter.MaxValues),
+			core.WithPropertyItemsRange("exclude_clients", 0, sessionfilter.MaxValues),
+			core.WithPropertyItemsRange("client_registrations", 0, sessionfilter.MaxValues),
+			core.WithPropertyItemsRange("exclude_client_registrations", 0, sessionfilter.MaxValues),
+			core.WithPropertyNumberRange("last_used_within", 1, sessionfilter.MaxLastUsedSeconds),
+			core.WithPropertyNumberRange("last_used_older_than", 1, sessionfilter.MaxLastUsedSeconds),
 		),
 		Variables:   nil,
 		Annotations: core.ReadOnlyAnnotations(),
@@ -185,12 +209,6 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		return err
 	}
 
-	switch in.Status {
-	case "", "active", "expired", "revoked", "all":
-	default:
-		return oops.E(oops.CodeBadRequest, nil, "invalid status %q: must be active, expired, revoked, or all", in.Status)
-	}
-
 	limit := int32(50)
 	if in.Limit != 0 {
 		if in.Limit < 1 || in.Limit > maxLimit {
@@ -199,14 +217,6 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		limit = int32(in.Limit)
 	}
 
-	issuer, err := parseNullUUID(in.UserSessionIssuerID, "user_session_issuer_id")
-	if err != nil {
-		return err
-	}
-	client, err := parseNullUUID(in.ClientID, "client_id")
-	if err != nil {
-		return err
-	}
 	cursor, err := parseNullUUID(in.Cursor, "cursor")
 	if err != nil {
 		return err
@@ -215,29 +225,36 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		return oops.E(oops.CodeBadRequest, nil, "search must be at most %d characters", maxSearchLength)
 	}
 
-	resourceIdentity := pgtype.Text{String: "", Valid: false}
+	filter, err := sessionfilter.Parse(sessionfilter.Input{
+		Status:                     conv.PtrEmpty(in.Status),
+		SubjectURN:                 conv.PtrEmpty(in.SubjectURN),
+		IssuerID:                   conv.PtrEmpty(in.UserSessionIssuerID),
+		ClientID:                   conv.PtrEmpty(in.ClientID),
+		Search:                     conv.PtrEmpty(in.Search),
+		Identities:                 in.Identities,
+		ExcludeIdentities:          in.ExcludeIdentities,
+		IdentityTypes:              in.IdentityTypes,
+		ExcludeIdentityTypes:       in.ExcludeIdentityTypes,
+		Servers:                    in.Servers,
+		ExcludeServers:             in.ExcludeServers,
+		Clients:                    in.Clients,
+		ExcludeClients:             in.ExcludeClients,
+		ClientRegistrations:        in.ClientRegistrations,
+		ExcludeClientRegistrations: in.ExcludeClientRegistrations,
+		LastUsedWithin:             in.LastUsedWithin,
+		LastUsedOlderThan:          in.LastUsedOlderThan,
+		LastUsedNever:              in.LastUsedNever,
+	})
+	if err != nil {
+		return fmt.Errorf("parse session filter: %w", err)
+	}
 	if in.MetaMcpServerID != "" {
-		resourceIdentity, err = gatewayscope.ResourceIdentity(ctx, t.db, pid, in.MetaMcpServerID)
-		if err != nil {
+		if filter.Gateway, err = gatewayscope.Resolve(ctx, t.db, pid, in.MetaMcpServerID); err != nil {
 			return fmt.Errorf("scope sessions to gateway: %w", err)
 		}
 	}
 
-	rows, err := repo.New(t.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
-		ProjectID:            pid,
-		OrganizationID:       org,
-		Status:               conv.ToPGTextEmpty(in.Status),
-		SubjectUrn:           conv.ToPGTextEmpty(in.SubjectURN),
-		UserSessionIssuerID:  issuer,
-		ClientID:             client,
-		ID:                   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Search:               conv.ContainsPattern(in.Search),
-		AgentSubjectUrns:     []string{},
-		FirstPartyClientName: sessiontokens.FirstPartyClientName,
-		ResourceIdentity:     resourceIdentity,
-		Cursor:               cursor,
-		LimitValue:           limit,
-	})
+	rows, err := repo.New(t.db).ListUserSessionsByProjectID(ctx, filter.ListParams(pid, org, []string{}, cursor, limit))
 	if err != nil {
 		return fmt.Errorf("list user sessions: %w", err)
 	}
@@ -296,21 +313,32 @@ func (t *GetTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io
 	}
 
 	// status "all" ensures revoked sessions are visible by ID too.
-	rows, err := repo.New(t.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
-		ProjectID:            pid,
-		OrganizationID:       org,
-		Status:               conv.ToPGTextEmpty("all"),
-		SubjectUrn:           conv.ToPGTextEmpty(""),
-		UserSessionIssuerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ClientID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ID:                   id,
-		Search:               pgtype.Text{String: "", Valid: false},
-		AgentSubjectUrns:     []string{},
-		FirstPartyClientName: sessiontokens.FirstPartyClientName,
-		ResourceIdentity:     pgtype.Text{String: "", Valid: false},
-		Cursor:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		LimitValue:           1,
+	filter, err := sessionfilter.Parse(sessionfilter.Input{
+		Status:                     new("all"),
+		SubjectURN:                 nil,
+		IssuerID:                   nil,
+		ClientID:                   nil,
+		Search:                     nil,
+		Identities:                 nil,
+		ExcludeIdentities:          nil,
+		IdentityTypes:              nil,
+		ExcludeIdentityTypes:       nil,
+		Servers:                    nil,
+		ExcludeServers:             nil,
+		Clients:                    nil,
+		ExcludeClients:             nil,
+		ClientRegistrations:        nil,
+		ExcludeClientRegistrations: nil,
+		LastUsedWithin:             nil,
+		LastUsedOlderThan:          nil,
+		LastUsedNever:              false,
 	})
+	if err != nil {
+		return fmt.Errorf("parse session filter: %w", err)
+	}
+	params := filter.ListParams(pid, org, []string{}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, 1)
+	params.ID = id
+	rows, err := repo.New(t.db).ListUserSessionsByProjectID(ctx, params)
 	if err != nil {
 		return fmt.Errorf("get user session: %w", err)
 	}
