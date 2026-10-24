@@ -669,7 +669,7 @@ func TestCreateStripeCheckoutAllowsGatedOrganizationAdmin(t *testing.T) {
 	require.Len(t, customers, 1)
 	require.Equal(t, "customer:"+ti.orgID, customers[0].IdempotencyKey)
 	require.Len(t, checkouts, 1)
-	require.Equal(t, stripeCheckoutEmbeddedReturnURL("https://app.example.test/"+ti.orgSlug+"/billing"), checkouts[0].ReturnURL)
+	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing"+"?session_id={CHECKOUT_SESSION_ID}", checkouts[0].ReturnURL)
 	require.Empty(t, checkouts[0].SuccessURL)
 	require.Empty(t, checkouts[0].CancelURL)
 	require.Nil(t, checkouts[0].TrialEnd)
@@ -1291,7 +1291,7 @@ func TestCreateStripeCheckoutReplacesLiveHostedLegacySession(t *testing.T) {
 	require.NotEmpty(t, checkouts[1].ReturnURL)
 	require.Empty(t, checkouts[1].SuccessURL)
 	require.Empty(t, checkouts[1].CancelURL)
-	require.Contains(t, checkouts[1].IdempotencyKey, ":"+stripeCheckoutFormPrototypeMarker+":")
+	require.Contains(t, checkouts[1].IdempotencyKey, ":"+stripeCheckoutFormMarker+":")
 	require.Nil(t, checkouts[1].TrialEnd)
 
 	stored, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)

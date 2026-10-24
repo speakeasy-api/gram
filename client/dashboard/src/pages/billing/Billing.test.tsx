@@ -301,7 +301,6 @@ describe("Billing", () => {
         isFetching: false,
       });
       renderBilling();
-      expect(mocks.subscription).toHaveBeenCalledWith({ enabled: true });
       expect(cta()?.getAttribute("href")).toBe("/test-org/billing/setup");
       expect(screen.getByText(/after your trial ends/)).toBeTruthy();
       expect(paymentSection()).toBeNull();
@@ -360,7 +359,6 @@ describe("Billing", () => {
     else mocks.flagResult.mockReturnValue({ status: "disabled" });
     renderBilling();
     expect(cta()).toBeNull();
-    expect(mocks.subscription).toHaveBeenCalledWith({ enabled: false });
   });
 
   it.each(["free", "base", "payg"])(

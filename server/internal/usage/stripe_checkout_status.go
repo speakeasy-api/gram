@@ -19,7 +19,7 @@ var stripeCheckoutSessionIDPattern = regexp.MustCompile(`^cs_[A-Za-z0-9_]+$`)
 // URL is only a session identifier, never evidence of successful payment.
 func (s *Service) GetStripeCheckoutStatus(ctx context.Context, payload *gen.GetStripeCheckoutStatusPayload) (*gen.GetStripeCheckoutStatusResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	for _, scope := range []authz.Scope{authz.ScopeOrgAdmin, authz.ScopeOrgRead} {

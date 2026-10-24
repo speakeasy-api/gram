@@ -2,64 +2,88 @@ package usage
 
 import (
 	"errors"
+	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
-	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
-	"github.com/speakeasy-api/gram/server/internal/usage/repo"
-	"github.com/stretchr/testify/require"
 )
 
-func TestExpiredCheckoutSessionForReplacementRemoteState(t *testing.T) {
+func TestCreateStripeCheckoutRemoteStateOpenSessionStaysReusable(t *testing.T) {
 	t.Parallel()
+	testCreateStripeCheckoutRemoteState(t, "open", "cus_test", "", false, false, "")
+}
+
+func TestCreateStripeCheckoutRemoteStateOpenAfterIntendedExpiryFailsClosed(t *testing.T) {
+	t.Parallel()
+	testCreateStripeCheckoutRemoteState(t, "open", "cus_test", "", true, false, oops.CodeConflict)
+}
+
+func TestCreateStripeCheckoutRemoteStateCompleteBeforeIntendedExpiry(t *testing.T) {
+	t.Parallel()
+	testCreateStripeCheckoutRemoteState(t, "complete", "cus_test", "", false, false, oops.CodeConflict)
+}
+
+func TestCreateStripeCheckoutRemoteStateExpiredWithSubscription(t *testing.T) {
+	t.Parallel()
+	testCreateStripeCheckoutRemoteState(t, "expired", "cus_test", "sub_test", false, false, oops.CodeConflict)
+}
+
+func TestCreateStripeCheckoutRemoteStateOpenWithSubscription(t *testing.T) {
+	t.Parallel()
+	testCreateStripeCheckoutRemoteState(t, "open", "cus_test", "sub_test", false, false, oops.CodeConflict)
+}
+
+func TestCreateStripeCheckoutRemoteStateWrongCustomer(t *testing.T) {
+	t.Parallel()
+	testCreateStripeCheckoutRemoteState(t, "expired", "cus_other", "", false, false, oops.CodeUnavailable)
+}
+
+func TestCreateStripeCheckoutRemoteStateUnknownStatus(t *testing.T) {
+	t.Parallel()
+	testCreateStripeCheckoutRemoteState(t, "unknown", "cus_test", "", false, false, oops.CodeConflict)
+}
+
+func TestCreateStripeCheckoutRemoteStateReadFailure(t *testing.T) {
+	t.Parallel()
+	testCreateStripeCheckoutRemoteState(t, "", "", "", false, true, oops.CodeUnavailable)
+}
+
+func testCreateStripeCheckoutRemoteState(t *testing.T, status, customer, subscription string, localExpired, readError bool, wantCode oops.Code) {
+	t.Helper()
+	ti := newStripeCheckoutTestInstance(t)
 	now := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
-	for _, tc := range []struct {
-		name, status, customer, subscription     string
-		localExpired, readError, wantReplacement bool
-		wantCode                                 oops.Code
-	}{
-		{name: "early remote expiry", status: "expired", customer: "cus_test", wantReplacement: true},
-		{name: "scheduled expiry", status: "expired", customer: "cus_test", localExpired: true, wantReplacement: true},
-		{name: "open session stays reusable", status: "open", customer: "cus_test"},
-		{name: "open after intended expiry fails closed", status: "open", customer: "cus_test", localExpired: true, wantCode: oops.CodeConflict},
-		{name: "complete before intended expiry", status: "complete", customer: "cus_test", wantCode: oops.CodeConflict},
-		{name: "expired with subscription", status: "expired", customer: "cus_test", subscription: "sub_test", wantCode: oops.CodeConflict},
-		{name: "open with subscription", status: "open", customer: "cus_test", subscription: "sub_test", wantCode: oops.CodeConflict},
-		{name: "wrong customer", status: "expired", customer: "cus_other", wantCode: oops.CodeUnavailable},
-		{name: "unknown status", status: "unknown", customer: "cus_test", wantCode: oops.CodeConflict},
-		{name: "read failure", readError: true, wantCode: oops.CodeUnavailable},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			api := newCheckoutStripeClient()
-			api.checkoutState = &stripeclient.CheckoutSessionState{
-				ID: "cs_test", CustomerID: tc.customer, Status: tc.status, SubscriptionID: tc.subscription,
-			}
-			if tc.readError {
-				api.checkoutGetErr = errors.New("read failed")
-			}
-			service := &Service{stripeClient: api, logger: testenv.NewLogger(t)}
-			expiresAt := now.Add(time.Hour)
-			if tc.localExpired {
-				expiresAt = now
-			}
-			replacement, err := service.expiredCheckoutSessionForReplacement(t.Context(), repo.BillingMetadatum{
-				StripeCheckoutSessionID: pgtype.Text{String: "cs_test", Valid: true},
-				StripeCheckoutExpiresAt: finiteTimestamptz(expiresAt),
-			}, "cus_test", now)
-			if tc.wantCode != "" {
-				require.Error(t, err)
-				requireOopsCode(t, err, tc.wantCode)
-			} else {
-				require.NoError(t, err)
-			}
-			require.Equal(t, tc.wantReplacement, replacement.Valid)
-			if replacement.Valid {
-				require.Equal(t, "cs_test", replacement.String)
-			}
-		})
+	ti.service.now = func() time.Time { return now }
+	first, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	_, _, initial := ti.stripe.snapshot()
+	require.Len(t, initial, 1)
+	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
+		ID: "cs_1", CustomerID: customer, Status: status, SubscriptionID: subscription,
 	}
+	if customer == "cus_test" {
+		ti.stripe.checkoutState.CustomerID = initial[0].CustomerID
+	}
+	if localExpired {
+		now = initial[0].ExpiresAt
+	}
+	if readError {
+		ti.stripe.checkoutGetErr = errors.New("read failed")
+	}
+	result, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{Theme: "dark"})
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Empty(t, ti.stripe.expiredCheckoutIDs)
+	if wantCode != "" {
+		require.Error(t, err)
+		requireOopsCode(t, err, wantCode)
+		require.Nil(t, result)
+		// Reconciliation failures must not create a replacement at Stripe.
+		require.Equal(t, initial, checkouts)
+		return
+	}
+	require.NoError(t, err)
+	require.Equal(t, first, result)
+	require.Len(t, checkouts, 2)
+	require.Equal(t, initial[0], checkouts[1])
 }

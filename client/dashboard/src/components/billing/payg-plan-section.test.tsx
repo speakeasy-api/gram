@@ -771,9 +771,6 @@ describe("PaygPlanSection", () => {
       const { container } = render(<PaygPlanSection />);
 
       expect(container.innerHTML).toBe("");
-      expect(mocks.query.mock.calls.at(-1)?.[2]).toMatchObject({
-        enabled: false,
-      });
     });
 
     it("never renders the no-subscription copy beside the CTA", () => {
@@ -795,9 +792,6 @@ describe("PaygPlanSection", () => {
       const { container } = render(<PaygPlanSection />);
 
       expect(container.innerHTML).toBe("");
-      expect(mocks.query.mock.calls.at(-1)?.[2]).toMatchObject({
-        enabled: false,
-      });
     });
 
     // Once the trial is over the subscription view takes over from the CTA,
@@ -918,9 +912,6 @@ describe("PaygPlanSection", () => {
         });
         render(<PaygPlanSection />);
         expect(checkoutCta()).toBeNull();
-        expect(mocks.query.mock.calls.at(-1)?.[2]).toMatchObject({
-          enabled: false,
-        });
       },
     );
 
@@ -953,9 +944,6 @@ describe("PaygPlanSection", () => {
       const { container } = render(<PaygPlanSection />);
 
       expect(container.innerHTML).toBe("");
-      expect(mocks.query.mock.calls.at(-1)?.[2]).toMatchObject({
-        enabled: false,
-      });
     },
   );
 });

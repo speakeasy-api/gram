@@ -242,8 +242,8 @@ type CreateCheckoutSessionInput struct {
 	// EmbeddedBrandingDarkV1 applies the immutable dark preset, not the current UI tokens.
 	EmbeddedBrandingDarkV1 bool
 
-	// EmbeddedFormPrototype selects the adopted custom form checkout UI.
-	EmbeddedFormPrototype bool
+	// EmbeddedForm selects the adopted custom form checkout UI.
+	EmbeddedForm bool
 
 	// TrialEnd is the UTC-aligned financial trial end. Speakeasy retains the exact
 	// product trial end separately and the interval between them is a free stub.
@@ -834,7 +834,7 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 
 		// Card payments stay on the page. Redirect-based methods still use ReturnURL.
 		params.RedirectOnCompletion = stripesdk.String(string(stripesdk.CheckoutSessionRedirectOnCompletionIfRequired))
-		if input.EmbeddedFormPrototype {
+		if input.EmbeddedForm {
 			params.UIMode = stripesdk.String(string(stripesdk.CheckoutSessionUIModeForm))
 			params.BrandingSettings = nil
 			params.RedirectOnCompletion = nil
