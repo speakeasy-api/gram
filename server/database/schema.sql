@@ -7808,6 +7808,11 @@ ON principal_remote_session_bindings (remote_session_id);
 CREATE INDEX IF NOT EXISTS principal_remote_session_bindings_project_idx
 ON principal_remote_session_bindings (project_id);
 
+-- Supports the subject-URN lookup used by session queries.
+CREATE INDEX IF NOT EXISTS principal_remote_session_bindings_agent_subject_idx
+ON principal_remote_session_bindings (('agent:' || principal_id::text), user_session_issuer_id)
+WHERE revoked_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS organization_invitations (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
