@@ -49,9 +49,10 @@ func TestTransactionalEndpointWritesApplyHostedRules(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = ti.service.CreateMcpEndpointInTransaction(ctx, tx, mcpendpoints.CreateMcpEndpointInTransactionInput{
-		AuthContext: authCtx, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, CustomDomainID: uuid.NullUUID{UUID: pending.ID, Valid: true}, Slug: "docs",
+		AuthContext: authCtx, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, CustomDomainID: uuid.NullUUID{UUID: pending.ID, Valid: true}, Slug: authCtx.OrganizationSlug + "-docs",
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "verified custom domain")
 	require.NoError(t, tx.Rollback(ctx))
 
 	tx, err = ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam

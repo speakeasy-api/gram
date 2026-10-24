@@ -2,10 +2,12 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -92,24 +94,19 @@ func (f connectionMutationFixture) seedIngress(t *testing.T, ctx context.Context
 	require.NoError(t, fixtures.SetNetworkIngressObservationFixture(ctx, testrepo.SetNetworkIngressObservationFixtureParams{OrganizationID: f.principal.OrganizationID, Status: status}))
 }
 
-func requireConnectionRefusal(t *testing.T, err error, code string) {
+// requireConnectionRefusal asserts the refusal an agent reads: its code and a part of its message.
+func requireConnectionRefusal(t *testing.T, err error, code, message string) map[string]any {
 	t.Helper()
 	result, ok := mcpConnectionMutationToolResult(err)
 	require.True(t, ok, "expected a readable refusal, got %v", err)
 	require.True(t, result.IsError)
-	var refusal *RiskMutationError
-	switch code {
-	case "confirmation_required":
-		var preview *connectionMutationPreviewError
-		require.ErrorAs(t, err, &preview)
-	case "not_found":
-		require.ErrorIs(t, err, ErrMCPConnectionMutationMissing)
-	case "conflict":
-		require.ErrorIs(t, err, ErrMCPConnectionMutationConflict)
-	default:
-		require.ErrorAs(t, err, &refusal)
-		require.Equal(t, code, refusal.Code, refusal.Message)
-	}
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(text.Text), &payload))
+	require.Equal(t, code, payload["code"], text.Text)
+	require.Contains(t, payload["message"], message)
+	return payload
 }
 
 func countAudit(t *testing.T, ctx context.Context, f connectionMutationFixture, action audit.Action) int64 {
@@ -138,9 +135,18 @@ func TestSetMCPAddressPreviewWritesNothing(t *testing.T) {
 	require.Equal(t, "change_endpoint", preview.Preview.Change)
 	require.Equal(t, f.orgSlug+"-hosted", preview.Preview.EndpointBefore.Slug)
 
-	result, ok := mcpConnectionMutationToolResult(err)
-	require.True(t, ok)
-	require.True(t, result.IsError)
+	require.Equal(t, f.hostedEndpoint.String(), preview.Preview.EndpointAfter.ID)
+	require.Equal(t, f.orgSlug+"-renamed", preview.Preview.EndpointAfter.Slug)
+	payload := requireConnectionRefusal(t, err, "confirmation_required", "Nothing was changed")
+	require.NotNil(t, payload["preview"])
+
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", "unprefixed", "", false)
+	requireConnectionRefusal(t, err, "invalid_request", "organization slug")
+	other, _ := seedRegistrationLifecycle(t, ctx, f.conn)
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, before.Version, "", f.orgSlug+"-docs", f.seedDomain(t, ctx, other.OrganizationID, true, true).String(), false)
+	requireConnectionRefusal(t, err, "invalid_request", "organization's custom domains")
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, "0"+before.Version[1:], "", f.orgSlug+"-second", "", false)
+	require.ErrorIs(t, err, ErrMCPConnectionMutationConflict, "a preview of a stale version is refused")
 
 	after := f.settings(t, ctx, MCPConnectionSettingsMCPServer, f.hostedID)
 	require.Equal(t, before.Version, after.Version, "a preview writes nothing")
@@ -178,7 +184,7 @@ func TestSetMCPAddressHostedAddsEndpointsAndReplays(t *testing.T) {
 	require.ErrorIs(t, err, ErrMCPConnectionMutationConflict, "a stale version is refused")
 
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, out.Settings.Version, "", "unprefixed-slug", "", true)
-	requireConnectionRefusal(t, err, "invalid_request")
+	requireConnectionRefusal(t, err, "invalid_request", "organization slug")
 
 	toolset, err := toolsetsrepo.New(f.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.hostedID, ProjectID: f.project.ID})
 	require.NoError(t, err)
@@ -209,21 +215,18 @@ func TestSetMCPAddressHostedCustomDomainMustBeLiveAndVerified(t *testing.T) {
 	pending := f.seedDomain(t, ctx, f.principal.OrganizationID, false, false)
 	version := f.settings(t, ctx, MCPConnectionSettingsMCPServer, f.hostedID).Version
 
-	_, err := f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, version, "", "docs", pending.String(), true)
-	requireConnectionRefusal(t, err, "invalid_request")
+	_, err := f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, version, "", f.orgSlug+"-docs", pending.String(), true)
+	requireConnectionRefusal(t, err, "invalid_request", "verified custom domain")
 
 	other, _ := seedRegistrationLifecycle(t, ctx, f.conn)
 	foreign := f.seedDomain(t, ctx, other.OrganizationID, true, true)
-	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, version, "", "docs", foreign.String(), true)
-	requireConnectionRefusal(t, err, "invalid_request")
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, version, "", f.orgSlug+"-docs", foreign.String(), true)
+	requireConnectionRefusal(t, err, "invalid_request", "live custom domain")
 
 	_, err = customdomainsrepo.New(f.conn).UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{Verified: true, Activated: true, ProvisionerKind: "local", ID: pending})
 	require.NoError(t, err)
 	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, version, "", "docs", pending.String(), true)
-	requireConnectionRefusal(t, err, "invalid_request")
-	var refusal *RiskMutationError
-	require.ErrorAs(t, err, &refusal)
-	require.Contains(t, refusal.Message, "free accounts", "a free account keeps the organization prefix on its own domain, as on the dashboard")
+	requireConnectionRefusal(t, err, "invalid_request", "free accounts")
 
 	out, err := f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, version, "", f.orgSlug+"-docs", pending.String(), true)
 	require.NoError(t, err)
@@ -315,7 +318,11 @@ func TestSetMCPNetworkAccessChecksEntitlementAndIngress(t *testing.T) {
 	ctx, denied := seedConnectionMutationFixture(t, "platform_mcp_network_access_denied", networkaccess.DenyAllChecker{})
 	denied.seedIngress(t, ctx, "online")
 	_, err := setMode(ctx, denied, MCPConnectionSettingsMCPServer, denied.hostedID, "dual", true)
-	requireConnectionRefusal(t, err, "invalid_request")
+	requireConnectionRefusal(t, err, "invalid_request", "could not be admitted")
+	deniedGateway, err := denied.create(ctx, "Connectors", denied.seedRemoteMember(t, ctx, "Remote"))
+	require.NoError(t, err)
+	_, err = setMode(ctx, denied, MCPConnectionSettingsGateway, uuid.MustParse(deniedGateway.Gateway.ID), "dual", true)
+	requireConnectionRefusal(t, err, "invalid_request", "could not be admitted")
 	require.Equal(t, "public_only", denied.settings(t, ctx, MCPConnectionSettingsMCPServer, denied.hostedID).NetworkMode)
 
 	ctx, f := seedConnectionMutationFixture(t, "platform_mcp_network_access_ingress", allowConnectionNetworkAccess{})
@@ -326,11 +333,11 @@ func TestSetMCPNetworkAccessChecksEntitlementAndIngress(t *testing.T) {
 	require.Equal(t, "private_only", preview.Preview.NetworkModeAfter)
 
 	_, err = setMode(ctx, f, MCPConnectionSettingsMCPServer, f.hostedID, "dual", true)
-	requireConnectionRefusal(t, err, "invalid_request")
+	requireConnectionRefusal(t, err, "invalid_request", "online private network ingress is required")
 
 	f.seedIngress(t, ctx, "offline")
 	_, err = setMode(ctx, f, MCPConnectionSettingsMCPServer, f.hostedID, "dual", true)
-	requireConnectionRefusal(t, err, "invalid_request")
+	requireConnectionRefusal(t, err, "invalid_request", "online private network ingress is required")
 
 	require.NoError(t, testrepo.New(f.conn).SetNetworkIngressObservationFixture(ctx, testrepo.SetNetworkIngressObservationFixtureParams{OrganizationID: f.principal.OrganizationID, Status: "online"}))
 	out, err := setMode(ctx, f, MCPConnectionSettingsMCPServer, f.hostedID, "private_only", true)
@@ -338,8 +345,10 @@ func TestSetMCPNetworkAccessChecksEntitlementAndIngress(t *testing.T) {
 	require.Equal(t, "private_only", out.Settings.NetworkMode)
 
 	domain := f.seedDomain(t, ctx, f.principal.OrganizationID, true, true)
-	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, out.Settings.Version, "", "docs", domain.String(), true)
-	requireConnectionRefusal(t, err, "invalid_request")
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, out.Settings.Version, "", f.orgSlug+"-docs", domain.String(), false)
+	requireConnectionRefusal(t, err, "invalid_request", "network ingress namespace")
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, out.Settings.Version, "", f.orgSlug+"-docs", domain.String(), true)
+	requireConnectionRefusal(t, err, "invalid_request", "network ingress namespace")
 
 	gateway, err := f.create(ctx, "Connectors", f.seedRemoteMember(t, ctx, "Remote"))
 	require.NoError(t, err)

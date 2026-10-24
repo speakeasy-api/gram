@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -187,7 +188,7 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 		return MCPConnectionMutationOutput{}, connectionMutationInvalid("Provide either no endpoint ID to create an address or the exact endpoint ID to update.")
 	}
 	if !input.Confirmed {
-		return MCPConnectionMutationOutput{}, addressPreview(current, input.ExpectedVersion, endpointID, input.Slug, domainID)
+		return MCPConnectionMutationOutput{}, s.addressPreview(ctx, principal, current, input.ExpectedVersion, endpointID, input.Slug, domainID)
 	}
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, EndpointID: input.EndpointID, Slug: input.Slug, CustomDomainID: input.CustomDomainID}
 	result, receipt, err := s.execute(ctx, principal, project, operationSetMCPAddress, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
@@ -195,17 +196,15 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 		if err != nil {
 			return connectionMutationReceipt{}, err
 		}
-		if settings.NetworkMode == "private_only" {
-			if settings.Ingress == nil || !settings.Ingress.Enabled || settings.Ingress.DNSName == "" {
-				return connectionMutationReceipt{}, connectionMutationInvalid("A ready network ingress is required to change a private-only MCP address.")
-			}
-			if !endpointMatchesIngress(domainID, *settings.Ingress) {
-				return connectionMutationReceipt{}, connectionMutationInvalid("A private-only MCP address must use the network ingress namespace.")
-			}
+		if err := checkPrivateOnlyAddress(settings, domainID); err != nil {
+			return connectionMutationReceipt{}, err
 		}
 		organization, err := organizationsrepo.New(tx).GetOrganizationMetadata(ctx, principal.OrganizationID)
 		if err != nil || organization.Slug == "" {
 			return connectionMutationReceipt{}, connectionMutationUnavailable(errors.Join(errors.New("organization slug unavailable"), err))
+		}
+		if err := checkPlatformSlug(organization.Slug, input.Slug, domainID); err != nil {
+			return connectionMutationReceipt{}, err
 		}
 		// Account type drives the same slug prefix rule a dashboard session applies.
 		authCtx := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID, OrganizationSlug: organization.Slug, AccountType: organization.GramAccountType}
@@ -232,7 +231,7 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 			if _, domains, err := s.endpoints.UpdateMcpEndpointAddressInTransaction(ctx, tx, endpointInput); err != nil {
 				return connectionMutationReceipt{}, classifyConnectionMutationError(err)
 			} else if len(domains) != 0 {
-				return connectionMutationReceipt{}, connectionMutationInvalid("Moving a domain-root endpoint requires the dashboard so its domain can be reconciled.")
+				return connectionMutationReceipt{}, connectionMutationInvalid(rootMoveMessage)
 			}
 		}
 		outcome, err := s.publication.ProjectWithOutcome(ctx, tx, principal.OrganizationID, project.ID, principal.UserID)
@@ -268,10 +267,16 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, Mode: string(mode)}
 	result, receipt, err := s.execute(ctx, principal, project, operationSetMCPNetworkAccess, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
 		var clearedRootDomainIDs []uuid.UUID
-		finalize, err := s.eligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: principal.OrganizationID, Mode: mode})
+		prepared, err := s.eligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: principal.OrganizationID, Mode: mode})
 		if err != nil {
 			return connectionMutationReceipt{}, privateAccessUnavailable(err)
 		}
+		finalize := networkaccess.NewAdmissionFinalizer(func(ctx context.Context, tx pgx.Tx) error {
+			if err := prepared.Finalize(ctx, tx); err != nil {
+				return privateAccessUnavailable(err)
+			}
+			return nil
+		})
 		if err := networkingressrepo.New(tx).AcquireNetworkIngressOrganizationLock(ctx, principal.OrganizationID); err != nil {
 			return connectionMutationReceipt{}, fmt.Errorf("lock network ingress lifecycle: %w", err)
 		}
@@ -285,7 +290,7 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 			}
 			if server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID {
 				if err := finalize.Finalize(ctx, tx); err != nil {
-					return connectionMutationReceipt{}, privateAccessUnavailable(err)
+					return connectionMutationReceipt{}, err
 				}
 				actor := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}
 				clearedRootDomainIDs, err = toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, s.audit, actor, targetID, mode)
@@ -354,15 +359,33 @@ func (s *MCPConnectionMutationService) validateInput(ctx context.Context, princi
 	return kind, parsedTarget, ResolvedProject{ID: project.ID, Name: project.Name, Slug: project.Slug}, settings, nil
 }
 
-// addressPreview reports the address change a confirmed call would make, against the settings it would lock.
-func addressPreview(current MCPConnectionSettings, expectedVersion string, endpointID uuid.UUID, slug string, domainID uuid.NullUUID) error {
+// addressPreview reports the address change a confirmed call would make, against the settings it would lock. It
+// refuses what the confirmed call would refuse from this data; the endpoint writer's rules run only on confirm.
+func (s *MCPConnectionMutationService) addressPreview(ctx context.Context, principal Principal, current MCPConnectionSettings, expectedVersion string, endpointID uuid.UUID, slug string, domainID uuid.NullUUID) error {
 	if !hmac.Equal([]byte(current.Version), []byte(expectedVersion)) {
 		return ErrMCPConnectionMutationConflict
+	}
+	organization, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
+	if err != nil {
+		return connectionMutationUnavailable(err)
 	}
 	preview := newConnectionMutationPreview(current)
 	after := &MCPConnectionEndpoint{Slug: slug}
 	if domainID.Valid {
-		after.CustomDomainID = domainID.UUID.String()
+		domain, err := customdomainsrepo.New(s.db).GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{ID: domainID.UUID, OrganizationID: principal.OrganizationID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return connectionMutationInvalid("Provide the ID of one of the organization's custom domains.")
+		}
+		if err != nil {
+			return connectionMutationUnavailable(err)
+		}
+		after.CustomDomainID, after.Domain = domainID.UUID.String(), domain.Domain
+	}
+	if err := checkPlatformSlug(organization.Slug, slug, domainID); err != nil {
+		return err
+	}
+	if err := checkPrivateOnlyAddress(current, domainID); err != nil {
+		return err
 	}
 	if endpointID == uuid.Nil {
 		preview.Change = "add_endpoint"
@@ -377,13 +400,38 @@ func addressPreview(current MCPConnectionSettings, expectedVersion string, endpo
 		if preview.EndpointBefore == nil {
 			return ErrMCPConnectionMutationMissing
 		}
-		after.ID = endpointID.String()
-		if after.CustomDomainID == preview.EndpointBefore.CustomDomainID {
-			after.Domain = preview.EndpointBefore.Domain
+		sameDomain := after.CustomDomainID == preview.EndpointBefore.CustomDomainID
+		if preview.EndpointBefore.IsDomainRoot && !sameDomain {
+			return connectionMutationInvalid(rootMoveMessage)
 		}
+		after.ID, after.IsDomainRoot = endpointID.String(), preview.EndpointBefore.IsDomainRoot
 	}
 	preview.EndpointAfter = after
 	return &connectionMutationPreviewError{Preview: preview}
+}
+
+// checkPlatformSlug keeps an address on the platform domain under the organization's slug prefix.
+func checkPlatformSlug(organizationSlug, slug string, domainID uuid.NullUUID) error {
+	if !domainID.Valid && !strings.HasPrefix(slug, organizationSlug+"-") {
+		return connectionMutationInvalid(fmt.Sprintf("A platform address slug must start with the organization slug %q followed by a hyphen.", organizationSlug))
+	}
+	return nil
+}
+
+const rootMoveMessage = "Moving a domain-root endpoint requires the dashboard so its domain can be reconciled."
+
+// checkPrivateOnlyAddress keeps a private-only target's addresses inside its network ingress namespace.
+func checkPrivateOnlyAddress(settings MCPConnectionSettings, domainID uuid.NullUUID) error {
+	if settings.NetworkMode != "private_only" {
+		return nil
+	}
+	if settings.Ingress == nil || !settings.Ingress.Enabled || settings.Ingress.DNSName == "" {
+		return connectionMutationInvalid("A ready network ingress is required to change a private-only MCP address.")
+	}
+	if !endpointMatchesIngress(domainID, *settings.Ingress) {
+		return connectionMutationInvalid("A private-only MCP address must use the network ingress namespace.")
+	}
+	return nil
 }
 
 // networkAccessPreview reports the network mode change a confirmed call would make.
@@ -522,9 +570,10 @@ func connectionMutationInvalid(message string) error {
 	return &RiskMutationError{Code: "invalid_request", Message: message, Cause: ErrMCPConnectionMutationInvalid}
 }
 
-// privateAccessUnavailable refuses a private mode the organization cannot use yet, as the dashboard does.
+// privateAccessUnavailable refuses a private mode the organization could not be admitted to. The admission check
+// does not tell a missing entitlement or ingress from a passing failure, so the message covers both.
 func privateAccessUnavailable(cause error) error {
-	return &RiskMutationError{Code: "invalid_request", Message: "Private network access is not available for this organization: it needs private networking switched on and an enabled network ingress. Check get_network_ingress.", Cause: errors.Join(ErrMCPConnectionMutationInvalid, cause)}
+	return &RiskMutationError{Code: "invalid_request", Message: "Private network access could not be admitted for this organization. It needs private networking switched on and an enabled network ingress: check get_network_ingress, and if it reports ready, retry later.", Cause: errors.Join(ErrMCPConnectionMutationInvalid, cause)}
 }
 
 func connectionMutationUnavailable(cause error) error {
