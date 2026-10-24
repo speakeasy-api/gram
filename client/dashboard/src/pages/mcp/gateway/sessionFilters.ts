@@ -238,7 +238,7 @@ const VALID_VALUE: Record<SessionFacetField, (value: string) => boolean> = {
 };
 
 /** The server's cap on each include and exclude list. */
-export const MAX_FILTER_VALUES = 50;
+const MAX_FILTER_VALUES = 50;
 
 /** Why a set of chips would exceed a list's cap, or null when none does. */
 export function sessionFilterLimitProblem(
