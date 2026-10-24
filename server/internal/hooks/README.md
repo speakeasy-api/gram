@@ -44,8 +44,19 @@ Generated hooks translate that response into the local provider response shape.
 when an explicit project selector is needed. Keep secret-bearing hook
 configuration uncommitted.
 
-Subscribe to `user.message.inbound` for prompts, `model.response.after` for
-assistant responses and usage, and `tool.before` / `tool.after` for tool activity.
+Call `hooks/configuration` to discover the supported subscriptions:
+
+- Intercept: `tool.before`, `tool.after`, `tool.permission.request`,
+  `user.message.inbound`, `user.message.outbound`, `model.request.before`,
+  `model.response.after`, `context.compact.before`, and `context.compact.after`.
+- Observe: `tool.permission.resolved`, `tool.batch.after`, `model.error`,
+  `turn.end`, `session.start`, and `session.end`.
+
+Each event is advertised once. Intercept subscriptions use a five-second timeout
+and the authenticated organization's current fail-open setting; policy presence
+does not change delivery mode. Content selection requests inline text bodies and
+metadata for other content.
+
 Observe mode records events without enforcing policy. Prompt and tool
 interception require the harness to support denial at the subscribed boundary.
 Only inline text is supported; content references and uploads are not supported.

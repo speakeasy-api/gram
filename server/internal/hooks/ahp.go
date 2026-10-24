@@ -41,6 +41,7 @@ func AttachAHP(mux goahttp.Muxer, s *Service) error {
 
 func (s *Service) ahpHandler() (http.Handler, error) {
 	h, err := ahpserver.NewHandler(ahpserver.Handlers{
+		Configuration: nil, // Discovery selects organization-specific configuration separately.
 		Intercept: ahpserver.InterceptHandlers{ //nolint:exhaustruct // unhandled events are rejected as unsupported
 			ToolBefore: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ToolBeforeEvent, ahp.ToolBeforeCapabilities]) (ahpserver.ToolBeforeReply, error) {
 				var reply ahpserver.ToolBeforeReply
@@ -258,6 +259,10 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 	}, ahpserver.Options{MaxRequestBytes: 1 << 20, MaxResponseBytes: 64 << 10, Diagnostic: nil})
 	if err != nil {
 		return nil, fmt.Errorf("create AHP handler: %w", err)
+	}
+	h, err = s.ahpConfigurationHandler(h)
+	if err != nil {
+		return nil, err
 	}
 	return s.ahpAuthenticate(h), nil
 }
