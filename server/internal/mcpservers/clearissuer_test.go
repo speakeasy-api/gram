@@ -103,20 +103,20 @@ func TestUpdateMcpServer_ClearIssuerRefusals(t *testing.T) {
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{Name: "clear refusals", RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("disabled")})
 	require.NoError(t, err)
 	issuerID := *created.UserSessionIssuerID
-	clear := func(id string) *gen.UpdateMcpServerPayload {
+	clearPayload := func(id string) *gen.UpdateMcpServerPayload {
 		return &gen.UpdateMcpServerPayload{ID: id, RemoteMcpServerID: &remoteID, ClearUserSessionIssuer: new(true), Visibility: types.McpServerVisibility("disabled")}
 	}
 
-	both := clear(created.ID)
+	both := clearPayload(created.ID)
 	both.UserSessionIssuerID = &issuerID
 	_, err = ti.service.UpdateMcpServer(ctx, both)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	_, err = ti.service.UpdateMcpServer(ctx, clear(uuid.NewString()))
+	_, err = ti.service.UpdateMcpServer(ctx, clearPayload(uuid.NewString()))
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	readOnly := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, created.ID))
-	_, err = ti.service.UpdateMcpServer(readOnly, clear(created.ID))
+	_, err = ti.service.UpdateMcpServer(readOnly, clearPayload(created.ID))
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	q := remoterepo.New(ti.conn)
@@ -124,7 +124,7 @@ func TestUpdateMcpServer_ClearIssuerRefusals(t *testing.T) {
 	require.NoError(t, err)
 	key := remoterepo.GetEMABindingParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID, UserSessionIssuerID: uuid.MustParse(issuerID), RemoteSessionIssuerID: remoteIssuer.ID, Resource: "https://resource.example.com/"}
 	require.NoError(t, q.EnsureEMABinding(ctx, remoterepo.EnsureEMABindingParams(key)))
-	_, err = ti.service.UpdateMcpServer(ctx, clear(created.ID))
+	_, err = ti.service.UpdateMcpServer(ctx, clearPayload(created.ID))
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.ErrorContains(t, err, "identity-chaining bindings")
 
