@@ -31,6 +31,10 @@ type Caller =
   | { kind: "client"; clientId: string; label: string }
   | { kind: "workload"; issuerId: string; subject: string; label: string };
 
+// Assistant trigger workloads choose through their assistant's execution
+// profile, so a profile here would never apply to them.
+const ASSISTANT_TRIGGER_SUBJECT_PREFIX = "assistant-trigger:";
+
 const CLIENT_PREFIX = "client:";
 const WORKLOAD_PREFIX = "workload:";
 
@@ -95,20 +99,28 @@ export function HeadlessCallersSection({
       toast.error(error.message || "The change could not be saved. Try again."),
   });
 
-  const callers: Caller[] = [
+  const allCallers: Caller[] = [
     ...(clients.data?.result.items ?? []).map((client): Caller => ({
       kind: "client",
       clientId: client.id,
       label: client.clientName,
     })),
     ...(workloads.data?.admissions ?? [])
-      .filter((admission) => admission.matchKind === "exact")
+      .filter(
+        (admission) =>
+          admission.matchKind === "exact" &&
+          !admission.subject.startsWith(ASSISTANT_TRIGGER_SUBJECT_PREFIX),
+      )
       .map((admission): Caller => ({
         kind: "workload",
         issuerId: admission.workloadIssuerId,
         subject: admission.subject,
         label: `${admission.issuerName} · ${admission.subject}`,
       })),
+  ];
+  // One subject can be admitted in several projects; it is one caller.
+  const callers = [
+    ...new Map(allCallers.map((c) => [callerKey(c), c])).values(),
   ];
   const callerLabels = new Map(callers.map((c) => [callerKey(c), c.label]));
   const credentialNames = new Map(credentials.map((c) => [c.id, c.name]));
