@@ -2070,6 +2070,14 @@ FROM sign_in_revocation_deliveries
 WHERE organization_id = @organization_id
 ORDER BY created_at, id;
 
+-- name: ListMCPSkillObservations :many
+-- The skill observations one project recorded with one provider, oldest first.
+SELECT *
+FROM skill_observations
+WHERE project_id = @project_id
+  AND provider = @provider::text
+ORDER BY seen_at ASC, id ASC;
+
 -- name: SetDirectoryGroupWorkOSDeletedFixture :exec
 -- Deletes a directory group as a WorkOS deletion does, setting both markers,
 -- or with deleted false brings it back by clearing them.
