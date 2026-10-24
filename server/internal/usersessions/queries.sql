@@ -2138,7 +2138,7 @@ WITH base AS MATERIALIZED (
          s.user_session_issuer_id::text AS server,
          iss.slug AS server_label,
          CASE WHEN s.user_session_client_id IS NOT NULL THEN s.user_session_client_id::text WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN 'dashboard' ELSE 'none' END AS client,
-         COALESCE(c.client_name, CASE WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN sqlc.arg('first_party_client_name')::text END) AS client_label,
+         COALESCE(c.client_name, CASE WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN sqlc.arg('first_party_client_name')::text WHEN s.user_session_client_id IS NULL THEN 'No client' END) AS client_label,
          CASE WHEN c.id IS NULL THEN 'none' WHEN c.client_id_metadata_uri IS NOT NULL THEN 'cimd' WHEN c.assistant_runtime_id IS NOT NULL OR c.assistant_trigger_workload_binding_id IS NOT NULL THEN 'assistant' ELSE 'dcr' END AS client_registration,
          (sqlc.narg('last_used_within')::interval IS NULL OR s.last_used_at >= now() - sqlc.narg('last_used_within')::interval)
            AND (sqlc.narg('last_used_older_than')::interval IS NULL OR s.last_used_at < now() - sqlc.narg('last_used_older_than')::interval)
@@ -2221,11 +2221,14 @@ marked AS (
            WHEN 'client' THEN value = ANY(sqlc.arg('clients')::text[] || sqlc.arg('exclude_clients')::text[])
            ELSE value = ANY(sqlc.arg('client_registrations')::text[] || sqlc.arg('exclude_client_registrations')::text[])
          END AS selected,
-         sqlc.narg('field_search')::text IS NULL
+         COALESCE(
+           sqlc.narg('field_search')::text IS NULL
            OR field <> sqlc.arg('search_field')::text
            OR label ILIKE sqlc.narg('field_search')::text
            OR value ILIKE sqlc.narg('field_search')::text
-           OR (field = 'identity' AND value = ANY(sqlc.arg('field_search_agent_subject_urns')::text[])) AS matches
+           OR (field = 'identity' AND value = ANY(sqlc.arg('field_search_agent_subject_urns')::text[])),
+           FALSE
+         ) AS matches
   FROM counts
 ),
 ranked AS (

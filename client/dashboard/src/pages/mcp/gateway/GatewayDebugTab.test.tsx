@@ -12,6 +12,7 @@ import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { Operator as Op } from "@gram/client/models/components/logfilter";
 import { serializeFilters } from "@/pages/logs/log-filter-url";
+import { encodeValues } from "./sessionFilters";
 import { GatewayDebugTab } from "./GatewayDebugTab";
 
 type Request = Record<string, unknown>;
@@ -551,14 +552,15 @@ it("refuses filters that would not apply and ignores them in links", async () =>
   server.list.mockResolvedValue(page(["s1"]));
   server.facets.mockResolvedValue(facets());
   renderAt(
-    "/debug?sf=last_used:eq:soon,color:eq:red,last_used:eq:%253E%25203651d,client:eq:dashboard",
+    "/debug?sf=last_used:eq:soon,color:eq:red,last_used:eq:%253E%25203651d,identity_type:eq:constructor,client:eq:dashboard",
   );
   await screen.findByText("s1");
   expect(
-    screen.getByText(
-      "Some filters in this link aren't valid and are not applied.",
-    ),
-  ).toBeTruthy();
+    (await screen.findByText(/Removed filters from this link/)).textContent,
+  ).toBe(
+    "Removed filters from this link that can't apply: Last used = soon; color = red; Last used = > 3651d; Identity type = constructor",
+  );
+  await waitFor(() => expect(params().get("sf")).toBe("client:eq:dashboard"));
   expect(
     screen.queryByRole("button", { name: "Edit filter Last used" }),
   ).toBeNull();
@@ -579,9 +581,10 @@ it("refuses filters that would not apply and ignores them in links", async () =>
 
   submitSearch("identity_type = robot");
   expect(screen.getByText("Not a valid identity type value")).toBeTruthy();
-  expect(params().get("sf")).toBe(
-    "last_used:eq:soon,color:eq:red,last_used:eq:%3E%203651d,client:eq:dashboard",
-  );
+  submitSearch("identity_type = toString");
+  expect(screen.getByText("Not a valid identity type value")).toBeTruthy();
+  expect(params().get("sf")).toBe("client:eq:dashboard");
+  expect(lastList().identityTypes).toBeUndefined();
 });
 
 it("names readable agents found beyond the loaded rows, and only those", async () => {
@@ -751,9 +754,179 @@ it("keeps an identity's exact bytes through an edit and refuses an empty one", a
   renderAt("/debug?sf=identity:eq:");
   await screen.findByText("s1");
   expect(
-    screen.getByText(
-      "Some filters in this link aren't valid and are not applied.",
-    ),
+    await screen.findByText(/Removed filters from this link/),
   ).toBeTruthy();
   expect(lastList().identities).toBeUndefined();
+});
+
+const many = (n: number, prefix = "0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d") =>
+  Array.from(
+    { length: n },
+    (_, i) => `${prefix}${i.toString(16).padStart(4, "0")}`,
+  );
+
+it("keeps each list within the server's 50-value cap", async () => {
+  server.list.mockResolvedValue(page(["s1"]));
+  const fifty = many(50);
+  server.facets.mockResolvedValue(
+    facets({
+      client: facet(
+        [...fifty, OTHER_CLIENT].map((id) =>
+          value(
+            id,
+            1,
+            id === OTHER_CLIENT ? "Another client" : `Client ${id.slice(-4)}`,
+          ),
+        ),
+        51,
+      ),
+    }),
+  );
+  const full = new URLSearchParams({
+    sf: serializeFilters([
+      { id: "a", path: "client", op: Op.In, value: encodeValues(fifty) },
+    ])!,
+  });
+  renderAt(`/debug?${full}`);
+  await screen.findByText("s1");
+  expect(lastList().clients).toHaveLength(50);
+
+  fireEvent.click(await screen.findByText("Another client"));
+  expect(
+    screen.getByText(
+      "A field takes at most 50 values to include and 50 to exclude",
+    ),
+  ).toBeTruthy();
+  expect(lastList().clients).toHaveLength(50);
+
+  submitSearch(`client != ${OTHER_CLIENT}`);
+  await waitFor(() =>
+    expect(lastList()).toMatchObject({ excludeClients: [OTHER_CLIENT] }),
+  );
+  expect(
+    screen.queryByText(
+      "A field takes at most 50 values to include and 50 to exclude",
+    ),
+  ).toBeNull();
+  cleanup();
+
+  const over = new URLSearchParams({
+    sf: serializeFilters([
+      { id: "a", path: "client", op: Op.In, value: encodeValues(many(51)) },
+      { id: "b", path: "client_registration", op: Op.Eq, value: "dcr" },
+    ])!,
+  });
+  renderAt(`/debug?${over}`);
+  await screen.findByText("s1");
+  const notice = (await screen.findByText(/Removed filters from this link/))
+    .textContent!;
+  expect(notice).toMatch(/: Client in Client 0000, Client 0001, /);
+  expect(notice).not.toContain("%2C");
+  for (const [request] of [
+    ...server.list.mock.calls,
+    ...server.facets.mock.calls,
+  ]) {
+    expect(
+      ((request.clients as string[] | undefined) ?? []).length,
+    ).toBeLessThanOrEqual(50);
+  }
+  await waitFor(() =>
+    expect(lastList()).toMatchObject({ clientRegistrations: ["dcr"] }),
+  );
+  submitSearch(`client != ${OTHER_CLIENT}`);
+  await waitFor(() =>
+    expect(screen.queryByText(/Removed filters from this link/)).toBeNull(),
+  );
+});
+
+it("searches fixed fields by their shown labels without a request", async () => {
+  server.list.mockResolvedValue(page(["s1"]));
+  server.facets.mockResolvedValue(
+    facets({
+      identityType: facet([value("user", 2), value("agent", 1)]),
+      clientRegistration: facet([value("dcr", 2), value("cimd", 1)]),
+    }),
+  );
+  renderAt();
+  await screen.findByText("s1");
+  await waitFor(() => expect(server.facets).toHaveBeenCalled());
+
+  pickField("Identity type");
+  pick("=");
+  fireEvent.change(screen.getByPlaceholderText("value"), {
+    target: { value: "pers" },
+  });
+  expect(await screen.findByText("Person")).toBeTruthy();
+  expect(
+    screen.getAllByRole("option").map((option) => option.textContent),
+  ).not.toContainEqual(expect.stringContaining("Agent"));
+  fireEvent.keyDown(screen.getByPlaceholderText("value"), { key: "Escape" });
+
+  pickField("Client registration");
+  pick("=");
+  fireEvent.change(screen.getByPlaceholderText("value"), {
+    target: { value: "dynamic" },
+  });
+  expect(await screen.findByText("Dynamic registration (DCR)")).toBeTruthy();
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 300);
+  });
+  expect(
+    server.facets.mock.calls.filter(([request]) => request.fieldSearch),
+  ).toEqual([]);
+});
+
+it("drops a builder search when the builder resets and refreshes each search once", async () => {
+  server.list.mockResolvedValue(page(["s1"]));
+  server.facets.mockImplementation(async (request) =>
+    request.fieldSearch === "cur"
+      ? Promise.reject(new Error("500"))
+      : facets({
+          client: facet(
+            Array.from({ length: 12 }, (_, i) =>
+              value(many(12)[i]!, 1, `Client ${i}`),
+            ),
+            40,
+          ),
+        }),
+  );
+  renderAt();
+  await screen.findByText("s1");
+
+  pickField("Client");
+  pick("=");
+  fireEvent.change(screen.getByPlaceholderText("value"), {
+    target: { value: "cur" },
+  });
+  expect(await screen.findByText("Couldn't load filter values.")).toBeTruthy();
+  fireEvent.keyDown(screen.getByPlaceholderText("value"), { key: "Escape" });
+  await waitFor(() =>
+    expect(screen.queryByText("Couldn't load filter values.")).toBeNull(),
+  );
+
+  openGroup("Client");
+  fireEvent.change(await screen.findByLabelText("Filter Client"), {
+    target: { value: "zed" },
+  });
+  pickField("Client");
+  pick("=");
+  fireEvent.change(screen.getByPlaceholderText("value"), {
+    target: { value: "zed" },
+  });
+  await waitFor(() =>
+    expect(
+      server.facets.mock.calls.filter(([r]) => r.fieldSearch === "zed"),
+    ).toHaveLength(1),
+  );
+
+  server.facets.mockClear();
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await waitFor(() => expect(server.facets).toHaveBeenCalledTimes(2));
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 100);
+  });
+  expect(server.facets.mock.calls.map(([r]) => r.fieldSearch ?? null)).toEqual([
+    null,
+    "zed",
+  ]);
 });

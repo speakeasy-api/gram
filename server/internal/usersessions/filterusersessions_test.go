@@ -153,10 +153,23 @@ func TestListUserSessions_FilterRejectsOversizedAndInvalidValues(t *testing.T) {
 		"unknown client value": {Clients: []string{"somewhere"}},
 		"unknown registration": {ClientRegistrations: []string{"preregistered"}},
 		"zero seconds":         {LastUsedWithin: new(0)},
+		"empty identity":       {Identities: []string{""}},
+		"empty exclusion":      {ExcludeClients: []string{" "}},
+		"NUL subject":          {SubjectUrn: new("user:a\x00b")},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			_, err := ti.service.ListUserSessions(ctx, &payload)
+			requireOopsCode(t, err, oops.CodeBadRequest)
+		})
+	}
+	for name, payload := range map[string]gen.QueryFacetsPayload{
+		"facets with empty identity": {ExcludeIdentities: []string{""}},
+		"facets with NUL subject":    {SubjectUrn: new("user:a\x00b")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ti.service.QueryFacets(ctx, &payload)
 			requireOopsCode(t, err, oops.CodeBadRequest)
 		})
 	}
@@ -370,6 +383,10 @@ func TestPlatformListUserSessions_FiltersMatchTheAPI(t *testing.T) {
 	}
 	_, err = call(map[string]any{"clients": tooMany})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = call(map[string]any{"identities": []string{""}})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = call(map[string]any{"subject_urn": "user:a\x00b"})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestQueryFacets_FieldSearchKeepsSelectedCounts(t *testing.T) {
@@ -444,4 +461,42 @@ func TestListUserSessions_IdentityFilterMatchesExactly(t *testing.T) {
 
 	_, err = ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{Identities: []string{"user:a\x00b"}})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestQueryFacets_FieldSearchKeepsSelectedUnlabelledValues(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	f := seedFilterFixture(t, ctx, ti)
+
+	types, err := ti.service.QueryFacets(ctx, &gen.QueryFacetsPayload{
+		IdentityTypes: []string{"user"},
+		Field:         new("identity_type"),
+		FieldSearch:   new("work"),
+	})
+	require.NoError(t, err)
+	matched := map[string]bool{}
+	for _, v := range types.IdentityType.Values {
+		matched[v.Value] = v.MatchesSearch
+	}
+	require.Equal(t, map[string]bool{"workload": true, "user": false}, matched, "a selected value with no label is kept and is not a match")
+
+	clients, err := ti.service.QueryFacets(ctx, &gen.QueryFacetsPayload{
+		Clients:     []string{"none"},
+		Field:       new("client"),
+		FieldSearch: new("cursor"),
+	})
+	require.NoError(t, err)
+	byValue := map[string]*gen.UserSessionFilterFacetValue{}
+	for _, v := range clients.Client.Values {
+		byValue[v.Value] = v
+	}
+	require.True(t, byValue[f.dcrClient.String()].MatchesSearch)
+	require.False(t, byValue["none"].MatchesSearch)
+	require.Equal(t, "No client", *byValue["none"].DisplayName)
+
+	none, err := ti.service.QueryFacets(ctx, &gen.QueryFacetsPayload{Field: new("client"), FieldSearch: new("no client")})
+	require.NoError(t, err)
+	require.Equal(t, []string{"none"}, []string{none.Client.Values[0].Value}, "the shown label is searchable")
+	require.Len(t, none.Client.Values, 1)
 }

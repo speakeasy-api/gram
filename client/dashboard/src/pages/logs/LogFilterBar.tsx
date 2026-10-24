@@ -96,8 +96,13 @@ interface LogFilterBarProps {
   valueOptions?: FilterValueOption[];
   onValueInputChange?: (key: string, text: string) => void;
   formatValue?: (path: string, value: string, op: Op) => string;
-  /** A message refuses the filter instead of adding it. */
-  validateFilter?: (path: string, op: Op, value?: string) => string | null;
+  /** A message refuses the filter; `next` is the list the change would leave. */
+  validateFilter?: (
+    path: string,
+    op: Op,
+    value: string | undefined,
+    next: ActiveLogFilter[],
+  ) => string | null;
   valueNotice?: string;
   /** Encodes an offered value as a single `in` item. */
   encodeInValue?: (value: string) => string;
@@ -189,22 +194,24 @@ export function LogFilterBar({
   }, []);
 
   const resetFlow = useCallback(() => {
+    if (selectedKey) onValueInputChange?.(selectedKey, "");
     setProblem(null);
     setStep("key");
     setSelectedKey("");
     setSelectedOp(null);
     setFilterValue("");
     focusMainInput();
-  }, [focusMainInput]);
+  }, [focusMainInput, onValueInputChange, selectedKey]);
 
   const addFilter = useCallback(
     (path: string, op: Op, value?: string) => {
-      const refused = validateFilter?.(path, op, value) ?? null;
+      const next = applyFilterAdd(filters, { path, op, value });
+      const refused = validateFilter?.(path, op, value, next) ?? null;
       if (refused) {
         setProblem(refused);
         return;
       }
-      onChange(applyFilterAdd(filters, { path, op, value }));
+      onChange(next);
       onSearchInputChange("");
       resetFlow();
     },
@@ -435,6 +442,8 @@ export function LogFilterBar({
         onOpenChange={(open) => {
           // Allow clicking outside to dismiss the operator step
           if (!open && step === "operator") resetFlow();
+          // A typed value is saved by the value input's blur.
+          if (!open && step === "value" && !filterValue.trim()) resetFlow();
         }}
       >
         <PopoverAnchor asChild>
@@ -455,7 +464,16 @@ export function LogFilterBar({
                 formatValue={formatValue}
                 formatKey={keyLabel}
                 operatorsFor={operatorsFor}
-                validateFilter={validateFilter}
+                validateFilter={
+                  validateFilter &&
+                  ((path, op, value) =>
+                    validateFilter(
+                      path,
+                      op,
+                      value,
+                      applyFilterEdit(filters, filter.id, { op, value }),
+                    ))
+                }
                 exactValue={exactValue}
               />
             ))}
@@ -609,6 +627,9 @@ export function LogFilterBar({
           style={{ width: "var(--radix-popover-trigger-width)" }}
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
+          onInteractOutside={(e) => {
+            if (barRef.current?.contains(e.target as Node)) e.preventDefault();
+          }}
         >
           {step === "key" && (
             <CommandList>
@@ -660,6 +681,9 @@ export function LogFilterBar({
                   <CommandItem
                     key={option.value}
                     value={option.value}
+                    // Keeps the value input focused, so its blur commit cannot
+                    // add the typed text before this selection.
+                    onMouseDown={(e) => e.preventDefault()}
                     onSelect={() => {
                       if (!selectedOp) return;
                       addFilter(
@@ -720,7 +744,7 @@ export function LogFilterBar({
   );
 }
 
-/** A single-operator field omits it: `Last used > 7d`, `Last used: never`. */
+/** A single-operator field omits it: `Last used > 7d`, `Last used: No recorded use`. */
 function chipText(key: string, op: Op | null, value?: string): string {
   if (value === undefined) return op ? `${key} ${OP_LABELS[op]}` : key;
   if (op) return `${key} ${OP_LABELS[op]} ${value}`;
@@ -762,6 +786,7 @@ function EditableFilterChip({
     if (open) {
       setOp(filter.op);
       setValue(filter.value ?? "");
+      setProblem(null);
     }
   }, [open, filter.op, filter.value]);
 

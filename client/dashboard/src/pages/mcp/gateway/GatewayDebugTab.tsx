@@ -22,7 +22,7 @@ import {
   LogFilterBar,
   type FilterValueOption,
 } from "@/pages/logs/LogFilterBar";
-import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
+import { type ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import type { UserSessionFilterFacet } from "@gram/client/models/components/usersessionfilterfacet.js";
 import type { UserSessionFilterFacets } from "@gram/client/models/components/usersessionfilterfacets.js";
@@ -31,7 +31,7 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildUserSessionFilterFacetsQuery } from "@gram/client/react-query/userSessionFilterFacets.core.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
 import { keepPreviousData, useQueries } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import {
   CLIENT_REGISTRATION_LABELS,
@@ -41,6 +41,7 @@ import {
   SESSION_FILTER_FIELDS,
   SESSION_FILTER_PARAM,
   SESSION_FILTER_SAMPLES,
+  describeSessionFilter,
   encodeValues,
   filtersToQuery,
   formatSessionFilterValue,
@@ -49,6 +50,9 @@ import {
   parseSessionFilterExpression,
   sessionFilterOperators,
   sessionFilterProblem,
+  withinFilterLimits,
+  sessionFilterLimitProblem,
+  ownLabel,
   withIncludedValues,
   type SessionFacetField,
 } from "./sessionFilters";
@@ -84,6 +88,18 @@ const FACET_KEYS: Record<
 
 type Surface = "rail" | "builder";
 type SearchKey = `${Surface}:${SessionFacetField}`;
+
+// Fixed fields whose few values all arrive unsearched; typing filters them by
+// their shown label or raw value without a request.
+const LOCAL_FIELDS: SessionFacetField[] = [
+  "identity_type",
+  "client_registration",
+];
+const LOCAL_LABELS: Partial<Record<SessionFacetField, Record<string, string>>> =
+  {
+    identity_type: IDENTITY_TYPE_LABELS,
+    client_registration: CLIENT_REGISTRATION_LABELS,
+  };
 
 const tooLong = (text: string) => Array.from(text).length > MAX_SEARCH_LENGTH;
 
@@ -130,8 +146,11 @@ export function GatewayDebugTab({
   );
   const chips = useMemo(
     () =>
-      linkedChips.filter(
-        (chip) => sessionFilterProblem(chip.path, chip.op, chip.value) === null,
+      withinFilterLimits(
+        linkedChips.filter(
+          (chip) =>
+            sessionFilterProblem(chip.path, chip.op, chip.value) === null,
+        ),
       ),
     [linkedChips],
   );
@@ -143,6 +162,22 @@ export function GatewayDebugTab({
         else next.delete(SESSION_FILTER_PARAM);
       }),
     [updateParams],
+  );
+  // Filters from a link that cannot apply are named once and taken out of it.
+  const [ignoredChips, setIgnoredChips] = useState<ActiveLogFilter[]>([]);
+  useEffect(() => {
+    if (chips.length === linkedChips.length) return;
+    setIgnoredChips(linkedChips.filter((chip) => !chips.includes(chip)));
+    setChips(chips);
+  }, [chips, linkedChips, setChips]);
+  const [selectionProblem, setSelectionProblem] = useState<string | null>(null);
+  const editChips = useCallback(
+    (filters: ActiveLogFilter[]) => {
+      setIgnoredChips([]);
+      setSelectionProblem(null);
+      setChips(filters);
+    },
+    [setChips],
   );
 
   const term = search.trim();
@@ -163,25 +198,31 @@ export function GatewayDebugTab({
     [],
   );
   const debouncedSearches = useDebouncedValue(fieldSearches, 200);
-  const searchedKeys = (Object.keys(debouncedSearches) as SearchKey[]).filter(
-    (key) => {
-      const text = debouncedSearches[key]!.trim();
-      return text !== "" && !tooLong(text);
-    },
-  );
+  // One request per distinct field and text, whichever surfaces typed it.
+  const searches = [
+    ...new Set(
+      (Object.keys(debouncedSearches) as SearchKey[]).flatMap((key) => {
+        const field = key.split(":")[1] as SessionFacetField;
+        const text = debouncedSearches[key]!.trim();
+        return text === "" || tooLong(text) || LOCAL_FIELDS.includes(field)
+          ? []
+          : [`${field}\n${text}`];
+      }),
+    ),
+  ];
 
   const client = useGramContext();
   const facetQueries = useQueries({
-    queries: [undefined, ...searchedKeys].map((key) => {
-      const field = key?.split(":")[1] as SessionFacetField | undefined;
+    queries: [undefined, ...searches].map((search) => {
+      const [field, text] = search?.split("\n") ?? [];
       return {
         ...buildUserSessionFilterFacetsQuery(client, {
           ...request,
           field: field as FacetFieldParam | undefined,
-          fieldSearch: key ? debouncedSearches[key]!.trim() : undefined,
+          fieldSearch: text,
         }),
         enabled: !searchTooLong,
-        placeholderData: key ? undefined : keepPreviousData,
+        placeholderData: search ? undefined : keepPreviousData,
         throwOnError: false,
         retry: false,
       };
@@ -209,11 +250,25 @@ export function GatewayDebugTab({
         notice: `Search must be ${MAX_SEARCH_LENGTH} characters or fewer.`,
       };
     }
-    const index = searchedKeys.indexOf(key);
-    const query =
-      index === -1 || debouncedSearches[key]!.trim() !== text
-        ? undefined
-        : searchedFacets[index];
+    if (LOCAL_FIELDS.includes(field)) {
+      const facet = facets?.[FACET_KEYS[field]];
+      const needle = text.toLowerCase();
+      return {
+        facet: facet && {
+          ...facet,
+          values: facet.values.filter((v) =>
+            [v.value, ownLabel(LOCAL_LABELS[field]!, v.value) ?? ""].some((t) =>
+              t.toLowerCase().includes(needle),
+            ),
+          ),
+        },
+      };
+    }
+    const index =
+      (debouncedSearches[key] ?? "").trim() === text
+        ? searches.indexOf(`${field}\n${text}`)
+        : -1;
+    const query = index === -1 ? undefined : searchedFacets[index];
     if (query?.isError) return { notice: "Couldn't search values." };
     if (!query?.data) return { notice: "Searching…" };
     return { facet: query.data[FACET_KEYS[field]] };
@@ -242,17 +297,17 @@ export function GatewayDebugTab({
   const labelFor = (field: string, value: string): string => {
     switch (field) {
       case "identity_type":
-        return IDENTITY_TYPE_LABELS[value] ?? value;
+        return ownLabel(IDENTITY_TYPE_LABELS, value) ?? value;
       case "client_registration":
-        return CLIENT_REGISTRATION_LABELS[value] ?? value;
+        return ownLabel(CLIENT_REGISTRATION_LABELS, value) ?? value;
       case "last_used":
         return lastUsedLabel(value);
     }
     if (field === "identity" && agentNames.has(value)) {
       return agentNames.get(value)!;
     }
-    if (field === "client" && CLIENT_VALUE_LABELS[value]) {
-      return CLIENT_VALUE_LABELS[value];
+    if (field === "client" && ownLabel(CLIENT_VALUE_LABELS, value)) {
+      return ownLabel(CLIENT_VALUE_LABELS, value)!;
     }
     const named = facetQueries
       .flatMap((query) =>
@@ -399,7 +454,7 @@ export function GatewayDebugTab({
         <div className="min-w-0 flex-1">
           <LogFilterBar
             filters={chips}
-            onChange={setChips}
+            onChange={editChips}
             attributeKeys={[]}
             keyOptions={SESSION_FILTER_FIELDS.map((option) => ({
               ...option,
@@ -420,7 +475,10 @@ export function GatewayDebugTab({
             formatValue={(path, value, op) =>
               formatSessionFilterValue(path, op, value, labelFor)
             }
-            validateFilter={sessionFilterProblem}
+            validateFilter={(path, op, value, next) =>
+              sessionFilterProblem(path, op, value) ??
+              sessionFilterLimitProblem(next)
+            }
             valueNotice={valueNotice}
             encodeInValue={(value) => encodeValues([value])}
             exactValue={(path) => path === "identity"}
@@ -444,10 +502,16 @@ export function GatewayDebugTab({
           </Page.Toolbar>
         )}
       </div>
-      {linkedChips.length > chips.length && (
-        <p className="text-muted-foreground text-sm">
-          Some filters in this link aren&apos;t valid and are not applied.
+      {ignoredChips.length > 0 && (
+        <p className="text-muted-foreground text-sm break-all">
+          Removed filters from this link that can&apos;t apply:{" "}
+          {ignoredChips
+            .map((chip) => describeSessionFilter(chip, labelFor))
+            .join("; ")}
         </p>
+      )}
+      {selectionProblem && (
+        <p className="text-muted-foreground text-sm">{selectionProblem}</p>
       )}
       {!searchTooLong && facetsFailed.length > 0 && (
         <div className="flex items-center justify-between gap-3">
@@ -479,18 +543,19 @@ export function GatewayDebugTab({
             onToggle={(groupId, value, nextSelected) => {
               const field = groupId as SessionFacetField;
               const current = includedValues(chips, field);
-              setChips(
-                withIncludedValues(
-                  chips,
-                  field,
-                  nextSelected
-                    ? [...current, value]
-                    : current.filter((v) => v !== value),
-                ),
+              const next = withIncludedValues(
+                chips,
+                field,
+                nextSelected
+                  ? [...current, value]
+                  : current.filter((v) => v !== value),
               );
+              const problem = sessionFilterLimitProblem(next);
+              if (problem) setSelectionProblem(problem);
+              else editChips(next);
             }}
             onClearGroup={(groupId) =>
-              setChips(
+              editChips(
                 withIncludedValues(chips, groupId as SessionFacetField, []),
               )
             }

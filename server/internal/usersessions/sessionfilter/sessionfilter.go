@@ -111,6 +111,9 @@ func Parse(in Input) (Filter, error) {
 		return Filter{}, oops.E(oops.CodeBadRequest, nil, "invalid status %q", *in.Status)
 	}
 	f.status = conv.PtrToPGTextEmpty(in.Status)
+	if in.SubjectURN != nil && strings.ContainsRune(*in.SubjectURN, 0) {
+		return Filter{}, oops.E(oops.CodeBadRequest, nil, "invalid subject_urn")
+	}
 	f.subjectURN = conv.PtrToPGTextEmpty(in.SubjectURN)
 	if f.issuerID, err = conv.PtrToNullUUID(in.IssuerID); err != nil {
 		return Filter{}, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id")
@@ -285,7 +288,7 @@ func values(name string, in []string, allowed []string) ([]string, error) {
 	for _, raw := range in {
 		value := conv.SearchTerm(raw)
 		if value == "" {
-			continue
+			return nil, oops.E(oops.CodeBadRequest, nil, "%s values must not be empty", name)
 		}
 		if allowed != nil && !slices.Contains(allowed, value) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "invalid %s value %q", name, value)
@@ -305,10 +308,10 @@ func identities(name string, in []string) ([]string, error) {
 	}
 	out := make([]string, 0, len(in))
 	for _, value := range in {
-		if strings.ContainsRune(value, 0) {
+		if value == "" || strings.ContainsRune(value, 0) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "invalid %s value", name)
 		}
-		if value != "" && !slices.Contains(out, value) {
+		if !slices.Contains(out, value) {
 			out = append(out, value)
 		}
 	}

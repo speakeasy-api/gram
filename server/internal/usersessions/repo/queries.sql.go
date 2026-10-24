@@ -3838,7 +3838,7 @@ WITH base AS MATERIALIZED (
          s.user_session_issuer_id::text AS server,
          iss.slug AS server_label,
          CASE WHEN s.user_session_client_id IS NOT NULL THEN s.user_session_client_id::text WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN 'dashboard' ELSE 'none' END AS client,
-         COALESCE(c.client_name, CASE WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN $2::text END) AS client_label,
+         COALESCE(c.client_name, CASE WHEN s.refresh_token_hash LIKE 'dashboard-mint:%' THEN $2::text WHEN s.user_session_client_id IS NULL THEN 'No client' END) AS client_label,
          CASE WHEN c.id IS NULL THEN 'none' WHEN c.client_id_metadata_uri IS NOT NULL THEN 'cimd' WHEN c.assistant_runtime_id IS NOT NULL OR c.assistant_trigger_workload_binding_id IS NOT NULL THEN 'assistant' ELSE 'dcr' END AS client_registration,
          ($3::interval IS NULL OR s.last_used_at >= now() - $3::interval)
            AND ($4::interval IS NULL OR s.last_used_at < now() - $4::interval)
@@ -3921,11 +3921,14 @@ marked AS (
            WHEN 'client' THEN value = ANY($22::text[] || $23::text[])
            ELSE value = ANY($24::text[] || $25::text[])
          END AS selected,
-         $26::text IS NULL
+         COALESCE(
+           $26::text IS NULL
            OR field <> $27::text
            OR label ILIKE $26::text
            OR value ILIKE $26::text
-           OR (field = 'identity' AND value = ANY($28::text[])) AS matches
+           OR (field = 'identity' AND value = ANY($28::text[])),
+           FALSE
+         ) AS matches
   FROM counts
 ),
 ranked AS (

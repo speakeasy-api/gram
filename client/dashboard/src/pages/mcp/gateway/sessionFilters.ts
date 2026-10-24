@@ -1,6 +1,6 @@
 import { Operator as Op } from "@gram/client/models/components/logfilter";
 import type { QueryUserSessionFacetsRequest } from "@gram/client/models/operations/queryusersessionfacets.js";
-import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
+import { OP_LABELS, type ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import type { FilterKeyOption } from "@/pages/logs/LogFilterBar";
 
 export const SESSION_FILTER_PARAM = "sf";
@@ -82,6 +82,14 @@ export const CLIENT_VALUE_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
   none: "No client",
 };
+
+/** A label from a fixed map, ignoring inherited keys such as `toString`. */
+export function ownLabel(
+  labels: Record<string, string>,
+  value: string,
+): string | undefined {
+  return Object.hasOwn(labels, value) ? labels[value] : undefined;
+}
 
 export function sessionFilterOperators(key: string): Op[] {
   return key === "last_used" ? [Op.Eq] : [Op.Eq, Op.NotEq, Op.In];
@@ -221,11 +229,48 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const VALID_VALUE: Record<SessionFacetField, (value: string) => boolean> = {
   identity: (value) => value !== "" && !value.includes("\0"),
-  identity_type: (value) => value in IDENTITY_TYPE_LABELS,
+  identity_type: (value) => Object.hasOwn(IDENTITY_TYPE_LABELS, value),
   mcp_server: (value) => UUID.test(value),
-  client: (value) => value in CLIENT_VALUE_LABELS || UUID.test(value),
-  client_registration: (value) => value in CLIENT_REGISTRATION_LABELS,
+  client: (value) =>
+    Object.hasOwn(CLIENT_VALUE_LABELS, value) || UUID.test(value),
+  client_registration: (value) =>
+    Object.hasOwn(CLIENT_REGISTRATION_LABELS, value),
 };
+
+/** The server's cap on each include and exclude list. */
+export const MAX_FILTER_VALUES = 50;
+
+/** Why a set of chips would exceed a list's cap, or null when none does. */
+export function sessionFilterLimitProblem(
+  filters: ActiveLogFilter[],
+): string | null {
+  const query = filtersToQuery(filters) as Record<string, unknown>;
+  const full = Object.values(query).some(
+    (list) => Array.isArray(list) && list.length > MAX_FILTER_VALUES,
+  );
+  return full
+    ? `A field takes at most ${MAX_FILTER_VALUES} values to include and ${MAX_FILTER_VALUES} to exclude`
+    : null;
+}
+
+/** Drops a field's include or exclude chips once their values exceed the cap. */
+export function withinFilterLimits(
+  filters: ActiveLogFilter[],
+): ActiveLogFilter[] {
+  return filters.filter((filter) => {
+    if (!Object.hasOwn(QUERY_KEYS, filter.path)) return true;
+    const field = filter.path as SessionFacetField;
+    const values =
+      filter.op === Op.NotEq
+        ? new Set(
+            filters
+              .filter((f) => f.path === field && f.op === Op.NotEq)
+              .map((f) => f.value),
+          ).size
+        : includedValues(filters, field).length;
+    return values <= MAX_FILTER_VALUES;
+  });
+}
 
 /** Why a chip would not narrow the list as shown, or null when it would. */
 export function sessionFilterProblem(
@@ -261,6 +306,22 @@ export function formatSessionFilterValue(
         .map((v) => label(path, v))
         .join(", ")
     : label(path, value);
+}
+
+/** A filter as the user reads it; values that don't apply are shown raw. */
+export function describeSessionFilter(
+  filter: ActiveLogFilter,
+  label: (path: string, value: string) => string,
+): string {
+  const field = SESSION_FILTER_FIELDS.find((o) => o.key === filter.path);
+  const value = filter.value ?? "";
+  const shown =
+    sessionFilterProblem(filter.path, filter.op, filter.value) === null
+      ? formatSessionFilterValue(filter.path, filter.op, value, label)
+      : filter.op === Op.In
+        ? decodeValues(value).join(", ")
+        : value;
+  return `${field?.label ?? filter.path} ${OP_LABELS[filter.op] ?? filter.op} ${shown}`;
 }
 
 export function withIncludedValues(

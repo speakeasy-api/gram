@@ -6,6 +6,10 @@ import {
   encodeValues,
   filtersToQuery,
   formatSessionFilterValue,
+  ownLabel,
+  IDENTITY_TYPE_LABELS,
+  sessionFilterLimitProblem,
+  withinFilterLimits,
   includedValues,
   parseLastUsed,
   parseSessionFilterExpression,
@@ -157,5 +161,40 @@ describe("session filter chips", () => {
         label,
       ),
     ).toBe("[a,b], [c%]");
+  });
+
+  it("ignores inherited keys in the fixed label maps", () => {
+    expect(ownLabel(IDENTITY_TYPE_LABELS, "user")).toBe("Person");
+    expect(ownLabel(IDENTITY_TYPE_LABELS, "toString")).toBeUndefined();
+    for (const key of [
+      "constructor",
+      "toString",
+      "__proto__",
+      "hasOwnProperty",
+    ]) {
+      expect(sessionFilterProblem("identity_type", Op.Eq, key)).not.toBeNull();
+      expect(
+        sessionFilterProblem("client_registration", Op.Eq, key),
+      ).not.toBeNull();
+      expect(sessionFilterProblem("client", Op.Eq, key)).not.toBeNull();
+    }
+  });
+
+  it("caps each include and exclude list at fifty values", () => {
+    const ids = Array.from({ length: 51 }, (_, i) => `user:${i}`);
+    const fifty = [chip("identity", Op.In, encodeValues(ids.slice(0, 50)))];
+    expect(sessionFilterLimitProblem(fifty)).toBeNull();
+    expect(
+      sessionFilterLimitProblem([...fifty, chip("identity", Op.Eq, ids[50]!)]),
+    ).not.toBeNull();
+    const excluded = ids.map((id) => chip("identity", Op.NotEq, id));
+    expect(sessionFilterLimitProblem(excluded)).not.toBeNull();
+    expect(
+      sessionFilterLimitProblem([...fifty, ...excluded.slice(0, 50)]),
+    ).toBeNull();
+
+    const kept = chip("client", Op.Eq, "dashboard");
+    expect(withinFilterLimits([...excluded, kept])).toEqual([kept]);
+    expect(withinFilterLimits([...fifty, kept])).toEqual([...fifty, kept]);
   });
 });
