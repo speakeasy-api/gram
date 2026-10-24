@@ -761,6 +761,7 @@ INSERT INTO risk_policies (
   , user_message
   , prompt
   , model_config
+  , approval_config
   , score
   , version
 )
@@ -785,7 +786,8 @@ VALUES (
   , $18
   , $19::text
   , $20::jsonb
-  , COALESCE($21::double precision, 5.0)
+  , $21::jsonb
+  , COALESCE($22::double precision, 5.0)
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, approval_config, score, version, created_at, updated_at, deleted_at, deleted
@@ -812,6 +814,7 @@ type CreateRiskPolicyParams struct {
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
 	ModelConfig          []byte
+	ApprovalConfig       []byte
 	Score                pgtype.Float8
 }
 
@@ -837,6 +840,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.UserMessage,
 		arg.Prompt,
 		arg.ModelConfig,
+		arg.ApprovalConfig,
 		arg.Score,
 	)
 	var i RiskPolicy
@@ -5815,8 +5819,9 @@ SET name = $1
   , user_message = $13
   , prompt = $14::text
   , model_config = $15::jsonb
+  , approval_config = $16::jsonb
   -- Descriptive severity: preserve on omit, never contributes to the version bump.
-  , score = COALESCE($16::double precision, score)
+  , score = COALESCE($17::double precision, score)
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -5829,13 +5834,14 @@ SET name = $1
         OR action IS DISTINCT FROM $10
         OR prompt IS DISTINCT FROM $14::text
         OR model_config IS DISTINCT FROM $15::jsonb
+        OR approval_config IS DISTINCT FROM $16::jsonb
         OR audience_type IS DISTINCT FROM $11
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $17
-  AND project_id = $18
+WHERE id = $18
+  AND project_id = $19
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, approval_config, score, version, created_at, updated_at, deleted_at, deleted
 `
@@ -5856,6 +5862,7 @@ type UpdateRiskPolicyParams struct {
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
 	ModelConfig          []byte
+	ApprovalConfig       []byte
 	Score                pgtype.Float8
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
@@ -5878,6 +5885,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.UserMessage,
 		arg.Prompt,
 		arg.ModelConfig,
+		arg.ApprovalConfig,
 		arg.Score,
 		arg.ID,
 		arg.ProjectID,

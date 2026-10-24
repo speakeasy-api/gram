@@ -8,14 +8,40 @@
 -- (validateSourceAction). A postflight assert checks the source names.
 INSERT INTO risk_policies (id, project_id, organization_id, name, policy_type,
                            sources, presidio_entities, analyzer_config,
-                           custom_rule_ids, mcp_scope,
+                           custom_rule_ids, mcp_scope, approval_config,
                            enabled, action, audience_type,
                            shadow_mcp_disposition, auto_name, score, version)
 VALUES (@id, @project_id, @organization_id, @name, 'standard',
         @sources::text[], sqlc.narg(presidio_entities)::text[], @analyzer_config::jsonb,
-        @custom_rule_ids::text[], sqlc.narg(mcp_scope)::jsonb,
+        @custom_rule_ids::text[], sqlc.narg(mcp_scope)::jsonb, sqlc.narg(approval_config)::jsonb,
         @enabled, @action, 'everyone',
         sqlc.narg(shadow_mcp_disposition)::text, @auto_name, @score, 1);
+
+-- name: RiskInsertApproval :exec
+-- One tool call held by the approval policy, at a point in its life cycle.
+-- Times are relative to now(). The pending request gets the longest window,
+-- 24 hours from when it was held, so it is still waiting until a few minutes
+-- before the daily reseed replaces it. The project delete cascades these.
+INSERT INTO risk_policy_approvals
+  (id, organization_id, project_id, risk_policy_id, policy_version, token,
+   requester_urn, surface, toolset_id, tool_name, call_fingerprint,
+   arguments_preview, reason, status, requested_scope, granted_scope,
+   decided_by_urn, decided_via, decision_note,
+   requested_at, decided_at, expires_at, consumed_at, created_at, updated_at)
+VALUES
+  (@id, @organization_id, @project_id, @risk_policy_id, 1, @token,
+   @requester_urn, 'hosted_mcp', NULL, @tool_name, @call_fingerprint,
+   @arguments_preview::jsonb, @reason, @status, '{"kind":"exact_once"}'::jsonb,
+   CASE WHEN @status::text IN ('approved', 'consumed') THEN '{"kind":"exact_once"}'::jsonb END,
+   sqlc.narg(decided_by_urn)::text, sqlc.narg(decided_via)::text, sqlc.narg(decision_note)::text,
+   now() - make_interval(mins => @held_minutes_ago::int) + interval '20 seconds',
+   CASE WHEN sqlc.narg(decided_by_urn)::text IS NOT NULL
+        THEN now() - make_interval(mins => @held_minutes_ago::int) + interval '3 minutes' END,
+   now() - make_interval(mins => @held_minutes_ago::int) + make_interval(mins => @window_minutes::int),
+   CASE WHEN @status::text = 'consumed'
+        THEN now() - make_interval(mins => @held_minutes_ago::int) + interval '3 minutes 10 seconds' END,
+   now() - make_interval(mins => @held_minutes_ago::int),
+   now() - make_interval(mins => @held_minutes_ago::int) + interval '3 minutes');
 
 -- name: RiskInsertBypassGrant :exec
 -- The same canonical target has two grants, so Platform MCP demonstrates
