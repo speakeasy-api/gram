@@ -129,14 +129,17 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 	}
 
 	if slug != existing.Slug || customDomainID != existing.CustomDomainID {
-		siblings, err := txRepo.ListMCPEndpointsByMCPServerID(ctx, repo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: server.ID})
+		// Endpoints left on a deleted domain cannot serve, so they do not take part in the ingress check.
+		siblings, err := txRepo.ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, repo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+			OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpServerID: server.ID,
+		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints").LogError(ctx, logger)
 		}
 		addresses := []repo.McpEndpoint{proposedAddress(customDomainID, slug)}
 		for _, sibling := range siblings {
-			if sibling.ID != existing.ID {
-				addresses = append(addresses, sibling)
+			if sibling.McpEndpoint.ID != existing.ID {
+				addresses = append(addresses, sibling.McpEndpoint)
 			}
 		}
 		if err := checkHostedIngress(ctx, dbtx, logger, authCtx, server, addresses); err != nil {
@@ -181,7 +184,7 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 		}
 	}
 
-	if err := s.followHostedSlug(ctx, dbtx, logger, authCtx, server, slug); err != nil {
+	if err := s.followHostedSlug(ctx, dbtx, logger, authCtx, server, &existing, slug); err != nil {
 		return nil, err
 	}
 	if err := hostingstate.MirrorToToolset(ctx, dbtx, *authCtx.ProjectID, server.ID); err != nil {
@@ -300,17 +303,33 @@ func requireHostedSlugPrefix(ctx context.Context, logger *slog.Logger, authCtx *
 	return nil
 }
 
-// followHostedSlug renames a hosted server to its single address's slug, as pods that compare it with the toolset's
-// mcp_slug expect.
-func (s *Service) followHostedSlug(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string) error {
-	if server.Slug.Valid && server.Slug.String == slug {
+// followHostedSlug renames a hosted server to its single address's new slug, as pods that compare it with the
+// toolset's mcp_slug expect. It follows only while the server slug and the toolset's address slug both still name
+// the address being replaced (from; the toolset's own address when nil), so a server with several endpoints or a
+// slug of its own keeps it. A slug another server holds is left alone rather than failing the address write.
+func (s *Service) followHostedSlug(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, from *repo.McpEndpoint, slug string) error {
+	if !server.Slug.Valid || server.Slug.String == slug {
+		return nil
+	}
+	toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: server.ID, ProjectID: server.ProjectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load hosted toolset").LogError(ctx, logger)
+	}
+	fromSlug := toolset.McpSlug.String
+	if from != nil {
+		fromSlug = from.Slug
+	}
+	if server.Slug.String != fromSlug || toolset.McpSlug.String != fromSlug {
 		return nil
 	}
 	serversRepo := mcpserversrepo.New(tx)
 	holder, err := serversRepo.GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: pgtype.Text{String: slug, Valid: true}, ProjectID: server.ProjectID})
 	switch {
 	case err == nil && holder.ID != server.ID:
-		return oops.E(oops.CodeConflict, nil, "name is taken by another MCP server in the project").LogWarn(ctx, logger)
+		return nil
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return oops.E(oops.CodeUnexpected, err, "check hosted MCP server slug").LogError(ctx, logger)
 	}

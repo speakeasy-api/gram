@@ -247,7 +247,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation").LogError(ctx, logger)
 	}
 	if hosted {
-		if err := s.followHostedSlug(ctx, dbtx, logger, authCtx, mcpServer, created.Slug); err != nil {
+		if err := s.followHostedSlug(ctx, dbtx, logger, authCtx, mcpServer, nil, created.Slug); err != nil {
 			return nil, err
 		}
 		if err := hostingstate.MirrorToToolset(ctx, dbtx, *authCtx.ProjectID, mcpServer.ID); err != nil {

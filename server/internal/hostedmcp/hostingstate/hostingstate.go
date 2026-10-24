@@ -25,14 +25,26 @@ import (
 type Row = toolsetsrepo.ListCanonicalHostingByToolsetIDsRow
 
 // ApplyServer sets toolset's enabled, public and issuer state from its canonical wrapper's visibility and issuer.
-// A disabled server keeps the toolset's mirrored public flag, which says how it re-enables.
+// A disabled server reads as the visibility it re-enables to.
 func ApplyServer(toolset toolsetsrepo.Toolset, serverVisibility string, issuer uuid.NullUUID) toolsetsrepo.Toolset {
 	toolset.McpEnabled = serverVisibility == visibility.Public || serverVisibility == visibility.Private
-	if serverVisibility != visibility.Disabled {
+	if serverVisibility == visibility.Disabled {
+		toolset.McpIsPublic = ReEnableVisibility(toolset) == visibility.Public
+	} else {
 		toolset.McpIsPublic = serverVisibility == visibility.Public
 	}
 	toolset.UserSessionIssuerID = issuer
 	return toolset
+}
+
+// ReEnableVisibility is the visibility a disabled hosted server comes back with: public only when it carries
+// external OAuth or an OAuth proxy, which a private server cannot, and private otherwise. The toolset's public
+// flag does not count, since later releases stop updating it.
+func ReEnableVisibility(toolset toolsetsrepo.Toolset) string {
+	if toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid {
+		return visibility.Public
+	}
+	return visibility.Private
 }
 
 // ApplyKept marks a toolset whose id a non-canonical server kept after leaving it: nothing serves it.

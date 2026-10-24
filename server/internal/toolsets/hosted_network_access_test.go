@@ -248,8 +248,8 @@ func setHostedMode(t *testing.T, ctx context.Context, ti *testInstance, toolset 
 	return updated
 }
 
-// A disabled public server reads back as public, so the dashboard re-enables it public.
-func TestDisabledPublicHostedServerReadsPublic(t *testing.T) {
+// A disabled server without OAuth reads private, as it would re-enable, while the mirrored column keeps its flag.
+func TestDisabledPublicHostedServerReadsPrivate(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestToolsetsService(t)
 	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Disabled Public")
@@ -260,6 +260,38 @@ func TestDisabledPublicHostedServerReadsPublic(t *testing.T) {
 	require.NotNil(t, stored.McpEnabled)
 	require.False(t, *stored.McpEnabled)
 	require.NotNil(t, stored.McpIsPublic)
-	require.True(t, *stored.McpIsPublic, "the mirrored public flag survives disabling")
+	require.False(t, *stored.McpIsPublic, "a disabled server without OAuth re-enables private")
 	requireHostingColumnsMirrored(t, ctx, ti, created.ID)
+}
+
+// An endpoint left on a deleted domain cannot serve, so it does not block a private mode on a platform ingress.
+func TestHostedNetworkAccessIgnoresDeadDomainEndpoints(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	ti.service.WithNetworkAccessEligibility(allowHostedNetworkAccess{})
+	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Dead Domain")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	domain, err := repo.New(ti.conn).CreateCustomDomain(ctx, repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID, Domain: "hosted-dead-" + uuid.NewString() + ".example.test", IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: *authCtx.ProjectID, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+		McpServerID: uuid.NullUUID{UUID: uuid.MustParse(created.ID), Valid: true}, Slug: "dead-domain-address",
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.New(ti.conn).DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID))
+	fixtures := testrepo.New(ti.conn)
+	require.NoError(t, fixtures.InsertNetworkIngressFixture(ctx, testrepo.InsertNetworkIngressFixtureParams{
+		ID: uuid.New(), OrganizationID: authCtx.ActiveOrganizationID,
+		DnsName: pgtype.Text{String: "private.example.ts.net", Valid: true},
+	}))
+	require.NoError(t, fixtures.SetNetworkIngressObservationFixture(ctx, testrepo.SetNetworkIngressObservationFixtureParams{
+		Status: "online", OrganizationID: authCtx.ActiveOrganizationID,
+	}))
+
+	mode := types.NetworkAccessMode("dual")
+	updated := setHostedMode(t, ctx, ti, created, mode)
+	require.Equal(t, &mode, updated.NetworkAccessMode)
 }

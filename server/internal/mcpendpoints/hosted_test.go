@@ -25,6 +25,8 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -531,4 +533,55 @@ func TestUpdateMcpEndpointHostedRejectsOtherServerScopedWrite(t *testing.T) {
 	_, err := f.ti.service.UpdateMcpEndpoint(scoped, f.payload(f.authCtx.OrganizationSlug+"-denied", nil))
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Equal(t, f.endpoint.Slug, f.requireProjected(t, ctx).Slug)
+}
+
+// A server shaped by a later release, with several endpoints and a slug of its own, keeps its slug when an endpoint
+// moves, and the address write never fails on the server slug.
+func TestUpdateMcpEndpointHostedLeavesIndependentServerSlug(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+	_, err := mcpendpointsrepo.New(f.ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: f.projectID, McpServerID: uuid.NullUUID{UUID: f.toolset.ID, Valid: true}, Slug: f.authCtx.OrganizationSlug + "-second",
+	})
+	require.NoError(t, err)
+	servers := mcpserversrepo.New(f.ti.conn)
+	server, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	_, err = servers.SyncHostedMCPServer(ctx, mcpserversrepo.SyncHostedMCPServerParams{
+		Name: server.Name, Slug: pgtype.Text{String: "own-server-slug", Valid: true}, Visibility: server.Visibility,
+		UserSessionIssuerID: server.UserSessionIssuerID, ToolVariationsGroupID: server.ToolVariationsGroupID,
+		NetworkAccessMode: server.NetworkAccessMode, ID: server.ID, ProjectID: server.ProjectID,
+	})
+	require.NoError(t, err)
+
+	renamed := f.authCtx.OrganizationSlug + "-moved"
+	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(renamed, nil))
+	require.NoError(t, err)
+	after, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.Equal(t, "own-server-slug", after.Slug.String, "the server slug does not follow an endpoint it was not named after")
+}
+
+// A new address whose slug another server already uses as its name still saves; the server keeps its own slug.
+func TestUpdateMcpEndpointHostedSkipsSlugFollowOnCollision(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+	taken := f.authCtx.OrganizationSlug + "-taken"
+	remote := remotemcptest.SeedServer(t, ctx, f.ti.conn, remotemcprepo.CreateServerParams{
+		ProjectID: f.projectID, TransportType: "streamable-http", Url: "https://test.example.com/mcp/" + uuid.NewString(),
+	})
+	_, err := mcpserversrepo.New(f.ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: f.projectID, Name: pgtype.Text{String: "Holder", Valid: true}, Slug: pgtype.Text{String: taken, Valid: true},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+	before, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+
+	_, err = f.ti.service.UpdateMcpEndpoint(ctx, f.payload(taken, nil))
+	require.NoError(t, err)
+	require.Equal(t, taken, f.requireProjected(t, ctx).Slug)
+	after, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.Equal(t, before.Slug, after.Slug)
 }

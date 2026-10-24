@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcpRepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -621,7 +622,33 @@ func TestServiceAssistantEnableRestoresPublicAndChecksIngress(t *testing.T) {
 	require.NoError(t, err)
 	server, err := servers.GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.Equal(t, "public", server.Visibility, "a toolset that was public comes back public")
+	require.Equal(t, "private", server.Visibility, "a public flag without OAuth comes back private")
+	hostedmcptest.RequireMirrored(t, t.Context(), conn, projectID, ts.ID)
+
+	withOAuth, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID: "org-test", ProjectID: projectID, Name: "OAuth", Slug: "oauth",
+		McpSlug: pgtype.Text{String: "org-test-oauth-canonical", Valid: true}, McpEnabled: false,
+	})
+	require.NoError(t, err)
+	syncCanonicalWrapper(t, conn, withOAuth)
+	metadata, err := oauthRepo.New(conn).CreateExternalOAuthServerMetadata(t.Context(), oauthRepo.CreateExternalOAuthServerMetadataParams{
+		ProjectID: projectID, Slug: "oauth-reenable", Metadata: []byte(`{}`), AuthorizationServerIssuer: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = toolsetsRepo.New(conn).UpdateToolsetExternalOAuthServer(t.Context(), toolsetsRepo.UpdateToolsetExternalOAuthServerParams{
+		ExternalOauthServerID: uuid.NullUUID{UUID: metadata.ID, Valid: true}, Slug: withOAuth.Slug, ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	oauthCtx := authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant(), mcpWriteGrant(withOAuth.ID))
+	_, err = svc.CreateAssistant(oauthCtx, &gen.CreateAssistantPayload{
+		Name: "OAuth", Model: "openai/gpt-4o-mini",
+		Toolsets: []*types.AssistantToolsetRef{{ToolsetSlug: withOAuth.Slug, EnvironmentSlug: nil}},
+	})
+	require.NoError(t, err)
+	server, err = servers.GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: withOAuth.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, "public", server.Visibility, "external OAuth comes back public")
+	hostedmcptest.RequireMirrored(t, t.Context(), conn, projectID, withOAuth.ID)
 
 	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
 		Name: "Private Network", Model: "openai/gpt-4o-mini",
