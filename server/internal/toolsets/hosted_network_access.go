@@ -29,7 +29,7 @@ func SetHostedNetworkAccessInTransaction(ctx context.Context, tx pgx.Tx, auditLo
 		return nil, err
 	}
 	written, err := applyHostedServerChange(ctx, tx, auditLogger, hostedActor(actor), locked, hostedServerChange{
-		Name: nil, Visibility: nil, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ToolVariationsGroupID: nil, NetworkAccessMode: &mode,
+		Name: nil, Visibility: nil, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ClearUserSessionIssuer: false, ToolVariationsGroupID: nil, NetworkAccessMode: &mode,
 	})
 	if err != nil {
 		return nil, err

@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 	variationsRepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
@@ -47,12 +48,13 @@ func (s *Service) UpdateHostedServer(ctx context.Context, update mcpservers.Host
 // DisableHostedServer applies an mcpServers.delete on a canonical hosted wrapper: it disables the wrapper and keeps it.
 func (s *Service) DisableHostedServer(ctx context.Context, toolsetID uuid.UUID) error {
 	_, err := s.writeHostedServer(ctx, mcpservers.HostedServerUpdate{
-		ToolsetID:             toolsetID,
-		Name:                  nil,
-		Visibility:            mcpservers.VisibilityDisabled,
-		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		NetworkAccessMode:     nil,
+		ToolsetID:              toolsetID,
+		Name:                   nil,
+		Visibility:             mcpservers.VisibilityDisabled,
+		UserSessionIssuerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClearUserSessionIssuer: false,
+		ToolVariationsGroupID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		NetworkAccessMode:      nil,
 	}, true)
 	return err
 }
@@ -135,11 +137,12 @@ func (s *Service) writeHostedServer(ctx context.Context, update mcpservers.Hoste
 		}
 	}
 	change := hostedServerChange{
-		Name:                  update.Name,
-		Visibility:            &update.Visibility,
-		UserSessionIssuerID:   update.UserSessionIssuerID,
-		ToolVariationsGroupID: nil,
-		NetworkAccessMode:     update.NetworkAccessMode,
+		Name:                   update.Name,
+		Visibility:             &update.Visibility,
+		UserSessionIssuerID:    update.UserSessionIssuerID,
+		ClearUserSessionIssuer: update.ClearUserSessionIssuer,
+		ToolVariationsGroupID:  nil,
+		NetworkAccessMode:      update.NetworkAccessMode,
 	}
 	if !keepToolVariationsGroup {
 		change.ToolVariationsGroupID = &update.ToolVariationsGroupID
@@ -245,6 +248,9 @@ type hostedServerChange struct {
 	// UserSessionIssuerID links an issuer when valid; invalid keeps the current one.
 	UserSessionIssuerID uuid.NullUUID
 
+	// ClearUserSessionIssuer detaches the issuer; UserSessionIssuerID is then invalid.
+	ClearUserSessionIssuer bool
+
 	// ToolVariationsGroupID replaces the tool filtering group when set; an invalid value clears it.
 	ToolVariationsGroupID *uuid.NullUUID
 
@@ -321,7 +327,15 @@ func applyHostedServerChange(ctx context.Context, tx pgx.Tx, auditLogger *audit.
 		name = pgtype.Text{String: *change.Name, Valid: true}
 	}
 	issuer := canonical.UserSessionIssuerID
-	if change.UserSessionIssuerID.Valid {
+	switch {
+	case change.ClearUserSessionIssuer:
+		if canonical.UserSessionIssuerID.Valid {
+			if err := lifecycle.GuardServerIssuerEMABindings(ctx, tx, toolset.OrganizationID, toolset.ProjectID, canonical.UserSessionIssuerID.UUID); err != nil {
+				return hostedServerWrite{}, err //nolint:wrapcheck // oops errors pass through.
+			}
+		}
+		issuer = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	case change.UserSessionIssuerID.Valid:
 		issuer = change.UserSessionIssuerID
 	}
 	variationsGroup := canonical.ToolVariationsGroupID

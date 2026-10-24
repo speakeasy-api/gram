@@ -671,20 +671,21 @@ func newPlatformMCPLifecycleMetadataService(config platformMCPConfig) (*platform
 	return platformmcp.NewLifecycleMetadataService(config.DB, func(ctx context.Context, tx pgx.Tx, existing mcpserversrepo.McpServer, input platformmcp.LifecycleMetadataUpdate) (mcpserversrepo.McpServer, error) {
 		name := input.Name
 		return mcpservers.UpdateMCPServerLifecycleInTransaction(ctx, tx, config.AuditLogger, existing, mcpservers.LifecycleUpdateInput{
-			OrganizationID:        input.OrganizationID,
-			ProjectID:             input.ProjectID,
-			ActorUserID:           input.ActorUserID,
-			ActorEmail:            nil,
-			ServerID:              input.ServerID,
-			Name:                  &name,
-			Visibility:            existing.Visibility,
-			EnvironmentID:         existing.EnvironmentID,
-			UserSessionIssuerID:   existing.UserSessionIssuerID,
-			RemoteMcpServerID:     existing.RemoteMcpServerID,
-			TunneledMcpServerID:   existing.TunneledMcpServerID,
-			ToolsetID:             existing.ToolsetID,
-			UnproxiedMcpServerID:  existing.UnproxiedMcpServerID,
-			ToolVariationsGroupID: existing.ToolVariationsGroupID,
+			OrganizationID:         input.OrganizationID,
+			ProjectID:              input.ProjectID,
+			ActorUserID:            input.ActorUserID,
+			ActorEmail:             nil,
+			ServerID:               input.ServerID,
+			Name:                   &name,
+			Visibility:             existing.Visibility,
+			EnvironmentID:          existing.EnvironmentID,
+			UserSessionIssuerID:    existing.UserSessionIssuerID,
+			ClearUserSessionIssuer: false,
+			RemoteMcpServerID:      existing.RemoteMcpServerID,
+			TunneledMcpServerID:    existing.TunneledMcpServerID,
+			ToolsetID:              existing.ToolsetID,
+			UnproxiedMcpServerID:   existing.UnproxiedMcpServerID,
+			ToolVariationsGroupID:  existing.ToolVariationsGroupID,
 		})
 	}, config.JWTSigningKey)
 }
@@ -692,20 +693,21 @@ func newPlatformMCPLifecycleMetadataService(config platformMCPConfig) (*platform
 func newPlatformMCPLifecycleVisibilityService(config platformMCPConfig, readiness *platformmcp.ReadinessService) (*platformmcp.LifecycleVisibilityService, error) {
 	service, err := platformmcp.NewLifecycleVisibilityService(config.DB, config.AuditLogger, mcpservers.LockMCPServerVisibilityDependencies, func(ctx context.Context, tx pgx.Tx, existing mcpserversrepo.McpServer, input platformmcp.LifecycleVisibilityUpdate) (platformmcp.LifecycleVisibilityUpdateResult, error) {
 		updated, err := mcpservers.UpdateMCPServerVisibilityInTransaction(ctx, tx, config.AuditLogger, existing, mcpservers.LifecycleUpdateInput{
-			OrganizationID:        input.OrganizationID,
-			ProjectID:             input.ProjectID,
-			ActorUserID:           input.ActorUserID,
-			ActorEmail:            nil,
-			ServerID:              input.ServerID,
-			Name:                  nil,
-			Visibility:            input.Visibility,
-			EnvironmentID:         existing.EnvironmentID,
-			UserSessionIssuerID:   existing.UserSessionIssuerID,
-			RemoteMcpServerID:     existing.RemoteMcpServerID,
-			TunneledMcpServerID:   existing.TunneledMcpServerID,
-			ToolsetID:             existing.ToolsetID,
-			UnproxiedMcpServerID:  existing.UnproxiedMcpServerID,
-			ToolVariationsGroupID: existing.ToolVariationsGroupID,
+			OrganizationID:         input.OrganizationID,
+			ProjectID:              input.ProjectID,
+			ActorUserID:            input.ActorUserID,
+			ActorEmail:             nil,
+			ServerID:               input.ServerID,
+			Name:                   nil,
+			Visibility:             input.Visibility,
+			EnvironmentID:          existing.EnvironmentID,
+			UserSessionIssuerID:    existing.UserSessionIssuerID,
+			ClearUserSessionIssuer: false,
+			RemoteMcpServerID:      existing.RemoteMcpServerID,
+			TunneledMcpServerID:    existing.TunneledMcpServerID,
+			ToolsetID:              existing.ToolsetID,
+			UnproxiedMcpServerID:   existing.UnproxiedMcpServerID,
+			ToolVariationsGroupID:  existing.ToolVariationsGroupID,
 		})
 		if err != nil {
 			return platformmcp.LifecycleVisibilityUpdateResult{}, err
