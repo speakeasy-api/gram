@@ -240,17 +240,25 @@ func (s *Service) CheckPolicyGrants(ctx context.Context, payload *gen.CheckPolic
 		requested = append(requested, requestedGrant{scope: scope, selectorRaw: selectorRaw})
 	}
 	var agentID *uuid.UUID
-	if payload.AgentID != nil && *payload.AgentID != "" {
+	if payload.AgentID != nil {
 		parsed, err := parseAgentID(*payload.AgentID)
 		if err != nil {
 			return nil, err
 		}
 		agentID = &parsed
 	}
+	// As agents.create reads it: empty means the caller.
+	ownerUserID := ""
+	if payload.OwnerUserID != nil {
+		ownerUserID = *payload.OwnerUserID
+	}
+	if agentID != nil && ownerUserID != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "owner_user_id cannot be combined with agent_id")
+	}
 
 	results := make([]*gen.AgentPolicyGrantCheck, 0, len(requested))
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-		human, ownerUserID, err := s.policyCheckOwner(ctx, tx, agentID)
+		human, ownerUserID, err := s.policyCheckOwner(ctx, tx, agentID, ownerUserID)
 		if err != nil {
 			return err
 		}
@@ -275,15 +283,29 @@ func (s *Service) CheckPolicyGrants(ctx context.Context, payload *gen.CheckPolic
 
 // policyCheckOwner authorizes a policy check and returns the owner whose
 // permissions bound it. With an agent it authorizes as a policy write does,
-// pinning both memberships before the agent lock. Without one the grants are
-// for an agent the caller is about to create, which the caller owns.
-func (s *Service) policyCheckOwner(ctx context.Context, tx pgx.Tx, agentID *uuid.UUID) (HumanContext, string, error) {
+// pinning both memberships before the agent lock. Without one it authorizes as
+// agents.create does for ownerUserID, the caller when empty: the grants are
+// for an agent the caller is about to create.
+func (s *Service) policyCheckOwner(ctx context.Context, tx pgx.Tx, agentID *uuid.UUID, ownerUserID string) (HumanContext, string, error) {
 	if agentID == nil {
-		human, err := s.authorizer.RequireHuman(ctx, tx)
+		authCtx, ok := contextAuth(ctx)
+		if !ok {
+			return HumanContext{}, "", oops.C(oops.CodeUnauthorized)
+		}
+		if ownerUserID == "" {
+			ownerUserID = authCtx.UserID
+		}
+		// Never stored: it stands for the agent agents.create would make, so
+		// naming another owner needs the same agent:write there as here.
+		prospective, err := uuid.NewV7()
+		if err != nil {
+			return HumanContext{}, "", fmt.Errorf("generate prospective agent id: %w", err)
+		}
+		human, err := s.authorizer.RequireCreate(ctx, tx, prospective, ownerUserID)
 		if err != nil {
 			return HumanContext{}, "", err
 		}
-		return human, human.Auth.UserID, nil
+		return human, ownerUserID, nil
 	}
 	human, agent, err := s.authorizer.RequireAgentOwnerForUpdate(ctx, tx, *agentID, OwnedAgentSetup)
 	if err != nil {

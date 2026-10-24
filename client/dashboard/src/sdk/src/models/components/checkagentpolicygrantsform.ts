@@ -12,9 +12,13 @@ import {
 
 export type CheckAgentPolicyGrantsForm = {
   /**
-   * The agent the grants would be written to. Omit for an agent the caller would create and own.
+   * The agent the grants would be written to. Omit for an agent the caller would create.
    */
   agentId?: string | undefined;
+  /**
+   * Owner of the agent the caller would create, as agents.create takes it; defaults to the caller. Not allowed with agent_id, whose owner is its own.
+   */
+  ownerUserId?: string | undefined;
   /**
    * The grants to check, answered in the same order.
    */
@@ -24,6 +28,7 @@ export type CheckAgentPolicyGrantsForm = {
 /** @internal */
 export type CheckAgentPolicyGrantsForm$Outbound = {
   agent_id?: string | undefined;
+  owner_user_id?: string | undefined;
   policy_grants: Array<AgentPolicyGrantForm$Outbound>;
 };
 
@@ -34,11 +39,13 @@ export const CheckAgentPolicyGrantsForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     agentId: z.optional(z.string()),
+    ownerUserId: z.optional(z.string()),
     policyGrants: z.array(AgentPolicyGrantForm$outboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
       agentId: "agent_id",
+      ownerUserId: "owner_user_id",
       policyGrants: "policy_grants",
     });
   }),

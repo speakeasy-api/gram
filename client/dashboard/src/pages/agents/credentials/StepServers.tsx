@@ -30,8 +30,6 @@ export interface AllServersRefusal {
   message: string;
   /** Still being checked, rather than refused. */
   pending?: boolean;
-  /** Asks again, where the check itself failed. */
-  retry?: () => void;
 }
 
 export function StepServers({
@@ -43,6 +41,7 @@ export function StepServers({
   onAllServersChange,
   allServersRefusal,
   refusedServers,
+  onRecheck,
   scopeLabel,
   selected,
   onChange,
@@ -71,6 +70,11 @@ export function StepServers({
    * server. One already ticked can still be unticked.
    */
   refusedServers?: ReadonlyMap<string, string>;
+  /**
+   * Set when the check of what can be saved failed, to ask again. Until it
+   * answers, nothing ticked here can be saved.
+   */
+  onRecheck?: () => void;
   /**
    * What "all" covers, named: the agent's project, or the organization where
    * the agent already holds a wildcard that reaches every one of them.
@@ -213,15 +217,23 @@ export function StepServers({
               </Button>
             </div>
           </div>
+          {onRecheck && (
+            <div
+              role="alert"
+              className="border-border flex items-center justify-between gap-3 border-b px-4 py-3"
+            >
+              <Text small>Could not check which servers you can reach.</Text>
+              <Button size="sm" variant="secondary" onClick={onRecheck}>
+                Check again
+              </Button>
+            </div>
+          )}
           {/* Above the rows and outside the filters, because it is not one of
               them: it covers servers this list has never shown, including the
               ones that do not exist yet. */}
           <label
             className={cn(
-              "border-border flex items-center gap-4 px-4 py-3",
-              // The retry below belongs to this row, so the row's rule moves
-              // under it.
-              !allServersRefusal?.retry && "border-b",
+              "border-border flex items-center gap-4 border-b px-4 py-3",
               allServersLocked
                 ? "cursor-not-allowed"
                 : "hover:bg-muted/40 cursor-pointer",
@@ -260,19 +272,6 @@ export function StepServers({
               )}
             </span>
           </label>
-          {/* Outside the label, which would otherwise lend the button its
-              own text as a name. */}
-          {allServersRefusal?.retry && (
-            <div className="border-border border-b px-4 pb-3 pl-12">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={allServersRefusal.retry}
-              >
-                Check again
-              </Button>
-            </div>
-          )}
           {shown.length === 0 ? (
             <Text muted small className="block px-4 py-10 text-center">
               {servers.length === 0

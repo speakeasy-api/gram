@@ -35,8 +35,9 @@ type Service interface {
 	// ListPolicyGrants implements listPolicyGrants.
 	ListPolicyGrants(context.Context, *ListPolicyGrantsPayload) (res []*AgentPolicyGrant, err error)
 	// Check whether policy grants could be written without writing them: to
-	// agent_id, or to a new agent the caller would own. Uses the containment rule
-	// of agents.create and agents.createPolicyGrant, which still check every write.
+	// agent_id, or to a new agent the caller would create for owner_user_id (the
+	// caller by default). Uses the authorization and containment rule of
+	// agents.create and agents.createPolicyGrant, which still check every write.
 	CheckPolicyGrants(context.Context, *CheckPolicyGrantsPayload) (res *CheckAgentPolicyGrantsResult, err error)
 	// CreatePolicyGrant implements createPolicyGrant.
 	CreatePolicyGrant(context.Context, *CreatePolicyGrantPayload) (res *AgentPolicyGrant, err error)
@@ -212,8 +213,11 @@ type CheckAgentPolicyGrantsResult struct {
 type CheckPolicyGrantsPayload struct {
 	SessionToken *string
 	// The agent the grants would be written to. Omit for an agent the caller would
-	// create and own.
+	// create.
 	AgentID *string
+	// Owner of the agent the caller would create, as agents.create takes it;
+	// defaults to the caller. Not allowed with agent_id, whose owner is its own.
+	OwnerUserID *string
 	// The grants to check, answered in the same order.
 	PolicyGrants []*AgentPolicyGrantForm
 }

@@ -143,7 +143,7 @@ export class Agents extends ClientSDK {
    * checkPolicyGrants agents
    *
    * @remarks
-   * Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would own. Uses the containment rule of agents.create and agents.createPolicyGrant, which still check every write.
+   * Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.
    */
   async checkPolicyGrants(
     request: CheckAgentPolicyGrantsRequest,

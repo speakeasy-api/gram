@@ -49,8 +49,11 @@ type RenameRequestBody struct {
 // "checkPolicyGrants" endpoint HTTP request body.
 type CheckPolicyGrantsRequestBody struct {
 	// The agent the grants would be written to. Omit for an agent the caller would
-	// create and own.
+	// create.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Owner of the agent the caller would create, as agents.create takes it;
+	// defaults to the caller. Not allowed with agent_id, whose owner is its own.
+	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
 	// The grants to check, answered in the same order.
 	PolicyGrants []*AgentPolicyGrantFormRequestBodyRequestBody `form:"policy_grants" json:"policy_grants" xml:"policy_grants"`
 }
@@ -4490,7 +4493,8 @@ func NewRenameRequestBody(p *agents.RenamePayload) *RenameRequestBody {
 // payload of the "checkPolicyGrants" endpoint of the "agents" service.
 func NewCheckPolicyGrantsRequestBody(p *agents.CheckPolicyGrantsPayload) *CheckPolicyGrantsRequestBody {
 	body := &CheckPolicyGrantsRequestBody{
-		AgentID: p.AgentID,
+		AgentID:     p.AgentID,
+		OwnerUserID: p.OwnerUserID,
 	}
 	if p.PolicyGrants != nil {
 		body.PolicyGrants = make([]*AgentPolicyGrantFormRequestBodyRequestBody, len(p.PolicyGrants))

@@ -717,6 +717,34 @@ describe("Agent project", () => {
     ).toEqual(["toolset_one"]);
   });
 
+  it("saves no server the check has not answered for", async () => {
+    // Ticked before the answer arrived, or after the check failed: either way
+    // the server has not said the grant fits, so nothing is written yet.
+    mocks.checkPolicyGrants.mockRejectedValueOnce(new Error("network down"));
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Unchecked" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      await screen.findByText("Could not check which servers you can reach."),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "GitHub" }));
+    const next = screen.getByRole("button", {
+      name: "Continue",
+    }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Could not check that you can reach the servers you chose. Check again above the list.",
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(next.disabled).toBe(false));
+  });
+
   it("holds All servers until the check answers, and retries one that failed", async () => {
     mocks.checkPolicyGrants.mockRejectedValueOnce(new Error("network down"));
     setup();

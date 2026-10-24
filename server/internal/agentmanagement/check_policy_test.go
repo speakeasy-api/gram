@@ -218,3 +218,53 @@ func TestCheckPolicyGrantsRejectsInvalidGrant(t *testing.T) {
 
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
+
+// A new agent created for another owner is bounded by that owner too, and
+// naming one needs agent:write, as agents.create does.
+func TestCheckPolicyGrantsForAnotherOwnerMatchesCreate(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	projectID := uuid.NewString()
+	everyServer := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource)
+	f.grant(t, "caller", authz.ScopeMCPConnect, everyServer)
+	f.grant(t, "owner", authz.ScopeMCPConnect, everyServer)
+	f.grant(t, "owner", authz.ScopeMCPBlockedConnect, blockedServer("server-b", ""))
+	ctx := validatedHumanContext(t, "org-delegable", "caller")
+	payload := &gen.CheckPolicyGrantsPayload{
+		OwnerUserID:  new("owner"),
+		PolicyGrants: []*gen.AgentPolicyGrantForm{allServersGrant(projectID)},
+	}
+
+	_, err := f.service.CheckPolicyGrants(ctx, payload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	f.grant(t, "caller", authz.ScopeAgentWrite, authz.NewSelector(authz.ScopeAgentWrite, authz.WildcardResource))
+	checked, err := f.service.CheckPolicyGrants(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, checked.Results, 1)
+	require.False(t, checked.Results[0].Allowed)
+	require.Equal(t, new(string(policyLimitOwner)), checked.Results[0].LimitedBy)
+
+	_, err = f.service.Create(ctx, &gen.CreatePayload{
+		Name:         "Owned elsewhere",
+		OwnerUserID:  new("owner"),
+		PolicyGrants: []*gen.AgentPolicyGrantForm{allServersGrant(projectID)},
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Contains(t, err.Error(), "owner's permissions")
+}
+
+// An existing agent's owner is its own, so naming another is refused.
+func TestCheckPolicyGrantsRejectsOwnerWithAgent(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	ctx := validatedHumanContext(t, "org-delegable", "caller")
+
+	_, err := f.service.CheckPolicyGrants(ctx, &gen.CheckPolicyGrantsPayload{
+		AgentID:      new(f.agentID.String()),
+		OwnerUserID:  new("owner"),
+		PolicyGrants: []*gen.AgentPolicyGrantForm{allServersGrant(uuid.NewString())},
+	})
+
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}

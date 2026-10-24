@@ -498,7 +498,6 @@ export function CredentialsWizard({
     if (policyCheck.isError) {
       return {
         message: `Could not check that you can reach every server in ${allServersScopeName}.`,
-        retry: recheck,
       };
     }
     return {
@@ -522,18 +521,32 @@ export function CredentialsWizard({
     });
     return refused;
   }, [wildcardToWrite, serversToCheck, policyCheck.data]);
-  // Saving a choice the check refused would be refused by the server in turn:
-  // "All servers" turned on before the answer changed, or a server ticked
-  // before it arrived. Said here, before anything is written, instead.
+  // A choice is saved only once the check has accepted it: one it refused
+  // would be refused by the server in turn, and one it has not answered for,
+  // still pending or failed, might be. "All servers" can be on while its
+  // answer changes, and a server can be ticked before its answer arrives.
+  // Said here, before anything is written, instead.
+  const checkedIds = useMemo(
+    () => new Set(serversToCheck.map((server) => server.id)),
+    [serversToCheck],
+  );
   const refusedSelection = allServers
     ? []
     : selected.filter((entry) => refusedServers.has(entry.server.id));
+  const unansweredSelection =
+    allServers || policyCheck.data !== undefined
+      ? []
+      : selected.filter((entry) => checkedIds.has(entry.server.id));
   const refusedChoice =
-    allServers && allServersRefusal !== undefined && !allServersRefusal.pending
+    allServers && allServersRefusal !== undefined
       ? allServersRefusal.message
       : refusedSelection.length > 0
         ? `Deselect ${refusedSelection.map((entry) => entry.server.name).join(", ")}: ${refusedServers.get(refusedSelection[0]!.server.id)}`
-        : null;
+        : unansweredSelection.length > 0
+          ? policyCheck.isError
+            ? "Could not check that you can reach the servers you chose. Check again above the list."
+            : "Checking that you can reach the servers you chose…"
+          : null;
   // The rows the picker offers. Under "All servers" they are the ones those
   // wildcards reach, so an organization-wide one shows every project's;
   // otherwise it is the project the agent is bound to.
@@ -1128,6 +1141,7 @@ export function CredentialsWizard({
               allServers={allServers}
               allServersRefusal={allServersRefusal}
               refusedServers={refusedServers}
+              onRecheck={policyCheck.isError ? recheck : undefined}
               onAllServersChange={(next) => {
                 setAllServers(next);
                 setHighlight(next ? "server:all" : null);

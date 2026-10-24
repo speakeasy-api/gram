@@ -8139,7 +8139,7 @@ paths:
         name: BlockAgentOnConnection
   /rpc/agents.checkPolicyGrants:
     post:
-      description: 'Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would own. Uses the containment rule of agents.create and agents.createPolicyGrant, which still check every write.'
+      description: 'Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.'
       operationId: checkAgentPolicyGrants
       parameters:
         - allowEmptyValue: true
@@ -87409,8 +87409,11 @@ components:
       properties:
         agent_id:
           type: string
-          description: The agent the grants would be written to. Omit for an agent the caller would create and own.
+          description: The agent the grants would be written to. Omit for an agent the caller would create.
           format: uuid
+        owner_user_id:
+          type: string
+          description: Owner of the agent the caller would create, as agents.create takes it; defaults to the caller. Not allowed with agent_id, whose owner is its own.
         policy_grants:
           type: array
           items:

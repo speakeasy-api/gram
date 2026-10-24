@@ -84,7 +84,8 @@ var PolicyGrant = Type("AgentPolicyGrant", func() {
 })
 
 var CheckPolicyGrantsForm = Type("CheckAgentPolicyGrantsForm", func() {
-	Attribute("agent_id", String, "The agent the grants would be written to. Omit for an agent the caller would create and own.", func() { Format(FormatUUID) })
+	Attribute("agent_id", String, "The agent the grants would be written to. Omit for an agent the caller would create.", func() { Format(FormatUUID) })
+	Attribute("owner_user_id", String, "Owner of the agent the caller would create, as agents.create takes it; defaults to the caller. Not allowed with agent_id, whose owner is its own.")
 	Attribute("policy_grants", ArrayOf(PolicyGrantForm), "The grants to check, answered in the same order.", func() {
 		MinLength(1)
 		MaxLength(100)
@@ -326,7 +327,7 @@ var _ = Service("agents", func() {
 	})
 
 	Method("checkPolicyGrants", func() {
-		Description("Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would own. Uses the containment rule of agents.create and agents.createPolicyGrant, which still check every write.")
+		Description("Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.")
 		Meta("openapi:operationId", "checkAgentPolicyGrants")
 		Meta("openapi:extension:x-speakeasy-name-override", "checkPolicyGrants")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CheckAgentPolicyGrants"}`)
