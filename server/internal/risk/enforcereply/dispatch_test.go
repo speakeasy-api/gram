@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"maps"
 	"strings"
 	"testing"
@@ -19,6 +18,7 @@ import (
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/redisinbox"
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
@@ -49,6 +49,12 @@ func (p *capturePublisher[T]) Publish(ctx context.Context, message T, options ..
 
 func (p *capturePublisher[T]) Stop(context.Context) error {
 	return nil
+}
+
+type enforcementLaneFunc func(context.Context, proto.Message) (*riskv1.EnforcementReply, error)
+
+func (f enforcementLaneFunc) Request(ctx context.Context, request proto.Message) (*riskv1.EnforcementReply, error) {
+	return f(ctx, request)
 }
 
 type (
@@ -239,6 +245,37 @@ func TestDispatchPublishesTenantContextAndReplyMetadata(t *testing.T) {
 	require.NotEqual(t, message.GetRequestId(), correlationID)
 }
 
+func TestDispatchAggregatesHandlerTruncation(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-handler-truncation")
+	publisher := &captureEnforcementPublisher{onPublish: func(ctx context.Context, _ *riskv1.GitleaksEnforcement, attributes map[string]string) error {
+		replyURN := attributes[requestreply.ReplyURNAttribute]
+		_, correlationID, err := ParseReplyURN(replyURN)
+		if err != nil {
+			return err
+		}
+		return te.writer.Reply(ctx, replyURN, riskv1.EnforcementReply_builder{
+			CorrelationId:    new(correlationID),
+			Scanner:          new(gitleaksLane.Scanner),
+			Status:           new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+			ContentTruncated: new(true),
+		}.Build())
+	}}
+	dispatcher := testDispatcher(te, publisher, time.Second)
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-dispatch",
+		ProjectID:      "project-dispatch",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane},
+		Origins:        testOrigins(gitleaksLane),
+	})
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.True(t, outcome.Truncated)
+}
+
 func TestDispatchAcceptsOpaqueOperationID(t *testing.T) {
 	t.Parallel()
 
@@ -377,6 +414,7 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 	require.Equal(t, "safe content", message.GetContent())
 	require.Equal(t, origins[presidioLane].RiskPolicyID.String(), message.GetOriginRiskPolicyId())
 	require.Equal(t, origins[presidioLane].RiskPolicyVersion, message.GetOriginRiskPolicyVersion())
+
 	require.Equal(t, origins[presidioLane].ExecutionPath, message.GetExecutionPath())
 	require.Equal(t, origins[presidioLane].MessageLinkReason, message.GetMessageLinkReason())
 	require.Empty(t, message.GetRiskPolicyId(), "shared origin must not alter finding/reply policy correlation")
@@ -407,6 +445,33 @@ func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
 	_, gitleaksCorrelation, err := ParseReplyURN(gitleaksPub.attributes[0][requestreply.ReplyURNAttribute])
 	require.NoError(t, err)
 	require.NotEqual(t, gitleaksCorrelation, correlationID)
+}
+
+func TestDispatchCapsPresidioMeteringAtEngineLimit(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-presidio-meter-limit")
+	gitleaksPub := &captureEnforcementPublisher{}
+	presidioPub := &capturePresidioPublisher{}
+	presidioPub.onPublish = replyOK[*riskv1.PresidioEnforcement](te, presidioLane)
+	dispatcher := testDispatcherWithPresidio(te, gitleaksPub, presidioPub, 5*time.Second)
+	content := strings.Repeat("x", presidioEngineMaxContentBytes*2)
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-presidio",
+		ProjectID:      "project-presidio",
+		Content:        content,
+		Lanes:          []Lane{presidioLane},
+		Origins:        testOrigins(presidioLane),
+	})
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.Len(t, presidioPub.messages, 1)
+	var reading meteringv1.MeterReading
+	require.NoError(t, proto.Unmarshal(presidioPub.messages[0].GetMeterReading(), &reading))
+	expected, err := stokens.NewCodec().Count(t.Context(), content[:presidioEngineMaxContentBytes])
+	require.NoError(t, err)
+	require.Equal(t, int64(expected), reading.GetValue())
 }
 
 func TestDispatchPreservesSuccessfulSiblingOnLaneFailure(t *testing.T) {
@@ -736,7 +801,11 @@ func TestDispatchDoesNotSpendBudgetTwiceOnDuplicateBody(t *testing.T) {
 	te := setupInboxTest(t, "replica-dispatch-duplicate-body")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{
+		WaitTimeout:     time.Second,
+		LaneWaitTimeout: nil,
+		Flags:           contentLimitFlags(t, 100*1024),
+	})
 
 	text := strings.Repeat("x", 60*1024)
 	request := llmDispatchRequest([]Lane{llmLane}, testOrigins(llmLane))
@@ -745,10 +814,10 @@ func TestDispatchDoesNotSpendBudgetTwiceOnDuplicateBody(t *testing.T) {
 
 	outcome, err := dispatcher.Dispatch(t.Context(), request)
 	require.NoError(t, err)
-	require.True(t, outcome.Truncated)
+	require.False(t, outcome.Truncated)
 	require.Len(t, llmPub.messages, 1)
-	require.Equal(t, strings.Repeat("x", DefaultMaxContentBytes), llmPub.messages[0].GetContent())
-	require.Equal(t, llmPub.messages[0].GetContent(), llmPub.messages[0].GetBody())
+	require.Equal(t, text, llmPub.messages[0].GetContent())
+	require.Equal(t, text, llmPub.messages[0].GetBody())
 }
 
 func TestDispatchDoesNotSpendBudgetTwiceOnDuplicateToolArguments(t *testing.T) {
@@ -829,4 +898,108 @@ func TestDispatchRejectsDuplicateLane(t *testing.T) {
 	})
 	require.ErrorContains(t, err, "duplicate enforcement lane")
 	require.Empty(t, publisher.messages)
+}
+
+func TestDispatchSendsPolicyKeyedJudgeLane(t *testing.T) {
+	t.Parallel()
+
+	policyID := uuid.NewString()
+	lane := Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, PolicyID: policyID}
+	var captured *riskv1.PromptPolicyEnforcement
+	dispatcher := &Dispatcher{
+		judge: enforcementLaneFunc(func(_ context.Context, request proto.Message) (*riskv1.EnforcementReply, error) {
+			var ok bool
+			captured, ok = request.(*riskv1.PromptPolicyEnforcement)
+			require.True(t, ok)
+			return riskv1.EnforcementReply_builder{
+				Scanner: new(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE),
+				Status:  new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+			}.Build(), nil
+		}),
+		waitTimeout: time.Second,
+		logger:      newTestLogger(),
+	}
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-judge",
+		ProjectID:      uuid.NewString(),
+		Content:        "transport content",
+		Body:           "judge this body",
+		Lanes:          []Lane{lane},
+		Origins:        testOrigins(lane),
+		PromptPolicies: map[string]PromptPolicyConfig{
+			policyID: {Prompt: "deny unsafe requests", ModelConfig: []byte(`{"fail_open":false}`)},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.NotNil(t, outcome.ByLane[lane])
+	require.NotNil(t, captured)
+	require.Equal(t, policyID, captured.GetRiskPolicyId())
+	require.Equal(t, "deny unsafe requests", captured.GetPrompt())
+	require.JSONEq(t, `{"fail_open":false}`, string(captured.GetModelConfig()))
+}
+
+func TestDispatchStartsNewEnforcementLanesConcurrently(t *testing.T) {
+	t.Parallel()
+
+	policyID := uuid.NewString()
+	lanes := []Lane{
+		{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION},
+		{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_CUSTOM_RULES},
+		{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, PolicyID: policyID},
+	}
+	started := make(chan riskv1.EnforcementScanner, len(lanes))
+	release := make(chan struct{})
+	fakeLane := func(scanner riskv1.EnforcementScanner) EnforcementLane {
+		return enforcementLaneFunc(func(ctx context.Context, _ proto.Message) (*riskv1.EnforcementReply, error) {
+			started <- scanner
+			select {
+			case <-release:
+				return riskv1.EnforcementReply_builder{
+					Scanner: new(scanner),
+					Status:  new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+				}.Build(), nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		})
+	}
+	dispatcher := &Dispatcher{
+		promptInjection: fakeLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION),
+		customRules:     fakeLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_CUSTOM_RULES),
+		judge:           fakeLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE),
+		waitTimeout:     time.Second,
+		logger:          newTestLogger(),
+	}
+
+	type dispatchResult struct {
+		outcome Outcome
+		err     error
+	}
+	done := make(chan dispatchResult, 1)
+	go func() {
+		outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+			OrganizationID: "org-concurrent",
+			ProjectID:      uuid.NewString(),
+			Content:        "content",
+			Lanes:          lanes,
+			Origins:        testOrigins(lanes...),
+			PromptPolicies: map[string]PromptPolicyConfig{policyID: {Prompt: "judge"}},
+		})
+		done <- dispatchResult{outcome: outcome, err: err}
+	}()
+
+	for range lanes {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("enforcement lanes did not all start before release")
+		}
+	}
+	close(release)
+	result := <-done
+	require.NoError(t, result.err)
+	require.True(t, result.outcome.Complete)
+	require.Len(t, result.outcome.ByLane, len(lanes))
 }

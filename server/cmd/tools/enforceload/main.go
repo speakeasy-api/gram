@@ -563,7 +563,7 @@ func newFullLoop(ctx context.Context, logger *slog.Logger, redisClient *redis.Cl
 			sum, _, fingerprintErr := fingerprinter.TenantedHS256(tenantID, message)
 			return risk.EncodeFingerprint(sum), fingerprintErr
 		},
-		gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
+		gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge, MaxContentBytes: 0},
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	if err != nil {
@@ -651,6 +651,8 @@ func runFullPoint(
 				ToolCalls:              nil,
 				PresidioEntities:       nil,
 				PresidioScoreThreshold: nil,
+				CustomRuleIDs:          nil,
+				PromptPolicies:         nil,
 				Lanes:                  []enforcereply.Lane{lane},
 				Origins: map[enforcereply.Lane]metering.RiskProvenance{
 					lane: {

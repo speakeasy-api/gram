@@ -1449,6 +1449,8 @@ func (s *Scanner) dispatchEnforcementLanes(ctx context.Context, request Realtime
 		ToolCalls:              nil,
 		PresidioEntities:       nil,
 		PresidioScoreThreshold: nil,
+		CustomRuleIDs:          nil,
+		PromptPolicies:         nil,
 		Lanes:                  lanes,
 		Origins:                origins,
 	}
