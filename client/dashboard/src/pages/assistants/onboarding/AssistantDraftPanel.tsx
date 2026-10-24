@@ -228,7 +228,10 @@ export function AssistantDraftPanel(): JSX.Element {
                 assistant={a}
                 onUpdated={() => void draft.refetchAssistant()}
               />
-              <AssistantUpstreamCredentials assistantId={a.id} />
+              <AssistantUpstreamCredentials
+                assistantId={a.id}
+                canWrite={canWrite}
+              />
             </Stack>
           </TabsContent>
 

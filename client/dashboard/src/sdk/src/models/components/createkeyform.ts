@@ -26,7 +26,7 @@ export type CreateKeyForm = {
    */
   agentId?: string | undefined;
   /**
-   * For an agent key: the upstream credential the key uses on each MCP server that offers several. Where typed upstream authentication is enforced, the key is served on a server with the credential chosen here, checked again on every request. Shared credentials only: an agent reaches a person's own connection when it acts for them.
+   * For an agent key: the upstream credential the key uses on each MCP server it names. Where typed upstream authentication is enforced, the key is served on a server with the credential chosen here, checked again on every request. Shared credentials only: an agent reaches a person's own connection when it acts for them.
    */
   authClientChoices?: Array<AgentKeyAuthClientChoice> | undefined;
   /**

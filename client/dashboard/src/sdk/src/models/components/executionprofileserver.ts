@@ -29,6 +29,16 @@ export const GapReason = {
  */
 export type GapReason = OpenEnum<typeof GapReason>;
 
+export const ExecutionProfileChoiceSource = {
+  Admin: "admin",
+  Issuance: "issuance",
+  Backfill: "backfill",
+  Automatic: "automatic",
+} as const;
+export type ExecutionProfileChoiceSource = OpenEnum<
+  typeof ExecutionProfileChoiceSource
+>;
+
 /**
  * One MCP server an assistant's turns reach through Speakeasy.
  */
@@ -50,18 +60,25 @@ export type ExecutionProfileServer = {
    */
   mcpServerId: string;
   /**
+   * Whether the server was decided to need no upstream authentication, so no-auth can be chosen.
+   */
+  noAuthAllowed: boolean;
+  /**
    * The credentials that can be chosen.
    */
   options: Array<ExecutionProfileOption>;
-  /**
-   * How the choice was made: admin, issuance, backfill, or automatic for one the next turn makes on its own.
-   */
-  source?: string | undefined;
+  executionProfileChoiceSource?: ExecutionProfileChoiceSource | undefined;
 };
 
 /** @internal */
 export const GapReason$inboundSchema: z.ZodMiniType<GapReason, unknown> =
   openEnums.inboundSchema(GapReason);
+
+/** @internal */
+export const ExecutionProfileChoiceSource$inboundSchema: z.ZodMiniType<
+  ExecutionProfileChoiceSource,
+  unknown
+> = openEnums.inboundSchema(ExecutionProfileChoiceSource);
 
 /** @internal */
 export const ExecutionProfileServer$inboundSchema: z.ZodMiniType<
@@ -73,14 +90,17 @@ export const ExecutionProfileServer$inboundSchema: z.ZodMiniType<
     chosen: z.boolean(),
     gap_reason: z.optional(GapReason$inboundSchema),
     mcp_server_id: z.string(),
+    no_auth_allowed: z.boolean(),
     options: z.array(ExecutionProfileOption$inboundSchema),
-    source: z.optional(z.string()),
+    source: z.optional(ExecutionProfileChoiceSource$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
       "auth_client_id": "authClientId",
       "gap_reason": "gapReason",
       "mcp_server_id": "mcpServerId",
+      "no_auth_allowed": "noAuthAllowed",
+      "source": "executionProfileChoiceSource",
     });
   }),
 );

@@ -373,27 +373,31 @@ FROM remote_session_clients AS c
 JOIN remote_session_issuers AS rsi
   ON rsi.id = c.remote_session_issuer_id
  AND rsi.deleted IS FALSE
- AND (rsi.organization_id IS NULL OR rsi.organization_id = $1::text)
-WHERE c.id = $2
+ AND (
+   (rsi.project_id IS NOT NULL AND rsi.project_id = $1::uuid)
+   OR (rsi.project_id IS NULL AND rsi.organization_id = $2::text)
+   OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL)
+ )
+WHERE c.id = $3
   AND c.deleted IS FALSE
   AND (
-    (c.project_id IS NOT NULL AND c.project_id = $3::uuid)
-    OR (c.project_id IS NULL AND c.organization_id = $1::text)
+    (c.project_id IS NOT NULL AND c.project_id = $1::uuid)
+    OR (c.project_id IS NULL AND c.organization_id = $2::text)
     OR (c.project_id IS NULL AND c.organization_id IS NULL)
   )
   AND (c.project_id IS NULL OR EXISTS (
     SELECT 1
     FROM projects p
     WHERE p.id = c.project_id
-      AND p.organization_id = $1::text
+      AND p.organization_id = $2::text
       AND p.deleted IS FALSE
   ))
 `
 
 type GetAuthClientRegistrationParams struct {
+	ProjectID      uuid.NullUUID
 	OrganizationID string
 	ID             uuid.UUID
-	ProjectID      uuid.NullUUID
 }
 
 type GetAuthClientRegistrationRow struct {
@@ -407,7 +411,7 @@ type GetAuthClientRegistrationRow struct {
 // An OAuth registration a new remote_session or service_account client may
 // the organization, or platform-global.
 func (q *Queries) GetAuthClientRegistration(ctx context.Context, arg GetAuthClientRegistrationParams) (GetAuthClientRegistrationRow, error) {
-	row := q.db.QueryRow(ctx, getAuthClientRegistration, arg.OrganizationID, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getAuthClientRegistration, arg.ProjectID, arg.OrganizationID, arg.ID)
 	var i GetAuthClientRegistrationRow
 	err := row.Scan(
 		&i.ID,
@@ -546,19 +550,28 @@ const isUserSessionClientOfIssuer = `-- name: IsUserSessionClientOfIssuer :one
 SELECT EXISTS (
   SELECT 1
   FROM user_session_clients AS c
+  LEFT JOIN projects AS p
+    ON p.id = c.project_id
   WHERE c.id = $1
     AND c.user_session_issuer_id = $2
     AND c.deleted IS FALSE
+    AND (
+      (c.project_id IS NULL AND c.organization_id = $3::text)
+      OR (p.organization_id = $3::text AND p.deleted IS FALSE)
+    )
 )::boolean AS is_client
 `
 
 type IsUserSessionClientOfIssuerParams struct {
 	ID                  uuid.UUID
 	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
 }
 
+// A live client of the issuer, in the organization: its own, or one of a
+// live project's.
 func (q *Queries) IsUserSessionClientOfIssuer(ctx context.Context, arg IsUserSessionClientOfIssuerParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isUserSessionClientOfIssuer, arg.ID, arg.UserSessionIssuerID)
+	row := q.db.QueryRow(ctx, isUserSessionClientOfIssuer, arg.ID, arg.UserSessionIssuerID, arg.OrganizationID)
 	var is_client bool
 	err := row.Scan(&is_client)
 	return is_client, err
@@ -1131,6 +1144,22 @@ func (q *Queries) LockIssuanceProfile(ctx context.Context, arg LockIssuanceProfi
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const lockIssuanceProfileCaller = `-- name: LockIssuanceProfileCaller :exec
+SELECT pg_advisory_xact_lock(hashtextextended('issuance_selection_profiles:' || $1::text || ':' || $2::text, 0))
+`
+
+type LockIssuanceProfileCallerParams struct {
+	UserSessionIssuerID string
+	CallerKey           string
+}
+
+// Serializes writes to one caller's profile on one sign-in, including the
+// first, which has no row to lock yet.
+func (q *Queries) LockIssuanceProfileCaller(ctx context.Context, arg LockIssuanceProfileCallerParams) error {
+	_, err := q.db.Exec(ctx, lockIssuanceProfileCaller, arg.UserSessionIssuerID, arg.CallerKey)
+	return err
 }
 
 const lockIssuanceProfileForCaller = `-- name: LockIssuanceProfileForCaller :one

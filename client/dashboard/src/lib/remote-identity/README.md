@@ -4,10 +4,11 @@ Models, hooks, and components for one idea: **a remote identity provider is a
 complete, working configuration for signing into an upstream service** — not
 the two or three records we happen to store it in.
 
-It also owns the alternative to that: the static credential an administrator
-sets up when nobody is signing in as themselves (a shared credential), and the
-absence of both (Manual). Those three are one choice, so they live
-together.
+It also owns the alternative to that: the shared credential an administrator
+sets up when nobody is signing in as themselves, either a static credential
+(stored headers such as an API key) or a service account (an OAuth client that
+gets its own token), and the absence of both (Manual). Those three are one
+choice, so they live together.
 
 ## The modelling claim
 

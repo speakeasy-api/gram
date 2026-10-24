@@ -1,3 +1,4 @@
+import { DENIED_PASS_THROUGH_SOURCES } from "@/lib/remote-identity/drafts/headerDrafts";
 import type { AuthClientHeader } from "@gram/client/models/components/authclientheader.js";
 import type { AuthClientHeaderInput } from "@gram/client/models/components/authclientheaderinput.js";
 
@@ -5,15 +6,24 @@ import type { AuthClientHeaderInput } from "@gram/client/models/components/authc
 export type HeaderDraft = {
   key: string;
   name: string;
+  description: string;
   /** A stored value, or the caller's request header it is copied from. */
   source: "stored" | "forwarded";
-  /** The new value; empty on a secret that keeps its stored one. */
+  /** The new value; empty on a header that keeps its stored one. */
   value: string;
   fromHeader: string;
   isSecret: boolean;
-  /** The header already stores a secret, so leaving value empty keeps it. */
-  keepsStored: boolean;
+  /**
+   * The name the header's stored value is saved under. The value is kept by
+   * name, so leaving value empty keeps it only while the name still matches.
+   */
+  storedName: string | null;
 };
+
+/** A header name's identity: names match regardless of case, and '_' matches '-'. */
+function headerKey(name: string): string {
+  return name.trim().toLowerCase().replaceAll("_", "-");
+}
 
 export function newHeaderDraft(
   source: HeaderDraft["source"],
@@ -22,11 +32,12 @@ export function newHeaderDraft(
   return {
     key: crypto.randomUUID(),
     name,
+    description: "",
     source,
     value: "",
     fromHeader: "",
     isSecret: source === "stored",
-    keepsStored: false,
+    storedName: null,
   };
 }
 
@@ -37,18 +48,29 @@ export function headerDraftsFrom(headers: AuthClientHeader[]): HeaderDraft[] {
     return {
       key: crypto.randomUUID(),
       name: header.name,
+      description: header.description ?? "",
       source: forwarded ? "forwarded" : "stored",
       value: "",
       fromHeader: header.valueFromRequestHeader ?? "",
       isSecret: header.isSecret,
-      keepsStored: header.isSecret && header.hasStoredValue,
+      storedName: !forwarded && header.hasStoredValue ? header.name : null,
     };
   });
+}
+
+/** Whether leaving the value empty keeps the header's stored value. */
+export function keepsStoredValue(draft: HeaderDraft): boolean {
+  return (
+    draft.source === "stored" &&
+    draft.storedName !== null &&
+    headerKey(draft.storedName) === headerKey(draft.name)
+  );
 }
 
 export function headerInputs(drafts: HeaderDraft[]): AuthClientHeaderInput[] {
   return drafts.map((draft) => ({
     name: draft.name.trim(),
+    description: draft.description.trim() || undefined,
     isSecret: draft.source === "stored" && draft.isSecret,
     isRequired: draft.source === "forwarded",
     value: draft.source === "stored" && draft.value ? draft.value : undefined,
@@ -69,17 +91,31 @@ export function headerDraftProblem(
   for (const draft of drafts) {
     const name = draft.name.trim();
     if (!name) return "Every header needs a name.";
-    const key = name.toLowerCase().replaceAll("_", "-");
+    const key = headerKey(name);
     if (names.has(key)) return `“${name}” is listed twice.`;
     names.add(key);
     if (generatesAuthorization(clientType) && key === "authorization") {
       return "Sign-in produces the Authorization header, so it cannot be set here.";
     }
-    if (draft.source === "forwarded" && !draft.fromHeader.trim()) {
-      return `Say which of the caller's headers “${name}” is copied from.`;
+    if (key === "set-cookie" || key === "proxy-authorization") {
+      return `“${name}” is reserved and cannot be sent upstream.`;
     }
-    if (draft.source === "stored" && !draft.value && !draft.keepsStored) {
-      return `Enter a value for “${name}”.`;
+    if (draft.source === "forwarded") {
+      const from = draft.fromHeader.trim();
+      if (!from) {
+        return `Say which of the caller's headers “${name}” is copied from.`;
+      }
+      if (DENIED_PASS_THROUGH_SOURCES.has(headerKey(from))) {
+        return `The caller's “${from}” header is never forwarded upstream. Have callers send the value in a header of its own.`;
+      }
+      if (key === "cookie") {
+        return "Cookie can only hold a stored value.";
+      }
+    }
+    if (draft.source === "stored" && !draft.value && !keepsStoredValue(draft)) {
+      return draft.storedName === null
+        ? `Enter a value for “${name}”.`
+        : `Enter a value for “${name}”: the stored value stays with the name “${draft.storedName}”.`;
     }
   }
   if (

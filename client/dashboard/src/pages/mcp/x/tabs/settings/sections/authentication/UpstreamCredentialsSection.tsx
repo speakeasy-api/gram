@@ -124,7 +124,8 @@ export function UpstreamCredentialsSection({
                   ) : null}
                 </AuthRow>
               )}
-              {mcpServer.userSessionIssuerId ? (
+              {mcpServer.userSessionIssuerId &&
+              query.data.requiresUpstreamAuth !== false ? (
                 <HeadlessCallersSection
                   mcpServerId={mcpServer.id}
                   userSessionIssuerId={mcpServer.userSessionIssuerId}

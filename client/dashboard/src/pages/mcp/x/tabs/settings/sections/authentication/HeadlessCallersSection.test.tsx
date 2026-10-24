@@ -11,7 +11,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@gram/client/react-query/issuanceProfiles.js", () => ({
   invalidateAllIssuanceProfiles: () => Promise.resolve(),
-  useIssuanceProfiles: () => ({ data: { items: mocks.profiles } }),
+  useIssuanceProfiles: () => ({
+    data: { items: mocks.profiles },
+    isSuccess: true,
+  }),
 }));
 
 vi.mock("@gram/client/react-query/setIssuanceProfile.js", () => ({
@@ -21,12 +24,13 @@ vi.mock("@gram/client/react-query/setIssuanceProfile.js", () => ({
   }),
 }));
 
-vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
-  useUserSessionClients: () => ({
-    data: {
-      result: { items: [{ id: "usc-1", clientName: "Nightly report job" }] },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({ userSessionClients: { list: () => undefined } }),
+}));
+
+vi.mock("@/components/sessions/collectPageItems", () => ({
+  collectPageItems: () =>
+    Promise.resolve([{ id: "usc-1", clientName: "Nightly report job" }]),
 }));
 
 vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
@@ -119,10 +123,25 @@ describe("HeadlessCallersSection", () => {
   });
 
   it("offers no changes to members who cannot manage credentials", () => {
+    mocks.profiles = [
+      {
+        id: "p-1",
+        name: "Nightly report job",
+        userSessionIssuerId: "usi-1",
+        userSessionClientId: "usc-1",
+        choices: [{ mcpServerId: "server-1", authClientId: "ac-token" }],
+        updatedAt: new Date(),
+      },
+    ];
     renderSection(false);
 
     expect(
       screen.queryByRole("button", { name: "Choose for an app" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Remove the choice for Nightly report job",
+      }),
     ).toBeNull();
   });
 });

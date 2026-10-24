@@ -49,6 +49,17 @@ const (
 	AuthClientTypeEMA              = "ema"
 )
 
+// IsSharedAuthClientType reports whether clientType serves every caller with
+// one credential that belongs to nobody, as opposed to a person's own
+// connection or identity-provider sign-in.
+func IsSharedAuthClientType(clientType string) bool {
+	switch clientType {
+	case AuthClientTypeServiceAccount, AuthClientTypeStaticCredential, AuthClientTypePassThrough:
+		return true
+	}
+	return false
+}
+
 var validAuthClientTypes = map[string]bool{
 	AuthClientTypeRemoteSession:    true,
 	AuthClientTypeServiceAccount:   true,

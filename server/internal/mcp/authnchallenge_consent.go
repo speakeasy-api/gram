@@ -804,7 +804,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 		showToolsIsland = !lockedDown
 	}
-	if approvalError == nil && upstreamAuth != nil && (upstreamAuth.Status == consentAuthNoAccess || upstreamAuth.Status == consentAuthSetupIncomplete) {
+	// With an agent to approve for, the submission judges the chosen
+	// subject's credential, so the person's own status does not block it.
+	if approvalError == nil && !agentSelectionEnabled && upstreamAuth != nil && (upstreamAuth.Status == consentAuthNoAccess || upstreamAuth.Status == consentAuthSetupIncomplete) {
 		approvalError = &consentApprovalError{Message: upstreamAuth.Problem(), ActionURL: "", ActionLabel: ""}
 		if upstreamAuth.Status == consentAuthNoAccess {
 			approvalError.ActionURL = s.requestAccessURL(ctx, endpoint.McpServerID.UUID.String(), endpoint.Slug)

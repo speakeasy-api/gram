@@ -25,6 +25,7 @@ FROM upstream_client_selections AS sel
 WHERE sel.credential_kind = 'execution_profile_version'
   AND sel.credential_id = $2::uuid
   AND sel.organization_id = $3
+  AND sel.project_id = $4
   AND sel.deleted IS FALSE
 `
 
@@ -32,12 +33,18 @@ type CopyProfileVersionChoicesParams struct {
 	ToVersionID    uuid.UUID
 	FromVersionID  uuid.UUID
 	OrganizationID string
+	ProjectID      uuid.UUID
 }
 
 // Carries every choice of one version into the next, so a new version never
 // changes a choice a turn already used.
 func (q *Queries) CopyProfileVersionChoices(ctx context.Context, arg CopyProfileVersionChoicesParams) error {
-	_, err := q.db.Exec(ctx, copyProfileVersionChoices, arg.ToVersionID, arg.FromVersionID, arg.OrganizationID)
+	_, err := q.db.Exec(ctx, copyProfileVersionChoices,
+		arg.ToVersionID,
+		arg.FromVersionID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -54,7 +61,8 @@ FROM upstream_client_selections AS sel
 WHERE sel.credential_kind = 'execution_profile_version'
   AND sel.credential_id = $2::uuid
   AND sel.organization_id = $3
-  AND sel.mcp_server_id <> $4::uuid
+  AND sel.project_id = $4
+  AND sel.mcp_server_id <> $5::uuid
   AND sel.deleted IS FALSE
 `
 
@@ -62,6 +70,7 @@ type CopyProfileVersionChoicesExceptParams struct {
 	ToVersionID       uuid.UUID
 	FromVersionID     uuid.UUID
 	OrganizationID    string
+	ProjectID         uuid.UUID
 	ExceptMcpServerID uuid.UUID
 }
 
@@ -72,6 +81,7 @@ func (q *Queries) CopyProfileVersionChoicesExcept(ctx context.Context, arg CopyP
 		arg.ToVersionID,
 		arg.FromVersionID,
 		arg.OrganizationID,
+		arg.ProjectID,
 		arg.ExceptMcpServerID,
 	)
 	return err
@@ -102,6 +112,20 @@ func (q *Queries) CreateProfileVersion(ctx context.Context, arg CreateProfileVer
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const disableAuthClientFixture = `-- name: DisableAuthClientFixture :exec
+UPDATE mcp_auth_clients SET enabled = FALSE WHERE id = $1 AND organization_id = $2
+`
+
+type DisableAuthClientFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DisableAuthClientFixture(ctx context.Context, arg DisableAuthClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, disableAuthClientFixture, arg.ID, arg.OrganizationID)
+	return err
 }
 
 const ensureProfile = `-- name: EnsureProfile :exec
@@ -840,6 +864,39 @@ func (q *Queries) SeedRemoteSessionIssuerFixture(ctx context.Context, arg SeedRe
 		arg.ProjectID,
 		arg.Slug,
 		arg.Issuer,
+	)
+	return err
+}
+
+const seedTriggerBindingFixture = `-- name: SeedTriggerBindingFixture :exec
+INSERT INTO trigger_workload_bindings (
+  organization_id, project_id, project_ref_organization_id, project_ref_id,
+  original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
+  original_assistant_binding_id, assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id,
+  assistant_binding_generation, original_workload_issuer_id, subject, generation
+)
+SELECT $1, $2, $1, $2,
+       $3, $1, $2, $3,
+       ab.id, $1, $2, ab.id,
+       ab.generation, generate_uuidv7(), 'workload', 1
+FROM assistant_agent_bindings AS ab
+WHERE ab.assistant_id = $4 AND ab.deleted IS FALSE
+`
+
+type SeedTriggerBindingFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TriggerID      uuid.UUID
+	AssistantID    uuid.NullUUID
+}
+
+// Binds a trigger to an assistant's existing agent binding.
+func (q *Queries) SeedTriggerBindingFixture(ctx context.Context, arg SeedTriggerBindingFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedTriggerBindingFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.TriggerID,
+		arg.AssistantID,
 	)
 	return err
 }

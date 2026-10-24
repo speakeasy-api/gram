@@ -149,6 +149,8 @@ type EnsureManagedAssistantPayload struct {
 	ProjectSlugInput *string
 }
 
+type ExecutionProfileChoiceSource string
+
 // A credential a server offers that the profile's turns can use.
 type ExecutionProfileOption struct {
 	// The auth client.
@@ -170,7 +172,10 @@ type ExecutionProfileServer struct {
 	AuthClientID *string
 	// How the choice was made: admin, issuance, backfill, or automatic for one the
 	// next turn makes on its own.
-	Source *string
+	Source *ExecutionProfileChoiceSource
+	// Whether the server was decided to need no upstream authentication, so
+	// no-auth can be chosen.
+	NoAuthAllowed bool
 	// Why a server without a choice gets none on its own.
 	GapReason *string
 	// The credentials that can be chosen.

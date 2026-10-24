@@ -2831,6 +2831,9 @@ type ExecutionProfileServerResponseBody struct {
 	// How the choice was made: admin, issuance, backfill, or automatic for one the
 	// next turn makes on its own.
 	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Whether the server was decided to need no upstream authentication, so
+	// no-auth can be chosen.
+	NoAuthAllowed *bool `form:"no_auth_allowed,omitempty" json:"no_auth_allowed,omitempty" xml:"no_auth_allowed,omitempty"`
 	// Why a server without a choice gets none on its own.
 	GapReason *string `form:"gap_reason,omitempty" json:"gap_reason,omitempty" xml:"gap_reason,omitempty"`
 	// The credentials that can be chosen.
@@ -8927,11 +8930,19 @@ func ValidateExecutionProfileServerResponseBody(body *ExecutionProfileServerResp
 	if body.Options == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("options", "body"))
 	}
+	if body.NoAuthAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("no_auth_allowed", "body"))
+	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	if body.AuthClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	if body.Source != nil {
+		if !(*body.Source == "admin" || *body.Source == "issuance" || *body.Source == "backfill" || *body.Source == "automatic") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"admin", "issuance", "backfill", "automatic"}))
+		}
 	}
 	if body.GapReason != nil {
 		if !(*body.GapReason == "selection_required" || *body.GapReason == "personal_requires_user" || *body.GapReason == "no_client" || *body.GapReason == "setup_incomplete" || *body.GapReason == "upstream_auth_undecided") {

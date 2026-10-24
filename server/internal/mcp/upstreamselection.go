@@ -348,7 +348,14 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 	if selector, err := s.agentKeySelectorFor(ctx, authentication.endpoint); err != nil {
 		return none, true, oops.E(oops.CodeUnexpected, err, "load agent key credential choice").LogError(ctx, s.logger)
 	} else if selector != nil {
-		return s.enforceAuthClient(ctx, w, authentication, selector)
+		choice, handled, err := s.enforceAuthClient(ctx, w, authentication, selector)
+		if handled || err != nil {
+			return choice, true, err
+		}
+		// A key's choice is served only through the typed resolver, never by
+		// the issuer's credentials.
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key choice unusable", issuerGateReasonUpstreamSelectionUnavailable)
+		return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
 	}
 	authenticated, ok := principalcredential.FromContext(ctx)
 	if !ok {
@@ -557,7 +564,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 			}
 			// An enforced choice that names no auth client is a gap, never
 			// served by the upstream client choice; a profile has none.
-			if c.profile || (c.enforced && res.clientID == uuid.Nil) {
+			if c.profile || c.onlyChosen || (c.enforced && res.clientID == uuid.Nil) {
 				res.outcome = authClientGap
 				resolved[id] = res
 				continue
@@ -594,7 +601,9 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 			continue
 		}
 		if c.onlyChosen {
-			if _, ok := resolved[member.serverID]; !ok || err != nil {
+			// A failed read degrades every member rather than letting one the
+			// key has a choice for fall back to the issuer's credentials.
+			if _, ok := resolved[member.serverID]; !ok && err == nil {
 				continue
 			}
 			c.mu.Lock()

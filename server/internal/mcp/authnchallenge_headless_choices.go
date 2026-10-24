@@ -142,22 +142,33 @@ func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *Resolve
 		return nil, nil, err
 	}
 
+	// Every target server's options are read once, then decided per server.
+	options, err := s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, nil, nil, true)
+	if err != nil {
+		return nil, nil, fmt.Errorf("decide server credentials: %w", err)
+	}
 	upstreamPicks := map[uuid.UUID]uuid.UUID{}
 	authClientPicks := map[uuid.UUID]uuid.UUID{}
 	for _, server := range servers {
+		auth := options[server.id]
+		if auth == nil {
+			return nil, nil, setupRequired("a server's upstream sign-in is not set up")
+		}
+		if err := s.headlessReadiness(ctx, endpoint, subject, server, auth); err != nil {
+			return nil, nil, err
+		}
 		choice, named := requested[server.id]
 		var selected *consentAuthClientOption
-		var err error
 		if profileChoice, ok := configured[server.id]; ok && !named {
-			selected, err = s.decideHeadlessChoice(ctx, endpoint, subject, server, profileChoice, true)
+			selected, err = decideHeadlessChoice(server, auth, profileChoice, true)
 			// A profile's choice that no longer validates, because the
 			// credential was withdrawn or the subject lost access, gives way
 			// to the choice the caller would get without a profile.
 			if _, stale := errors.AsType[*oops.OAuthError](err); stale {
-				selected, err = s.decideHeadlessChoice(ctx, endpoint, subject, server, choice, false)
+				selected, err = decideHeadlessChoice(server, auth, choice, false)
 			}
 		} else {
-			selected, err = s.decideHeadlessChoice(ctx, endpoint, subject, server, choice, named)
+			selected, err = decideHeadlessChoice(server, auth, choice, named)
 		}
 		if err != nil {
 			return nil, nil, err
@@ -229,18 +240,10 @@ func (s *Service) issuanceProfileChoices(ctx context.Context, endpoint *Resolved
 }
 
 // decideHeadlessChoice validates a named choice for one server, or, with none
-// named, takes the server's only ready credential the subject may use. It
-// returns nil for no upstream authentication.
-func (s *Service) decideHeadlessChoice(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, server consentAuthServer, choice headlessChoice, named bool) (*consentAuthClientOption, error) {
-	choices, err := s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, []consentAuthServer{server}, nil, nil, true)
-	if err != nil {
-		return nil, fmt.Errorf("decide server credentials: %w", err)
-	}
-	auth := choices[server.id]
-	if err := s.headlessReadiness(ctx, endpoint, subject, server, auth); err != nil {
-		return nil, err
-	}
-
+// named, takes the server's only ready credential the subject may use. auth
+// is the server's options with their headless readiness. It returns nil for
+// no upstream authentication.
+func decideHeadlessChoice(server consentAuthServer, auth *consentServerAuth, choice headlessChoice, named bool) (*consentAuthClientOption, error) {
 	switch auth.Status {
 	case consentAuthNoAuth:
 		if named && choice.clientID.Valid {

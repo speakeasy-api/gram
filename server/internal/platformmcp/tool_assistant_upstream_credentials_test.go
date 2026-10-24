@@ -17,10 +17,14 @@ import (
 
 type assistantExecutionProfileManagementStub struct {
 	assistantIdentityManagementFunc
-	set func(context.Context, *genassistants.SetExecutionProfileChoicePayload) (*genassistants.AssistantExecutionProfile, error)
+	set    func(context.Context, *genassistants.SetExecutionProfileChoicePayload) (*genassistants.AssistantExecutionProfile, error)
+	listed *string
 }
 
 func (s assistantExecutionProfileManagementStub) ListExecutionProfiles(_ context.Context, p *genassistants.ListExecutionProfilesPayload) (*genassistants.ListExecutionProfilesResult, error) {
+	if s.listed != nil {
+		*s.listed = p.AssistantID
+	}
 	return &genassistants.ListExecutionProfilesResult{Profiles: []*genassistants.AssistantExecutionProfile{{
 		TriggerInstanceID: "trigger", TriggerName: "Dashboard", ExecutionContext: "userless", Version: 2,
 		Servers: []*genassistants.ExecutionProfileServer{{McpServerID: "server", Chosen: false, GapReason: new("selection_required"), Options: []*genassistants.ExecutionProfileOption{{AuthClientID: "ac", Name: "Shared token", ClientType: "static_credential"}}}},
@@ -39,25 +43,38 @@ func TestAssistantUpstreamCredentialChoice(t *testing.T) {
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), auth, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	calls := 0
 	var endpointErr error
+	listed := ""
 	service := &AssistantIdentityService{
 		organizations: riskMutationOrganizationResolver{slug: "test-org"},
 		resolveProject: func(_ context.Context, _ string, in FindMCPInput) (ResolvedProject, error) {
 			require.Equal(t, projectID.String(), in.ProjectID)
 			return ResolvedProject{ID: projectID, Slug: "exact-project"}, nil
 		},
-		management: assistantExecutionProfileManagementStub{set: func(ctx context.Context, p *genassistants.SetExecutionProfileChoicePayload) (*genassistants.AssistantExecutionProfile, error) {
+		management: assistantExecutionProfileManagementStub{listed: &listed, set: func(ctx context.Context, p *genassistants.SetExecutionProfileChoicePayload) (*genassistants.AssistantExecutionProfile, error) {
 			calls++
 			scoped, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
 			require.Equal(t, projectID, *scoped.ProjectID)
-			require.Equal(t, clientID.String(), *p.AuthClientID)
-			require.Nil(t, p.NoAuth)
-			require.Nil(t, p.Automatic)
+			require.Equal(t, assistantID.String(), p.AssistantID, "the exact assistant is changed")
 			require.Equal(t, int64(2), p.ExpectedVersion)
+			selected := 0
+			if p.AuthClientID != nil {
+				require.Equal(t, clientID.String(), *p.AuthClientID)
+				selected++
+			}
+			if p.NoAuth != nil {
+				require.True(t, *p.NoAuth)
+				selected++
+			}
+			if p.Automatic != nil {
+				require.True(t, *p.Automatic)
+				selected++
+			}
+			require.Equal(t, 1, selected, "exactly one mode is sent")
 			if endpointErr != nil {
 				return nil, endpointErr
 			}
-			return &genassistants.AssistantExecutionProfile{TriggerInstanceID: p.TriggerInstanceID, TriggerName: "Dashboard", ExecutionContext: p.ExecutionContext, Version: 3, Servers: []*genassistants.ExecutionProfileServer{{McpServerID: p.McpServerID, Chosen: true, AuthClientID: p.AuthClientID, Source: new("admin"), Options: []*genassistants.ExecutionProfileOption{}}}}, nil
+			return &genassistants.AssistantExecutionProfile{TriggerInstanceID: p.TriggerInstanceID, TriggerName: "Dashboard", ExecutionContext: p.ExecutionContext, Version: 3, Servers: []*genassistants.ExecutionProfileServer{{McpServerID: p.McpServerID, Chosen: true, AuthClientID: p.AuthClientID, Source: new(genassistants.ExecutionProfileChoiceSource("admin")), Options: []*genassistants.ExecutionProfileOption{}}}}, nil
 		}},
 	}
 
@@ -66,16 +83,27 @@ func TestAssistantUpstreamCredentialChoice(t *testing.T) {
 	require.Len(t, preview.Profiles, 1)
 	require.Equal(t, "selection_required", preview.Profiles[0].Servers[0].GapReason)
 	require.Equal(t, 0, calls)
+	require.Equal(t, assistantID.String(), listed, "the exact assistant is read")
 
 	input := ChooseAssistantUpstreamCredentialInput{
 		ProjectID: projectID.String(), AssistantID: assistantID.String(), TriggerInstanceID: triggerID.String(), ExecutionContext: "userless",
-		McpServerID: serverID.String(), AuthClientID: clientID.String(), ExpectedVersion: 2, Confirmed: true,
+		McpServerID: serverID.String(), AuthClientID: clientID.String(), ExpectedVersion: new(int64(2)), Confirmed: true,
 	}
 	out, err := service.chooseUpstreamCredential(ctx, principal, input)
 	require.NoError(t, err)
 	require.Equal(t, int64(3), out.Profiles[0].Version)
 	require.Equal(t, clientID.String(), out.Profiles[0].Servers[0].AuthClientID)
 	require.Nil(t, auth.ProjectID, "the caller's context is not changed")
+
+	for _, mode := range []func(*ChooseAssistantUpstreamCredentialInput){
+		func(in *ChooseAssistantUpstreamCredentialInput) { in.AuthClientID, in.NoAuth = "", true },
+		func(in *ChooseAssistantUpstreamCredentialInput) { in.AuthClientID, in.Automatic = "", true },
+	} {
+		other := input
+		mode(&other)
+		_, err := service.chooseUpstreamCredential(ctx, principal, other)
+		require.NoError(t, err)
+	}
 
 	for _, code := range []oops.Code{oops.CodeConflict, oops.CodeForbidden} {
 		endpointErr = oops.C(code)
@@ -90,6 +118,9 @@ func TestAssistantUpstreamCredentialChoice(t *testing.T) {
 		func(in *ChooseAssistantUpstreamCredentialInput) { in.ExecutionContext = "owner" },
 		func(in *ChooseAssistantUpstreamCredentialInput) { in.TriggerInstanceID = "invalid" },
 		func(in *ChooseAssistantUpstreamCredentialInput) { in.ProjectID = "" },
+		func(in *ChooseAssistantUpstreamCredentialInput) { in.ExpectedVersion = nil },
+		func(in *ChooseAssistantUpstreamCredentialInput) { in.McpServerID = uuid.Nil.String() },
+		func(in *ChooseAssistantUpstreamCredentialInput) { in.TriggerInstanceID = uuid.Nil.String() },
 	} {
 		bad := input
 		invalid(&bad)

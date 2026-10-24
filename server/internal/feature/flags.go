@@ -11,6 +11,13 @@ const (
 	// create or update nl-type risk policies and have them enforced. The
 	// dashboard gates the matching UI behind the same key.
 	FlagPromptPolicies Flag = "gram-prompt-policies"
+	// FlagToolApprovals gates creating require_approval risk policies (tool
+	// approvals) and the dashboard's approval wizard and Tool approvals tab.
+	// Evaluated server-side on policy create and update and in the dashboard;
+	// targeted by PostHog organization group (org slug). Fails closed. Existing
+	// approval policies keep enforcing and their requests stay decidable when
+	// the flag is off. Removed once tool approvals are GA.
+	FlagToolApprovals Flag = "risk-tool-approvals"
 	// FlagBudgets gates the Budgets (spend control) rollout end to end with
 	// one key: the dashboard hides the Budgets tab on the Costs page behind
 	// it, and the background spend-rule evaluator skips organizations

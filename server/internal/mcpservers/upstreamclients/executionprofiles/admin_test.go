@@ -122,3 +122,53 @@ func TestSetChoiceRefusesAChangeDecidedFromAnOldVersion(t *testing.T) {
 	err := SetChoice(t.Context(), f.pool, f.target(ContextUserless), server, stale, func(context.Context, pgx.Tx, *Choice) error { return nil })
 	require.ErrorIs(t, err, ErrVersionChanged)
 }
+
+func TestSetChoiceRecordsNoAuthForAServerThatNeedsNone(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	open := f.server(pgtype.Bool{Bool: false, Valid: true})
+	f.bind(ContextUserless)
+
+	view, err := Describe(t.Context(), f.pool, f.target(ContextUserless))
+	require.NoError(t, err)
+	require.True(t, view.Servers[0].NoAuthAllowed)
+
+	_, err = f.setChoice(ContextUserless, open, ChoiceInput{NoAuth: true})
+	require.NoError(t, err)
+	next := f.bind(ContextUserless)
+	rows, err := f.q.ListVersionChoicesFixture(t.Context(), next.VersionID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.True(t, rows[0].NoAuth, "the no-auth choice carries into later versions")
+}
+
+func TestDescribeReportsAChoiceWhoseClientWasWithdrawn(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server := f.server(pgtype.Bool{Bool: true, Valid: true})
+	f.authClient(server, typeStaticCredential, uuid.Nil)
+	chosen := f.authClient(server, typeStaticCredential, uuid.Nil)
+	f.bind(ContextUserless)
+	_, err := f.setChoice(ContextUserless, server, client(chosen))
+	require.NoError(t, err)
+	require.NoError(t, f.q.DisableAuthClientFixture(t.Context(), DisableAuthClientFixtureParams{ID: chosen, OrganizationID: f.orgID}))
+
+	view, err := Describe(t.Context(), f.pool, f.target(ContextUserless))
+	require.NoError(t, err)
+	require.NotNil(t, view.Servers[0].Choice)
+	require.NotNil(t, view.Servers[0].Gap, "a disabled client serves nothing")
+	require.Equal(t, GapNoClient, *view.Servers[0].Gap)
+}
+
+func TestSetChoiceReportsTheAutomaticChoiceItReplaces(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server := f.server(pgtype.Bool{Bool: true, Valid: true})
+	only := f.authClient(server, typeStaticCredential, uuid.Nil)
+
+	previous, err := f.setChoice(ContextUserless, server, ChoiceInput{Clear: true})
+	require.NoError(t, err)
+	require.NotNil(t, previous)
+	require.Equal(t, SourceAutomatic, previous.Source)
+	require.Equal(t, uuid.NullUUID{UUID: only, Valid: true}, previous.AuthClientID)
+}

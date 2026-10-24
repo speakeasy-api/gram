@@ -7,7 +7,6 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useRBAC } from "@/hooks/useRBAC";
 import { clientTypeLabel } from "@/lib/auth-clients";
 import type { AssistantExecutionProfile } from "@gram/client/models/components/assistantexecutionprofile.js";
 import type { ExecutionProfileServer } from "@gram/client/models/components/executionprofileserver.js";
@@ -46,12 +45,13 @@ const GAP_LABELS: Record<string, string> = {
  */
 export function AssistantUpstreamCredentials({
   assistantId,
+  canWrite,
 }: {
   assistantId: string;
+  /** Whether the viewer may change this assistant's credentials. */
+  canWrite: boolean;
 }): JSX.Element | null {
   const gramProject = useProjectSlugForRequests();
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("assistant:write");
   const profiles = useAssistantExecutionProfiles(
     { assistantId, gramProject },
     undefined,
@@ -139,7 +139,8 @@ function ProfileCard({
 }
 
 function choiceValue(server: ExecutionProfileServer): string {
-  if (!server.chosen || server.source === AUTOMATIC) return AUTOMATIC;
+  if (!server.chosen || server.executionProfileChoiceSource === AUTOMATIC)
+    return AUTOMATIC;
   return server.authClientId ?? NO_AUTH;
 }
 
@@ -163,12 +164,16 @@ function ServerChoice({
       toast.success("Saved");
       void invalidateAllAssistantExecutionProfiles(queryClient);
     },
-    onError: (error) =>
-      toast.error(error.message || "The change could not be saved. Try again."),
+    onError: (error) => {
+      toast.error(error.message || "The change could not be saved. Try again.");
+      // A conflict means the profile moved on; reload it so a retry uses the
+      // current version.
+      void invalidateAllAssistantExecutionProfiles(queryClient);
+    },
   });
   const automaticLabel = server.gapReason
     ? "Not chosen"
-    : server.source === AUTOMATIC
+    : server.executionProfileChoiceSource === AUTOMATIC
       ? `Automatic (${server.authClientId ? (server.options.find((o) => o.authClientId === server.authClientId)?.name ?? "one credential") : "no sign-in"})`
       : "Automatic";
 
@@ -215,9 +220,7 @@ function ServerChoice({
               {option.name} · {clientTypeLabel(option.clientType)}
             </SelectItem>
           ))}
-          {server.chosen &&
-          !server.authClientId &&
-          server.source !== AUTOMATIC ? (
+          {server.noAuthAllowed ? (
             <SelectItem value={NO_AUTH}>No upstream sign-in</SelectItem>
           ) : null}
         </SelectContent>
