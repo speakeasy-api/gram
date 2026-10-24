@@ -104,7 +104,7 @@ files or command output.
    does not copy or print assertion contents. A failed probe blocks creation
    with ownership guidance. Keep this ownership invariant during rotation.
    The image must provide `/bin/sh` for this check.
-   Its directory is mounted read-only so atomic token replacement remains
+   The assertion directory is mounted read-only so atomic token replacement remains
    visible. Each cold startup requires a new external
    subject: previously admitted subjects cannot authorize a new generation.
    Local development uses the
