@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net"
 	"net/url"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,9 +21,10 @@ import (
 
 // KitLocalBootstrap uses the verified Kit filesystem configuration contract. Secrets travel only through an in-memory archive into a stopped guest.
 type KitLocalBootstrap struct {
-	Model                                          string
-	AgentsMD, InferenceJSON, MCPJSON, GatewayToken []byte
-	MCPFiles                                       map[string][]byte
+	Model                            string
+	Workload                         *KitWorkloadBinding
+	AssertionFile, InferenceEndpoint string
+	AgentsMD, MCPJSON, GatewayToken  []byte
 }
 
 // KitLocalRuntimeConfig is local-only. Command, Args and Env must not contain
@@ -37,13 +39,14 @@ type KitLocalRuntimeConfig struct {
 	Env                     map[string]string
 	GuestPort               int
 	ServerURL               *url.URL
+	WorkloadAssertionFile   string
 	ExtraCACertFile         string
 	Network                 string
 	CompatibilityGeneration string
 	HomeOwnedByRuntimeUser  bool
-	// Bootstrap runs before every stopped-container start. Use PrepareKitStartupBootstrap
-	// to revoke/remint inference authority before provisioning; never return snapshot secrets.
+	// Bootstrap resolves fresh workload authority before every stopped-container start.
 	Bootstrap func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error)
+	Fence     func(context.Context, assistantRuntimeRecord) error
 	Protocol  func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error)
 	// Ready must perform authenticated ACP initialization, not container liveness.
 	Ready func(context.Context, assistantRuntimeRecord, *url.URL) error
@@ -63,6 +66,8 @@ type kitLocalEngine interface {
 }
 
 type kitLocalContainerInfo struct {
+	AssertionDirectory            string
+	AssertionReadOnly             bool
 	ID, ImageID, User, HomeVolume string
 	Running                       bool
 	HostPort                      int
@@ -72,19 +77,22 @@ type kitLocalContainerSpec struct {
 	Name, Image, VolumeName string
 	Command, Args           []string
 	Labels, Env             map[string]string
+	WorkloadAssertionFile   string
 	ExtraCACertFile         string
 	Network                 string
 }
 
 type kitLocalRuntimeMetadata struct {
-	RuntimeVersion int16     `json:"runtime_version"`
-	RuntimeID      uuid.UUID `json:"runtime_id"`
-	AssistantID    uuid.UUID `json:"assistant_id"`
-	Generation     string    `json:"generation"`
-	ContainerID    string    `json:"container_id"`
-	ContainerName  string    `json:"container_name"`
-	HomeVolume     string    `json:"home_volume"`
-	HostPort       int       `json:"host_port"`
+	ProjectID      uuid.UUID           `json:"project_id"`
+	Workload       *KitWorkloadBinding `json:"workload,omitempty"`
+	RuntimeVersion int16               `json:"runtime_version"`
+	RuntimeID      uuid.UUID           `json:"runtime_id"`
+	AssistantID    uuid.UUID           `json:"assistant_id"`
+	Generation     string              `json:"generation"`
+	ContainerID    string              `json:"container_id"`
+	ContainerName  string              `json:"container_name"`
+	HomeVolume     string              `json:"home_volume"`
+	HostPort       int                 `json:"host_port"`
 }
 
 // KitLocalRuntimeBackend owns infrastructure only; the injected ACP adapter owns
@@ -105,8 +113,11 @@ func NewKitLocalRuntimeBackend(config KitLocalRuntimeConfig) (*KitLocalRuntimeBa
 	return newKitLocalRuntimeBackend(config, newDockerCLIEngine(config.GuestPort))
 }
 func newKitLocalRuntimeBackend(config KitLocalRuntimeConfig, engine kitLocalEngine) (*KitLocalRuntimeBackend, error) {
-	if config.Environment != "local" || config.Image == "" || len(config.Command) == 0 || config.Command[0] == "" || config.Args == nil || config.GuestPort < 1 || config.GuestPort > 65535 || config.ServerURL == nil || config.ServerURL.Hostname() == "" || config.CompatibilityGeneration == "" || !config.HomeOwnedByRuntimeUser || config.Bootstrap == nil || config.Protocol == nil || config.Ready == nil || engine == nil {
+	if config.Environment != "local" || config.Image == "" || len(config.Command) == 0 || config.Command[0] == "" || config.Args == nil || config.GuestPort < 1 || config.GuestPort > 65535 || config.ServerURL == nil || config.ServerURL.Hostname() == "" || config.CompatibilityGeneration == "" || !config.HomeOwnedByRuntimeUser || config.Bootstrap == nil || config.Fence == nil || config.Protocol == nil || config.Ready == nil || engine == nil {
 		return nil, fmt.Errorf("kit local requires local environment, image/command/args/port, server URL, generation, UID1000 HOME image contract, bootstrap, ACP protocol and authenticated readiness")
+	}
+	if err := validateKitLocalAssertionFile(config.WorkloadAssertionFile); err != nil {
+		return nil, err
 	}
 	if !kitGKEExplicitImage(config.Image) {
 		return nil, fmt.Errorf("kit local requires an explicit non-latest image tag or digest")
@@ -133,7 +144,7 @@ func newKitLocalRuntimeBackend(config KitLocalRuntimeConfig, engine kitLocalEngi
 	}
 	serverURL := *config.ServerURL
 	config.ServerURL = &serverURL
-	encoded, err := json.Marshal(map[string]any{"image": config.Image, "command": config.Command, "args": config.Args, "env": config.Env, "port": config.GuestPort, "ca": config.ExtraCACertFile, "network": config.Network})
+	encoded, err := json.Marshal(map[string]any{"image": config.Image, "command": config.Command, "args": config.Args, "env": config.Env, "port": config.GuestPort, "ca": config.ExtraCACertFile, "network": config.Network, "assertion_directory": filepath.Dir(config.WorkloadAssertionFile)})
 	if err != nil {
 		return nil, fmt.Errorf("encode kit local immutable spec: %w", err)
 	}
@@ -179,7 +190,7 @@ func (k *KitLocalRuntimeBackend) validate(r assistantRuntimeRecord) error {
 		return fmt.Errorf("decode kit local metadata: %w", err)
 	}
 	name, volume := kitLocalNames(r)
-	if m.RuntimeVersion != 3 || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.Generation != k.config.CompatibilityGeneration || m.ContainerName != name || m.HomeVolume != volume || m.ContainerID == "" {
+	if m.RuntimeVersion != 3 || m.RuntimeID != r.ID || m.ProjectID != r.ProjectID || m.AssistantID != r.AssistantID || m.Generation != k.config.CompatibilityGeneration || m.ContainerName != name || m.HomeVolume != volume || m.ContainerID == "" {
 		return fmt.Errorf("kit local saved metadata does not match runtime authority")
 	}
 	return nil
@@ -200,6 +211,9 @@ func (k *KitLocalRuntimeBackend) checkContainer(r assistantRuntimeRecord, info k
 	if info.ID == "" || info.User != "1000:1000" || info.HomeVolume != volume {
 		return fmt.Errorf("kit local container has invalid identity, user or HOME mount")
 	}
+	if info.AssertionDirectory != filepath.Dir(k.config.WorkloadAssertionFile) || !info.AssertionReadOnly {
+		return fmt.Errorf("kit local requires its exact read-only projected assertion directory")
+	}
 	if !kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
 		var m kitLocalRuntimeMetadata
 		if err := json.Unmarshal(r.BackendMetadataJSON, &m); err != nil {
@@ -213,7 +227,13 @@ func (k *KitLocalRuntimeBackend) checkContainer(r assistantRuntimeRecord, info k
 }
 func (k *KitLocalRuntimeBackend) metadata(r assistantRuntimeRecord, info kitLocalContainerInfo) ([]byte, error) {
 	name, volume := kitLocalNames(r)
-	b, err := json.Marshal(kitLocalRuntimeMetadata{RuntimeVersion: 3, RuntimeID: r.ID, AssistantID: r.AssistantID, Generation: k.config.CompatibilityGeneration, ContainerID: info.ID, ContainerName: name, HomeVolume: volume, HostPort: info.HostPort})
+	var previous kitLocalRuntimeMetadata
+	if len(r.BackendMetadataJSON) != 0 {
+		if err := json.Unmarshal(r.BackendMetadataJSON, &previous); err != nil {
+			return nil, fmt.Errorf("decode previous kit local metadata: %w", err)
+		}
+	}
+	b, err := json.Marshal(kitLocalRuntimeMetadata{ProjectID: r.ProjectID, Workload: previous.Workload, RuntimeVersion: 3, RuntimeID: r.ID, AssistantID: r.AssistantID, Generation: k.config.CompatibilityGeneration, ContainerID: info.ID, ContainerName: name, HomeVolume: volume, HostPort: info.HostPort})
 	if err != nil {
 		return nil, fmt.Errorf("encode kit local metadata: %w", err)
 	}
@@ -224,14 +244,21 @@ func (k *KitLocalRuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeR
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	startedID := ""
+	bootstrapped := false
 	defer func() {
-		if resultErr == nil || startedID == "" {
+		if resultErr == nil {
 			return
 		}
 		// Cancellation must not prevent stopping the exact incarnation started
 		// by this attempt. The janitor only reaps stopped containers.
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
+		if bootstrapped && k.config.Fence != nil {
+			resultErr = errors.Join(resultErr, k.config.Fence(cleanup, r))
+		}
+		if startedID == "" {
+			return
+		}
 		if err := k.engine.Stop(cleanup, startedID); err != nil {
 			resultErr = errors.Join(resultErr, fmt.Errorf("stop unready kit gateway: %w", err))
 		}
@@ -262,8 +289,23 @@ func (k *KitLocalRuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeR
 	if err != nil && !created {
 		return result, fmt.Errorf("inspect kit local container: %w", err)
 	}
+	if !created {
+		if err := k.checkContainer(r, info); err != nil {
+			return result, err
+		}
+		if info.ImageID != imageID {
+			return result, fmt.Errorf("kit local image changed; retire authority and use a new runtime generation")
+		}
+	}
+	if created || !info.Running {
+		// Withdraw the prior exact binding before a missing container can erase
+		// its metadata or a stopped process can receive new authority.
+		if err := k.config.Fence(ctx, r); err != nil {
+			return result, fmt.Errorf("fence prior kit local workload: %w", err)
+		}
+	}
 	if created {
-		spec := kitLocalContainerSpec{Name: name, Image: k.config.Image, VolumeName: volume, Command: k.config.Command, Args: k.config.Args, Labels: k.labels(r), Env: k.config.Env, ExtraCACertFile: k.config.ExtraCACertFile, Network: k.config.Network}
+		spec := kitLocalContainerSpec{Name: name, Image: k.config.Image, VolumeName: volume, Command: k.config.Command, Args: k.config.Args, Labels: k.labels(r), Env: k.config.Env, ExtraCACertFile: k.config.ExtraCACertFile, WorkloadAssertionFile: k.config.WorkloadAssertionFile, Network: k.config.Network}
 		if _, err := k.engine.CreateKit(ctx, spec); err != nil {
 			return result, fmt.Errorf("create kit local container: %w", err)
 		}
@@ -285,10 +327,18 @@ func (k *KitLocalRuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeR
 		if err != nil {
 			return result, fmt.Errorf("build kit bootstrap: %w", err)
 		}
-		if origin, err := kitInferenceOrigin(bootstrap.InferenceJSON); err != nil || origin != k.config.Env["SPEAKEASY_ORIGIN"] {
-			return result, fmt.Errorf("kit bootstrap inference origin does not match configured origin")
+		r.BackendMetadataJSON, err = json.Marshal(struct {
+			Workload *KitWorkloadBinding `json:"workload"`
+		}{bootstrap.Workload})
+		if err != nil {
+			return result, fmt.Errorf("encode kit local workload binding: %w", err)
 		}
+		bootstrapped = true
 		if err := validateKitLocalBootstrap(bootstrap); err != nil {
+			return result, err
+		}
+		r.BackendMetadataJSON, err = k.metadata(r, info)
+		if err != nil {
 			return result, err
 		}
 		if err := k.engine.CopyKitBootstrap(ctx, info.ID, bootstrap); err != nil {
@@ -345,7 +395,12 @@ func waitKitLocalListener(ctx context.Context, address string, dial func(context
 	}
 }
 
-func validateKitLocalBootstrap(b KitLocalBootstrap) error { return validateKitBootstrap(b) }
+func validateKitLocalBootstrap(b KitLocalBootstrap) error {
+	if b.AssertionFile != KitWorkloadAssertionPath {
+		return fmt.Errorf("kit local assertion path must match the external read-only projection")
+	}
+	return validateKitBootstrap(b)
+}
 
 func (k *KitLocalRuntimeBackend) endpoint(ctx context.Context, r assistantRuntimeRecord) (*url.URL, error) {
 	if err := k.validate(r); err != nil {
@@ -428,6 +483,11 @@ func (k *KitLocalRuntimeBackend) RecycleImage(ctx context.Context, r assistantRu
 func (k *KitLocalRuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecord) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
+	if k.config.Fence != nil {
+		if err := k.config.Fence(ctx, r); err != nil {
+			return err
+		}
+	}
 	info, exists, err := k.ownedContainer(ctx, r)
 	if err != nil || !exists {
 		return err
@@ -473,6 +533,11 @@ func (k *KitLocalRuntimeBackend) Reap(ctx context.Context, r assistantRuntimeRec
 	return k.reap(ctx, r)
 }
 func (k *KitLocalRuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecord) error {
+	if k.config.Fence != nil {
+		if err := k.config.Fence(ctx, r); err != nil {
+			return err
+		}
+	}
 	info, exists, err := k.ownedContainer(ctx, r)
 	if err != nil {
 		return err

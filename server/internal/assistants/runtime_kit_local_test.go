@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,7 +57,7 @@ func (f *fakeKitLocalEngine) CreateKitVolume(_ context.Context, _ string, labels
 func (f *fakeKitLocalEngine) CreateKit(_ context.Context, spec kitLocalContainerSpec) (string, error) {
 	f.calls = append(f.calls, "create")
 	f.spec = spec
-	f.info = kitLocalContainerInfo{ID: "container-id", ImageID: "sha256:test-image", User: "1000:1000", HomeVolume: spec.VolumeName, Labels: maps.Clone(spec.Labels)}
+	f.info = kitLocalContainerInfo{ID: "container-id", ImageID: "sha256:test-image", User: "1000:1000", HomeVolume: spec.VolumeName, AssertionDirectory: filepath.Dir(spec.WorkloadAssertionFile), AssertionReadOnly: true, Labels: maps.Clone(spec.Labels)}
 	return f.info.ID, nil
 }
 func (f *fakeKitLocalEngine) CopyKitBootstrap(_ context.Context, _ string, b KitLocalBootstrap) error {
@@ -109,9 +111,9 @@ func kitLocalFixture(t *testing.T) (*KitLocalRuntimeBackend, *fakeKitLocalEngine
 	t.Helper()
 	engine := &fakeKitLocalEngine{nextPort: 32100}
 	protocol := &fakeKitLocalProtocol{}
-	config := KitLocalRuntimeConfig{Environment: "local", Image: "example.invalid/kit:local", Command: []string{"/usr/local/bin/kit"}, Args: func() []string { _, args := KitGatewayCommand(8080); return args }(), GuestPort: 8080, ServerURL: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, CompatibilityGeneration: "local-generation-one", HomeOwnedByRuntimeUser: true,
+	config := KitLocalRuntimeConfig{Fence: func(context.Context, assistantRuntimeRecord) error { return nil }, WorkloadAssertionFile: "/operator/workload/assertion", Environment: "local", Image: "example.invalid/kit:local", Command: []string{"/usr/local/bin/kit"}, Args: func() []string { _, args := KitGatewayCommand(8080); return args }(), GuestPort: 8080, ServerURL: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, CompatibilityGeneration: "local-generation-one", HomeOwnedByRuntimeUser: true,
 		Bootstrap: func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error) {
-			return KitLocalBootstrap{AgentsMD: []byte("caller instructions"), InferenceJSON: []byte(`{"api_key":"gram_local_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","project":"test-project","email":null,"organization_id":null}`), MCPJSON: []byte(`{"mcpServers":{}}`), GatewayToken: []byte("private-test-token")}, nil
+			return kitTestWorkloadBootstrap(), nil
 		},
 		Protocol: func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) { return protocol, nil },
 		Ready: func(context.Context, assistantRuntimeRecord, *url.URL) error {
@@ -197,7 +199,7 @@ func TestKitLocalReadinessAndInjectionAreRequired(t *testing.T) {
 }
 func TestKitLocalRejectsForeignAuthority(t *testing.T) {
 	t.Parallel()
-	for _, field := range []string{"version", "assistant-label", "generation-label", "runtime-label", "volume-label", "saved-version", "saved-generation", "user", "mount", "container-id"} {
+	for _, field := range []string{"version", "assistant-label", "generation-label", "runtime-label", "volume-label", "saved-version", "saved-generation", "saved-project", "user", "mount", "assertion-source", "assertion-writable", "container-id"} {
 		t.Run(field, func(t *testing.T) {
 			t.Parallel()
 			k, engine, r, _ := kitLocalFixture(t)
@@ -218,6 +220,16 @@ func TestKitLocalRejectsForeignAuthority(t *testing.T) {
 				engine.volume["gram.ai/assistant-id"] = uuid.NewString()
 			case "saved-version":
 				r.BackendMetadataJSON = bytes.ReplaceAll(r.BackendMetadataJSON, []byte(`"runtime_version":3`), []byte(`"runtime_version":2`))
+			case "saved-project":
+				var metadata kitLocalRuntimeMetadata
+				require.NoError(t, json.Unmarshal(r.BackendMetadataJSON, &metadata))
+				metadata.ProjectID = uuid.New()
+				r.BackendMetadataJSON, err = json.Marshal(metadata)
+				require.NoError(t, err)
+			case "assertion-source":
+				engine.info.AssertionDirectory = "/other/projection"
+			case "assertion-writable":
+				engine.info.AssertionReadOnly = false
 			case "saved-generation":
 				r.BackendMetadataJSON = bytes.ReplaceAll(r.BackendMetadataJSON, []byte("local-generation-one"), []byte("other"))
 			case "user":
@@ -307,7 +319,7 @@ func TestKitLocalBootstrapTarPermissionsAndExactBytes(t *testing.T) {
 		require.NoError(t, err)
 		files[header.Name] = data
 	}
-	require.Equal(t, map[string][]byte{".kit/AGENTS.md": b.AgentsMD, ".kit/config.toml": []byte(kitFileConfig + "model = \"openai/gpt-4.1-mini\"\n"), ".kit/credentials/" + KitInferenceCredentialFilename: b.InferenceJSON, ".kit/credentials/mcp.json": b.MCPJSON, ".kit/credentials/gateway-token": b.GatewayToken}, files)
+	require.Equal(t, map[string][]byte{".kit/AGENTS.md": b.AgentsMD, ".kit/config.toml": []byte(kitBootstrapConfig(b)), ".kit/credentials/mcp.json": b.MCPJSON, ".kit/credentials/gateway-token": b.GatewayToken}, files)
 }
 func TestKitLocalDockerCreateUsesOnlyInjectedImageContract(t *testing.T) {
 	t.Parallel()
@@ -496,6 +508,111 @@ func TestKitLocalCredentialReplacementRemovesOmittedFiles(t *testing.T) {
 			if symlink {
 				require.FileExists(t, filepath.Join(outside, "revoked-key"))
 			}
+		})
+	}
+}
+
+func TestKitLocalMetadataPersistsProjectAndWorkload(t *testing.T) {
+	t.Parallel()
+	k, engine, r, _ := kitLocalFixture(t)
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	var metadata kitLocalRuntimeMetadata
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &metadata))
+	require.Equal(t, r.ProjectID, metadata.ProjectID)
+	require.Equal(t, r.ID, metadata.RuntimeID)
+	require.Equal(t, r.AssistantID, metadata.AssistantID)
+	require.Equal(t, engine.bootstrap.Workload, metadata.Workload)
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	require.NoError(t, k.validate(r))
+	metadata.ProjectID = uuid.Nil
+	r.BackendMetadataJSON, err = json.Marshal(metadata)
+	require.NoError(t, err)
+	require.Error(t, k.validate(r))
+}
+
+func TestKitLocalRecoveryFencesExactWorkloadBeforeBootstrap(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []bool{false, true} {
+		t.Run(fmt.Sprintf("missing-%t", missing), func(t *testing.T) {
+			t.Parallel()
+			core, db, runtime, identity, composition, _ := kitWorkloadDBFixture(t)
+			runtime.Backend = runtimeBackendLocal
+			composition.Environment, composition.WorkloadSubject = "local", "local-first-generation"
+			backend, engine, _, _ := kitLocalFixture(t)
+			gateway := "generation-one"
+			var withdrawn *KitWorkloadBinding
+			backend.config.Fence = func(ctx context.Context, r assistantRuntimeRecord) error {
+				if len(r.BackendMetadataJSON) != 0 {
+					var metadata kitLocalRuntimeMetadata
+					if err := json.Unmarshal(r.BackendMetadataJSON, &metadata); err != nil {
+						return fmt.Errorf("decode recovered kit workload binding: %w", err)
+					}
+					withdrawn = metadata.Workload
+				}
+				return core.revokeKitWorkload(ctx, db, r)
+			}
+			backend.config.Bootstrap = func(ctx context.Context, r assistantRuntimeRecord) (KitLocalBootstrap, error) {
+				binding, err := core.provisionKitWorkload(ctx, r, composition, identity, gateway)
+				if err != nil {
+					return KitLocalBootstrap{}, err
+				}
+				b := kitTestWorkloadBootstrap()
+				b.Workload, b.GatewayToken = binding, []byte(gateway)
+				return b, nil
+			}
+			first, err := backend.Ensure(t.Context(), runtime)
+			require.NoError(t, err)
+			runtime.BackendMetadataJSON = first.BackendMetadataJSON
+			old := *engine.bootstrap.Workload
+			if missing {
+				engine.info = kitLocalContainerInfo{}
+			} else {
+				engine.info.Running = false
+			}
+			gateway, composition.WorkloadSubject = "generation-two", "local-second-generation"
+			_, err = backend.Ensure(t.Context(), runtime)
+			require.NoError(t, err)
+			require.Equal(t, &old, withdrawn, "recovery must fence the saved exact generation before clearing metadata")
+			require.NotEqual(t, old.Subject, engine.bootstrap.Workload.Subject)
+			assignments, err := workloadrepo.New(db).GetWorkloadAgentAssignmentForSubject(t.Context(), workloadrepo.GetWorkloadAgentAssignmentForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: old.IssuerID, Subject: old.Subject, MatchKind: "exact"})
+			require.NoError(t, err)
+			require.Empty(t, assignments, "old assertion must lose its exact assignment after recovery")
+			assignments, err = workloadrepo.New(db).GetWorkloadAgentAssignmentForSubject(t.Context(), workloadrepo.GetWorkloadAgentAssignmentForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: engine.bootstrap.Workload.IssuerID, Subject: engine.bootstrap.Workload.Subject, MatchKind: "exact"})
+			require.NoError(t, err)
+			require.Len(t, assignments, 1)
+		})
+	}
+}
+
+func TestKitLocalRecoveryAbortsOnWithdrawalFailure(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []bool{false, true} {
+		t.Run(fmt.Sprintf("missing-%t", missing), func(t *testing.T) {
+			t.Parallel()
+			backend, engine, runtime, _ := kitLocalFixture(t)
+			first, err := backend.Ensure(t.Context(), runtime)
+			require.NoError(t, err)
+			runtime.BackendMetadataJSON = first.BackendMetadataJSON
+			if missing {
+				engine.info = kitLocalContainerInfo{}
+			} else {
+				engine.info.Running = false
+			}
+			engine.calls = nil
+			backend.config.Fence = func(_ context.Context, r assistantRuntimeRecord) error {
+				require.Equal(t, first.BackendMetadataJSON, r.BackendMetadataJSON)
+				return errors.New("withdrawal unavailable")
+			}
+			backend.config.Bootstrap = func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error) {
+				t.Fatal("failed withdrawal must prevent new workload authority")
+				return KitLocalBootstrap{}, nil
+			}
+			_, err = backend.Ensure(t.Context(), runtime)
+			require.ErrorContains(t, err, "withdrawal unavailable")
+			require.NotContains(t, engine.calls, "create")
+			require.NotContains(t, engine.calls, "copy")
+			require.NotContains(t, engine.calls, "start")
 		})
 	}
 }

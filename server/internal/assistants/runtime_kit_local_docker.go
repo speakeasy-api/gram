@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // Kit's native roots honor SSL_CERT_FILE as a replacement, not an addition.
@@ -34,6 +37,13 @@ exec "$@"
 // These extensions leave the legacy Run path unchanged. Kit must be created
 // stopped so credentials can be copied before its gateway process ever starts.
 func (d *dockerCLIEngine) CreateKit(ctx context.Context, spec kitLocalContainerSpec) (string, error) {
+	if err := validateKitLocalAssertionFile(spec.WorkloadAssertionFile); err != nil {
+		return "", err
+	}
+	parent, err := os.Stat(filepath.Dir(spec.WorkloadAssertionFile))
+	if err != nil || !parent.IsDir() {
+		return "", fmt.Errorf("kit assertion projection requires an existing parent directory")
+	}
 	args := kitLocalCreateArgs(d.guestPort, spec)
 	id, err := d.exec(ctx, args...)
 	if err != nil {
@@ -43,6 +53,9 @@ func (d *dockerCLIEngine) CreateKit(ctx context.Context, spec kitLocalContainerS
 }
 func kitLocalCreateArgs(port int, spec kitLocalContainerSpec) []string {
 	args := []string{"create", "--name", spec.Name, "--user", "1000:1000", "--workdir", "/home/kit", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--publish", "127.0.0.1::" + strconv.Itoa(port), "--add-host", LocalRuntimeHostGatewayAlias + ":host-gateway", "--volume", spec.VolumeName + ":/home/kit", "--env", "HOME=/home/kit"}
+	// Bind the directory, not the assertion inode, so atomic file replacement
+	// remains visible. The mounted projection is outside persistent HOME.
+	args = append(args, "--mount", "type=bind,src="+filepath.Dir(spec.WorkloadAssertionFile)+",dst="+filepath.Dir(KitWorkloadAssertionPath)+",readonly")
 	if spec.Network != "" {
 		args = append(args, "--network", spec.Network)
 	}
@@ -93,6 +106,8 @@ func decodeKitLocalInspect(raw []byte, port int) (kitLocalContainerInfo, error) 
 		Mounts []struct {
 			Type        string `json:"Type"`
 			Name        string `json:"Name"`
+			Source      string `json:"Source"`
+			RW          bool   `json:"RW"`
 			Destination string `json:"Destination"`
 		} `json:"Mounts"`
 		NetworkSettings struct {
@@ -107,6 +122,12 @@ func decodeKitLocalInspect(raw []byte, port int) (kitLocalContainerInfo, error) 
 	}
 	info := kitLocalContainerInfo{ID: obj.ID, ImageID: obj.Image, User: obj.Config.User, HomeVolume: "", Running: obj.State.Running, HostPort: 0, Labels: obj.Config.Labels}
 	for _, mount := range obj.Mounts {
+		if mount.Destination == filepath.Dir(KitWorkloadAssertionPath) {
+			if mount.Type != "bind" || mount.RW || info.AssertionDirectory != "" {
+				return kitLocalContainerInfo{}, fmt.Errorf("kit assertion mount must be one read-only bind directory")
+			}
+			info.AssertionDirectory, info.AssertionReadOnly = mount.Source, true
+		}
 		if mount.Destination == "/home/kit" && mount.Type == "volume" {
 			info.HomeVolume = mount.Name
 		}
@@ -221,13 +242,8 @@ func kitLocalBootstrapArchive(b KitLocalBootstrap) ([]byte, error) {
 	files := []struct {
 		name string
 		data []byte
-	}{{".kit/AGENTS.md", b.AgentsMD}, {".kit/config.toml", []byte(kitBootstrapConfig(b))}, {".kit/credentials/" + KitInferenceCredentialFilename, b.InferenceJSON}, {".kit/credentials/mcp.json", b.MCPJSON}, {".kit/credentials/gateway-token", b.GatewayToken}}
-	for _, name := range slices.Sorted(maps.Keys(b.MCPFiles)) {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{".kit/credentials/" + name, b.MCPFiles[name]})
-	}
+	}{{".kit/AGENTS.md", b.AgentsMD}, {".kit/config.toml", []byte(kitBootstrapConfig(b))}, {".kit/credentials/mcp.json", b.MCPJSON}, {".kit/credentials/gateway-token", b.GatewayToken}}
+
 	for _, file := range files {
 		header := new(tar.Header)
 		header.Name = file.name
@@ -247,4 +263,13 @@ func kitLocalBootstrapArchive(b KitLocalBootstrap) ([]byte, error) {
 		return nil, fmt.Errorf("close kit bootstrap archive: %w", err)
 	}
 	return buffer.Bytes(), nil
+}
+
+// Local operators project a file named assertion in a dedicated directory.
+// Mounting its parent preserves atomic rotation without copying token bytes.
+func validateKitLocalAssertionFile(path string) error {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Base(path) != "assertion" || filepath.Dir(path) == "/" || strings.ContainsAny(path, ",\r\n\x00") || strings.HasPrefix(path, "/home/kit/") {
+		return fmt.Errorf("kit local requires an absolute clean projection path named assertion in a dedicated directory outside persistent HOME")
+	}
+	return nil
 }

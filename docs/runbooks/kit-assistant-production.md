@@ -29,14 +29,14 @@ not mount the TLS key. Fresh bootstrap also removes restored `.kit/tls` and the
 entire old credential directory. Only the public certificate is persisted in
 lifecycle authority. New bootstrap replaces the Secret and trust certificate;
 existing UID-fenced cleanup removes the old Secret. Certificates expire after
-30 days; existing startup-authority expiry fences the runtime sooner and
-requires checkpoint/refresh rather than extending trust silently.
+30 days; gateway renewal uses that certificate lifetime, independently of
+short-lived workload token rotation.
 
 Infrastructure contract (review/apply separately):
 
 - Permit pulling both the configured released Kit image and the nginx image
   above. The sandbox has two ordinary containers (`kit`, `acp-tls`), UID/GID
-  1000, no capabilities, and no service account token.
+  1000, no capabilities, and automatic service-account token mounting disabled.
 - Keep server/worker ingress limited to the configured guest TCP port and
   source CIDR. The guest port now speaks TLS, not HTTP. Do not expose port
   17766; it is loopback-only and excluded from ingress policy.
@@ -76,8 +76,8 @@ rejection. It does not prove GKE controller or snapshot infrastructure health.
 
 ## Deployment inputs
 
-Use the released Kit image with an explicit version tag (not `latest`), or an
-explicit digest. Do not use local relay settings in production.
+Use Kit v0.2.19 or a workload-capable build with an explicit version tag
+(not `latest`) or digest. Do not use local relay settings in production.
 
 Configure the server and worker consistently:
 
@@ -94,18 +94,28 @@ Configure the server and worker consistently:
   `GRAM_ASSISTANT_KIT_MCP_ISSUER_ID=<PERSISTED_ISSUER_UUID>`.
 - Optional `GRAM_ASSISTANT_KIT_ROOT_TRIGGER_ID=<ROOT_TRIGGER_UUID>` when the
   assistant has more than one root.
-- `GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD=client_secret_basic` (default), or
-  `private_key_jwt` for ephemeral ES256 startup credentials.
+- `GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER=<CLUSTER_OIDC_ISSUER_URL>` and
+  `GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL=<DISCOVERED_JWKS_URL>`. Use the
+  cluster discovery document's actual `jwks_uri`, not an assumed URL suffix.
 
-The MCP resource must be an enabled attachment of the assistant and use the
-configured workload issuer. Bootstrap resolves the persisted assistant/root
-identity, revokes the prior workload clients, provisions a new confidential
-client, and rotates inference and gateway credentials. Credentials belong in
-protected startup files, never image layers, CLI arguments or logs. The native
-Speakeasy provider connects to `https://ai.speakeasy.com` with normal TLS
-verification. Do not substitute human credentials or an inference bearer for
-MCP authentication. Built-in Platform MCP endpoints are not part of this
-attached-resource machine-auth contract.
+The MCP resource must be an enabled attachment of the assistant. Bootstrap
+registers one project-scoped cluster issuer and a generation-specific subject
+assigned to the assistant's agent. Project-scoped inference authority must already
+be available to the owner; existing agent policies are not silently expanded.
+The issuer explicitly permits projected assertion reuse, requiring the issuer
+replay-policy migration and implementation before this runtime is deployed.
+
+The worker needs namespace-scoped ServiceAccount get/create/delete permission.
+The pod uses an explicit 600-second audience-bound token projection mounted
+read-only at `/var/run/secrets/speakeasy/workload`, without `subPath`.
+`automountServiceAccountToken` remains false. Only the Kit container mounts it;
+tokens are not put in bootstrap Secrets, rootfs, or snapshots. Cold restore
+creates a new service account and admission; cleanup is UID-fenced.
+
+MCP and inference use Kit's generic workload exchange configuration, not native
+API keys or confidential OAuth clients. Gateway authentication remains separate
+from these outbound credentials. No live reset or deployment is implied by
+configuring the replacement.
 
 ## Snapshot deployment gate
 

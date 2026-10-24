@@ -2373,61 +2373,6 @@ WHERE si.id = @id
   AND si.organization_id = @organization_id
 FOR SHARE OF si;
 
--- name: BindAssistantWorkloadClient :one
--- Pin a newly registered client to the current root binding, never infer it
--- from client metadata or accept a subject supplied at the token endpoint.
-UPDATE user_session_clients c
-SET assistant_trigger_workload_binding_id = tb.id, assistant_runtime_id = r.id, updated_at = clock_timestamp()
-FROM trigger_workload_bindings tb
-JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
-  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
-  AND ab.generation = tb.assistant_binding_generation
-JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
-JOIN assistant_runtimes r ON r.assistant_id = a.id AND r.project_id = a.project_id
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
-WHERE c.id = @client_id AND c.deleted IS FALSE
-  AND c.assistant_trigger_workload_binding_id IS NULL AND c.assistant_runtime_id IS NULL
-  AND r.id = @runtime_id AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
-  AND c.organization_id = @organization_id
-  AND (c.project_id = @project_id OR c.project_id IS NULL)
-  AND tb.organization_id = @organization_id AND tb.project_id = @project_id
-  AND ab.original_assistant_id = @assistant_id AND tb.original_trigger_id = @trigger_id
-  AND tb.deleted IS FALSE AND ab.deleted IS FALSE AND a.deleted IS FALSE AND a.status = 'active'
-  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
-  AND t.target_kind = 'assistant' AND t.target_ref = a.id::text
-RETURNING c.id;
-
--- name: GetAssistantWorkloadClientBinding :one
-SELECT tb.id AS binding_id, r.id AS runtime_id, ab.original_assistant_id AS assistant_id,
-  tb.original_trigger_id AS trigger_id, tb.original_workload_issuer_id AS workload_issuer_id,
-  tb.subject
-FROM user_session_clients c
-JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id
-JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
-  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
-  AND ab.generation = tb.assistant_binding_generation
-JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
-JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.assistant_id = a.id AND r.project_id = a.project_id
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
-WHERE c.id = @client_id AND c.user_session_issuer_id = @user_session_issuer_id
-  AND c.organization_id = @organization_id AND c.deleted IS FALSE
-  AND (c.project_id = @project_id OR c.project_id IS NULL)
-  AND tb.organization_id = @organization_id AND tb.project_id = @project_id
-  AND tb.deleted IS FALSE AND ab.deleted IS FALSE AND a.deleted IS FALSE AND a.status = 'active'
-  AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
-  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
-  AND t.target_kind = 'assistant' AND t.target_ref = a.id::text;
-
--- name: GetAssistantWorkloadRuntime :one
--- Trusted worker bootstrap resolves tenancy from the persisted incarnation.
-SELECT r.id, r.assistant_id, r.project_id, a.organization_id
-FROM assistant_runtimes r
-JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
-WHERE r.id = @runtime_id AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
-  AND a.deleted IS FALSE AND a.status = 'active';
-
 -- name: ListAssistantWorkloadRuntimeRoots :many
 SELECT tb.original_trigger_id AS trigger_id
 FROM trigger_workload_bindings tb
@@ -2440,34 +2385,6 @@ WHERE tb.project_id = @project_id AND tb.organization_id = @organization_id
   AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
   AND t.target_kind = 'assistant' AND t.target_ref = ab.original_assistant_id::text
 ORDER BY tb.original_trigger_id;
-
--- name: RevokeAssistantRuntimeWorkloadClients :many
-UPDATE user_session_clients c
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-FROM assistant_runtimes r
-WHERE c.assistant_runtime_id = @runtime_id AND r.id = c.assistant_runtime_id
-  AND c.organization_id = @organization_id AND r.project_id = @project_id
-  AND (c.project_id = @project_id OR c.project_id IS NULL) AND c.deleted IS FALSE
-RETURNING c.id;
-
--- name: GetAssistantRuntimeForWorkloadSession :one
--- Input comes only from the already authenticated workload context. The caller
--- locks/rechecks the returned runtime in its wake-creation transaction.
-SELECT r.id AS runtime_id, r.assistant_id, c.id AS client_registration_id
-FROM user_sessions s
-JOIN user_session_clients c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = s.user_session_issuer_id
-JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id AND tb.organization_id = c.organization_id AND tb.deleted IS FALSE
-JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id AND ab.deleted IS FALSE AND ab.generation = tb.assistant_binding_generation
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id AND t.deleted IS FALSE AND t.status = 'active'
-JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.project_id = tb.project_id AND r.assistant_id = ab.assistant_id
-JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
-WHERE s.jti = @jti AND s.subject_urn = @subject_urn
-  AND s.organization_id = @organization_id AND r.project_id = @project_id
-  AND s.deleted IS FALSE AND s.expires_at > clock_timestamp() AND c.deleted IS FALSE
-  AND r.state IN ('starting', 'active')
-  AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
-  AND a.deleted IS FALSE AND a.status = 'active' AND a.organization_id = @organization_id
-  AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = a.id::text;
 
 -- name: RecordUpstreamClientSelections :execrows
 -- Records, for one inbound credential, the upstream OAuth client it uses for
@@ -2945,9 +2862,3 @@ LEFT JOIN projects project ON project.id = issuer.project_id
 WHERE issuer.id = @id AND issuer.deleted IS FALSE
   AND ((issuer.project_id = @project_id::uuid AND project.organization_id = @organization_id::text)
     OR (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text));
-
--- name: ClearAssistantWorkloadClientMarkersForTest :exec
--- Test fixture: simulate ON DELETE SET NULL cleanup of both binding references.
-UPDATE user_session_clients
-SET assistant_runtime_id = NULL, assistant_trigger_workload_binding_id = NULL
-WHERE id = @client_id AND organization_id = @organization_id;
