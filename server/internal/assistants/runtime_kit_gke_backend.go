@@ -76,8 +76,8 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 		p.Command, p.Args = KitGatewayCommand(int(p.GuestPort))
 	}
 	if p.Identity.CompatibilityGeneration == "" {
-		p.Identity.CompatibilityGeneration = "kit-acp-v2-rootfs-workload-v4"
-	} else if !strings.HasSuffix(p.Identity.CompatibilityGeneration, "-workload-v4") && !strings.HasPrefix(p.Identity.CompatibilityGeneration, "kit-workload-v4-") {
+		p.Identity.CompatibilityGeneration = "kit-workload-v4-default"
+	} else if !strings.HasPrefix(p.Identity.CompatibilityGeneration, "kit-workload-v4-") {
 		// Scope even caller-defined generations away from legacy automatic snapshots.
 		p.Identity.CompatibilityGeneration = fmt.Sprintf("kit-workload-v4-%x", sha256.Sum256([]byte(p.Identity.CompatibilityGeneration)))[:63]
 	}

@@ -427,6 +427,9 @@ func TestApplyIssuerGate_WorkloadSessionRefusedWhenItsOAuthClientIsRevoked(t *te
 	require.NoError(t, err)
 	_, _, _, err = ti.service.ApplyIssuerGate(ctx, httptest.NewRecorder(), token, ti.serverURL.String(), endpoint)
 	require.Error(t, err, "removing runtime coupling must not bypass OAuth client revocation")
+	var denied *oops.ShareableError
+	require.ErrorAs(t, err, &denied)
+	require.Equal(t, oops.CodeUnauthorized, denied.Code)
 }
 
 func TestApplyIssuerGate_RejectsObsoleteRuntimeOAuthSession(t *testing.T) {
@@ -456,6 +459,9 @@ func TestApplyIssuerGate_RejectsObsoleteRuntimeOAuthSession(t *testing.T) {
 			}
 			_, _, _, err = ti.service.ApplyIssuerGate(ctx, httptest.NewRecorder(), mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time), ti.serverURL.String(), workloadSessionEndpoint(fx))
 			require.Error(t, err, "superseded runtime credentials must not fall back to ordinary OAuth even after binding markers are cleared")
+			var denied *oops.ShareableError
+			require.ErrorAs(t, err, &denied)
+			require.Equal(t, oops.CodeUnauthorized, denied.Code)
 		})
 	}
 }

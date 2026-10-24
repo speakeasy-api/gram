@@ -49,14 +49,15 @@ The control plane binds verified issuer/subject identity to persisted runtime
 metadata. Kit's completion body `user` field selects only an existing ACP session
 inside that authority. Canonical chat ownership, assistant billing, and transcript
 deduplication remain control-plane decisions; caller-supplied assistant/chat
-headers do not establish authority.
+headers do not establish authority. ACP session creation and resumption must omit
+`ai.speakeasy/gram-chat-id`; the canonical chat UUID is never sent to Kit.
 
 ## MCP configuration lifecycle
 
 The approved `_kit/session/update_mcp` contract is **additive upsert**, not
 replacement of the server set. Verify support in the runtime image before using
-this API; this contract does not change or establish support in the image pinned
-above.
+this API; workload authentication requires Kit v0.2.19 or a build containing
+its MCP and inference workload support.
 
 | Operation                                                             | Required behavior                                                                                     |
 | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -69,9 +70,8 @@ above.
 | `_kit/session/update_mcp` with `[]`                                   | No-op; retain all servers.                                                                            |
 | A submitted name colliding with a host- or plugin-owned server        | Reject the collision; host/plugin servers and built-ins remain protected.                             |
 
-The pinned Kit gateway itself accepts omitted or empty `mcpServers` as retention
-(`src/gateway.rs`, released Kit `v0.2.17`, commit `90a1805`; unchanged from the
-image pin `2c4a35e`). The Speakeasy adapter is deliberately stricter:
+The gateway's additive retention contract is distinct from the v0.2.19
+workload-authentication requirement. The Speakeasy adapter is deliberately stricter:
 an explicit list represents a desired set, and `[]` must not silently retain
 servers the caller intended to remove. Omission is the adapter's only retain form.
 

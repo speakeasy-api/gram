@@ -122,3 +122,14 @@ func TestPrivateIngressRegistersAssistantRuntimeFlags(t *testing.T) {
 	}
 	require.False(t, flags["assistant-kit-allow-insecure-inference"], "Kit requires its fixed HTTPS provider origin")
 }
+
+func TestKitGKERejectsLocalProjectionOptions(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v0.2.19", "assistant-runtime-provider": "gke", name: "local-projection-value"})
+			require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), name+" is local-only")
+		})
+	}
+}

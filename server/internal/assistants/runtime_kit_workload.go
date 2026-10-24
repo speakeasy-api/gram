@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
-	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -285,11 +284,14 @@ func (s *ServiceCore) revokeKitWorkload(ctx context.Context, db assistantrepo.DB
 		}
 		return nil
 	}
-	bound, err := identityrepo.New(db).GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID})
+	// Withdrawal must survive identity tombstoning. Authorize against durable
+	// assistant tenancy, then the exact runtime-generation admission and agent
+	// assignment below; never resolve or revive an active assistant binding.
+	bound, err := assistantrepo.New(db).GetAssistantIgnoringDeleted(ctx, assistantrepo.GetAssistantIgnoringDeletedParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID})
 	if err != nil {
 		return fmt.Errorf("revoke kit workload: %w", err)
 	}
-	if bound.OrganizationID != b.Identity.OrganizationID || bound.OriginalAgentID != b.Identity.AgentID {
+	if bound.OrganizationID != b.Identity.OrganizationID {
 		return ErrKitRuntimeBinding
 	}
 	project := uuid.NullUUID{UUID: r.ProjectID, Valid: true}

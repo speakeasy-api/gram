@@ -3,8 +3,12 @@ package assistants
 import (
 	"encoding/json"
 	"fmt"
+	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -431,4 +435,38 @@ func TestKitWorkloadDBConcurrentCrossProjectLocalSubject(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, assignments, 1)
 	require.Equal(t, winner.Identity.AgentID, assignments[0].AgentID)
+}
+
+func TestKitWorkloadDBRetiredFenceAfterIdentityTombstone(t *testing.T) {
+	t.Parallel()
+	for _, deleted := range []bool{false, true} {
+		t.Run(fmt.Sprintf("deleted=%t", deleted), func(t *testing.T) {
+			t.Parallel()
+			core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+			binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "retired-generation")
+			require.NoError(t, err)
+			r = kitWorkloadMetadata(t, r, binding)
+			q := assistantrepo.New(db)
+			chat := uuid.New()
+			require.NoError(t, q.UpsertAssistantChat(t.Context(), assistantrepo.UpsertAssistantChatParams{ChatID: chat, ProjectID: r.ProjectID, OrganizationID: identity.OrganizationID}))
+			thread, err := q.UpsertAssistantThread(t.Context(), assistantrepo.UpsertAssistantThreadParams{AssistantID: r.AssistantID, ProjectID: r.ProjectID, CorrelationID: uuid.New().String(), ChatID: chat, SourceKind: sourceKindSlack, SourceRefJson: []byte("{}")})
+			require.NoError(t, err)
+			endedAt := pgtype.Timestamptz{Time: time.Now(), Valid: !deleted}
+			deletedAt := pgtype.Timestamptz{Time: time.Now(), Valid: deleted}
+			require.NoError(t, q.CreateAssistantRuntime(t.Context(), assistantrepo.CreateAssistantRuntimeParams{ID: r.ID, AssistantThreadID: thread, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Backend: runtimeBackendGKE, BackendMetadataJson: r.BackendMetadataJSON, State: "stopped", UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, EndedAt: endedAt, DeletedAt: deletedAt}))
+			require.NoError(t, q.SetKitRuntimeMetadataFixture(t.Context(), assistantrepo.SetKitRuntimeMetadataFixtureParams{ProjectID: r.ProjectID, RuntimeID: r.ID, RuntimeVersion: 3, Metadata: r.BackendMetadataJSON}))
+			require.NoError(t, identityrepo.New(db).TombstoneAssistantBinding(t.Context(), identityrepo.TombstoneAssistantBindingParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID}))
+			require.NoError(t, q.DeleteAssistant(t.Context(), assistantrepo.DeleteAssistantParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID}))
+			// Exercise persisted metadata fallback, without an active identity resolver.
+			r.BackendMetadataJSON = nil
+			require.NoError(t, core.fenceKitRuntimeAlreadyLocked(t.Context(), r))
+			require.NoError(t, q.UpdateAssistantRuntimeMetadata(t.Context(), assistantrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: r.ProjectID, RuntimeID: r.ID, BackendMetadataJson: []byte("{}")}))
+			admitted, err := workloadidentity.IsAdmitted(t.Context(), db, workloadidentity.AdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject})
+			require.NoError(t, err)
+			require.False(t, admitted, "ordinary wake admission must remain denied after metadata clearing")
+			_, assigned, err := workloadidentity.ResolveAssignedAgent(t.Context(), db, workloadidentity.AssignmentParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject})
+			require.NoError(t, err)
+			require.False(t, assigned)
+		})
+	}
 }

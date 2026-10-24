@@ -584,3 +584,56 @@ func TestKitGKELegacyAuthorityReprovisions(t *testing.T) {
 	require.NotNil(t, m.Workload)
 	require.NotEmpty(t, m.ServiceAccountUID)
 }
+
+func TestKitGKEFailedRestoreRetainsPersistedServiceAccount(t *testing.T) {
+	t.Parallel()
+	k, client, r, fences := kitGKEBackendFixture(t)
+	k.config.Provision.SnapshotsEnabled = true
+	k.config.Snapshots = &kitGKEFakeCheckpointDriver{client: client, restored: true}
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	require.NoError(t, k.Stop(t.Context(), r))
+	old, _, err := k.loadAuthority(t.Context(), r)
+	require.NoError(t, err)
+	client.PrependReactor("create", "secrets", func(ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("restore secret creation failed")
+	})
+	_, err = k.Ensure(t.Context(), r)
+	require.ErrorContains(t, err, "restore secret creation failed")
+	require.Equal(t, 2, *fences)
+	state, _, err := k.loadAuthority(t.Context(), r)
+	require.NoError(t, err)
+	require.Equal(t, "restoring", state.Phase)
+	require.NotEqual(t, old.Metadata.ServiceAccountUID, state.Metadata.ServiceAccountUID)
+	sa, err := k.get(t.Context(), r, kitServiceAccountGVR, state.Metadata.Workload.ServiceAccount, state.Metadata.ServiceAccountUID)
+	require.NoError(t, err)
+	require.Equal(t, state.Metadata.ServiceAccountUID, sa.GetUID())
+	_, err = client.Resource(kitServiceAccountGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), old.Metadata.Workload.ServiceAccount, metav1.GetOptions{})
+	require.True(t, apierrors.IsNotFound(err))
+	_, err = k.Ensure(t.Context(), r)
+	require.ErrorContains(t, err, "restoring")
+}
+
+func TestKitGKECallerGenerationIsScopedAndStable(t *testing.T) {
+	t.Parallel()
+	k, _, _, _ := kitGKEBackendFixture(t)
+	for _, generation := range []string{"custom", "custom-workload-v4", "kit-acp-v2-rootfs-workload-v4"} {
+		config := k.config
+		config.Provision.Identity.CompatibilityGeneration = generation
+		scoped, err := NewKitGKERuntimeBackend(config)
+		require.NoError(t, err)
+		require.NotEqual(t, generation, scoped.config.Provision.Identity.CompatibilityGeneration)
+		require.True(t, strings.HasPrefix(scoped.config.Provision.Identity.CompatibilityGeneration, "kit-workload-v4-"))
+		repeated, err := NewKitGKERuntimeBackend(scoped.config)
+		require.NoError(t, err)
+		require.Equal(t, scoped.fingerprint, repeated.fingerprint)
+	}
+	config := k.config
+	config.Provision.Identity.CompatibilityGeneration = ""
+	defaults, err := NewKitGKERuntimeBackend(config)
+	require.NoError(t, err)
+	repeated, err := NewKitGKERuntimeBackend(defaults.config)
+	require.NoError(t, err)
+	require.Equal(t, defaults.fingerprint, repeated.fingerprint)
+}

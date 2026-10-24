@@ -369,8 +369,8 @@ func TestKitLocalReservationMetadataSentinel(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, result.ColdStart)
 			require.NotEmpty(t, result.BackendMetadataJSON)
-			// An interrupted first ensure can leave a correctly labelled guest before
-			// metadata persistence. The same sentinel must not reject that owned guest.
+			// Only persisted workload authority permits adopting a running guest.
+			r.BackendMetadataJSON = result.BackendMetadataJSON
 			_, err = backend.Ensure(t.Context(), r)
 			require.NoError(t, err)
 			require.Equal(t, 1, strings.Count(strings.Join(engine.calls, ","), "create"))
@@ -613,6 +613,69 @@ func TestKitLocalRecoveryAbortsOnWithdrawalFailure(t *testing.T) {
 			require.NotContains(t, engine.calls, "create")
 			require.NotContains(t, engine.calls, "copy")
 			require.NotContains(t, engine.calls, "start")
+		})
+	}
+}
+
+func TestKitLocalImageMismatchFencesRecordedAuthority(t *testing.T) {
+	t.Parallel()
+	for _, fenceFails := range []bool{false, true} {
+		t.Run(fmt.Sprintf("fence-failure-%t", fenceFails), func(t *testing.T) {
+			t.Parallel()
+			backend, engine, r, _ := kitLocalFixture(t)
+			admitted, err := backend.Ensure(t.Context(), r)
+			require.NoError(t, err)
+			r.BackendMetadataJSON = admitted.BackendMetadataJSON
+			engine.info.ImageID = "sha256:changed-image"
+			fenced := false
+			backend.config.Fence = func(_ context.Context, observed assistantRuntimeRecord) error {
+				require.Equal(t, r.BackendMetadataJSON, observed.BackendMetadataJSON)
+				fenced = true
+				if fenceFails {
+					return errors.New("withdrawal failed")
+				}
+				return nil
+			}
+			result, err := backend.Ensure(t.Context(), r)
+			require.ErrorContains(t, err, "image changed")
+			if fenceFails {
+				require.ErrorContains(t, err, "withdrawal failed")
+			}
+			require.True(t, fenced)
+			require.False(t, engine.info.Running)
+			require.Empty(t, result.BackendMetadataJSON)
+		})
+	}
+}
+
+func TestKitLocalRejectsRunningGuestWithoutRecordedWorkload(t *testing.T) {
+	t.Parallel()
+	for _, sentinel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("reservation-%t", sentinel), func(t *testing.T) {
+			t.Parallel()
+			backend, engine, r, _ := kitLocalFixture(t)
+			admitted, err := backend.Ensure(t.Context(), r)
+			require.NoError(t, err)
+			if sentinel {
+				r.BackendMetadataJSON = []byte(`{}`)
+			} else {
+				var metadata kitLocalRuntimeMetadata
+				require.NoError(t, json.Unmarshal(admitted.BackendMetadataJSON, &metadata))
+				metadata.Workload = nil
+				r.BackendMetadataJSON, err = json.Marshal(metadata)
+				require.NoError(t, err)
+			}
+			fenced := false
+			backend.config.Fence = func(_ context.Context, observed assistantRuntimeRecord) error {
+				require.Equal(t, r.BackendMetadataJSON, observed.BackendMetadataJSON)
+				fenced = true
+				return nil
+			}
+			result, err := backend.Ensure(t.Context(), r)
+			require.ErrorContains(t, err, "no recorded workload authority")
+			require.True(t, fenced)
+			require.False(t, engine.info.Running)
+			require.Empty(t, result.BackendMetadataJSON)
 		})
 	}
 }

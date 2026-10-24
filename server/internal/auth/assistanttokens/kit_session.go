@@ -24,7 +24,7 @@ func (m *Manager) BindKitSession(ctx context.Context, providerID uuid.UUID) (con
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 	if err := new(assistantidentity.Service).Validate(ctx, m.db, identity); err != nil {
-		return ctx, oops.C(oops.CodeUnauthorized)
+		return ctx, kitIdentityValidationError(err)
 	}
 	bindings, err := m.tokens.ListKitInferenceSessionBindings(ctx, tokenrepo.ListKitInferenceSessionBindingsParams{
 		WorkloadBinding: workload,

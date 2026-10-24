@@ -95,7 +95,7 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	serverURL := s.serverURL.String()
 
 	presented := presentedWorkload{
-		issuerURL: "", subject: "", issuerID: uuid.Nil,
+		issuerURL: "", subject: "", issuerID: uuid.Nil, jwksURI: "",
 		assertionPolicyChecked: false, allowAssertionReuse: false,
 	}
 	token, err := assertioncore.ParseSigned(assertion, workloadAssertionMaxBytes)

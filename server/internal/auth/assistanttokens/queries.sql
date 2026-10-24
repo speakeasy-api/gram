@@ -38,9 +38,3 @@ JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE r.project_id = @project_id AND a.organization_id = @organization_id
   AND r.backend_metadata_json->'workload'->>'issuer_id' = @issuer_id::text
   AND r.backend_metadata_json->'workload'->>'subject' = @subject::text;
-
--- name: IsSupersededKitAPIKey :one
--- A historical binding permanently disqualifies this credential, even if the
--- runtime or binding has been retired. This is rejection, not legacy admission.
-SELECT EXISTS (SELECT 1 FROM assistant_inference_credentials
-WHERE api_key_id = @api_key_id AND project_id = @project_id);

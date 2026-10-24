@@ -121,9 +121,8 @@ func (s *ServiceCore) fenceKitRuntimeAlreadyLocked(ctx context.Context, r assist
 	if err := s.revokeKitWorkload(ctx, db, r); err != nil {
 		return err
 	}
-	// Retirement is already a durable admission fence for workload OAuth and
-	// gateway binding reads. Do not try to issue a new gateway key for a row
-	// which the canonical credential query correctly refuses to resurrect.
+	// Withdraw before metadata can be cleared, even after identity tombstoning.
+	// Retired rows must not receive fresh gateway authority.
 	if row.Ended || row.Deleted {
 		return nil
 	}

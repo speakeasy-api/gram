@@ -63,7 +63,7 @@ func (m *Manager) AuthorizeKitWorkload(ctx context.Context) (context.Context, er
 	// Validate re-resolves the current assistant, trigger, owner, agent and
 	// identity subject. A replaced identity or disabled trigger cannot bind.
 	if err := new(assistantidentity.Service).Validate(ctx, m.db, identity); err != nil {
-		return ctx, oops.C(oops.CodeUnauthorized)
+		return ctx, kitIdentityValidationError(err)
 	}
 	var snapshot struct {
 		Workload json.RawMessage `json:"workload"`

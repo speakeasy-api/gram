@@ -64,25 +64,6 @@ func (q *Queries) GetAssistantTokenRevocation(ctx context.Context, arg GetAssist
 	return i, err
 }
 
-const isSupersededKitAPIKey = `-- name: IsSupersededKitAPIKey :one
-SELECT EXISTS (SELECT 1 FROM assistant_inference_credentials
-WHERE api_key_id = $1 AND project_id = $2)
-`
-
-type IsSupersededKitAPIKeyParams struct {
-	ApiKeyID  uuid.UUID
-	ProjectID uuid.UUID
-}
-
-// A historical binding permanently disqualifies this credential, even if the
-// runtime or binding has been retired. This is rejection, not legacy admission.
-func (q *Queries) IsSupersededKitAPIKey(ctx context.Context, arg IsSupersededKitAPIKeyParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isSupersededKitAPIKey, arg.ApiKeyID, arg.ProjectID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const listKitInferenceSessionBindings = `-- name: ListKitInferenceSessionBindings :many
 SELECT s.acp_session_id, t.id AS thread_id, t.chat_id
 FROM assistant_kit_sessions s

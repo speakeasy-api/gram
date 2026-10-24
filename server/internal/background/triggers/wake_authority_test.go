@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -56,12 +57,18 @@ func TestWakeRuntimeAuthority(t *testing.T) {
 	for _, tc := range []struct {
 		name                                                                                                    string
 		user, noSession, wrongProject, wrongOrg, retired, ambiguous, missingSession, infraSession, infraRuntime bool
+		withdrawn, reassigned, noAssignment, infraAdmission, infraAssignment                                    bool
 		wantError                                                                                               bool
 		wantQueries                                                                                             int
 	}{
 		{name: "user", user: true},
-		{name: "ordinary principal workload", noSession: true, wantQueries: 1},
-		{name: "ordinary assertion workload", wantQueries: 2},
+		{name: "ordinary principal workload", noSession: true, wantQueries: 4},
+		{name: "ordinary assertion workload", wantQueries: 5},
+		{name: "reaped generation with withdrawn admission", withdrawn: true, wantError: true, wantQueries: 5},
+		{name: "reaped generation with withdrawn assignment", noAssignment: true, wantError: true, wantQueries: 5},
+		{name: "ordinary workload reassigned after authentication", reassigned: true, wantError: true, wantQueries: 5},
+		{name: "admission database failure", infraAdmission: true, wantQueries: 4},
+		{name: "assignment database failure", infraAssignment: true, wantQueries: 5},
 		{name: "retired managed generation", retired: true, wantError: true, wantQueries: 2},
 		{name: "ambiguous managed generation", ambiguous: true, wantError: true, wantQueries: 2},
 		{name: "foreign project", wrongProject: true, wantError: true},
@@ -72,7 +79,7 @@ func TestWakeRuntimeAuthority(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			projectID, assistantID, issuerID := uuid.New(), uuid.New(), uuid.New()
+			projectID, assistantID, issuerID, agentID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 			jti := "authenticated-session"
 			// A service-account-shaped ordinary subject is not sufficient to classify a runtime.
 			subject := "system:serviceaccount:example:kit-ordinary"
@@ -92,11 +99,49 @@ func TestWakeRuntimeAuthority(t *testing.T) {
 				auth.ActiveOrganizationID = "other-org"
 			}
 			ctx := contextvalues.WithAuthenticatedActor(t.Context(), auth, actor)
+			ctx = contextvalues.WithWorkloadAgent(ctx, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
 			infraErr := errors.New("database unavailable")
 			calls := 0
+			issuerLocked := false
 			db := wakeAuthorityDB{
 				queryRow: func(_ context.Context, query string, args ...any) pgx.Row {
 					calls++
+					switch {
+					case strings.Contains(query, "LockWorkloadIssuerForWrite"):
+						require.Equal(t, []any{"test-org", issuerID}, args)
+						issuerLocked = true
+						return wakeAuthorityRow(func(dest ...any) error {
+							*wakeScanDestination[uuid.UUID](t, dest[0]) = issuerID
+							return nil
+						})
+					case strings.Contains(query, "WorkloadIdentityIsAdmitted"):
+						require.True(t, issuerLocked, "admission must be checked under the policy writer lock")
+						require.Equal(t, []any{"test-org", issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, subject}, args)
+						return wakeAuthorityRow(func(dest ...any) error {
+							if tc.infraAdmission {
+								return infraErr
+							}
+							*wakeScanDestination[bool](t, dest[0]) = !tc.withdrawn
+							return nil
+						})
+					case strings.Contains(query, "ResolveWorkloadAgentAssignment"):
+						require.True(t, issuerLocked, "assignment must be checked under the policy writer lock")
+						require.Equal(t, []any{"test-org", issuerID, subject}, args)
+						return wakeAuthorityRow(func(dest ...any) error {
+							if tc.infraAssignment {
+								return infraErr
+							}
+							if tc.noAssignment {
+								return pgx.ErrNoRows
+							}
+							assigned := agentID
+							if tc.reassigned {
+								assigned = uuid.New()
+							}
+							*wakeScanDestination[uuid.UUID](t, dest[0]) = assigned
+							return nil
+						})
+					}
 					require.Contains(t, query, "GetWakeWorkloadSession")
 					require.Contains(t, query, "deleted IS FALSE AND expires_at > clock_timestamp()")
 					require.Equal(t, []any{jti, urn.NewWorkloadSubject(issuerID, subject), pgtype.Text{String: "test-org", Valid: true}, uuid.NullUUID{UUID: projectID, Valid: true}}, args)
@@ -115,6 +160,7 @@ func TestWakeRuntimeAuthority(t *testing.T) {
 					calls++
 					require.Contains(t, query, "ListKitWorkloadBindings")
 					require.Equal(t, []any{projectID, "test-org", issuerID.String(), subject}, args)
+					// An empty lookup also models reaping that cleared backend metadata.
 					if tc.infraRuntime {
 						return nil, infraErr
 					}
@@ -129,7 +175,7 @@ func TestWakeRuntimeAuthority(t *testing.T) {
 				},
 			}
 			err := validateWakeRuntimeAuthority(ctx, db, CreateWakeInstanceParams{OrganizationID: "test-org", ProjectID: projectID, AssistantID: assistantID})
-			if tc.infraSession || tc.infraRuntime {
+			if tc.infraSession || tc.infraRuntime || tc.infraAdmission || tc.infraAssignment {
 				require.ErrorIs(t, err, infraErr)
 				require.NotErrorIs(t, err, ErrBadRequest)
 			} else if tc.wantError {
@@ -186,10 +232,16 @@ func TestWakeRuntimeIdentity(t *testing.T) {
 			row := tokenrepo.ListKitWorkloadBindingsRow{RuntimeID: runtimeID, AssistantID: assistantID, BackendMetadataJson: data, Active: change != "ended"}
 			params := CreateWakeInstanceParams{OrganizationID: "test-org", ProjectID: projectID, AssistantID: assistantID}
 			got, err := wakeRuntimeIdentity(ctx, row, params, issuerID, subject)
-			if change == "live" {
+			switch change {
+			case "live":
 				require.NoError(t, err)
 				require.Equal(t, identity, got)
-			} else {
+			case "corrupt":
+				require.Error(t, err)
+				require.NotErrorIs(t, err, ErrBadRequest)
+				var syntax *json.SyntaxError
+				require.ErrorAs(t, err, &syntax)
+			default:
 				require.ErrorIs(t, err, ErrBadRequest)
 			}
 		})

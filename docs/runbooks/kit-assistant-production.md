@@ -105,7 +105,8 @@ be available to the owner; existing agent policies are not silently expanded.
 The issuer explicitly permits projected assertion reuse, requiring the issuer
 replay-policy migration and implementation before this runtime is deployed.
 
-The worker needs namespace-scoped ServiceAccount get/create/delete permission.
+The runtime Kubernetes principal needs namespace-scoped ServiceAccount
+get/create/delete permission.
 The pod uses an explicit 600-second audience-bound token projection mounted
 read-only at `/var/run/secrets/speakeasy/workload`, without `subPath`.
 `automountServiceAccountToken` remains false. Only the Kit container mounts it;
@@ -115,7 +116,9 @@ creates a new service account and admission; cleanup is UID-fenced.
 MCP and inference use Kit's generic workload exchange configuration, not native
 API keys or confidential OAuth clients. Gateway authentication remains separate
 from these outbound credentials. No live reset or deployment is implied by
-configuring the replacement.
+configuring the replacement. Never place workload assertions or exchanged tokens
+in CLI arguments or logs. Never substitute human credentials or inference
+bearers for MCP authentication.
 
 ## Snapshot deployment gate
 
@@ -150,6 +153,7 @@ management:
 
 | API group            | Resource                    | Required verbs            | Purpose                                                                |
 | -------------------- | --------------------------- | ------------------------- | ---------------------------------------------------------------------- |
+| Core (`""`)          | `serviceaccounts`           | `get`, `create`, `delete` | Provision and retire generation-specific projected identities          |
 | Core (`""`)          | `pods`                      | `get`, `list`, `delete`   | Discover claim Pods, verify source/restore identity, and reap runtimes |
 | `podsnapshot.gke.io` | `podsnapshotpolicies`       | `get`, `list`             | Select and validate the manual rootfs-only policy                      |
 | `podsnapshot.gke.io` | `podsnapshotmanualtriggers` | `create`, `get`, `delete` | Request, observe, and clean up checkpoints                             |

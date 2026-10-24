@@ -40,9 +40,8 @@ func (d *dockerCLIEngine) CreateKit(ctx context.Context, spec kitLocalContainerS
 	if err := validateKitLocalAssertionFile(spec.WorkloadAssertionFile); err != nil {
 		return "", err
 	}
-	parent, err := os.Stat(filepath.Dir(spec.WorkloadAssertionFile))
-	if err != nil || !parent.IsDir() {
-		return "", fmt.Errorf("kit assertion projection requires an existing parent directory")
+	if err := validateKitLocalProjectionDirectory(spec.WorkloadAssertionFile); err != nil {
+		return "", err
 	}
 	args := kitLocalCreateArgs(d.guestPort, spec)
 	id, err := d.exec(ctx, args...)
@@ -120,7 +119,7 @@ func decodeKitLocalInspect(raw []byte, port int) (kitLocalContainerInfo, error) 
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return kitLocalContainerInfo{}, fmt.Errorf("decode kit inspect: %w", err)
 	}
-	info := kitLocalContainerInfo{ID: obj.ID, ImageID: obj.Image, User: obj.Config.User, HomeVolume: "", Running: obj.State.Running, HostPort: 0, Labels: obj.Config.Labels}
+	info := kitLocalContainerInfo{AssertionDirectory: "", AssertionReadOnly: false, ID: obj.ID, ImageID: obj.Image, User: obj.Config.User, HomeVolume: "", Running: obj.State.Running, HostPort: 0, Labels: obj.Config.Labels}
 	for _, mount := range obj.Mounts {
 		if mount.Destination == filepath.Dir(KitWorkloadAssertionPath) {
 			if mount.Type != "bind" || mount.RW || info.AssertionDirectory != "" {
@@ -270,6 +269,40 @@ func kitLocalBootstrapArchive(b KitLocalBootstrap) ([]byte, error) {
 func validateKitLocalAssertionFile(path string) error {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Base(path) != "assertion" || filepath.Dir(path) == "/" || strings.ContainsAny(path, ",\r\n\x00") || strings.HasPrefix(path, "/home/kit/") {
 		return fmt.Errorf("kit local requires an absolute clean projection path named assertion in a dedicated directory outside persistent HOME")
+	}
+	return nil
+}
+
+// A directory mount must not grant access to unrelated host files. Operators
+// must keep this directory dedicated to assertion projection for its lifetime.
+func validateKitLocalProjectionDirectory(assertion string) error {
+	directory := filepath.Dir(assertion)
+	parent, err := os.Lstat(directory)
+	if err != nil {
+		return fmt.Errorf("inspect kit assertion projection directory: %w", err)
+	}
+	if !parent.IsDir() {
+		return fmt.Errorf("kit assertion projection parent must be a directory, not a file or symlink")
+	}
+	if parent.Mode().Perm() != 0o700 {
+		return fmt.Errorf("kit assertion projection directory must have permissions 0700")
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return fmt.Errorf("read kit assertion projection directory: %w", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "assertion" {
+		return fmt.Errorf("kit assertion projection requires a dedicated directory containing only assertion")
+	}
+	entry, err := entries[0].Info()
+	if err != nil {
+		return fmt.Errorf("inspect projected kit assertion: %w", err)
+	}
+	if !entry.Mode().IsRegular() {
+		return fmt.Errorf("projected kit assertion must be a regular file")
+	}
+	if entry.Mode().Perm() != 0o600 {
+		return fmt.Errorf("projected kit assertion must have permissions 0600")
 	}
 	return nil
 }

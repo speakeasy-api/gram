@@ -488,6 +488,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	}
 	var createdSAName string
 	var createdSAUID types.UID
+	serviceAccountPersisted := false
 	// Stopped already fences admission and the source claim is gone. Keep that
 	// retryable phase through preparation: no Kubernetes resource has changed.
 	// Bootstrap may mint authority even when its result is an error. Revoke that
@@ -500,7 +501,7 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 			if fenceErr := k.config.Fence(cleanupCtx, r); fenceErr != nil {
 				returnErr = errors.Join(returnErr, fmt.Errorf("revoke failed restore bootstrap: %w", fenceErr))
 			}
-			if createdSAUID != "" {
+			if createdSAUID != "" && !serviceAccountPersisted {
 				returnErr = errors.Join(returnErr, k.deleteOwned(cleanupCtx, kitServiceAccountGVR, createdSAName, createdSAUID))
 			}
 		}
@@ -574,8 +575,10 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	state.Metadata.Workload, state.Metadata.ServiceAccountUID = b.Workload, sa.GetUID()
 	obj, err = k.saveAuthority(ctx, obj, state)
 	if err != nil {
-		return empty, errors.Join(err, k.deleteOwned(ctx, kitServiceAccountGVR, sa.GetName(), sa.GetUID()))
+		return empty, err
 	}
+	// Once published, the exact UID is durable recovery/reap authority.
+	serviceAccountPersisted = true
 	if err = k.deleteOwned(ctx, kitServiceAccountGVR, oldWorkload.ServiceAccount, oldSAUID); err != nil {
 		return empty, err
 	}
