@@ -219,7 +219,13 @@ func TestSetMCPAddressHostedCustomDomainMustBeLiveAndVerified(t *testing.T) {
 
 	_, err = queriesActivate(ctx, f, pending)
 	require.NoError(t, err)
-	out, err := f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, version, "", "docs", pending.String(), true)
+	_, err = f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, version, "", "docs", pending.String(), true)
+	requireConnectionRefusal(t, err, "invalid_request")
+	var refusal *RiskMutationError
+	require.ErrorAs(t, err, &refusal)
+	require.Contains(t, refusal.Message, "free accounts", "a free account keeps the organization prefix on its own domain, as on the dashboard")
+
+	out, err := f.setAddress(ctx, MCPConnectionSettingsMCPServer, f.hostedID, version, "", f.orgSlug+"-docs", pending.String(), true)
 	require.NoError(t, err)
 	require.Len(t, out.Settings.Endpoints, 2)
 	var onDomain *MCPConnectionEndpoint
@@ -229,7 +235,7 @@ func TestSetMCPAddressHostedCustomDomainMustBeLiveAndVerified(t *testing.T) {
 		}
 	}
 	require.NotNil(t, onDomain)
-	require.Equal(t, "docs", onDomain.Slug)
+	require.Equal(t, f.orgSlug+"-docs", onDomain.Slug)
 }
 
 func queriesActivate(ctx context.Context, f connectionMutationFixture, domainID uuid.UUID) (customdomainsrepo.CustomDomain, error) {

@@ -10,7 +10,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -28,26 +27,8 @@ func WithServerState(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpSe
 	return hostingstate.ApplyServer(toolset, wrapper.Visibility, wrapper.UserSessionIssuerID)
 }
 
-// InSync reports whether a canonical wrapper matches its toolset's mirrored hosting columns. Serving denies a
-// drifted pair, as pods that read the columns do, so old and new pods answer alike while both run.
-func InSync(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) bool {
-	return IsCanonical(wrapper, toolset.ID) && wrapper.Visibility == columnVisibility(toolset) && wrapper.UserSessionIssuerID == toolset.UserSessionIssuerID
-}
-
-// columnVisibility maps a toolset's (mcp_enabled, mcp_is_public) columns onto mcp_servers.visibility.
-func columnVisibility(toolset toolsetsrepo.Toolset) string {
-	switch {
-	case !toolset.McpEnabled:
-		return visibility.Disabled
-	case toolset.McpIsPublic:
-		return visibility.Public
-	default:
-		return visibility.Private
-	}
-}
-
 // LoadServerState loads toolset's canonical wrapper and applies WithServerState; wrapper is nil when there is none.
-// The toolset keeps its mirrored address, which the slug fallback serves. A server that kept the toolset's id but
+// The toolset keeps its frozen address, which the slug fallback serves. A server that kept the toolset's id but
 // no longer serves it leaves the toolset disabled.
 func LoadServerState(ctx context.Context, db toolsetsrepo.DBTX, toolset toolsetsrepo.Toolset) (toolsetsrepo.Toolset, *mcpserversrepo.McpServer, error) {
 	wrapper, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})

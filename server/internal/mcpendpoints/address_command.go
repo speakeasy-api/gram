@@ -88,7 +88,7 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint")
 	}
 	if hostedServer != nil {
-		if err := checkHostedCreate(ctx, tx, s.logger, authCtx, *hostedServer, input.CustomDomainID, input.Slug); err != nil {
+		if err := checkHostedNewAddress(ctx, tx, s.logger, authCtx, *hostedServer, input.Slug, input.CustomDomainID); err != nil {
 			return nil, err
 		}
 	}
@@ -124,10 +124,7 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation")
 	}
 	if hostedServer != nil {
-		if err := s.followHostedSlug(ctx, tx, s.logger, authCtx, *hostedServer, nil, created.Slug); err != nil {
-			return nil, err
-		}
-		if err := hostingstate.MirrorToToolset(ctx, tx, *authCtx.ProjectID, hostedServer.ID); err != nil {
+		if err := hostingstate.FollowAlias(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, hostedServer.ID); err != nil {
 			return nil, err //nolint:wrapcheck // oops errors pass through.
 		}
 	}

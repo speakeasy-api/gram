@@ -1,5 +1,5 @@
 // Package hostingstate derives a toolset's MCP hosting state from the server row holding its id. The canonical
-// wrapper owns that state; the toolset's hosting columns mirror it for older pods and stand alone only without one.
+// wrapper owns that state; the toolset's own hosting columns are a frozen alias that stands only without one.
 package hostingstate
 
 import (
@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -38,8 +37,8 @@ func ApplyServer(toolset toolsetsrepo.Toolset, serverVisibility string, issuer u
 }
 
 // ReEnableVisibility is the visibility a disabled hosted server comes back with: public only when it carries
-// external OAuth or an OAuth proxy, which a private server cannot, and private otherwise. The toolset's public
-// flag does not count, since later releases stop updating it.
+// external OAuth or an OAuth proxy, which a private server cannot, and private otherwise. The frozen toolset
+// public flag does not count, since nothing updates it.
 func ReEnableVisibility(toolset toolsetsrepo.Toolset) string {
 	if toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid {
 		return visibility.Public
@@ -125,76 +124,16 @@ func CheckPrivateIngress(ctx context.Context, db networkingressrepo.DBTX, organi
 	return nil
 }
 
-// MirrorToToolset writes a hosted toolset's hosting columns from its canonical server and endpoint, in the
-// caller's transaction, so pods that still read the columns and run the toolset-to-server sync see the same state
-// and that sync writes nothing. The caller locks the toolset row first, then the server's hosting locks. A toolset
-// without a canonical server is left alone. Errors are oops errors; an address another toolset holds is a conflict.
-func MirrorToToolset(ctx context.Context, tx toolsetsrepo.DBTX, projectID, toolsetID uuid.UUID) error {
-	toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load hosted toolset")
-	}
-	server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolsetID, ProjectID: projectID})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load hosted MCP server")
-	case !server.ToolsetID.Valid || server.ToolsetID.UUID != server.ID:
-		return nil
-	}
-	endpoints, err := mcpendpointsrepo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
-		OrganizationID: toolset.OrganizationID, ProjectID: projectID, McpServerID: toolsetID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints")
-	}
-	live := make([]mcpendpointsrepo.McpEndpoint, 0, len(endpoints))
-	for _, row := range endpoints {
-		live = append(live, row.McpEndpoint)
-	}
-	mirrored := MirrorOf(toolset, server, live)
-	if _, err := toolsetsrepo.New(tx).MirrorToolsetHosting(ctx, toolsetsrepo.MirrorToolsetHostingParams{
-		Name: mirrored.Name, McpSlug: mirrored.McpSlug, McpEnabled: mirrored.McpEnabled, McpIsPublic: mirrored.McpIsPublic,
-		CustomDomainID: mirrored.CustomDomainID, UserSessionIssuerID: mirrored.UserSessionIssuerID,
-		ToolVariationsGroupID: mirrored.ToolVariationsGroupID, ID: toolsetID, ProjectID: projectID,
-	}); err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return oops.E(oops.CodeConflict, err, "this name or address is already taken by another toolset")
-		}
-		return oops.E(oops.CodeUnexpected, err, "mirror hosted MCP state to toolset")
-	}
-	return nil
-}
-
-// MirrorOf is toolset with its hosting columns set from its canonical server and live endpoints: the toolset's
-// current address while an endpoint still holds it, else the platform endpoint first, else the oldest one. A disabled
-// server keeps the toolset's public flag, as the column pair encodes it, and a server with no endpoint keeps the
-// toolset's address.
-func MirrorOf(toolset toolsetsrepo.Toolset, server mcpserversrepo.McpServer, endpoints []mcpendpointsrepo.McpEndpoint) toolsetsrepo.Toolset {
-	if server.Name.Valid && server.Name.String != "" {
-		toolset.Name = server.Name.String
-	}
-	switch server.Visibility {
-	case visibility.Public:
-		toolset.McpEnabled, toolset.McpIsPublic = true, true
-	case visibility.Private:
-		toolset.McpEnabled, toolset.McpIsPublic = true, false
-	default:
-		toolset.McpEnabled = false
-	}
-	toolset.UserSessionIssuerID = server.UserSessionIssuerID
-	toolset.ToolVariationsGroupID = server.ToolVariationsGroupID
+// AliasAddress is the address a legacy toolset's MCP alias follows among its hosted server's live endpoints: its
+// current address while an endpoint still holds it, else the platform endpoint, else the oldest one. With no live
+// endpoint the alias stays. This is the address rule pods that mirror the toolset columns apply, so both agree.
+func AliasAddress(toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
 	var preferred *mcpendpointsrepo.McpEndpoint
 	for i := range endpoints {
 		candidate := &endpoints[i]
 		switch {
 		case toolset.McpSlug.Valid && candidate.Slug == toolset.McpSlug.String && candidate.CustomDomainID == toolset.CustomDomainID:
-			return toolset
+			return toolset.McpSlug, toolset.CustomDomainID
 		case preferred == nil:
 			preferred = candidate
 		case !candidate.CustomDomainID.Valid && preferred.CustomDomainID.Valid:
@@ -203,9 +142,44 @@ func MirrorOf(toolset toolsetsrepo.Toolset, server mcpserversrepo.McpServer, end
 			preferred = candidate
 		}
 	}
-	if preferred != nil {
-		toolset.McpSlug = pgtype.Text{String: preferred.Slug, Valid: true}
-		toolset.CustomDomainID = preferred.CustomDomainID
+	if preferred == nil {
+		return toolset.McpSlug, toolset.CustomDomainID
 	}
-	return toolset
+	return pgtype.Text{String: preferred.Slug, Valid: true}, preferred.CustomDomainID
+}
+
+// FollowAlias moves a legacy toolset's MCP alias to the endpoint AliasAddress picks, after a write to its hosted
+// server's endpoints. Toolsets without an alias are left alone. The caller holds the toolset row lock.
+func FollowAlias(ctx context.Context, tx toolsetsrepo.DBTX, organizationID string, projectID, toolsetID uuid.UUID) error {
+	toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load hosted toolset")
+	case !toolset.McpSlug.Valid || toolset.McpSlug.String == "":
+		return nil
+	}
+	rows, err := mcpendpointsrepo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+		OrganizationID: organizationID, ProjectID: projectID, McpServerID: toolsetID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints")
+	}
+	live := make([]mcpendpointsrepo.McpEndpoint, 0, len(rows))
+	for _, row := range rows {
+		live = append(live, row.McpEndpoint)
+	}
+	slug, domainID := AliasAddress(toolset, live)
+	if slug == toolset.McpSlug && domainID == toolset.CustomDomainID {
+		return nil
+	}
+	if err := toolsetsrepo.New(tx).MoveToolsetMCPAlias(ctx, toolsetsrepo.MoveToolsetMCPAliasParams{McpSlug: slug, CustomDomainID: domainID, ID: toolsetID, ProjectID: projectID}); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return oops.E(oops.CodeConflict, err, "this address is already taken by another toolset")
+		}
+		return oops.E(oops.CodeUnexpected, err, "move hosted MCP alias")
+	}
+	return nil
 }

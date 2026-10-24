@@ -13,20 +13,26 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
-const domainsLoading = vi.hoisted(() => ({ current: false }));
+const domainsOverride = vi.hoisted(() => ({
+  current: undefined as
+    | Array<{
+        id: string;
+        domain: string;
+        verified: boolean;
+        activated: boolean;
+      }>
+    | undefined,
+}));
 vi.mock("@/hooks/useToolsetUrl", () => ({
   useCustomDomains: () => ({
-    isLoading: domainsLoading.current,
-    domains: domainsLoading.current
-      ? []
-      : [
-          {
-            id: "domain-1",
-            domain: "mcp.example.com",
-            verified: true,
-            activated: true,
-          },
-        ],
+    domains: domainsOverride.current ?? [
+      {
+        id: "domain-1",
+        domain: "mcp.example.com",
+        verified: true,
+        activated: true,
+      },
+    ],
   }),
 }));
 vi.mock("@/hooks/usePrivateMcpServerUrls", () => ({
@@ -69,15 +75,18 @@ vi.mock("@gram/client/react-query/networkIngress.js", () => ({
 vi.mock("../../../useMcpEndpointSlugValidation", () => ({
   useMcpEndpointSlugValidation: () => null,
 }));
+const deleteEndpoint = vi.hoisted(() => vi.fn());
 vi.mock("@gram/client/react-query/deleteMcpEndpoint.js", () => ({
-  useDeleteMcpEndpointMutation: () => ({ isPending: false, mutate: vi.fn() }),
+  useDeleteMcpEndpointMutation: () => ({
+    isPending: false,
+    mutate: deleteEndpoint,
+  }),
 }));
-const updateEndpoint = vi.hoisted(() => vi.fn());
 vi.mock("@gram/client/react-query/updateMcpEndpoint.js", () => ({
   useUpdateMcpEndpointMutation: () => ({
     isPending: false,
     isError: false,
-    mutate: updateEndpoint,
+    mutate: vi.fn(),
   }),
 }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
@@ -122,42 +131,58 @@ function renderSection(mcpServer: McpServer, endpoints: McpEndpoint[]) {
 
 afterEach(() => {
   cleanup();
-  updateEndpoint.mockReset();
-  domainsLoading.current = false;
+  deleteEndpoint.mockReset();
   networkIngress.current = undefined;
+  domainsOverride.current = undefined;
 });
 
 describe("ServerUrlSection", () => {
-  it("lets a canonical hosted server edit its one address but not add or remove", () => {
-    renderSection(server({ id: "toolset-1", toolsetId: "toolset-1" }), [
-      platformEndpoint,
-    ]);
+  const hosted = () => server({ id: "toolset-1", toolsetId: "toolset-1" });
 
-    expect(screen.getByLabelText("Save address")).toBeTruthy();
-    expect(screen.getByDisplayValue("example")).toBeTruthy();
-    expect(screen.queryByLabelText("Remove address")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
-    expect(screen.queryByText("Custom Address")).toBeNull();
+  it("lets a hosted server add and remove addresses", () => {
+    renderSection(hosted(), [platformEndpoint, customEndpoint]);
+
+    expect(screen.getAllByLabelText("Save address")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Remove address")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Add" })).toBeTruthy();
   });
 
-  it("hides add and remove for a canonical server on a custom domain", () => {
-    renderSection(server({ id: "toolset-1", toolsetId: "toolset-1" }), [
-      customEndpoint,
-    ]);
+  it("lists every platform address of a hosted server so each can be removed", () => {
+    const second = { id: "endpoint-3", slug: "acme-second" } as McpEndpoint;
+    renderSection(hosted(), [platformEndpoint, second]);
 
-    expect(screen.getByLabelText("Save address")).toBeTruthy();
-    expect(screen.queryByLabelText("Remove address")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
-    expect(screen.queryByText("Hosted Address")).toBeNull();
+    expect(screen.getAllByLabelText("Remove address")).toHaveLength(2);
+    fireEvent.click(screen.getAllByLabelText("Remove address")[1]!);
+    expect(deleteEndpoint).toHaveBeenCalledWith({
+      request: { id: "endpoint-3" },
+    });
   });
 
-  it("offers to add an address to a canonical server that has none", () => {
-    renderSection(server({ id: "toolset-1", toolsetId: "toolset-1" }), []);
+  it("confirms before removing the last address that can serve", () => {
+    const dead = {
+      id: "endpoint-4",
+      slug: "stale",
+      customDomainId: "deleted-domain",
+    } as McpEndpoint;
+    renderSection(
+      server({
+        id: "toolset-1",
+        toolsetId: "toolset-1",
+        visibility: "disabled",
+      }),
+      [platformEndpoint, dead],
+    );
 
-    expect(screen.getByText("No hosted address")).toBeTruthy();
-    expect(
-      screen.getAllByRole("button", { name: "Add" }).length,
-    ).toBeGreaterThan(0);
+    const [platformRemove, deadRemove] =
+      screen.getAllByLabelText("Remove address");
+    fireEvent.click(deadRemove!);
+    expect(deleteEndpoint).toHaveBeenCalledWith({
+      request: { id: "endpoint-4" },
+    });
+    deleteEndpoint.mockReset();
+    fireEvent.click(platformRemove!);
+    expect(deleteEndpoint).not.toHaveBeenCalled();
+    expect(screen.getByText("Remove this server's only address?")).toBeTruthy();
   });
 
   it("keeps add and remove for other servers", () => {
@@ -171,97 +196,101 @@ describe("ServerUrlSection", () => {
     expect(screen.getByRole("button", { name: "Add" })).toBeTruthy();
   });
 
-  it("moves a canonical server's platform address onto the verified domain in place", () => {
-    renderSection(server({ id: "toolset-1", toolsetId: "toolset-1" }), [
-      platformEndpoint,
-    ]);
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Move to mcp.example.com" }),
-    );
-    expect(updateEndpoint).toHaveBeenCalledWith({
-      request: {
-        updateMcpEndpointForm: {
-          id: "endpoint-1",
-          mcpServerId: "toolset-1",
-          slug: "acme-example",
-          customDomainId: "domain-1",
-        },
-      },
+  it("only offers a private hosted server addresses in its ingress namespace", () => {
+    const privateHosted = server({
+      id: "toolset-1",
+      toolsetId: "toolset-1",
+      networkAccessMode: "private_only",
     });
-  });
-
-  it("moves a canonical server back to the platform only once its domain cannot serve", () => {
-    renderSection(server({ id: "toolset-1", toolsetId: "toolset-1" }), [
-      customEndpoint,
-    ]);
-    expect(
-      screen.queryByRole("button", { name: "Move to Speakeasy domain" }),
-    ).toBeNull();
-    cleanup();
-
-    renderSection(server({ id: "toolset-1", toolsetId: "toolset-1" }), [
-      { ...customEndpoint, customDomainId: "deleted-domain" },
-    ]);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Move to Speakeasy domain" }),
-    );
-    expect(updateEndpoint).toHaveBeenCalledWith({
-      request: {
-        updateMcpEndpointForm: {
-          id: "endpoint-2",
-          mcpServerId: "toolset-1",
-          slug: "acme-example",
-          customDomainId: undefined,
-        },
-      },
-    });
-  });
-
-  it("does not treat a still-loading domain list as a deleted domain", () => {
-    domainsLoading.current = true;
-    renderSection(server({ id: "toolset-1", toolsetId: "toolset-1" }), [
-      customEndpoint,
-    ]);
-
-    expect(
-      screen.queryByRole("button", { name: "Move to Speakeasy domain" }),
-    ).toBeNull();
-  });
-
-  it("only offers a private server moves within its ingress namespace", () => {
     networkIngress.current = { endpointNamespaceKind: "platform" };
-    renderSection(
-      server({
-        id: "toolset-1",
-        toolsetId: "toolset-1",
-        networkAccessMode: "private_only",
-      }),
-      [platformEndpoint],
-    );
-    expect(screen.queryByRole("button", { name: /^Move to/ })).toBeNull();
+    renderSection(privateHosted, []);
+    expect(
+      screen.getByRole("button", { name: "Add" }),
+      "only the hosted address can be added",
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Private network access keeps this server's addresses on its ingress namespace.",
+      ),
+    ).toBeTruthy();
     cleanup();
 
     networkIngress.current = {
       endpointNamespaceKind: "custom_domain",
       customDomainId: "domain-1",
     };
+    renderSection(privateHosted, []);
+    expect(screen.getAllByRole("button", { name: "Add" })).toHaveLength(1);
+    expect(screen.getByText("No hosted address")).toBeTruthy();
+    expect(screen.getByText("No custom address")).toBeTruthy();
+  });
+
+  it("lets a hosted server add another platform address", () => {
+    renderSection(hosted(), [platformEndpoint]);
+
+    fireEvent.click(screen.getByLabelText("Add hosted address"));
+    expect(screen.getByLabelText("Add address")).toBeTruthy();
+  });
+
+  it("lets a private hosted server on a platform ingress add a platform address", () => {
+    networkIngress.current = { endpointNamespaceKind: "platform" };
     renderSection(
       server({
         id: "toolset-1",
         toolsetId: "toolset-1",
-        networkAccessMode: "private_only",
+        networkAccessMode: "dual",
       }),
       [platformEndpoint],
     );
-    expect(
-      screen.getByRole("button", { name: "Move to mcp.example.com" }),
-    ).toBeTruthy();
+
+    expect(screen.getByLabelText("Add hosted address")).toBeTruthy();
   });
 
-  it("does not offer in-place moves to other servers", () => {
+  it("asks to disable an enabled hosted server before removing its last address", () => {
+    renderSection(hosted(), [platformEndpoint]);
+
+    fireEvent.click(screen.getByLabelText("Remove address"));
+    expect(screen.getByText("Disable this server first")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove address" })).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Close" }).at(-1)!);
+    expect(deleteEndpoint).not.toHaveBeenCalled();
+  });
+
+  it("removes the last address of a disabled hosted server after confirming", () => {
+    renderSection(
+      server({
+        id: "toolset-1",
+        toolsetId: "toolset-1",
+        visibility: "disabled",
+      }),
+      [platformEndpoint],
+    );
+
+    fireEvent.click(screen.getByLabelText("Remove address"));
+    fireEvent.click(screen.getByRole("button", { name: "Remove address" }));
+    expect(deleteEndpoint).toHaveBeenCalledWith({
+      request: { id: "endpoint-1" },
+    });
+  });
+
+  it("only offers verified, activated domains for a new address", () => {
+    domainsOverride.current = [
+      {
+        id: "domain-2",
+        domain: "pending.example.com",
+        verified: false,
+        activated: false,
+      },
+      {
+        id: "domain-1",
+        domain: "mcp.example.com",
+        verified: true,
+        activated: true,
+      },
+    ];
     renderSection(server({ toolsetId: "toolset-1" }), [platformEndpoint]);
 
-    expect(screen.queryByRole("button", { name: /^Move to/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.queryByText(/pending\.example\.com/)).toBeNull();
   });
 });

@@ -195,7 +195,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	}
 	hosted := mcpServerID.Valid && isCanonicalHosted(mcpServer)
 	if hosted {
-		if err := checkHostedCreate(ctx, dbtx, logger, authCtx, mcpServer, customDomainID, slug); err != nil {
+		if err := checkHostedNewAddress(ctx, dbtx, logger, authCtx, mcpServer, slug, customDomainID); err != nil {
 			return nil, err
 		}
 	}
@@ -247,10 +247,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation").LogError(ctx, logger)
 	}
 	if hosted {
-		if err := s.followHostedSlug(ctx, dbtx, logger, authCtx, mcpServer, nil, created.Slug); err != nil {
-			return nil, err
-		}
-		if err := hostingstate.MirrorToToolset(ctx, dbtx, *authCtx.ProjectID, mcpServer.ID); err != nil {
+		if err := hostingstate.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.ID); err != nil {
 			return nil, err //nolint:wrapcheck // oops errors pass through.
 		}
 	}
@@ -575,7 +572,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		}
 		for _, server := range lockedServers {
 			if isCanonicalHosted(server) {
-				return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's address cannot move to or from another backend").LogWarn(ctx, logger)
+				return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's endpoints cannot move to or from another backend; create or delete endpoints instead").LogWarn(ctx, logger)
 			}
 		}
 	}
@@ -750,6 +747,11 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
 	}
+	if preexisting.McpServerID.Valid {
+		if err := lockHostedToolset(ctx, dbtx, *authCtx.ProjectID, preexisting.McpServerID.UUID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock hosted toolset").LogError(ctx, logger)
+		}
+	}
 
 	if err := lockCustomDomains(ctx, dbtx, uniqueIDs(preexisting.CustomDomainID)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
@@ -767,6 +769,7 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	if existing.CustomDomainID != preexisting.CustomDomainID {
 		return oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request").LogError(ctx, logger)
 	}
+	hostedServerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if existing.McpServerID.Valid {
 		server, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: existing.McpServerID.UUID, ProjectID: *authCtx.ProjectID})
 		switch {
@@ -774,7 +777,10 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 			return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 		case err == nil:
 			if isCanonicalHosted(server) {
-				return oops.E(oops.CodeInvalid, nil, "a hosted MCP server keeps its address; disable the server instead").LogWarn(ctx, logger)
+				hostedServerID = uuid.NullUUID{UUID: server.ID, Valid: true}
+			}
+			if err := rejectLastHostedAddress(ctx, dbtx, logger, authCtx, server, existing.ID); err != nil {
+				return err
 			}
 		}
 	}
@@ -787,6 +793,11 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 			return oops.E(oops.CodeNotFound, err, "mcp endpoint not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete mcp endpoint").LogError(ctx, logger)
+	}
+	if hostedServerID.Valid {
+		if err := hostingstate.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, hostedServerID.UUID); err != nil {
+			return err //nolint:wrapcheck // oops errors pass through.
+		}
 	}
 
 	if err := s.audit.LogMcpEndpointDelete(ctx, dbtx, audit.LogMcpEndpointDeleteEvent{

@@ -166,13 +166,13 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 }
 
 // canonicalAttachTarget previews a toolset's canonical wrapper, which owns the issuer: its live endpoints and,
-// while the server is enabled, the toolset's mirrored address, which still serves on its own host.
+// while the server is enabled, the toolset's frozen alias, which still serves on its own host.
 func (s *Service) canonicalAttachTarget(ctx context.Context, logger *slog.Logger, organizationID string, projectID uuid.UUID, wrapper *mcpserversrepo.McpServer, toolset toolsetsrepo.Toolset) (attachTarget, error) {
 	customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, wrapper.ID)
 	if err != nil {
 		return attachTarget{issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, onPlatformHost: false}, err
 	}
-	// The toolset's mirrored address still serves on its own host while the server is enabled.
+	// The frozen alias still serves on its own host while the server is enabled.
 	if toolset.McpSlug.Valid && toolset.McpSlug.String != "" && (wrapper.Visibility == visibility.Public || wrapper.Visibility == visibility.Private) {
 		customDomainIDs = append(customDomainIDs, toolset.CustomDomainID)
 	}
