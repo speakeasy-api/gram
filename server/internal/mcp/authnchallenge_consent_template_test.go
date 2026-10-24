@@ -1012,3 +1012,26 @@ func TestConsentTemplateRendersUpstreamCredentialPicker(t *testing.T) {
 	require.NotContains(t, page, "Sign in to the service as", "a single option needs no picker")
 	require.Contains(t, page, `<input type="hidden" name="auth_client" form="consent-approve-form" value="`+shared.String()+`" />`)
 }
+
+func TestConsentTemplateExplainsWhyThePersonCannotApproveForThemselves(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:        "Example client",
+		MCPSlug:           "example",
+		MCPRouteBase:      mcproute.MCP,
+		State:             "state",
+		CSRFToken:         "csrf",
+		SubjectDisplay:    "user@example.com",
+		ScriptURL:         "/mcp/consent-page-test.js",
+		ConsentEnabled:    false,
+		SelfApprovalError: &consentApprovalError{Message: "You don't have access to any of the ways this server signs in.", ActionURL: "https://example.com/request-access", ActionLabel: "Request access"},
+	})
+	require.NoError(t, err)
+
+	html := normalizeWhitespace(page.String())
+	require.Contains(t, html, `<div role="alert" data-agent-self-only data-self-approval-error`, "hidden once the page approves for an agent")
+	require.Contains(t, html, "You don&#39;t have access to any of the ways this server signs in.")
+	require.Contains(t, html, `<a class="underline" href="https://example.com/request-access">Request access</a>`)
+}
