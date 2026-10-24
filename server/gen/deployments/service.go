@@ -71,21 +71,6 @@ type AddDeploymentPackageForm struct {
 	Version *string
 }
 
-type AddExternalMCPForm struct {
-	// The ID of the external MCP registry the server is from.
-	RegistryID *string
-	// The display name for the external MCP server.
-	Name string
-	// A URL-friendly identifier used for tool prefixing (e.g., 'exa').
-	Slug types.Slug
-	// The canonical server name used to look up the server in the registry (e.g.,
-	// 'slack', 'ai.exa/exa').
-	RegistryServerSpecifier string
-	// URLs of the remotes to use for this MCP server. If not provided, the backend
-	// will auto-select based on transport type preference.
-	SelectedRemotes []string
-}
-
 type AddFunctionsForm struct {
 	// The ID of the functions file from the assets service.
 	AssetID string
@@ -148,7 +133,6 @@ type CreateDeploymentPayload struct {
 	Openapiv3Assets []*AddOpenAPIv3DeploymentAssetForm
 	Functions       []*AddFunctionsForm
 	Packages        []*AddDeploymentPackageForm
-	ExternalMcps    []*AddExternalMCPForm
 }
 
 // CreateDeploymentResult is the result type of the deployments service
@@ -229,8 +213,6 @@ type EvolvePayload struct {
 	UpsertPackages []*AddPackageForm
 	// The tool functions to upsert in the new deployment.
 	UpsertFunctions []*AddFunctionsForm
-	// The external MCP servers to upsert in the new deployment.
-	UpsertExternalMcps []*AddExternalMCPForm
 	// The OpenAPI 3.x documents, identified by slug, to exclude from the new
 	// deployment when cloning a previous deployment.
 	ExcludeOpenapiv3Assets []string
@@ -240,8 +222,8 @@ type EvolvePayload struct {
 	// The functions, identified by slug, to exclude from the new deployment when
 	// cloning a previous deployment.
 	ExcludeFunctions []string
-	// The external MCP servers, identified by slug, to exclude from the new
-	// deployment when cloning a previous deployment.
+	// Has no effect: new deployments never include external MCP servers. Accepted
+	// so existing callers keep working.
 	ExcludeExternalMcps []string
 }
 
