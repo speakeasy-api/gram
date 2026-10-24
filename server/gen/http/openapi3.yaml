@@ -104017,19 +104017,28 @@ components:
                     type: string
                     description: The MCP server.
                     format: uuid
+                no_auth_allowed:
+                    type: boolean
+                    description: Whether the server was decided to need no upstream authentication, so no-auth can be chosen.
                 options:
                     type: array
                     items:
                         $ref: '#/components/schemas/ExecutionProfileOption'
                     description: The credentials that can be chosen.
                 source:
+                    enum:
+                        - admin
+                        - issuance
+                        - backfill
+                        - automatic
                     type: string
-                    description: 'How the choice was made: admin, issuance, backfill, or automatic for one the next turn makes on its own.'
+                    x-speakeasy-name-override: ExecutionProfileChoiceSource
             description: One MCP server an assistant's turns reach through Speakeasy.
             required:
                 - mcp_server_id
                 - chosen
                 - options
+                - no_auth_allowed
         ExplainResourceAccessResult:
             type: object
             properties:

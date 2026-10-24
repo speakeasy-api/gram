@@ -152,6 +152,10 @@ func (s *Service) SetExecutionProfileChoice(ctx context.Context, payload *gen.Se
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", upstreamclients.ErrChoiceNotOffered.Error()).LogWarn(ctx, s.logger)
 	case errors.Is(err, upstreamclients.ErrChoiceNeedsCredential):
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", upstreamclients.ErrChoiceNeedsCredential.Error()).LogWarn(ctx, s.logger)
+	case errors.Is(err, upstreamclients.ErrChoiceNeedsNoCredential):
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", upstreamclients.ErrChoiceNeedsNoCredential.Error()).LogWarn(ctx, s.logger)
+	case errors.Is(err, upstreamclients.ErrChoiceUpstreamAuthUndecided):
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", upstreamclients.ErrChoiceUpstreamAuthUndecided.Error()).LogWarn(ctx, s.logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "change execution profile").LogError(ctx, s.logger)
 	}
@@ -178,15 +182,16 @@ func toHTTPExecutionProfile(triggerName string, view executionprofiles.View) *ge
 	servers := make([]*gen.ExecutionProfileServer, 0, len(view.Servers))
 	for _, server := range view.Servers {
 		out := &gen.ExecutionProfileServer{
-			McpServerID:  server.MCPServerID.String(),
-			Chosen:       server.Choice != nil,
-			AuthClientID: nil,
-			Source:       nil,
-			GapReason:    nil,
-			Options:      make([]*gen.ExecutionProfileOption, 0, len(server.Options)),
+			McpServerID:   server.MCPServerID.String(),
+			Chosen:        server.Choice != nil,
+			AuthClientID:  nil,
+			Source:        nil,
+			GapReason:     nil,
+			Options:       make([]*gen.ExecutionProfileOption, 0, len(server.Options)),
+			NoAuthAllowed: server.NoAuthAllowed,
 		}
 		if server.Choice != nil {
-			out.Source = new(server.Choice.Source)
+			out.Source = new(gen.ExecutionProfileChoiceSource(server.Choice.Source))
 			if server.Choice.AuthClientID.Valid {
 				out.AuthClientID = new(server.Choice.AuthClientID.UUID.String())
 			}

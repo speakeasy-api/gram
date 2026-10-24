@@ -56,6 +56,9 @@ type ServerView struct {
 	Gap *GapReason
 	// Options are the credentials the profile's context can choose.
 	Options []Option
+	// NoAuthAllowed reports that the server was decided to need no upstream
+	// authentication, so no-auth can be chosen.
+	NoAuthAllowed bool
 }
 
 // View is a profile's latest version as the dashboard shows it.
@@ -121,10 +124,12 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 		return View{}, fmt.Errorf("list server auth clients: %w", err)
 	}
 	options := map[uuid.UUID][]Option{}
+	live := map[uuid.UUID]bool{}
 	for _, row := range offered {
 		if !row.AuthClientID.Valid {
 			continue
 		}
+		live[row.AuthClientID.UUID] = true
 		if upstreamclients.CheckConfiguredChoice([]upstreamclientsrepo.ListServerConsentAuthClientsRow{row}, row.AuthClientID, target.Context == ContextUserless) != nil {
 			continue
 		}
@@ -133,12 +138,21 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 
 	view := View{Target: target, Version: profile.Version, Servers: make([]ServerView, 0, len(servers))}
 	for _, row := range servers {
-		server := ServerView{MCPServerID: row.McpServerID, Choice: nil, Gap: nil, Options: options[row.McpServerID]}
+		server := ServerView{
+			MCPServerID: row.McpServerID, Choice: nil, Gap: nil, Options: options[row.McpServerID],
+			NoAuthAllowed: row.RequiresUpstreamAuth.Valid && !row.RequiresUpstreamAuth.Bool,
+		}
 		if server.Options == nil {
 			server.Options = []Option{}
 		}
 		if choice, ok := recorded[row.McpServerID]; ok {
 			server.Choice = &choice
+			// A recorded client the server no longer offers enabled serves
+			// nothing until another is chosen.
+			if choice.AuthClientID.Valid && !live[choice.AuthClientID.UUID] {
+				reason := GapNoClient
+				server.Gap = &reason
+			}
 		} else if d, gap := decide(row, target.Context); gap != nil {
 			server.Gap = &gap.Reason
 		} else {
@@ -198,14 +212,22 @@ func SetChoice(ctx context.Context, db TxStarter, target Target, serverID uuid.U
 	if err != nil {
 		return fmt.Errorf("list execution profile servers: %w", err)
 	}
-	reached := false
-	for _, row := range servers {
-		reached = reached || row.McpServerID == serverID
+	var reachedRow *ListProfileServersRow
+	for i := range servers {
+		if servers[i].McpServerID == serverID {
+			reachedRow = &servers[i]
+		}
 	}
-	if !reached {
+	if reachedRow == nil {
 		return ErrServerNotReached
 	}
 	var previous *Choice
+	if !reachedRow.HasChoice {
+		// The choice the next turn would make on its own is what this replaces.
+		if d, gap := decide(*reachedRow, target.Context); gap == nil {
+			previous = &Choice{AuthClientID: uuid.NullUUID{UUID: d.authClientID, Valid: d.authClientID != uuid.Nil}, Source: SourceAutomatic}
+		}
+	}
 	if profile.Version > 0 {
 		rows, err := q.ListVersionChoices(ctx, ListVersionChoicesParams{VersionID: profile.VersionID, OrganizationID: target.OrganizationID})
 		if err != nil {
@@ -247,6 +269,7 @@ func SetChoice(ctx context.Context, db TxStarter, target Target, serverID uuid.U
 			ToVersionID:       versionID,
 			FromVersionID:     profile.VersionID,
 			OrganizationID:    target.OrganizationID,
+			ProjectID:         target.ProjectID,
 			ExceptMcpServerID: serverID,
 		}); err != nil {
 			return fmt.Errorf("copy execution profile choices: %w", err)

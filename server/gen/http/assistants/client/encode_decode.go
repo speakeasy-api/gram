@@ -3050,11 +3050,15 @@ func unmarshalAssistantExecutionProfileResponseBodyToAssistantsAssistantExecutio
 // type *ExecutionProfileServerResponseBody.
 func unmarshalExecutionProfileServerResponseBodyToAssistantsExecutionProfileServer(v *ExecutionProfileServerResponseBody) *assistants.ExecutionProfileServer {
 	res := &assistants.ExecutionProfileServer{
-		McpServerID:  *v.McpServerID,
-		Chosen:       *v.Chosen,
-		AuthClientID: v.AuthClientID,
-		Source:       v.Source,
-		GapReason:    v.GapReason,
+		McpServerID:   *v.McpServerID,
+		Chosen:        *v.Chosen,
+		AuthClientID:  v.AuthClientID,
+		NoAuthAllowed: *v.NoAuthAllowed,
+		GapReason:     v.GapReason,
+	}
+	if v.Source != nil {
+		source := assistants.ExecutionProfileChoiceSource(*v.Source)
+		res.Source = &source
 	}
 	res.Options = make([]*assistants.ExecutionProfileOption, len(v.Options))
 	for i, val := range v.Options {

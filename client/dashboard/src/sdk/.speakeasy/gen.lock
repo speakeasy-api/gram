@@ -9312,7 +9312,7 @@ examples:
           assistant_id: "7ac0789c-60b9-451d-b74e-e5324fd18e91"
       responses:
         "200":
-          application/json: {"profiles": [{"execution_context": "user_backed", "servers": [{"chosen": true, "mcp_server_id": "f3e824af-6009-4259-a903-642999b77617", "options": []}], "trigger_instance_id": "5cbe1a3d-44b6-4d8a-bb48-3b131fe67343", "trigger_name": "<value>", "version": 420338}]}
+          application/json: {"profiles": [{"execution_context": "user_backed", "servers": [{"chosen": true, "mcp_server_id": "f3e824af-6009-4259-a903-642999b77617", "no_auth_allowed": true, "options": []}], "trigger_instance_id": "5cbe1a3d-44b6-4d8a-bb48-3b131fe67343", "trigger_name": "<value>", "version": 420338}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

@@ -2798,11 +2798,15 @@ func marshalAssistantsAssistantExecutionProfileToAssistantExecutionProfileRespon
 // type *assistants.ExecutionProfileServer.
 func marshalAssistantsExecutionProfileServerToExecutionProfileServerResponseBody(v *assistants.ExecutionProfileServer) *ExecutionProfileServerResponseBody {
 	res := &ExecutionProfileServerResponseBody{
-		McpServerID:  v.McpServerID,
-		Chosen:       v.Chosen,
-		AuthClientID: v.AuthClientID,
-		Source:       v.Source,
-		GapReason:    v.GapReason,
+		McpServerID:   v.McpServerID,
+		Chosen:        v.Chosen,
+		AuthClientID:  v.AuthClientID,
+		NoAuthAllowed: v.NoAuthAllowed,
+		GapReason:     v.GapReason,
+	}
+	if v.Source != nil {
+		source := string(*v.Source)
+		res.Source = &source
 	}
 	if v.Options != nil {
 		res.Options = make([]*ExecutionProfileOptionResponseBody, len(v.Options))

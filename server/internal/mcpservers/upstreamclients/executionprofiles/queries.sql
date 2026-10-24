@@ -143,6 +143,7 @@ FROM upstream_client_selections AS sel
 WHERE sel.credential_kind = 'execution_profile_version'
   AND sel.credential_id = @from_version_id::uuid
   AND sel.organization_id = @organization_id
+  AND sel.project_id = @project_id
   AND sel.deleted IS FALSE;
 
 -- name: RecordProfileChoice :execrows
@@ -271,6 +272,7 @@ FROM upstream_client_selections AS sel
 WHERE sel.credential_kind = 'execution_profile_version'
   AND sel.credential_id = @from_version_id::uuid
   AND sel.organization_id = @organization_id
+  AND sel.project_id = @project_id
   AND sel.mcp_server_id <> @except_mcp_server_id::uuid
   AND sel.deleted IS FALSE;
 
@@ -358,3 +360,21 @@ SELECT @organization_id, @project_id, @organization_id, @project_id,
        ab.id, @organization_id, @project_id, ab.id,
        1, generate_uuidv7(), 'workload', 1
 FROM ab;
+
+-- name: DisableAuthClientFixture :exec
+UPDATE mcp_auth_clients SET enabled = FALSE WHERE id = @id AND organization_id = @organization_id;
+
+-- name: SeedTriggerBindingFixture :exec
+-- Binds a trigger to an assistant's existing agent binding.
+INSERT INTO trigger_workload_bindings (
+  organization_id, project_id, project_ref_organization_id, project_ref_id,
+  original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
+  original_assistant_binding_id, assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id,
+  assistant_binding_generation, original_workload_issuer_id, subject, generation
+)
+SELECT @organization_id, @project_id, @organization_id, @project_id,
+       @trigger_id, @organization_id, @project_id, @trigger_id,
+       ab.id, @organization_id, @project_id, ab.id,
+       ab.generation, generate_uuidv7(), 'workload', 1
+FROM assistant_agent_bindings AS ab
+WHERE ab.assistant_id = @assistant_id AND ab.deleted IS FALSE;

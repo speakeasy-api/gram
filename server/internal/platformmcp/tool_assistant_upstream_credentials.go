@@ -31,7 +31,7 @@ type ChooseAssistantUpstreamCredentialInput struct {
 	AuthClientID      string `json:"auth_client_id,omitempty" jsonschema:"one of the server's options from a preview"`
 	NoAuth            bool   `json:"no_auth,omitempty" jsonschema:"use no upstream authentication, for a server that needs none"`
 	Automatic         bool   `json:"automatic,omitempty" jsonschema:"remove the choice so the next turn makes it from the server's configuration"`
-	ExpectedVersion   int64  `json:"expected_version,omitempty" jsonschema:"the profile version from a fresh preview; on conflict preview again and reconfirm"`
+	ExpectedVersion   *int64 `json:"expected_version,omitempty" jsonschema:"the profile version from a fresh preview, required with confirmed:true; on conflict preview again and reconfirm"`
 	Confirmed         bool   `json:"confirmed" jsonschema:"false previews every profile; true only after explicit confirmation of this exact assistant, trigger, context, server and choice"`
 }
 
@@ -48,6 +48,8 @@ type AssistantUpstreamCredentialServer struct {
 	Source       string                              `json:"source,omitempty"`
 	GapReason    string                              `json:"gap_reason,omitempty"`
 	Options      []AssistantUpstreamCredentialOption `json:"options"`
+	// NoAuthAllowed reports that no_auth can be chosen for the server.
+	NoAuthAllowed bool `json:"no_auth_allowed"`
 }
 
 type AssistantUpstreamCredentialProfile struct {
@@ -88,9 +90,11 @@ func (s *AssistantIdentityService) chooseUpstreamCredential(ctx context.Context,
 				modes++
 			}
 		}
-		_, triggerErr := uuid.Parse(input.TriggerInstanceID)
-		_, serverErr := uuid.Parse(input.McpServerID)
-		if modes != 1 || triggerErr != nil || serverErr != nil || (input.ExecutionContext != "user_backed" && input.ExecutionContext != "userless") {
+		triggerID, triggerErr := uuid.Parse(input.TriggerInstanceID)
+		serverID, serverErr := uuid.Parse(input.McpServerID)
+		if modes != 1 || triggerErr != nil || serverErr != nil || triggerID == uuid.Nil || serverID == uuid.Nil ||
+			input.ExpectedVersion == nil || *input.ExpectedVersion < 0 ||
+			(input.ExecutionContext != "user_backed" && input.ExecutionContext != "userless") {
 			return zero, oops.C(oops.CodeBadRequest)
 		}
 	}
@@ -138,7 +142,7 @@ func (s *AssistantIdentityService) chooseUpstreamCredential(ctx context.Context,
 	// the choice and audits it atomically, then returns committed state.
 	payload := &genassistants.SetExecutionProfileChoicePayload{
 		AssistantID: assistantID.String(), TriggerInstanceID: input.TriggerInstanceID, ExecutionContext: input.ExecutionContext,
-		McpServerID: input.McpServerID, AuthClientID: nil, NoAuth: nil, Automatic: nil, ExpectedVersion: input.ExpectedVersion,
+		McpServerID: input.McpServerID, AuthClientID: nil, NoAuth: nil, Automatic: nil, ExpectedVersion: *input.ExpectedVersion,
 		SessionToken: nil, ProjectSlugInput: nil,
 	}
 	switch {
@@ -168,13 +172,13 @@ func assistantUpstreamCredentialProfile(profile *genassistants.AssistantExecutio
 	for _, server := range profile.Servers {
 		s := AssistantUpstreamCredentialServer{
 			McpServerID: server.McpServerID, Chosen: server.Chosen, AuthClientID: "", Source: "", GapReason: "",
-			Options: make([]AssistantUpstreamCredentialOption, 0, len(server.Options)),
+			Options: make([]AssistantUpstreamCredentialOption, 0, len(server.Options)), NoAuthAllowed: server.NoAuthAllowed,
 		}
 		if server.AuthClientID != nil {
 			s.AuthClientID = *server.AuthClientID
 		}
 		if server.Source != nil {
-			s.Source = *server.Source
+			s.Source = string(*server.Source)
 		}
 		if server.GapReason != nil {
 			s.GapReason = *server.GapReason
