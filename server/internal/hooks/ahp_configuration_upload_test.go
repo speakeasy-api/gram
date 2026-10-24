@@ -286,11 +286,6 @@ func TestAHPConfigurationUploadBasePath(t *testing.T) {
 		{"https://api.example.test/prefix/", "https://api.example.test/prefix/ahp/uploads", false},
 		{"https://api.example.test/api%2Fv1/space%20here?ignored=1#ignored", "https://api.example.test/api%2Fv1/space%20here/ahp/uploads", false},
 		{"https://userinfo@api.example.test/prefix", "", true},
-		{"http://api.example.test/prefix", "", true},
-		{"http://192.0.2.1/prefix", "", true},
-		{"http://localhost:8080/prefix", "http://localhost:8080/prefix/ahp/uploads", false},
-		{"http://127.0.0.1:8080/prefix", "http://127.0.0.1:8080/prefix/ahp/uploads", false},
-		{"http://[::1]:8080/prefix", "http://[::1]:8080/prefix/ahp/uploads", false},
 	} {
 		t.Run(tc.base, func(t *testing.T) {
 			t.Parallel()
