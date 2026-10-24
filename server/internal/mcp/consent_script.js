@@ -666,4 +666,16 @@
       }
     });
   }
+
+  // A gateway server's credential decides which of its tools can be
+  // approved, so changing it reloads the page with every server's pick.
+  var gatewayAuthForm = document.querySelector("#gateway-auth-form");
+  if (gatewayAuthForm) {
+    var authSelects = document.querySelectorAll("select[data-auto-submit]");
+    Array.prototype.forEach.call(authSelects, function (select) {
+      select.addEventListener("change", function () {
+        gatewayAuthForm.submit();
+      });
+    });
+  }
 })();

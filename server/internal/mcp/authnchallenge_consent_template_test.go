@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -968,4 +969,46 @@ func TestConsentTemplateAgentAccessUsesExistingProviderCard(t *testing.T) {
 	require.NotContains(t, html, "Agent service connections")
 	require.NotContains(t, html, "data-agent-connection-list")
 	require.Contains(t, html, `value="disconnect"`)
+}
+
+func TestConsentTemplateRendersUpstreamCredentialPicker(t *testing.T) {
+	t.Parallel()
+
+	shared, personal := uuid.New(), uuid.New()
+	render := func(auth *consentServerAuth) string {
+		var page bytes.Buffer
+		require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
+			ClientName: "Example client", MCPSlug: "example", MCPRouteBase: mcproute.MCP,
+			State: "state", CSRFToken: "csrf", SubjectDisplay: "user@example.com",
+			ScriptURL: "/mcp/consent-page-test.js", ConsentEnabled: auth.Approvable(), UpstreamAuth: auth,
+		}))
+		return normalizeWhitespace(page.String())
+	}
+
+	page := render(&consentServerAuth{ServerID: uuid.New(), Status: consentAuthChoose, Options: []consentAuthClientOption{
+		{ID: shared, Name: "Engineering token", Type: authClientTypeStaticCredential, State: consentClientReady, Selected: true},
+		{ID: personal, Name: "Own account", Type: authClientTypeRemoteSession, State: consentClientConnect},
+	}})
+	require.Contains(t, page, "Sign in to the service as")
+	require.Contains(t, page, `name="auth_client" form="consent-approve-form" value="`+shared.String()+`"`)
+	require.Contains(t, page, "the service records your actions as this shared identity")
+	require.Contains(t, page, "Connect your account below to choose this.")
+	require.Regexp(t, `value="`+personal.String()+`"[^>]*disabled`, page, "an option that needs connecting cannot be picked")
+
+	reconnect, setup := uuid.New(), uuid.New()
+	page = render(&consentServerAuth{ServerID: uuid.New(), Status: consentAuthChoose, Options: []consentAuthClientOption{
+		{ID: shared, Name: "Engineering token", Type: authClientTypeStaticCredential, State: consentClientReady, Selected: true},
+		{ID: reconnect, Name: "Own account", Type: authClientTypeRemoteSession, State: consentClientReconnect},
+		{ID: setup, Name: "Identity provider", Type: authClientTypeEMA, State: consentClientSetup},
+	}})
+	require.Contains(t, page, "Reconnect your account below to choose this.")
+	require.Contains(t, page, "Not set up yet. Ask an administrator.")
+	require.Regexp(t, `value="`+reconnect.String()+`"[^>]*disabled`, page, "an option that needs reconnecting cannot be picked")
+	require.Regexp(t, `value="`+setup.String()+`"[^>]*disabled`, page, "an option that is not set up cannot be picked")
+
+	page = render(&consentServerAuth{ServerID: uuid.New(), Status: consentAuthChoose, Options: []consentAuthClientOption{
+		{ID: shared, Name: "Engineering token", Type: authClientTypeStaticCredential, State: consentClientReady, Selected: true},
+	}})
+	require.NotContains(t, page, "Sign in to the service as", "a single option needs no picker")
+	require.Contains(t, page, `<input type="hidden" name="auth_client" form="consent-approve-form" value="`+shared.String()+`" />`)
 }

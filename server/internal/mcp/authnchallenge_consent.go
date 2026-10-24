@@ -222,6 +222,10 @@ type consentTemplateData struct {
 	// servers, or, on one server's connect page, narrows RemoteSessionCards
 	// to that server's services. Nil for every other endpoint.
 	Gateway *gatewayConsentView
+	// UpstreamAuth is the direct server's upstream credential choice, where
+	// typed auth client resolution is enforced. Nil elsewhere, where the
+	// service cards decide.
+	UpstreamAuth *consentServerAuth
 }
 
 // sessionDurationOption is one <option> of the consent page's session length
@@ -634,6 +638,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
+	upstreamAuth, err := s.directConsentAuthChoice(ctx, endpoint, challengeState, cards, uuid.Nil)
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "read upstream credential choices").LogError(ctx, logger)
+	}
+
 	connectedCardCount := 0
 	chainedCardCount := 0
 	autoRefreshHasSessions := false
@@ -656,6 +665,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
 	// Gateway capture below decides whether any member can be approved.
 	consentEnabled := gateway != nil || len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
+	if upstreamAuth != nil {
+		// The chosen credential decides, not whether some service card is
+		// connected: a shared credential needs no connection at all.
+		consentEnabled = upstreamAuth.Approvable()
+	}
 
 	agentSelectionEnabled := false
 	agentSetupURL := ""
@@ -790,6 +804,17 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 		showToolsIsland = !lockedDown
 	}
+	// With an agent to approve for, the submission judges the chosen
+	// subject's credential, so the person's own status does not block it.
+	if approvalError == nil && !agentSelectionEnabled && upstreamAuth != nil && (upstreamAuth.Status == consentAuthNoAccess || upstreamAuth.Status == consentAuthSetupIncomplete) {
+		approvalError = &consentApprovalError{Message: upstreamAuth.Problem(), ActionURL: "", ActionLabel: ""}
+		if upstreamAuth.Status == consentAuthNoAccess {
+			approvalError.ActionURL = s.requestAccessURL(ctx, endpoint.McpServerID.UUID.String(), endpoint.Slug)
+			if approvalError.ActionURL != "" {
+				approvalError.ActionLabel = "Request access"
+			}
+		}
+	}
 	if approvalError != nil {
 		showToolsIsland = false
 		consentEnabled = false
@@ -846,6 +871,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AgentOptions:            agentOptions,
 		AgentSetupURL:           agentSetupURL,
 		Gateway:                 gateway,
+		UpstreamAuth:            upstreamAuth,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1154,6 +1180,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if err != nil {
 		return oops.E(oops.CodeUnavailable, err, "read upstream client picks").LogError(ctx, logger)
 	}
+	authClientPicks, err := s.consentDirectAuthClientPick(ctx, endpoint, pickState, r.PostForm.Get("auth_client"), upstreamPicks)
+	if err != nil {
+		if errors.Is(err, errConsentConfigurationChanged) {
+			return oops.E(oops.CodeFailedPrecondition, err, "The credential you chose can no longer be used. Reload this page to choose again.").LogWarn(ctx, logger)
+		}
+		return oops.E(oops.CodeUnavailable, err, "read upstream credential choice").LogError(ctx, logger)
+	}
 
 	if materializeGateway {
 		reference, err := s.publishConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", upstreamPicks, duration, time.Now())
@@ -1258,6 +1291,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		SignInID:                    nil,
 		GatewayPolicy:               toolPolicy,
 		UpstreamClientPicks:         upstreamPicks,
+		AuthClientPicks:             authClientPicks,
 		CreatedAt:                   time.Now(),
 	}
 	// Only a human subject's own session is linked to its sign-in.
