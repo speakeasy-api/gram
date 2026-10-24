@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
@@ -70,6 +71,7 @@ import (
 )
 
 type platformMCPConfig struct {
+	Hooks              *hooks.Service
 	DeploymentRedeploy platformmcp.DeploymentRedeployManagement
 	AssistantIdentity  platformmcp.AssistantIdentityManagement
 	// Workspaces creates the first organization for a user who connects with
@@ -230,6 +232,11 @@ type AssistantSurface struct {
 }
 
 func configurePlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
+	if config.Hooks != nil {
+		if err := configureAHPOAuth(config); err != nil {
+			return AssistantSurface{}, err
+		}
+	}
 	if config.LocalFixture != nil {
 		return configureLocalFixturePlatformMCP(ctx, config)
 	}

@@ -73,6 +73,8 @@ type Service struct {
 	audit              *audit.Logger
 	cache              cache.Cache
 	ahpUploadLimiter   *ratelimit.Limiter
+	ahpOAuth           AHPAuthenticator
+	ahpOAuthBaseURL    string
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
@@ -298,6 +300,8 @@ func NewService(
 	deviceAgentTokens *deviceagenttoken.Issuer,
 ) *Service {
 	return &Service{
+		ahpOAuth:           nil,
+		ahpOAuthBaseURL:    "",
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		metrics:            newMetrics(meterProvider, logger),
 		logger:             logger.With(attr.SlogComponent("hooks")),

@@ -440,7 +440,7 @@ func TestOAuthHTTPCreateWorkspaceRejectsInvalidState(t *testing.T) {
 
 	// A challenge that has not been through the identity provider carries no
 	// user, so it cannot create a workspace either.
-	anonymous := oauthChallenge{ID: "challenge-anonymous", ClientID: "client-1", RedirectURI: "http://127.0.0.1:3000/callback", CSRFToken: "csrf", CreatedAt: time.Now()}
+	anonymous := oauthChallenge{ID: "22222222-2222-4222-8222-222222222222", ClientID: "client-1", RedirectURI: "http://127.0.0.1:3000/callback", CSRFToken: "csrf", CreatedAt: time.Now()}
 	require.NoError(t, service.cache.Store(t.Context(), anonymous))
 	response := postWorkspace(service, url.Values{"state": {anonymous.ID}, "csrf_token": {"csrf"}, "workspace_name": {"Acme"}})
 	require.Equal(t, http.StatusUnauthorized, response.Code)

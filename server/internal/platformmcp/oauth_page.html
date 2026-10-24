@@ -155,10 +155,16 @@
             <span>Speakeasy</span>
           </h1>
           <p class="text-sm text-muted-foreground">
+            {{if .AHP}}
+            Allow <span class="text-foreground">{{.ClientName}}</span> to upload
+            hook events and content, and receive hook configuration in the
+            selected project on Speakeasy. This does not grant MCP management access.
+            {{else}}
             Allow <span class="text-foreground">{{.ClientName}}</span> to manage
             <span class="text-foreground">{{.OrganizationName}}</span> on
             Speakeasy for you, such as adding MCP servers and giving your team
             access to them.
+            {{end}}
           </p>
         </header>
         <dl class="m-0 flex flex-col gap-4 border-b px-6 py-6 sm:px-8">
@@ -166,6 +172,34 @@
             <dt class="text-eyebrow">Organization</dt>
             <dd class="mt-1 ml-0 text-sm">{{.OrganizationName}}</dd>
           </div>
+          {{if .AHP}}
+          <div>
+            <dt class="text-eyebrow"><label for="project_id">Project</label></dt>
+            <dd class="mt-1 ml-0 flex flex-col gap-2">
+              {{$hasSelection := false}}
+              {{range .Projects}}{{if eq .ID $.SelectedProjectID}}{{$hasSelection = true}}{{end}}{{end}}
+              <select
+                id="project_id"
+                name="project_id"
+                form="ahp-approve"
+                required
+                {{if not .Projects}}disabled{{end}}
+                class="bg-background w-full border px-4 py-3 text-sm"
+              >
+                <option value="" disabled {{if not $hasSelection}}selected{{end}}>Choose a project</option>
+                {{range .Projects}}
+                <option value="{{.ID}}" {{if eq .ID $.SelectedProjectID}}selected{{end}}>{{.Name}} ({{.Slug}})</option>
+                {{end}}
+              </select>
+              {{if not .Projects}}
+              <p class="text-sm text-muted-foreground">
+                No eligible projects are available. Ask your organization administrator
+                for access to a project, then try connecting again. You can cancel below.
+              </p>
+              {{end}}
+            </dd>
+          </div>
+          {{end}}
           {{if .ClientIDOrigin}}
           <div>
             <dt class="text-eyebrow">Client verified from</dt>
@@ -178,13 +212,14 @@
           </div>
         </dl>
         <div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:px-8">
-          <form method="post" data-single-submit>
+          <form method="post" {{if .AHP}}id="ahp-approve"{{end}} data-single-submit>
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
             <button
               type="submit"
               name="action"
               value="approve"
+              {{if and .AHP (not .Projects)}}disabled{{end}}
               class="bg-primary text-primary-foreground enabled:interact:bg-foreground disabled:bg-muted disabled:text-muted-foreground h-10 w-full px-6 text-sm sm:w-auto disabled:cursor-not-allowed"
             >
               Give access

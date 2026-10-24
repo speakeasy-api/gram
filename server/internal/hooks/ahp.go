@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 // ahpAdapter is the canonical hook source for AHP events that report no
@@ -263,24 +267,69 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 	return s.ahpAuthenticate(h), nil
 }
 
-// ahpAuthenticate accepts the hooks API key as a bearer token or Gram-Key
-// header and selects the project from Gram-Project.
+// AHPAuthenticator resolves a human OAuth credential and its bound project.
+type AHPAuthenticator interface {
+	AuthenticateAHP(ctx context.Context, token, projectSlug string) (context.Context, error)
+}
+
+func (s *Service) WithAHPOAuth(authenticator AHPAuthenticator, baseURL *url.URL) *Service {
+	s.ahpOAuth = authenticator
+	s.ahpOAuthBaseURL = baseURL.String()
+	return s
+}
+
+// ahpAuthenticate preserves bearer precedence and never retries a failed key
+// as OAuth. All protocol operations, including uploads, use this wrapper.
 func (s *Service) ahpAuthenticate(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := strings.TrimSpace(r.Header.Get("Gram-Key"))
+		bearer := false
 		if scheme, token, ok := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " "); ok && strings.EqualFold(scheme, "Bearer") {
-			key = strings.TrimSpace(token)
+			key, bearer = strings.TrimSpace(token), true
 		}
 		project := strings.TrimSpace(r.Header.Get("Gram-Project"))
-		if key == "" || project == "" {
+		challenge := func() {
+			if s.ahpOAuth != nil {
+				base, err := url.Parse(requestorigin.BaseURL(r.Context(), s.ahpOAuthBaseURL))
+				if err != nil {
+					return
+				}
+				metadata := base.JoinPath(".well-known", "oauth-protected-resource", "ahp")
+				metadata.RawQuery, metadata.Fragment, metadata.RawFragment = "", "", ""
+				metadata.ForceQuery = false
+				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+metadata.String()+`"`)
+			}
+		}
+		if key == "" {
+			challenge()
 			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 			return
 		}
-		ctx, err := s.authorizePluginRequest(r.Context(), key, project)
+		ctx := r.Context()
+		var err error
+		oauthCredential := bearer && strings.Count(key, ".") == 2 && !strings.HasPrefix(key, "gram_")
+		if oauthCredential {
+			if s.ahpOAuth == nil {
+				err = platformmcp.ErrUnauthorized
+			} else {
+				ctx, err = s.ahpOAuth.AuthenticateAHP(ctx, key, project)
+			}
+		} else if project == "" {
+			err = platformmcp.ErrUnauthorized
+		} else {
+			ctx, err = s.authorizePluginRequest(ctx, key, project)
+		}
 		if err != nil {
 			status := http.StatusUnauthorized
-			if errors.Is(err, errAgentHooksDenied) {
+			var denied *platformmcp.ExternalAuthorizationError
+			var shareable *oops.ShareableError
+			if errors.Is(err, errAgentHooksDenied) || (oauthCredential && (errors.Is(err, platformmcp.ErrForbidden) || errors.As(err, &denied) || (errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden))) {
 				status = http.StatusForbidden
+			} else if oauthCredential && !errors.Is(err, platformmcp.ErrUnauthorized) {
+				status = http.StatusServiceUnavailable
+			}
+			if status == http.StatusUnauthorized && oauthCredential {
+				challenge()
 			}
 			http.Error(w, http.StatusText(status), status)
 			return

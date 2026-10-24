@@ -23,6 +23,7 @@ const (
 )
 
 type credentialPayload struct {
+	Namespace      string         `json:"namespace,omitempty"`
 	Kind           credentialKind `json:"kind"`
 	OrganizationID string         `json:"organization_id"`
 
@@ -38,6 +39,7 @@ type credentialPayload struct {
 // CredentialCodec makes Platform MCP credentials opaque while preserving a verified
 // organization routing hint for organization-scoped persistence queries.
 type CredentialCodec struct {
+	namespace  string
 	encryption *encryption.Client
 }
 
@@ -45,7 +47,7 @@ func NewCredentialCodec(encryptionClient *encryption.Client) (*CredentialCodec, 
 	if encryptionClient == nil {
 		return nil, errors.New("platform MCP credential codec requires encryption")
 	}
-	return &CredentialCodec{encryption: encryptionClient}, nil
+	return &CredentialCodec{encryption: encryptionClient, namespace: ""}, nil
 }
 
 // Issue mints an opaque credential bound to organizationID and resource.
@@ -58,6 +60,7 @@ func (c *CredentialCodec) Issue(kind credentialKind, organizationID, resource st
 		return "", fmt.Errorf("read platform MCP credential entropy: %w", err)
 	}
 	payload, err := json.Marshal(credentialPayload{
+		Namespace:      c.namespace,
 		Kind:           kind,
 		OrganizationID: organizationID,
 		Resource:       resource,
@@ -99,7 +102,7 @@ func (c *CredentialCodec) decode(kind credentialKind, credential string) (creden
 		return credentialPayload{}, errInvalidCredential
 	}
 	var payload credentialPayload
-	if err := json.Unmarshal([]byte(plaintext), &payload); err != nil || payload.Kind != kind || payload.OrganizationID == "" || payload.Secret == "" {
+	if err := json.Unmarshal([]byte(plaintext), &payload); err != nil || payload.Namespace != c.namespace || payload.Kind != kind || payload.OrganizationID == "" || payload.Secret == "" {
 		return credentialPayload{}, errInvalidCredential
 	}
 	return payload, nil

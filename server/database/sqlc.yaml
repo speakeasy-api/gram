@@ -1063,6 +1063,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/platformmcp/ahprepo/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "ahprepo"
+        out: "../internal/platformmcp/ahprepo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/platformmcp/queries.sql
     engine: postgresql
     gen:

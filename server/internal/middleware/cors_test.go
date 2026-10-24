@@ -75,3 +75,35 @@ func TestCORSMiddleware_VaryOrigin(t *testing.T) {
 		require.Empty(t, h.Get("Vary"))
 	})
 }
+
+func TestCORSMiddleware_AHPMetadataExactRoutes(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{
+		"/.well-known/oauth-authorization-server/ahp",
+		"/.well-known/oauth-protected-resource/ahp",
+		"/.well-known/oauth-authorization-server/ahp/extra",
+		"/.well-known/oauth-protected-resource/ahp-other",
+		"/ahp", "/ahp/authorize", "/ahp/token", "/ahp/uploads",
+	} {
+		for _, method := range []string{http.MethodGet, http.MethodOptions} {
+			t.Run(method+path, func(t *testing.T) {
+				t.Parallel()
+				handler := CORSMiddleware("prod", "https://api.example.test", []string{"https://platform.example.test"}, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+				request := httptest.NewRequest(method, path, nil)
+				request.Header.Set("Origin", "https://external.example.test")
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				public := path == "/.well-known/oauth-authorization-server/ahp" || path == "/.well-known/oauth-protected-resource/ahp"
+				if public {
+					require.Equal(t, "*", response.Header().Get("Access-Control-Allow-Origin"))
+					require.Equal(t, http.MethodGet, response.Header().Get("Access-Control-Allow-Methods"))
+					require.Empty(t, response.Header().Get("Access-Control-Allow-Credentials"))
+					require.Empty(t, response.Header().Get("Vary"))
+				} else {
+					require.Equal(t, "https://api.example.test", response.Header().Get("Access-Control-Allow-Origin"))
+					require.Equal(t, "true", response.Header().Get("Access-Control-Allow-Credentials"))
+				}
+			})
+		}
+	}
+}

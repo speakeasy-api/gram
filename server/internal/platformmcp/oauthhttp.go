@@ -76,8 +76,11 @@ var (
 )
 
 type oauthPageData struct {
-	Title string
-	Kind  string
+	AHP               bool
+	Projects          []AHPProjectOption
+	SelectedProjectID string
+	Title             string
+	Kind              string
 	// Styles is the shared authorization page stylesheet. renderOAuthPage
 	// sets it.
 	Styles template.CSS
@@ -151,6 +154,7 @@ type WorkspaceProvisioner interface {
 }
 
 type oauthChallenge struct {
+	Namespace      string    `json:"namespace,omitempty"`
 	ID             string    `json:"id"`
 	ClientID       string    `json:"client_id"`
 	RedirectURI    string    `json:"redirect_uri"`
@@ -177,7 +181,7 @@ type oauthChallenge struct {
 	SSOOrganizationID string `json:"sso_organization_id,omitempty"`
 }
 
-func (c oauthChallenge) CacheKey() string              { return platformOAuthChallengePrefix + c.ID }
+func (c oauthChallenge) CacheKey() string              { return platformOAuthChallengePrefix + c.Namespace + c.ID }
 func (c oauthChallenge) AdditionalCacheKeys() []string { return []string{} }
 func (c oauthChallenge) TTL() time.Duration            { return platformOAuthCodeLifetime }
 
@@ -191,6 +195,7 @@ var _ cache.CacheableObject[oauthChallenge] = (*oauthChallenge)(nil)
 // platform host is its own RFC 8707 resource with its own authorization
 // server metadata. Requests from any other surface use baseURL.
 type OAuthHTTP struct {
+	ahpProjects AHPProjects
 	// baseURL is the configured server URL. It is the origin for requests not
 	// stamped as a platform host.
 	baseURL       *url.URL
@@ -220,6 +225,7 @@ type OAuthHTTP struct {
 }
 
 type OAuthHTTPConfig struct {
+	AHPProjects   AHPProjects
 	BaseURL       *url.URL
 	Environment   string
 	Cache         cache.Cache
@@ -250,6 +256,9 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 	if err != nil {
 		return nil, err
 	}
+	if config.AHPProjects != nil {
+		credentials.namespace = "ahp"
+	}
 	logger := config.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -271,6 +280,7 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 	}
 	return &OAuthHTTP{
 		baseURL:       &baseURL,
+		ahpProjects:   config.AHPProjects,
 		environment:   config.Environment,
 		cache:         cache.NewTypedObjectCache[oauthChallenge](nil, config.Cache, cache.SuffixNone),
 		store:         config.Store,
@@ -301,20 +311,20 @@ func (s *OAuthHTTP) oauthTelemetry() OAuthTelemetry {
 func (s *OAuthHTTP) Attach(mux interface {
 	Handle(string, string, http.HandlerFunc)
 }) {
-	mux.Handle("GET", "/.well-known/oauth-protected-resource/platform-mcp", handlerFunc(s.ProtectedResourceHandler()))
-	mux.Handle("GET", "/.well-known/oauth-authorization-server/platform-mcp", handlerFunc(s.AuthorizationServerHandler()))
-	mux.Handle("POST", "/platform-mcp/register", handlerFunc(s.RegisterHandler()))
-	mux.Handle("GET", "/platform-mcp/authorize", handlerFunc(s.AuthorizeHandler()))
-	mux.Handle("GET", "/platform-mcp/idp_callback", handlerFunc(s.IDPCallbackHandler()))
-	mux.Handle("GET", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
-	mux.Handle("POST", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
-	mux.Handle("POST", "/platform-mcp/create-workspace", handlerFunc(s.CreateWorkspaceHandler()))
-	mux.Handle("POST", "/platform-mcp/join-workspace", handlerFunc(s.JoinWorkspaceHandler()))
-	mux.Handle("GET", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
-	mux.Handle("POST", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
-	mux.Handle("GET", "/platform-mcp/provider-setup-complete", handlerFunc(s.ProviderSetupCompleteHandler()))
-	mux.Handle("POST", "/platform-mcp/token", handlerFunc(s.TokenHandler()))
-	mux.Handle("POST", "/platform-mcp/revoke", handlerFunc(s.RevokeHandler()))
+	mux.Handle("GET", "/.well-known/oauth-protected-resource"+s.resourcePath(), handlerFunc(s.ProtectedResourceHandler()))
+	mux.Handle("GET", "/.well-known/oauth-authorization-server"+s.resourcePath(), handlerFunc(s.AuthorizationServerHandler()))
+	mux.Handle("POST", s.resourcePath()+"/register", handlerFunc(s.RegisterHandler()))
+	mux.Handle("GET", s.resourcePath()+"/authorize", handlerFunc(s.AuthorizeHandler()))
+	mux.Handle("GET", s.resourcePath()+"/idp_callback", handlerFunc(s.IDPCallbackHandler()))
+	mux.Handle("GET", s.resourcePath()+"/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
+	mux.Handle("POST", s.resourcePath()+"/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
+	mux.Handle("POST", s.resourcePath()+"/create-workspace", handlerFunc(s.CreateWorkspaceHandler()))
+	mux.Handle("POST", s.resourcePath()+"/join-workspace", handlerFunc(s.JoinWorkspaceHandler()))
+	mux.Handle("GET", s.resourcePath()+"/connect", handlerFunc(s.ConnectHandler()))
+	mux.Handle("POST", s.resourcePath()+"/connect", handlerFunc(s.ConnectHandler()))
+	mux.Handle("GET", s.resourcePath()+"/provider-setup-complete", handlerFunc(s.ProviderSetupCompleteHandler()))
+	mux.Handle("POST", s.resourcePath()+"/token", handlerFunc(s.TokenHandler()))
+	mux.Handle("POST", s.resourcePath()+"/revoke", handlerFunc(s.RevokeHandler()))
 }
 
 func handlerFunc(handler http.Handler) http.HandlerFunc {
@@ -330,13 +340,13 @@ func (s *OAuthHTTP) ProtectedResourceHandler() http.Handler {
 
 func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		base := platformBaseURL(r.Context(), s.baseURL)
+		base := s.requestBaseURL(r.Context())
 		metadata := map[string]any{
-			"issuer":                                platformResource(base),
-			"authorization_endpoint":                endpointURL(base, "authorize"),
-			"token_endpoint":                        endpointURL(base, "token"),
-			"registration_endpoint":                 endpointURL(base, "register"),
-			"revocation_endpoint":                   endpointURL(base, "revoke"),
+			"issuer":                                s.resourceAt(base),
+			"authorization_endpoint":                s.endpointURL(base, "authorize"),
+			"token_endpoint":                        s.endpointURL(base, "token"),
+			"registration_endpoint":                 s.endpointURL(base, "register"),
+			"revocation_endpoint":                   s.endpointURL(base, "revoke"),
 			"response_types_supported":              usersessions.SupportedResponseTypes,
 			"grant_types_supported":                 supportedGrantTypes,
 			"token_endpoint_auth_methods_supported": supportedAuthMethods,
@@ -404,6 +414,12 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		request := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
 		request.SetDefaults()
+		if s.ahpProjects != nil {
+			if err := oauthwire.ValidateResourceIndicators(oauthwire.ResourceIndicatorsFrom(r.URL.Query()), s.resource(r.Context())); err != nil {
+				writeRequestOAuthError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
 		if err := request.ValidateRedirectableFields(); err != nil {
 			writeRequestOAuthError(w, http.StatusBadRequest, err)
 			return
@@ -437,7 +453,7 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not start authorization")
 			return
 		}
-		challenge := oauthChallenge{ID: uuid.NewString(), ClientID: request.ClientID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrfToken, OrganizationID: "", Subject: "", CreatedAt: time.Now(), BaseURL: platformBaseURL(r.Context(), s.baseURL).String()}
+		challenge := oauthChallenge{Namespace: s.challengeNamespace(), ID: uuid.NewString(), ClientID: request.ClientID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrfToken, OrganizationID: "", Subject: "", CreatedAt: time.Now(), BaseURL: s.requestBaseURL(r.Context()).String()}
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not start authorization")
 			return
@@ -445,7 +461,7 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 		// The identity provider only accepts registered redirect URIs, so the
 		// callback stays on the pinned callback origin for every platform host;
 		// the challenge carries the origin to return to afterwards.
-		callback := endpointURL(s.idpCallbackBaseURL, "idp_callback")
+		callback := s.endpointURL(s.idpCallbackBaseURL, "idp_callback")
 		idpURL, err := s.identity.BuildAuthorizationURL(r.Context(), identity.AuthorizationURLParams{CallbackURL: callback, State: challenge.ID, Scope: "", ScopesSupported: nil})
 		if err != nil {
 			writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not start login")
@@ -457,7 +473,7 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 
 func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
+		challenge, err := s.readChallenge(r.Context(), r.URL.Query().Get("state"), true)
 		if err != nil {
 			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
 			return
@@ -491,7 +507,7 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
 			return
 		}
-		http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "select-organization")+"?state="+url.QueryEscape(challenge.ID), http.StatusFound)
+		http.Redirect(w, r, s.endpointURL(s.challengeBaseURL(challenge), "select-organization")+"?state="+url.QueryEscape(challenge.ID), http.StatusFound)
 	})
 }
 
@@ -510,7 +526,7 @@ func (s *OAuthHTTP) OrganizationSelectionHandler() http.Handler {
 }
 
 func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Request) {
-	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
+	challenge, err := s.readChallenge(r.Context(), r.URL.Query().Get("state"), false)
 	if err != nil || challenge.Subject == "" {
 		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
 		return
@@ -567,7 +583,7 @@ func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Req
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse organization selection")
 		return
 	}
-	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
+	challenge, err := s.readChallenge(r.Context(), r.PostForm.Get("state"), true)
 	if err != nil || challenge.Subject == "" {
 		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
 		return
@@ -594,7 +610,7 @@ func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Req
 				writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
 				return
 			}
-			http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
+			http.Redirect(w, r, s.endpointURL(s.challengeBaseURL(challenge), "connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
 			return
 		}
 	}
@@ -674,7 +690,7 @@ func (s *OAuthHTTP) workspaceFormChallenge(w http.ResponseWriter, r *http.Reques
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse organization form")
 		return challenge, "", false
 	}
-	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
+	challenge, err := s.readChallenge(r.Context(), r.PostForm.Get("state"), false)
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
 		return challenge, "", false
@@ -696,7 +712,7 @@ func (s *OAuthHTTP) workspaceFormChallenge(w http.ResponseWriter, r *http.Reques
 // challenge again, because another submit can change it between the read and
 // the delete. ok is false once an error is written.
 func (s *OAuthHTTP) consumeWorkspaceChallenge(w http.ResponseWriter, r *http.Request) (oauthChallenge, bool) {
-	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
+	challenge, err := s.readChallenge(r.Context(), r.PostForm.Get("state"), true)
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
 		return challenge, false
@@ -715,7 +731,7 @@ func (s *OAuthHTTP) continueWithOrganization(w http.ResponseWriter, r *http.Requ
 		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
 		return
 	}
-	http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
+	http.Redirect(w, r, s.endpointURL(s.challengeBaseURL(challenge), "connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
 }
 
 // CreateWorkspaceHandler creates the first organization for a signed-in user
@@ -845,7 +861,7 @@ func (s *OAuthHTTP) ConnectHandler() http.Handler {
 }
 
 func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
-	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
+	challenge, err := s.readChallenge(r.Context(), r.URL.Query().Get("state"), false)
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID == "" {
 		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or incomplete")
 		return
@@ -863,7 +879,27 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusForbidden, "access_denied", "selected organization is not available")
 		return
 	}
+	var projects []AHPProjectOption
+	selected := ""
+	if s.ahpProjects != nil {
+		subject, parseErr := urn.ParseSessionSubject(challenge.Subject)
+		if parseErr != nil {
+			writeOAuthError(w, http.StatusForbidden, "access_denied", "authorization identity is invalid")
+			return
+		}
+		projects, err = s.ahpProjects.EligibleProjects(r.Context(), Principal{UserID: subject.ID, OrganizationID: challenge.OrganizationID})
+		if err != nil {
+			writeAHPProjectAuthorizationError(w, r, challenge, err)
+			return
+		}
+		for _, project := range projects {
+			if project.Slug == "default" {
+				selected = project.ID
+			}
+		}
+	}
 	s.renderOAuthPage(w, oauthPageData{
+		AHP: s.ahpProjects != nil, Projects: projects, SelectedProjectID: selected,
 		Title:            "Connect to Speakeasy",
 		Kind:             "connect",
 		ClientName:       client.Name,
@@ -891,7 +927,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse authorization")
 		return
 	}
-	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
+	challenge, err := s.readChallenge(r.Context(), r.PostForm.Get("state"), true)
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID == "" {
 		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or incomplete")
 		return
@@ -915,7 +951,15 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		writeAuthorizationGateError(w, r, challenge, err)
 		return
 	}
-	code, err := s.credentials.Issue(authorizationCodeCredential, challenge.OrganizationID, platformResource(s.challengeBaseURL(challenge)))
+	projectID := ""
+	if s.ahpProjects != nil {
+		projectID = r.PostForm.Get("project_id")
+		if _, err := s.ahpProjects.AuthorizeProject(r.Context(), principal, projectID); err != nil {
+			writeAHPProjectAuthorizationError(w, r, challenge, err)
+			return
+		}
+	}
+	code, err := s.credentials.Issue(authorizationCodeCredential, challenge.OrganizationID, s.resourceAt(s.challengeBaseURL(challenge)))
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
 		return
@@ -924,6 +968,8 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 	_, err = s.store.AuthorizeConnection(r.Context(), platformoauth.AuthorizeConnectionInput{
 		Connection: platformoauth.Connection{
 			ID:                     uuid.NewString(),
+			ProjectID:              projectID,
+			ResourceURI:            s.connectionResource(s.challengeBaseURL(challenge)),
 			ClientID:               challenge.ClientID,
 			Subject:                challenge.Subject,
 			OrganizationID:         challenge.OrganizationID,
@@ -975,6 +1021,12 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 		}
 		now := s.now()
 		resource := s.resource(r.Context())
+		if s.ahpProjects != nil {
+			if err := oauthwire.ValidateResourceIndicators(oauthwire.ResourceIndicatorsFrom(r.PostForm), resource); err != nil {
+				writeRequestOAuthError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
 		client, err := s.authenticateClient(r.Context(), clientID, clientSecret, now)
 		if err != nil {
 			s.writeClientAuthenticationFailure(w, r, err)
@@ -1021,7 +1073,7 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
 				return
 			}
-			if err := s.gateAndAuthorize(r.Context(), Principal{UserID: subject.ID, OrganizationID: old.Connection.OrganizationID, ConnectionID: old.Connection.ID, Generation: old.Connection.Generation, ClientID: client.ID}); err != nil {
+			if err := s.authorizeConnection(r.Context(), old.Connection, resource); err != nil {
 				if errors.Is(err, ErrForbidden) && !errors.Is(err, errPlatformMCPDisabled) {
 					if markErr := s.store.MarkAuthorizationLost(r.Context(), old.Connection.OrganizationID, old.Connection.ID, old.Connection.Generation, now); markErr != nil {
 						writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "organization access change could not be recorded")
@@ -1103,8 +1155,7 @@ func (s *OAuthHTTP) mintAndExchangeGrant(w http.ResponseWriter, r *http.Request,
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	principal := Principal{UserID: subject.ID, OrganizationID: connection.OrganizationID, ConnectionID: connection.ID, Generation: connection.Generation, ClientID: clientID}
-	if err := s.gateAndAuthorize(r.Context(), principal); err != nil {
+	if err := s.authorizeConnection(r.Context(), connection, resource); err != nil {
 		writeTokenGateError(w, err)
 		return
 	}
@@ -1343,19 +1394,19 @@ func writeTokenGateError(w http.ResponseWriter, err error) {
 // ProviderSetupCompletionURL is the only callback landing page accepted for
 // Platform MCP provider authorization. It is server-owned and carries no state.
 func (s *OAuthHTTP) ProviderSetupCompletionURL() string {
-	return endpointURL(s.baseURL, "provider-setup-complete")
+	return s.endpointURL(s.baseURL, "provider-setup-complete")
 }
 
 // ProtectedResourceURL is the RFC 9728 metadata URL on the configured base
 // URL, used when a request carries no platform origin.
 func (s *OAuthHTTP) ProtectedResourceURL() string {
-	return platformProtectedResourceMetadataURL(s.baseURL)
+	return s.protectedResourceURL(s.baseURL)
 }
 
 // resource is the Platform MCP resource, issuer, and audience for the
 // platform origin the request arrived on.
 func (s *OAuthHTTP) resource(ctx context.Context) string {
-	return platformResource(platformBaseURL(ctx, s.baseURL))
+	return s.resourceAt(s.requestBaseURL(ctx))
 }
 
 // challengeBaseURL is the platform origin an authorization started on.
@@ -1376,14 +1427,10 @@ func (s *OAuthHTTP) challengeBaseURL(challenge oauthChallenge) *url.URL {
 // the configured base URL's resource, so they keep working there and only
 // there.
 func (s *OAuthHTTP) boundResource(credential credentialPayload) string {
-	if credential.Resource == "" {
+	if credential.Resource == "" && s.ahpProjects == nil {
 		return platformResource(s.baseURL)
 	}
 	return credential.Resource
-}
-
-func endpointURL(base *url.URL, segment string) string {
-	return platformResource(base) + "/" + segment
 }
 
 // writeClientResolutionError maps the resolveClient error contract onto the

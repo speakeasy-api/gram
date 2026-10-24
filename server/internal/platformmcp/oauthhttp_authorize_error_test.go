@@ -103,7 +103,7 @@ func TestOAuthHTTPConnectPostDenialStillRedirectsRemoteCallback(t *testing.T) {
 	service := newTestOAuthHTTP(t)
 	store := testStore(t, service)
 	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"https://client.example/cb?keep=value"}}))
-	challenge := oauthChallenge{ID: "challenge-1", ClientID: "client-1", RedirectURI: "https://client.example/cb?keep=value", State: "client-state", CSRFToken: "csrf", OrganizationID: "org-1", Subject: "user:user-1", CreatedAt: time.Now()}
+	challenge := oauthChallenge{ID: "11111111-1111-4111-8111-111111111111", ClientID: "client-1", RedirectURI: "https://client.example/cb?keep=value", State: "client-state", CSRFToken: "csrf", OrganizationID: "org-1", Subject: "user:user-1", CreatedAt: time.Now()}
 	require.NoError(t, service.cache.Store(t.Context(), challenge))
 
 	form := url.Values{"state": {challenge.ID}, "csrf_token": {challenge.CSRFToken}, "action": {"deny"}}

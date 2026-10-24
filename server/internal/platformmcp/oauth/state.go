@@ -83,6 +83,8 @@ type TouchCIMDCacheInput struct {
 }
 
 type Connection struct {
+	ProjectID                 string
+	ResourceURI               string
 	ID                        string
 	ClientID                  string
 	Subject                   string
@@ -309,7 +311,7 @@ func (s *InMemoryStore) RegisterConnection(_ context.Context, connection Connect
 	}
 	if connection.RevokedAt == nil {
 		for _, existing := range s.connections {
-			if existing.OrganizationID == connection.OrganizationID && existing.Subject == connection.Subject && existing.ClientID == connection.ClientID && existing.RevokedAt == nil {
+			if existing.OrganizationID == connection.OrganizationID && existing.Subject == connection.Subject && existing.ClientID == connection.ClientID && existing.ProjectID == connection.ProjectID && existing.ResourceURI == connection.ResourceURI && existing.RevokedAt == nil {
 				return ErrAlreadyUsed
 			}
 		}
@@ -326,7 +328,7 @@ func (s *InMemoryStore) GetConnection(_ context.Context, organizationID, subject
 		return Connection{}, err
 	}
 	for _, connection := range s.connections {
-		if connection.OrganizationID == organizationID && connection.Subject == subject && connection.ClientID == clientID && connection.RevokedAt == nil {
+		if connection.OrganizationID == organizationID && connection.Subject == subject && connection.ClientID == clientID && connection.ProjectID == "" && connection.ResourceURI == "" && connection.RevokedAt == nil {
 			return connection, nil
 		}
 	}
@@ -351,7 +353,7 @@ func (s *InMemoryStore) AuthorizeConnection(_ context.Context, input AuthorizeCo
 		connection.AuthorizationExpiresAt = input.Now.Add(AuthorizationLifetime)
 	}
 	for id, existing := range s.connections {
-		if existing.OrganizationID != connection.OrganizationID || existing.Subject != connection.Subject || existing.ClientID != connection.ClientID || existing.RevokedAt != nil {
+		if existing.OrganizationID != connection.OrganizationID || existing.Subject != connection.Subject || existing.ClientID != connection.ClientID || existing.ProjectID != connection.ProjectID || existing.ResourceURI != connection.ResourceURI || existing.RevokedAt != nil {
 			continue
 		}
 		s.revokeGeneration(id, existing.Generation, input.Now)
@@ -740,7 +742,7 @@ func (s *InMemoryStore) validateConnection(connection Connection, clientID strin
 	if err != nil {
 		return err
 	}
-	if connection.ClientID != clientID || stored.ClientID != clientID || stored.Subject != connection.Subject || stored.OrganizationID != connection.OrganizationID {
+	if connection.ClientID != clientID || stored.ClientID != clientID || stored.Subject != connection.Subject || stored.OrganizationID != connection.OrganizationID || stored.ProjectID != connection.ProjectID || stored.ResourceURI != connection.ResourceURI {
 		return ErrClientMismatch
 	}
 	if stored.Generation != connection.Generation {
