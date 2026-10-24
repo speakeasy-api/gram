@@ -99,6 +99,7 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 			organizationID:      issuer.organizationID,
 			issuer:              shared.issuer,
 			audience:            urn.NewUserSessionIssuerMCPServers(shared.issuerID).String(),
+			resourceIdentity:    pgtype.Text{String: "", Valid: false},
 		}, subject, credential),
 	})
 }

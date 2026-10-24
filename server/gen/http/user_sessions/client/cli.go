@@ -19,7 +19,7 @@ import (
 
 // BuildListUserSessionsPayload builds the payload for the userSessions
 // listUserSessions endpoint from CLI flags.
-func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsStatus string, userSessionsListUserSessionsClientID string, userSessionsListUserSessionsSearch string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
+func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsStatus string, userSessionsListUserSessionsClientID string, userSessionsListUserSessionsSearch string, userSessionsListUserSessionsMetaMcpServerID string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
 	var err error
 	var subjectUrn *string
 	{
@@ -71,6 +71,16 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 			}
 		}
 	}
+	var metaMcpServerID *string
+	{
+		if userSessionsListUserSessionsMetaMcpServerID != "" {
+			metaMcpServerID = &userSessionsListUserSessionsMetaMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var cursor *string
 	{
 		if userSessionsListUserSessionsCursor != "" {
@@ -117,6 +127,7 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 	v.Status = status
 	v.ClientID = clientID
 	v.Search = search
+	v.MetaMcpServerID = metaMcpServerID
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken

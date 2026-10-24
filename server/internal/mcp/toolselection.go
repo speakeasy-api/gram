@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -101,6 +102,14 @@ func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 	default:
 		return ""
 	}
+}
+
+func endpointResourceIdentity(endpoint *ResolvedMcpEndpoint) (pgtype.Text, error) {
+	identity := endpointToolSelectionResource(endpoint)
+	if identity == "" {
+		return pgtype.Text{String: "", Valid: false}, errors.New("endpoint has no resource identity")
+	}
+	return pgtype.Text{String: identity, Valid: true}, nil
 }
 
 // endpointAcceptsToolSelectionResource reports whether a stored consent

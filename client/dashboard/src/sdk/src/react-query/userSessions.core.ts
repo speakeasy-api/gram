@@ -85,6 +85,7 @@ export function buildUserSessionsQuery(
       status: request?.status,
       clientId: request?.clientId,
       search: request?.search,
+      metaMcpServerId: request?.metaMcpServerId,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -133,6 +134,7 @@ export function buildUserSessionsInfiniteQuery(
       status: request?.status,
       clientId: request?.clientId,
       search: request?.search,
+      metaMcpServerId: request?.metaMcpServerId,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -178,6 +180,7 @@ export function queryKeyUserSessions(
     status?: ListUserSessionsQueryParamStatus | undefined;
     clientId?: string | undefined;
     search?: string | undefined;
+    metaMcpServerId?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
@@ -195,6 +198,7 @@ export function queryKeyUserSessionsInfinite(
     status?: ListUserSessionsQueryParamStatus | undefined;
     clientId?: string | undefined;
     search?: string | undefined;
+    metaMcpServerId?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;

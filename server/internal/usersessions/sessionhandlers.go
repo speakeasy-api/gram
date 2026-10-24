@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/gatewayscope"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -159,6 +161,14 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		}
 	}
 
+	resourceIdentity := pgtype.Text{String: "", Valid: false}
+	if payload.MetaMcpServerID != nil {
+		resourceIdentity, err = gatewayscope.ResourceIdentity(ctx, s.db, *authCtx.ProjectID, *payload.MetaMcpServerID)
+		if err != nil {
+			return nil, fmt.Errorf("scope sessions to gateway: %w", err)
+		}
+	}
+
 	rows, err := repo.New(s.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
 		ProjectID:            *authCtx.ProjectID,
 		OrganizationID:       authCtx.ActiveOrganizationID,
@@ -170,6 +180,7 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		Search:               search,
 		AgentSubjectUrns:     agentSubjectURNs,
 		FirstPartyClientName: sessiontokens.FirstPartyClientName,
+		ResourceIdentity:     resourceIdentity,
 		Cursor:               cursor,
 		LimitValue:           limit,
 	})

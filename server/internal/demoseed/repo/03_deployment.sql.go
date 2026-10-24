@@ -490,14 +490,14 @@ func (q *Queries) DeployInsertJamfIssuer(ctx context.Context, arg DeployInsertJa
 const deployInsertManagedAgentSession = `-- name: DeployInsertManagedAgentSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id,
-   user_session_client_id, subject_urn, authorizer_user_id, delegated_grants,
+   user_session_client_id, subject_urn, resource_identity, authorizer_user_id, delegated_grants,
    delegated_grants_version, jti, refresh_token_hash, refresh_expires_at,
    expires_at, last_used_at, created_at)
 VALUES
   ($1, $2::uuid, $3::text,
    $4::uuid, $5::uuid,
-   $6::text, $7::text, '[]'::jsonb, 1,
-   $8, $9::text,
+   $6::text, $7::text, $8::text, '[]'::jsonb, 1,
+   $9, $10::text,
    now() + interval '7 days', now() - interval '10 minutes',
    now() - interval '20 minutes', now() - interval '3 days')
 `
@@ -509,6 +509,7 @@ type DeployInsertManagedAgentSessionParams struct {
 	UserSessionIssuerID uuid.UUID
 	UserSessionClientID uuid.UUID
 	SubjectUrn          string
+	ResourceIdentity    string
 	AuthorizerUserID    string
 	Jti                 string
 	RefreshTokenHash    string
@@ -525,6 +526,7 @@ func (q *Queries) DeployInsertManagedAgentSession(ctx context.Context, arg Deplo
 		arg.UserSessionIssuerID,
 		arg.UserSessionClientID,
 		arg.SubjectUrn,
+		arg.ResourceIdentity,
 		arg.AuthorizerUserID,
 		arg.Jti,
 		arg.RefreshTokenHash,
@@ -742,13 +744,13 @@ func (q *Queries) DeployInsertTriggerWorkloadBinding(ctx context.Context, arg De
 const deployInsertUserSession = `-- name: DeployInsertUserSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
-   subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at,
+   subject_urn, resource_identity, jti, refresh_token_hash, refresh_expires_at, expires_at,
    last_used_at, created_at)
 VALUES
   ($1, $2::uuid, $3::text, $4::uuid, $5::uuid,
-   $6::text, $7, $8::text,
-   now() + ($9::text)::interval, now() + ($10::text)::interval,
-   now() - ($11::text)::interval, now() - ($12::text)::interval)
+   $6::text, $7::text, $8, $9::text,
+   now() + ($10::text)::interval, now() + ($11::text)::interval,
+   now() - ($12::text)::interval, now() - ($13::text)::interval)
 `
 
 type DeployInsertUserSessionParams struct {
@@ -758,6 +760,7 @@ type DeployInsertUserSessionParams struct {
 	UserSessionIssuerID uuid.UUID
 	UserSessionClientID uuid.UUID
 	SubjectUrn          string
+	ResourceIdentity    string
 	Jti                 string
 	RefreshTokenHash    string
 	RefreshExpiresIn    string
@@ -774,6 +777,7 @@ func (q *Queries) DeployInsertUserSession(ctx context.Context, arg DeployInsertU
 		arg.UserSessionIssuerID,
 		arg.UserSessionClientID,
 		arg.SubjectUrn,
+		arg.ResourceIdentity,
 		arg.Jti,
 		arg.RefreshTokenHash,
 		arg.RefreshExpiresIn,
@@ -905,16 +909,16 @@ func (q *Queries) DeployInsertWorkloadAssignment(ctx context.Context, arg Deploy
 const deployInsertWorkloadSession = `-- name: DeployInsertWorkloadSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id,
-   user_session_client_id, subject_urn, authorizer_user_id, delegated_grants,
+   user_session_client_id, subject_urn, resource_identity, authorizer_user_id, delegated_grants,
    delegated_grants_version, jti, refresh_token_hash, refresh_expires_at,
    expires_at, last_used_at, created_at)
 VALUES
   ($1, $2::uuid, $3::text,
    $4::uuid, NULL,
-   $5::text, NULL, '[]'::jsonb, 1,
-   $6, $7::text,
-   now() + ($8::text)::interval, now() - ($9::text)::interval,
-   now() - ($10::text)::interval, now() - ($11::text)::interval)
+   $5::text, $6::text, NULL, '[]'::jsonb, 1,
+   $7, $8::text,
+   now() + ($9::text)::interval, now() - ($10::text)::interval,
+   now() - ($11::text)::interval, now() - ($12::text)::interval)
 `
 
 type DeployInsertWorkloadSessionParams struct {
@@ -923,6 +927,7 @@ type DeployInsertWorkloadSessionParams struct {
 	OrganizationID      string
 	UserSessionIssuerID uuid.UUID
 	SubjectUrn          string
+	ResourceIdentity    string
 	Jti                 string
 	RefreshTokenHash    string
 	RefreshExpiresIn    string
@@ -938,6 +943,7 @@ func (q *Queries) DeployInsertWorkloadSession(ctx context.Context, arg DeployIns
 		arg.OrganizationID,
 		arg.UserSessionIssuerID,
 		arg.SubjectUrn,
+		arg.ResourceIdentity,
 		arg.Jti,
 		arg.RefreshTokenHash,
 		arg.RefreshExpiresIn,

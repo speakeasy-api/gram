@@ -448,6 +448,10 @@ func (s *Service) handleWorkloadAssertionGrant(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
+	resourceIdentity, err := endpointResourceIdentity(endpoint)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "identify workload session resource").LogError(ctx, logger)
+	}
 
 	projectID := endpoint.ProjectID
 	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{
@@ -462,6 +466,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 			organizationID:      endpoint.OrganizationID,
 			issuer:              issuerURL,
 			audience:            canonicalResource,
+			resourceIdentity:    resourceIdentity,
 		}, subject, credential),
 	})
 }
@@ -523,6 +528,10 @@ type workloadSessionTarget struct {
 
 	// audience is the access token's audience.
 	audience string
+
+	// resourceIdentity is the stable identity of the one resource the session
+	// is for, NULL for an issuer-wide session.
+	resourceIdentity pgtype.Text
 }
 
 // workloadSessionIssuance is the session a workload grant mints at target:
@@ -537,6 +546,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		Issuer:                 target.issuer,
 		Audience:               target.audience,
 		Resource:               "",
+		ResourceIdentity:       target.resourceIdentity,
 		Refreshable:            false,
 		StoresRefreshHash:      false,
 		Subject:                subject,

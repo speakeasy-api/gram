@@ -5124,6 +5124,7 @@ func ParseEndpoint(
 		userSessionsListUserSessionsStatusFlag              = userSessionsListUserSessionsFlags.String("status", "", "")
 		userSessionsListUserSessionsClientIDFlag            = userSessionsListUserSessionsFlags.String("client-id", "", "")
 		userSessionsListUserSessionsSearchFlag              = userSessionsListUserSessionsFlags.String("search", "", "")
+		userSessionsListUserSessionsMetaMcpServerIDFlag     = userSessionsListUserSessionsFlags.String("meta-mcp-server-id", "", "")
 		userSessionsListUserSessionsCursorFlag              = userSessionsListUserSessionsFlags.String("cursor", "", "")
 		userSessionsListUserSessionsLimitFlag               = userSessionsListUserSessionsFlags.String("limit", "", "")
 		userSessionsListUserSessionsSessionTokenFlag        = userSessionsListUserSessionsFlags.String("session-token", "", "")
@@ -12889,7 +12890,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-user-sessions":
 				endpoint = c.ListUserSessions()
-				data, err = usersessionsc.BuildListUserSessionsPayload(*userSessionsListUserSessionsSubjectUrnFlag, *userSessionsListUserSessionsUserSessionIssuerIDFlag, *userSessionsListUserSessionsStatusFlag, *userSessionsListUserSessionsClientIDFlag, *userSessionsListUserSessionsSearchFlag, *userSessionsListUserSessionsCursorFlag, *userSessionsListUserSessionsLimitFlag, *userSessionsListUserSessionsSessionTokenFlag, *userSessionsListUserSessionsApikeyTokenFlag, *userSessionsListUserSessionsProjectSlugInputFlag)
+				data, err = usersessionsc.BuildListUserSessionsPayload(*userSessionsListUserSessionsSubjectUrnFlag, *userSessionsListUserSessionsUserSessionIssuerIDFlag, *userSessionsListUserSessionsStatusFlag, *userSessionsListUserSessionsClientIDFlag, *userSessionsListUserSessionsSearchFlag, *userSessionsListUserSessionsMetaMcpServerIDFlag, *userSessionsListUserSessionsCursorFlag, *userSessionsListUserSessionsLimitFlag, *userSessionsListUserSessionsSessionTokenFlag, *userSessionsListUserSessionsApikeyTokenFlag, *userSessionsListUserSessionsProjectSlugInputFlag)
 			case "list-facets":
 				endpoint = c.ListFacets()
 				data, err = usersessionsc.BuildListFacetsPayload(*userSessionsListFacetsSessionTokenFlag, *userSessionsListFacetsApikeyTokenFlag, *userSessionsListFacetsProjectSlugInputFlag)
@@ -35019,6 +35020,7 @@ func userSessionsListUserSessionsUsage() {
 	fmt.Fprint(os.Stderr, " -status STRING")
 	fmt.Fprint(os.Stderr, " -client-id STRING")
 	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -meta-mcp-server-id STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -35036,6 +35038,7 @@ func userSessionsListUserSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    -status STRING: `)
 	fmt.Fprintln(os.Stderr, `    -client-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -meta-mcp-server-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -35044,7 +35047,7 @@ func userSessionsListUserSessionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions list-user-sessions --subject-urn \"abc123\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions list-user-sessions --subject-urn \"abc123\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionsListFacetsUsage() {

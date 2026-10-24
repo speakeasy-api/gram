@@ -1,6 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
+import { useProject } from "@/contexts/Auth";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { useRoutes } from "@/routes";
 import { useGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
@@ -13,6 +14,7 @@ import {
   initialTabFromHash,
 } from "./GatewayDetailsRouting";
 import { MCPTeamAccessTab } from "@/pages/mcp/MCPTeamAccessTab";
+import { GatewayDebugTab } from "./GatewayDebugTab";
 import { GatewayInspectTab } from "./GatewayInspectTab";
 import { GatewayOverviewTab } from "./GatewayOverviewTab";
 import { GatewaySettingsTab } from "./GatewaySettingsTab";
@@ -21,6 +23,7 @@ export default function GatewayDetails(): JSX.Element {
   const { gatewayId } = useParams<{ gatewayId: string }>();
   const location = useLocation();
   const routes = useRoutes();
+  const project = useProject();
   const id = gatewayId ?? "";
   const activeTab = activeTabFromPath(location.pathname, id);
   const tabContentRef = useTabScrollReset(activeTab);
@@ -96,6 +99,15 @@ export default function GatewayDetails(): JSX.Element {
           <RequireScope scope="project:read" level="page">
             <ClientsAndSessionsTab
               issuerId={metaMcpServer.userSessionIssuerId}
+            />
+          </RequireScope>
+        );
+      case "debug":
+        return (
+          <RequireScope scope="project:read" level="page">
+            <GatewayDebugTab
+              key={`${project.id}:${metaMcpServer.id}`}
+              gatewayId={metaMcpServer.id}
             />
           </RequireScope>
         );

@@ -7,6 +7,7 @@ const VALID_TABS = [
   "inspect",
   "team-access",
   "sessions",
+  "debug",
   "settings",
 ] as const;
 
@@ -79,6 +80,8 @@ export function gatewayTabHref(
       return routes.mcp.gateway.teamAccess.href(gatewayId);
     case "sessions":
       return routes.mcp.gateway.sessions.href(gatewayId);
+    case "debug":
+      return routes.mcp.gateway.debug.href(gatewayId);
     case "settings":
       return routes.mcp.gateway.settings.href(gatewayId);
   }

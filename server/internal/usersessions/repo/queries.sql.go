@@ -766,7 +766,7 @@ WITH issuer AS (
     SELECT issuer.id, issuer.project_id, COALESCE(issuer.organization_id, project.organization_id) AS organization_id
     FROM user_session_issuers AS issuer
     LEFT JOIN projects AS project ON project.id = issuer.project_id
-    WHERE issuer.id = $13
+    WHERE issuer.id = $14
       AND issuer.deleted IS FALSE
     FOR KEY SHARE OF issuer
 ),
@@ -784,8 +784,8 @@ sign_in AS (
         ) AS fenced
     FROM sign_ins AS si
     JOIN issuer ON si.organization_id = issuer.organization_id
-    WHERE si.id = $14
-      AND si.user_id = $15
+    WHERE si.id = $15
+      AND si.user_id = $16
     FOR SHARE OF si
 )
 INSERT INTO user_sessions (
@@ -803,6 +803,7 @@ INSERT INTO user_sessions (
     expires_at,
     tool_selection,
     resource,
+    resource_identity,
     sign_in_id,
     credential_id
 )
@@ -821,8 +822,9 @@ SELECT
     $9,
     $10,
     $11,
+    $12,
     (SELECT sign_in.id FROM sign_in),
-    $12
+    $13
 FROM issuer
 WHERE NOT EXISTS (
     SELECT 1
@@ -845,6 +847,7 @@ type CreateUserSessionParams struct {
 	ExpiresAt              pgtype.Timestamptz
 	ToolSelection          []byte
 	Resource               pgtype.Text
+	ResourceIdentity       pgtype.Text
 	CredentialID           uuid.NullUUID
 	UserSessionIssuerID    uuid.UUID
 	SignInID               uuid.NullUUID
@@ -881,6 +884,7 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.ExpiresAt,
 		arg.ToolSelection,
 		arg.Resource,
+		arg.ResourceIdentity,
 		arg.CredentialID,
 		arg.UserSessionIssuerID,
 		arg.SignInID,
@@ -4178,15 +4182,39 @@ WHERE (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization
         )
       )
     )
-    OR EXISTS (
-      SELECT 1
-      FROM remote_sessions AS rs
-      JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
-      JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-      WHERE ri.slug ILIKE $8::text
-        AND (
-          (s.subject_urn::text NOT LIKE 'agent:%' AND rs.subject_urn = s.subject_urn::text)
-          OR EXISTS (
+    OR (
+      s.subject_urn::text NOT LIKE 'agent:%'
+      AND EXISTS (
+        SELECT 1
+        FROM remote_sessions AS rs
+        JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+        JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+        WHERE ri.slug ILIKE $8::text
+          AND rs.subject_urn = s.subject_urn::text
+          AND (rc.project_id = $1::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $2::text)))
+          AND (
+            EXISTS (
+              SELECT 1
+              FROM remote_session_client_user_session_issuers AS blink
+              WHERE blink.remote_session_client_id = rs.remote_session_client_id
+                AND blink.user_session_issuer_id = s.user_session_issuer_id
+            )
+            OR rs.user_session_issuer_id = s.user_session_issuer_id
+          )
+          AND rs.deleted IS FALSE
+          AND rc.deleted IS FALSE
+          AND ri.deleted IS FALSE
+      )
+    )
+    OR (
+      s.subject_urn::text LIKE 'agent:%'
+      AND EXISTS (
+        SELECT 1
+        FROM remote_sessions AS rs
+        JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+        JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+        WHERE ri.slug ILIKE $8::text
+          AND EXISTS (
             SELECT 1
             FROM principal_remote_session_bindings AS b
             JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
@@ -4223,25 +4251,30 @@ WHERE (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization
               AND (bc.project_id = $1::uuid OR (bc.project_id IS NULL AND (bc.organization_id IS NULL OR bc.organization_id = $2::text)))
               AND bs.id = rs.id
           )
-        )
-        AND (rc.project_id = $1::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $2::text)))
-        AND (
-          EXISTS (
-            SELECT 1
-            FROM remote_session_client_user_session_issuers AS blink
-            WHERE blink.remote_session_client_id = rs.remote_session_client_id
-              AND blink.user_session_issuer_id = s.user_session_issuer_id
+          AND (rc.project_id = $1::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $2::text)))
+          AND (
+            EXISTS (
+              SELECT 1
+              FROM remote_session_client_user_session_issuers AS blink
+              WHERE blink.remote_session_client_id = rs.remote_session_client_id
+                AND blink.user_session_issuer_id = s.user_session_issuer_id
+            )
+            OR rs.user_session_issuer_id = s.user_session_issuer_id
           )
-          OR rs.user_session_issuer_id = s.user_session_issuer_id
-        )
-        AND rs.deleted IS FALSE
-        AND rc.deleted IS FALSE
-        AND ri.deleted IS FALSE
+          AND rs.deleted IS FALSE
+          AND rc.deleted IS FALSE
+          AND ri.deleted IS FALSE
+      )
     )
   )
-  AND ($11::uuid IS NULL OR s.id < $11::uuid)
+  AND (
+    $11::text IS NULL
+    OR s.resource_identity = $11::text
+    OR (s.resource_identity IS NULL AND s.tool_selection->>'resource' = $11::text)
+  )
+  AND ($12::uuid IS NULL OR s.id < $12::uuid)
 ORDER BY s.id DESC
-LIMIT $12
+LIMIT $13
 `
 
 type ListUserSessionsByProjectIDParams struct {
@@ -4255,6 +4288,7 @@ type ListUserSessionsByProjectIDParams struct {
 	Search               pgtype.Text
 	AgentSubjectUrns     []string
 	FirstPartyClientName string
+	ResourceIdentity     pgtype.Text
 	Cursor               uuid.NullUUID
 	LimitValue           int32
 }
@@ -4298,6 +4332,7 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 		arg.Search,
 		arg.AgentSubjectUrns,
 		arg.FirstPartyClientName,
+		arg.ResourceIdentity,
 		arg.Cursor,
 		arg.LimitValue,
 	)
