@@ -104,6 +104,24 @@ type oauthPageData struct {
 	// Invitations are the organizations a user with none may join instead
 	// of creating a workspace.
 	Invitations []WorkspaceInvitation
+
+	// LoopbackRedirect offers "Finishing on another machine?" on the connect
+	// page: the client receives its code on a loopback address, which this
+	// browser reaches only when the client runs on the same machine.
+	LoopbackRedirect bool
+
+	// CallbackURL is the authorization response a finish-elsewhere page
+	// shows for the person to deliver from the client's machine.
+	CallbackURL string
+
+	// CallbackCommand delivers CallbackURL from the client's machine.
+	CallbackCommand string
+
+	// ListenAddress is the host and port the client listens on.
+	ListenAddress string
+
+	// CodeLifetime is how long the code in CallbackURL can be exchanged.
+	CodeLifetime string
 }
 
 // BrowserIdentity resolves a real Speakeasy user from the product identity provider.
@@ -872,6 +890,7 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 		RedirectURI:      challenge.RedirectURI,
 		State:            challenge.ID,
 		CSRFToken:        challenge.CSRFToken,
+		LoopbackRedirect: consentpage.IsLoopbackRedirect(challenge.RedirectURI),
 	})
 }
 
@@ -946,7 +965,40 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	recorded.setOAuthOutcome("succeeded")
-	http.Redirect(w, r, redirectURL(challenge.RedirectURI, code, challenge.State, "", ""), http.StatusSeeOther)
+	callback := redirectURL(challenge.RedirectURI, code, challenge.State, "", "")
+	if consentpage.FinishElsewhereRequested(r.PostForm, challenge.RedirectURI) {
+		s.renderFinishElsewherePage(w, r, challenge, callback)
+		return
+	}
+	http.Redirect(w, r, callback, http.StatusSeeOther)
+}
+
+// renderFinishElsewherePage shows the authorization response as a command to
+// run where the client listens, for a client in a VM, a container or an SSH
+// session. It is no more exposure than the redirect it replaces: the same URL
+// would otherwise sit in this browser's address bar, and its code is bound to
+// the client's PKCE verifier and redeemable once.
+func (s *OAuthHTTP) renderFinishElsewherePage(w http.ResponseWriter, r *http.Request, challenge oauthChallenge, callback string) {
+	// The code is already issued, so a failed name lookup must not strand the
+	// sign-in: the page still works with a generic name.
+	clientName := "The app"
+	if client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly); err == nil && client.Name != "" {
+		clientName = client.Name
+	}
+	listenAddress := ""
+	if u, err := url.Parse(callback); err == nil {
+		listenAddress = u.Host
+	}
+	s.renderOAuthPage(w, oauthPageData{
+		Title:           "Finish signing in · Speakeasy",
+		Kind:            "finish-elsewhere",
+		ClientName:      clientName,
+		RedirectURI:     challenge.RedirectURI,
+		CallbackURL:     callback,
+		CallbackCommand: consentpage.CallbackCommand(callback),
+		ListenAddress:   listenAddress,
+		CodeLifetime:    fmt.Sprintf("%d minutes", int(platformOAuthCodeLifetime.Minutes())),
+	})
 }
 
 func (s *OAuthHTTP) TokenHandler() http.Handler {
@@ -1497,6 +1549,11 @@ func (s *OAuthHTTP) renderOAuthPage(w http.ResponseWriter, data oauthPageData) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
+	if data.CallbackURL != "" {
+		// The page carries a live authorization code; never leak it in a
+		// Referer.
+		w.Header().Set("Referrer-Policy", "no-referrer")
+	}
 	w.Header().Set("Content-Security-Policy", oauthPageContentSecurityPolicy(data.RedirectURI, scriptNonce))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page.String()))

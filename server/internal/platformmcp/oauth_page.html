@@ -177,8 +177,29 @@
             <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.RedirectURI}}</dd>
           </div>
         </dl>
+        {{if .LoopbackRedirect}}
+        {{/* A browser can only follow a loopback redirect to a client on its
+        own machine. Ticked, the approval shows the redirect as a command to
+        run where the client listens (a VM, a container, an SSH session). */}}
+        <label class="flex items-start gap-3 px-6 pt-6 text-sm sm:px-8">
+          <input
+            type="checkbox"
+            form="platform-approve-form"
+            name="finish_elsewhere"
+            value="1"
+            class="mt-1 size-4 shrink-0"
+          />
+          <span class="flex min-w-0 flex-col gap-1 break-words">
+            <span class="text-foreground">Finishing on another machine?</span>
+            <span class="text-muted-foreground"
+              >Tick this if {{.ClientName}} runs in a VM, a container or over
+              SSH. After you give access, you get a command to run there.</span
+            >
+          </span>
+        </label>
+        {{end}}
         <div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:px-8">
-          <form method="post" data-single-submit>
+          <form method="post" id="platform-approve-form" data-single-submit>
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
             <button
@@ -202,6 +223,55 @@
               Cancel
             </button>
           </form>
+        </div>
+        {{else if eq .Kind "finish-elsewhere"}}
+        <div class="flex flex-col gap-5 px-6 py-8 sm:px-8">
+          <div class="flex flex-col gap-2">
+            <h1 id="page-title" class="text-display-xs">
+              Finish on the other machine
+            </h1>
+            <p class="text-sm text-muted-foreground break-words">
+              You gave <span class="text-foreground">{{.ClientName}}</span>
+              access. It is waiting for this sign-in at
+              <span class="text-foreground font-mono">{{.ListenAddress}}</span>
+              on the machine where it runs. Run this command there:
+            </p>
+          </div>
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-start">
+            <pre
+              class="bg-background m-0 min-w-0 flex-1 border px-4 py-3 font-mono text-xs break-all whitespace-pre-wrap select-all"
+            ><code id="finish-command" data-finish-command>{{.CallbackCommand}}</code></pre>
+            <button
+              type="button"
+              data-copy-target="finish-command"
+              class="bg-primary text-primary-foreground interact:bg-foreground h-10 w-full shrink-0 px-6 text-sm sm:w-40"
+            >
+              Copy command
+            </button>
+          </div>
+          <div class="flex flex-col gap-2">
+            <p class="text-sm text-muted-foreground break-words">
+              If {{.ClientName}} asks you to paste the address it was redirected
+              to, paste this instead:
+            </p>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start">
+              <pre
+                class="bg-background m-0 min-w-0 flex-1 border px-4 py-3 font-mono text-xs break-all whitespace-pre-wrap select-all"
+              ><code id="finish-url" data-finish-url>{{.CallbackURL}}</code></pre>
+              <button
+                type="button"
+                data-copy-target="finish-url"
+                class="bg-card interact:bg-accent h-10 w-full shrink-0 border px-6 text-sm sm:w-40"
+              >
+                Copy address
+              </button>
+            </div>
+          </div>
+          <p class="text-xs text-default-warning">
+            Run it only on a machine you control, and never send it to anyone.
+            It works once, only for the app that started this sign-in, and
+            expires in {{.CodeLifetime}}.
+          </p>
         </div>
         {{else}}
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
@@ -237,6 +307,27 @@
           }
           if (submittedButton) submittedButton.textContent = "Connecting…";
         }, { once: true });
+      }
+    </script>
+    {{else if eq .Kind "finish-elsewhere"}}
+    <script nonce="{{.ScriptNonce}}">
+      // Each copy button names the element whose text it copies. Without
+      // clipboard access the text stays selectable by hand.
+      for (const copyButton of document.querySelectorAll("[data-copy-target]")) {
+        const label = copyButton.textContent;
+        let restore;
+        copyButton.addEventListener("click", () => {
+          const source = document.getElementById(copyButton.dataset.copyTarget);
+          if (!source || !navigator.clipboard) return;
+          navigator.clipboard.writeText(source.textContent).then(
+            () => {
+              copyButton.textContent = "Copied";
+              clearTimeout(restore);
+              restore = setTimeout(() => { copyButton.textContent = label; }, 2000);
+            },
+            () => { copyButton.textContent = label; },
+          );
+        });
       }
     </script>
     {{end}}

@@ -155,6 +155,11 @@ type consentTemplateData struct {
 	// machine can bind the same port, so the page shows a caution (MCP
 	// SHOULD).
 	LoopbackRedirectWarning bool
+	// LoopbackRedirect is set when the client receives its authorization on
+	// a loopback address, which this browser reaches only when the client
+	// runs on the same machine. The page then offers to finish the sign-in on
+	// another machine instead.
+	LoopbackRedirect bool
 	// AutoClose marks a fully completed first-party connection: every bound
 	// remote_session_client is connected. The consent script closes only this
 	// terminal state; partially-linked connections (some cards still
@@ -825,6 +830,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		FirstParty:              challengeState.FirstParty,
 		ClientIDOrigin:          clientIDOrigin,
 		LoopbackRedirectWarning: loopbackRedirectWarning,
+		LoopbackRedirect:        consentpage.IsLoopbackRedirect(challengeState.RedirectURI),
 		AutoClose:               shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
 		SessionDurationOptions:  durationOptions,
 		AutoRefreshPolicy:       autoRefreshPolicy,
@@ -1289,6 +1295,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
+	}
+	if consentpage.FinishElsewhereRequested(r.PostForm, challengeState.RedirectURI) {
+		if err := renderConsentFinishElsewhere(w, clientRow.ClientName, clientRedirect); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "render finish elsewhere page").LogError(ctx, logger)
+		}
+		return nil
 	}
 	// 303 See Other (POST → GET): the consent submit is a POST; we want
 	// the user agent to GET the redirect target with NO body re-submission.

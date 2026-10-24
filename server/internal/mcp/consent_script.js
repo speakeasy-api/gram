@@ -29,6 +29,36 @@
     }, 3000);
   }
 
+  // The finish-elsewhere page's copy buttons each name the element whose text
+  // they copy. Without clipboard access the text stays selectable by hand.
+  Array.prototype.forEach.call(
+    document.querySelectorAll("[data-copy-target]"),
+    function (copyButton) {
+      // Read once, so a click while "Copied" shows can't make it the label.
+      var label = copyButton.textContent;
+      var restore;
+      copyButton.addEventListener("click", function () {
+        var source = document.getElementById(
+          copyButton.getAttribute("data-copy-target"),
+        );
+        if (!source || !navigator.clipboard) return;
+        navigator.clipboard.writeText(source.textContent).then(
+          function () {
+            copyButton.textContent = "Copied";
+            window.clearTimeout(restore);
+            restore = window.setTimeout(function () {
+              copyButton.textContent = label;
+            }, 2000);
+          },
+          function () {
+            // Clipboard access denied: the text stays selectable by hand.
+            copyButton.textContent = label;
+          },
+        );
+      });
+    },
+  );
+
   // A card whose automatic verification was still running when the callback
   // redirected reads "Connected · Verifying…". First-party pages can
   // safely reload until the callback probe's absolute deadline; interactive
