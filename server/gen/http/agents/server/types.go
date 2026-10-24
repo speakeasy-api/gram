@@ -74,6 +74,9 @@ type UpdatePolicyGrantRequestBody struct {
 // DeletePolicyGrantRequestBody is the type of the "agents" service
 // "deletePolicyGrant" endpoint HTTP request body.
 type DeletePolicyGrantRequestBody struct {
+	// Optional delete precondition. Returns conflict if the current scope or
+	// selector differs; omission preserves unconditional deletion.
+	ExpectedPolicy *AgentExpectedPolicyRequestBodyRequestBody `form:"expected_policy,omitempty" json:"expected_policy,omitempty" xml:"expected_policy,omitempty"`
 	// Direct policy grant identifier
 	GrantID *string `form:"grant_id,omitempty" json:"grant_id,omitempty" xml:"grant_id,omitempty"`
 	// First-class agent identifier
@@ -4243,6 +4246,15 @@ type AgentPolicySelector struct {
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
 }
 
+// AgentExpectedPolicyRequestBodyRequestBody is used to define fields on
+// request body types.
+type AgentExpectedPolicyRequestBodyRequestBody struct {
+	// Scope of the grant originally read
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Selector of the grant originally read
+	Selector *AgentPolicySelectorRequestBodyRequestBody `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
+}
+
 // NewListSessionsResponseBody builds the HTTP response body from the result of
 // the "listSessions" endpoint of the "agents" service.
 func NewListSessionsResponseBody(res *agents.ListSessionsResult) *ListSessionsResponseBody {
@@ -7548,6 +7560,9 @@ func NewDeletePolicyGrantPayload(body *DeletePolicyGrantRequestBody, sessionToke
 		GrantID: *body.GrantID,
 		AgentID: *body.AgentID,
 	}
+	if body.ExpectedPolicy != nil {
+		v.ExpectedPolicy = unmarshalAgentExpectedPolicyRequestBodyRequestBodyToAgentsAgentExpectedPolicy(body.ExpectedPolicy)
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -7803,6 +7818,11 @@ func ValidateDeletePolicyGrantRequestBody(body *DeletePolicyGrantRequestBody) (e
 	if body.AgentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
 	}
+	if body.ExpectedPolicy != nil {
+		if err2 := ValidateAgentExpectedPolicyRequestBodyRequestBody(body.ExpectedPolicy); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.GrantID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.grant_id", *body.GrantID, goa.FormatUUID))
 	}
@@ -8002,6 +8022,28 @@ func ValidateAgentPolicySelector(body *AgentPolicySelector) (err error) {
 	}
 	if body.ServerURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
+	}
+	return
+}
+
+// ValidateAgentExpectedPolicyRequestBodyRequestBody runs the validations
+// defined on AgentExpectedPolicyRequestBodyRequestBody
+func ValidateAgentExpectedPolicyRequestBodyRequestBody(body *AgentExpectedPolicyRequestBodyRequestBody) (err error) {
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if body.Scope != nil {
+		if utf8.RuneCountInString(*body.Scope) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", *body.Scope, utf8.RuneCountInString(*body.Scope), 1, true))
+		}
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelectorRequestBodyRequestBody(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }

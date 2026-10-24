@@ -898,6 +898,7 @@ trackedFiles:
   src/models/components/agentconnectionblockidform.ts: {}
   src/models/components/agentdelegatedgrant.ts: {}
   src/models/components/agentdelegatedpolicy.ts: {}
+  src/models/components/agentexpectedpolicy.ts: {}
   src/models/components/agentidform.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentmcpserver.ts: {}
@@ -908,7 +909,6 @@ trackedFiles:
   src/models/components/agentpluginserver.ts: {}
   src/models/components/agentpolicygrant.ts: {}
   src/models/components/agentpolicygrantform.ts: {}
-  src/models/components/agentpolicygrantidform.ts: {}
   src/models/components/agentpolicyselector.ts: {}
   src/models/components/agentpollingprincipal.ts: {}
   src/models/components/agentsession.ts: {}
@@ -1112,6 +1112,7 @@ trackedFiles:
   src/models/components/deactivateprescriptionrequestbody.ts: {}
   src/models/components/declineriskpolicychallengeresponsebody.ts: {}
   src/models/components/delegationstatuscount.ts: {}
+  src/models/components/deleteagentpolicygrantform.ts: {}
   src/models/components/deleteaiscantargetrequestbody.ts: {}
   src/models/components/deleteaiscantargetresult.ts: {}
   src/models/components/deleteconfigrequestbody.ts: {}

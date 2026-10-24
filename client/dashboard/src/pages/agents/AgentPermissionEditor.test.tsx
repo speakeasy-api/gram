@@ -171,9 +171,13 @@ describe("Agent permission editor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
     await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
     expect(mocks.remove).toHaveBeenCalledExactlyOnceWith({
-      agentPolicyGrantIDForm: {
+      deleteAgentPolicyGrantForm: {
         agentId: agent.id,
         grantId: "grant_project_one",
+        expectedPolicy: {
+          scope: "inference:execute",
+          selector: inferenceGrant("project_one").selector,
+        },
       },
     });
     expect(mocks.create).not.toHaveBeenCalled();
@@ -314,6 +318,118 @@ it("preserves existing grants after a second addition fails and reloads before r
       .projectId,
   ).toBe("project_three");
   expect(mocks.remove).toHaveBeenCalledExactlyOnceWith({
-    agentPolicyGrantIDForm: { agentId: agent.id, grantId: existing.id },
+    deleteAgentPolicyGrantForm: {
+      agentId: agent.id,
+      grantId: existing.id,
+      expectedPolicy: { scope: existing.scope, selector: existing.selector },
+    },
   });
+});
+
+it.each([
+  { projectId: undefined, dismiss: "Done" },
+  { projectId: "*", dismiss: "Done" },
+  { projectId: undefined, dismiss: "Close" },
+  { projectId: "*", dismiss: "Close" },
+])(
+  "preserves existing all-project inference on drawer $dismiss ($projectId)",
+  async ({ projectId, dismiss }) => {
+    const existing: AgentPolicyGrant = {
+      ...inferenceGrant("project_one"),
+      id: "all_projects_grant",
+      selector: {
+        resourceKind: "inference",
+        resourceId: "*",
+        ...(projectId ? { projectId } : {}),
+      },
+    };
+    setup([existing]);
+    openPlatform();
+    fireEvent.click(screen.getByRole("button", { name: /Choose resources/ }));
+    expect(screen.getByRole("button", { name: /All projects/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: dismiss }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Choose resources/ }).textContent,
+      ).toContain("All projects"),
+    );
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Save permissions",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  },
+);
+
+it("stops deletions on a server 409 and retries only against reloaded policy", async () => {
+  const original = inferenceGrant("project_one");
+  const second = inferenceGrant("project_two");
+  setup([original, second]);
+  openPlatform();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Remove inference:execute" }),
+  );
+  mocks.remove.mockRejectedValueOnce(
+    Object.assign(new Error("Policy grant changed since it was read"), {
+      statusCode: 409,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "Policy grant changed since it was read",
+  );
+  expect(mocks.remove).toHaveBeenCalledExactlyOnceWith({
+    deleteAgentPolicyGrantForm: {
+      agentId: agent.id,
+      grantId: original.id,
+      expectedPolicy: { scope: original.scope, selector: original.selector },
+    },
+  });
+  expect(mocks.create).not.toHaveBeenCalled();
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Save permissions",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  expect(mocks.close).not.toHaveBeenCalled();
+
+  const updated = {
+    ...original,
+    selector: inferenceGrant("project_three").selector,
+  };
+  mocks.list.mockResolvedValue([updated, second]);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Reload saved permissions" }),
+  );
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  expect(mocks.remove).toHaveBeenCalledTimes(1);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Remove inference:execute" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+  await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+  expect(mocks.remove).toHaveBeenCalledTimes(3);
+  expect(mocks.remove.mock.calls[1]?.[0]).toEqual({
+    deleteAgentPolicyGrantForm: {
+      agentId: agent.id,
+      grantId: updated.id,
+      expectedPolicy: { scope: updated.scope, selector: updated.selector },
+    },
+  });
+  expect(mocks.remove.mock.calls[2]?.[0]).toEqual({
+    deleteAgentPolicyGrantForm: {
+      agentId: agent.id,
+      grantId: second.id,
+      expectedPolicy: { scope: second.scope, selector: second.selector },
+    },
+  });
+  expect(mocks.create).not.toHaveBeenCalled();
 });

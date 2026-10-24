@@ -593,7 +593,9 @@ export function CredentialsWizard({
         : [...changes.remove, ...(appliedWildcard.current?.grantIds ?? [])];
       for (const grantId of removals) {
         await deleteGrant.mutateAsync({
-          request: { agentPolicyGrantIDForm: { agentId: agent.id, grantId } },
+          request: {
+            deleteAgentPolicyGrantForm: { agentId: agent.id, grantId },
+          },
         });
         for (const [resourceId, server] of applied.current) {
           const left = server.grantIds.filter((id) => id !== grantId);

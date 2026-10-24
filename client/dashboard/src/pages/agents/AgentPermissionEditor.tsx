@@ -125,7 +125,11 @@ export function AgentPermissionEditor({
         }
         for (const grant of changes.remove) {
           await sdk.agents.deletePolicyGrant({
-            agentPolicyGrantIDForm: { agentId: agent.id, grantId: grant.id },
+            deleteAgentPolicyGrantForm: {
+              agentId: agent.id,
+              grantId: grant.id,
+              expectedPolicy: { scope: grant.scope, selector: grant.selector },
+            },
           });
           completed++;
         }
@@ -329,7 +333,10 @@ export function AgentPermissionEditor({
                 scope={scope.slug}
                 selectors={draft[scope.slug] ?? null}
                 allowedPanels={
-                  scope.resourceType === "inference" ? ["projects"] : undefined
+                  scope.resourceType === "inference" &&
+                  view.draft[scope.slug] !== null
+                    ? ["projects"]
+                    : undefined
                 }
                 onChangeSelectors={(selectors) => {
                   setChangedScopes((previous) =>

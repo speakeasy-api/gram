@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -200,6 +201,18 @@ func (s *Service) DeletePolicyGrant(ctx context.Context, payload *gen.DeletePoli
 		}
 		if err := requireNotConnectionOwnerBlock(ctx, tx, human.Auth.ActiveOrganizationID, agent.ID, existing.Scope, existing.Selectors); err != nil {
 			return err
+		}
+		if expected := payload.ExpectedPolicy; expected != nil {
+			if expected.Selector == nil || expected.Scope == "" {
+				return oops.E(oops.CodeBadRequest, nil, "expected policy scope and selector are required")
+			}
+			current, err := authz.SelectorFromRow(existing.Selectors)
+			if err != nil {
+				return fmt.Errorf("parse current agent policy selector: %w", err)
+			}
+			if existing.Scope != expected.Scope || !maps.Equal(current, policySelector(expected.Selector)) {
+				return oops.E(oops.CodeConflict, nil, "agent policy grant changed; reload before deleting")
+			}
 		}
 		row, err := q.DeleteAgentPolicyGrant(ctx, repo.DeleteAgentPolicyGrantParams{
 			OrganizationID: human.Auth.ActiveOrganizationID, AgentID: agent.ID, GrantID: grantID,

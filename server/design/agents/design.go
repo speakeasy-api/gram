@@ -89,6 +89,17 @@ var PolicyGrantIDForm = Type("AgentPolicyGrantIDForm", func() {
 	Required("grant_id")
 })
 
+var ExpectedPolicy = Type("AgentExpectedPolicy", func() {
+	Attribute("scope", String, "Scope of the grant originally read", func() { MinLength(1) })
+	Attribute("selector", PolicySelector, "Selector of the grant originally read")
+	Required("scope", "selector")
+})
+
+var DeletePolicyGrantForm = Type("DeleteAgentPolicyGrantForm", func() {
+	Extend(PolicyGrantIDForm)
+	Attribute("expected_policy", ExpectedPolicy, "Optional delete precondition. Returns conflict if the current scope or selector differs; omission preserves unconditional deletion.")
+})
+
 var OwnerAssignmentForm = Type("AgentOwnerAssignmentForm", func() {
 	Attribute("agent_id", String, "First-class agent identifier", func() { Format(FormatUUID) })
 	Attribute("owner_user_id", String, "Eligible same-organization human replacement owner")
@@ -339,12 +350,12 @@ var _ = Service("agents", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deletePolicyGrant")
 		Payload(func() {
 			security.SessionPayload()
-			Extend(PolicyGrantIDForm)
+			Extend(DeletePolicyGrantForm)
 		})
 		HTTP(func() {
 			POST("/rpc/agents.deletePolicyGrant")
 			security.SessionHeader()
-			Body(PolicyGrantIDForm)
+			Body(DeletePolicyGrantForm)
 			Response(StatusNoContent)
 		})
 	})

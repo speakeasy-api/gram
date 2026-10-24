@@ -16502,7 +16502,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/AgentPolicyGrantIDForm'
+                            $ref: '#/components/schemas/DeleteAgentPolicyGrantForm'
                 required: true
             responses:
                 "204":
@@ -94053,6 +94053,18 @@ components:
             required:
                 - requested
                 - effective
+        AgentExpectedPolicy:
+            type: object
+            properties:
+                scope:
+                    type: string
+                    description: Scope of the grant originally read
+                    minLength: 1
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+            required:
+                - scope
+                - selector
         AgentIDForm:
             type: object
             properties:
@@ -100682,6 +100694,22 @@ components:
             required:
                 - status
                 - count
+        DeleteAgentPolicyGrantForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: First-class agent identifier
+                    format: uuid
+                expected_policy:
+                    $ref: '#/components/schemas/AgentExpectedPolicy'
+                grant_id:
+                    type: string
+                    description: Direct policy grant identifier
+                    format: uuid
+            required:
+                - grant_id
+                - agent_id
         DeleteAiScanTargetRequestBody:
             type: object
             properties:

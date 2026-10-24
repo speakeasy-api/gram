@@ -14678,7 +14678,7 @@ func agentsDeletePolicyGrantUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents delete-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents delete-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_policy\": {\n         \"scope\": \"aa\",\n         \"selector\": {\n            \"client_type\": \"service_account\",\n            \"connection_owner\": \"abc123\",\n            \"disposition\": \"destructive\",\n            \"project_id\": \"abc123\",\n            \"resource_id\": \"abc123\",\n            \"resource_kind\": \"mcp\",\n            \"server_identity\": \"abc123\",\n            \"server_url\": \"https://example.com/foo\",\n            \"tool\": \"abc123\",\n            \"upstream_client\": \"abc123\"\n         }\n      },\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func agentsListConnectionBlocksUsage() {

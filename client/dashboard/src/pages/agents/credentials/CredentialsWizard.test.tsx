@@ -727,7 +727,7 @@ describe("Editing an agent that already exists", () => {
 
     await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(1));
     expect(
-      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.agentPolicyGrantIDForm,
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm,
     ).toEqual({ agentId: "agent_one", grantId: "grant_one" });
     expect(mocks.createGrant).not.toHaveBeenCalled();
   });
@@ -823,7 +823,7 @@ describe("Editing an agent that already exists", () => {
 
     await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(1));
     expect(
-      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.agentPolicyGrantIDForm,
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm,
     ).toEqual({ agentId: "agent_one", grantId: "grant_all" });
     // The chosen server is granted before the wildcard goes, so a failure
     // between the two leaves too much reach rather than too little.
@@ -974,7 +974,7 @@ describe("Editing an agent that already exists", () => {
     await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(3));
     expect(
       mocks.deleteGrant.mock.calls.map(
-        (call) => call[0]?.request?.agentPolicyGrantIDForm?.grantId,
+        (call) => call[0]?.request?.deleteAgentPolicyGrantForm?.grantId,
       ),
     ).toEqual(["grant_all", "grant_all_two", "grant_all_two"]);
   });
