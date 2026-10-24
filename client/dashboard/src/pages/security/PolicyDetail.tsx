@@ -1,5 +1,4 @@
-import { enumPresentation, requireKnownEnumValue } from "@/lib/enum";
-import { RiskPolicyAction } from "@gram/client/models/components/riskpolicy.js";
+import { enumPresentation } from "@/lib/enum";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ShadowMCPDispositionPicker } from "@/components/shadow-mcp/ShadowMCPDispositionPicker";
@@ -474,10 +473,7 @@ function PromptPolicyEditor({
   );
   const [action, setAction] = useState<PolicyAction>(() => {
     const initial = detectionPolicyAction(
-      requireKnownEnumValue(
-        RiskPolicyAction,
-        policy?.action ?? draft?.action ?? "flag",
-      ),
+      policy?.action ?? draft?.action ?? "flag",
     );
     return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;
   });

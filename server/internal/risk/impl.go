@@ -4006,8 +4006,6 @@ type promptModelConfig struct {
 	FailOpen    *bool    `json:"fail_open,omitempty"`
 }
 
-// approvalConfigFromPayload converts an API approval config to its domain
-// form. A nil config stays nil.
 // validateApprovers checks that every approver names a user or role in the
 // organization, so a typo cannot hold calls for an approver nobody can be.
 func (s *Service) validateApprovers(ctx context.Context, organizationID string, config *policycore.ApprovalConfig) error {
@@ -4030,6 +4028,8 @@ func (s *Service) validateApprovers(ctx context.Context, organizationID string, 
 	return nil
 }
 
+// approvalConfigFromPayload converts an API approval config to its domain
+// form. A nil config stays nil.
 func approvalConfigFromPayload(c *types.RiskPolicyApprovalConfig) *policycore.ApprovalConfig {
 	if c == nil {
 		return nil

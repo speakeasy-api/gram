@@ -1,3 +1,4 @@
+import { requireKnownEnumValue } from "@/lib/enum";
 import celExamples from "./cel-examples.json";
 import {
   DETECTION_RULES,
@@ -360,13 +361,20 @@ export const SCOPE_INCLUDE_CEL_EXAMPLES: { label: string; expr: string }[] =
 export const SCOPE_EXEMPT_CEL_EXAMPLES: { label: string; expr: string }[] =
   celExamples.scope_exempt;
 
-/** Detection editors never see require_approval: those policies open in their
- *  own read-only view, and the server rejects detectors on them. A stray one
- *  reads as block, the closest enforcing action. */
-export function detectionPolicyAction(
-  action: PolicyAction | "require_approval",
-): PolicyAction {
-  return action === "require_approval" ? "block" : action;
+/** The actions a detection editor offers. */
+const DETECTION_POLICY_ACTIONS = {
+  Flag: "flag",
+  Warn: "warn",
+  Block: "block",
+  Quarantine: "quarantine",
+} as const satisfies Record<string, PolicyAction>;
+
+/** Detection editors take only detection actions. require_approval policies
+ *  open in their own read-only view and the server rejects detectors on them,
+ *  so any other action asks for a refresh instead of becoming one the user
+ *  did not choose. */
+export function detectionPolicyAction(action: string): PolicyAction {
+  return requireKnownEnumValue(DETECTION_POLICY_ACTIONS, action);
 }
 
 export function mcpCompatibleAction(action: PolicyAction): PolicyAction {

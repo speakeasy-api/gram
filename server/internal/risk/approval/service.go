@@ -105,8 +105,8 @@ const (
 	maxPreviewKeys = 20
 
 	// omittedArgumentsKey names the preview entry that says how many
-	// top-level arguments were left out. It sorts after ASCII keys. When an
-	// argument already has that name, the entry takes a longer run of "…".
+	// top-level arguments were left out. When an argument already has that
+	// name, the entry takes a longer run of "…".
 	omittedArgumentsKey = "…"
 )
 
