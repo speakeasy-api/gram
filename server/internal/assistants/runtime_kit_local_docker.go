@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -62,6 +63,13 @@ func checkKitLocalProjectionAccess(ctx context.Context, spec kitLocalContainerSp
 		"--mount", "type=bind,src=" + filepath.Dir(spec.WorkloadAssertionFile) + ",dst=" + filepath.Dir(KitWorkloadAssertionPath) + ",readonly",
 		"--entrypoint", "/bin/sh", spec.Image, "-c", `test -f "$1" && test -r "$1" && : < "$1"`, "kit-projection-check", KitWorkloadAssertionPath}
 	if _, err := run(ctx, args...); err != nil {
+		exit, hasExit := errors.AsType[interface {
+			error
+			ExitCode() int
+		}](err)
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || !hasExit || (exit.ExitCode() != 1 && exit.ExitCode() != 2) {
+			return fmt.Errorf("run kit assertion projection access probe: %w", err)
+		}
 		return fmt.Errorf("kit assertion projection must be readable by guest UID 1000 through the configured container daemon: provision the directory and each rotated assertion with ownership mapped to guest UID 1000, retaining 0700/0600 permissions; rootless host-owner-to-root mapping alone is unsupported (do not run Kit as root or widen permissions): %w", err)
 	}
 	return nil

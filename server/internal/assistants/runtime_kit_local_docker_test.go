@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -141,7 +142,7 @@ func TestKitLocalProjectionAccessUsesDaemonMapping(t *testing.T) {
 		t.Run(map[bool]string{false: "unmapped-owner", true: "mapped-owner"}[readable], func(t *testing.T) {
 			t.Parallel()
 			spec := kitLocalContainerSpec{WorkloadAssertionFile: "/operator/projection/assertion", Image: "kit:v0.2.19"}
-			denied := errors.New("guest cannot open assertion")
+			denied := fmt.Errorf("docker run: %w", kitProjectionExitError(1))
 			called := false
 			err := checkKitLocalProjectionAccess(t.Context(), spec, func(_ context.Context, args ...string) (string, error) {
 				called = true
@@ -160,6 +161,49 @@ func TestKitLocalProjectionAccessUsesDaemonMapping(t *testing.T) {
 				require.ErrorIs(t, err, denied)
 				require.ErrorContains(t, err, "ownership mapped to guest UID 1000")
 				require.ErrorContains(t, err, "rootless host-owner-to-root mapping alone is unsupported")
+			}
+		})
+	}
+}
+
+type kitProjectionExitError int
+
+func (e kitProjectionExitError) Error() string { return fmt.Sprintf("exit status %d", e) }
+func (e kitProjectionExitError) ExitCode() int { return int(e) }
+
+func TestKitLocalProjectionAccessClassifiesFailures(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		cause     error
+		cancel    bool
+		ownership bool
+	}{
+		{name: "daemon", cause: errors.New("cannot connect to daemon"), cancel: false, ownership: false},
+		{name: "canceled", cause: context.Canceled, cancel: false, ownership: false},
+		{name: "deadline", cause: context.DeadlineExceeded, cancel: false, ownership: false},
+		{name: "canceled-process", cause: kitProjectionExitError(1), cancel: true, ownership: false},
+		{name: "unreadable", cause: kitProjectionExitError(1), cancel: false, ownership: true},
+		{name: "open-denied", cause: kitProjectionExitError(2), cancel: false, ownership: true},
+		{name: "mount", cause: kitProjectionExitError(125), cancel: false, ownership: false},
+		{name: "cannot-execute", cause: kitProjectionExitError(126), cancel: false, ownership: false},
+		{name: "missing-shell", cause: kitProjectionExitError(127), cancel: false, ownership: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc.cancel {
+				cancel()
+			}
+			wrapped := fmt.Errorf("docker run: %w", tc.cause)
+			err := checkKitLocalProjectionAccess(ctx, kitLocalContainerSpec{WorkloadAssertionFile: "/operator/projection/assertion", Image: "kit:v0.2.19"}, func(context.Context, ...string) (string, error) { return "", wrapped })
+			require.ErrorIs(t, err, tc.cause)
+			if tc.ownership {
+				require.ErrorContains(t, err, "ownership mapped to guest UID 1000")
+			} else {
+				require.ErrorContains(t, err, "run kit assertion projection access probe")
+				require.NotContains(t, err.Error(), "ownership mapped")
 			}
 		})
 	}
