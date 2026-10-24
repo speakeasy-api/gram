@@ -290,7 +290,7 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 			}
 			if server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID {
 				if err := finalize.Finalize(ctx, tx); err != nil {
-					return connectionMutationReceipt{}, err
+					return connectionMutationReceipt{}, fmt.Errorf("finalize network access admission: %w", err)
 				}
 				actor := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}
 				clearedRootDomainIDs, err = toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, s.audit, actor, targetID, mode)
