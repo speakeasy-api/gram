@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -37,8 +38,12 @@ type MCPHeadlessCallerChoice struct {
 	UserSessionClientID string `json:"user_session_client_id,omitempty"`
 	WorkloadIssuerID    string `json:"workload_issuer_id,omitempty"`
 	WorkloadSubject     string `json:"workload_subject,omitempty"`
-	AuthClientID        string `json:"auth_client_id,omitempty"`
-	NoAuth              bool   `json:"no_auth"`
+	// Chosen reports that the caller has a choice for this server; without
+	// one, its sessions take the server's only ready credential or must name
+	// one.
+	Chosen       bool   `json:"chosen"`
+	AuthClientID string `json:"auth_client_id,omitempty"`
+	NoAuth       bool   `json:"no_auth"`
 }
 
 type ChooseMCPHeadlessCallerCredentialOutput struct {
@@ -104,19 +109,21 @@ func (s *AccessRoleMutationService) ChooseHeadlessCallerCredential(ctx context.C
 	}
 	out := ChooseMCPHeadlessCallerCredentialOutput{UpstreamAuthentication: upstream, Callers: []MCPHeadlessCallerChoice{}}
 	for _, profile := range profiles {
-		for _, choice := range profile.Choices {
-			if choice.McpServerID != mcpID.String() {
-				continue
-			}
-			out.Callers = append(out.Callers, MCPHeadlessCallerChoice{
-				ProfileID: profile.ID, Name: profile.Name,
-				UserSessionClientID: conv.PtrValOr(profile.UserSessionClientID, ""),
-				WorkloadIssuerID:    conv.PtrValOr(profile.WorkloadIssuerID, ""),
-				WorkloadSubject:     conv.PtrValOr(profile.WorkloadSubject, ""),
-				AuthClientID:        conv.PtrValOr(choice.AuthClientID, ""),
-				NoAuth:              choice.AuthClientID == nil,
-			})
+		caller := MCPHeadlessCallerChoice{
+			ProfileID: profile.ID, Name: profile.Name,
+			UserSessionClientID: conv.PtrValOr(profile.UserSessionClientID, ""),
+			WorkloadIssuerID:    conv.PtrValOr(profile.WorkloadIssuerID, ""),
+			WorkloadSubject:     conv.PtrValOr(profile.WorkloadSubject, ""),
+			Chosen:              false, AuthClientID: "", NoAuth: false,
 		}
+		for _, choice := range profile.Choices {
+			if choice.McpServerID == mcpID.String() {
+				caller.Chosen = true
+				caller.AuthClientID = conv.PtrValOr(choice.AuthClientID, "")
+				caller.NoAuth = choice.AuthClientID == nil
+			}
+		}
+		out.Callers = append(out.Callers, caller)
 	}
 	return out, nil
 }
@@ -145,6 +152,21 @@ func (s *AccessRoleMutationService) writeHeadlessCallerChoice(ctx context.Contex
 			return accessRoleMutationInvalid("auth_client_id is not a valid ID.")
 		}
 		authClientID = &input.AuthClientID
+	}
+	if input.Remove {
+		// Removing a choice from a caller with no profile changes nothing.
+		profiles, err := authclients.ListIssuanceProfilesForIssuer(ctx, s.reads.db, principal.OrganizationID, issuerID)
+		if err != nil {
+			return accessRoleMutationUnavailable(err)
+		}
+		if !slices.ContainsFunc(profiles, func(p *types.IssuanceProfile) bool {
+			if clientID.Valid {
+				return conv.PtrValOr(p.UserSessionClientID, "") == clientID.UUID.String()
+			}
+			return conv.PtrValOr(p.WorkloadIssuerID, "") == workloadIssuerID.UUID.String() && conv.PtrValOr(p.WorkloadSubject, "") == input.WorkloadSubject
+		}) {
+			return nil
+		}
 	}
 	if err := s.budget.AllowConnectionOrOrganization(ctx, principal); err != nil {
 		if errors.Is(err, ErrOperationRateLimited) {

@@ -894,24 +894,22 @@ LEFT JOIN meta_mcp_server_members AS m
  AND m.deleted IS FALSE
 WHERE s.id = ANY($3::uuid[])
   AND s.deleted IS FALSE
-  -- The subject and sign-in bound the lineage lookup to one person's
-  -- sessions, which an index serves.
+  -- The subject bounds the lineage lookup to one person's sessions, which an
+  -- index serves, across every sign-in the credential was rotated through.
   AND COALESCE(m.created_at, s.created_at) > (
     SELECT min(us.created_at)
     FROM user_sessions AS us
     WHERE us.subject_urn = $4::text
-      AND us.user_session_issuer_id = $5::uuid
-      AND COALESCE(us.credential_id, us.id) = $6::uuid
+      AND COALESCE(us.credential_id, us.id) = $5::uuid
   )
 `
 
 type ListGatewayMembersAddedAfterIssuanceParams struct {
-	OrganizationID      string
-	MetaMcpServerID     uuid.NullUUID
-	McpServerIds        []uuid.UUID
-	SubjectUrn          string
-	UserSessionIssuerID uuid.UUID
-	CredentialID        uuid.UUID
+	OrganizationID  string
+	MetaMcpServerID uuid.NullUUID
+	McpServerIds    []uuid.UUID
+	SubjectUrn      string
+	CredentialID    uuid.UUID
 }
 
 // The members, of those given, that joined the gateway after the credential
@@ -924,7 +922,6 @@ func (q *Queries) ListGatewayMembersAddedAfterIssuance(ctx context.Context, arg 
 		arg.MetaMcpServerID,
 		arg.McpServerIds,
 		arg.SubjectUrn,
-		arg.UserSessionIssuerID,
 		arg.CredentialID,
 	)
 	if err != nil {

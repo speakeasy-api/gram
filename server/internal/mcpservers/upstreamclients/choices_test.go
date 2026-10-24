@@ -34,6 +34,7 @@ func TestCheckConfiguredChoice(t *testing.T) {
 	undecided := pgtype.Bool{}
 	clients := map[uuid.UUID]string{shared: authz.AuthClientTypeStaticCredential, personal: authz.AuthClientTypeRemoteSession}
 
+	require.ErrorIs(t, upstreamclients.CheckConfiguredChoice(nil, none, true), upstreamclients.ErrChoiceNotOffered, "a server that offers nothing is not the organization's")
 	require.NoError(t, upstreamclients.CheckConfiguredChoice(offer(needsNone, nil), none, true), "a server needing none takes no-auth")
 	require.ErrorIs(t, upstreamclients.CheckConfiguredChoice(offer(undecided, nil), none, true), upstreamclients.ErrChoiceUpstreamAuthUndecided)
 	require.ErrorIs(t, upstreamclients.CheckConfiguredChoice(offer(needs, clients), none, true), upstreamclients.ErrChoiceNeedsCredential)
