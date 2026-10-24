@@ -52,7 +52,10 @@ export function AgentIdentityPermissions({
     throwOnError: false,
   });
   const { orgSlug } = useSlugs();
-  const rows = canRead ? (grants.data ?? []) : [];
+  // Credential restrictions are listed and edited in their own panel.
+  const rows = canRead
+    ? (grants.data ?? []).filter((grant) => grant.scope !== "mcp:blocked_auth")
+    : [];
   // Only a grant naming a specific MCP server needs the org inventories;
   // project names come from the session.
   const maps = useResourceLinkMaps(

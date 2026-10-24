@@ -1,5 +1,6 @@
 import { SettingsSection } from "@/components/detail/settings-section";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FieldError } from "@/components/ui/Field";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -20,9 +21,10 @@ import { useMcpServerAuthentication } from "@gram/client/react-query/mcpServerAu
 import { useSetMcpServerUpstreamAuthRequirementMutation } from "@gram/client/react-query/setMcpServerUpstreamAuthRequirement.js";
 import { useUpdateAuthClientMutation } from "@gram/client/react-query/updateAuthClient.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Globe } from "lucide-react";
+import { ChevronRight, Globe, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { AddCredentialSheet } from "./AddCredentialSheet";
 import { AuthClientSheet } from "./AuthClientSheet";
 import { invalidateAuthClientQueries } from "./authClientQueries";
 import { AuthRow } from "./AuthRow";
@@ -43,6 +45,7 @@ export function UpstreamCredentialsSection({
   const canManage = hasScope("org:admin");
   const query = useMcpServerAuthentication({ mcpServerId: mcpServer.id });
   const [openClientId, setOpenClientId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const openClient =
     query.data?.clients.find((client) => client.id === openClientId) ?? null;
 
@@ -86,9 +89,10 @@ export function UpstreamCredentialsSection({
                   hint="Turning one off or changing who can use it applies on every server that uses it."
                 >
                   {query.data.clients.length === 0 ? (
-                    <Text muted small>
-                      No credentials yet. They appear here once this
-                      server&apos;s identity is set up above.
+                    <Text muted small className="block">
+                      {canManage
+                        ? "No credentials yet. Add one so callers can reach the upstream."
+                        : "No credentials yet."}
                     </Text>
                   ) : (
                     <ul className="border-border divide-y border">
@@ -103,12 +107,34 @@ export function UpstreamCredentialsSection({
                       ))}
                     </ul>
                   )}
+                  {canManage && query.data.requiresUpstreamAuth !== false ? (
+                    <div className="mt-3">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setAdding(true)}
+                      >
+                        <Button.LeftIcon>
+                          <Plus className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Add credential</Button.Text>
+                      </Button>
+                    </div>
+                  ) : null}
                 </AuthRow>
               )}
             </>
           )}
         </div>
       </SettingsSection.Panel>
+      {adding ? (
+        <AddCredentialSheet
+          mcpServerId={mcpServer.id}
+          projectId={mcpServer.projectId}
+          tunneled={!!mcpServer.tunneledMcpServerId}
+          onOpenChange={setAdding}
+        />
+      ) : null}
       {openClient ? (
         <AuthClientSheet
           client={openClient}

@@ -109,7 +109,7 @@ function IdentityExplainerContent(): JSX.Element {
         />
       </div>
       <div>
-        <div className="text-eyebrow">Service Account</div>
+        <div className="text-eyebrow">Shared credential</div>
         <div className="mt-3">
           <Flow
             nodes={[
@@ -163,11 +163,11 @@ export function IdentityExplainerDialog({
       {trigger ? <Dialog.Trigger asChild>{trigger}</Dialog.Trigger> : null}
       <Dialog.Content className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <Dialog.Header>
-          <Dialog.Title>User Identity or Service Account?</Dialog.Title>
+          <Dialog.Title>User Identity or shared credential?</Dialog.Title>
           <Dialog.Description>
             Users of this server must authenticate as themselves against the
-            service&apos;s authorization server, or every caller can act as one
-            Service Account whose permissions you manage in the control plane.
+            service&apos;s authorization server, or every caller can share one
+            credential whose permissions you manage in the control plane.
           </Dialog.Description>
         </Dialog.Header>
         <IdentityExplainerContent />
@@ -199,8 +199,8 @@ export function IdentityExplainerCallout({
       <div className="space-y-3">
         <Text small>
           Users of this server must authenticate as themselves against the
-          service&apos;s authorization server, or every caller can act as one
-          Service Account whose permissions you manage in the control plane.
+          service&apos;s authorization server, or every caller can share one
+          credential whose permissions you manage in the control plane.
         </Text>
         <IdentityExplainerContent />
       </div>
