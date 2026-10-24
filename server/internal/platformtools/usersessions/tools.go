@@ -25,8 +25,7 @@ import (
 
 const maxLimit = 100
 
-// maxSearchLength matches the userSessions.list search limit, which is far
-// longer than any label it matches.
+// maxSearchLength matches the userSessions.list search limit.
 const maxSearchLength = 200
 
 type listInput struct {
@@ -34,7 +33,7 @@ type listInput struct {
 	UserSessionIssuerID string `json:"user_session_issuer_id,omitempty" jsonschema:"Filter to one issuer/server id (UUID)."`
 	SubjectURN          string `json:"subject_urn,omitempty" jsonschema:"Exact subject URN to filter by (e.g. user:<id>)."`
 	ClientID            string `json:"client_id,omitempty" jsonschema:"Filter to one connecting client id (UUID)."`
-	Search              string `json:"search,omitempty" jsonschema:"Case-insensitive substring match on the person, API key, workload, client, MCP server, or upstream provider shown for a session."`
+	Search              string `json:"search,omitempty" jsonschema:"Case-insensitive substring match on the person, API key, workload, client, MCP server, or upstream provider of a session. Workload issuer and assignment labels and upstream provider labels may match without being included in the response."`
 	Cursor              string `json:"cursor,omitempty" jsonschema:"Pagination cursor: id of the last item from the previous page."`
 	Limit               int    `json:"limit,omitempty" jsonschema:"Page size (default 50, max 100)."`
 }

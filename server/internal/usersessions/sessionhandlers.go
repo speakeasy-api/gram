@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -144,10 +143,11 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, s.logger)
 	}
 
-	search := conv.ContainsPattern(conv.PtrValOr(payload.Search, ""))
+	term := conv.SearchTerm(conv.PtrValOr(payload.Search, ""))
+	search := conv.ContainsPattern(term)
 	agentSubjectURNs := []string{}
 	if search.Valid {
-		agentIDs, err := s.agents.ReadableAgentIDsNamed(ctx, s.db, strings.TrimSpace(*payload.Search))
+		agentIDs, err := s.agents.ReadableAgentIDsNamed(ctx, s.db, term)
 		if _, ok := errors.AsType[*oops.ShareableError](err); ok {
 			return nil, fmt.Errorf("search agent names: %w", err)
 		}
