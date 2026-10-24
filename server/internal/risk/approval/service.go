@@ -105,7 +105,8 @@ const (
 	maxPreviewKeys = 20
 
 	// omittedArgumentsKey names the preview entry that says how many
-	// top-level arguments were left out. It sorts after ASCII keys.
+	// top-level arguments were left out. It sorts after ASCII keys. When an
+	// argument already has that name, the entry takes a longer run of "…".
 	omittedArgumentsKey = "…"
 )
 
@@ -653,13 +654,23 @@ func argumentsPreview(raw []byte) []byte {
 		preview[key] = previewValue(args[key])
 	}
 	if omitted > 0 {
-		preview[omittedArgumentsKey] = fmt.Sprintf("%d more arguments not shown", omitted)
+		preview[unusedKey(preview, omittedArgumentsKey)] = fmt.Sprintf("arguments not shown: %d", omitted)
 	}
 	encoded, err := json.Marshal(preview)
 	if err != nil {
 		return []byte("{}")
 	}
 	return encoded
+}
+
+// unusedKey returns key, with "…" appended until no entry of m has it.
+func unusedKey(m map[string]any, key string) string {
+	for {
+		if _, taken := m[key]; !taken {
+			return key
+		}
+		key += "…"
+	}
 }
 
 func previewValue(value any) any {
