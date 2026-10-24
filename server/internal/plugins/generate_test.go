@@ -1664,8 +1664,41 @@ func TestHooksBootstrapNamesUnpackToolsWhenNoneInstalled(t *testing.T) {
 		"PATH=" + hooksBootstrapToolPath(t),
 	}, "")
 	require.Error(t, err)
-	require.Contains(t, string(out), "unzip, busybox or python3 is required for first install")
+	require.Contains(t, string(out), "unzip, busybox, python3 or bsdtar is required for first install")
 	require.NotContains(t, string(out), "ran")
+}
+
+// TestHooksBootstrapFallsBackToBsdtarWithoutPython3 checks that a machine with
+// bsdtar as its only unpack tool still installs the binary. The bsdtar here is
+// a stub that checks the arguments and prints the archived binary, because CI
+// runners do not all ship libarchive's bsdtar.
+func TestHooksBootstrapFallsBackToBsdtarWithoutPython3(t *testing.T) {
+	t.Parallel()
+	binary := "#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n"
+	path := hooksBootstrapToolPath(t)
+	cat, err := exec.LookPath("cat")
+	require.NoError(t, err)
+	require.NoError(t, os.Symlink(cat, filepath.Join(path, "cat")))
+	stub := "#!/bin/sh\n[ \"$1\" = -xOf ] && [ \"$3\" = speakeasy-hooks ] || exit 2\ncat <<'EOF'\n" + binary + "EOF\n"
+	require.NoError(t, os.WriteFile(filepath.Join(path, "bsdtar"), []byte(stub), 0o755))
+
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte(binary))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	out, err := runHooksBootstrapWithEnv(t, script, []string{
+		"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(),
+		"PATH=" + path,
+	}, "", "--first")
+	require.NoError(t, err, string(out))
+	require.Equal(t, "args:--first\n", string(out))
 }
 
 // workingPython3 returns the interpreter behind the first python3 on PATH that

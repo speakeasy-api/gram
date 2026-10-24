@@ -388,8 +388,10 @@ if ! cache_valid; then
     # Slim container images, the official OpenClaw image among them, ship
     # neither unzip nor busybox but do carry python3 and its zipfile module.
     python3 -c $'import sys, zipfile\ndata = zipfile.ZipFile(sys.argv[1]).read(sys.argv[2])\nwith open(sys.argv[3], "wb") as out: out.write(data)' "$archive" "$binary_name" "$extracted" || install_failure 'archive extraction failed'
+  elif command -v bsdtar >/dev/null 2>&1; then
+    bsdtar -xOf "$archive" "$binary_name" > "$extracted" || install_failure 'archive extraction failed'
   else
-    install_failure 'unzip, busybox or python3 is required for first install'
+    install_failure 'unzip, busybox, python3 or bsdtar is required for first install'
   fi
   chmod 755 "$extracted" || install_failure 'could not mark the binary executable'
   mkdir -p "$install_dir" || install_failure 'could not create the install directory'
