@@ -529,11 +529,11 @@ export function staticActionPhrase(action: AuditAction): string {
     case "internal_session_issuer:disable":
       return "disabled Speakeasy signing with issuer";
     case "issuance-selection-profile:create":
-      return "set the upstream credentials of";
+      return "set the upstream credentials of headless caller";
     case "issuance-selection-profile:update":
-      return "changed the upstream credentials of";
+      return "changed the upstream credentials of headless caller";
     case "issuance-selection-profile:delete":
-      return "removed the upstream credential choices of";
+      return "removed the upstream credential choices of headless caller";
     case "json_web_key:publish":
       return "published JSON Web Key";
     case "json_web_key:activate":
