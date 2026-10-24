@@ -155,10 +155,10 @@ INSERT INTO mcp_auth_clients
   (id, organization_id, project_id, client_type, source, name,
    remote_session_client_id, client_attachment_scope)
 SELECT $1::uuid, $2::text, $3::uuid, $4::text,
-       'backfill', $5::text, c.id, c.attachment_scope
+       $5::text, $6::text, c.id, c.attachment_scope
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
-  ON c.id = $6::uuid
+  ON c.id = $7::uuid
 `
 
 type ServersInsertAuthClientParams struct {
@@ -166,6 +166,7 @@ type ServersInsertAuthClientParams struct {
 	OrgID                 string
 	ProjectID             uuid.UUID
 	ClientType            string
+	Source                string
 	Name                  string
 	RemoteSessionClientID uuid.NullUUID
 }
@@ -182,8 +183,36 @@ func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsert
 		arg.OrgID,
 		arg.ProjectID,
 		arg.ClientType,
+		arg.Source,
 		arg.Name,
 		arg.RemoteSessionClientID,
+	)
+	return err
+}
+
+const serversInsertAuthClientForwardedHeader = `-- name: ServersInsertAuthClientForwardedHeader :exec
+INSERT INTO mcp_auth_client_headers
+  (id, auth_client_id, organization_id, name, is_required, value_from_request_header)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text, TRUE,
+   $5::text)
+`
+
+type ServersInsertAuthClientForwardedHeaderParams struct {
+	ID                     uuid.UUID
+	AuthClientID           uuid.UUID
+	OrgID                  string
+	Name                   string
+	ValueFromRequestHeader string
+}
+
+func (q *Queries) ServersInsertAuthClientForwardedHeader(ctx context.Context, arg ServersInsertAuthClientForwardedHeaderParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAuthClientForwardedHeader,
+		arg.ID,
+		arg.AuthClientID,
+		arg.OrgID,
+		arg.Name,
+		arg.ValueFromRequestHeader,
 	)
 	return err
 }
@@ -1364,7 +1393,7 @@ INSERT INTO mcp_server_auth_clients
   (id, project_id, organization_id, mcp_server_id, auth_client_id,
    client_attachment_scope, source)
 SELECT $1::uuid, $2::uuid, $3::text, $4::uuid,
-       ac.id, ac.attachment_scope, 'backfill'
+       ac.id, ac.attachment_scope, ac.source
 FROM mcp_auth_clients AS ac
 WHERE ac.id = $5::uuid
 `

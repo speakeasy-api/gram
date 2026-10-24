@@ -113,6 +113,23 @@ var AuthClientAudience = Type("AuthClientAudience", func() {
 	Required("auth_client_id", "entries", "version", "public_servers")
 })
 
+func creatableClientTypeEnum() {
+	Enum("remote_session", "service_account", "static_credential", "pass_through")
+}
+
+var AuthClientHeaderInput = Type("AuthClientHeaderInput", func() {
+	Description("A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a secret header already storing a value may omit both to keep it.")
+
+	Attribute("name", String, "The header name.", func() { MinLength(1) })
+	Attribute("description", String, "What the header is for.")
+	Attribute("is_required", Boolean, "Whether a caller must supply the header when it is copied from the request.", func() { Default(false) })
+	Attribute("is_secret", Boolean, "Whether the value is secret. Secret values are stored encrypted and never returned.", func() { Default(false) })
+	Attribute("value", String, "The value to send. Omit it on a secret header that already stores one to keep the stored value.")
+	Attribute("value_from_request_header", String, "The caller's request header to copy the value from, for pass-through headers.")
+
+	Required("name")
+})
+
 var AuthClientAudienceRule = Type("AuthClientAudienceRule", func() {
 	Description("A rule to store for an auth client.")
 
@@ -220,6 +237,88 @@ var _ = Service("authClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateAuthClient"}`)
 	})
 
+	Method("createAuthClient", func() {
+		Description("Create an auth client and, optionally, offer it on MCP servers. A remote_session or service_account client authenticates through an existing OAuth registration whose credential owner matches its type; a static_credential or pass_through client authenticates with its own headers. Creating a client gives nobody permission to use it: set its audience to decide who may. Takes effect only where typed auth client resolution is enforced. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("client_type", String, "How the client authenticates upstream.", creatableClientTypeEnum)
+			Attribute("name", String, "The client's name.", func() { MinLength(1) })
+			Attribute("project_id", String, "Confine the client to one project. Omit to share it across the organization's projects.", func() { Format(FormatUUID) })
+			Attribute("remote_session_client_id", String, "The OAuth registration behind a remote_session or service_account client.", func() { Format(FormatUUID) })
+			Attribute("headers", ArrayOf(AuthClientHeaderInput), "The headers the client sends upstream. Required for static_credential and pass_through clients. Token-generating clients produce their own Authorization header, which cannot be configured.")
+			Attribute("mcp_server_ids", ArrayOf(String, func() { Format(FormatUUID) }), "MCP servers that should offer the client.")
+			Required("client_type", "name")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(AuthClient)
+
+		HTTP(func() {
+			POST("/rpc/authClients.create")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createAuthClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateAuthClient"}`)
+	})
+
+	Method("attachAuthClientToMcpServer", func() {
+		Description("Offer an existing auth client on another MCP server instead of creating a copy. The client stays one client: changing or rotating it changes upstream behavior on every server that offers it. Offering a client grants nobody permission to use it or access to the server. Takes effect only where typed auth client resolution is enforced. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
+			Attribute("mcp_server_id", String, "The MCP server id.", func() { Format(FormatUUID) })
+			Required("id", "mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			// Named explicitly: detach takes the same body, and an unnamed copy
+			// would be merged with it in the SDK.
+			Meta("openapi:typename", "AttachAuthClientToMcpServerRequestBody")
+		})
+
+		Result(AuthClient)
+
+		HTTP(func() {
+			POST("/rpc/authClients.attachToMcpServer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "attachAuthClientToMcpServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "attachToMcpServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AttachAuthClientToMcpServer"}`)
+	})
+
+	Method("setAuthClientHeaders", func() {
+		Description("Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
+			Attribute("headers", ArrayOf(AuthClientHeaderInput), "Every header the client should send.")
+			Required("id", "headers")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(AuthClient)
+
+		HTTP(func() {
+			POST("/rpc/authClients.setHeaders")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setAuthClientHeaders")
+		Meta("openapi:extension:x-speakeasy-name-override", "setHeaders")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetAuthClientHeaders"}`)
+	})
+
 	Method("detachAuthClientFromMcpServer", func() {
 		Description("Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.")
 
@@ -229,6 +328,9 @@ var _ = Service("authClients", func() {
 			Required("id", "mcp_server_id")
 			security.SessionPayload()
 			security.ByKeyPayload()
+			// Named explicitly: attach takes the same body, and an unnamed copy
+			// would be merged with it in the SDK.
+			Meta("openapi:typename", "DetachAuthClientFromMcpServerRequestBody")
 		})
 
 		Result(AuthClient)
