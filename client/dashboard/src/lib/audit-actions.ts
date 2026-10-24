@@ -44,11 +44,14 @@ export const AUDIT_ACTIONS = [
   "api_key:revoke",
   "api_key:update_policy",
   "asset:create",
+  "auth-client:attach-mcp-server",
+  "auth-client:create",
   "auth-client:detach-mcp-server",
   "auth-client:disable",
   "auth-client:enable",
   "auth-client:update",
   "auth-client:update-audience",
+  "auth-client:update-headers",
   "assistant:identity_provision",
   "assistant:tool_call",
   "aws_iam_credential:create",
@@ -438,8 +441,14 @@ export function staticActionPhrase(action: AuditAction): string {
     case "asset:create":
       return "uploaded asset";
 
+    case "auth-client:create":
+      return "created auth client";
     case "auth-client:update":
       return "renamed auth client";
+    case "auth-client:update-headers":
+      return "changed the headers of auth client";
+    case "auth-client:attach-mcp-server":
+      return "offered auth client on an MCP server";
     case "auth-client:enable":
       return "enabled auth client";
     case "auth-client:disable":
