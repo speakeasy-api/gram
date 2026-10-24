@@ -193,6 +193,9 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		if memberAuth != nil {
 			res, resolveErr := s.resolveMemberAuthChoice(ctx, endpoint, *member, memberAuth[member.serverID], subject)
 			s.applyMemberAuthClient(ctx, member, res, resolveErr)
+			// As at runtime, a resolved client was checked against the member,
+			// which authorizes its registration without a sign-in link.
+			member.typedAuthClient = member.upstreamUnavailable == nil && res.outcome == authClientResolved && member.chosenClientID.Valid
 			continue
 		}
 		clientID, chosen := picks[member.serverID]
@@ -200,6 +203,12 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		s.applyMemberAuthClient(ctx, member, res, resolveErr)
 	}
 	gate.memberChoices = &memberChoices{selector: nil, enforced: false, subject: subject, profile: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+		if member.typedAuthClient {
+			return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+				ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
+				Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true,
+			})
+		}
 		return s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
 	}, mu: sync.Mutex{}, byServer: map[uuid.UUID]*memberTokens{}}
 	var signInID uuid.UUID

@@ -80,6 +80,34 @@ export function headerInputs(drafts: HeaderDraft[]): AuthClientHeaderInput[] {
 }
 
 /**
+ * Whether a header carries a Speakeasy credential, session, caller identity
+ * or tunnel field. Such a header is never read from the caller's request,
+ * and is never filled from it.
+ */
+function isProtectedInboundHeader(key: string): boolean {
+  return (
+    key === "x-speakeasy-identity" ||
+    key.startsWith("gram-") ||
+    key.startsWith("speakeasy-ai-") ||
+    key.startsWith("x-gram-tunnel-") ||
+    key === "proxy-authorization" ||
+    key === "cookie" ||
+    key === "set-cookie" ||
+    key === "x-gram-agent-version"
+  );
+}
+
+/** Whether a header belongs to the MCP protocol, which Speakeasy sets. */
+function isMCPProtocolHeader(key: string): boolean {
+  return (
+    key === "mcp-protocol-version" ||
+    key === "mcp-method" ||
+    key === "mcp-name" ||
+    (key.startsWith("mcp-param-") && key.length > "mcp-param-".length)
+  );
+}
+
+/**
  * Why the drafts cannot be saved yet, in words for the administrator, or
  * null when they can.
  */
@@ -97,7 +125,12 @@ export function headerDraftProblem(
     if (generatesAuthorization(clientType) && key === "authorization") {
       return "Sign-in produces the Authorization header, so it cannot be set here.";
     }
-    if (key === "set-cookie" || key === "proxy-authorization") {
+    if (
+      key === "set-cookie" ||
+      key === "proxy-authorization" ||
+      key === "x-speakeasy-identity" ||
+      isMCPProtocolHeader(key)
+    ) {
       return `“${name}” is reserved and cannot be sent upstream.`;
     }
     if (draft.source === "forwarded") {
@@ -105,11 +138,18 @@ export function headerDraftProblem(
       if (!from) {
         return `Say which of the caller's headers “${name}” is copied from.`;
       }
-      if (DENIED_PASS_THROUGH_SOURCES.has(headerKey(from))) {
+      const fromKey = headerKey(from);
+      if (
+        DENIED_PASS_THROUGH_SOURCES.has(fromKey) ||
+        isProtectedInboundHeader(fromKey)
+      ) {
         return `The caller's “${from}” header is never forwarded upstream. Have callers send the value in a header of its own.`;
       }
       if (key === "cookie") {
         return "Cookie can only hold a stored value.";
+      }
+      if (isProtectedInboundHeader(key)) {
+        return `“${name}” is a Speakeasy header, so it cannot be copied from the caller's request.`;
       }
     }
     if (draft.source === "stored" && !draft.value && !keepsStoredValue(draft)) {

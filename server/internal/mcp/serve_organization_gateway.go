@@ -399,7 +399,25 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 // the organization, and one person reaches only some of them. Listing the
 // rest would show a person connections, and the services behind them, for
 // servers their access does not include.
+//
+// Where typed auth client resolution is enforced, the registrations its
+// servers offer through typed auth clients are listed too, whether or not the
+// sign-in links them.
 func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
+	clients, err := s.listSignInClients(ctx, endpoint, challengeState)
+	if err != nil {
+		return nil, err
+	}
+	typed, err := s.typedConsentRegistrations(ctx, endpoint, challengeState)
+	if err != nil || len(typed) == 0 {
+		return clients, err
+	}
+	return s.withTypedRegistrationClients(ctx, endpoint.OrganizationID, clients, typed)
+}
+
+// listSignInClients is the clients the endpoint's sign-in links that
+// listEndpointClients offers.
+func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
 	if endpoint.IsOrganizationGateway() {
 		clients, err := s.remoteChallengeMgr.ListOrganizationClients(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 		if err != nil {
@@ -465,6 +483,9 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 	_, members, err := s.resolveEndpointMemberSnapshot(memberCtx, s.logger, mandatorySurfaceConsent, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("resolve gateway members: %w", err)
+	}
+	if err := s.withTypedMemberRegistrations(ctx, endpoint.OrganizationID, members); err != nil {
+		return nil, err
 	}
 	return members, nil
 }

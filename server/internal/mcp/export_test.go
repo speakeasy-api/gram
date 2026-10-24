@@ -105,3 +105,15 @@ func (s *Service) SetPosthog(p *posthog.Posthog) {
 func (s *Service) SetPrepareMandatory(prepare func(context.Context) (authz.MandatoryAuthorization, error)) {
 	s.prepareMandatory = prepare
 }
+
+// PermitAllAuthClients lets every caller use every auth client, for tests of
+// serving rather than of permission.
+func (s *Service) PermitAllAuthClients() {
+	s.authClientPermitter = permitAllAuthClients{}
+}
+
+type permitAllAuthClients struct{}
+
+func (permitAllAuthClients) Permitted(context.Context, authClientPermitRequest) (bool, error) {
+	return true, nil
+}
