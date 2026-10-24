@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const DecidedVia = {
 /**
  * Where the decision came from.
  */
-export type DecidedVia = ClosedEnum<typeof DecidedVia>;
+export type DecidedVia = OpenEnum<typeof DecidedVia>;
 
 /**
  * The request's status. An open request past its window is expired.
@@ -36,7 +37,7 @@ export const RiskPolicyApprovalStatus = {
 /**
  * The request's status. An open request past its window is expired.
  */
-export type RiskPolicyApprovalStatus = ClosedEnum<
+export type RiskPolicyApprovalStatus = OpenEnum<
   typeof RiskPolicyApprovalStatus
 >;
 
@@ -140,13 +141,14 @@ export type RiskPolicyApproval = {
 };
 
 /** @internal */
-export const DecidedVia$inboundSchema: z.ZodMiniEnum<typeof DecidedVia> = z
-  .enum(DecidedVia);
+export const DecidedVia$inboundSchema: z.ZodMiniType<DecidedVia, unknown> =
+  openEnums.inboundSchema(DecidedVia);
 
 /** @internal */
-export const RiskPolicyApprovalStatus$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyApprovalStatus
-> = z.enum(RiskPolicyApprovalStatus);
+export const RiskPolicyApprovalStatus$inboundSchema: z.ZodMiniType<
+  RiskPolicyApprovalStatus,
+  unknown
+> = openEnums.inboundSchema(RiskPolicyApprovalStatus);
 
 /** @internal */
 export const RiskPolicyApproval$inboundSchema: z.ZodMiniType<
