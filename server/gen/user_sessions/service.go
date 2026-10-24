@@ -88,6 +88,9 @@ type ListUserSessionsPayload struct {
 	Status *string
 	// Filter by the connecting client id.
 	ClientID *string
+	// Case-insensitive substring match on the person, agent, API key, workload,
+	// client, MCP server, or upstream provider shown for a session.
+	Search *string
 	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).

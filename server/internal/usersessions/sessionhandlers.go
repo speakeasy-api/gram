@@ -3,6 +3,8 @@ package usersessions
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -141,16 +144,34 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, s.logger)
 	}
 
+	search := conv.ContainsPattern(conv.PtrValOr(payload.Search, ""))
+	agentSubjectURNs := []string{}
+	if search.Valid {
+		agentIDs, err := s.agents.ReadableAgentIDsNamed(ctx, s.db, strings.TrimSpace(*payload.Search))
+		if _, ok := errors.AsType[*oops.ShareableError](err); ok {
+			return nil, fmt.Errorf("search agent names: %w", err)
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "search agent names").LogError(ctx, s.logger)
+		}
+		for _, id := range agentIDs {
+			agentSubjectURNs = append(agentSubjectURNs, urn.NewAgentSubject(id).String())
+		}
+	}
+
 	rows, err := repo.New(s.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
-		ProjectID:           *authCtx.ProjectID,
-		OrganizationID:      authCtx.ActiveOrganizationID,
-		Status:              conv.PtrToPGTextEmpty(payload.Status),
-		SubjectUrn:          conv.PtrToPGTextEmpty(payload.SubjectUrn),
-		UserSessionIssuerID: issuerFilter,
-		ClientID:            clientFilter,
-		ID:                  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Cursor:              cursor,
-		LimitValue:          limit,
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Status:               conv.PtrToPGTextEmpty(payload.Status),
+		SubjectUrn:           conv.PtrToPGTextEmpty(payload.SubjectUrn),
+		UserSessionIssuerID:  issuerFilter,
+		ClientID:             clientFilter,
+		ID:                   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Search:               search,
+		AgentSubjectUrns:     agentSubjectURNs,
+		FirstPartyClientName: sessiontokens.FirstPartyClientName,
+		Cursor:               cursor,
+		LimitValue:           limit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list user sessions").LogError(ctx, s.logger)

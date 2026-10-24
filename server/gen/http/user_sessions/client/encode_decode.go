@@ -68,6 +68,9 @@ func EncodeListUserSessionsRequest(encoder func(*http.Request) goahttp.Encoder) 
 		if p.ClientID != nil {
 			values.Add("client_id", *p.ClientID)
 		}
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}

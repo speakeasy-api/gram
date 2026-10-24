@@ -29,6 +29,9 @@ var _ = Service("userSessions", func() {
 			Attribute("client_id", String, "Filter by the connecting client id.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("search", String, "Case-insensitive substring match on the person, agent, API key, workload, client, MCP server, or upstream provider shown for a session.", func() {
+				MaxLength(200)
+			})
 			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() {
 				Format(FormatUUID)
 			})
@@ -46,6 +49,7 @@ var _ = Service("userSessions", func() {
 			Param("user_session_issuer_id")
 			Param("status")
 			Param("client_id")
+			Param("search")
 			Param("cursor")
 			Param("limit")
 			security.SessionHeader()
