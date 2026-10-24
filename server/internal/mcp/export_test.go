@@ -2,6 +2,9 @@ package mcp
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -115,4 +118,33 @@ func (p fixedPermitter) Permitted(context.Context, authClientPermitRequest) (boo
 // SetAuthClientPermitted answers every auth client permission check with allowed.
 func (s *Service) SetAuthClientPermitted(allowed bool) {
 	s.authClientPermitter = fixedPermitter(allowed)
+}
+
+type callerRecordingPermitter struct {
+	mu    sync.Mutex
+	users []string
+}
+
+func (p *callerRecordingPermitter) Permitted(ctx context.Context, _ authClientPermitRequest) (bool, error) {
+	user := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		user = authCtx.UserID
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.users = append(p.users, user)
+	return true, nil
+}
+
+// RecordAuthClientPermitCallers allows every auth client and returns the
+// users each permission check was judged for, empty for a check made with no
+// signed-in caller.
+func (s *Service) RecordAuthClientPermitCallers() func() []string {
+	permitter := &callerRecordingPermitter{mu: sync.Mutex{}, users: nil}
+	s.authClientPermitter = permitter
+	return func() []string {
+		permitter.mu.Lock()
+		defer permitter.mu.Unlock()
+		return slices.Clone(permitter.users)
+	}
 }
