@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 )
@@ -185,7 +186,7 @@ func pendingCard(in cardInput) card {
 		{Type: "button", Text: plainText("Deny"), ActionID: ActionDeny, Value: in.Approval.ID.String(), Style: "danger", URL: "", TextValue: "", Confirm: &confirmDialog{
 			Title: textObject{Type: "plain_text", Text: "Deny this call?"},
 			// Slack shows a confirm dialog's text as plain text, so no mrkdwn here.
-			Text:    textObject{Type: "plain_text", Text: fmt.Sprintf("The agent is told the call to %s was denied.", in.Approval.ToolName)},
+			Text:    textObject{Type: "plain_text", Text: fmt.Sprintf("The agent is told the call to %s was denied.", conv.TruncateString(in.Approval.ToolName, maxNameChars))},
 			Confirm: textObject{Type: "plain_text", Text: "Deny"},
 			Deny:    textObject{Type: "plain_text", Text: "Cancel"},
 			Style:   "danger",
@@ -198,7 +199,7 @@ func pendingCard(in cardInput) card {
 		block{Type: "actions", BlockID: "risk_approval", Text: nil, Fields: nil, Elements: buttons},
 		contextBlock("Approve once lets this exact call run one time. The reason above was written by the agent."),
 	)
-	return card{Text: fmt.Sprintf("Approval needed to call %s", in.Approval.ToolName), Blocks: blocks}
+	return card{Text: "Approval needed to call " + fit(in.Approval.ToolName, maxNameChars), Blocks: blocks}
 }
 
 // decidedCard replaces a pending card once the request is decided or lapses.
@@ -218,23 +219,26 @@ func decidedCard(in cardInput) card {
 
 func decidedHeadline(in cardInput) (string, string) {
 	tool := code(in.Approval.ToolName, maxNameChars)
+	// Slack reads the notification text as mrkdwn too, so the name is escaped
+	// there as well.
+	plain := fit(in.Approval.ToolName, maxNameChars)
 	decider := ""
 	if in.DeciderName != "" {
 		decider = " by " + fit(in.DeciderName, maxNameChars)
 	}
 	switch in.Status {
 	case approval.StatusApproved:
-		return fmt.Sprintf(":white_check_mark: *Approved*%s: one call to %s", decider, tool), fmt.Sprintf("Approved: one call to %s", in.Approval.ToolName)
+		return fmt.Sprintf(":white_check_mark: *Approved*%s: one call to %s", decider, tool), fmt.Sprintf("Approved: one call to %s", plain)
 	case approval.StatusConsumed:
-		return fmt.Sprintf(":white_check_mark: *Approved*%s: the call to %s ran", decider, tool), fmt.Sprintf("Approved: the call to %s ran", in.Approval.ToolName)
+		return fmt.Sprintf(":white_check_mark: *Approved*%s: the call to %s ran", decider, tool), fmt.Sprintf("Approved: the call to %s ran", plain)
 	case approval.StatusDenied:
-		return fmt.Sprintf(":no_entry: *Denied*%s: the call to %s", decider, tool), fmt.Sprintf("Denied: the call to %s", in.Approval.ToolName)
+		return fmt.Sprintf(":no_entry: *Denied*%s: the call to %s", decider, tool), fmt.Sprintf("Denied: the call to %s", plain)
 	case approval.StatusExpired:
-		return fmt.Sprintf(":hourglass: *Expired*: nobody decided on the call to %s in time", tool), fmt.Sprintf("Expired: the call to %s", in.Approval.ToolName)
+		return fmt.Sprintf(":hourglass: *Expired*: nobody decided on the call to %s in time", tool), fmt.Sprintf("Expired: the call to %s", plain)
 	case approval.StatusBlocked, approval.StatusPending:
-		return fmt.Sprintf(":raised_hand: *Waiting for a decision* on the call to %s", tool), fmt.Sprintf("Waiting for a decision on the call to %s", in.Approval.ToolName)
+		return fmt.Sprintf(":raised_hand: *Waiting for a decision* on the call to %s", tool), fmt.Sprintf("Waiting for a decision on the call to %s", plain)
 	}
-	return fmt.Sprintf("The call to %s is %s", tool, fit(string(in.Status), maxNameChars)), fmt.Sprintf("The call to %s is %s", in.Approval.ToolName, in.Status)
+	return fmt.Sprintf("The call to %s is %s", tool, fit(string(in.Status), maxNameChars)), fmt.Sprintf("The call to %s is %s", plain, fit(string(in.Status), maxNameChars))
 }
 
 func detailFields(in cardInput) block {
@@ -293,7 +297,7 @@ func argumentsSection(raw []byte) (block, bool) {
 			fields = append(fields, textObject{Type: "mrkdwn", Text: fmt.Sprintf("*More*\n%d more arguments, in Speakeasy", len(names)-i)})
 			break
 		}
-		fields = append(fields, textObject{Type: "mrkdwn", Text: "*" + fit(name, maxArgumentNameChars) + "*\n" + argumentValue(arguments[name])})
+		fields = append(fields, textObject{Type: "mrkdwn", Text: argumentName(name) + "\n" + argumentValue(arguments[name])})
 	}
 	return block{Type: "section", BlockID: "", Text: &textObject{Type: "mrkdwn", Text: "*Arguments*"}, Fields: fields, Elements: nil}, true
 }
@@ -311,13 +315,37 @@ func argumentValue(value any) string {
 	if isText && plainArgument(text) {
 		return fit(text, maxArgumentValueChars)
 	}
+	encoded, ok := compactJSON(value)
+	if !ok {
+		return "_cannot show this value_"
+	}
+	return code(encoded, maxArgumentValueChars)
+}
+
+// argumentName renders an argument's name as its field's bold title. A name
+// Slack would format reads as code instead, so it cannot end the title early
+// or add lines that pass for the card's own.
+func argumentName(name string) string {
+	if strings.TrimSpace(name) != "" && !strings.ContainsAny(name, "*~`\r\n") && !emojiCode.MatchString(name) {
+		return "*" + fit(name, maxArgumentNameChars) + "*"
+	}
+	encoded, ok := compactJSON(name)
+	if !ok {
+		return "*Argument*"
+	}
+	return code(encoded, maxArgumentNameChars)
+}
+
+// compactJSON encodes value on one line, leaving <, > and & for fit to
+// escape.
+func compactJSON(value any) (string, bool) {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
 	if err := encoder.Encode(value); err != nil {
-		return "_cannot show this value_"
+		return "", false
 	}
-	return code(strings.TrimSpace(buf.String()), maxArgumentValueChars)
+	return strings.TrimSpace(buf.String()), true
 }
 
 // plainArgument reports text that Slack shows as written: not blank, on one

@@ -116,4 +116,19 @@ func TestHeadlineKeepsTheToolNameInItsCodeSpan(t *testing.T) {
 	require.Equal(t, ":raised_hand: *Approval needed* to call `x' :white_check_mark: *Approved* 'y`", pendingCard(in).Blocks[0].Text.Text)
 	headline, _ := decidedHeadline(in)
 	require.Equal(t, ":raised_hand: *Waiting for a decision* on the call to `x' :white_check_mark: *Approved* 'y`", headline)
+
+	// Slack reads the notification text as mrkdwn too.
+	in.Approval.ToolName = "<!here>"
+	require.Equal(t, "Approval needed to call &lt;!here&gt;", pendingCard(in).Text)
+	_, text := decidedHeadline(in)
+	require.Equal(t, "Waiting for a decision on the call to &lt;!here&gt;", text)
+}
+
+func TestArgumentNamesCannotAddCardLines(t *testing.T) {
+	t.Parallel()
+
+	section, ok := argumentsSection([]byte(`{"dry_run":true,"x*\n*Requester*\nCEO":"y"}`))
+	require.True(t, ok)
+	require.Equal(t, "*dry_run*\n`true`", section.Fields[0].Text)
+	require.Equal(t, "`\"x*\\n*Requester*\\nCEO\"`\ny", section.Fields[1].Text)
 }
