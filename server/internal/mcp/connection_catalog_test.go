@@ -34,6 +34,8 @@ import (
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -138,6 +140,7 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 		{"remote_session", toolfilter.CatalogModeLive, "", "backfill"}, {"static_credential", toolfilter.CatalogModeLive, "", "backfill"},
 		{"static_credential", toolfilter.CatalogModeCached, "bound", "backfill"}, {"static_credential", toolfilter.CatalogModeCached, "unbound", "backfill"},
 		{"remote_session", toolfilter.CatalogModeCached, "", "admin"}, {"static_credential", toolfilter.CatalogModeCached, "", "admin"},
+		{"remote_session", toolfilter.CatalogModeCached, "", "admin-unlinked"},
 	} {
 		t.Run(tc.kind+"/"+string(tc.mode)+"/"+tc.oauth+"/"+tc.source, func(t *testing.T) {
 			kind := tc.kind
@@ -151,9 +154,18 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 			serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
 			registration := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 			if kind == "remote_session" {
-				registration = uuid.NullUUID{UUID: createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "typed-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID}), Valid: true}
-				_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration.UUID})
-				require.NoError(t, err)
+				// An administrator's client is offered without the association
+				// a backfilled one mirrors, and need not be linked to the
+				// gateway's sign-in.
+				linked := []uuid.UUID{issuer.ID}
+				if tc.source == "admin-unlinked" {
+					linked = nil
+				}
+				registration = uuid.NullUUID{UUID: createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "typed-"+uuid.NewString()[:8], "", linked), Valid: true}
+				if tc.source == "backfill" {
+					_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration.UUID})
+					require.NoError(t, err)
+				}
 				insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration.UUID, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
 			}
 			if tc.oauth != "" {
@@ -166,7 +178,8 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				require.NoError(t, err)
 			}
 			fixtures := authclientfixtures.New(ti.conn)
-			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: tc.source, RemoteSessionClientID: registration})
+			source := strings.TrimSuffix(tc.source, "-unlinked")
+			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: source, RemoteSessionClientID: registration})
 			require.NoError(t, err)
 			if kind == "static_credential" {
 				server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *auth.ProjectID})
@@ -175,7 +188,14 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: authClientID, OrganizationID: auth.ActiveOrganizationID, Name: "X-Fixture-Key", Value: pgtype.Text{String: "fixture-key", Valid: true}}))
 			}
-			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: authClientID, Source: tc.source}))
+			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: authClientID, Source: source}))
+			if kind == "remote_session" && strings.HasPrefix(tc.source, "admin") {
+				// Only enforced typed resolution serves a client offered
+				// without the association a backfilled one mirrors.
+				_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+				require.NoError(t, err)
+				ti.service.PermitAllAuthClients()
+			}
 			ti.service.manual = true
 			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, tc.mode, metamcp.DiscoveryModeDirect, nil)
 			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())

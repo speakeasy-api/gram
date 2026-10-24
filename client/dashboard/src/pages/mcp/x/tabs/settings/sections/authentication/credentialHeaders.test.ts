@@ -87,6 +87,10 @@ describe("credential header drafts", () => {
       "cookie",
       "Set-Cookie",
       "proxy_authorization",
+      "Gram-Key",
+      "Speakeasy-AI-Key",
+      "X-Speakeasy-Identity",
+      "X-Gram-Tunnel-Id",
     ]) {
       expect(
         headerDraftProblem("pass_through", [forward("X-Upstream", source)]),
@@ -95,18 +99,31 @@ describe("credential header drafts", () => {
     expect(
       headerDraftProblem("pass_through", [forward("Cookie", "X-Session")]),
     ).toMatch(/Cookie can only hold a stored value/);
-    for (const name of ["Set-Cookie", "Proxy-Authorization"]) {
+    expect(
+      headerDraftProblem("pass_through", [forward("Gram-Key", "X-Session")]),
+    ).toMatch(/is a Speakeasy header/);
+    for (const name of [
+      "Set-Cookie",
+      "Proxy-Authorization",
+      "x_speakeasy_identity",
+      "MCP-Protocol-Version",
+      "Mcp-Method",
+      "Mcp-Name",
+      "Mcp-Param-Region",
+    ]) {
       expect(
         headerDraftProblem("static_credential", [
           { ...newHeaderDraft("stored", name), value: "x" },
         ]),
       ).toMatch(/is reserved/);
     }
-    expect(
-      headerDraftProblem("static_credential", [
-        { ...newHeaderDraft("stored", "Cookie"), value: "session=x" },
-      ]),
-    ).toBeNull();
+    for (const name of ["Cookie", "Mcp-Param-", "Gram-Key"]) {
+      expect(
+        headerDraftProblem("static_credential", [
+          { ...newHeaderDraft("stored", name), value: "x" },
+        ]),
+      ).toBeNull();
+    }
   });
 
   it("refuses an Authorization header on a credential that signs in", () => {
