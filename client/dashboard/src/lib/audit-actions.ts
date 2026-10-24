@@ -117,6 +117,9 @@ export const AUDIT_ACTIONS = [
   "identity-provider-connection:verify",
   "internal_session_issuer:disable",
   "internal_session_issuer:enable",
+  "issuance-selection-profile:create",
+  "issuance-selection-profile:delete",
+  "issuance-selection-profile:update",
   "json_web_key:activate",
   "json_web_key:delete",
   "json_web_key:publish",
@@ -525,6 +528,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "enabled Speakeasy signing with issuer";
     case "internal_session_issuer:disable":
       return "disabled Speakeasy signing with issuer";
+    case "issuance-selection-profile:create":
+      return "set the upstream credentials of headless caller";
+    case "issuance-selection-profile:update":
+      return "changed the upstream credentials of headless caller";
+    case "issuance-selection-profile:delete":
+      return "removed the upstream credential choices of headless caller";
     case "json_web_key:publish":
       return "published JSON Web Key";
     case "json_web_key:activate":

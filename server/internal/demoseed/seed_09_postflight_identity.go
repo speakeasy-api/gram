@@ -159,7 +159,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				OrgID:           org,
 			})
 		}, 1, "demo seed postflight: expected the workforce user session issuer in shared mode, found %d"},
-		{byProj(s.q.PostflightIDUserSessionClients), 8, "demo seed postflight: expected 8 registered agents, found %d"},
+		{byProj(s.q.PostflightIDUserSessionClients), 9, "demo seed postflight: expected 9 registered agents, found %d"},
 		// EMA: two ready bindings, no cached credentials, and one saved
 		// provider order. The workforce sign-in must not trust the fictional
 		// provider.
@@ -230,6 +230,14 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				SlackServerID:  s.det("mcpserver-slack"),
 			})
 		}, 0, "demo seed postflight: %d upstream client choices are not the intended Linear client or Slack no-auth choice"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDIssuanceProfileChoices(ctx, repo.PostflightIDIssuanceProfileChoicesParams{
+				ProjectID:      proj,
+				ClientID:       s.det("usc-nightly-report"),
+				LinearServerID: s.det("mcpserver-linear"),
+				AuthClientID:   s.det("auth-client-github-token"),
+			})
+		}, 1, "demo seed postflight: expected the headless app's profile to choose the shared token on Linear, found %d"},
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.

@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	authclients "github.com/speakeasy-api/gram/server/gen/auth_clients"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -403,6 +404,156 @@ func BuildListMcpServerAuthClientChoicesPayload(authClientsListMcpServerAuthClie
 	}
 	v := &authclients.ListMcpServerAuthClientChoicesPayload{}
 	v.McpServerID = mcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildListIssuanceProfilesPayload builds the payload for the authClients
+// listIssuanceProfiles endpoint from CLI flags.
+func BuildListIssuanceProfilesPayload(authClientsListIssuanceProfilesUserSessionIssuerID string, authClientsListIssuanceProfilesSessionToken string, authClientsListIssuanceProfilesApikeyToken string) (*authclients.ListIssuanceProfilesPayload, error) {
+	var err error
+	var userSessionIssuerID string
+	{
+		userSessionIssuerID = authClientsListIssuanceProfilesUserSessionIssuerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", userSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if authClientsListIssuanceProfilesSessionToken != "" {
+			sessionToken = &authClientsListIssuanceProfilesSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if authClientsListIssuanceProfilesApikeyToken != "" {
+			apikeyToken = &authClientsListIssuanceProfilesApikeyToken
+		}
+	}
+	v := &authclients.ListIssuanceProfilesPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildSetIssuanceProfilePayload builds the payload for the authClients
+// setIssuanceProfile endpoint from CLI flags.
+func BuildSetIssuanceProfilePayload(authClientsSetIssuanceProfileBody string, authClientsSetIssuanceProfileSessionToken string, authClientsSetIssuanceProfileApikeyToken string) (*authclients.SetIssuanceProfilePayload, error) {
+	var err error
+	var body SetIssuanceProfileRequestBody
+	{
+		err = json.Unmarshal([]byte(authClientsSetIssuanceProfileBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"choices\": [\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"name\": \"aa\",\n      \"user_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workload_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workload_subject\": \"aa\"\n   }'")
+		}
+		if body.Choices == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("choices", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		if body.UserSessionClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_client_id", *body.UserSessionClientID, goa.FormatUUID))
+		}
+		if body.WorkloadIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.workload_issuer_id", *body.WorkloadIssuerID, goa.FormatUUID))
+		}
+		if body.WorkloadSubject != nil {
+			if utf8.RuneCountInString(*body.WorkloadSubject) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.workload_subject", *body.WorkloadSubject, utf8.RuneCountInString(*body.WorkloadSubject), 1, true))
+			}
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if utf8.RuneCountInString(body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 100, false))
+		}
+		if len(body.Choices) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.choices", body.Choices, len(body.Choices), 100, false))
+		}
+		for _, e := range body.Choices {
+			if e != nil {
+				if err2 := ValidateIssuanceProfileChoiceRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if authClientsSetIssuanceProfileSessionToken != "" {
+			sessionToken = &authClientsSetIssuanceProfileSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if authClientsSetIssuanceProfileApikeyToken != "" {
+			apikeyToken = &authClientsSetIssuanceProfileApikeyToken
+		}
+	}
+	v := &authclients.SetIssuanceProfilePayload{
+		UserSessionIssuerID: body.UserSessionIssuerID,
+		UserSessionClientID: body.UserSessionClientID,
+		WorkloadIssuerID:    body.WorkloadIssuerID,
+		WorkloadSubject:     body.WorkloadSubject,
+		Name:                body.Name,
+	}
+	if body.Choices != nil {
+		v.Choices = make([]*types.IssuanceProfileChoice, len(body.Choices))
+		for i, val := range body.Choices {
+			if val == nil {
+				v.Choices[i] = nil
+				continue
+			}
+			v.Choices[i] = marshalIssuanceProfileChoiceRequestBodyToTypesIssuanceProfileChoice(val)
+		}
+	} else {
+		v.Choices = []*types.IssuanceProfileChoice{}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildDeleteIssuanceProfilePayload builds the payload for the authClients
+// deleteIssuanceProfile endpoint from CLI flags.
+func BuildDeleteIssuanceProfilePayload(authClientsDeleteIssuanceProfileBody string, authClientsDeleteIssuanceProfileSessionToken string, authClientsDeleteIssuanceProfileApikeyToken string) (*authclients.DeleteIssuanceProfilePayload, error) {
+	var err error
+	var body DeleteIssuanceProfileRequestBody
+	{
+		err = json.Unmarshal([]byte(authClientsDeleteIssuanceProfileBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if authClientsDeleteIssuanceProfileSessionToken != "" {
+			sessionToken = &authClientsDeleteIssuanceProfileSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if authClientsDeleteIssuanceProfileApikeyToken != "" {
+			apikeyToken = &authClientsDeleteIssuanceProfileApikeyToken
+		}
+	}
+	v := &authclients.DeleteIssuanceProfilePayload{
+		ID: body.ID,
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 

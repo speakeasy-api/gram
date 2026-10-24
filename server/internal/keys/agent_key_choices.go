@@ -2,13 +2,13 @@ package keys
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -51,8 +51,11 @@ func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, organizatio
 		if len(offered) == 0 {
 			return oops.E(oops.CodeNotFound, nil, "mcp server not found")
 		}
-		if err := checkAgentKeyChoice(offered, clientID); err != nil {
-			return err
+		if err := upstreamclients.CheckConfiguredChoice(offered, clientID, true); err != nil {
+			if errors.Is(err, upstreamclients.ErrChoicePersonal) {
+				return oops.E(oops.CodeBadRequest, err, "agent keys use shared credentials; an agent reaches a person's own connection only when it acts for them")
+			}
+			return oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 		}
 
 		recorded, err := queries.RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{
@@ -71,28 +74,4 @@ func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, organizatio
 		}
 	}
 	return nil
-}
-
-// checkAgentKeyChoice refuses a choice the server does not offer to agent
-// keys. offered is the server's enabled clients, one row with no client when
-// it offers none.
-func checkAgentKeyChoice(offered []upstreamclientsrepo.ListServerConsentAuthClientsRow, clientID uuid.NullUUID) error {
-	requires := offered[0].RequiresUpstreamAuth
-	if !clientID.Valid {
-		hasClients := offered[0].AuthClientID.Valid
-		if (requires.Valid && requires.Bool) || (!requires.Valid && hasClients) {
-			return oops.E(oops.CodeBadRequest, nil, "this server needs upstream credentials; choose one")
-		}
-		return nil
-	}
-	for _, row := range offered {
-		if row.AuthClientID != clientID {
-			continue
-		}
-		if authz.IsSharedAuthClientType(row.ClientType.String) {
-			return nil
-		}
-		return oops.E(oops.CodeBadRequest, nil, "agent keys use shared credentials; an agent reaches a person's own connection only when it acts for them")
-	}
-	return oops.E(oops.CodeBadRequest, nil, "the server does not offer that credential")
 }

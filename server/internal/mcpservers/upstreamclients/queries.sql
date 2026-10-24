@@ -849,3 +849,30 @@ SELECT EXISTS (
     AND organization_id = @organization_id::text
     AND deleted IS FALSE
 )::boolean AS has_choice;
+
+-- name: GetIssuanceProfileForCaller :one
+-- The profile configured for one headless caller signing in through one user
+-- session issuer: a client, or a workload issuer and subject.
+SELECT p.id
+FROM issuance_selection_profiles AS p
+WHERE p.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND p.organization_id = @organization_id::text
+  AND p.deleted IS FALSE
+  AND (
+    (sqlc.narg('user_session_client_id')::uuid IS NOT NULL AND p.user_session_client_id = sqlc.narg('user_session_client_id')::uuid)
+    OR (sqlc.narg('workload_issuer_id')::uuid IS NOT NULL
+        AND p.workload_issuer_id = sqlc.narg('workload_issuer_id')::uuid
+        AND p.workload_subject = sqlc.narg('workload_subject')::text)
+  );
+
+-- name: ListCredentialChoices :many
+-- One credential's (or profile's) recorded choices for the given servers.
+SELECT sel.mcp_server_id,
+       sel.auth_client_id,
+       sel.no_auth
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = @credential_kind::text
+  AND sel.credential_id = @credential_id::uuid
+  AND sel.organization_id = @organization_id::text
+  AND sel.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND sel.deleted IS FALSE;

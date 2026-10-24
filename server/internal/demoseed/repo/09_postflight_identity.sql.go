@@ -511,6 +511,45 @@ func (q *Queries) PostflightIDInvalidSubjectRules(ctx context.Context, orgID str
 	return i, err
 }
 
+const postflightIDIssuanceProfileChoices = `-- name: PostflightIDIssuanceProfileChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+JOIN issuance_selection_profiles p
+  ON p.id = u.credential_id AND p.deleted IS FALSE
+JOIN mcp_auth_clients ac
+  ON ac.id = u.auth_client_id AND ac.organization_id = u.organization_id
+ AND ac.deleted IS FALSE AND ac.enabled
+JOIN mcp_server_auth_clients l
+  ON l.auth_client_id = ac.id AND l.mcp_server_id = u.mcp_server_id
+ AND l.project_id = $1::uuid AND l.deleted IS FALSE
+WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'issuance_profile'
+  AND p.user_session_client_id = $2::uuid
+  AND u.mcp_server_id = $3::uuid
+  AND u.auth_client_id = $4::uuid
+`
+
+type PostflightIDIssuanceProfileChoicesParams struct {
+	ProjectID      uuid.UUID
+	ClientID       uuid.UUID
+	LinearServerID uuid.UUID
+	AuthClientID   uuid.UUID
+}
+
+// The headless app's one profile, choosing the shared token on Linear,
+// which is still enabled and offered there.
+func (q *Queries) PostflightIDIssuanceProfileChoices(ctx context.Context, arg PostflightIDIssuanceProfileChoicesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDIssuanceProfileChoices,
+		arg.ProjectID,
+		arg.ClientID,
+		arg.LinearServerID,
+		arg.AuthClientID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDJamfClientIssuerBindings = `-- name: PostflightIDJamfClientIssuerBindings :one
 SELECT count(*) FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = $1::uuid
@@ -674,6 +713,7 @@ const postflightIDMisassignedUpstreamClientChoices = `-- name: PostflightIDMisas
 SELECT count(*)
 FROM upstream_client_selections u
 WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'user_session'
   AND NOT (
     EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
     AND (
@@ -1265,6 +1305,7 @@ const postflightIDUpstreamClientChoices = `-- name: PostflightIDUpstreamClientCh
 WITH live AS (
   SELECT id, project_id, organization_id, credential_kind, credential_id, mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth, source, auth_client_id, auth_client_attachment_scope, created_at, updated_at, deleted_at, deleted FROM upstream_client_selections
   WHERE project_id = $6::uuid AND deleted IS FALSE
+    AND credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
 WHERE (SELECT count(*) FROM live) = 8

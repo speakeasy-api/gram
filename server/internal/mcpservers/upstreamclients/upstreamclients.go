@@ -69,6 +69,11 @@ func Reconcile(ctx context.Context, dbtx repo.DBTX, organizationID string, proje
 // COALESCE(credential_id, id).
 const CredentialKindUserSession = "user_session"
 
+// CredentialKindIssuanceProfile identifies an issuance selection profile:
+// the choices a headless caller's new sessions are given, copied onto each
+// once validated.
+const CredentialKindIssuanceProfile = "issuance_profile"
+
 // CredentialKindAPIKey identifies an agent API key credential by its
 // api_keys row id. A rotation's replacement key gets the choices of the key
 // it replaces.

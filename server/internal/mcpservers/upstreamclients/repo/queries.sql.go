@@ -654,6 +654,43 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 	return items, nil
 }
 
+const getIssuanceProfileForCaller = `-- name: GetIssuanceProfileForCaller :one
+SELECT p.id
+FROM issuance_selection_profiles AS p
+WHERE p.user_session_issuer_id = $1::uuid
+  AND p.organization_id = $2::text
+  AND p.deleted IS FALSE
+  AND (
+    ($3::uuid IS NOT NULL AND p.user_session_client_id = $3::uuid)
+    OR ($4::uuid IS NOT NULL
+        AND p.workload_issuer_id = $4::uuid
+        AND p.workload_subject = $5::text)
+  )
+`
+
+type GetIssuanceProfileForCallerParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+	UserSessionClientID uuid.NullUUID
+	WorkloadIssuerID    uuid.NullUUID
+	WorkloadSubject     pgtype.Text
+}
+
+// The profile configured for one headless caller signing in through one user
+// session issuer: a client, or a workload issuer and subject.
+func (q *Queries) GetIssuanceProfileForCaller(ctx context.Context, arg GetIssuanceProfileForCallerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getIssuanceProfileForCaller,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.UserSessionClientID,
+		arg.WorkloadIssuerID,
+		arg.WorkloadSubject,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const hasCredentialChoice = `-- name: HasCredentialChoice :one
 SELECT EXISTS (
   SELECT 1
@@ -784,6 +821,57 @@ func (q *Queries) ListAuthClientHeaders(ctx context.Context, arg ListAuthClientH
 			&i.Value,
 			&i.ValueFromRequestHeader,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCredentialChoices = `-- name: ListCredentialChoices :many
+SELECT sel.mcp_server_id,
+       sel.auth_client_id,
+       sel.no_auth
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = $1::text
+  AND sel.credential_id = $2::uuid
+  AND sel.organization_id = $3::text
+  AND sel.mcp_server_id = ANY($4::uuid[])
+  AND sel.deleted IS FALSE
+`
+
+type ListCredentialChoicesParams struct {
+	CredentialKind string
+	CredentialID   uuid.UUID
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+type ListCredentialChoicesRow struct {
+	McpServerID  uuid.UUID
+	AuthClientID uuid.NullUUID
+	NoAuth       bool
+}
+
+// One credential's (or profile's) recorded choices for the given servers.
+func (q *Queries) ListCredentialChoices(ctx context.Context, arg ListCredentialChoicesParams) ([]ListCredentialChoicesRow, error) {
+	rows, err := q.db.Query(ctx, listCredentialChoices,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.OrganizationID,
+		arg.McpServerIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCredentialChoicesRow
+	for rows.Next() {
+		var i ListCredentialChoicesRow
+		if err := rows.Scan(&i.McpServerID, &i.AuthClientID, &i.NoAuth); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -23407,6 +23407,97 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateAuthClient
+    /rpc/authClients.deleteIssuanceProfile:
+        post:
+            description: Delete an issuance profile. Sessions already issued keep their choices; later sessions decide theirs without it. Requires org:admin.
+            operationId: deleteIssuanceProfile
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteIssuanceProfileRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: deleteIssuanceProfile authClients
+            tags:
+                - authClients
+            x-speakeasy-name-override: deleteIssuanceProfile
+            x-speakeasy-react-hook:
+                name: DeleteIssuanceProfile
     /rpc/authClients.detachFromMcpServer:
         post:
             description: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.
@@ -23932,6 +24023,104 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: AuthClients
+    /rpc/authClients.listIssuanceProfiles:
+        get:
+            description: List the issuance profiles for headless callers signing in through a sign-in. Requires org:read.
+            operationId: listIssuanceProfiles
+            parameters:
+                - allowEmptyValue: true
+                  description: The sign-in.
+                  in: query
+                  name: user_session_issuer_id
+                  required: true
+                  schema:
+                    description: The sign-in.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListIssuanceProfilesResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: listIssuanceProfiles authClients
+            tags:
+                - authClients
+            x-speakeasy-name-override: listIssuanceProfiles
+            x-speakeasy-react-hook:
+                name: IssuanceProfiles
     /rpc/authClients.listMcpServerChoices:
         get:
             description: List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Returns each choice's id, name and client_type, and whether the upstream requires authentication; no headers or credentials.
@@ -24220,6 +24409,101 @@ paths:
             x-speakeasy-name-override: setHeaders
             x-speakeasy-react-hook:
                 name: SetAuthClientHeaders
+    /rpc/authClients.setIssuanceProfile:
+        post:
+            description: 'Create or replace the issuance profile of one headless caller signing in through a sign-in: an OAuth client, or a workload issuer and subject. Each choice names a credential the server offers, or none for a server that needs no upstream authentication. A workload subject represents no person, so its profile names shared credentials only. Choices take effect on sessions issued afterwards; existing sessions keep theirs. Choosing a credential grants nothing: each issuance checks the caller may use it. Takes effect only where typed auth client resolution is enforced. Requires org:admin.'
+            operationId: setIssuanceProfile
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetIssuanceProfileRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/IssuanceProfile'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: setIssuanceProfile authClients
+            tags:
+                - authClients
+            x-speakeasy-name-override: setIssuanceProfile
+            x-speakeasy-react-hook:
+                name: SetIssuanceProfile
     /rpc/authClients.setMcpServerUpstreamAuthRequirement:
         post:
             description: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.
@@ -101604,6 +101888,15 @@ components:
                     description: The ID of the variation that was deleted
             required:
                 - variation_id
+        DeleteIssuanceProfileRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The profile id.
+                    format: uuid
+            required:
+                - id
         DeleteOnboardingPlaybookRequestBody:
             type: object
             properties:
@@ -107321,6 +107614,61 @@ components:
                 - stopped
                 - interrupted
                 - cancelled_queued
+        IssuanceProfile:
+            type: object
+            properties:
+                choices:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IssuanceProfileChoice'
+                    description: The credential for each MCP server.
+                id:
+                    type: string
+                    description: The profile id.
+                    format: uuid
+                name:
+                    type: string
+                    description: The profile's name.
+                updated_at:
+                    type: string
+                    description: When the profile last changed.
+                    format: date-time
+                user_session_client_id:
+                    type: string
+                    description: The OAuth client the profile applies to, for a client.
+                    format: uuid
+                user_session_issuer_id:
+                    type: string
+                    description: The sign-in the caller's sessions come from.
+                    format: uuid
+                workload_issuer_id:
+                    type: string
+                    description: The workload issuer, for a workload subject.
+                    format: uuid
+                workload_subject:
+                    type: string
+                    description: The workload subject, for a workload.
+            description: 'The upstream credentials a headless caller''s sessions use: an OAuth client or a workload subject that cannot choose in a browser. Each new session gets the choices that still validate; a token request may name its own instead.'
+            required:
+                - id
+                - name
+                - user_session_issuer_id
+                - choices
+                - updated_at
+        IssuanceProfileChoice:
+            type: object
+            properties:
+                auth_client_id:
+                    type: string
+                    description: The auth client. Omit for a server whose upstream needs no authentication.
+                    format: uuid
+                mcp_server_id:
+                    type: string
+                    description: The MCP server.
+                    format: uuid
+            description: The upstream credential a headless caller's sessions use on one MCP server.
+            required:
+                - mcp_server_id
         IssuerConvergenceCandidate:
             type: object
             properties:
@@ -109072,6 +109420,15 @@ components:
                     description: Pending invitations for the organization only; accepted, expired, and revoked invitations are omitted.
             required:
                 - invitations
+        ListIssuanceProfilesResponseBody:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IssuanceProfile'
+            required:
+                - items
         ListIssuerConvergenceCandidatesResult:
             type: object
             properties:
@@ -120834,6 +121191,40 @@ components:
                 - organization_id
                 - key_type
                 - monthly_credits
+        SetIssuanceProfileRequestBody:
+            type: object
+            properties:
+                choices:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IssuanceProfileChoice'
+                    description: Every choice the profile should hold.
+                    maxItems: 100
+                name:
+                    type: string
+                    description: The profile's name.
+                    minLength: 1
+                    maxLength: 100
+                user_session_client_id:
+                    type: string
+                    description: The OAuth client, for a client's profile.
+                    format: uuid
+                user_session_issuer_id:
+                    type: string
+                    description: The sign-in.
+                    format: uuid
+                workload_issuer_id:
+                    type: string
+                    description: The workload issuer, for a workload's profile.
+                    format: uuid
+                workload_subject:
+                    type: string
+                    description: The workload subject, for a workload's profile.
+                    minLength: 1
+            required:
+                - user_session_issuer_id
+                - name
+                - choices
         SetKeyEnabledRequestBody:
             type: object
             properties:

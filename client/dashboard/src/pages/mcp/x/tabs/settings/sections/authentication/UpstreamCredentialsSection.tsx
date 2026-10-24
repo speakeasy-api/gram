@@ -28,6 +28,7 @@ import { AddCredentialSheet } from "./AddCredentialSheet";
 import { AuthClientSheet } from "./AuthClientSheet";
 import { invalidateAuthClientQueries } from "./authClientQueries";
 import { AuthRow } from "./AuthRow";
+import { HeadlessCallersSection } from "./HeadlessCallersSection";
 
 export const UPSTREAM_CREDENTIALS_SECTION_ID = "upstream-credentials";
 
@@ -123,6 +124,15 @@ export function UpstreamCredentialsSection({
                   ) : null}
                 </AuthRow>
               )}
+              {mcpServer.userSessionIssuerId &&
+              query.data.requiresUpstreamAuth !== false ? (
+                <HeadlessCallersSection
+                  mcpServerId={mcpServer.id}
+                  userSessionIssuerId={mcpServer.userSessionIssuerId}
+                  credentials={query.data.clients}
+                  canManage={canManage}
+                />
+              ) : null}
             </>
           )}
         </div>

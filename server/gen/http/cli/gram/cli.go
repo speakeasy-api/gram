@@ -132,7 +132,7 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|upgrade-assistant-identity|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|logout-everywhere|register|info|transfer-out|transfer-in)",
-		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|create-auth-client|attach-auth-client-to-mcp-server|set-auth-client-headers|detach-auth-client-from-mcp-server|list-mcp-server-auth-client-choices|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
+		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|create-auth-client|attach-auth-client-to-mcp-server|set-auth-client-headers|detach-auth-client-from-mcp-server|list-mcp-server-auth-client-choices|list-issuance-profiles|set-issuance-profile|delete-issuance-profile|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
@@ -991,6 +991,21 @@ func ParseEndpoint(
 		authClientsListMcpServerAuthClientChoicesMcpServerIDFlag  = authClientsListMcpServerAuthClientChoicesFlags.String("mcp-server-id", "REQUIRED", "")
 		authClientsListMcpServerAuthClientChoicesSessionTokenFlag = authClientsListMcpServerAuthClientChoicesFlags.String("session-token", "", "")
 		authClientsListMcpServerAuthClientChoicesApikeyTokenFlag  = authClientsListMcpServerAuthClientChoicesFlags.String("apikey-token", "", "")
+
+		authClientsListIssuanceProfilesFlags                   = flag.NewFlagSet("list-issuance-profiles", flag.ExitOnError)
+		authClientsListIssuanceProfilesUserSessionIssuerIDFlag = authClientsListIssuanceProfilesFlags.String("user-session-issuer-id", "REQUIRED", "")
+		authClientsListIssuanceProfilesSessionTokenFlag        = authClientsListIssuanceProfilesFlags.String("session-token", "", "")
+		authClientsListIssuanceProfilesApikeyTokenFlag         = authClientsListIssuanceProfilesFlags.String("apikey-token", "", "")
+
+		authClientsSetIssuanceProfileFlags            = flag.NewFlagSet("set-issuance-profile", flag.ExitOnError)
+		authClientsSetIssuanceProfileBodyFlag         = authClientsSetIssuanceProfileFlags.String("body", "REQUIRED", "")
+		authClientsSetIssuanceProfileSessionTokenFlag = authClientsSetIssuanceProfileFlags.String("session-token", "", "")
+		authClientsSetIssuanceProfileApikeyTokenFlag  = authClientsSetIssuanceProfileFlags.String("apikey-token", "", "")
+
+		authClientsDeleteIssuanceProfileFlags            = flag.NewFlagSet("delete-issuance-profile", flag.ExitOnError)
+		authClientsDeleteIssuanceProfileBodyFlag         = authClientsDeleteIssuanceProfileFlags.String("body", "REQUIRED", "")
+		authClientsDeleteIssuanceProfileSessionTokenFlag = authClientsDeleteIssuanceProfileFlags.String("session-token", "", "")
+		authClientsDeleteIssuanceProfileApikeyTokenFlag  = authClientsDeleteIssuanceProfileFlags.String("apikey-token", "", "")
 
 		authClientsGetMcpServerAuthenticationFlags            = flag.NewFlagSet("get-mcp-server-authentication", flag.ExitOnError)
 		authClientsGetMcpServerAuthenticationMcpServerIDFlag  = authClientsGetMcpServerAuthenticationFlags.String("mcp-server-id", "REQUIRED", "")
@@ -5464,6 +5479,9 @@ func ParseEndpoint(
 	authClientsSetAuthClientHeadersFlags.Usage = authClientsSetAuthClientHeadersUsage
 	authClientsDetachAuthClientFromMcpServerFlags.Usage = authClientsDetachAuthClientFromMcpServerUsage
 	authClientsListMcpServerAuthClientChoicesFlags.Usage = authClientsListMcpServerAuthClientChoicesUsage
+	authClientsListIssuanceProfilesFlags.Usage = authClientsListIssuanceProfilesUsage
+	authClientsSetIssuanceProfileFlags.Usage = authClientsSetIssuanceProfileUsage
+	authClientsDeleteIssuanceProfileFlags.Usage = authClientsDeleteIssuanceProfileUsage
 	authClientsGetMcpServerAuthenticationFlags.Usage = authClientsGetMcpServerAuthenticationUsage
 	authClientsSetMcpServerUpstreamAuthRequirementFlags.Usage = authClientsSetMcpServerUpstreamAuthRequirementUsage
 	authClientsGetAuthClientAudienceFlags.Usage = authClientsGetAuthClientAudienceUsage
@@ -7121,6 +7139,15 @@ func ParseEndpoint(
 
 			case "list-mcp-server-auth-client-choices":
 				epf = authClientsListMcpServerAuthClientChoicesFlags
+
+			case "list-issuance-profiles":
+				epf = authClientsListIssuanceProfilesFlags
+
+			case "set-issuance-profile":
+				epf = authClientsSetIssuanceProfileFlags
+
+			case "delete-issuance-profile":
+				epf = authClientsDeleteIssuanceProfileFlags
 
 			case "get-mcp-server-authentication":
 				epf = authClientsGetMcpServerAuthenticationFlags
@@ -10331,6 +10358,15 @@ func ParseEndpoint(
 			case "list-mcp-server-auth-client-choices":
 				endpoint = c.ListMcpServerAuthClientChoices()
 				data, err = authclientsc.BuildListMcpServerAuthClientChoicesPayload(*authClientsListMcpServerAuthClientChoicesMcpServerIDFlag, *authClientsListMcpServerAuthClientChoicesSessionTokenFlag, *authClientsListMcpServerAuthClientChoicesApikeyTokenFlag)
+			case "list-issuance-profiles":
+				endpoint = c.ListIssuanceProfiles()
+				data, err = authclientsc.BuildListIssuanceProfilesPayload(*authClientsListIssuanceProfilesUserSessionIssuerIDFlag, *authClientsListIssuanceProfilesSessionTokenFlag, *authClientsListIssuanceProfilesApikeyTokenFlag)
+			case "set-issuance-profile":
+				endpoint = c.SetIssuanceProfile()
+				data, err = authclientsc.BuildSetIssuanceProfilePayload(*authClientsSetIssuanceProfileBodyFlag, *authClientsSetIssuanceProfileSessionTokenFlag, *authClientsSetIssuanceProfileApikeyTokenFlag)
+			case "delete-issuance-profile":
+				endpoint = c.DeleteIssuanceProfile()
+				data, err = authclientsc.BuildDeleteIssuanceProfilePayload(*authClientsDeleteIssuanceProfileBodyFlag, *authClientsDeleteIssuanceProfileSessionTokenFlag, *authClientsDeleteIssuanceProfileApikeyTokenFlag)
 			case "get-mcp-server-authentication":
 				endpoint = c.GetMcpServerAuthentication()
 				data, err = authclientsc.BuildGetMcpServerAuthenticationPayload(*authClientsGetMcpServerAuthenticationMcpServerIDFlag, *authClientsGetMcpServerAuthenticationSessionTokenFlag, *authClientsGetMcpServerAuthenticationApikeyTokenFlag)
@@ -16303,6 +16339,9 @@ func authClientsUsage() {
 	fmt.Fprintln(os.Stderr, `    set-auth-client-headers: Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    detach-auth-client-from-mcp-server: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-server-auth-client-choices: List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Returns each choice's id, name and client_type, and whether the upstream requires authentication; no headers or credentials.`)
+	fmt.Fprintln(os.Stderr, `    list-issuance-profiles: List the issuance profiles for headless callers signing in through a sign-in. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    set-issuance-profile: Create or replace the issuance profile of one headless caller signing in through a sign-in: an OAuth client, or a workload issuer and subject. Each choice names a credential the server offers, or none for a server that needs no upstream authentication. A workload subject represents no person, so its profile names shared credentials only. Choices take effect on sessions issued afterwards; existing sessions keep theirs. Choosing a credential grants nothing: each issuance checks the caller may use it. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    delete-issuance-profile: Delete an issuance profile. Sessions already issued keep their choices; later sessions decide theirs without it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-authentication: Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    set-mcp-server-upstream-auth-requirement: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-auth-client-audience: List who may use an auth client: the rules naming it and the broader rules that reach it. Requires org:read.`)
@@ -16491,6 +16530,72 @@ func authClientsListMcpServerAuthClientChoicesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients list-mcp-server-auth-client-choices --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsListIssuanceProfilesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients list-issuance-profiles", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the issuance profiles for headless callers signing in through a sign-in. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients list-issuance-profiles --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsSetIssuanceProfileUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients set-issuance-profile", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or replace the issuance profile of one headless caller signing in through a sign-in: an OAuth client, or a workload issuer and subject. Each choice names a credential the server offers, or none for a server that needs no upstream authentication. A workload subject represents no person, so its profile names shared credentials only. Choices take effect on sessions issued afterwards; existing sessions keep theirs. Choosing a credential grants nothing: each issuance checks the caller may use it. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients set-issuance-profile --body '{\n      \"choices\": [\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"name\": \"aa\",\n      \"user_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workload_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workload_subject\": \"aa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsDeleteIssuanceProfileUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients delete-issuance-profile", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an issuance profile. Sessions already issued keep their choices; later sessions decide theirs without it. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients delete-issuance-profile --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func authClientsGetMcpServerAuthenticationUsage() {
