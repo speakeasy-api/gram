@@ -959,3 +959,17 @@ func (q *Queries) SeedWorkloadBindingFixture(ctx context.Context, arg SeedWorklo
 	)
 	return err
 }
+
+const setRequiresUpstreamAuthFixture = `-- name: SetRequiresUpstreamAuthFixture :exec
+UPDATE mcp_servers SET requires_upstream_auth = $1 WHERE id = $2
+`
+
+type SetRequiresUpstreamAuthFixtureParams struct {
+	RequiresUpstreamAuth pgtype.Bool
+	ID                   uuid.UUID
+}
+
+func (q *Queries) SetRequiresUpstreamAuthFixture(ctx context.Context, arg SetRequiresUpstreamAuthFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRequiresUpstreamAuthFixture, arg.RequiresUpstreamAuth, arg.ID)
+	return err
+}

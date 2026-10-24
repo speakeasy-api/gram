@@ -160,6 +160,23 @@ func TestDescribeReportsAChoiceWhoseClientWasWithdrawn(t *testing.T) {
 	require.Equal(t, GapNoClient, *view.Servers[0].Gap)
 }
 
+func TestDescribeReportsANoAuthChoiceOnceTheServerNeedsAuthentication(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server := f.server(pgtype.Bool{Bool: false, Valid: true})
+	f.bind(ContextUserless)
+	_, err := f.setChoice(ContextUserless, server, ChoiceInput{NoAuth: true})
+	require.NoError(t, err)
+	require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), SetRequiresUpstreamAuthFixtureParams{ID: server, RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}}))
+	f.authClient(server, typeStaticCredential, uuid.Nil)
+
+	view, err := Describe(t.Context(), f.pool, f.target(ContextUserless))
+	require.NoError(t, err)
+	require.NotNil(t, view.Servers[0].Choice)
+	require.NotNil(t, view.Servers[0].Gap, "a no-auth choice serves nothing once the server needs authentication")
+	require.Equal(t, GapSelectionRequired, *view.Servers[0].Gap)
+}
+
 func TestSetChoiceReportsTheAutomaticChoiceItReplaces(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

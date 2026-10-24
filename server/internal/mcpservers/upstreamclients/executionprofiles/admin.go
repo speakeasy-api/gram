@@ -149,8 +149,21 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 			server.Choice = &choice
 			// A recorded client the server no longer offers enabled serves
 			// nothing until another is chosen.
-			if choice.AuthClientID.Valid && !live[choice.AuthClientID.UUID] {
+			switch {
+			case choice.AuthClientID.Valid && !live[choice.AuthClientID.UUID]:
 				reason := GapNoClient
+				server.Gap = &reason
+			case !choice.AuthClientID.Valid && !server.NoAuthAllowed:
+				// A no-auth choice serves nothing once the server needs, or
+				// has not decided whether it needs, upstream authentication.
+				reason := GapSelectionRequired
+				switch {
+				case len(server.Options) > 0:
+				case row.RequiresUpstreamAuth.Valid:
+					reason = GapSetupIncomplete
+				default:
+					reason = GapUpstreamAuthUndecided
+				}
 				server.Gap = &reason
 			}
 		} else if d, gap := decide(row, target.Context); gap != nil {

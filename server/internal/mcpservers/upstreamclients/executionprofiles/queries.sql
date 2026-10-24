@@ -364,6 +364,9 @@ FROM ab;
 -- name: DisableAuthClientFixture :exec
 UPDATE mcp_auth_clients SET enabled = FALSE WHERE id = @id AND organization_id = @organization_id;
 
+-- name: SetRequiresUpstreamAuthFixture :exec
+UPDATE mcp_servers SET requires_upstream_auth = @requires_upstream_auth WHERE id = @id;
+
 -- name: SeedTriggerBindingFixture :exec
 -- Binds a trigger to an assistant's existing agent binding.
 INSERT INTO trigger_workload_bindings (
