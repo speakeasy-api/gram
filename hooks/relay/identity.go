@@ -165,22 +165,36 @@ func deviceAgentCommands() []string {
 	commands := []string{"speakeasyd"}
 	home, _ := os.UserHomeDir()
 	var candidates []string
+	// Each OS lists the agent's own bin folder first, then its state folder
+	// itself: `speakeasy setup` installs only the daemon, straight into the
+	// state folder with no bin folder under it.
 	switch runtime.GOOS {
 	case "darwin":
 		if home != "" {
-			candidates = append(candidates, filepath.Join(home, "Library", "Application Support", "Speakeasy", "bin", "speakeasyd"))
+			stateDir := filepath.Join(home, "Library", "Application Support", "Speakeasy")
+			candidates = append(candidates,
+				filepath.Join(stateDir, "bin", "speakeasyd"),
+				filepath.Join(stateDir, "speakeasyd"),
+			)
 		}
 	case "windows":
+		if localAppData := strings.TrimSpace(os.Getenv("LOCALAPPDATA")); filepath.IsAbs(localAppData) {
+			candidates = append(candidates, filepath.Join(localAppData, "Speakeasy", "speakeasyd.exe"))
+		}
 	default:
 		// The dashboard's Linux setup installs into the agent's XDG state
 		// folder, written as ~/.local/state so it ignores XDG_STATE_HOME; an
 		// absolute XDG_STATE_HOME is probed too for installs that honour it.
 		if stateHome := strings.TrimSpace(os.Getenv("XDG_STATE_HOME")); filepath.IsAbs(stateHome) {
-			candidates = append(candidates, filepath.Join(stateHome, "speakeasy", "bin", "speakeasyd"))
+			candidates = append(candidates,
+				filepath.Join(stateHome, "speakeasy", "bin", "speakeasyd"),
+				filepath.Join(stateHome, "speakeasy", "speakeasyd"),
+			)
 		}
 		if home != "" {
 			candidates = append(candidates,
 				filepath.Join(home, ".local", "state", "speakeasy", "bin", "speakeasyd"),
+				filepath.Join(home, ".local", "state", "speakeasy", "speakeasyd"),
 				// ~/.speakeasy is the agent's conventional dotdir on Linux
 				// (its IPC socket lives there); kept as a supported install
 				// location by maintainer decision even though no packaged

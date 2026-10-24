@@ -76,6 +76,7 @@ func startIdentitySocket(t *testing.T, status int, body string) string {
 func isolateInstalledAgent(t *testing.T) {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("LOCALAPPDATA", "")
 	previous := machineWideAgentPaths
 	machineWideAgentPaths = nil
 	t.Cleanup(func() { machineWideAgentPaths = previous })
@@ -177,7 +178,9 @@ func TestDeviceAgentCommandsFindsXDGStateInstall(t *testing.T) {
 	stateHome := t.TempDir()
 	defaultAgent := filepath.Join(home, ".local", "state", "speakeasy", "bin", "speakeasyd")
 	xdgAgent := filepath.Join(stateHome, "speakeasy", "bin", "speakeasyd")
-	for _, agent := range []string{defaultAgent, xdgAgent} {
+	// `speakeasy setup` puts the daemon in the state folder itself.
+	xdgSetupAgent := filepath.Join(stateHome, "speakeasy", "speakeasyd")
+	for _, agent := range []string{defaultAgent, xdgAgent, xdgSetupAgent} {
 		require.NoError(t, os.MkdirAll(filepath.Dir(agent), 0o755))
 		require.NoError(t, os.WriteFile(agent, []byte("#!/bin/sh\n"), 0o700))
 	}
@@ -189,7 +192,32 @@ func TestDeviceAgentCommandsFindsXDGStateInstall(t *testing.T) {
 
 	commands := deviceAgentCommands()
 	require.Contains(t, commands, xdgAgent)
+	require.Contains(t, commands, xdgSetupAgent)
 	require.Contains(t, commands, defaultAgent)
+}
+
+func TestDeviceAgentCommandsFindsSetupInstall(t *testing.T) {
+	// `speakeasy setup` installs only the daemon, straight into the agent's
+	// per-user state folder rather than a bin folder under it.
+	isolateInstalledAgent(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+
+	agent := filepath.Join(home, ".local", "state", "speakeasy", "speakeasyd")
+	switch runtime.GOOS {
+	case "darwin":
+		agent = filepath.Join(home, "Library", "Application Support", "Speakeasy", "speakeasyd")
+	case "windows":
+		localAppData := t.TempDir()
+		t.Setenv("LOCALAPPDATA", localAppData)
+		agent = filepath.Join(localAppData, "Speakeasy", "speakeasyd.exe")
+	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(agent), 0o755))
+	require.NoError(t, os.WriteFile(agent, []byte("#!/bin/sh\n"), 0o700))
+
+	require.Contains(t, deviceAgentCommands(), agent)
 }
 
 func TestTopLevelPayloadEmailIgnoresNestedValues(t *testing.T) {
