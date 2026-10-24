@@ -1210,7 +1210,7 @@ func newStartCommand() *cli.Command {
 			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			mcpFindingEvidence := risk.NewMCPFindingEvidenceStore(db, encryptionClient)
-			approvalService := approval.NewService(logger, db, serverURL)
+			approvalService := approval.NewService(logger, db, serverURL, auditLogger)
 			mcpPolicyEvaluator := mcpriskscan.NewPolicyEvaluator(
 				logger,
 				tracerProvider,
@@ -2045,6 +2045,7 @@ func newStartCommand() *cli.Command {
 				assetStorage,
 				metering.NewRiskRecorder(publishers.MeterReadings),
 				platformToolsets,
+				approvalService,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)

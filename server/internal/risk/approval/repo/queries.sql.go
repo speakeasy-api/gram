@@ -331,27 +331,57 @@ FROM risk_policy_approvals
 WHERE organization_id = $1
   AND project_id = $2
   AND deleted IS FALSE
-  AND ($3::text IS NULL OR status = $3::text)
-  AND ($4::uuid IS NULL OR id < $4::uuid)
+  AND (
+    $3::text IS NULL
+    OR (
+      $3::text = 'expired'
+      AND (
+        status = 'expired'
+        OR (status IN ('blocked', 'pending', 'approved') AND expires_at <= clock_timestamp())
+      )
+    )
+    OR (
+      $3::text IN ('blocked', 'pending', 'approved')
+      AND status = $3::text
+      AND (expires_at IS NULL OR expires_at > clock_timestamp())
+    )
+    OR (
+      $3::text NOT IN ('expired', 'blocked', 'pending', 'approved')
+      AND status = $3::text
+    )
+  )
+  AND (
+    $4::uuid[] IS NULL
+    OR risk_policy_id = ANY($4::uuid[])
+    OR requester_user_id = $5::text
+  )
+  AND ($6::uuid IS NULL OR id < $6::uuid)
 ORDER BY id DESC
-LIMIT $5
+LIMIT $7
 `
 
 type ListApprovalsParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Status         pgtype.Text
-	Cursor         uuid.NullUUID
-	PageLimit      int32
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	Status           pgtype.Text
+	VisiblePolicyIds []uuid.UUID
+	ViewerUserID     pgtype.Text
+	Cursor           uuid.NullUUID
+	PageLimit        int32
 }
 
-// Lists a project's approval requests, newest first, optionally narrowed to
-// one status.
+// Lists a project's approval requests, newest first. @status filters on the
+// status a viewer sees: an open request or an unused approval past its window
+// counts as expired.
+// @visible_policy_ids, when set, narrows the list to those policies plus the
+// requests @viewer_user_id made; NULL lists every request.
 func (q *Queries) ListApprovals(ctx context.Context, arg ListApprovalsParams) ([]RiskPolicyApproval, error) {
 	rows, err := q.db.Query(ctx, listApprovals,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.Status,
+		arg.VisiblePolicyIds,
+		arg.ViewerUserID,
 		arg.Cursor,
 		arg.PageLimit,
 	)

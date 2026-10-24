@@ -13,6 +13,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -44,6 +45,7 @@ func TestCreateRequireApprovalPolicyRoundTripsApprovers(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	ti.flags.SetFlag(feature.FlagToolApprovals, authCtx.ActiveOrganizationID, true)
 	approver := "user:" + authCtx.UserID
 	security := approverRole(t, ctx, ti, "security")
 
@@ -91,6 +93,7 @@ func TestCreateRequireApprovalPolicyRejectsInvalidShapes(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	ti.flags.SetFlag(feature.FlagToolApprovals, authCtx.ActiveOrganizationID, true)
 	approvers := &types.RiskPolicyApprovalConfig{Approvers: []string{"user:" + authCtx.UserID}}
 
 	cases := map[string]*gen.CreateRiskPolicyPayload{
@@ -111,4 +114,46 @@ func TestCreateRequireApprovalPolicyRejectsInvalidShapes(t *testing.T) {
 			require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 		})
 	}
+}
+
+func TestCreateRequireApprovalPolicyNeedsFlag(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Action:         "require_approval",
+		McpScope:       approvalScope(),
+		ApprovalConfig: &types.RiskPolicyApprovalConfig{Approvers: []string{"user:" + authCtx.UserID}},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestUpdateToRequireApprovalNeedsFlag(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	flagPolicy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:     new("Scoped flag"),
+		Action:   "flag",
+		Sources:  []string{"destructive_tool"},
+		McpScope: approvalScope(),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:             flagPolicy.ID,
+		Name:           flagPolicy.Name,
+		Action:         new("require_approval"),
+		Sources:        []string{},
+		ApprovalConfig: &types.RiskPolicyApprovalConfig{Approvers: []string{"user:" + authCtx.UserID}},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }

@@ -151,14 +151,40 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- name: ListApprovals :many
--- Lists a project's approval requests, newest first, optionally narrowed to
--- one status.
+-- Lists a project's approval requests, newest first. @status filters on the
+-- status a viewer sees: an open request or an unused approval past its window
+-- counts as expired.
+-- @visible_policy_ids, when set, narrows the list to those policies plus the
+-- requests @viewer_user_id made; NULL lists every request.
 SELECT *
 FROM risk_policy_approvals
 WHERE organization_id = @organization_id
   AND project_id = @project_id
   AND deleted IS FALSE
-  AND (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text)
+  AND (
+    sqlc.narg(status)::text IS NULL
+    OR (
+      sqlc.narg(status)::text = 'expired'
+      AND (
+        status = 'expired'
+        OR (status IN ('blocked', 'pending', 'approved') AND expires_at <= clock_timestamp())
+      )
+    )
+    OR (
+      sqlc.narg(status)::text IN ('blocked', 'pending', 'approved')
+      AND status = sqlc.narg(status)::text
+      AND (expires_at IS NULL OR expires_at > clock_timestamp())
+    )
+    OR (
+      sqlc.narg(status)::text NOT IN ('expired', 'blocked', 'pending', 'approved')
+      AND status = sqlc.narg(status)::text
+    )
+  )
+  AND (
+    sqlc.narg(visible_policy_ids)::uuid[] IS NULL
+    OR risk_policy_id = ANY(sqlc.narg(visible_policy_ids)::uuid[])
+    OR requester_user_id = sqlc.narg(viewer_user_id)::text
+  )
   AND (sqlc.narg(cursor)::uuid IS NULL OR id < sqlc.narg(cursor)::uuid)
 ORDER BY id DESC
 LIMIT @page_limit;

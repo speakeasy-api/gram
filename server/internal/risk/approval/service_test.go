@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -45,13 +47,23 @@ func TestApprovedCallIsReleasedExactlyOnce(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, StatusBlocked, status)
 
+	requests, err := audittest.AuditLogCountByAction(t.Context(), f.db, audit.ActionRiskPolicyApprovalRequest)
+	require.NoError(t, err)
 	require.Equal(t, StatusPending, f.request(t, token))
 	// Repeating request_approval leaves the request as it is.
 	require.Equal(t, StatusPending, f.request(t, token))
+	requestsAfter, err := audittest.AuditLogCountByAction(t.Context(), f.db, audit.ActionRiskPolicyApprovalRequest)
+	require.NoError(t, err)
+	require.Equal(t, requests+1, requestsAfter, "only the first request_approval is audited")
+	approvals, err := audittest.AuditLogCountByAction(t.Context(), f.db, audit.ActionRiskPolicyApprovalApprove)
+	require.NoError(t, err)
 
 	decided, err := f.service.Decide(t.Context(), DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: f.approvalID(t, token), Approve: true, DeciderUserID: f.approverID, Via: DecidedViaDashboard, Note: ""})
 	require.NoError(t, err)
 	require.Equal(t, string(StatusApproved), decided.Status)
+	approvalsAfter, err := audittest.AuditLogCountByAction(t.Context(), f.db, audit.ActionRiskPolicyApprovalApprove)
+	require.NoError(t, err)
+	require.Equal(t, approvals+1, approvalsAfter)
 	status, err = f.service.WatchStatus(t.Context(), token)
 	require.NoError(t, err)
 	require.Equal(t, StatusApproved, status)
