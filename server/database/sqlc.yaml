@@ -203,7 +203,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: [schema.sql, sqlc_retired_columns.sql]
+  - schema: schema.sql
     queries: ../internal/deployments/queries.sql
     engine: postgresql
     gen:
@@ -243,7 +243,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: [schema.sql, sqlc_retired_columns.sql]
+  - schema: schema.sql
     queries: ../internal/toolsets/queries.sql
     engine: postgresql
     gen:
@@ -1022,7 +1022,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: [schema.sql, sqlc_retired_columns.sql]
+  - schema: schema.sql
     queries: ../internal/admin/queries.sql
     engine: postgresql
     gen:
@@ -1032,7 +1032,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: [schema.sql, sqlc_retired_columns.sql]
+  - schema: schema.sql
     queries: ../internal/externalmcp/migration/queries.sql
     engine: postgresql
     gen:
