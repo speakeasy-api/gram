@@ -106,14 +106,13 @@ func (s *Service) SetPrepareMandatory(prepare func(context.Context) (authz.Manda
 	s.prepareMandatory = prepare
 }
 
-// PermitAllAuthClients lets every caller use every auth client, for tests of
-// serving rather than of permission.
-func (s *Service) PermitAllAuthClients() {
-	s.authClientPermitter = permitAllAuthClients{}
+type fixedPermitter bool
+
+func (p fixedPermitter) Permitted(context.Context, authClientPermitRequest) (bool, error) {
+	return bool(p), nil
 }
 
-type permitAllAuthClients struct{}
-
-func (permitAllAuthClients) Permitted(context.Context, authClientPermitRequest) (bool, error) {
-	return true, nil
+// SetAuthClientPermitted answers every auth client permission check with allowed.
+func (s *Service) SetAuthClientPermitted(allowed bool) {
+	s.authClientPermitter = fixedPermitter(allowed)
 }
