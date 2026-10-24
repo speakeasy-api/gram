@@ -39,11 +39,10 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagEMAProviders, f.organizationID, true)
-	flags.SetFlag(feature.FlagOktaConnections, f.organizationID, true)
 	speakeasy := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: internal.ID, Unavailable: ""}
 	governor := orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, order: remotesessions.EMAProviderOrder{VendorIssuer: "https://as-a.example.test", IsDefault: false, Providers: []remotesessions.EMAProvider{speakeasy}}, ordered: true}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	// The Okta rollout is on but the organization has no Okta connection.
+	// The organization has no Okta connection.
 	okta := &xaaReaderStub{err: oops.C(oops.CodeFailedPrecondition)}
 	service := NewPostgresReader(testenv.NewLogger(t), conn).WithXAAReadiness(okta, nil, flags).WithXAAIdentityChaining(governor, nil).WithAuthorization(engine).xaaReadiness
 	require.NotNil(t, service)
@@ -100,10 +99,6 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	require.NoError(t, err)
 	requireXAARefusal(t, result, "setup_required")
 
-	flags.SetFlag(feature.FlagOktaConnections, f.organizationID, false)
-	result, _, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
-	require.NoError(t, err)
-	requireXAARefusal(t, result, unavailableCode)
 }
 
 func requireXAARefusal(t *testing.T, result *mcp.CallToolResult, code string) {

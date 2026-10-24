@@ -19514,7 +19514,7 @@ func identityProviderConnectionsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage the organization's Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] identity-provider-connections COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    create: Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.`)
+	fmt.Fprintln(os.Stderr, `    create: Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin. One live connection per organization; creation is rate limited.`)
 	fmt.Fprintln(os.Stderr, `    submit-client-id: Record the client ID of the Okta API Services application and verify it. Connections installed from the Okta Integration Network also take the client secret. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    replace-client-secret: Replace the client secret of a connection installed from the Okta Integration Network and re-verify it. The previous secret is kept if Okta rejects the new one. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    set-setup-method: Switch how a pending connection connects to Okta: an install from the Okta Integration Network (client secret) or a custom API Services app (private key). Allowed until the client ID is submitted. Switching to the custom app provisions a signing key and JWKS URL once; switching away stops serving the key and switching back reuses it. A key left unused is retired when the client ID is submitted or the connection is revoked. Requires org:admin.`)
@@ -19537,7 +19537,7 @@ func identityProviderConnectionsCreateUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.`)
+	fmt.Fprintln(os.Stderr, `Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin. One live connection per organization; creation is rate limited.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -21835,7 +21835,7 @@ func oktaResourceConnectionsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] okta-resource-connections COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list: List the Okta resource connection and derived state of every eligible MCP server. Requires org:admin and a live identity provider connection.`)
-	fmt.Fprintln(os.Stderr, `    confirm: Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin and the okta-connections rollout.`)
+	fmt.Fprintln(os.Stderr, `    confirm: Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    reset: Delete the Okta resource connection for this server's upstream so it, and every server sharing that upstream, shows as pending again. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -21870,7 +21870,7 @@ func oktaResourceConnectionsConfirmUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin and the okta-connections rollout.`)
+	fmt.Fprintln(os.Stderr, `Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -21907,9 +21907,9 @@ func oktaServerSuggestionsUsage() {
 	fmt.Fprintln(os.Stderr, `MCP servers suggested from the organization's Okta applications: catalog entries whose staff-curated Okta mapping matches a synced, assigned application. Administrators accept by creating the server through the usual remote MCP flow, or dismiss; dismissals are remembered per organization and audited.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] okta-server-suggestions COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list: List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.`)
-	fmt.Fprintln(os.Stderr, `    dismiss: Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin and the okta-connections rollout.`)
-	fmt.Fprintln(os.Stderr, `    restore: Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.`)
+	fmt.Fprintln(os.Stderr, `    list: List the catalog servers suggested from the Okta applications snapshot. Requires org:admin and a verified identity provider connection.`)
+	fmt.Fprintln(os.Stderr, `    dismiss: Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    restore: Restore a dismissed suggestion currently made to the organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s okta-server-suggestions COMMAND --help\n", os.Args[0])
@@ -21923,7 +21923,7 @@ func oktaServerSuggestionsListUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.`)
+	fmt.Fprintln(os.Stderr, `List the catalog servers suggested from the Okta applications snapshot. Requires org:admin and a verified identity provider connection.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -include-all BOOL: `)
@@ -21943,7 +21943,7 @@ func oktaServerSuggestionsDismissUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin and the okta-connections rollout.`)
+	fmt.Fprintln(os.Stderr, `Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -21963,7 +21963,7 @@ func oktaServerSuggestionsRestoreUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.`)
+	fmt.Fprintln(os.Stderr, `Restore a dismissed suggestion currently made to the organization. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

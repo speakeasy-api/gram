@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -117,24 +116,6 @@ func TestConfirm_AgentChangesWhileWaitingForConnectionLock(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestReset_RequiresRolloutEnabled(t *testing.T) {
-	t.Parallel()
-	ctx, si := newTestService(t)
-	recordAgent(t, ctx, si, "wlp1")
-	f := capableServer(t, ctx, si, "Reset")
-	_, err := confirm(t, ctx, si, audience, nil, f.serverID)
-	require.NoError(t, err)
-	si.flags.SetFlag(feature.FlagOktaConnections, si.orgID, false)
-	_, err = si.svc.Reset(ctx, &gen.ResetPayload{McpServerID: f.serverID.String()})
-	requireOopsCode(t, err, oops.CodeForbidden)
-	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	count, err := audittest.AuditLogCountByAction(ctx, si.conn, audit.ActionOktaResourceConnectionReset)
-	require.NoError(t, err)
-	require.Zero(t, count)
 }
 
 func TestConfirm_RequiresDiscoveredAdvertisement(t *testing.T) {

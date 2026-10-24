@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
@@ -58,7 +57,6 @@ type instance struct {
 	q            *repo.Queries
 	orgID        string
 	connectionID uuid.UUID
-	flags        *feature.InMemory
 	authCtx      *contextvalues.AuthContext
 }
 
@@ -109,15 +107,13 @@ func newTestService(t *testing.T) (context.Context, *instance) {
 	authCtx.ActiveOrganizationID = orgID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagOktaConnections, orgID, true)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	validator, err := mcpregistry.LoadValidator()
 	require.NoError(t, err)
-	svc := oktaserversuggestions.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), flags, validator)
+	svc := oktaserversuggestions.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), validator)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID))
 
-	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, flags: flags, authCtx: authCtx}
+	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, authCtx: authCtx}
 	si.connectionID = createConnection(t, ctx, si, orgID)
 	return ctx, si
 }
@@ -460,10 +456,7 @@ func TestPreconditionsAndAuthorization(t *testing.T) {
 	linear := createEntry(t, ctx, si, entryRecord("example.test/linear", []string{"https://mcp.linear.example/mcp"}, `{"oinNames":["linear"]}`), true)
 	createApp(t, ctx, si, "0oa1", "Linear", "linear", "SAML_2_0", true)
 
-	si.flags.SetFlag(feature.FlagOktaConnections, si.orgID, false)
-	_, err := si.svc.List(ctx, &gen.ListPayload{SessionToken: nil, IncludeAll: false})
-	requireOopsCode(t, err, oops.CodeForbidden)
-	si.flags.SetFlag(feature.FlagOktaConnections, si.orgID, true)
+	var err error
 
 	// A pending or revoked connection serves nothing and writes nothing.
 	for _, status := range []string{identityproviderconnections.StatusPending, identityproviderconnections.StatusRevoked} {
