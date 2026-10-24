@@ -40,11 +40,24 @@ func canonicalHosting(ctx context.Context, db tsr.DBTX, organizationID string, t
 	return byID, nil
 }
 
+// toolsetHostingColumns are the toolset columns the hosting derivation reads, including the OAuth attachments that
+// decide how a disabled server re-enables.
+type toolsetHostingColumns struct {
+	McpSlug               pgtype.Text
+	CustomDomainID        uuid.NullUUID
+	McpEnabled            bool
+	McpIsPublic           bool
+	UserSessionIssuerID   uuid.NullUUID
+	ExternalOauthServerID uuid.NullUUID
+	OauthProxyServerID    uuid.NullUUID
+}
+
 // deriveToolsetHosting applies hostingstate.Apply to a toolset's hosting columns.
-func deriveToolsetHosting(mcpSlug pgtype.Text, customDomainID uuid.NullUUID, enabled, public bool, issuer uuid.NullUUID, row *hostingstate.Row) toolsetHosting {
+func deriveToolsetHosting(columns toolsetHostingColumns, row *hostingstate.Row) toolsetHosting {
 	//nolint:exhaustruct // Only the hosting columns feed the derivation.
 	derived := hostingstate.Apply(tsr.Toolset{
-		McpSlug: mcpSlug, CustomDomainID: customDomainID, McpEnabled: enabled, McpIsPublic: public, UserSessionIssuerID: issuer,
+		McpSlug: columns.McpSlug, CustomDomainID: columns.CustomDomainID, McpEnabled: columns.McpEnabled, McpIsPublic: columns.McpIsPublic,
+		UserSessionIssuerID: columns.UserSessionIssuerID, ExternalOauthServerID: columns.ExternalOauthServerID, OauthProxyServerID: columns.OauthProxyServerID,
 	}, row)
 	return toolsetHosting{
 		McpSlug:             conv.FromPGText[types.Slug](derived.McpSlug),

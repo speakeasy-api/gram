@@ -273,3 +273,44 @@ func TestToolsetsService_AddExternalOAuthServer_DisabledServerReadsPrivate(t *te
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
+
+// A disabled server with external OAuth reads public, as it re-enables, through get and both lists.
+func TestToolsetsService_DisabledServerWithExternalOAuthReadsPublic(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	ctx = withAccountType(t, ctx, "pro")
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Disabled OAuth Toolset")
+	_, err := ti.service.AddExternalOAuthServer(ctx, &gen.AddExternalOAuthServerPayload{
+		Slug: toolset.Slug, ExternalOauthServer: &types.ExternalOAuthServerForm{Metadata: map[string]any{"issuer": "https://example.com"}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, ti.service.DisableHostedServer(ctx, uuid.MustParse(toolset.ID)))
+
+	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
+	require.NoError(t, err)
+	require.False(t, *stored.McpEnabled)
+	require.True(t, *stored.McpIsPublic, "get")
+
+	listed, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{})
+	require.NoError(t, err)
+	found := false
+	for _, entry := range listed.Toolsets {
+		if entry.ID == toolset.ID {
+			found = true
+			require.True(t, *entry.McpIsPublic, "list")
+		}
+	}
+	require.True(t, found)
+
+	summaries, err := ti.service.ListToolsetsForOrg(ctx, &gen.ListToolsetsForOrgPayload{})
+	require.NoError(t, err)
+	found = false
+	for _, summary := range summaries.Toolsets {
+		if summary.ID == toolset.ID {
+			found = true
+			require.True(t, *summary.McpIsPublic, "org list")
+		}
+	}
+	require.True(t, found)
+}
