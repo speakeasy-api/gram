@@ -1754,6 +1754,7 @@ trackedFiles:
   src/models/components/riskoverviewtimeseriesfinding.ts: {}
   src/models/components/riskoverviewuser.ts: {}
   src/models/components/riskpolicy.ts: {}
+  src/models/components/riskpolicyapprovalconfig.ts: {}
   src/models/components/riskpolicybypassapprovalrequestbody.ts: {}
   src/models/components/riskpolicybypassrequest.ts: {}
   src/models/components/riskpolicyevalreview.ts: {}

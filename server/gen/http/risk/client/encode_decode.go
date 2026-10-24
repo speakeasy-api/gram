@@ -13151,6 +13151,26 @@ func marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(v *type
 	return res
 }
 
+// marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigRequestBody
+// builds a value of type *RiskPolicyApprovalConfigRequestBody from a value of
+// type *types.RiskPolicyApprovalConfig.
+func marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigRequestBody(v *types.RiskPolicyApprovalConfig) *RiskPolicyApprovalConfigRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskPolicyApprovalConfigRequestBody{}
+	if v.Approvers != nil {
+		res.Approvers = make([]string, len(v.Approvers))
+		for i, val := range v.Approvers {
+			res.Approvers[i] = val
+		}
+	} else {
+		res.Approvers = []string{}
+	}
+
+	return res
+}
+
 // marshalRiskDetectionScopeRequestBodyToTypesRiskDetectionScope builds a value
 // of type *types.RiskDetectionScope from a value of type
 // *RiskDetectionScopeRequestBody.
@@ -13236,6 +13256,26 @@ func marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *Risk
 	return res
 }
 
+// marshalRiskPolicyApprovalConfigRequestBodyToTypesRiskPolicyApprovalConfig
+// builds a value of type *types.RiskPolicyApprovalConfig from a value of type
+// *RiskPolicyApprovalConfigRequestBody.
+func marshalRiskPolicyApprovalConfigRequestBodyToTypesRiskPolicyApprovalConfig(v *RiskPolicyApprovalConfigRequestBody) *types.RiskPolicyApprovalConfig {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskPolicyApprovalConfig{}
+	if v.Approvers != nil {
+		res.Approvers = make([]string, len(v.Approvers))
+		for i, val := range v.Approvers {
+			res.Approvers[i] = val
+		}
+	} else {
+		res.Approvers = []string{}
+	}
+
+	return res
+}
+
 // unmarshalRiskDetectionScopeResponseBodyToTypesRiskDetectionScope builds a
 // value of type *types.RiskDetectionScope from a value of type
 // *RiskDetectionScopeResponseBody.
@@ -13315,6 +13355,22 @@ func unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(v *R
 	return res
 }
 
+// unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig
+// builds a value of type *types.RiskPolicyApprovalConfig from a value of type
+// *RiskPolicyApprovalConfigResponseBody.
+func unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(v *RiskPolicyApprovalConfigResponseBody) *types.RiskPolicyApprovalConfig {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskPolicyApprovalConfig{}
+	res.Approvers = make([]string, len(v.Approvers))
+	for i, val := range v.Approvers {
+		res.Approvers[i] = val
+	}
+
+	return res
+}
+
 // unmarshalRiskPolicyResponseBodyToTypesRiskPolicy builds a value of type
 // *types.RiskPolicy from a value of type *RiskPolicyResponseBody.
 func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody) *types.RiskPolicy {
@@ -13389,6 +13445,9 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 	}
 	if v.ModelConfig != nil {
 		res.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(v.ModelConfig)
+	}
+	if v.ApprovalConfig != nil {
+		res.ApprovalConfig = unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(v.ApprovalConfig)
 	}
 
 	return res

@@ -39,7 +39,7 @@ var _ = Service("risk", func() {
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
 				shared.RiskPolicyActionEnum()
 				Default("flag")
 			})
@@ -48,7 +48,7 @@ var _ = Service("risk", func() {
 				Default("everyone")
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.")
-			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit or send an empty server list to apply the policy to every MCP server. When a non-empty scope is set, the action must be flag or block.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit or send an empty server list to apply the policy to every MCP server. When a non-empty scope is set, the action must be flag, block or require_approval; require_approval needs one.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})
@@ -62,6 +62,7 @@ var _ = Service("risk", func() {
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.")
 			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration.")
+			Attribute("approval_config", shared.RiskPolicyApprovalConfig, "For require_approval policies: who may approve held calls. Required when action is require_approval, rejected otherwise.")
 			Attribute("score", Float64, "CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).", func() {
 				Minimum(0.1)
 				Maximum(10)
@@ -246,14 +247,14 @@ var _ = Service("risk", func() {
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
 				shared.RiskPolicyActionEnum()
 			})
 			Attribute("audience_type", String, "Policy audience type: everyone or targeted. Omit to preserve the current audience type.", func() {
 				shared.RiskPolicyAudienceTypeEnum()
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. Omit to preserve the current target principals.")
-			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit to preserve; send an empty server list to clear and apply the policy to every MCP server. When the resulting policy keeps an MCP scope, the action must be flag or block.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit to preserve; send an empty server list to clear and apply the policy to every MCP server. When the resulting policy keeps an MCP scope, the action must be flag, block or require_approval; require_approval needs one.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})
@@ -270,6 +271,7 @@ var _ = Service("risk", func() {
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.")
 			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Omit to preserve the current value.")
+			Attribute("approval_config", shared.RiskPolicyApprovalConfig, "For require_approval policies: who may approve held calls. Omit to preserve the current value.")
 			Attribute("score", Float64, "CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.", func() {
 				Minimum(0.1)
 				Maximum(10)

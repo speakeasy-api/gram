@@ -640,6 +640,12 @@ func marshalMetaToolCallResult(ctx context.Context, logger *slog.Logger, id mcpj
 // marshalMetaToolError emits a member-scoped failure as an isError tool
 // result rather than a protocol error.
 func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, message string) (json.RawMessage, error) {
+	return marshalToolErrorResult(ctx, logger, id, message, serverInfoMetaServer)
+}
+
+// marshalToolErrorResult serializes a tools/call result with isError set and
+// one text block, under the given server identity.
+func marshalToolErrorResult(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, message string, identity serverInfo) (json.RawMessage, error) {
 	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{
 		Type:     "text",
 		MimeType: nil,
@@ -657,7 +663,7 @@ func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrp
 			StructuredContent: nil,
 			IsError:           true,
 		},
-		serverIdentity: serverInfoMetaServer,
+		serverIdentity: identity,
 		cacheHints:     nil,
 	})
 	if err != nil {

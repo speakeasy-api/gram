@@ -12755,6 +12755,22 @@ func unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *Ri
 	return res
 }
 
+// unmarshalRiskPolicyApprovalConfigRequestBodyToTypesRiskPolicyApprovalConfig
+// builds a value of type *types.RiskPolicyApprovalConfig from a value of type
+// *RiskPolicyApprovalConfigRequestBody.
+func unmarshalRiskPolicyApprovalConfigRequestBodyToTypesRiskPolicyApprovalConfig(v *RiskPolicyApprovalConfigRequestBody) *types.RiskPolicyApprovalConfig {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskPolicyApprovalConfig{}
+	res.Approvers = make([]string, len(v.Approvers))
+	for i, val := range v.Approvers {
+		res.Approvers[i] = val
+	}
+
+	return res
+}
+
 // marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody builds a
 // value of type *RiskDetectionScopeResponseBody from a value of type
 // *types.RiskDetectionScope.
@@ -12835,6 +12851,26 @@ func marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(v *typ
 	res := &RiskPolicyModelConfigResponseBody{
 		Temperature: v.Temperature,
 		FailOpen:    v.FailOpen,
+	}
+
+	return res
+}
+
+// marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigResponseBody
+// builds a value of type *RiskPolicyApprovalConfigResponseBody from a value of
+// type *types.RiskPolicyApprovalConfig.
+func marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigResponseBody(v *types.RiskPolicyApprovalConfig) *RiskPolicyApprovalConfigResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskPolicyApprovalConfigResponseBody{}
+	if v.Approvers != nil {
+		res.Approvers = make([]string, len(v.Approvers))
+		for i, val := range v.Approvers {
+			res.Approvers[i] = val
+		}
+	} else {
+		res.Approvers = []string{}
 	}
 
 	return res
@@ -12922,6 +12958,9 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 	}
 	if v.ModelConfig != nil {
 		res.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(v.ModelConfig)
+	}
+	if v.ApprovalConfig != nil {
+		res.ApprovalConfig = marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigResponseBody(v.ApprovalConfig)
 	}
 
 	return res

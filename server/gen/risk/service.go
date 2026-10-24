@@ -382,8 +382,10 @@ type CreateRiskPolicyPayload struct {
 	CustomRuleIds []string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session). MCP-scoped policies support flag and block only.
+	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
@@ -392,7 +394,7 @@ type CreateRiskPolicyPayload struct {
 	AudiencePrincipalUrns []string
 	// Optional MCP server and tool restriction. Omit or send an empty server list
 	// to apply the policy to every MCP server. When a non-empty scope is set, the
-	// action must be flag or block.
+	// action must be flag, block or require_approval; require_approval needs one.
 	McpScope *types.RiskMCPScope
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
@@ -416,6 +418,9 @@ type CreateRiskPolicyPayload struct {
 	Prompt *string
 	// For prompt_based policies: per-policy LLM-judge model configuration.
 	ModelConfig *types.RiskPolicyModelConfig
+	// For require_approval policies: who may approve held calls. Required when
+	// action is require_approval, rejected otherwise.
+	ApprovalConfig *types.RiskPolicyApprovalConfig
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to apply the default (5).
 	Score float64
@@ -1784,8 +1789,10 @@ type UpdateRiskPolicyPayload struct {
 	CustomRuleIds []string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session). MCP-scoped policies support flag and block only.
+	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -1795,7 +1802,8 @@ type UpdateRiskPolicyPayload struct {
 	AudiencePrincipalUrns []string
 	// Optional MCP server and tool restriction. Omit to preserve; send an empty
 	// server list to clear and apply the policy to every MCP server. When the
-	// resulting policy keeps an MCP scope, the action must be flag or block.
+	// resulting policy keeps an MCP scope, the action must be flag, block or
+	// require_approval; require_approval needs one.
 	McpScope *types.RiskMCPScope
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
@@ -1823,6 +1831,9 @@ type UpdateRiskPolicyPayload struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
 	// preserve the current value.
 	ModelConfig *types.RiskPolicyModelConfig
+	// For require_approval policies: who may approve held calls. Omit to preserve
+	// the current value.
+	ApprovalConfig *types.RiskPolicyApprovalConfig
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to preserve the current value.
 	Score *float64

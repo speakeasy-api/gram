@@ -147,6 +147,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -1209,6 +1210,7 @@ func newStartCommand() *cli.Command {
 			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			mcpFindingEvidence := risk.NewMCPFindingEvidenceStore(db, encryptionClient)
+			approvalService := approval.NewService(logger, db, serverURL)
 			mcpPolicyEvaluator := mcpriskscan.NewPolicyEvaluator(
 				logger,
 				tracerProvider,
@@ -1218,6 +1220,7 @@ func newStartCommand() *cli.Command {
 				publishers.RiskFindings,
 				mcpriskscan.DefaultPolicyConfig,
 				mcpriskscan.WithMCPFindingEvidenceWriter(mcpFindingEvidence, toolIOLogsEnabled),
+				mcpriskscan.WithApprovalGate(approvalService),
 			)
 			tunnelCollector, stopTunnelMetrics := newTunnelMetrics(ctx, logger, psbroker)
 			tunnelMetricsShutdown = stopTunnelMetrics
@@ -1961,6 +1964,7 @@ func newStartCommand() *cli.Command {
 			}
 			mcp.Attach(mux, mcpRuntime.MCP, mcpRuntime.Metadata)
 			mcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.MCP)
+			attachApprovals(mux, logger, approvalService, mcpRuntime.MCP, ratelimit.NewRedisStore(redisClient))
 
 			analyticsSvc.WithConversationAccess(chatService)
 			chat.Attach(mux, chatService)

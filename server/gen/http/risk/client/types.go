@@ -46,8 +46,10 @@ type CreateRiskPolicyRequestBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session). MCP-scoped policies support flag and block only.
+	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action string `form:"action" json:"action" xml:"action"`
 	// Policy audience type: everyone or targeted.
 	AudienceType string `form:"audience_type" json:"audience_type" xml:"audience_type"`
@@ -56,7 +58,7 @@ type CreateRiskPolicyRequestBody struct {
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Omit or send an empty server list
 	// to apply the policy to every MCP server. When a non-empty scope is set, the
-	// action must be flag or block.
+	// action must be flag, block or require_approval; require_approval needs one.
 	McpScope *RiskMCPScopeRequestBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
@@ -80,6 +82,9 @@ type CreateRiskPolicyRequestBody struct {
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
 	// For prompt_based policies: per-policy LLM-judge model configuration.
 	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Required when
+	// action is require_approval, rejected otherwise.
+	ApprovalConfig *RiskPolicyApprovalConfigRequestBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to apply the default (5).
 	Score float64 `form:"score" json:"score" xml:"score"`
@@ -117,8 +122,10 @@ type UpdateRiskPolicyRequestBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session). MCP-scoped policies support flag and block only.
+	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -128,7 +135,8 @@ type UpdateRiskPolicyRequestBody struct {
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Omit to preserve; send an empty
 	// server list to clear and apply the policy to every MCP server. When the
-	// resulting policy keeps an MCP scope, the action must be flag or block.
+	// resulting policy keeps an MCP scope, the action must be flag, block or
+	// require_approval; require_approval needs one.
 	McpScope *RiskMCPScopeRequestBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
@@ -156,6 +164,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
 	// preserve the current value.
 	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Omit to preserve
+	// the current value.
+	ApprovalConfig *RiskPolicyApprovalConfigRequestBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to preserve the current value.
 	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
@@ -479,9 +490,10 @@ type CreateRiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session). MCP-scoped policies support flag and block
-	// only.
+	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
+	// freeze the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -489,7 +501,8 @@ type CreateRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
@@ -509,6 +522,9 @@ type CreateRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Null for every
+	// other action.
+	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -592,9 +608,10 @@ type GetRiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session). MCP-scoped policies support flag and block
-	// only.
+	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
+	// freeze the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -602,7 +619,8 @@ type GetRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
@@ -622,6 +640,9 @@ type GetRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Null for every
+	// other action.
+	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -675,9 +696,10 @@ type UpdateRiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session). MCP-scoped policies support flag and block
-	// only.
+	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
+	// freeze the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -685,7 +707,8 @@ type UpdateRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
@@ -705,6 +728,9 @@ type UpdateRiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Null for every
+	// other action.
+	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -11558,6 +11584,14 @@ type RiskPolicyModelConfigRequestBody struct {
 	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
 }
 
+// RiskPolicyApprovalConfigRequestBody is used to define fields on request body
+// types.
+type RiskPolicyApprovalConfigRequestBody struct {
+	// Principal URNs that may approve held calls: specific users (user:...) or
+	// roles (role:...). Everyone is not allowed.
+	Approvers []string `form:"approvers" json:"approvers" xml:"approvers"`
+}
+
 // RiskDetectionScopeResponseBody is used to define fields on response body
 // types.
 type RiskDetectionScopeResponseBody struct {
@@ -11604,6 +11638,14 @@ type RiskPolicyModelConfigResponseBody struct {
 	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
 }
 
+// RiskPolicyApprovalConfigResponseBody is used to define fields on response
+// body types.
+type RiskPolicyApprovalConfigResponseBody struct {
+	// Principal URNs that may approve held calls: specific users (user:...) or
+	// roles (role:...). Everyone is not allowed.
+	Approvers []string `form:"approvers,omitempty" json:"approvers,omitempty" xml:"approvers,omitempty"`
+}
+
 // RiskPolicyResponseBody is used to define fields on response body types.
 type RiskPolicyResponseBody struct {
 	// The risk policy ID.
@@ -11644,9 +11686,10 @@ type RiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session). MCP-scoped policies support flag and block
-	// only.
+	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
+	// freeze the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -11654,7 +11697,8 @@ type RiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server. When set, the action must be flag or block.
+	// MCP server. When set, the action must be flag, block or require_approval;
+	// require_approval needs it.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
@@ -11674,6 +11718,9 @@ type RiskPolicyResponseBody struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+	// For require_approval policies: who may approve held calls. Null for every
+	// other action.
+	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -12451,6 +12498,9 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 	if p.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
 	}
+	if p.ApprovalConfig != nil {
+		body.ApprovalConfig = marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigRequestBody(p.ApprovalConfig)
+	}
 	{
 		var zero float64
 		if body.Score == zero {
@@ -12546,6 +12596,9 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 	}
 	if p.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
+	}
+	if p.ApprovalConfig != nil {
+		body.ApprovalConfig = marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigRequestBody(p.ApprovalConfig)
 	}
 	return body
 }
@@ -12981,6 +13034,9 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
+	}
+	if body.ApprovalConfig != nil {
+		v.ApprovalConfig = unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(body.ApprovalConfig)
 	}
 
 	return v
@@ -13878,6 +13934,9 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
+	if body.ApprovalConfig != nil {
+		v.ApprovalConfig = unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(body.ApprovalConfig)
+	}
 
 	return v
 }
@@ -14106,6 +14165,9 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
+	}
+	if body.ApprovalConfig != nil {
+		v.ApprovalConfig = unmarshalRiskPolicyApprovalConfigResponseBodyToTypesRiskPolicyApprovalConfig(body.ApprovalConfig)
 	}
 
 	return v
@@ -22169,8 +22231,8 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -22186,6 +22248,11 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 	if body.ShadowMcpDisposition != nil {
 		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
+		}
+	}
+	if body.ApprovalConfig != nil {
+		if err2 := ValidateRiskPolicyApprovalConfigResponseBody(body.ApprovalConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Score != nil {
@@ -22348,8 +22415,8 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -22365,6 +22432,11 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 	if body.ShadowMcpDisposition != nil {
 		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
+		}
+	}
+	if body.ApprovalConfig != nil {
+		if err2 := ValidateRiskPolicyApprovalConfigResponseBody(body.ApprovalConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Score != nil {
@@ -22460,8 +22532,8 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -22477,6 +22549,11 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	if body.ShadowMcpDisposition != nil {
 		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
+		}
+	}
+	if body.ApprovalConfig != nil {
+		if err2 := ValidateRiskPolicyApprovalConfigResponseBody(body.ApprovalConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Score != nil {
@@ -36785,6 +36862,18 @@ func ValidateRiskMCPServerScopeRequestBody(body *RiskMCPServerScopeRequestBody) 
 	return
 }
 
+// ValidateRiskPolicyApprovalConfigRequestBody runs the validations defined on
+// RiskPolicyApprovalConfigRequestBody
+func ValidateRiskPolicyApprovalConfigRequestBody(body *RiskPolicyApprovalConfigRequestBody) (err error) {
+	if body.Approvers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approvers", "body"))
+	}
+	if len(body.Approvers) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.approvers", body.Approvers, len(body.Approvers), 1, true))
+	}
+	return
+}
+
 // ValidateRiskDetectionScopeResponseBody runs the validations defined on
 // RiskDetectionScopeResponseBody
 func ValidateRiskDetectionScopeResponseBody(body *RiskDetectionScopeResponseBody) (err error) {
@@ -36823,6 +36912,18 @@ func ValidateRiskMCPServerScopeResponseBody(body *RiskMCPServerScopeResponseBody
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRiskPolicyApprovalConfigResponseBody runs the validations defined on
+// RiskPolicyApprovalConfigResponseBody
+func ValidateRiskPolicyApprovalConfigResponseBody(body *RiskPolicyApprovalConfigResponseBody) (err error) {
+	if body.Approvers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("approvers", "body"))
+	}
+	if len(body.Approvers) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.approvers", body.Approvers, len(body.Approvers), 1, true))
 	}
 	return
 }
@@ -36901,8 +37002,8 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -36918,6 +37019,11 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	if body.ShadowMcpDisposition != nil {
 		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
+		}
+	}
+	if body.ApprovalConfig != nil {
+		if err2 := ValidateRiskPolicyApprovalConfigResponseBody(body.ApprovalConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Score != nil {
