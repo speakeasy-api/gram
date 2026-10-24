@@ -9,6 +9,7 @@ import {
 import type { RiskPreset } from "@gram/client/models/components/riskpreset.js";
 import type { SuggestRiskPolicyResult } from "@gram/client/models/components/suggestriskpolicyresult.js";
 import type { PolicyAction } from "./policy-data";
+import { detectionPolicyAction } from "./policy-form";
 import type { PolicyMCPScopeValue } from "./policy-mcp-scope";
 
 /** Where a draft should be enforced when it is not left to agent sessions:
@@ -125,7 +126,9 @@ export function draftFromPreset(preset: RiskPreset): PolicyDraft {
     presetId: preset.id,
     policyType: requireKnownEnumValue(RiskPolicyPolicyType, preset.policyType),
     name: preset.label,
-    action: requireKnownEnumValue(RiskPolicyAction, preset.action),
+    action: detectionPolicyAction(
+      requireKnownEnumValue(RiskPolicyAction, preset.action),
+    ),
     score: preset.score,
     sources: draftSources(preset.sources),
     presidioEntities: [...preset.presidioEntities],
@@ -146,7 +149,9 @@ export function draftFromSuggestion(
       suggestion.policyType,
     ),
     name: suggestion.name,
-    action: requireKnownEnumValue(RiskPolicyAction, suggestion.action),
+    action: detectionPolicyAction(
+      requireKnownEnumValue(RiskPolicyAction, suggestion.action),
+    ),
     score: suggestion.score,
     sources: draftSources(suggestion.sources),
     presidioEntities: [...suggestion.presidioEntities],

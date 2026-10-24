@@ -17,7 +17,7 @@ export function ApprovalPolicySummary({
   const approvers = policy.approvalConfig?.approvers ?? [];
   return (
     <Stack gap={4}>
-      <Alert variant="info" alignTop>
+      <Alert variant="info">
         <AlertDescription>
           This tool approval policy holds matching MCP tool calls until an
           approver approves them. It is read-only here.
