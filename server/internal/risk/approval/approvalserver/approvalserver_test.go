@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -89,8 +90,15 @@ func TestEnsureCreatesTheServerOnceAndAddsItToTheDefaultPlugin(t *testing.T) {
 
 	plugin, err := pluginsrepo.New(conn).GetDefaultPlugin(t.Context(), pluginsrepo.GetDefaultPluginParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	member, found := defaultPluginMember(t, conn, plugin.ID, first.Server.ID)
-	require.True(t, found, "the approvals server joins the Default plugin")
+	memberParams := pluginsrepo.GetPluginServerByBackendParams{
+		PluginID:       plugin.ID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ToolsetID:      uuid.NullUUID{},
+		McpServerID:    uuid.NullUUID{UUID: first.Server.ID, Valid: true},
+	}
+	member, err := pluginsrepo.New(conn).GetPluginServerByBackend(t.Context(), memberParams)
+	require.NoError(t, err, "the approvals server joins the Default plugin")
 	require.Equal(t, approval.MCPServerName, member.DisplayName)
 
 	// Later calls find the server and change nothing, so an admin who removes
@@ -101,20 +109,8 @@ func TestEnsureCreatesTheServerOnceAndAddsItToTheDefaultPlugin(t *testing.T) {
 	require.False(t, second.Created)
 	require.False(t, second.AddedToDefaultPlugin)
 	require.Equal(t, first.Server, second.Server)
-	_, found = defaultPluginMember(t, conn, plugin.ID, first.Server.ID)
-	require.False(t, found, "a removed approvals server stays out of the Default plugin")
-}
-
-func defaultPluginMember(t *testing.T, conn *pgxpool.Pool, pluginID, serverID uuid.UUID) (pluginsrepo.PluginServer, bool) {
-	t.Helper()
-	servers, err := pluginsrepo.New(conn).ListPluginServers(t.Context(), pluginID)
-	require.NoError(t, err)
-	for _, server := range servers {
-		if server.McpServerID.Valid && server.McpServerID.UUID == serverID {
-			return server, true
-		}
-	}
-	return pluginsrepo.PluginServer{}, false
+	_, err = pluginsrepo.New(conn).GetPluginServerByBackend(t.Context(), memberParams)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a removed approvals server stays out of the Default plugin")
 }
 
 func TestEnsureFitsALongEndpointSlug(t *testing.T) {
@@ -125,8 +121,7 @@ func TestEnsureFitsALongEndpointSlug(t *testing.T) {
 	long.OrganizationSlug = strings.Repeat("o", 150)
 	outcome := ensure(t, conn, &long)
 	require.True(t, outcome.Created)
-	require.Len(t, outcome.Server.EndpointSlug, 128)
-	require.True(t, strings.HasPrefix(outcome.Server.EndpointSlug, strings.Repeat("o", 100)))
+	require.Equal(t, strings.Repeat("o", 128), outcome.Server.EndpointSlug)
 }
 
 func TestEnsureSkipsTakenEndpointSlugs(t *testing.T) {

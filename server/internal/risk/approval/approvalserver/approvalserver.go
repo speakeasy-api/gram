@@ -228,24 +228,16 @@ func createEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, a
 
 // endpointSlugCandidates are the endpoint slugs to try in order: the
 // organization, project and suffix, then the same with 4, 8 and 12 characters
-// of the server ID's random tail. Each is cut to fit the endpoint column.
+// of the server ID's random tail. Each cuts the base so the slug fits the
+// endpoint column. Slugs are ASCII, so a byte cut is a character cut.
 func endpointSlugCandidates(organizationSlug, projectSlug string, serverID uuid.UUID) []string {
 	base := fmt.Sprintf("%s-%s-%s", organizationSlug, projectSlug, endpointSuffix)
 	id := serverID.String()
-	tail := id[len(id)-12:]
-	candidates := []string{fitEndpointSlug(base, "")}
-	for _, n := range []int{4, 8, 12} {
-		candidates = append(candidates, fitEndpointSlug(base, tail[len(tail)-n:]))
+	suffixes := []string{"", "-" + id[len(id)-4:], "-" + id[len(id)-8:], "-" + id[len(id)-12:]}
+	candidates := make([]string, 0, len(suffixes))
+	for _, suffix := range suffixes {
+		keep := min(len(base), maxEndpointSlugLen-len(suffix))
+		candidates = append(candidates, strings.TrimRight(base[:keep], "-")+suffix)
 	}
 	return candidates
-}
-
-// fitEndpointSlug joins base and suffix, cutting base so the slug fits the
-// endpoint column. Slugs are ASCII, so a byte cut is a character cut.
-func fitEndpointSlug(base, suffix string) string {
-	if suffix == "" {
-		return strings.TrimRight(base[:min(len(base), maxEndpointSlugLen)], "-")
-	}
-	keep := maxEndpointSlugLen - len(suffix) - 1
-	return strings.TrimRight(base[:min(len(base), keep)], "-") + "-" + suffix
 }
