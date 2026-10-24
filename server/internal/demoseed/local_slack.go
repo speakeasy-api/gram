@@ -73,6 +73,13 @@ func connectLocalSlack(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 	if err != nil {
 		return fmt.Errorf("encrypt local Slack token: %w", err)
 	}
+	// Ask Slack before locking the connection row, so a slow answer cannot
+	// hold the lock.
+	email := conv.Default(opts.SlackEmail, dev.Email)
+	slackUserID, err := lookupSlackUser(ctx, opts.Slack, opts.BotToken, email)
+	if err != nil {
+		logger.WarnContext(ctx, "local Slack account not found; set GRAM_DEV_SLACK_EMAIL or map yourself on the Slack workspaces page", attr.SlogError(err))
+	}
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -89,12 +96,6 @@ func connectLocalSlack(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 	}
 	if err != nil {
 		return fmt.Errorf("save local Slack connection: %w", err)
-	}
-
-	email := conv.Default(opts.SlackEmail, dev.Email)
-	slackUserID, err := lookupSlackUser(ctx, opts.Slack, opts.BotToken, email)
-	if err != nil {
-		logger.WarnContext(ctx, "local Slack account not found; set GRAM_DEV_SLACK_EMAIL or map yourself on the Slack workspaces page", attr.SlogError(err))
 	}
 	if slackUserID != "" {
 		if err := mapLocalSlackUser(ctx, queries, organizationID, workspace.teamID, slackUserID, email, dev); err != nil {
