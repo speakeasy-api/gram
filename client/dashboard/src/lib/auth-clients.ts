@@ -1,8 +1,5 @@
-import { collectPageItems } from "@/components/sessions/collectPageItems";
-import { useSdkClient } from "@/contexts/Sdk";
 import { enumPresentation } from "@/lib/enum";
 import type { AuthClient } from "@gram/client/models/components/authclient.js";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 /**
  * How Speakeasy reaches an upstream on a caller's behalf, in the words an
@@ -87,23 +84,4 @@ export function otherServers(
 
 export function serverLabel(server: AuthClient["servers"][number]): string {
   return server.name?.trim() || server.slug?.trim() || "Unnamed server";
-}
-
-/**
- * Every auth client in the organization, across all pages. Keyed under the
- * SDK's list key so its invalidation refreshes this too.
- */
-export function useAllAuthClients({
-  enabled = true,
-}: { enabled?: boolean } = {}): UseQueryResult<AuthClient[]> {
-  const sdk = useSdkClient();
-  return useQuery({
-    queryKey: ["@gram/client", "authClients", "list", { all: true }],
-    queryFn: ({ signal }) =>
-      collectPageItems(
-        sdk.authClients.list({ limit: 100 }, undefined, { signal }),
-      ),
-    enabled,
-    throwOnError: false,
-  });
 }
