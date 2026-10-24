@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -22,7 +23,7 @@ export const BuiltinBackend = {
 /**
  * A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
  */
-export type BuiltinBackend = ClosedEnum<typeof BuiltinBackend>;
+export type BuiltinBackend = OpenEnum<typeof BuiltinBackend>;
 
 /**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
@@ -35,7 +36,7 @@ export const McpServerNetworkAccessMode = {
 /**
  * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
-export type McpServerNetworkAccessMode = ClosedEnum<
+export type McpServerNetworkAccessMode = OpenEnum<
   typeof McpServerNetworkAccessMode
 >;
 
@@ -50,7 +51,7 @@ export const McpServerVisibility = {
 /**
  * The visibility of an MCP server
  */
-export type McpServerVisibility = ClosedEnum<typeof McpServerVisibility>;
+export type McpServerVisibility = OpenEnum<typeof McpServerVisibility>;
 
 /**
  * An MCP server configuration: authentication, environment, and backend selection for an MCP server.
@@ -68,6 +69,10 @@ export type McpServer = {
    * The ID of the environment associated with the server
    */
   environmentId?: string | undefined;
+  /**
+   * Whether any endpoint routes to this server, including one on a custom domain that is not live yet. Absent when it could not be read.
+   */
+  hasEndpoint?: boolean | undefined;
   /**
    * The ID of the MCP server
    */
@@ -139,19 +144,22 @@ export type McpServer = {
 };
 
 /** @internal */
-export const BuiltinBackend$inboundSchema: z.ZodMiniEnum<
-  typeof BuiltinBackend
-> = z.enum(BuiltinBackend);
+export const BuiltinBackend$inboundSchema: z.ZodMiniType<
+  BuiltinBackend,
+  unknown
+> = openEnums.inboundSchema(BuiltinBackend);
 
 /** @internal */
-export const McpServerNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
-  typeof McpServerNetworkAccessMode
-> = z.enum(McpServerNetworkAccessMode);
+export const McpServerNetworkAccessMode$inboundSchema: z.ZodMiniType<
+  McpServerNetworkAccessMode,
+  unknown
+> = openEnums.inboundSchema(McpServerNetworkAccessMode);
 
 /** @internal */
-export const McpServerVisibility$inboundSchema: z.ZodMiniEnum<
-  typeof McpServerVisibility
-> = z.enum(McpServerVisibility);
+export const McpServerVisibility$inboundSchema: z.ZodMiniType<
+  McpServerVisibility,
+  unknown
+> = openEnums.inboundSchema(McpServerVisibility);
 
 /** @internal */
 export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
@@ -163,6 +171,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         z.transform(v => new Date(v)),
       ),
       environment_id: z.optional(z.string()),
+      has_endpoint: z.optional(z.boolean()),
       id: z.string(),
       name: z.optional(z.string()),
       network_access_mode: McpServerNetworkAccessMode$inboundSchema,
@@ -189,6 +198,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         "builtin_backend": "builtinBackend",
         "created_at": "createdAt",
         "environment_id": "environmentId",
+        "has_endpoint": "hasEndpoint",
         "network_access_mode": "networkAccessMode",
         "platform_endpoint_slug": "platformEndpointSlug",
         "primary_endpoint_id": "primaryEndpointId",
