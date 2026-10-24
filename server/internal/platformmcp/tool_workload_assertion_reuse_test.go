@@ -1,10 +1,10 @@
-//nolint:exhaustruct // Test fixtures intentionally omit unrelated fields.
 package platformmcp
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -48,7 +49,6 @@ func TestWorkloadAssertionReuseToolContracts(t *testing.T) {
 		a, b := descriptorByName(t, live, name), descriptorByName(t, unavailable, name)
 		require.JSONEq(t, string(a.InputSchema), string(b.InputSchema))
 		require.Equal(t, a.Meta, b.Meta)
-		require.Equal(t, ExternalAuthorizationMember, a.Meta.Authorization)
 		require.Equal(t, ProjectScopeExplicit, a.Meta.ProjectScope)
 		require.Equal(t, externalOnly, a.Meta.Audiences)
 		var schema struct {
@@ -62,6 +62,7 @@ func TestWorkloadAssertionReuseToolContracts(t *testing.T) {
 			require.Contains(t, schema.Required, field)
 		}
 		if name == "set_workload_assertion_reuse" {
+			require.Equal(t, ExternalAuthorizationOrgAdmin, a.Meta.Authorization)
 			for _, field := range []string{"confirmed", "allow_assertion_reuse"} {
 				require.Equal(t, "boolean", schema.Properties[field].Type)
 				require.Contains(t, schema.Required, field)
@@ -70,6 +71,7 @@ func TestWorkloadAssertionReuseToolContracts(t *testing.T) {
 			require.True(t, a.Annotations.IdempotentHint)
 			require.True(t, *a.Annotations.DestructiveHint)
 		} else {
+			require.Equal(t, ExternalAuthorizationMember, a.Meta.Authorization)
 			require.Equal(t, []authz.Scope{authz.ScopeWorkloadRead}, a.Meta.DiscoveryScopes)
 			require.True(t, a.Annotations.ReadOnlyHint)
 		}
@@ -93,7 +95,7 @@ func assertionReuseTestContext(t *testing.T) (context.Context, Principal, uuid.U
 	p := Principal{OrganizationID: "test-org", UserID: "test-user"}
 	project, issuer := uuid.New(), uuid.New()
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: p.OrganizationID, UserID: p.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, p.UserID))
-	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeWorkloadRead, p.OrganizationID), authz.NewGrant(authz.ScopeWorkloadWrite, p.OrganizationID)})
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, p.OrganizationID), authz.NewGrant(authz.ScopeWorkloadRead, p.OrganizationID), authz.NewGrant(authz.ScopeWorkloadWrite, p.OrganizationID)})
 	return ctx, p, project, issuer
 }
 
@@ -103,6 +105,7 @@ func TestWorkloadAssertionReuseSetPreservesActorAndReturnsLiveSafeState(t *testi
 	row := &types.WorkloadIssuer{ID: issuer.String(), OrganizationID: p.OrganizationID, Name: "Projected tokens", JwksURI: "private-key-location"}
 	reads, writes := 0, 0
 	service := &WorkloadAssertionReuseService{
+		authorization: authz.NewEngine(testenv.NewLogger(t), nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		resolveProject: func(_ context.Context, org string, input FindMCPInput) (ResolvedProject, error) {
 			require.Equal(t, p.OrganizationID, org)
 			require.Equal(t, project.String(), input.ProjectID)
@@ -116,6 +119,9 @@ func TestWorkloadAssertionReuseSetPreservesActorAndReturnsLiveSafeState(t *testi
 			update: func(scoped context.Context, input *gen.UpdateIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
 				writes++
 				require.Equal(t, issuer.String(), input.ID)
+				administrator := admission.ActorFromContext(scoped)
+				require.True(t, administrator.OrgAdmin)
+				require.Equal(t, p.UserID, administrator.UserID)
 				require.Nil(t, input.Name)
 				require.Nil(t, input.JwksURI)
 				require.Nil(t, input.Tags)
@@ -137,10 +143,11 @@ func TestWorkloadAssertionReuseSetPreservesActorAndReturnsLiveSafeState(t *testi
 		},
 	}
 	for _, enabled := range []bool{true, true, false, false} {
-		result, err := service.set(ctx, p, SetWorkloadAssertionReuseInput{ProjectID: project.String(), IssuerID: issuer.String(), AllowAssertionReuse: enabled, Confirmed: true})
+		result, err := service.set(ctx, p, SetWorkloadAssertionReuseInput{ProjectID: project.String(), IssuerID: strings.ToUpper(issuer.String()), AllowAssertionReuse: enabled, Confirmed: true})
 		require.NoError(t, err)
 		require.Equal(t, enabled, result.AllowAssertionReuse)
 		require.Equal(t, "organization", result.PolicyScope)
+		require.Equal(t, issuer.String(), result.IssuerID)
 		encoded, err := json.Marshal(result)
 		require.NoError(t, err)
 		require.NotContains(t, string(encoded), "private")
@@ -158,6 +165,7 @@ func TestWorkloadAssertionReuseRejectsUnconfirmedAndHiddenTargets(t *testing.T) 
 	row := &types.WorkloadIssuer{ID: issuer.String(), OrganizationID: p.OrganizationID}
 	reads, writes := 0, 0
 	service := &WorkloadAssertionReuseService{
+		authorization: authz.NewEngine(testenv.NewLogger(t), nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
 			return ResolvedProject{ID: project}, nil
 		},
@@ -187,13 +195,11 @@ func TestWorkloadAssertionReuseRejectsUnconfirmedAndHiddenTargets(t *testing.T) 
 		{"project tier", p.OrganizationID, project.String(), issuer.String()},
 		{"unknown issuer", p.OrganizationID, "", uuid.NewString()},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			row.OrganizationID, row.ProjectID, row.ID = tc.org, tc.project, tc.id
-			_, err := service.set(ctx, p, input)
-			var refusal *oops.ShareableError
-			require.ErrorAs(t, err, &refusal)
-			require.Equal(t, oops.CodeNotFound, refusal.Code)
-		})
+		row.OrganizationID, row.ProjectID, row.ID = tc.org, tc.project, tc.id
+		_, err := service.set(ctx, p, input)
+		var refusal *oops.ShareableError
+		require.ErrorAs(t, err, &refusal)
+		require.Equal(t, oops.CodeNotFound, refusal.Code, tc.name)
 	}
 	require.Zero(t, writes)
 	for _, principal := range []Principal{{OrganizationID: "other-org", UserID: p.UserID}, {OrganizationID: p.OrganizationID, UserID: "other-user"}} {
@@ -220,7 +226,7 @@ func TestWorkloadAssertionReuseAPIAndMCPRequireSameReadScope(t *testing.T) {
 	service := &WorkloadAssertionReuseService{management: management, resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
 		return ResolvedProject{ID: project}, nil
 	}}
-	for _, grants := range [][]authz.Grant{nil, {authz.NewGrant(authz.ScopeWorkloadRead, "other-org")}, {authz.NewGrant(authz.ScopeWorkloadWrite, p.OrganizationID)}} {
+	for _, grants := range [][]authz.Grant{nil, {authz.NewGrant(authz.ScopeWorkloadRead, "other-org")}, {authz.NewGrant(authz.ScopeProjectRead, project.String())}} {
 		scoped := authz.GrantsToContext(ctx, grants)
 		_, apiErr := management.List(scoped, &gen.ListPayload{})
 		_, mcpErr := service.get(scoped, p, GetWorkloadAssertionReuseInput{ProjectID: project.String(), IssuerID: issuer.String()})
@@ -238,7 +244,9 @@ func TestWorkloadAssertionReuseRefusalsAreBounded(t *testing.T) {
 		result, ok := workloadAssertionReuseToolResult(err)
 		require.True(t, ok)
 		require.True(t, result.IsError)
-		require.NotContains(t, result.Content[0].(*mcp.TextContent).Text, "private")
+		text, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok)
+		require.NotContains(t, text.Text, "private")
 	}
 }
 
@@ -250,6 +258,7 @@ func TestWorkloadAssertionReuseAPIAndMCPRequireSameWriteScope(t *testing.T) {
 	ctx, p, project, issuer := assertionReuseTestContext(t)
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	service := &WorkloadAssertionReuseService{
+		authorization: authz.NewEngine(testenv.NewLogger(t), nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
 			return ResolvedProject{ID: project}, nil
 		},
@@ -261,7 +270,7 @@ func TestWorkloadAssertionReuseAPIAndMCPRequireSameWriteScope(t *testing.T) {
 		},
 	}
 	for _, grants := range [][]authz.Grant{{authz.NewGrant(authz.ScopeWorkloadRead, p.OrganizationID)}, {authz.NewGrant(authz.ScopeWorkloadWrite, "other-org")}} {
-		scoped := authz.GrantsToContext(ctx, grants)
+		scoped := authz.GrantsToContext(ctx, append(grants, authz.NewGrant(authz.ScopeOrgAdmin, p.OrganizationID)))
 		_, apiErr := management.UpdateIssuer(scoped, &gen.UpdateIssuerPayload{ID: issuer.String(), AllowAssertionReuse: new(true)})
 		_, mcpErr := service.set(scoped, p, SetWorkloadAssertionReuseInput{ProjectID: project.String(), IssuerID: issuer.String(), AllowAssertionReuse: true, Confirmed: true})
 		var apiOops, mcpOops *oops.ShareableError
@@ -281,20 +290,26 @@ func TestWorkloadAssertionReuseDiscoveryUsesExistingScopes(t *testing.T) {
 	for _, tc := range []struct {
 		scope authz.Scope
 		org   string
-		want  string
+		admin bool
+		want  []string
 	}{
-		{authz.ScopeWorkloadRead, p.OrganizationID, "get_workload_assertion_reuse"},
-		{authz.ScopeWorkloadWrite, p.OrganizationID, "set_workload_assertion_reuse"},
-		{authz.ScopeWorkloadWrite, "other-org", ""},
+		{authz.ScopeWorkloadRead, p.OrganizationID, false, []string{"get_workload_assertion_reuse"}},
+		// workload:write implies workload:read, but cannot admit organization mutations alone.
+		{authz.ScopeWorkloadWrite, p.OrganizationID, false, []string{"get_workload_assertion_reuse"}},
+		{authz.ScopeWorkloadWrite, p.OrganizationID, true, []string{"get_workload_assertion_reuse", "set_workload_assertion_reuse"}},
+		{authz.ScopeWorkloadWrite, "other-org", true, nil},
 	} {
-		ctx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(tc.scope, tc.org)})
-		visible := reg.FilterExternalTools(ctx, p, tools)
-		if tc.want == "" {
-			require.Empty(t, visible)
-		} else {
-			require.Len(t, visible, 1)
-			require.Equal(t, tc.want, visible[0].Name)
+		grants := []authz.Grant{authz.NewGrant(tc.scope, tc.org)}
+		if tc.admin {
+			grants = append(grants, authz.NewGrant(authz.ScopeOrgAdmin, p.OrganizationID))
 		}
+		ctx := authz.GrantsToContext(t.Context(), grants)
+		visible := reg.FilterExternalTools(ctx, p, tools)
+		var names []string
+		for _, tool := range visible {
+			names = append(names, tool.Name)
+		}
+		require.Equal(t, tc.want, names)
 	}
 }
 
@@ -316,4 +331,64 @@ func TestWorkloadAssertionReuseSchemaRejectsMissingOrUntypedPolicy(t *testing.T)
 	output := inferOutputSchema[WorkloadAssertionReuseOutput]("get_workload_assertion_reuse")
 	require.Equal(t, "boolean", output.Properties["allow_assertion_reuse"].Type)
 	require.Contains(t, output.Required, "allow_assertion_reuse")
+}
+
+func TestWorkloadAssertionReuseWriteRequiresAdministratorAdmission(t *testing.T) {
+	t.Parallel()
+	ctx, p, project, issuer := assertionReuseTestContext(t)
+	calls := 0
+	service := &WorkloadAssertionReuseService{
+		authorization: authz.NewEngine(testenv.NewLogger(t), nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
+			return ResolvedProject{ID: project}, nil
+		},
+		management: assertionReuseManagementStub{
+			list: func(context.Context, *gen.ListPayload) (*gen.WorkloadIdentityPolicy, error) { calls++; return nil, nil },
+			update: func(context.Context, *gen.UpdateIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
+				calls++
+				return nil, nil
+			},
+		},
+	}
+	for _, adminOrg := range []string{"", "other-org"} {
+		grants := []authz.Grant{authz.NewGrant(authz.ScopeWorkloadWrite, p.OrganizationID)}
+		if adminOrg != "" {
+			grants = append(grants, authz.NewGrant(authz.ScopeOrgAdmin, adminOrg))
+		}
+		scoped := authz.GrantsToContext(ctx, grants)
+		_, err := service.set(scoped, p, SetWorkloadAssertionReuseInput{ProjectID: project.String(), IssuerID: issuer.String(), AllowAssertionReuse: true, Confirmed: true})
+		var refusal *oops.ShareableError
+		require.ErrorAs(t, err, &refusal)
+		require.Equal(t, oops.CodeForbidden, refusal.Code)
+	}
+	require.Zero(t, calls, "administrator admission precedes policy reads and writes")
+	service.authorization = nil
+	_, err := service.set(ctx, p, SetWorkloadAssertionReuseInput{ProjectID: project.String(), IssuerID: issuer.String(), AllowAssertionReuse: true, Confirmed: true})
+	require.ErrorIs(t, err, ErrUnavailable)
+	require.Zero(t, calls)
+}
+
+func TestWorkloadAssertionReuseReadCanonicalizesIssuerAndAcceptsWriteScope(t *testing.T) {
+	t.Parallel()
+	ctx, p, project, issuer := assertionReuseTestContext(t)
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeWorkloadWrite, p.OrganizationID)})
+	service := &WorkloadAssertionReuseService{
+		resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
+			return ResolvedProject{ID: project}, nil
+		},
+		management: assertionReuseManagementStub{
+			list: func(ctx context.Context, _ *gen.ListPayload) (*gen.WorkloadIdentityPolicy, error) {
+				grants, ok := authz.GrantsFromContext(ctx)
+				require.True(t, ok)
+				allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeWorkloadRead, ResourceKind: "", ResourceID: p.OrganizationID, Dimensions: nil})
+				require.NoError(t, err)
+				require.True(t, allowed, "workload:write includes workload:read")
+				return &gen.WorkloadIdentityPolicy{Issuers: []*types.WorkloadIssuer{{ID: issuer.String(), OrganizationID: p.OrganizationID}}}, nil
+			},
+		},
+	}
+	output, err := service.get(ctx, p, GetWorkloadAssertionReuseInput{ProjectID: strings.ToUpper(project.String()), IssuerID: strings.ToUpper(issuer.String())})
+	require.NoError(t, err)
+	require.Equal(t, issuer.String(), output.IssuerID)
+	require.Equal(t, project.String(), output.ProjectID)
 }
