@@ -220,9 +220,16 @@ func LockServer(ctx context.Context, tx pgx.Tx, organizationID string, projectID
 		return nil, mcpserversrepo.McpServer{}, fmt.Errorf("lock hosted MCP server: %w", err)
 	}
 	// Endpoint creates and deletes lock the server row, so a read under that lock sees every endpoint that can serve.
-	endpoints, err := endpointRepo.ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: serverID})
+	// Endpoints left on a deleted domain cannot serve and are left out, so they never hold back the ingress check.
+	rows, err := endpointRepo.ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+		OrganizationID: organizationID, ProjectID: projectID, McpServerID: serverID,
+	})
 	if err != nil {
 		return nil, mcpserversrepo.McpServer{}, fmt.Errorf("read hosted MCP endpoints: %w", err)
+	}
+	endpoints := make([]mcpendpointsrepo.McpEndpoint, 0, len(rows))
+	for _, row := range rows {
+		endpoints = append(endpoints, row.McpEndpoint)
 	}
 	return endpoints, server, nil
 }

@@ -129,14 +129,17 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 	}
 
 	if slug != existing.Slug || customDomainID != existing.CustomDomainID {
-		siblings, err := txRepo.ListMCPEndpointsByMCPServerID(ctx, repo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: server.ID})
+		// Endpoints left on a deleted domain cannot serve, so they do not take part in the ingress check.
+		siblings, err := txRepo.ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, repo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+			OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpServerID: server.ID,
+		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list hosted MCP endpoints").LogError(ctx, logger)
 		}
 		addresses := []repo.McpEndpoint{proposedAddress(customDomainID, slug)}
 		for _, sibling := range siblings {
-			if sibling.ID != existing.ID {
-				addresses = append(addresses, sibling)
+			if sibling.McpEndpoint.ID != existing.ID {
+				addresses = append(addresses, sibling.McpEndpoint)
 			}
 		}
 		if err := checkHostedIngress(ctx, dbtx, logger, authCtx, server, addresses); err != nil {

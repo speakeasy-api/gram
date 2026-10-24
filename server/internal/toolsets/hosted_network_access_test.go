@@ -242,3 +242,35 @@ func setHostedMode(t *testing.T, ctx context.Context, ti *testInstance, toolset 
 	require.NoError(t, err)
 	return updated
 }
+
+// An endpoint left on a deleted domain cannot serve, so it does not block a private mode on a platform ingress.
+func TestHostedNetworkAccessIgnoresDeadDomainEndpoints(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	ti.service.WithNetworkAccessEligibility(allowHostedNetworkAccess{})
+	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Dead Domain")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	domain, err := repo.New(ti.conn).CreateCustomDomain(ctx, repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID, Domain: "hosted-dead-" + uuid.NewString() + ".example.test", IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: *authCtx.ProjectID, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+		McpServerID: uuid.NullUUID{UUID: uuid.MustParse(created.ID), Valid: true}, Slug: "dead-domain-address",
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.New(ti.conn).DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID))
+	fixtures := testrepo.New(ti.conn)
+	require.NoError(t, fixtures.InsertNetworkIngressFixture(ctx, testrepo.InsertNetworkIngressFixtureParams{
+		ID: uuid.New(), OrganizationID: authCtx.ActiveOrganizationID,
+		DnsName: pgtype.Text{String: "private.example.ts.net", Valid: true},
+	}))
+	require.NoError(t, fixtures.SetNetworkIngressObservationFixture(ctx, testrepo.SetNetworkIngressObservationFixtureParams{
+		Status: "online", OrganizationID: authCtx.ActiveOrganizationID,
+	}))
+
+	mode := types.NetworkAccessMode("dual")
+	updated := setHostedMode(t, ctx, ti, created, mode)
+	require.Equal(t, &mode, updated.NetworkAccessMode)
+}
