@@ -189,7 +189,7 @@ func TestServeConsentMCP_BuiltinBackendListsItsTools(t *testing.T) {
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	endpointSlug, server, calls := createBuiltinServer(t, ctx, ti, issuer.ProjectID.UUID, issuer.ID)
 	stateID, csrfToken := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, server.ID, endpointSlug)
-	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, endpointSlug, "x/mcp")
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, endpointSlug, "mcp")
 	require.NoError(t, err)
 
 	w := serveConsentMCPRequest(t, ctx, ti, endpoint, stateID, csrfToken, uuid.NewString(), `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, nil)

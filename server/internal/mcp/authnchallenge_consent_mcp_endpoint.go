@@ -237,7 +237,13 @@ func (s *Service) serveConsentBuiltinMCP(w http.ResponseWriter, r *http.Request,
 		}
 		tools := make([]consentInventoryTool, 0, len(backend.Tools))
 		for _, tool := range backend.Tools {
-			tools = append(tools, consentInventoryTool{Name: tool.Name, Annotations: consentAnnotationsFromSDK(tool.Annotations)})
+			tools = append(tools, consentInventoryTool{
+				Name:           tool.Name,
+				Definition:     nil,
+				DefinitionHash: consentEvidenceHash(tool),
+				Annotations:    consentAnnotationsFromSDK(tool.Annotations),
+				Source:         "",
+			})
 		}
 		return tools, nil, nil
 	})

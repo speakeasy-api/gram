@@ -94,7 +94,6 @@ func TestEnsureCreatesTheServerOnceAndAddsItToTheDefaultPlugin(t *testing.T) {
 		PluginID:       plugin.ID,
 		ProjectID:      *authCtx.ProjectID,
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ToolsetID:      uuid.NullUUID{},
 		McpServerID:    uuid.NullUUID{UUID: first.Server.ID, Valid: true},
 	}
 	member, err := pluginsrepo.New(conn).GetPluginServerByBackend(t.Context(), memberParams)
