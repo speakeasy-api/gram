@@ -25,8 +25,8 @@ import {
   clientTypeHint,
   clientTypeLabel,
   serverLabel,
-  useAllAuthClients,
 } from "@/lib/auth-clients";
+import { useAllAuthClients } from "@/lib/useAllAuthClients";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { cn } from "@/lib/utils";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
