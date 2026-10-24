@@ -19,7 +19,7 @@ describe("KeyCredentialChoice", () => {
         serverId="s"
         serverName="GitHub"
         value={undefined}
-        onChange={vi.fn()}
+        onChange={() => undefined}
       />,
     );
     expect(container.innerHTML).toBe("");
@@ -36,7 +36,9 @@ describe("KeyCredentialChoice", () => {
         serverId="s"
         serverName="GitHub"
         value={undefined}
-        onChange={onChange}
+        onChange={(id) => {
+          onChange(id);
+        }}
       />,
     );
     fireEvent.click(
