@@ -371,8 +371,14 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 	if err != nil || !enforced {
 		return nil, err
 	}
+	// Permission is judged for the consenting person, as their requests will
+	// be.
+	subjectCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
+	if err != nil {
+		return nil, fmt.Errorf("stamp consent subject context: %w", err)
+	}
 	serverID := endpoint.McpServerID.UUID
-	choices, err := s.consentAuthChoices(ctx, endpoint.OrganizationID, *challengeState.Subject, []consentAuthServer{{id: serverID, projectID: endpoint.ProjectID}}, cards, map[uuid.UUID]uuid.UUID{serverID: picked})
+	choices, err := s.consentAuthChoices(withMandatoryAdmission(subjectCtx), endpoint.OrganizationID, *challengeState.Subject, []consentAuthServer{{id: serverID, projectID: endpoint.ProjectID}}, cards, map[uuid.UUID]uuid.UUID{serverID: picked})
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -189,4 +190,31 @@ func TestConsentPost_ChoosesAnAdministratorOfferedPersonalClient(t *testing.T) {
 	grant := approveConsent(t, ctx, fx)
 	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: authClientID}, grant.AuthClientPicks)
 	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: registration}, grant.UpstreamClientPicks)
+}
+
+// The consent page judges a credential's permission as the consenting
+// person, as their requests will be, both when it offers the choice and when
+// it approves it.
+func TestConsentPost_JudgesCredentialPermissionAsTheConsentingPerson(t *testing.T) {
+	t.Parallel()
+	ctx, fx := standaloneConsent(t, "judge-person", consentChainedUpstream, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
+		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
+	})
+	fx.ti.service.manual = true
+	callers := fx.ti.service.RecordAuthClientPermitCallers()
+	serverID := fx.endpoint.McpServerID.UUID
+	fixtures := authclientfixtures.New(fx.ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "static_credential", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: authClientID, OrganizationID: fx.orgID, Name: "X-Api-Key", Value: pgtype.Text{String: "key", Valid: true}}))
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
+	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+
+	grant := approveConsent(t, ctx, fx)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: authClientID}, grant.AuthClientPicks)
+	require.NotEmpty(t, callers())
+	for _, user := range callers() {
+		require.Equal(t, fx.subject.ID, user)
+	}
 }
