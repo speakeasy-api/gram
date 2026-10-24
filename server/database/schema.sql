@@ -4937,6 +4937,10 @@ COMMENT ON COLUMN user_session_clients.updated_at IS '@access: confidential';
 COMMENT ON COLUMN user_session_clients.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN user_session_clients.deleted IS '@access: confidential';
 
+-- FK target for children pinned to a client of one issuer.
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_clients_issuer_id_key
+ON user_session_clients (user_session_issuer_id, id);
+
 CREATE INDEX IF NOT EXISTS user_session_clients_organization_id_idx
 ON user_session_clients (organization_id);
 
@@ -10380,7 +10384,8 @@ CREATE TABLE IF NOT EXISTS issuance_selection_profiles (
   -- The user session issuer's project; NULL for an organization issuer.
   project_id uuid,
   user_session_issuer_id uuid NOT NULL,
-  -- Exactly one of a client, or a workload issuer and subject, is set.
+  -- Exactly one of a client, or a workload issuer and subject, is set;
+  -- validated in application code.
   user_session_client_id uuid,
   workload_issuer_id uuid,
   workload_subject TEXT CHECK (workload_subject IS NULL OR workload_subject <> ''),
@@ -10394,14 +10399,11 @@ CREATE TABLE IF NOT EXISTS issuance_selection_profiles (
 
   CONSTRAINT issuance_selection_profiles_pkey PRIMARY KEY (id),
   CONSTRAINT issuance_selection_profiles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT issuance_selection_profiles_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT issuance_selection_profiles_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT issuance_selection_profiles_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
-  CONSTRAINT issuance_selection_profiles_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE CASCADE,
-  CONSTRAINT issuance_selection_profiles_workload_issuer_id_fkey FOREIGN KEY (workload_issuer_id) REFERENCES workload_issuers (id) ON DELETE CASCADE,
-  CONSTRAINT issuance_selection_profiles_caller_check CHECK (
-    (user_session_client_id IS NOT NULL) <> (workload_issuer_id IS NOT NULL)
-    AND (workload_issuer_id IS NULL) = (workload_subject IS NULL)
-  )
+  -- Pins the client to the profile's issuer.
+  CONSTRAINT issuance_selection_profiles_user_session_client_fkey FOREIGN KEY (user_session_issuer_id, user_session_client_id) REFERENCES user_session_clients (user_session_issuer_id, id) ON DELETE CASCADE,
+  CONSTRAINT issuance_selection_profiles_workload_issuer_tenant_fkey FOREIGN KEY (organization_id, workload_issuer_id) REFERENCES workload_issuers (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN issuance_selection_profiles.id IS '@access: confidential';
