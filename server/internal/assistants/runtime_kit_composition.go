@@ -267,7 +267,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	}
 	tx, err := r.LifecycleTx.Begin(ctx)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("begin kit bootstrap savepoint: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	r.LifecycleTx = tx

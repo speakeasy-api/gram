@@ -51,9 +51,25 @@ func validateWakeRuntimeAuthority(ctx context.Context, tx pgx.Tx, params CreateW
 	if err != nil {
 		return fmt.Errorf("resolve wake managed workload: %w", err)
 	}
-	// Ordinary workloads keep ordinary authority. Historical managed rows are
-	// deliberately included by the shared lookup, so retirement cannot fall back.
+	// Reaping can clear runtime metadata after withdrawing its workload. Do not
+	// trust the pre-lock authentication snapshot when no metadata remains: fence
+	// ordinary admission/assignment against withdrawal before granting a wake.
 	if len(rows) == 0 {
+		if _, err := workloadrepo.New(tx).LockWorkloadIssuerForWrite(ctx, workloadrepo.LockWorkloadIssuerForWriteParams{OrganizationID: params.OrganizationID, ID: issuer}); err != nil {
+			return wakeAuthorityReadError("lock wake workload issuer", err)
+		}
+		admitted, err := workloadidentity.IsAdmitted(ctx, tx, workloadidentity.AdmissionParams{OrganizationID: params.OrganizationID, ProjectID: uuid.NullUUID{UUID: params.ProjectID, Valid: true}, WorkloadIssuerID: issuer, Subject: subject})
+		if err != nil {
+			return fmt.Errorf("read wake workload admission: %w", err)
+		}
+		agent, assigned, err := workloadidentity.ResolveAssignedAgent(ctx, tx, workloadidentity.AssignmentParams{OrganizationID: params.OrganizationID, WorkloadIssuerID: issuer, Subject: subject})
+		if err != nil {
+			return fmt.Errorf("read wake workload assignment: %w", err)
+		}
+		expected, hasAgent := contextvalues.EffectiveAgent(ctx)
+		if !admitted || !assigned || !hasAgent || expected != urn.NewPrincipal(urn.PrincipalTypeAgent, agent.String()) {
+			return fmt.Errorf("%w: wake workload authority changed", ErrBadRequest)
+		}
 		return nil
 	}
 	if len(rows) != 1 {
@@ -73,7 +89,7 @@ func validateWakeRuntimeAuthority(ctx context.Context, tx pgx.Tx, params CreateW
 	if err != nil {
 		return wakeAuthorityReadError("lock wake root", err)
 	}
-	if root.OrganizationID != params.OrganizationID || root.Status != "active" || root.TargetKind != TargetKindAssistant || root.TargetRef != params.AssistantID.String() || root.DefinitionSlug == "wake" {
+	if root.OrganizationID != params.OrganizationID || root.Status != "active" || root.TargetKind != TargetKindAssistant || root.TargetRef != params.AssistantID.String() || root.DefinitionSlug == DefinitionSlugWake {
 		return fmt.Errorf("%w: wake root is no longer active", ErrBadRequest)
 	}
 	binding, err := q.GetAssistantTriggerBinding(ctx, identityrepo.GetAssistantTriggerBindingParams{ProjectID: params.ProjectID, AssistantID: params.AssistantID, TriggerID: identity.TriggerID})
@@ -152,8 +168,11 @@ func wakeRuntimeIdentity(ctx context.Context, row tokenrepo.ListKitWorkloadBindi
 		} `json:"workload"`
 	}
 	var zero wakeIdentitySnapshot
-	if !row.Active || json.Unmarshal(row.BackendMetadataJson, &metadata) != nil {
+	if !row.Active {
 		return zero, fmt.Errorf("%w: wake runtime is no longer active", ErrBadRequest)
+	}
+	if err := json.Unmarshal(row.BackendMetadataJson, &metadata); err != nil {
+		return zero, fmt.Errorf("decode wake runtime metadata: %w", err)
 	}
 	identity := metadata.Workload.Identity
 	agent, hasAgent := contextvalues.EffectiveAgent(ctx)

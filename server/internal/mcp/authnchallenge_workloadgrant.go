@@ -217,6 +217,7 @@ type presentedWorkload struct {
 	issuerURL              string
 	subject                string
 	issuerID               uuid.UUID
+	jwksURI                string
 	assertionPolicyChecked bool
 	allowAssertionReuse    bool
 }
@@ -237,7 +238,7 @@ func admitWorkloadAssertion(
 	raw string,
 ) (presentedWorkload, error) {
 	presented := presentedWorkload{
-		issuerURL: "", subject: "", issuerID: uuid.Nil,
+		issuerURL: "", subject: "", issuerID: uuid.Nil, jwksURI: "",
 		assertionPolicyChecked: false, allowAssertionReuse: false,
 	}
 
@@ -275,6 +276,7 @@ func admitWorkloadAssertion(
 		return presented, workloadGrantStageUnavailable("issuer_lookup_unavailable", err)
 	}
 	presented.issuerID = issuer.ID
+	presented.jwksURI = issuer.JwksUri
 	presented.assertionPolicyChecked = true
 	presented.allowAssertionReuse = issuer.AllowAssertionReuse.Valid && issuer.AllowAssertionReuse.Bool
 
@@ -631,7 +633,7 @@ func lockWorkloadAssertionPolicy(ctx context.Context, dbtx pgx.Tx, organizationI
 		if err != nil {
 			return workloadGrantStageUnavailable("issuer_lookup_unavailable", err)
 		}
-		if issuer.ID != presented.issuerID || (issuer.AllowAssertionReuse.Valid && issuer.AllowAssertionReuse.Bool) != presented.allowAssertionReuse {
+		if !workloadAssertionPolicyMatches(issuer, presented) {
 			return refuseWorkloadGrant("issuer_policy_changed", errors.New("workload issuer policy changed during verification"))
 		}
 		admitted, err := workloadidentity.IsAdmitted(ctx, dbtx, workloadidentity.AdmissionParams{
@@ -705,8 +707,8 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	}
 	// All database work after the lock uses dbtx, never another pool connection.
 	authorizationCtx, err = s.admitWorkloadGrantInTx(authorizationCtx, dbtx, organizationID, subject, grant.credential)
-	if err == nil && grant.endpoint != nil {
-		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
+	if err == nil {
+		err = s.recheckWorkloadGrantAuthorization(authorizationCtx, grant)
 	}
 	if err != nil {
 		if errors.Is(err, errCredentialRejected) || isCredentialDenial(err) {
@@ -772,4 +774,37 @@ func (s *Service) writeWorkloadGrantRefusal(ctx context.Context, w http.Response
 // than one.
 func retryAfterSeconds(d time.Duration) string {
 	return strconv.Itoa(max(1, int(math.Ceil(d.Seconds()))))
+}
+
+// recheckWorkloadGrantAuthorization evaluates the freshly loaded authority without
+// writing challenge logs through the pool while the issuance transaction holds a
+// connection and issuer lock. The preflight checks record the normal challenge.
+func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant workloadGrantIssuance) error {
+	var checks []authz.Check
+	if grant.endpoint != nil {
+		target, ok := agentAuthorizationTarget(grant.endpoint)
+		if !ok {
+			return errCredentialRejected
+		}
+		checks = append(checks, target.connectCheck())
+	}
+	if grant.session.Audience == InferenceResource {
+		checks = append(checks, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
+	}
+	if len(checks) == 0 {
+		return nil
+	}
+	allowed, err := s.authz.Evaluate(ctx, checks...)
+	if err != nil {
+		return fmt.Errorf("recheck workload grant authority: %w", err)
+	}
+	if !allowed {
+		return errCredentialRejected
+	}
+	return nil
+}
+
+func workloadAssertionPolicyMatches(issuer workloadidentity_repo.WorkloadIssuer, presented presentedWorkload) bool {
+	return issuer.ID == presented.issuerID && issuer.JwksUri == presented.jwksURI &&
+		(issuer.AllowAssertionReuse.Valid && issuer.AllowAssertionReuse.Bool) == presented.allowAssertionReuse
 }

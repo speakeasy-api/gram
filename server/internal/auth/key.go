@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
@@ -261,20 +260,18 @@ func APIKeyPrefix(env string) string {
 }
 
 type ByKey struct {
-	retiredKitKeys *tokenrepo.Queries
-	keyDB          *repo.Queries
-	orgRepo        *orgRepo.Queries
-	logger         *slog.Logger
-	billingRepo    billing.Repository
+	keyDB       *repo.Queries
+	orgRepo     *orgRepo.Queries
+	logger      *slog.Logger
+	billingRepo billing.Repository
 }
 
 func NewKeyAuth(db *pgxpool.Pool, logger *slog.Logger, billingRepo billing.Repository) *ByKey {
 	return &ByKey{
-		keyDB:          repo.New(db),
-		retiredKitKeys: tokenrepo.New(db),
-		orgRepo:        orgRepo.New(db),
-		logger:         logger,
-		billingRepo:    billingRepo,
+		keyDB:       repo.New(db),
+		orgRepo:     orgRepo.New(db),
+		logger:      logger,
+		billingRepo: billingRepo,
 	}
 }
 
@@ -304,14 +301,8 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 	// Managed Kit credentials were replaced by workload identity. Never let a
 	// historical key re-enter through an ordinary API-key transport, regardless
 	// of its runtime state or the binding's revocation timestamp.
-	if apiKey.ProjectID.Valid {
-		retired, err := k.retiredKitKeys.IsSupersededKitAPIKey(ctx, tokenrepo.IsSupersededKitAPIKeyParams{ApiKeyID: apiKey.ID, ProjectID: apiKey.ProjectID.UUID})
-		if err != nil {
-			return ctx, oops.E(oops.CodeUnexpected, err, "check superseded runtime credential")
-		}
-		if retired {
-			return ctx, oops.C(oops.CodeUnauthorized)
-		}
+	if apiKey.SupersededKitCredential {
+		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
 	actor, credential, principalBacked, err := classifyPrincipalAPIKey(apiKey, time.Now())

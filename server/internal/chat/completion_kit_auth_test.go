@@ -125,7 +125,7 @@ func TestCompletionKitWorkloadAdmission(t *testing.T) {
 	require.False(t, bound, "the request body must select a persisted ACP session")
 	effectiveAgent = uuid.New()
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(), true)
-	require.Error(t, err, "a different admitted agent cannot acquire this runtime")
+	requireKitAuthError(t, err, oops.CodeUnauthorized)
 	effectiveAgent = resolved.Identity.AgentID
 	for _, mismatch := range []string{"issuer", "subject"} {
 		savedIssuer, savedSubject := issuerID, subject
@@ -155,29 +155,36 @@ func TestCompletionKitWorkloadAdmission(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, assistantsrepo.New(ti.conn).UpdateAssistantRuntimeMetadata(ctx, assistantsrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: ti.projectID, RuntimeID: runtimeID, BackendMetadataJson: invalid}))
 		_, _, _, err = ti.service.TestingAuthorizeCompletion(request(), true)
-		require.Error(t, err, field)
+		requireKitAuthError(t, err, oops.CodeUnauthorized)
 	}
 	require.NoError(t, assistantsrepo.New(ti.conn).UpdateAssistantRuntimeMetadata(ctx, assistantsrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: ti.projectID, RuntimeID: runtimeID, BackendMetadataJson: metadata}))
 	_, err = tokens.BindKitSession(authorized, uuid.New())
-	require.Error(t, err)
+	requireKitAuthError(t, err, oops.CodeForbidden)
 	for _, header := range []string{"Gram-Chat-ID", "Gram-Assistant-ID"} {
 		r := request()
 		r.Header.Set(header, uuid.NewString())
 		_, _, _, err = ti.service.TestingAuthorizeCompletion(r, true)
-		require.Error(t, err, "managed workloads cannot claim header attribution")
+		requireKitAuthError(t, err, oops.CodeForbidden)
 	}
 	require.NoError(t, chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3, EndedAt: now}))
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(), true)
-	require.Error(t, err, "ended runtime fails closed")
+	requireKitAuthError(t, err, oops.CodeUnauthorized)
 	require.NoError(t, chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3}))
 	_, err = agentrepo.New(ti.conn).SuspendAgent(ctx, agentrepo.SuspendAgentParams{OrganizationID: ti.orgID, ID: resolved.Identity.AgentID})
 	require.NoError(t, err)
 	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(), true)
-	require.Error(t, err, "suspended identity fails closed")
+	requireKitAuthError(t, err, oops.CodeUnauthorized)
 }
 
 type kitWorkloadAuthorizer func(context.Context, string) (context.Context, bool, error)
 
 func (f kitWorkloadAuthorizer) AuthorizeWorkloadInference(ctx context.Context, token string) (context.Context, bool, error) {
 	return f(ctx, token)
+}
+
+func requireKitAuthError(t *testing.T, err error, code oops.Code) {
+	t.Helper()
+	var denied *oops.ShareableError
+	require.ErrorAs(t, err, &denied)
+	require.Equal(t, code, denied.Code)
 }

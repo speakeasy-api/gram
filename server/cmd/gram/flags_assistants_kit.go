@@ -55,8 +55,10 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 	}
 	var provision assistants.KitGKEProvisionInput
 	if base.Provider == assistants.RuntimeProviderGKE {
-		if c.String("assistant-kit-root-trigger-id") != "" {
-			return fmt.Errorf("assistant-kit-root-trigger-id is local-only")
+		for _, name := range []string{"assistant-kit-root-trigger-id", "assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
+			if c.String(name) != "" {
+				return fmt.Errorf("%s is local-only", name)
+			}
 		}
 		provision, err = kitGKEProvisionFromCLI(c)
 		if err != nil {

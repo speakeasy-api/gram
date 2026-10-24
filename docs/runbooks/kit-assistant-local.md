@@ -89,7 +89,9 @@ files or command output.
 
    Supply a short-lived assertion through the configured read-only file. The
    external issuer must rotate it before renewal. Use a dedicated host directory
-   containing no unrelated files; its directory is mounted read-only so atomic
+   containing no unrelated files, with owner-only directory permissions (`0700`)
+   and assertion-file permissions (`0600`). The host-side issuer must retain these
+   permissions during rotation. Its directory is mounted read-only so atomic
    token replacement remains visible. Each cold startup requires a new external
    subject: previously admitted subjects cannot authorize a new generation.
    Local development uses the

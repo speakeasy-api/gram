@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -84,4 +85,51 @@ func TestKitLocalBootstrapArchiveNeverCopiesAssertionsOrProviderCredentials(t *t
 		require.NotContains(t, header.Name, "speakeasy.json")
 	}
 	require.ElementsMatch(t, []string{".kit/AGENTS.md", ".kit/config.toml", ".kit/credentials/mcp.json", ".kit/credentials/gateway-token"}, files)
+}
+
+func TestKitLocalProjectionRequiresDedicatedDirectory(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	require.NoError(t, os.Chmod(directory, 0700))
+	assertion := filepath.Join(directory, "assertion")
+	require.NoError(t, os.WriteFile(assertion, []byte("test-assertion"), 0600))
+	require.NoError(t, validateKitLocalProjectionDirectory(assertion))
+	sibling := filepath.Join(directory, "unrelated-host-file")
+	require.NoError(t, os.WriteFile(sibling, []byte("not-for-runtime"), 0600))
+	require.ErrorContains(t, validateKitLocalProjectionDirectory(assertion), "dedicated directory")
+	require.NoError(t, os.Remove(sibling))
+	// Atomic assertion replacement remains compatible with the dedicated mount.
+	next := filepath.Join(directory, "next")
+	require.NoError(t, os.WriteFile(next, []byte("rotated-test-assertion"), 0600))
+	require.NoError(t, os.Rename(next, assertion))
+	require.NoError(t, validateKitLocalProjectionDirectory(assertion))
+	require.NoError(t, os.Remove(assertion))
+	require.NoError(t, os.Symlink(filepath.Join(t.TempDir(), "other"), assertion))
+	require.ErrorContains(t, validateKitLocalProjectionDirectory(assertion), "regular file")
+}
+
+func TestKitLocalProjectionPreservesFilesystemErrors(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	require.ErrorIs(t, validateKitLocalProjectionDirectory(filepath.Join(directory, "missing", "assertion")), os.ErrNotExist)
+	file := filepath.Join(directory, "not-a-directory")
+	require.NoError(t, os.WriteFile(file, []byte("test"), 0600))
+	require.ErrorContains(t, validateKitLocalProjectionDirectory(filepath.Join(file, "assertion")), "must be a directory")
+	linked := filepath.Join(directory, "linked-directory")
+	require.NoError(t, os.Symlink(t.TempDir(), linked))
+	require.ErrorContains(t, validateKitLocalProjectionDirectory(filepath.Join(linked, "assertion")), "not a file or symlink")
+}
+
+func TestKitLocalProjectionRequiresPrivatePermissions(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	assertion := filepath.Join(directory, "assertion")
+	require.NoError(t, os.WriteFile(assertion, []byte("test-assertion"), 0600))
+	require.NoError(t, os.Chmod(directory, 0750))
+	require.ErrorContains(t, validateKitLocalProjectionDirectory(assertion), "0700")
+	require.NoError(t, os.Chmod(directory, 0700))
+	require.NoError(t, os.Chmod(assertion, 0640))
+	require.ErrorContains(t, validateKitLocalProjectionDirectory(assertion), "0600")
+	require.NoError(t, os.Chmod(assertion, 0600))
+	require.NoError(t, validateKitLocalProjectionDirectory(assertion))
 }

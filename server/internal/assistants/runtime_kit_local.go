@@ -294,7 +294,18 @@ func (k *KitLocalRuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeR
 			return result, err
 		}
 		if info.ImageID != imageID {
-			return result, fmt.Errorf("kit local image changed; retire authority and use a new runtime generation")
+			return result, errors.Join(fmt.Errorf("kit local image changed; retire authority and use a new runtime generation"), k.config.Fence(ctx, r), k.engine.Stop(ctx, info.ID))
+		}
+		if info.Running {
+			var metadata kitLocalRuntimeMetadata
+			if !kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
+				if err := json.Unmarshal(r.BackendMetadataJSON, &metadata); err != nil {
+					return result, fmt.Errorf("decode running kit authority: %w", err)
+				}
+			}
+			if metadata.Workload == nil {
+				return result, errors.Join(fmt.Errorf("running kit local container has no recorded workload authority"), k.config.Fence(ctx, r), k.engine.Stop(ctx, info.ID))
+			}
 		}
 	}
 	if created || !info.Running {

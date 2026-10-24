@@ -32,6 +32,10 @@ func TestKitCompositionRejectsInvalidConfig(t *testing.T) {
 		func(c *KitLocalCompositionConfig) { c.WorkloadJWKSURL = "" },
 		func(c *KitLocalCompositionConfig) { c.WorkloadJWKSURL = "http://external.example/keys" },
 		func(c *KitLocalCompositionConfig) { c.WorkloadIssuerURL = "" },
+		func(c *KitLocalCompositionConfig) { c.WorkloadSubject = "" },
+		func(c *KitLocalCompositionConfig) { c.WorkloadAssertionFile = "" },
+		func(c *KitLocalCompositionConfig) { c.WorkloadIssuerBaseURL = "" },
+		func(c *KitLocalCompositionConfig) { c.WorkloadIssuerBaseURL = "http://issuer.example" },
 		func(c *KitLocalCompositionConfig) { c.MCPUserSessionIssuerID = uuid.Nil },
 		func(c *KitLocalCompositionConfig) { c.MCPResource, _ = url.Parse("http://mcp.example/mcp/resource") },
 		func(c *KitLocalCompositionConfig) {

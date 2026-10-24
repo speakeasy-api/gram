@@ -55,7 +55,7 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		{"invalid network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = []string{"10.0.0.0/16", "garbage"} }},
 		{"missing network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = nil }},
 		{"missing issuer", func(c *KitGKECompositionConfig) { c.MCPUserSessionIssuerID = uuid.Nil }},
-		{"missing provisioner", func(c *KitGKECompositionConfig) { c.WorkloadIssuerURL = "" }},
+		{"missing workload issuer", func(c *KitGKECompositionConfig) { c.WorkloadIssuerURL = "" }},
 		{"missing transcript", func(c *KitGKECompositionConfig) { c.TurnStream = nil }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -92,6 +92,11 @@ func TestKitGKEFencePreservesCanonicalSession(t *testing.T) {
 		ProjectID: key.ProjectID, RuntimeID: key.RuntimeID, State: runtimeStateStopped,
 		StartingState: runtimeStateStarting, ActiveState: runtimeStateActive, ExpiringState: runtimeStateExpiring,
 	}))
+	// Retirement must not bypass validation of supplied workload authority.
+	r.BackendMetadataJSON = []byte(`{"workload":{"subject":"retired-binding"}}`)
+	require.ErrorIs(t, core.fenceKitRuntimeAlreadyLocked(t.Context(), r), ErrKitRuntimeBinding)
+	// This fixture has no workload binding; use its persisted metadata instead.
+	r.BackendMetadataJSON = nil
 	require.NoError(t, core.fenceKitRuntimeAlreadyLocked(t.Context(), r), "permanent cleanup must not resurrect retired gateway authority")
 	_, err = core.LoadKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID)
 	require.Error(t, err)
