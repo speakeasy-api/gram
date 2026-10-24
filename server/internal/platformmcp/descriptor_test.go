@@ -701,3 +701,11 @@ func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, schema.Properties["mode"].Description, "presets, open, or disabled")
 }
+
+func TestPlatformOverviewKeepsAssertionReuseInManagementAPI(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, platformOverview, "Workload issuer trust and assertion reuse settings are managed through the workload identities management API, not Platform MCP tools")
+	require.Contains(t, platformOverview, "Reuse of assertions with jti or uti identifiers defaults to disabled")
+	require.Contains(t, platformOverview, "authorized workload administrator must explicitly opt in")
+	require.Contains(t, platformOverview, "Tokens without replay identifiers retain existing exact-token compatibility")
+}

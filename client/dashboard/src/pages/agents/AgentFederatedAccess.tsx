@@ -1,3 +1,4 @@
+import { WorkloadIssuerPolicy } from "./WorkloadIssuerPolicy";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -92,17 +93,26 @@ export function AgentFederatedAccess({
                   : undefined
               }
               trailing={
-                <RequireScope scope="workload:write" level="component">
-                  <Button
-                    variant="destructive-secondary"
-                    size="sm"
-                    disabled={withdraw.isPending}
-                    aria-label={`Remove ${admission.issuerName || admission.issuer} access`}
-                    onClick={() => setRemoving(admission)}
-                  >
-                    <Button.Text>Remove</Button.Text>
-                  </Button>
-                </RequireScope>
+                <div className="flex items-center gap-2">
+                  {identities.issuers
+                    .filter(
+                      (issuer) => issuer.id === admission.workloadIssuerId,
+                    )
+                    .map((issuer) => (
+                      <WorkloadIssuerPolicy key={issuer.id} issuer={issuer} />
+                    ))}
+                  <RequireScope scope="workload:write" level="component">
+                    <Button
+                      variant="destructive-secondary"
+                      size="sm"
+                      disabled={withdraw.isPending}
+                      aria-label={`Remove ${admission.issuerName || admission.issuer} access`}
+                      onClick={() => setRemoving(admission)}
+                    >
+                      <Button.Text>Remove</Button.Text>
+                    </Button>
+                  </RequireScope>
+                </div>
               }
             />
           ))

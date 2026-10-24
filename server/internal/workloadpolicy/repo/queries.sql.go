@@ -259,8 +259,8 @@ func (q *Queries) CreateWorkloadDeviceKey(ctx context.Context, arg CreateWorkloa
 }
 
 const createWorkloadIssuer = `-- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
@@ -273,6 +273,7 @@ type CreateWorkloadIssuerParams struct {
 	Issuer                 string
 	JwksUri                string
 	AllowWildcardAdmission bool
+	AllowAssertionReuse    pgtype.Bool
 }
 
 func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIssuerParams) (WorkloadIssuer, error) {
@@ -285,6 +286,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 		arg.Issuer,
 		arg.JwksUri,
 		arg.AllowWildcardAdmission,
+		arg.AllowAssertionReuse,
 	)
 	var i WorkloadIssuer
 	err := row.Scan(
@@ -1212,22 +1214,24 @@ SET name = $1,
     description = $2,
     tags = $3,
     jwks_uri = $4,
+    allow_assertion_reuse = $5,
     updated_at = clock_timestamp()
-WHERE organization_id = $5
-  AND (project_id IS NULL OR project_id = $6)
-  AND id = $7
+WHERE organization_id = $6
+  AND (project_id IS NULL OR project_id = $7)
+  AND id = $8
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateWorkloadIssuerParams struct {
-	Name           string
-	Description    pgtype.Text
-	Tags           []string
-	JwksUri        string
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	ID             uuid.UUID
+	Name                string
+	Description         pgtype.Text
+	Tags                []string
+	JwksUri             string
+	AllowAssertionReuse pgtype.Bool
+	OrganizationID      string
+	ProjectID           uuid.NullUUID
+	ID                  uuid.UUID
 }
 
 // Writes every editable field, so the caller merges an edit into the row it
@@ -1240,6 +1244,7 @@ func (q *Queries) UpdateWorkloadIssuer(ctx context.Context, arg UpdateWorkloadIs
 		arg.Description,
 		arg.Tags,
 		arg.JwksUri,
+		arg.AllowAssertionReuse,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ID,
