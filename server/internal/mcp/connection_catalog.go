@@ -128,13 +128,20 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 	if err != nil {
 		return nil, err
 	}
+	// Each member's credential is judged for the consenting person, as their
+	// requests will be.
+	subjectCtx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, state.ClientID)
+	if err != nil {
+		return nil, fmt.Errorf("stamp consent subject context: %w", err)
+	}
+	subjectCtx = withMandatoryAdmission(subjectCtx)
 	members := make(map[string]connectionCatalogMember, len(inventory.MemberBindings))
 	for slug, member := range inventory.MemberBindings {
 		if member.ServerID == uuid.Nil || hashes[member.ServerID] != member.BackendHash {
 			return nil, errConsentConfigurationChanged
 		}
 		if member.Auth != nil {
-			if err := s.validateCatalogMemberAuth(ctx, endpoint, *state.Subject, member, upstreamPicks, typedChoices); err != nil {
+			if err := s.validateCatalogMemberAuth(subjectCtx, endpoint, *state.Subject, member, upstreamPicks, typedChoices); err != nil {
 				return nil, err
 			}
 		}

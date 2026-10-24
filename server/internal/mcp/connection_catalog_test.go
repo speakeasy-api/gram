@@ -194,8 +194,8 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				// without the association a backfilled one mirrors.
 				_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 				require.NoError(t, err)
-				ti.service.SetAuthClientPermitted(true)
 			}
+			callers := ti.service.RecordAuthClientPermitCallers()
 			ti.service.manual = true
 			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, tc.mode, metamcp.DiscoveryModeDirect, nil)
 			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
@@ -208,6 +208,9 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 			require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, selected[0].AuthClientID)
 			require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), "executed live")
 			require.EqualValues(t, 1, upstream.calls.Load())
+			for _, user := range callers() {
+				require.Equal(t, mockidp.MockUserID, user, "credential permission is judged for the consenting person")
+			}
 		})
 	}
 }
@@ -254,7 +257,9 @@ func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, 
 		form.Set("tool_filtering", "on")
 		form["tools"] = tools
 	}
-	request := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
+	// The approval arrives from the person's browser, which carries no
+	// Speakeasy request authentication; the challenge names the person.
+	request := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(t.Context())
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	require.NoError(t, ti.service.ServeConsent(response, request, endpoint))

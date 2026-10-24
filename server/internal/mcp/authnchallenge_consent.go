@@ -140,6 +140,9 @@ type consentTemplateData struct {
 	ConsentEnabled bool
 	// ApprovalError blocks approval while keeping Cancel available.
 	ApprovalError *consentApprovalError
+	// SelfApprovalError explains why the person cannot approve for
+	// themselves on a page that can still approve for an agent.
+	SelfApprovalError *consentApprovalError
 	// FirstParty swaps the approve/deny client-grant footer for a terminal
 	// completion message: a first-party challenge has no MCP client to grant
 	// to, so linking the cards is the whole job.
@@ -805,14 +808,27 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		showToolsIsland = !lockedDown
 	}
 	// With an agent to approve for, the submission judges the chosen
-	// subject's credential, so the person's own status does not block it.
-	if approvalError == nil && !agentSelectionEnabled && upstreamAuth != nil && (upstreamAuth.Status == consentAuthNoAccess || upstreamAuth.Status == consentAuthSetupIncomplete) {
-		approvalError = &consentApprovalError{Message: upstreamAuth.Problem(), ActionURL: "", ActionLabel: ""}
+	// subject's credential, so the person's own status only blocks approving
+	// for themselves.
+	var selfApprovalError *consentApprovalError
+	if approvalError == nil && upstreamAuth != nil && (upstreamAuth.Status == consentAuthNoAccess || upstreamAuth.Status == consentAuthSetupIncomplete) {
+		problem := &consentApprovalError{Message: upstreamAuth.Problem(), ActionURL: "", ActionLabel: ""}
 		if upstreamAuth.Status == consentAuthNoAccess {
-			approvalError.ActionURL = s.requestAccessURL(ctx, endpoint.McpServerID.UUID.String(), endpoint.Slug)
-			if approvalError.ActionURL != "" {
-				approvalError.ActionLabel = "Request access"
+			// The link names the person's organization, which their own
+			// context carries.
+			accessCtx := ctx
+			if stamped, serr := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID); serr == nil {
+				accessCtx = stamped
 			}
+			problem.ActionURL = s.requestAccessURL(accessCtx, endpoint.McpServerID.UUID.String(), endpoint.Slug)
+			if problem.ActionURL != "" {
+				problem.ActionLabel = "Request access"
+			}
+		}
+		if agentSelectionEnabled {
+			selfApprovalError = problem
+		} else {
+			approvalError = problem
 		}
 	}
 	if approvalError != nil {
@@ -847,6 +863,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		RemoteSessionCards:      cards,
 		ConsentEnabled:          consentEnabled,
 		ApprovalError:           approvalError,
+		SelfApprovalError:       selfApprovalError,
 		FirstParty:              challengeState.FirstParty,
 		ClientIDOrigin:          clientIDOrigin,
 		LoopbackRedirectWarning: loopbackRedirectWarning,
