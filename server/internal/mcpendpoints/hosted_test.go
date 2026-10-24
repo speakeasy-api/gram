@@ -562,7 +562,7 @@ func TestUpdateMcpEndpointHostedLeavesIndependentServerSlug(t *testing.T) {
 	require.Equal(t, "own-server-slug", after.Slug.String, "the server slug does not follow an endpoint it was not named after")
 }
 
-// A new address whose slug another server already uses as its name still saves; the server keeps its own slug.
+// A new address whose slug another server already uses as its name is refused; the endpoint and server keep their slugs.
 func TestUpdateMcpEndpointHostedRefusesSlugTakenByAnotherServer(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedAddressFixture(t, "pro")
@@ -583,5 +583,5 @@ func TestUpdateMcpEndpointHostedRefusesSlugTakenByAnotherServer(t *testing.T) {
 	after, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	require.Equal(t, before.Slug, after.Slug)
-	require.NotEqual(t, taken, f.requireProjected(t, ctx).Slug, "the address keeps its slug")
+	require.Equal(t, f.endpoint.Slug, f.requireProjected(t, ctx).Slug, "the address keeps its slug")
 }
