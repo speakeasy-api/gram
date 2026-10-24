@@ -457,6 +457,36 @@ func TestDispatchDeadlineIsNormalPartialOutcome(t *testing.T) {
 	require.False(t, outcome.Complete)
 	require.True(t, outcome.Deadline)
 	require.Empty(t, outcome.ByLane)
+	// The lane spent its own wait budget, so the silence is the consumer's.
+	require.Empty(t, outcome.CallerBudget)
+	require.Zero(t, te.inbox.Snapshot().Waiters)
+}
+
+func TestDispatchAttributesCallerDeadlineToCallerBudget(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-caller-budget")
+	publisher := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
+	// The lane has ten seconds; the caller only grants a fraction of it, as an
+	// inference hook does once its verdict budget is nearly spent.
+	dispatcher := testDispatcher(te, publisher, 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 25*time.Millisecond)
+	defer cancel()
+
+	started := time.Now()
+	outcome, err := dispatcher.Dispatch(ctx, DispatchRequest{
+		OrganizationID: "org-caller-budget",
+		ProjectID:      "project-caller-budget",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane},
+		Origins:        testOrigins(gitleaksLane),
+	})
+	require.NoError(t, err)
+	require.Less(t, time.Since(started), 5*time.Second, "the caller deadline must bound the wait")
+	require.False(t, outcome.Complete)
+	require.True(t, outcome.Deadline)
+	require.True(t, outcome.CallerBudget[gitleaksLane])
+	require.ErrorIs(t, outcome.Failed[gitleaksLane], context.DeadlineExceeded)
 	require.Zero(t, te.inbox.Snapshot().Waiters)
 }
 

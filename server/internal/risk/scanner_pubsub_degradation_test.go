@@ -23,12 +23,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-const pubsubDegradedLogMessage = "pub/sub enforcement lane degraded"
+const (
+	pubsubDegradedLogMessage     = "pub/sub enforcement lane degraded"
+	pubsubCallerBudgetLogMessage = "pub/sub enforcement lane cut short by caller budget"
+)
 
 func TestScanner_PubsubCallerCancellationDoesNotDegrade(t *testing.T) {
 	t.Parallel()
 
-	logs, metrics := runPubsubLaneFailure(t, fmt.Errorf("request typed enforcement lane: %w", context.Canceled))
+	logs, metrics := runPubsubLaneFailure(t, fmt.Errorf("request typed enforcement lane: %w", context.Canceled), false)
 
 	require.NotContains(t, logs, pubsubDegradedLogMessage)
 	require.Empty(t, pubsubDegradedCounts(t, metrics))
@@ -37,13 +40,27 @@ func TestScanner_PubsubCallerCancellationDoesNotDegrade(t *testing.T) {
 func TestScanner_PubsubDeadlineDoesDegrade(t *testing.T) {
 	t.Parallel()
 
-	logs, metrics := runPubsubLaneFailure(t, fmt.Errorf("request typed enforcement lane: %w", context.DeadlineExceeded))
+	logs, metrics := runPubsubLaneFailure(t, fmt.Errorf("request typed enforcement lane: %w", context.DeadlineExceeded), false)
 
 	require.Contains(t, logs, pubsubDegradedLogMessage)
 	require.Equal(t, map[string]int64{"deadline": 1}, pubsubDegradedCounts(t, metrics))
 }
 
-func runPubsubLaneFailure(t *testing.T, laneErr error) (string, metricdata.ResourceMetrics) {
+// A lane the caller's own deadline cut short never had its full wait, so it
+// counts under its own reason and stays off the error level the consumer
+// failures use.
+func TestScanner_PubsubCallerBudgetDegradesUnderItsOwnReason(t *testing.T) {
+	t.Parallel()
+
+	logs, metrics := runPubsubLaneFailure(t, fmt.Errorf("request typed enforcement lane: %w", context.DeadlineExceeded), true)
+
+	require.Contains(t, logs, pubsubCallerBudgetLogMessage)
+	require.NotContains(t, logs, pubsubDegradedLogMessage)
+	require.NotContains(t, logs, `"level":"ERROR"`)
+	require.Equal(t, map[string]int64{"budget_exhausted": 1}, pubsubDegradedCounts(t, metrics))
+}
+
+func runPubsubLaneFailure(t *testing.T, laneErr error, callerBudget bool) (string, metricdata.ResourceMetrics) {
 	t.Helper()
 
 	ctx, ti := newTestRiskService(t)
@@ -59,12 +76,17 @@ func runPubsubLaneFailure(t *testing.T, laneErr error) (string, metricdata.Resou
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	dispatcher := &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
 		lane := request.Lanes[0]
+		budget := map[enforcereply.Lane]bool{}
+		if callerBudget {
+			budget[lane] = true
+		}
 		return enforcereply.Outcome{
-			ByLane:    map[enforcereply.Lane]*riskv1.EnforcementReply{},
-			Failed:    map[enforcereply.Lane]error{lane: laneErr},
-			Complete:  false,
-			Deadline:  false,
-			Truncated: false,
+			ByLane:       map[enforcereply.Lane]*riskv1.EnforcementReply{},
+			Failed:       map[enforcereply.Lane]error{lane: laneErr},
+			Complete:     false,
+			Deadline:     false,
+			CallerBudget: budget,
+			Truncated:    false,
 		}, nil
 	}}
 	scanner, err := risk.NewScannerWithEnforcementDispatcher(
