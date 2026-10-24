@@ -6032,8 +6032,10 @@ const updateMCPServersToUserSessionIssuer = `-- name: UpdateMCPServersToUserSess
 UPDATE mcp_servers AS server
 SET user_session_issuer_id = $1,
     updated_at = clock_timestamp()
-FROM projects AS project
+FROM projects AS project, mcp_servers AS previous
 WHERE server.user_session_issuer_id = $2
+  AND previous.id = server.id
+  AND previous.project_id = server.project_id
   AND project.id = server.project_id
   AND project.organization_id = $3::text
   AND 2 = (
@@ -6047,7 +6049,7 @@ WHERE server.user_session_issuer_id = $2
         OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = $3::text AND issuer_project.deleted IS FALSE)
       )
   )
-RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id AND server.deleted IS FALSE)::boolean AS canonical
+RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id AND server.deleted IS FALSE)::boolean AS canonical, previous.updated_at AS previous_updated_at
 `
 
 type UpdateMCPServersToUserSessionIssuerParams struct {
@@ -6057,12 +6059,13 @@ type UpdateMCPServersToUserSessionIssuerParams struct {
 }
 
 type UpdateMCPServersToUserSessionIssuerRow struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	Canonical bool
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	Canonical         bool
+	PreviousUpdatedAt pgtype.Timestamptz
 }
 
-// Returns each moved server so live hosted ones can be audited as their own update.
+// Returns each moved server, with its updated_at before the move, so live hosted ones can be audited as their own update.
 func (q *Queries) UpdateMCPServersToUserSessionIssuer(ctx context.Context, arg UpdateMCPServersToUserSessionIssuerParams) ([]UpdateMCPServersToUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, updateMCPServersToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {
@@ -6072,7 +6075,12 @@ func (q *Queries) UpdateMCPServersToUserSessionIssuer(ctx context.Context, arg U
 	var items []UpdateMCPServersToUserSessionIssuerRow
 	for rows.Next() {
 		var i UpdateMCPServersToUserSessionIssuerRow
-		if err := rows.Scan(&i.ID, &i.ProjectID, &i.Canonical); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Canonical,
+			&i.PreviousUpdatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

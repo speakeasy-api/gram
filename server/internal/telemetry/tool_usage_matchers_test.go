@@ -21,10 +21,10 @@ func TestLoadToolUsageMatchers_CoverAliasAndEveryEndpoint(t *testing.T) {
 	require.True(t, ok)
 	projectID := *authCtx.ProjectID
 
-	// A legacy toolset whose canonical server gained a second address.
+	// A legacy toolset whose alias differs from both of its canonical server's addresses.
 	legacyServer := createHostedMCPServerFixture(t, ctx, ti, "Matcher Legacy", "matcher-legacy")
 	endpoints := mcpendpointsRepo.New(ti.conn)
-	for _, slug := range []string{"acme-matcher-legacy", "acme-matcher-legacy-second"} {
+	for _, slug := range []string{"acme-matcher-legacy-first", "acme-matcher-legacy-second"} {
 		_, err := endpoints.CreateMCPEndpoint(ctx, mcpendpointsRepo.CreateMCPEndpointParams{
 			ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: legacyServer, Valid: true}, Slug: slug,
 		})
@@ -45,6 +45,6 @@ func TestLoadToolUsageMatchers_CoverAliasAndEveryEndpoint(t *testing.T) {
 	for _, matcher := range hosted {
 		slugsByToolset[matcher.ToolsetSlug] = append(slugsByToolset[matcher.ToolsetSlug], matcher.McpSlug)
 	}
-	require.ElementsMatch(t, []string{"acme-matcher-legacy", "acme-matcher-legacy-second"}, slugsByToolset["matcher-legacy"])
+	require.ElementsMatch(t, []string{"acme-matcher-legacy", "acme-matcher-legacy-first", "acme-matcher-legacy-second"}, slugsByToolset["matcher-legacy"])
 	require.Equal(t, []string{"matcher-flipped-server-endpoint"}, slugsByToolset["matcher-flipped"])
 }

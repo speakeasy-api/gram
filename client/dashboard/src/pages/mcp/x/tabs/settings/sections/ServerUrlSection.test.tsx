@@ -48,6 +48,20 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
   useSlugs: () => ({ orgSlug: "acme" }),
 }));
+vi.mock("../../../useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => vi.fn(),
+}));
+vi.mock("@/hooks/useNetworkIngressRollout", () => ({
+  useNetworkIngressRollout: () => ({ canManageIngress: true }),
+}));
+const networkIngress = vi.hoisted(() => ({
+  current: undefined as
+    | { endpointNamespaceKind: string; customDomainId?: string }
+    | undefined,
+}));
+vi.mock("@gram/client/react-query/networkIngress.js", () => ({
+  useNetworkIngress: () => ({ data: { ingress: networkIngress.current } }),
+}));
 vi.mock("../../../useMcpEndpointSlugValidation", () => ({
   useMcpEndpointSlugValidation: () => null,
 }));
@@ -108,6 +122,7 @@ function renderSection(mcpServer: McpServer, endpoints: McpEndpoint[]) {
 afterEach(() => {
   cleanup();
   deleteEndpoint.mockReset();
+  networkIngress.current = undefined;
 });
 
 describe("ServerUrlSection", () => {
@@ -161,5 +176,34 @@ describe("ServerUrlSection", () => {
     expect(screen.getAllByLabelText("Save address")).toHaveLength(2);
     expect(screen.getAllByLabelText("Remove address")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Add" })).toBeTruthy();
+  });
+
+  it("only offers a private hosted server addresses in its ingress namespace", () => {
+    const privateHosted = server({
+      id: "toolset-1",
+      toolsetId: "toolset-1",
+      networkAccessMode: "private_only",
+    });
+    networkIngress.current = { endpointNamespaceKind: "platform" };
+    renderSection(privateHosted, []);
+    expect(
+      screen.getByRole("button", { name: "Add" }),
+      "only the hosted address can be added",
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Private network access keeps this server's addresses on its ingress namespace.",
+      ),
+    ).toBeTruthy();
+    cleanup();
+
+    networkIngress.current = {
+      endpointNamespaceKind: "custom_domain",
+      customDomainId: "domain-1",
+    };
+    renderSection(privateHosted, []);
+    expect(screen.getAllByRole("button", { name: "Add" })).toHaveLength(1);
+    expect(screen.getByText("No hosted address")).toBeTruthy();
+    expect(screen.getByText("No custom address")).toBeTruthy();
   });
 });

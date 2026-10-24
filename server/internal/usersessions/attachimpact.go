@@ -173,7 +173,7 @@ func (s *Service) canonicalAttachTarget(ctx context.Context, logger *slog.Logger
 		return attachTarget{issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, onPlatformHost: false}, err
 	}
 	// The frozen alias still serves on its own host while the server is enabled.
-	if toolset.McpSlug.Valid && toolset.McpSlug.String != "" && wrapper.Visibility != visibility.Disabled {
+	if toolset.McpSlug.Valid && toolset.McpSlug.String != "" && (wrapper.Visibility == visibility.Public || wrapper.Visibility == visibility.Private) {
 		customDomainIDs = append(customDomainIDs, toolset.CustomDomainID)
 	}
 	if len(customDomainIDs) == 0 {

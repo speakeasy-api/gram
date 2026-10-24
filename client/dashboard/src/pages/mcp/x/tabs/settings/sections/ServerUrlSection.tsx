@@ -23,7 +23,7 @@ import {
   patchMcpEndpointInCache,
   useRootMcpEndpointMutation,
 } from "@/hooks/useRootMcpEndpoint";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 
 import { Badge } from "@/components/ui/Badge";
@@ -52,6 +52,10 @@ import { usePrivateMcpServerUrls } from "@/hooks/usePrivateMcpServerUrls";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
+import { isCanonicalHostedWrapper } from "../../../MCPServerDetailsRouting";
+import { useFollowRenamedServer } from "../../../useFollowRenamedServer";
+import { useNetworkIngress } from "@gram/client/react-query/networkIngress.js";
+import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 
 const ADDRESS_INPUT_GROUP_CLASSNAME = "";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
@@ -90,13 +94,45 @@ export function ServerUrlSection({
   subject?: "server" | "gateway";
   mcpServer?: McpServer | MetaMcpServer;
 }): JSX.Element {
-  const { domains } = useCustomDomains();
+  const { domains, isLoading: isLoadingDomains } = useCustomDomains();
   const orgRoutes = useOrgRoutes();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
   const privateMode =
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
+  const hostedServerId =
+    mcpServer && isCanonicalHostedWrapper(mcpServer) ? mcpServer.id : undefined;
+  // Older servers rename a hosted server to its address, so the settings route follows the server after a write.
+  const client = useSdkClient();
+  const followRenamedServer = useFollowRenamedServer();
+  const followHostedServer = useCallback(async () => {
+    if (!hostedServerId) return;
+    try {
+      followRenamedServer(await client.mcpServers.get({ id: hostedServerId }));
+    } catch {
+      followRenamedServer({ id: hostedServerId });
+    }
+  }, [client, followRenamedServer, hostedServerId]);
+  // A private hosted server only takes addresses in its ingress namespace, which the server enforces.
+  const { canManageIngress } = useNetworkIngressRollout();
+  const hostedPrivate = !!hostedServerId && privateMode;
+  const ingressQuery = useNetworkIngress(undefined, undefined, {
+    enabled: hostedPrivate && canManageIngress,
+    retry: false,
+    throwOnError: false,
+  });
+  const ingress = ingressQuery.data?.ingress;
+  const canAddAt = useCallback(
+    (customDomainId: string | undefined) => {
+      if (!hostedPrivate) return true;
+      if (!ingress) return false;
+      return ingress.endpointNamespaceKind === "platform"
+        ? !customDomainId
+        : customDomainId === ingress.customDomainId;
+    },
+    [hostedPrivate, ingress],
+  );
   const {
     privateMcpUrls,
     privateInstallPageUrls,
@@ -116,13 +152,19 @@ export function ServerUrlSection({
     () => domains.filter((d): d is CustomDomain => d != null),
     [domains],
   );
+  const addableDomains = useMemo(
+    () => availableDomains.filter((d) => canAddAt(d.id)),
+    [availableDomains, canAddAt],
+  );
   // Only addresses that can serve count toward the last one: the platform, or a verified, activated domain.
+  // Every address counts while domains load, so a removal is never left unconfirmed.
   const servableIds = useMemo(
     () =>
       new Set(
         endpoints
           .filter(
             (e) =>
+              isLoadingDomains ||
               !e.customDomainId ||
               availableDomains.some(
                 (d) => d.id === e.customDomainId && d.verified && d.activated,
@@ -130,7 +172,7 @@ export function ServerUrlSection({
           )
           .map((e) => e.id),
       ),
-    [endpoints, availableDomains],
+    [endpoints, availableDomains, isLoadingDomains],
   );
   const isLast = (endpoint: McpEndpoint) =>
     servableIds.size === 1 && servableIds.has(endpoint.id);
@@ -159,6 +201,13 @@ export function ServerUrlSection({
           description={description}
           actionLabel={actionLabel}
           onAction={onAction}
+        />
+      );
+    } else if (addableDomains.length === 0) {
+      customAddressEmptyState = (
+        <SettingsInlineEmptyState
+          title="No custom address"
+          description="Private network access keeps this server's addresses on its ingress namespace."
         />
       );
     } else {
@@ -203,14 +252,16 @@ export function ServerUrlSection({
                       backend={backend}
                       endpoint={endpoint}
                       isLastEndpoint={isLast(endpoint)}
+                      onSaved={followHostedServer}
                     />
                   ))
                 ) : addingPlatform ? (
                   <NewPlatformAddressRow
                     backend={backend}
+                    onCreated={followHostedServer}
                     onClose={() => setAddingPlatform(false)}
                   />
-                ) : (
+                ) : canAddAt(undefined) ? (
                   <RequireScope scope="mcp:write" level="component">
                     <SettingsInlineEmptyState
                       title="No hosted address"
@@ -219,6 +270,11 @@ export function ServerUrlSection({
                       onAction={() => setAddingPlatform(true)}
                     />
                   </RequireScope>
+                ) : (
+                  <SettingsInlineEmptyState
+                    title="No hosted address"
+                    description="Private network access keeps this server's addresses on its ingress namespace."
+                  />
                 )}
                 <FieldDescription>
                   Hosted under a Speakeasy domain. Configured here even when
@@ -239,19 +295,21 @@ export function ServerUrlSection({
                     domains={availableDomains}
                     isLastEndpoint={isLast(endpoint)}
                     canManageDomainRoot={canManageDomains}
+                    onSaved={followHostedServer}
                   />
                 ))}
                 {addingCustom && (
                   <NewCustomAddressRow
                     backend={backend}
-                    domains={availableDomains}
+                    domains={addableDomains}
+                    onCreated={followHostedServer}
                     onClose={() => setAddingCustom(false)}
                   />
                 )}
                 {customAddressEmptyState}
                 {!addingCustom &&
                   customDomainEndpoints.length > 0 &&
-                  availableDomains.length > 0 && (
+                  addableDomains.length > 0 && (
                     <RequireScope scope="mcp:write" level="component">
                       <div>
                         <Button
@@ -345,12 +403,14 @@ function AddressRow({
   domains,
   isLastEndpoint,
   canManageDomainRoot = false,
+  onSaved,
 }: {
   backend: EndpointBackendRef;
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
   isLastEndpoint: boolean;
   canManageDomainRoot?: boolean;
+  onSaved?: () => Promise<void>;
 }) {
   const { orgSlug } = useSlugs();
   // Platform endpoints must carry the `${orgSlug}-` prefix. It's folded into
@@ -377,6 +437,7 @@ function AddressRow({
   const update = useUpdateMcpEndpointMutation({
     onSuccess: async (updated) => {
       patchMcpEndpointInCache(queryClient, updated);
+      await onSaved?.();
       await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address updated");
     },
@@ -629,9 +690,11 @@ function RemoveLastAddressDialog({
 
 function NewPlatformAddressRow({
   backend,
+  onCreated,
   onClose,
 }: {
   backend: EndpointBackendRef;
+  onCreated?: () => Promise<void>;
   onClose: () => void;
 }) {
   const [suffix, setSuffix] = useState(generateAddressSuffix);
@@ -656,6 +719,7 @@ function NewPlatformAddressRow({
           slug: fullSlug,
         },
       });
+      await onCreated?.();
       await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address added");
       onClose();
@@ -725,10 +789,12 @@ function NewPlatformAddressRow({
 function NewCustomAddressRow({
   backend,
   domains,
+  onCreated,
   onClose,
 }: {
   backend: EndpointBackendRef;
   domains: CustomDomain[];
+  onCreated?: () => Promise<void>;
   onClose: () => void;
 }) {
   const customDomain = domains[0];
@@ -754,6 +820,7 @@ function NewCustomAddressRow({
           customDomainId: domainId,
         },
       });
+      await onCreated?.();
       await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address added");
       onClose();

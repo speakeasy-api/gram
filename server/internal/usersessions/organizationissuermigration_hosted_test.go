@@ -180,14 +180,25 @@ func TestOrganizationUserSessionIssuerMigrateSkipsDeletedHostedServerAudit(t *te
 	require.NoError(t, err)
 	live := seedMigrationToolset(t, ctx, ti, "live-migrate", "live-migrate-mcp", sourceID)
 	syncMigrationWrapper(t, ctx, ti, live)
+	updatesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
+	require.NoError(t, err)
 
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID})
 	require.NoError(t, err)
 
+	updatesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
+	require.NoError(t, err)
+	require.Equal(t, updatesBefore+1, updatesAfter, "only the live hosted server's move is audited")
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionMcpServerUpdate, live.ID.String())
+	require.NoError(t, err)
+	before, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	after, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, sourceID.String(), before["UserSessionIssuerID"])
+	require.Equal(t, targetID.String(), after["UserSessionIssuerID"])
+
 	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: live.ID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, conv.ToNullUUID(targetID), server.UserSessionIssuerID)
-	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionMcpServerUpdate, live.ID.String())
-	require.NoError(t, err)
-	require.Contains(t, string(record.AfterSnapshot), target.ID, "the live hosted server's move is audited")
 }
