@@ -16,10 +16,10 @@ import {
   ExcludeClientRegistrations,
   ExcludeIdentityTypes,
   IdentityTypes,
+  ListUserSessionsQueryParamStatus,
   ListUserSessionsRequest,
   ListUserSessionsResponse,
   ListUserSessionsSecurity,
-  QueryParamStatus,
 } from "../models/operations/listusersessions.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -207,7 +207,7 @@ export function queryKeyUserSessions(
   parameters: {
     subjectUrn?: string | undefined;
     userSessionIssuerId?: string | undefined;
-    status?: QueryParamStatus | undefined;
+    status?: ListUserSessionsQueryParamStatus | undefined;
     clientId?: string | undefined;
     search?: string | undefined;
     metaMcpServerId?: string | undefined;
@@ -238,7 +238,7 @@ export function queryKeyUserSessionsInfinite(
   parameters: {
     subjectUrn?: string | undefined;
     userSessionIssuerId?: string | undefined;
-    status?: QueryParamStatus | undefined;
+    status?: ListUserSessionsQueryParamStatus | undefined;
     clientId?: string | undefined;
     search?: string | undefined;
     metaMcpServerId?: string | undefined;

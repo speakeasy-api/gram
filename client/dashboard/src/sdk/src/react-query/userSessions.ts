@@ -32,9 +32,9 @@ import {
   ExcludeClientRegistrations,
   ExcludeIdentityTypes,
   IdentityTypes,
+  ListUserSessionsQueryParamStatus,
   ListUserSessionsRequest,
   ListUserSessionsSecurity,
-  QueryParamStatus,
 } from "../models/operations/listusersessions.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -207,7 +207,7 @@ export function setUserSessionsData(
     parameters: {
       subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
-      status?: QueryParamStatus | undefined;
+      status?: ListUserSessionsQueryParamStatus | undefined;
       clientId?: string | undefined;
       search?: string | undefined;
       metaMcpServerId?: string | undefined;
@@ -246,7 +246,7 @@ export function invalidateUserSessions(
     [parameters: {
       subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
-      status?: QueryParamStatus | undefined;
+      status?: ListUserSessionsQueryParamStatus | undefined;
       clientId?: string | undefined;
       search?: string | undefined;
       metaMcpServerId?: string | undefined;
