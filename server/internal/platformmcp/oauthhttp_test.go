@@ -275,11 +275,11 @@ func TestOAuthHTTPRejectsConsentBeforeOrganizationSelection(t *testing.T) {
 	t.Parallel()
 
 	service := newTestOAuthHTTP(t)
-	challenge := oauthChallenge{ID: "challenge-1", ClientID: "client-1", RedirectURI: "http://127.0.0.1:3000/callback", CSRFToken: "csrf", Subject: "user:user-1", CreatedAt: time.Now()}
+	challenge := oauthChallenge{ID: "11111111-1111-4111-8111-111111111111", ClientID: "client-1", RedirectURI: "http://127.0.0.1:3000/callback", CSRFToken: "csrf", Subject: "user:user-1", CreatedAt: time.Now()}
 	require.NoError(t, service.cache.Store(t.Context(), challenge))
 
 	response := httptest.NewRecorder()
-	service.ConnectHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/platform-mcp/connect?state=challenge-1", nil))
+	service.ConnectHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/platform-mcp/connect?state=11111111-1111-4111-8111-111111111111", nil))
 
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_request"`)
@@ -392,7 +392,7 @@ func TestOAuthHTTPConnectPostRedirectsTransientGateError(t *testing.T) {
 	service := newTestOAuthHTTP(t)
 	store := testStore(t, service)
 	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
-	challenge := oauthChallenge{ID: "challenge-1", ClientID: "client-1", RedirectURI: "http://127.0.0.1:3000/callback", State: "client-state", CSRFToken: "csrf", OrganizationID: "org-1", Subject: "user:user-1", CreatedAt: time.Now()}
+	challenge := oauthChallenge{ID: "11111111-1111-4111-8111-111111111111", ClientID: "client-1", RedirectURI: "http://127.0.0.1:3000/callback", State: "client-state", CSRFToken: "csrf", OrganizationID: "org-1", Subject: "user:user-1", CreatedAt: time.Now()}
 	require.NoError(t, service.cache.Store(t.Context(), challenge))
 	service.gate = oauthTestGate{err: errors.New("feature provider unavailable")}
 

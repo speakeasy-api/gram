@@ -39,10 +39,14 @@ Generated hooks translate that response into the local provider response shape.
 
 ## Agent Hooks Protocol
 
-`POST /ahp` accepts AHP events with a hooks-scoped API key in
-`Authorization: Bearer <HOOKS_SCOPED_API_KEY>` or `Gram-Key`. Use `Gram-Project`
-when an explicit project selector is needed. Keep secret-bearing hook
-configuration uncommitted.
+`POST /ahp` supports OAuth or a hooks-scoped API key. OAuth-capable clients can
+follow the authentication challenge to sign in and choose a project on the consent
+screen. Discovery, events, and uploads use that project; `Gram-Project` cannot
+override it. Project access is checked again when tokens are used.
+
+API-key clients send `Authorization: Bearer <HOOKS_SCOPED_API_KEY>` or `Gram-Key`,
+plus `Gram-Project`. Keep secret-bearing hook configuration uncommitted. Deployments
+using a hosted identity provider must register the `/ahp/idp_callback` callback.
 
 Call `hooks/configuration` to discover the supported subscriptions:
 

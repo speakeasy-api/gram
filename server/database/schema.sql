@@ -16177,3 +16177,241 @@ COMMENT ON COLUMN assistant_kit_interrupt_requests.attempt IS '@access: confiden
 COMMENT ON COLUMN assistant_kit_interrupt_requests.outcome IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.created_at IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.acknowledged_at IS '@access: confidential';
+
+CREATE TABLE IF NOT EXISTS ahp_oauth_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  client_id TEXT NOT NULL,
+  client_secret_hash TEXT,
+  client_name TEXT NOT NULL,
+  redirect_uris TEXT[] NOT NULL,
+  client_id_issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  client_secret_expires_at timestamptz,
+  revoked_at timestamptz,
+
+  client_id_metadata_uri TEXT,
+  client_id_metadata_fetched_at timestamptz,
+  client_id_metadata_cache_expires_at timestamptz,
+  client_id_metadata_etag TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT ahp_oauth_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT ahp_oauth_clients_client_id_check CHECK (client_id <> ''),
+  CONSTRAINT ahp_oauth_clients_client_name_check CHECK (client_name <> '')
+);
+
+COMMENT ON COLUMN ahp_oauth_clients.id IS '@access: confidential';
+COMMENT ON COLUMN ahp_oauth_clients.client_id IS '@access: restricted';
+COMMENT ON COLUMN ahp_oauth_clients.client_secret_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN ahp_oauth_clients.client_name IS '@access: opaque-confidential';
+COMMENT ON COLUMN ahp_oauth_clients.redirect_uris IS '@access: opaque-restricted';
+COMMENT ON COLUMN ahp_oauth_clients.client_id_issued_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_oauth_clients.client_secret_expires_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_oauth_clients.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_oauth_clients.client_id_metadata_uri IS '@access: restricted';
+COMMENT ON COLUMN ahp_oauth_clients.client_id_metadata_fetched_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_oauth_clients.client_id_metadata_cache_expires_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_oauth_clients.client_id_metadata_etag IS '@access: opaque-confidential';
+COMMENT ON COLUMN ahp_oauth_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_oauth_clients.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS ahp_oauth_clients_client_id_key
+ON ahp_oauth_clients (client_id);
+
+CREATE INDEX IF NOT EXISTS ahp_oauth_clients_client_secret_expires_at_idx
+ON ahp_oauth_clients (client_secret_expires_at)
+WHERE client_secret_expires_at IS NOT NULL AND revoked_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS ahp_connections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  resource_uri TEXT NOT NULL,
+  subject_urn TEXT NOT NULL,
+  oauth_client_id uuid NOT NULL,
+  active_generation uuid NOT NULL DEFAULT generate_uuidv7(),
+  authorized_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  reauthorized_at timestamptz,
+  authorization_expires_at timestamptz,
+  reauthorization_required_at timestamptz,
+  reauthorization_reason TEXT,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT ahp_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT ahp_connections_subject_urn_check CHECK (subject_urn <> ''),
+
+  CONSTRAINT ahp_connections_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT ahp_connections_oauth_client_id_fkey
+    FOREIGN KEY (oauth_client_id) REFERENCES ahp_oauth_clients (id) ON DELETE SET NULL,
+  CONSTRAINT ahp_connections_resource_uri_check CHECK (resource_uri <> ''),
+  CONSTRAINT ahp_connections_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN ahp_connections.id IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.subject_urn IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.oauth_client_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.active_generation IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.authorized_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.reauthorized_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.authorization_expires_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.reauthorization_required_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.reauthorization_reason IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.created_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS ahp_connections_live_organization_subject_client_key
+ON ahp_connections (organization_id, subject_urn, oauth_client_id, project_id, resource_uri)
+WHERE revoked_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ahp_connections_organization_id_id_key
+ON ahp_connections (organization_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ahp_connections_organization_id_id_oauth_client_id_key
+ON ahp_connections (organization_id, id, oauth_client_id, project_id);
+
+CREATE INDEX IF NOT EXISTS ahp_connections_oauth_client_id_idx
+ON ahp_connections (oauth_client_id);
+
+-- Authorization codes are stored only as hashes and consumed atomically after
+-- client, redirect URI, PKCE, and current connection-generation validation.
+-- organization_id is copied from and tenant-pinned to the connection so every
+-- authorization-code transition has a direct tenant boundary.
+CREATE TABLE IF NOT EXISTS ahp_authorization_grants (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  authorization_code_hash TEXT NOT NULL,
+  oauth_client_id uuid NOT NULL,
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  code_challenge TEXT NOT NULL,
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT ahp_authorization_grants_pkey PRIMARY KEY (id),
+  CONSTRAINT ahp_authorization_grants_authorization_code_hash_check CHECK (authorization_code_hash <> ''),
+  CONSTRAINT ahp_authorization_grants_redirect_uri_check CHECK (redirect_uri <> ''),
+  CONSTRAINT ahp_authorization_grants_code_challenge_check CHECK (code_challenge <> ''),
+  CONSTRAINT ahp_authorization_grants_oauth_client_id_fkey
+    FOREIGN KEY (oauth_client_id) REFERENCES ahp_oauth_clients (id) ON DELETE SET NULL,
+  CONSTRAINT ahp_authorization_grants_org_connection_client_fkey
+    FOREIGN KEY (organization_id, connection_id, oauth_client_id, project_id)
+    REFERENCES ahp_connections (organization_id, id, oauth_client_id, project_id)
+    ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN ahp_authorization_grants.id IS '@access: confidential';
+COMMENT ON COLUMN ahp_authorization_grants.organization_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_authorization_grants.authorization_code_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN ahp_authorization_grants.oauth_client_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_authorization_grants.connection_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_authorization_grants.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN ahp_authorization_grants.redirect_uri IS '@access: restricted';
+COMMENT ON COLUMN ahp_authorization_grants.code_challenge IS '@access: secret-restricted';
+COMMENT ON COLUMN ahp_authorization_grants.expires_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_authorization_grants.consumed_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_authorization_grants.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_authorization_grants.created_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_authorization_grants.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS ahp_authorization_grants_authorization_code_hash_key
+ON ahp_authorization_grants (authorization_code_hash);
+
+CREATE INDEX IF NOT EXISTS ahp_authorization_grants_expires_at_idx
+ON ahp_authorization_grants (expires_at);
+
+CREATE INDEX IF NOT EXISTS ahp_authorization_grants_oauth_client_id_idx
+ON ahp_authorization_grants (oauth_client_id);
+
+CREATE INDEX IF NOT EXISTS ahp_authorization_grants_org_code_hash_idx
+ON ahp_authorization_grants (organization_id, authorization_code_hash);
+
+-- A session stores Platform token identifiers and hashes, never raw bearer or
+-- refresh tokens. The replacement link preserves single-use refresh history.
+-- organization_id is copied from and tenant-pinned to the connection so every
+-- session transition has a direct tenant boundary.
+CREATE TABLE IF NOT EXISTS ahp_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  connection_id uuid NOT NULL,
+  oauth_client_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  jti TEXT NOT NULL,
+  refresh_token_hash TEXT NOT NULL,
+  expires_at timestamptz NOT NULL,
+  refresh_expires_at timestamptz NOT NULL,
+  rotated_at timestamptz,
+  revoked_at timestamptz,
+  replaced_by_session_id uuid,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT ahp_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT ahp_sessions_id_lineage_key UNIQUE (id, connection_id, oauth_client_id, connection_generation),
+  CONSTRAINT ahp_sessions_jti_check CHECK (jti <> ''),
+  CONSTRAINT ahp_sessions_refresh_token_hash_check CHECK (refresh_token_hash <> ''),
+  CONSTRAINT ahp_sessions_organization_connection_client_fkey
+    FOREIGN KEY (organization_id, connection_id, oauth_client_id, project_id)
+    REFERENCES ahp_connections (organization_id, id, oauth_client_id, project_id)
+    ON DELETE SET NULL,
+  CONSTRAINT ahp_sessions_replaced_by_session_lineage_fkey
+    FOREIGN KEY (replaced_by_session_id, connection_id, oauth_client_id, connection_generation)
+    REFERENCES ahp_sessions (id, connection_id, oauth_client_id, connection_generation)
+    ON DELETE NO ACTION
+);
+
+COMMENT ON COLUMN ahp_sessions.id IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.connection_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.oauth_client_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.jti IS '@access: secret-restricted';
+COMMENT ON COLUMN ahp_sessions.refresh_token_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN ahp_sessions.expires_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.refresh_expires_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.rotated_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.replaced_by_session_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.created_at IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS ahp_sessions_jti_key
+ON ahp_sessions (jti);
+
+CREATE INDEX IF NOT EXISTS ahp_sessions_organization_jti_idx
+ON ahp_sessions (organization_id, jti);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ahp_sessions_refresh_token_hash_key
+ON ahp_sessions (refresh_token_hash);
+
+CREATE INDEX IF NOT EXISTS ahp_sessions_organization_refresh_token_hash_idx
+ON ahp_sessions (organization_id, refresh_token_hash);
+
+CREATE INDEX IF NOT EXISTS ahp_sessions_organization_connection_generation_idx
+ON ahp_sessions (organization_id, connection_id, connection_generation);
+
+CREATE INDEX IF NOT EXISTS ahp_sessions_refresh_expires_at_idx
+ON ahp_sessions (refresh_expires_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ahp_sessions_replaced_by_session_id_key
+ON ahp_sessions (replaced_by_session_id)
+WHERE replaced_by_session_id IS NOT NULL;
+
+COMMENT ON COLUMN ahp_connections.project_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_authorization_grants.project_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_sessions.project_id IS '@access: confidential';
+COMMENT ON COLUMN ahp_connections.resource_uri IS '@access: restricted';

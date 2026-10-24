@@ -66,7 +66,7 @@ func CORSMiddleware(env string, serverURL string, platformOrigins []string, chat
 
 			// Special CORS policy for OAuth well-known endpoints
 			// These need to be accessible from the browser on any origin
-			if slices.ContainsFunc(mcpOpenAccessControlRoutes, func(route string) bool {
+			if r.URL.Path == "/.well-known/oauth-authorization-server/ahp" || r.URL.Path == "/.well-known/oauth-protected-resource/ahp" || slices.ContainsFunc(mcpOpenAccessControlRoutes, func(route string) bool {
 				return strings.HasPrefix(r.URL.Path, route)
 			}) {
 				w.Header().Set("Access-Control-Allow-Origin", "*")
