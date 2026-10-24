@@ -5269,6 +5269,10 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   -- servers, and a refreshed token must be issued for the same one. NULL for
   -- sessions of an 'endpoint' authorization server, which serves only one.
   resource TEXT,
+  -- Stable identity of the MCP resource: meta_mcp_server:<id>, mcp_server:<id>
+  -- or toolset:<id>. Preserved across endpoint URL changes and refresh. NULL
+  -- when not recorded.
+  resource_identity TEXT,
   -- The sign-in that created this grant. NULL for grants created before
   -- sign-ins were recorded and for non-interactive grants; those never
   -- qualify for Speakeasy-issued ID-JAGs.
@@ -5310,6 +5314,7 @@ COMMENT ON COLUMN user_sessions.expires_at IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.tool_selection IS '@access: opaque-restricted';
 COMMENT ON COLUMN user_sessions.last_used_at IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.resource IS '@access: restricted';
+COMMENT ON COLUMN user_sessions.resource_identity IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.created_at IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.updated_at IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.deleted_at IS '@access: confidential';
