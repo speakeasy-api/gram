@@ -5,6 +5,7 @@ import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,6 +30,14 @@ import {
   isCredentialSafe,
   mintInstallCommand,
 } from "./gateway";
+import {
+  DEVICE_AGENT_SYNC_SCOPE,
+  discoverHooksOnlyGrants,
+  HOOKS_INGEST_SCOPE,
+  hooksOnlyPolicyGrants,
+  missingHooksOnlyScopes,
+} from "./hooksOnly";
+import { StepHooksInstall } from "./StepHooksInstall";
 import { StepInstall } from "./StepInstall";
 import { StepServers, type ServerSelection } from "./StepServers";
 import { StepVerify, type VerifyState } from "./StepVerify";
@@ -113,6 +122,42 @@ function freeName(base: string, taken: Set<string>): string {
   return numbered(suffix);
 }
 
+/**
+ * Why an agent with no server cannot be made, or null when it can. Such an
+ * agent only sends hook events, and its grants for that must fit within the
+ * permissions of the person making it, so the step says so before anything
+ * is created rather than after.
+ */
+function hooksOnlyBlockedReason({
+  platformName,
+  serversLoading,
+  serversFailed,
+  checkingPermissions,
+  canGrantHooks,
+}: {
+  /** The platform this flow was opened for, which signs in to reach servers. */
+  platformName: string | undefined;
+  serversLoading: boolean;
+  serversFailed: boolean;
+  checkingPermissions: boolean;
+  canGrantHooks: boolean;
+}): string | null {
+  // Hook events are signed with an API key, so an agent set up for a
+  // platform's own tokens has nothing to do without a server.
+  if (platformName !== undefined) {
+    return `Select at least one MCP server for ${platformName} to reach.`;
+  }
+  // None is only a choice once the list it is chosen from is on screen: an
+  // empty selection over a list that did not load is not a decision.
+  if (serversLoading) return "Loading MCP servers…";
+  if (serversFailed) {
+    return "The server list could not be loaded. Try again to choose servers, or to continue without one.";
+  }
+  if (checkingPermissions) return "Checking your permissions…";
+  if (canGrantHooks) return null;
+  return "Select at least one MCP server. An agent with none only sends hook events, which you do not have permission to grant.";
+}
+
 export function CredentialsWizard({
   agent,
   initialPlatformKey,
@@ -161,8 +206,19 @@ export function CredentialsWizard({
   // Trusting a platform and admitting a subject are both writes against the
   // organization's workload identities, so the choice is offered only to
   // someone who could carry it out.
-  const { hasAllScopes } = useRBAC();
+  const { hasAllScopes, isLoading: rbacLoading, error: rbacError } = useRBAC();
   const canFederate = hasAllScopes(["workload:write"]);
+  // An agent with no server is given hook ingestion in this project and
+  // device-agent plugin sync, which only someone holding both can delegate.
+  // A failed read of the caller's grants decides nothing: the server checks
+  // the same permissions when the agent is created, and says which it lacks.
+  const canGrantHooks =
+    Boolean(rbacError) ||
+    hasAllScopes(
+      [HOOKS_INGEST_SCOPE, DEVICE_AGENT_SYNC_SCOPE],
+      organization.id,
+      project.id,
+    );
   const renameAgent = useRenameAgentMutation();
   // Only to keep a prefilled name from colliding, so a failure to read the
   // list leaves the field empty rather than blocking the flow.
@@ -314,6 +370,17 @@ export function CredentialsWizard({
   // it saves to, so an agent that already has one opens with it on and the
   // list reads as what the policy actually allows.
   const [allServers, setAllServers] = useState(false);
+  // No server at all is a choice too, for a new agent: one that only reports
+  // what its coding agent does, through the observability plugin's hook
+  // events. An agent that exists keeps the policy it has, and an empty
+  // selection there is an edit, not this. Once the new agent is created its
+  // policy is settled, so the choice it was created with is the one that
+  // holds even if the selection changes afterwards.
+  const [createdHooksOnly, setCreatedHooksOnly] = useState<boolean | null>(
+    null,
+  );
+  const hooksOnly =
+    !existing && (createdHooksOnly ?? (!allServers && selected.length === 0));
 
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
@@ -480,10 +547,15 @@ export function CredentialsWizard({
       createAgentForm: {
         name: name.trim(),
         projectId: projectID,
-        policyGrants: agentPolicyGrantsFromDraft(draft),
+        // With no server chosen the agent reaches none, and is given only
+        // what sending hook events and syncing device-agent plugins take.
+        policyGrants: hooksOnly
+          ? hooksOnlyPolicyGrants(organization.id, projectID)
+          : agentPolicyGrantsFromDraft(draft),
       },
     });
     setAgentID(created.id);
+    setCreatedHooksOnly(hooksOnly);
     void invalidateAgentPolicy(
       queryClient,
       organization.id,
@@ -725,6 +797,61 @@ export function CredentialsWizard({
     setStep(lastStep);
   }, [existing, step, defaultStep, lastStep, setStep]);
 
+  /** Issue the agent's first key for these grants and show it once. */
+  const issueKey = async (
+    agentId: string,
+    requestedGrants: AgentPolicyGrantForm[],
+  ): Promise<void> => {
+    const expiresAt = new Date(Date.now() + KEY_LIFETIME_DAYS * 86_400_000);
+    const issued = await sdk.keys.create({
+      createKeyForm: {
+        agentId,
+        // Unique per issue, not per day: live key names are unique across
+        // the organization, so a date alone makes the second key of the day
+        // collide and the issue fail with a 409.
+        name: `${name.trim()} key ${new Date().toISOString().replace(/[:.]/g, "-")}`,
+        expiresAt,
+        delegatedGrantsVersion: 2,
+        requestedGrants,
+        scopes: [],
+      },
+    });
+    keyID.current = issued.id;
+    setSecret(issued.key ?? null);
+    setStep(3);
+    // The setup command only adds the gateway to MCP clients, which an agent
+    // with no server has no use for.
+    if (issued.key && !hooksOnly) {
+      regenerate(issued.key, agentGatewayURL(agentId));
+    }
+  };
+
+  /**
+   * What a key for an agent with no server requests: the hook and plugin
+   * sync grants discovery says may be delegated, and nothing more. Both or
+   * neither, because a key that can send events but not sync plugins, or the
+   * reverse, is half of what the install step tells the reader to set up.
+   */
+  const hooksOnlyKeyGrants = async (
+    agentId: string,
+    signal: AbortSignal,
+  ): Promise<AgentPolicyGrantForm[]> => {
+    const delegable = await discoverHooksOnlyGrants(
+      sdk.agents,
+      agentId,
+      signal,
+    );
+    const missing = missingHooksOnlyScopes(delegable);
+    if (missing.length > 0) {
+      throw new Error(
+        `The agent was created, but a key for it would lack ${missing.join(" and ")}. A key cannot give more access than the agent's owner has, so check the agent's permissions and that its owner still holds them.`,
+      );
+    }
+    return buildRequestedGrants(
+      delegable.map((grant) => ({ grant, narrowing: {} })),
+    );
+  };
+
   /**
    * Create the agent, discover what it may delegate, issue its first key, and
    * mint the setup command. Each step depends on the one before it, so a
@@ -738,6 +865,13 @@ export function CredentialsWizard({
       const target = { id: await ensureAgent() };
 
       const controller = new AbortController();
+      if (hooksOnly) {
+        await issueKey(
+          target.id,
+          await hooksOnlyKeyGrants(target.id, controller.signal),
+        );
+        return;
+      }
       // A key names servers one by one — there is no wildcard in a key, only
       // in the agent's policy. So "all servers" is issued as every server in
       // the agent's reach today, and the agent's own wildcard grant is what
@@ -805,24 +939,7 @@ export function CredentialsWizard({
         );
       }
 
-      const expiresAt = new Date(Date.now() + KEY_LIFETIME_DAYS * 86_400_000);
-      const issued = await sdk.keys.create({
-        createKeyForm: {
-          agentId: target.id,
-          // Unique per issue, not per day: live key names are unique across
-          // the organization, so a date alone makes the second key of the day
-          // collide and the issue fail with a 409.
-          name: `${name.trim()} key ${new Date().toISOString().replace(/[:.]/g, "-")}`,
-          expiresAt,
-          delegatedGrantsVersion: 2,
-          requestedGrants,
-          scopes: [],
-        },
-      });
-      keyID.current = issued.id;
-      setSecret(issued.key ?? null);
-      setStep(3);
-      if (issued.key) regenerate(issued.key, agentGatewayURL(target.id));
+      await issueKey(target.id, requestedGrants);
     } catch (failure) {
       const conflict =
         failure instanceof GramError && failure.statusCode === 409
@@ -839,6 +956,9 @@ export function CredentialsWizard({
     }
   };
 
+  const hooksOnlyGrants = `${HOOKS_INGEST_SCOPE}, ${DEVICE_AGENT_SYNC_SCOPE}`;
+  const grantsLabel = hooksOnly ? hooksOnlyGrants : "mcp:connect";
+
   const summary = (
     <WizardSummary
       step={step + 1}
@@ -852,7 +972,7 @@ export function CredentialsWizard({
         },
         {
           label: "Grants",
-          value: <code className="text-xs">mcp:connect</code>,
+          value: <code className="text-xs">{grantsLabel}</code>,
         },
         {
           label: "Credential",
@@ -1023,7 +1143,9 @@ export function CredentialsWizard({
                 value="workload"
                 // Offered only to someone who could carry it out: it trusts a
                 // platform and admits a subject for the whole organization.
-                disabled={!canFederate}
+                // Not for an agent with no server: its hook events are
+                // signed with an API key.
+                disabled={!canFederate || hooksOnly}
                 className="p-3"
                 title="Workload identity"
               >
@@ -1037,6 +1159,11 @@ export function CredentialsWizard({
                 {!canFederate && (
                   <Text muted small className="mt-1 block">
                     Needs permission to manage workload identities.
+                  </Text>
+                )}
+                {canFederate && hooksOnly && (
+                  <Text muted small className="mt-1 block">
+                    An agent with no server sends hook events with an API key.
                   </Text>
                 )}
               </RadioCard>
@@ -1058,6 +1185,20 @@ export function CredentialsWizard({
           </div>
         );
       case 3:
+        // No gateway to dial and no setup link to run: an agent with no
+        // server is installed as the observability plugin's key.
+        if (hooksOnly) {
+          return (
+            <StepHooksInstall
+              secret={secret}
+              // A new agent belongs to the project it is created in, which is
+              // the one its hook grant is bound to.
+              projectSlug={project.slug}
+              onIssue={() => void provision()}
+              issuing={provisioning}
+            />
+          );
+        }
         return (
           <StepInstall
             command={command}
@@ -1079,6 +1220,7 @@ export function CredentialsWizard({
             state={verify}
             firstCallAt={firstCallAt}
             gatewayURL={gatewayURL}
+            hooksOnly={hooksOnly}
           />
         );
     }
@@ -1090,8 +1232,17 @@ export function CredentialsWizard({
         ? "Name this agent."
         : null
       : step === 1
-        ? !allServers && selected.length === 0
-          ? "Select at least one MCP server."
+        ? hooksOnly
+          ? hooksOnlyBlockedReason({
+              platformName:
+                initialPlatformKey === undefined
+                  ? undefined
+                  : (preset?.displayName ?? "this platform"),
+              serversLoading: inventory.isLoading,
+              serversFailed: inventory.isError,
+              checkingPermissions: rbacLoading,
+              canGrantHooks,
+            })
           : // A key names servers one by one, and a server that authorizes
             // each person separately is not one a key can name. So "all
             // servers" with none of them left is a key that would reach
@@ -1103,6 +1254,19 @@ export function CredentialsWizard({
             ? "No server here can be reached with a key yet."
             : null
         : null;
+
+  // Choosing none is a choice, so it is said as what it makes rather than as
+  // a count of zero.
+  const serverCountNote = hooksOnly
+    ? "No servers selected. This agent will only send hook events."
+    : `${selected.length} of ${listedServers.length} servers selected.`;
+
+  const advance = () => {
+    // A credential chosen before every server was unticked may be workload
+    // identity, which an agent with no server cannot use.
+    if (step === 1 && hooksOnly) setCredential("api-key");
+    setStep(step + 1);
+  };
 
   const footer = () => {
     // Editing writes on the second step. Past it the flow is the ordinary
@@ -1282,11 +1446,11 @@ export function CredentialsWizard({
                   ? // Not a count: the choice is deliberately not a list, and
                     // naming today's would be a number that changes behind it.
                     "All servers selected."
-                  : `${selected.length} of ${listedServers.length} servers selected.`)
+                  : serverCountNote)
             }
             onBack={step > 0 ? () => setStep(step - 1) : undefined}
             primary={
-              <Button disabled={!!blocked} onClick={() => setStep(step + 1)}>
+              <Button disabled={!!blocked} onClick={advance}>
                 Continue
               </Button>
             }

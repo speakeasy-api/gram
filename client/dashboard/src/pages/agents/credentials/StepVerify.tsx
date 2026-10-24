@@ -15,28 +15,99 @@ import type { JSX } from "react";
 
 export type VerifyState = "waiting" | "connected" | "unknown";
 
+interface VerifyCopy {
+  /** What the page is waiting for, said while it waits. */
+  waiting: string;
+
+  checks: { title: string; description: string }[];
+  /** What a reader checks when nothing arrives, one cause per line. */
+  causes: { code?: string; text: string }[];
+}
+
+/**
+ * The checks, and the causes of silence, for what the agent calls: the MCP
+ * gateway, or for an agent that reaches no server, the hooks endpoint.
+ */
+function verifyCopy(gatewayURL: string, hooksOnly: boolean): VerifyCopy {
+  if (hooksOnly) {
+    return {
+      waiting:
+        "Keep this page open while the agent's runtime restarts with its key. This updates when the key is first used.",
+      checks: [
+        {
+          title: "Credential accepted",
+          description: "The API key was presented to Speakeasy and admitted.",
+        },
+        {
+          // The key's last use is all this page can see, and a device-agent
+          // plugin sync uses the same key, so the check names both.
+          title: "Agent reporting",
+          description:
+            "The observability plugin or the device agent called Speakeasy with this key.",
+        },
+      ],
+      causes: [
+        {
+          code: "401",
+          text: "the key was rejected. Check that the runtime was restarted after the key was set.",
+        },
+        {
+          code: "403",
+          text: "the events named another project. Set the project slug to this agent's project.",
+        },
+        {
+          text: "No requests at all: the observability plugin is not installed, or its hooks are not enabled.",
+        },
+      ],
+    };
+  }
+  return {
+    waiting:
+      "Keep this page open while the agent runs its setup. This updates as calls reach the gateway.",
+    checks: [
+      {
+        title: "Credential accepted",
+        description:
+          "The API key was presented to the agent gateway and admitted.",
+      },
+      {
+        title: "Gateway reachable",
+        description: `The runtime resolved ${gatewayURL} and completed a request.`,
+      },
+    ],
+    causes: [
+      {
+        code: "401",
+        text: "the credential was rejected. Run the setup command again; a code is spent on first use.",
+      },
+      {
+        code: "403",
+        text: "the tool is not granted. Check the server selection and the agent's permissions.",
+      },
+      {
+        text: "No requests at all: the runtime is not pointed at the gateway URL.",
+      },
+    ],
+  };
+}
+
 export function StepVerify({
   state,
   firstCallAt,
   gatewayURL,
+  hooksOnly = false,
 }: {
   state: VerifyState;
   firstCallAt?: Date;
   gatewayURL: string;
+  /** The agent reaches no MCP server and only sends hook events. */
+  hooksOnly?: boolean;
 }): JSX.Element {
-  const checks: { title: string; description: string; done: boolean }[] = [
-    {
-      title: "Credential accepted",
-      description:
-        "The API key was presented to the agent gateway and admitted.",
-      done: state === "connected",
-    },
-    {
-      title: "Gateway reachable",
-      description: `The runtime resolved ${gatewayURL} and completed a request.`,
-      done: state === "connected",
-    },
-  ];
+  const copy = verifyCopy(gatewayURL, hooksOnly);
+  const checks = copy.checks.map((check) => ({
+    ...check,
+    done: state === "connected",
+  }));
 
   return (
     <div className="space-y-5">
@@ -57,7 +128,7 @@ export function StepVerify({
           <Text muted small>
             {state === "connected"
               ? `First call ${firstCallAt ? dateTimeFormatters.full.format(firstCallAt) : "received"}. The agent is live.`
-              : "Keep this page open while the agent runs its setup. This updates as calls reach the gateway."}
+              : copy.waiting}
           </Text>
         </div>
       </div>
@@ -110,17 +181,16 @@ export function StepVerify({
           If nothing arrives
         </span>
         <ul className="space-y-1 text-sm">
-          <li>
-            <code className="text-xs">401</code> — the credential was rejected.
-            Run the setup command again; a code is spent on first use.
-          </li>
-          <li>
-            <code className="text-xs">403</code> — the tool is not granted.
-            Check the server selection and the agent's permissions.
-          </li>
-          <li>
-            No requests at all — the runtime is not pointed at the gateway URL.
-          </li>
+          {copy.causes.map((cause) => (
+            <li key={cause.text}>
+              {cause.code && (
+                <>
+                  <code className="text-xs">{cause.code}</code>:{" "}
+                </>
+              )}
+              {cause.text}
+            </li>
+          ))}
         </ul>
       </div>
     </div>
