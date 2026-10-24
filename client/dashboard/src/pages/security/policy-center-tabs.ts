@@ -9,6 +9,7 @@ export const POLICY_CENTER_TABS = [
   "detection-rules",
   "shadow-ai-targets",
   "mcp-approvals",
+  "tool-approvals",
   "exclusions",
   "quarantines",
 ] as const;
@@ -20,6 +21,7 @@ const TAB_LABEL: Record<PolicyCenterTab, string> = {
   "detection-rules": "Detection Rules",
   "shadow-ai-targets": "Shadow AI targets",
   "mcp-approvals": "MCP approvals",
+  "tool-approvals": "Tool approvals",
   exclusions: "Exclusion Rules",
   quarantines: "Quarantines",
 };
@@ -34,10 +36,30 @@ export function policyCenterTabSearch(tab: PolicyCenterTab): string {
   return `?tab=${tab}`;
 }
 
-export function policyCenterTabs(): PageTab[] {
-  return POLICY_CENTER_TABS.map((tab) => ({
+type PolicyCenterFlags = { toolApprovals?: boolean };
+
+function visibleTabs({
+  toolApprovals = false,
+}: PolicyCenterFlags): PolicyCenterTab[] {
+  return POLICY_CENTER_TABS.filter(
+    (tab) => toolApprovals || tab !== "tool-approvals",
+  );
+}
+
+/** The tabs to show. Tool approvals is behind its rollout flag. */
+export function policyCenterTabs(flags: PolicyCenterFlags = {}): PageTab[] {
+  return visibleTabs(flags).map((tab) => ({
     value: tab,
     label: TAB_LABEL[tab],
     href: policyCenterTabSearch(tab),
   }));
+}
+
+/** The tab a link lands on: one that is hidden, such as Tool approvals with
+ *  its flag off, falls back to "policies" rather than an empty page. */
+export function resolvePolicyCenterTab(
+  requested: PolicyCenterTab,
+  flags: PolicyCenterFlags = {},
+): PolicyCenterTab {
+  return visibleTabs(flags).includes(requested) ? requested : "policies";
 }

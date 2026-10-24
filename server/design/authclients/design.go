@@ -118,13 +118,13 @@ func creatableClientTypeEnum() {
 }
 
 var AuthClientHeaderInput = Type("AuthClientHeaderInput", func() {
-	Description("A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a secret header already storing a value may omit both to keep it.")
+	Description("A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a header already storing a value may omit both to keep it, as long as is_secret is unchanged.")
 
 	Attribute("name", String, "The header name.", func() { MinLength(1) })
 	Attribute("description", String, "What the header is for.")
 	Attribute("is_required", Boolean, "Whether a caller must supply the header when it is copied from the request.", func() { Default(false) })
 	Attribute("is_secret", Boolean, "Whether the value is secret. Secret values are stored encrypted and never returned.", func() { Default(false) })
-	Attribute("value", String, "The value to send. Omit it on a secret header that already stores one to keep the stored value.")
+	Attribute("value", String, "The value to send. Omit it on a header that already stores one, with is_secret unchanged, to keep the stored value.")
 	Attribute("value_from_request_header", String, "The caller's request header to copy the value from, for pass-through headers.")
 
 	Required("name")

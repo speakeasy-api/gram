@@ -25,6 +25,7 @@ import {
   clientTypeHint,
   clientTypeLabel,
   serverLabel,
+  useAllAuthClients,
 } from "@/lib/auth-clients";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,6 @@ import { useRoutes } from "@/routes";
 import type { AuthClient } from "@gram/client/models/components/authclient.js";
 import { CreateAuthClientRequestBodyClientType } from "@gram/client/models/components/createauthclientrequestbody.js";
 import { useAttachAuthClientToMcpServerMutation } from "@gram/client/react-query/attachAuthClientToMcpServer.js";
-import { useAuthClients } from "@gram/client/react-query/authClients.js";
 import { useCreateAuthClientMutation } from "@gram/client/react-query/createAuthClient.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -119,8 +119,8 @@ export function AddCredentialSheet({
   const [shareAcrossProjects, setShareAcrossProjects] = useState(false);
   const [headers, setHeaders] = useState<HeaderDraft[]>([]);
 
-  const reusable = useAuthClients({ limit: 100 });
-  const candidates = (reusable.data?.result.items ?? []).filter(
+  const reusable = useAllAuthClients();
+  const candidates = (reusable.data ?? []).filter(
     (client) =>
       !client.servers.some((server) => server.id === mcpServerId) &&
       (!client.projectId || client.projectId === projectId) &&
@@ -295,6 +295,11 @@ export function AddCredentialSheet({
                     <Text muted small>
                       Loading sign-ins…
                     </Text>
+                  ) : registrations.isError ? (
+                    <FieldError>
+                      Sign-ins could not be loaded. Refresh the page to try
+                      again.
+                    </FieldError>
                   ) : registrationOptions.length === 0 ? (
                     <Alert variant="info" inline>
                       {owner === "self"

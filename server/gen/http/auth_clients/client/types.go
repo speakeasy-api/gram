@@ -2757,8 +2757,8 @@ type AuthClientHeaderInputRequestBody struct {
 	// Whether the value is secret. Secret values are stored encrypted and never
 	// returned.
 	IsSecret bool `form:"is_secret" json:"is_secret" xml:"is_secret"`
-	// The value to send. Omit it on a secret header that already stores one to
-	// keep the stored value.
+	// The value to send. Omit it on a header that already stores one, with
+	// is_secret unchanged, to keep the stored value.
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 	// The caller's request header to copy the value from, for pass-through headers.
 	ValueFromRequestHeader *string `form:"value_from_request_header,omitempty" json:"value_from_request_header,omitempty" xml:"value_from_request_header,omitempty"`
