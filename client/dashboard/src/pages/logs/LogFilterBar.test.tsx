@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { Operator as Op } from "@gram/client/models/components/logfilter";
 import { useState, type ComponentProps } from "react";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -198,4 +204,116 @@ it("encodes an offered in-value and keeps exact values unless trimmed", () => {
   expect(onChange).toHaveBeenLastCalledWith([
     expect.objectContaining({ path: "identity", value: " padded " }),
   ]);
+});
+
+it("selects a clicked suggestion instead of committing the typed text", () => {
+  const onChange = vi.fn<(filters: ActiveLogFilter[]) => void>();
+  render(
+    <Bar
+      onChange={onChange}
+      keyOptions={[{ key: "identity" }]}
+      operatorsFor={() => [Op.Eq]}
+      valueOptions={[{ value: "agent:a-1", label: "Ops Bot" }]}
+    />,
+  );
+  fireEvent.focus(screen.getByRole("combobox"));
+  fireEvent.click(option("identity"));
+  fireEvent.change(screen.getByPlaceholderText("value"), {
+    target: { value: "ops" },
+  });
+  const item = option("Ops Bot");
+  expect(fireEvent.mouseDown(item)).toBe(false);
+  fireEvent.click(item);
+  expect(onChange).toHaveBeenCalledOnce();
+  expect(onChange).toHaveBeenLastCalledWith([
+    expect.objectContaining({ path: "identity", value: "agent:a-1" }),
+  ]);
+});
+
+it("dismisses value suggestions from outside and clears the value search", async () => {
+  const onChange = vi.fn<(filters: ActiveLogFilter[]) => void>();
+  const onValueInputChange = vi.fn<(key: string, text: string) => void>();
+  render(
+    <div>
+      <button type="button">outside</button>
+      <Bar
+        onChange={onChange}
+        keyOptions={[{ key: "identity" }]}
+        operatorsFor={() => [Op.Eq]}
+        valueOptions={[{ value: "user:q", label: "Quiet Person" }]}
+        onValueInputChange={onValueInputChange}
+      />
+    </div>,
+  );
+  fireEvent.focus(screen.getByRole("combobox"));
+  fireEvent.click(option("identity"));
+  expect(screen.getByText("Quiet Person")).toBeTruthy();
+  screen.getByRole("button", { name: "outside" }).focus();
+  await waitFor(() => expect(screen.queryByText("Quiet Person")).toBeNull());
+  expect(screen.queryByPlaceholderText("value")).toBeNull();
+  expect(onChange).not.toHaveBeenCalled();
+  expect(onValueInputChange).toHaveBeenLastCalledWith("identity", "");
+});
+
+it("commits a typed value once when dismissed from outside", async () => {
+  const onChange = vi.fn<(filters: ActiveLogFilter[]) => void>();
+  function Controlled() {
+    const [filters, setFilters] = useState<ActiveLogFilter[]>([]);
+    return (
+      <div>
+        <button type="button">outside</button>
+        <Bar
+          filters={filters}
+          onChange={(next) => {
+            onChange(next);
+            setFilters(next);
+          }}
+          keyOptions={[{ key: "identity" }]}
+          operatorsFor={() => [Op.Eq, Op.NotEq]}
+          valueOptions={[{ value: "user:q", label: "Quiet Person" }]}
+        />
+      </div>
+    );
+  }
+  render(<Controlled />);
+  fireEvent.focus(screen.getByRole("combobox"));
+  fireEvent.click(option("identity"));
+  fireEvent.click(option("!="));
+  fireEvent.change(screen.getByPlaceholderText("value"), {
+    target: { value: "repo:x" },
+  });
+  screen.getByRole("button", { name: "outside" }).focus();
+  await waitFor(() =>
+    expect(screen.queryByPlaceholderText("value")).toBeNull(),
+  );
+  expect(onChange).toHaveBeenCalledOnce();
+  expect(onChange).toHaveBeenLastCalledWith([
+    expect.objectContaining({
+      path: "identity",
+      op: Op.NotEq,
+      value: "repo:x",
+    }),
+  ]);
+});
+
+it("forgets an earlier refusal when the chip editor reopens", async () => {
+  render(
+    <Bar
+      filters={[{ id: "c1", path: "client", op: Op.Eq, value: "c-1" }]}
+      validateFilter={(_path, _op, value) =>
+        value === "bad" ? "Not a client" : null
+      }
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Edit filter client" }));
+  const input = await screen.findByPlaceholderText("value");
+  fireEvent.change(input, { target: { value: "bad" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  expect(screen.getByText("Not a client")).toBeTruthy();
+
+  fireEvent.keyDown(input, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByText("Not a client")).toBeNull());
+  fireEvent.click(screen.getByRole("button", { name: "Edit filter client" }));
+  await screen.findByRole("button", { name: "Save" });
+  expect(screen.queryByText("Not a client")).toBeNull();
 });
