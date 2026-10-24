@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a secret header already storing a value may omit both to keep it.
+ * A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a header already storing a value may omit both to keep it, as long as is_secret is unchanged.
  */
 export type AuthClientHeaderInput = {
   /**
@@ -26,7 +26,7 @@ export type AuthClientHeaderInput = {
    */
   name: string;
   /**
-   * The value to send. Omit it on a secret header that already stores one to keep the stored value.
+   * The value to send. Omit it on a header that already stores one, with is_secret unchanged, to keep the stored value.
    */
   value?: string | undefined;
   /**

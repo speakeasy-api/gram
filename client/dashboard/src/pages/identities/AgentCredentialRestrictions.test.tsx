@@ -16,11 +16,25 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   remove: vi.fn(),
   blockOnConnection: vi.fn(),
+  listSessions: vi.fn(),
   blocks: [] as unknown[],
   sessions: [] as unknown[],
+  clientPages: [] as unknown[][],
+  canReadOrg: false,
 }));
+function pages(items: unknown[][]) {
+  return Promise.resolve(
+    (async function* () {
+      for (const page of items) yield { result: { items: page } };
+    })(),
+  );
+}
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => false, isLoading: false, error: null }),
+  useRBAC: () => ({
+    hasScope: () => mocks.canReadOrg,
+    isLoading: false,
+    error: null,
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "user_example" } }),
@@ -32,22 +46,14 @@ vi.mock("@/contexts/Sdk", () => ({
       listPolicyGrants: mocks.list,
       createPolicyGrant: mocks.create,
       deletePolicyGrant: mocks.remove,
+      listConnectionBlocks: () => pages([mocks.blocks]),
     },
+    authClients: { list: () => pages(mocks.clientPages) },
+    remoteSessions: { list: mocks.listSessions },
   }),
-}));
-vi.mock("@gram/client/react-query/authClients.js", () => ({
-  useAuthClients: () => ({ data: undefined }),
 }));
 vi.mock("@gram/client/react-query/agentConnectionBlocks.js", () => ({
   invalidateAllAgentConnectionBlocks: () => Promise.resolve(),
-  useAgentConnectionBlocks: () => ({
-    data: { result: { items: mocks.blocks } },
-    isLoading: false,
-    isError: false,
-  }),
-}));
-vi.mock("@gram/client/react-query/remoteSessions.js", () => ({
-  useRemoteSessions: () => ({ data: { result: { items: mocks.sessions } } }),
 }));
 vi.mock("@gram/client/react-query/blockAgentOnConnection.js", () => ({
   useBlockAgentOnConnectionMutation: () => ({
@@ -91,6 +97,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.blocks = [];
   mocks.sessions = [];
+  mocks.clientPages = [];
+  mocks.canReadOrg = false;
+  mocks.listSessions.mockImplementation(() => pages([mocks.sessions]));
   mocks.list.mockResolvedValue([
     {
       id: "grant_connect",
@@ -148,7 +157,63 @@ describe("AgentCredentialRestrictions", () => {
     );
   });
 
-  it("lets anyone block the agent on their own connection", () => {
+  it("offers credentials from every page of the organization's list", async () => {
+    mocks.canReadOrg = true;
+    mocks.clientPages = [
+      [{ id: "client_one", name: "First credential" }],
+      [{ id: "client_two", name: "Second credential" }],
+    ];
+    setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Block a credential" }),
+    );
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Credential to block" }),
+    );
+    expect(
+      await screen.findByRole("option", { name: "Second credential" }),
+    ).toBeTruthy();
+  });
+
+  it("clears the previous choice when the dialog is dismissed", async () => {
+    setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Block a credential" }),
+    );
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Credential to block" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: "Service account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Block a credential" }));
+    expect(
+      screen.getByRole("button", { name: "Block" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("shows a connection owner's block without offering to remove it", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "owner_block",
+        scope: "mcp:blocked_auth",
+        effect: "allow",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "*",
+          connectionOwner: "user_other",
+          upstreamClient: "registration_example",
+        },
+      },
+    ]);
+    setup();
+    expect(await screen.findByText("A person's own connection")).toBeTruthy();
+    expect(screen.getByText("Only that person can lift it")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /Remove restriction/ }),
+    ).toBeNull();
+  });
+
+  it("lets anyone block the agent on their own connection", async () => {
     mocks.sessions = [
       {
         remoteSessionClientId: "registration_example",
@@ -160,7 +225,12 @@ describe("AgentCredentialRestrictions", () => {
       screen.queryByRole("button", { name: "Block a credential" }),
     ).toBeNull();
     fireEvent.click(
-      screen.getByRole("button", { name: "Block on a connection" }),
+      await screen.findByRole("button", { name: "Block on a connection" }),
+    );
+    expect(mocks.listSessions).toHaveBeenCalledWith(
+      { subjectUrn: "user:user_example", limit: 100 },
+      undefined,
+      { signal: expect.any(AbortSignal) },
     );
     fireEvent.click(
       screen.getByRole("combobox", { name: "Connection to block" }),
