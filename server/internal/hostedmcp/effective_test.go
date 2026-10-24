@@ -31,7 +31,7 @@ func TestWithServerState(t *testing.T) {
 		{name: "no wrapper keeps toolset columns", wrapper: nil, enabled: true, public: true, issuer: stale.UserSessionIssuerID},
 		{name: "public wrapper", wrapper: canonical(visibility.Public), enabled: true, public: true, issuer: issuer},
 		{name: "private wrapper", wrapper: canonical(visibility.Private), enabled: true, public: false, issuer: issuer},
-		{name: "disabled wrapper ignores the toolset public flag", wrapper: canonical(visibility.Disabled), enabled: false, public: false, issuer: issuer},
+		{name: "disabled wrapper ignores the frozen public flag", wrapper: canonical(visibility.Disabled), enabled: false, public: false, issuer: issuer},
 		{name: "unknown visibility fails closed", wrapper: canonical("unexpected"), enabled: false, public: false, issuer: issuer},
 		{
 			name:    "other server for the toolset is ignored",
@@ -59,14 +59,14 @@ func TestWithServerStateDisabledReadsHowItReEnables(t *testing.T) {
 
 	toolsetID := uuid.New()
 	disabled := &mcpserversrepo.McpServer{ID: toolsetID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: visibility.Disabled}
-	public := toolsetsrepo.Toolset{ID: toolsetID, McpEnabled: false, McpIsPublic: true}
-	require.False(t, WithServerState(public, disabled).McpIsPublic, "a public flag without OAuth re-enables private")
+	private := toolsetsrepo.Toolset{ID: toolsetID, McpEnabled: true, McpIsPublic: false}
+	require.False(t, WithServerState(private, disabled).McpIsPublic, "a private alias re-enables private")
 
-	withOAuth := public
+	withOAuth := private
 	withOAuth.ExternalOauthServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	require.True(t, WithServerState(withOAuth, disabled).McpIsPublic, "external OAuth re-enables public")
 
-	withProxy := public
+	withProxy := private
 	withProxy.OauthProxyServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	require.True(t, WithServerState(withProxy, disabled).McpIsPublic, "OAuth proxy re-enables public")
 }

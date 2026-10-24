@@ -480,6 +480,7 @@ describe("useMcpServerCandidates", () => {
         id: "toolset-1",
         name: "Hosted wrapper",
         toolset: { ...HOSTED_ROW.toolset, name: "Hosted tools" },
+        platformEndpointSlug: "acme-renamed-address",
         visibility: "private",
       },
     ];
@@ -488,6 +489,7 @@ describe("useMcpServerCandidates", () => {
 
     expect(hosted?.title).toBe("Hosted tools");
     expect(hosted?.keywords).toContain("hosted");
+    expect(hosted?.keywords).toContain("acme-renamed-address");
     await act(async () => {
       await hosted?.run("open");
     });

@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -50,8 +49,8 @@ func syncMigrationWrapper(t *testing.T, ctx context.Context, ti *testInstance, t
 	require.NoError(t, tx.Commit(ctx))
 }
 
-// Hosted wrappers and their mirrored toolset issuer columns move together.
-func TestOrganizationUserSessionIssuerMigrateMovesHostedWrappersAndToolsetColumns(t *testing.T) {
+// Hosted wrappers move with the bulk server update; their toolset issuer column is a frozen alias and stays put.
+func TestOrganizationUserSessionIssuerMigrateMovesHostedWrappersNotToolsetColumns(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -82,8 +81,7 @@ func TestOrganizationUserSessionIssuerMigrateMovesHostedWrappersAndToolsetColumn
 	require.Equal(t, conv.ToNullUUID(targetID), wrapper.UserSessionIssuerID)
 	hostedAfter, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: hosted.ID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.Equal(t, conv.ToNullUUID(targetID), hostedAfter.UserSessionIssuerID, "the toolset column mirrors its server")
-	hostedmcptest.RequireMirrored(t, ctx, ti.conn, projectID, hosted.ID)
+	require.Equal(t, conv.ToNullUUID(sourceID), hostedAfter.UserSessionIssuerID, "the frozen toolset alias is not written")
 	effective, _, err := hostedmcp.LoadServerState(ctx, ti.conn, hostedAfter)
 	require.NoError(t, err)
 	require.Equal(t, conv.ToNullUUID(targetID), effective.UserSessionIssuerID, "readers take the issuer from the wrapper")
@@ -203,5 +201,4 @@ func TestOrganizationUserSessionIssuerMigrateSkipsDeletedHostedServerAudit(t *te
 	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: live.ID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, conv.ToNullUUID(targetID), server.UserSessionIssuerID)
-	hostedmcptest.RequireMirrored(t, ctx, ti.conn, projectID, live.ID)
 }

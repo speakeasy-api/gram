@@ -812,6 +812,64 @@ func (q *Queries) ListRootMCPEndpointsByMCPServerID(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listServableMCPEndpointsByMCPServerID = `-- name: ListServableMCPEndpointsByMCPServerID :many
+SELECT e.id, e.project_id, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, e.slug, e.is_domain_root, e.created_at, e.updated_at, e.deleted_at, e.deleted
+FROM mcp_endpoints e
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = $1
+  AND cd.deleted IS FALSE
+  AND cd.verified
+  AND cd.activated
+WHERE e.project_id = $2
+  AND e.mcp_server_id = $3::uuid
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+`
+
+type ListServableMCPEndpointsByMCPServerIDParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.UUID
+}
+
+type ListServableMCPEndpointsByMCPServerIDRow struct {
+	McpEndpoint McpEndpoint
+}
+
+// Endpoints that can serve: on the platform, or on a live, verified and activated domain of the organization.
+func (q *Queries) ListServableMCPEndpointsByMCPServerID(ctx context.Context, arg ListServableMCPEndpointsByMCPServerIDParams) ([]ListServableMCPEndpointsByMCPServerIDRow, error) {
+	rows, err := q.db.Query(ctx, listServableMCPEndpointsByMCPServerID, arg.OrganizationID, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServableMCPEndpointsByMCPServerIDRow
+	for rows.Next() {
+		var i ListServableMCPEndpointsByMCPServerIDRow
+		if err := rows.Scan(
+			&i.McpEndpoint.ID,
+			&i.McpEndpoint.ProjectID,
+			&i.McpEndpoint.CustomDomainID,
+			&i.McpEndpoint.McpServerID,
+			&i.McpEndpoint.MetaMcpServerID,
+			&i.McpEndpoint.Slug,
+			&i.McpEndpoint.IsDomainRoot,
+			&i.McpEndpoint.CreatedAt,
+			&i.McpEndpoint.UpdatedAt,
+			&i.McpEndpoint.DeletedAt,
+			&i.McpEndpoint.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMCPEndpointByID = `-- name: LockMCPEndpointByID :one
 SELECT id, project_id, custom_domain_id, mcp_server_id, meta_mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 FROM mcp_endpoints

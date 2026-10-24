@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -74,13 +73,13 @@ func (f *hostedFixture) payload(visibility types.McpServerVisibility, mutate fun
 }
 
 // requireProjected asserts the wrapper shares the toolset's name and tool variations group, keeps its single
-// platform endpoint, and that the toolset hosting columns mirror it.
+// platform endpoint, and that the toolset hosting columns stay unset.
 func (f *hostedFixture) requireProjected(t *testing.T, ctx context.Context) (toolsetsrepo.Toolset, mcpserversrepo.McpServer) {
 	t.Helper()
 
 	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
-	hostedmcptest.RequireMirrored(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
+	require.False(t, toolset.McpSlug.Valid || toolset.McpEnabled || toolset.McpIsPublic || toolset.UserSessionIssuerID.Valid || toolset.CustomDomainID.Valid, "hosting writes never touch the toolset hosting columns")
 	server, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	require.Equal(t, toolset.Name, server.Name.String)
@@ -131,9 +130,8 @@ func TestUpdateMcpServerHostedWrapperWritesWrapper(t *testing.T) {
 
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("disabled"), nil))
 	require.NoError(t, err)
-	toolset, server = f.requireProjected(t, ctx)
+	_, server = f.requireProjected(t, ctx)
 	require.Equal(t, "disabled", server.Visibility)
-	require.True(t, toolset.McpIsPublic, "disabling keeps the public flag the legacy columns re-enable with")
 	require.False(t, server.ToolVariationsGroupID.Valid, "omitted tool variations group clears it")
 	require.False(t, f.resolve(t, ctx).Allowed)
 }

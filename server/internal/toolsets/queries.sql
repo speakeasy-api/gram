@@ -103,7 +103,7 @@ WHERE project_id = @project_id
 ORDER BY created_at DESC;
 
 -- name: UpdateToolsetDetails :one
--- Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state and MirrorToolsetHosting writes them.
+-- Leaves the MCP hosting columns alone: the canonical wrapper owns hosting state.
 UPDATE toolsets
 SET
     name = COALESCE(@name, name)
@@ -115,7 +115,8 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: UpdateToolset :one
--- Test fixture: also writes the MCP hosting columns, which production code writes only through MirrorToolsetHosting.
+-- Test fixture: also writes the MCP hosting columns. Production code writes them only through MoveToolsetMCPAlias,
+-- the external MCP migration's DisableToolset and the issuer migration for toolsets without a wrapper.
 UPDATE toolsets
 SET
     name = COALESCE(@name, name)
@@ -284,8 +285,17 @@ WHERE slug = @slug
   AND external_oauth_server_id IS NULL
 RETURNING *;
 
+-- name: MoveToolsetMCPAlias :exec
+-- Moves a legacy toolset's MCP alias to the hosted endpoint that now holds its address.
+UPDATE toolsets
+SET
+    mcp_slug = @mcp_slug
+  , custom_domain_id = @custom_domain_id
+  , updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE AND mcp_slug IS NOT NULL;
+
 -- name: UpdateToolsetUserSessionIssuer :one
--- Test fixture: production code writes the issuer column only through MirrorToolsetHosting and the issuer migration.
+-- Test fixture: production code writes the issuer column only through the issuer migration, for toolsets without a wrapper.
 UPDATE toolsets
 SET
     user_session_issuer_id = @user_session_issuer_id
@@ -464,17 +474,3 @@ LEFT JOIN LATERAL (
 WHERE s.id = ANY(@toolset_ids::uuid[])
   AND s.deleted IS FALSE;
 
--- name: MirrorToolsetHosting :one
--- Writes a hosted toolset's hosting columns from its canonical server so pods that still read them stay consistent.
-UPDATE toolsets
-SET
-    name = @name
-  , mcp_slug = @mcp_slug
-  , mcp_enabled = @mcp_enabled
-  , mcp_is_public = @mcp_is_public
-  , custom_domain_id = @custom_domain_id
-  , user_session_issuer_id = @user_session_issuer_id
-  , tool_variations_group_id = @tool_variations_group_id
-  , updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
-RETURNING *;
