@@ -253,6 +253,8 @@ SELECT
   t.mcp_is_public,
   t.mcp_enabled,
   t.tool_selection_mode,
+  t.external_oauth_server_id,
+  t.oauth_proxy_server_id,
   t.created_at,
   t.updated_at,
   COALESCE(tv.tool_urns, ARRAY[]::TEXT[]) AS latest_tool_urns,
