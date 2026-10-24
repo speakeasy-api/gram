@@ -969,7 +969,7 @@ function EmptyToolListNotice({
       </Text>
       {discovered ? (
         <Link
-          to={routes.mcp.x.inspect.href(mcpServerRouteParam(server))}
+          to={routes.mcp.details.inspect.href(mcpServerRouteParam(server))}
           target="_blank"
           rel="noopener noreferrer"
           className="text-muted-foreground hover:text-foreground inline-block text-xs underline"

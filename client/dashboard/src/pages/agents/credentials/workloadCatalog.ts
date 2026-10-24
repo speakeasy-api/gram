@@ -223,21 +223,22 @@ export function subjectRule(
 }
 
 /**
- * The organization-wide access rule already admitting this rule under the
- * entry's issuer, if there is one. The server refuses a second one, so the
+ * The access rule already admitting this rule under the issuer and tier,
+ * defaulting to organization-wide catalog flows. The server refuses a second one, so the
  * setup says so before the operator gets that far.
  */
 export function existingRule(
   issuer: string,
   admissions: WorkloadAdmission[],
   rule: SubjectRule,
+  projectId = "",
 ): WorkloadAdmission | undefined {
   return admissions.find(
     (admission) =>
       admission.issuer === issuer &&
       admission.subject === rule.subject &&
       admission.matchKind === rule.matchKind &&
-      admission.projectId === "",
+      admission.projectId === projectId,
   );
 }
 

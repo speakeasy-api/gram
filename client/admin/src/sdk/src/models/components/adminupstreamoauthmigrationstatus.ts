@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AdminUpstreamAuthEnforcement,
+  AdminUpstreamAuthEnforcement$inboundSchema,
+} from "./adminupstreamauthenforcement.js";
+import {
   AdminUpstreamOAuthMigrationAuthClients,
   AdminUpstreamOAuthMigrationAuthClients$inboundSchema,
 } from "./adminupstreamoauthmigrationauthclients.js";
@@ -32,6 +36,10 @@ export type AdminUpstreamOAuthMigrationStatus = {
    * Live user session credentials scanned.
    */
   credentials: number;
+  /**
+   * One organization's upstream auth enforcement.
+   */
+  enforcement?: AdminUpstreamAuthEnforcement | undefined;
   /**
    * Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.
    */
@@ -76,6 +84,7 @@ export const AdminUpstreamOAuthMigrationStatus$inboundSchema: z.ZodMiniType<
       AdminUpstreamOAuthMigrationAuthClients$inboundSchema,
     ),
     credentials: z.int(),
+    enforcement: z.optional(AdminUpstreamAuthEnforcement$inboundSchema),
     execution_profiles: z.optional(
       AdminUpstreamOAuthMigrationExecutionProfiles$inboundSchema,
     ),

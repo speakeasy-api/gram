@@ -461,6 +461,55 @@ describe("what a row change writes", () => {
   });
 });
 
+describe("a blocking role", () => {
+  const engineering = {
+    principalUrn: "role:global:1",
+    kind: "role",
+    displayName: "Engineering",
+  } as const;
+
+  it("reads as blocked rather than as no access", () => {
+    renderList([
+      entry({ ...engineering, level: "blocked" }),
+      entry({ ...engineering, level: "blocked_view" }),
+      entry({ ...engineering, level: "blocked_manage" }),
+    ]);
+
+    // The collapsed row says it, not only the lines inside it.
+    expect(screen.getAllByText("Blocked").length).toBeGreaterThan(0);
+    expandFirstRow();
+    expect(screen.getAllByRole("button", { name: /^Blocked/ })).toHaveLength(3);
+    expect(screen.queryByText("No access")).toBeNull();
+  });
+
+  it("names the choice that writes a block as blocked", () => {
+    renderList([entry({ ...engineering, appliesTo: "all_resources" })]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /All tools/ }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+
+    expect(screen.getByRole("menuitem", { name: "Blocked" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "No access" })).toBeNull();
+  });
+
+  it("keeps no access for a choice that only removes the role's own rule", () => {
+    renderList([entry({ ...engineering })]);
+    expandFirstRow();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /All tools/ }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+
+    expect(screen.getByRole("menuitem", { name: "No access" })).toBeTruthy();
+  });
+});
+
 it("confirms removing an agent that remains covered by a broader role allow", () => {
   renderList([
     entry({ principalUrn: "agent:a1", kind: "agent", displayName: "Releaser" }),

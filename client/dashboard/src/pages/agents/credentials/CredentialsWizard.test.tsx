@@ -852,8 +852,19 @@ describe("Editing an agent that already exists", () => {
 
     await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(1));
     expect(
-      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.agentPolicyGrantIDForm,
-    ).toEqual({ agentId: "agent_one", grantId: "grant_one" });
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm,
+    ).toEqual({
+      agentId: "agent_one",
+      grantId: "grant_one",
+      expectedPolicy: {
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "toolset_one",
+          projectId: "project_one",
+        },
+      },
+    });
     expect(mocks.createGrant).not.toHaveBeenCalled();
   });
 
@@ -948,8 +959,12 @@ describe("Editing an agent that already exists", () => {
 
     await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(1));
     expect(
-      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.agentPolicyGrantIDForm,
-    ).toEqual({ agentId: "agent_one", grantId: "grant_all" });
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm,
+    ).toEqual({
+      agentId: "agent_one",
+      grantId: "grant_all",
+      expectedPolicy: { scope: WILDCARD.scope, selector: WILDCARD.selector },
+    });
     // The chosen server is granted before the wildcard goes, so a failure
     // between the two leaves too much reach rather than too little.
     expect(mocks.createGrant).toHaveBeenCalledTimes(1);
@@ -1099,9 +1114,74 @@ describe("Editing an agent that already exists", () => {
     await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(3));
     expect(
       mocks.deleteGrant.mock.calls.map(
-        (call) => call[0]?.request?.agentPolicyGrantIDForm?.grantId,
+        (call) => call[0]?.request?.deleteAgentPolicyGrantForm?.grantId,
       ),
     ).toEqual(["grant_all", "grant_all_two", "grant_all_two"]);
+  });
+
+  it("keeps a conflicting deletion pending with its original policy on retry", async () => {
+    mocks.deleteGrant.mockRejectedValueOnce(
+      Object.assign(new Error("Policy changed; reopen to review"), {
+        statusCode: 409,
+      }),
+    );
+    const { onDone } = editing({ grants: [WILDCARD, WILDCARD_TWO] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "All servers" }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+    await screen.findByText("Policy changed; reopen to review");
+    expect(mocks.deleteGrant).toHaveBeenCalledTimes(1);
+    expect(onDone).not.toHaveBeenCalled();
+    expect(
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm,
+    ).toEqual({
+      agentId: "agent_one",
+      grantId: WILDCARD.id,
+      expectedPolicy: { scope: WILDCARD.scope, selector: WILDCARD.selector },
+    });
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Save changes and exit",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    expect(mocks.createGrant).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.deleteGrant.mock.calls.map(
+        (call) => call[0]?.request?.deleteAgentPolicyGrantForm,
+      ),
+    ).toEqual([
+      {
+        agentId: "agent_one",
+        grantId: WILDCARD.id,
+        expectedPolicy: { scope: WILDCARD.scope, selector: WILDCARD.selector },
+      },
+      {
+        agentId: "agent_one",
+        grantId: WILDCARD.id,
+        expectedPolicy: { scope: WILDCARD.scope, selector: WILDCARD.selector },
+      },
+      {
+        agentId: "agent_one",
+        grantId: WILDCARD_TWO.id,
+        expectedPolicy: {
+          scope: WILDCARD_TWO.scope,
+          selector: WILDCARD_TWO.selector,
+        },
+      },
+    ]);
   });
 
   it("will not save while the server list has not loaded", async () => {

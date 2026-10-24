@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -88,12 +89,24 @@ func (m *Manager) snapshotInferenceCeiling(ctx context.Context, tx pgx.Tx, ident
 	if admission.AgentPrincipal != urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String()).String() {
 		return inferenceCeiling{}, oops.C(oops.CodeUnauthorized)
 	}
-	grants, err := runtimepolicy.DelegableGrantsWithExclusions(admission.Agent, admission.Agent, admission.Agent)
+	return buildInferenceCeiling(admission.Agent)
+}
+
+func buildInferenceCeiling(agent []authz.Grant) (inferenceCeiling, error) {
+	grants, err := runtimepolicy.DelegableGrantsWithExclusions(agent, agent, agent)
 	if err != nil {
 		return inferenceCeiling{}, fmt.Errorf("derive inference ceiling grants: %w", err)
 	}
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
-	policy, err := runtimepolicy.NewDelegatedPolicy(version, grants)
+	version := runtimepolicy.AssistantIssuedPolicyVersion
+	// Reader support must not advance this existing issuer. Filter candidates
+	// after delegation so the original policy still determines exclusions.
+	legacyGrants := make([]authz.Grant, 0, len(grants))
+	for _, grant := range grants {
+		if runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.RuntimeScopeRegistryVersion(version), grant.Scope) {
+			legacyGrants = append(legacyGrants, grant)
+		}
+	}
+	policy, err := runtimepolicy.NewDelegatedPolicy(version, legacyGrants)
 	if err != nil {
 		return inferenceCeiling{}, fmt.Errorf("build inference ceiling policy: %w", err)
 	}

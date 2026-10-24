@@ -469,6 +469,10 @@ const issuerGateReasonWorkloadSessionOutOfReach = "workload_session_out_of_reach
 // is no longer admitted.
 const issuerGateReasonInvalidBearerToken = "invalid_bearer_token"
 
+// issuerGateReasonOrganizationMismatch: an organization that enforces upstream
+// auth refused a caller authenticated to another organization.
+const issuerGateReasonOrganizationMismatch = "organization_mismatch"
+
 // userSessionLastUsedCutoff coalesces the last_used_at stamp: a session records
 // at most one write per window regardless of request volume. Every other
 // request matches no rows and costs one index probe. The window is therefore
@@ -1146,6 +1150,10 @@ func (s *Service) authenticateIssuerGate(
 			return ctx, nil, nil, writeInvalidTokenChallenge(w, protectedResourceURL, message)
 		}
 		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, message)
+	}
+	if err := s.refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
+		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
+		return ctx, nil, nil, err
 	}
 
 	return newCtx, &issuerGateAuthentication{

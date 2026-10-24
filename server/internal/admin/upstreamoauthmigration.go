@@ -198,9 +198,10 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 	}
 	pendingSelections := int64(selections.Pairs[selectionbackfill.OutcomeClient] + selections.Pairs[selectionbackfill.OutcomeNoAuth])
 
-	return &gen.AdminUpstreamOAuthMigrationStatus{
+	status := &gen.AdminUpstreamOAuthMigrationStatus{
 		AuthClients:          s.authClientMigrationStatus(ctx, organizationID),
 		ExecutionProfiles:    s.executionProfileMigrationStatus(ctx, organizationID),
+		Enforcement:          nil,
 		OrganizationID:       organizationID,
 		Migrated:             associations.Decided == 0 && len(unresolved) == 0 && pendingSelections == 0,
 		Servers:              int64(associations.Servers),
@@ -209,7 +210,9 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 		Credentials:          int64(selections.Credentials),
 		PendingSelections:    pendingSelections,
 		ReconnectCredentials: int64(len(reconnect)),
-	}, nil
+	}
+	status.Enforcement = s.upstreamAuthEnforcement(ctx, status)
+	return status, nil
 }
 
 // authClientMigrationStatus dry-runs the typed auth client backfill. It is
@@ -236,6 +239,7 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 			FailedPhases:             []string{},
 			SelectionsComplete:       new(false),
 			PendingSelectionMappings: new(int64(0)),
+			PendingGrants:            new(int64(0)),
 			SelectionClasses:         []*gen.AdminUpstreamOAuthMigrationSelectionClass{},
 			SelectionGaps:            []*gen.AdminUpstreamOAuthMigrationSelectionGap{},
 			SelectionGapCount:        new(int64(0)),
@@ -311,6 +315,7 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 		FailedPhases:             phases,
 		SelectionsComplete:       new(gapCount == 0 && report.PendingSelectionMappings == 0 && !selectionsFailed),
 		PendingSelectionMappings: new(int64(report.PendingSelectionMappings)),
+		PendingGrants:            new(int64(report.PendingGrants)),
 		SelectionClasses:         classes,
 		SelectionGaps:            gaps,
 		SelectionGapCount:        new(int64(gapCount)),

@@ -1,3 +1,6 @@
+import { AgentPermissionEditor } from "@/pages/agents/AgentPermissionEditor";
+import { Button } from "@/components/ui/Button";
+import { useState } from "react";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { ResourceLink } from "@/pages/access/ResourceLink";
@@ -36,6 +39,7 @@ export function AgentIdentityPermissions({
 }): JSX.Element {
   const organization = useOrganization();
   const sdk = useSdkClient();
+  const [editing, setEditing] = useState(false);
   // The policy endpoint requires setup/write access, independently of agent:read.
   const canRead = agent.permissions.write;
   const grants = useQuery({
@@ -145,6 +149,17 @@ export function AgentIdentityPermissions({
   return (
     <IdentityPanel
       title="Agent permissions"
+      action={
+        canRead && grants.data && !grants.isError ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setEditing(true)}
+          >
+            Edit permissions
+          </Button>
+        ) : undefined
+      }
       loading={canRead && grants.isLoading}
       error={canRead && grants.isError && rows.length === 0}
       refreshFailed={canRead && grants.isError && rows.length > 0}
@@ -152,6 +167,13 @@ export function AgentIdentityPermissions({
       footer="These configured permissions limit what credentials may delegate. Actual access also depends on the credential's grants, the owner's current permissions, and the agent's status."
     >
       {content}
+      {editing && canRead && grants.data && (
+        <AgentPermissionEditor
+          agent={agent}
+          grants={rows}
+          onClose={() => setEditing(false)}
+        />
+      )}
     </IdentityPanel>
   );
 }

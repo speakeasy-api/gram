@@ -3193,11 +3193,7 @@ SELECT
   ams.mcp_server_id,
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
-  CASE WHEN t.id IS NOT NULL THEN CASE
-    WHEN t.mcp_enabled IS NOT TRUE THEN 'disabled'
-    WHEN t.mcp_is_public THEN 'public'
-    ELSE 'private'
-  END ELSE ms.visibility END::text AS visibility,
+  ms.visibility::text AS visibility,
   COALESCE(ep.slug, t.mcp_slug, '')::text AS endpoint_slug,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
   t.default_environment_slug,
@@ -3254,8 +3250,8 @@ type LoadAssistantMcpServersRow struct {
 	EnvironmentSlug        pgtype.Text
 }
 
-// Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug,
-// mcp_enabled and default environment, and sort first so they win runtime id
+// Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug and
+// default environment, and sort first so they win runtime id
 // collisions. The address is the server's own endpoint: platform first, else
 // one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
 // A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias until the

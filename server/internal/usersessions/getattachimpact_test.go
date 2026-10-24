@@ -13,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -73,7 +75,7 @@ func TestGetAttachImpactBetweenPerServerIssuersOnCustomDomain(t *testing.T) {
 	useAuthenticationHost(t, ctx, ti, candidateID)
 	domainID := createCustomDomain(t, ctx, ti)
 	toolset := attachIssuerToolset(t, ctx, ti, projectID, currentID, "impact-domain-toolset")
-	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
 		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Slug: toolset.Slug, ProjectID: projectID,
 	}))
 
@@ -95,6 +97,53 @@ func TestGetAttachImpactBetweenPerServerIssuersOnCustomDomain(t *testing.T) {
 	impact, err = ti.service.GetAttachImpact(ctx, payload)
 	require.NoError(t, err)
 	require.True(t, impact.AuthorizationServerChanges)
+}
+
+// A toolset with a canonical server previews that server's issuer, and is on
+// the platform host through its legacy alias or any live endpoint.
+func TestGetAttachImpactCanonicalServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	currentID := seedIssuer(t, ctx, ti, "impact-canonical-current")
+	candidateID := seedIssuer(t, ctx, ti, "impact-canonical-candidate")
+	useAuthenticationHost(t, ctx, ti, candidateID)
+	domainID := createCustomDomain(t, ctx, ti)
+	toolset := attachIssuerToolset(t, ctx, ti, projectID, currentID, "impact-canonical-toolset")
+	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: toolset.ID, ProjectID: projectID,
+		Name: pgtype.Text{String: toolset.Slug, Valid: true}, Slug: pgtype.Text{String: toolset.Slug, Valid: true},
+		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{UUID: currentID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{},
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ToolVariationsGroupID: uuid.NullUUID{}, Visibility: mcpservers.VisibilityDisabled,
+	})
+	require.NoError(t, err)
+	// Naming the toolset or its canonical server previews the same thing.
+	preview := func() *projectgen.UserSessionIssuerAttachImpact {
+		t.Helper()
+		byToolset, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{ToolsetID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
+		require.NoError(t, err)
+		byServer, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{McpServerID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
+		require.NoError(t, err)
+		require.Equal(t, byToolset, byServer)
+		return byToolset
+	}
+
+	// The legacy alias on the platform host answers beside a custom-domain endpoint.
+	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: domainID, Valid: true}, "impact-canonical-domain")
+	impact := preview()
+	require.Equal(t, currentID.String(), impact.CurrentIssuer.ID)
+	require.True(t, impact.AuthorizationServerChanges)
+
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
+		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Slug: toolset.Slug, ProjectID: projectID,
+	}))
+	require.False(t, preview().AuthorizationServerChanges)
+
+	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "impact-canonical-platform")
+	require.True(t, preview().AuthorizationServerChanges)
 }
 
 // useAuthenticationHost opts an issuer in to announcing the authentication

@@ -277,6 +277,9 @@ export function CredentialsWizard({
   // The grants as the save last knew them, so a retry after a partial save
   // writes what is still missing rather than creating a grant a second time.
   const applied = useRef(new Map<string, GrantedServer>());
+  // Keep the policy originally read for every pending deletion, including
+  // grants created by a partially completed save. A rejected delete keeps it.
+  const appliedPolicies = useRef(new Map<string, AgentPolicyGrant>());
   // The wildcard as the save last knew it, for the same reason: `grants` is
   // the answer the query gave before the save started, so a retry reading it
   // would create a second wildcard or ask for an id that is already gone.
@@ -286,6 +289,7 @@ export function CredentialsWizard({
     if (inventory.isLoading || inventory.isError) return;
     const granted = grantedServers(grants);
     applied.current = granted;
+    appliedPolicies.current = new Map(grants.map((grant) => [grant.id, grant]));
     setSelected(
       inventory.servers
         .filter((server) => granted.has(server.resourceId))
@@ -562,6 +566,7 @@ export function CredentialsWizard({
         });
         // Recorded as the write lands, so a failure further down this save
         // does not make the next attempt create a second wildcard.
+        appliedPolicies.current.set(created.id, created);
         appliedWildcard.current = {
           projectIds: scopedProjectID ? [scopedProjectID] : [],
           grantIds: [created.id],
@@ -584,6 +589,7 @@ export function CredentialsWizard({
         });
         // Recorded as each write lands, so a later failure does not send the
         // whole diff again on the next attempt.
+        appliedPolicies.current.set(created.id, created);
         applied.current.set(server.resourceId, {
           grantIds: [created.id],
           resourceId: server.resourceId,
@@ -597,9 +603,24 @@ export function CredentialsWizard({
         ? changes.remove
         : [...changes.remove, ...(appliedWildcard.current?.grantIds ?? [])];
       for (const grantId of removals) {
+        const baseline = appliedPolicies.current.get(grantId);
+        if (!baseline)
+          throw new Error(
+            "The original permission could not be found. Reopen the editor before saving.",
+          );
         await deleteGrant.mutateAsync({
-          request: { agentPolicyGrantIDForm: { agentId: agent.id, grantId } },
+          request: {
+            deleteAgentPolicyGrantForm: {
+              agentId: agent.id,
+              grantId,
+              expectedPolicy: {
+                scope: baseline.scope,
+                selector: baseline.selector,
+              },
+            },
+          },
         });
+        appliedPolicies.current.delete(grantId);
         for (const [resourceId, server] of applied.current) {
           const left = server.grantIds.filter((id) => id !== grantId);
           // A server can be reached through several grants, so it is only off

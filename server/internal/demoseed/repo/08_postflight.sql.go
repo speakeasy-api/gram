@@ -52,6 +52,18 @@ func (q *Queries) PostflightCountAgentAttributedChats(ctx context.Context, arg P
 	return count, err
 }
 
+const postflightCountAuthClientAssociations = `-- name: PostflightCountAuthClientAssociations :one
+SELECT count(*) FROM mcp_server_auth_clients
+WHERE organization_id = $1::text AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightCountAuthClientAssociations(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAuthClientAssociations, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountChats = `-- name: PostflightCountChats :one
 SELECT count(*) FROM chats WHERE organization_id = $1::text
 `
