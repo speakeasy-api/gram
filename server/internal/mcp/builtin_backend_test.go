@@ -142,8 +142,14 @@ func TestServePublic_BuiltinBackend_AcceptsKeysWithoutTheIssuer(t *testing.T) {
 func TestServePublic_BuiltinBackend_AdmitsKeysOnlyInItsProject(t *testing.T) {
 	t.Parallel()
 
-	for _, binding := range []string{"organization", "other project"} {
-		t.Run(binding, func(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		otherProject bool
+	}{
+		{name: "organization", otherProject: false},
+		{name: "other project", otherProject: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPService(t)
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -153,7 +159,7 @@ func TestServePublic_BuiltinBackend_AdmitsKeysOnlyInItsProject(t *testing.T) {
 			keyOwner := *authCtx
 			keyOwner.ProjectID = nil
 			keyOwner.ProjectSlug = nil
-			if binding == "other project" {
+			if tc.otherProject {
 				other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
 					Name: "Other project", Slug: "other-project", OrganizationID: authCtx.ActiveOrganizationID,
 				})
@@ -163,7 +169,7 @@ func TestServePublic_BuiltinBackend_AdmitsKeysOnlyInItsProject(t *testing.T) {
 			key := ti.createTestAPIKey(contextvalues.SetAuthContext(ctx, &keyOwner), t)
 
 			w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), key, nil)
-			if binding == "other project" {
+			if tc.otherProject {
 				require.ErrorContains(t, err, "key project does not match the mcp server project")
 				require.Empty(t, calls.seen(), "a key from another project must not reach the backend")
 				return
