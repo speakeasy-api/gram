@@ -460,18 +460,18 @@ type storedHeaderValue struct {
 	isSecret bool
 }
 
-// validateClientHeaders checks a client's complete header set. storedValues
-// maps header keys of headers already storing a value to that value; a header
-// given no value keeps it when it is still secret or still not secret, so a
-// kept value is never reinterpreted as plaintext or ciphertext. A returned error's
-// message is shown to the administrator as is, so it names the header and how
-// to fix it, never a value.
 // headerKey is a header name's identity: names match regardless of case, and
 // '_' matches '-'.
 func headerKey(name string) string {
 	return strings.ToLower(strings.ReplaceAll(strings.Trim(name, " "), "_", "-"))
 }
 
+// validateClientHeaders checks a client's complete header set. storedValues
+// maps header keys of headers already storing a value to that value; a header
+// given no value keeps it when it is still secret or still not secret, so a
+// kept value is never reinterpreted as plaintext or ciphertext. A returned error's
+// message is shown to the administrator as is, so it names the header and how
+// to fix it, never a value.
 func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInput, storedValues map[string]storedHeaderValue) ([]clientHeader, error) {
 	if len(inputs) > maxHeadersPerClient {
 		return nil, fmt.Errorf("an auth client can send at most %d headers", maxHeadersPerClient)
