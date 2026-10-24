@@ -60,7 +60,7 @@ func requireAHPConfiguration(t *testing.T, h http.Handler, failurePolicy string)
 		if sub.Mode == "intercept" {
 			intercepts += len(sub.Events)
 			require.Equal(t, failurePolicy, sub.FailurePolicy)
-			require.Equal(t, 30000, sub.TimeoutMS)
+			require.Equal(t, 10000, sub.TimeoutMS)
 		} else {
 			require.Equal(t, "observe", sub.Mode)
 			require.Empty(t, sub.FailurePolicy)
@@ -72,7 +72,6 @@ func requireAHPConfiguration(t *testing.T, h http.Handler, failurePolicy string)
 		"tool.before":          "intercept",
 		"session.start":        "observe",
 		"session.end":          "observe",
-		"turn.start":           "observe",
 		"turn.end":             "observe",
 		"model.response.after": "observe",
 		"tool.after":           "observe",

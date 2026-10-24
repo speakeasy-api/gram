@@ -47,20 +47,23 @@ configuration uncommitted.
 Call `hooks/configuration` to discover the supported subscriptions:
 
 - Intercept: `user.message.inbound` and `tool.before`.
-- Observe: `session.start`, `session.end`, `turn.start`, `turn.end`,
+- Observe: `session.start`, `session.end`, `turn.end`,
   `model.response.after`, and `tool.after`.
 
-Each event is advertised once. Intercept subscriptions use a 30-second timeout
+Each event is advertised once. Intercept subscriptions use a ten-second timeout
 and the authenticated organization's current fail-open setting; policy presence
 does not change delivery mode. Both modes request `content: {"default": "body"}`.
+The timeout is a fixed transport default; there is no organization-level AHP timeout setting.
 Discovery lookup failures return the SDK-native JSON-RPC
 error `-32004` (`Backend internal error`) over HTTP 200, without subscriptions or
 an assumed failure policy. Authentication failures remain HTTP 401/403.
 
-Observe mode records events without enforcing policy, except `turn.start`, which
-the SDK acknowledges without ingestion because no observer callback is registered. Prompt and tool
+Observe mode records events without enforcing policy. `turn.start` is not advertised. Prompt and tool
 interception require the harness to support denial at the subscribed boundary.
 Only inline text is supported; content references and uploads are not supported.
+
+Clients must support `hooks/configuration` discovery before explicit local subscriptions
+can be removed. Advertising defaults does not enable discovery in older clients.
 
 ## Legacy Compatibility
 
