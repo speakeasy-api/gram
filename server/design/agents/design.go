@@ -83,6 +83,30 @@ var PolicyGrant = Type("AgentPolicyGrant", func() {
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })
 })
 
+var CheckPolicyGrantsForm = Type("CheckAgentPolicyGrantsForm", func() {
+	Attribute("agent_id", String, "The agent the grants would be written to. Omit for an agent the caller would create.", func() { Format(FormatUUID) })
+	Attribute("owner_user_id", String, "Owner of the agent the caller would create, as agents.create takes it; defaults to the caller. Not allowed with agent_id, whose owner is its own.")
+	Attribute("policy_grants", ArrayOf(PolicyGrantForm), "The grants to check, answered in the same order.", func() {
+		MinLength(1)
+		MaxLength(100)
+	})
+	Required("policy_grants")
+})
+
+var PolicyGrantCheck = Type("AgentPolicyGrantCheck", func() {
+	Description("Whether one policy grant could be written, by the same rule agents.create and agents.createPolicyGrant enforce.")
+	Required("allowed")
+	Attribute("allowed", Boolean, "Whether the grant fits within the caller's and the owner's permissions.")
+	Attribute("limited_by", String, "Whose permissions the grant exceeds; absent when allowed.", func() {
+		Enum("caller", "owner")
+	})
+})
+
+var CheckPolicyGrantsResult = Type("CheckAgentPolicyGrantsResult", func() {
+	Required("results")
+	Attribute("results", ArrayOf(PolicyGrantCheck), "One answer per requested grant, in request order.")
+})
+
 var PolicyGrantIDForm = Type("AgentPolicyGrantIDForm", func() {
 	Extend(AgentIDForm)
 	Attribute("grant_id", String, "Direct policy grant identifier", func() { Format(FormatUUID) })
@@ -298,6 +322,24 @@ var _ = Service("agents", func() {
 			GET("/rpc/agents.listPolicyGrants")
 			Param("agent_id")
 			security.SessionHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("checkPolicyGrants", func() {
+		Description("Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.")
+		Meta("openapi:operationId", "checkAgentPolicyGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "checkPolicyGrants")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CheckAgentPolicyGrants"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Extend(CheckPolicyGrantsForm)
+		})
+		Result(CheckPolicyGrantsResult)
+		HTTP(func() {
+			POST("/rpc/agents.checkPolicyGrants")
+			security.SessionHeader()
+			Body(CheckPolicyGrantsForm)
 			Response(StatusOK)
 		})
 	})

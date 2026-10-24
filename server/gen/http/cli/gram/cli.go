@@ -123,7 +123,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
-		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
+		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -596,6 +596,10 @@ func ParseEndpoint(
 		agentsListPolicyGrantsFlags            = flag.NewFlagSet("list-policy-grants", flag.ExitOnError)
 		agentsListPolicyGrantsAgentIDFlag      = agentsListPolicyGrantsFlags.String("agent-id", "REQUIRED", "")
 		agentsListPolicyGrantsSessionTokenFlag = agentsListPolicyGrantsFlags.String("session-token", "", "")
+
+		agentsCheckPolicyGrantsFlags            = flag.NewFlagSet("check-policy-grants", flag.ExitOnError)
+		agentsCheckPolicyGrantsBodyFlag         = agentsCheckPolicyGrantsFlags.String("body", "REQUIRED", "")
+		agentsCheckPolicyGrantsSessionTokenFlag = agentsCheckPolicyGrantsFlags.String("session-token", "", "")
 
 		agentsCreatePolicyGrantFlags            = flag.NewFlagSet("create-policy-grant", flag.ExitOnError)
 		agentsCreatePolicyGrantBodyFlag         = agentsCreatePolicyGrantFlags.String("body", "REQUIRED", "")
@@ -5333,6 +5337,7 @@ func ParseEndpoint(
 	agentsRenameFlags.Usage = agentsRenameUsage
 	agentsListDelegableGrantsFlags.Usage = agentsListDelegableGrantsUsage
 	agentsListPolicyGrantsFlags.Usage = agentsListPolicyGrantsUsage
+	agentsCheckPolicyGrantsFlags.Usage = agentsCheckPolicyGrantsUsage
 	agentsCreatePolicyGrantFlags.Usage = agentsCreatePolicyGrantUsage
 	agentsUpdatePolicyGrantFlags.Usage = agentsUpdatePolicyGrantUsage
 	agentsDeletePolicyGrantFlags.Usage = agentsDeletePolicyGrantUsage
@@ -6819,6 +6824,9 @@ func ParseEndpoint(
 
 			case "list-policy-grants":
 				epf = agentsListPolicyGrantsFlags
+
+			case "check-policy-grants":
+				epf = agentsCheckPolicyGrantsFlags
 
 			case "create-policy-grant":
 				epf = agentsCreatePolicyGrantFlags
@@ -9993,6 +10001,9 @@ func ParseEndpoint(
 			case "list-policy-grants":
 				endpoint = c.ListPolicyGrants()
 				data, err = agentsc.BuildListPolicyGrantsPayload(*agentsListPolicyGrantsAgentIDFlag, *agentsListPolicyGrantsSessionTokenFlag)
+			case "check-policy-grants":
+				endpoint = c.CheckPolicyGrants()
+				data, err = agentsc.BuildCheckPolicyGrantsPayload(*agentsCheckPolicyGrantsBodyFlag, *agentsCheckPolicyGrantsSessionTokenFlag)
 			case "create-policy-grant":
 				endpoint = c.CreatePolicyGrant()
 				data, err = agentsc.BuildCreatePolicyGrantPayload(*agentsCreatePolicyGrantBodyFlag, *agentsCreatePolicyGrantSessionTokenFlag)
@@ -14423,6 +14434,7 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, `    rename: Rename implements rename.`)
 	fmt.Fprintln(os.Stderr, `    list-delegable-grants: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.`)
 	fmt.Fprintln(os.Stderr, `    list-policy-grants: ListPolicyGrants implements listPolicyGrants.`)
+	fmt.Fprintln(os.Stderr, `    check-policy-grants: Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.`)
 	fmt.Fprintln(os.Stderr, `    create-policy-grant: CreatePolicyGrant implements createPolicyGrant.`)
 	fmt.Fprintln(os.Stderr, `    update-policy-grant: UpdatePolicyGrant implements updatePolicyGrant.`)
 	fmt.Fprintln(os.Stderr, `    delete-policy-grant: DeletePolicyGrant implements deletePolicyGrant.`)
@@ -14619,6 +14631,26 @@ func agentsListPolicyGrantsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-policy-grants --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func agentsCheckPolicyGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents check-policy-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents check-policy-grants --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func agentsCreatePolicyGrantUsage() {
