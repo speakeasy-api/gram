@@ -46,7 +46,7 @@ type listInput struct {
 	ClientRegistrations        []string `json:"client_registrations,omitempty" jsonschema:"Only sessions whose client registered this way: cimd, dcr, assistant, or none."`
 	ExcludeClientRegistrations []string `json:"exclude_client_registrations,omitempty" jsonschema:"Leave out sessions whose client registered this way."`
 	Providers                  []string `json:"providers,omitempty" jsonschema:"Only sessions admitted to one of these upstream providers: a provider (remote session issuer) UUID, or none for sessions with no admitted provider sign-in."`
-	ExcludeProviders           []string `json:"exclude_providers,omitempty" jsonschema:"Leave out sessions admitted to any of these providers."`
+	ExcludeProviders           []string `json:"exclude_providers,omitempty" jsonschema:"Leave out sessions admitted to any of these providers: a provider (remote session issuer) UUID, or none to leave out sessions with no admitted provider sign-in."`
 	LastUsedWithin             *int     `json:"last_used_within,omitempty" jsonschema:"Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match."`
 	LastUsedOlderThan          *int     `json:"last_used_older_than,omitempty" jsonschema:"Only sessions last used more than this many seconds ago. Sessions with no recorded use never match."`
 	LastUsedNever              bool     `json:"last_used_never,omitempty" jsonschema:"Only sessions with no recorded use."`

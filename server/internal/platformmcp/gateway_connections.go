@@ -75,7 +75,7 @@ type ListGatewayConnectionsInput struct {
 	Providers []string `json:"providers,omitempty" jsonschema:"only sessions admitted to one of these upstream providers: a provider (remote session issuer) id, or none for sessions with no admitted provider sign-in; at most 50"`
 
 	// ExcludeProviders leaves out sessions admitted to any of these providers.
-	ExcludeProviders []string `json:"exclude_providers,omitempty" jsonschema:"leave out sessions admitted to any of these providers; at most 50"`
+	ExcludeProviders []string `json:"exclude_providers,omitempty" jsonschema:"leave out sessions admitted to any of these providers: a provider (remote session issuer) id, or none to leave out sessions with no admitted provider sign-in; at most 50"`
 
 	// LastUsedWithin keeps sessions used within this many seconds.
 	LastUsedWithin *int `json:"last_used_within_seconds,omitempty" jsonschema:"only sessions used within this many seconds; sessions with no recorded use do not match"`

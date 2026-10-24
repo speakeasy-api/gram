@@ -4349,20 +4349,25 @@ WHERE (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization
       )
     )
   )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM session_upstreams($1::uuid, $2::text) AS up
-    WHERE up.subject_urn = s.subject_urn::text
-      AND up.user_session_issuer_id = s.user_session_issuer_id
-      AND up.remote_session_issuer_id::text = ANY($26::text[])
-  )
-  AND NOT (
-    'none' = ANY($26::text[])
-    AND NOT EXISTS (
-      SELECT 1
-      FROM session_upstreams($1::uuid, $2::text) AS up
-      WHERE up.subject_urn = s.subject_urn::text
-        AND up.user_session_issuer_id = s.user_session_issuer_id
+  AND (
+    cardinality($26::text[]) = 0
+    OR (
+      NOT EXISTS (
+        SELECT 1
+        FROM session_upstreams($1::uuid, $2::text) AS up
+        WHERE up.subject_urn = s.subject_urn::text
+          AND up.user_session_issuer_id = s.user_session_issuer_id
+          AND up.remote_session_issuer_id::text = ANY($26::text[])
+      )
+      AND NOT (
+        'none' = ANY($26::text[])
+        AND NOT EXISTS (
+          SELECT 1
+          FROM session_upstreams($1::uuid, $2::text) AS up
+          WHERE up.subject_urn = s.subject_urn::text
+            AND up.user_session_issuer_id = s.user_session_issuer_id
+        )
+      )
     )
   )
   AND ($27::uuid IS NULL OR s.id < $27::uuid)

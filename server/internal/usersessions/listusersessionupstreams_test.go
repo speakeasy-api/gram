@@ -862,18 +862,19 @@ func TestListUserSessions_ProviderFilterAndFacet(t *testing.T) {
 		}))
 		return c.ID
 	}
+	noExpiry := pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
 	expired := pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite}
-	session := func(name string, grants ...uuid.UUID) (urn.SessionSubject, string) {
+	// session seeds one subject's session and its grants, each expiring at expiresAt.
+	session := func(name string, expiresAt pgtype.Timestamptz, grants ...uuid.UUID) (urn.SessionSubject, string) {
 		t.Helper()
 		subject := urn.NewUserSubject(name)
 		s, err := seedUserSession(t, ctx, ti.conn, issuerID, subject)
 		require.NoError(t, err)
 		for _, clientID := range grants {
-			params := remotesessions_repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: clientID, AccessTokenEncrypted: "encrypted-access", Scopes: []string{}}
-			if name == "provider-expired" {
-				params.AccessExpiresAt, params.RefreshExpiresAt = expired, expired
-			}
-			_, err := q.UpsertRemoteSession(ctx, params)
+			_, err := q.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+				SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: clientID, AccessTokenEncrypted: "encrypted-access", Scopes: []string{},
+				AccessExpiresAt: expiresAt, RefreshExpiresAt: expiresAt,
+			})
 			require.NoError(t, err)
 		}
 		return subject, s.ID.String()
@@ -881,11 +882,11 @@ func TestListUserSessions_ProviderFilterAndFacet(t *testing.T) {
 
 	linear, notion := provider("linear.example.com"), provider("notion.example.com")
 	linearA, linearB, notionC := client(linear, "linear-a"), client(linear, "linear-b"), client(notion, "notion-c")
-	_, multi := session("provider-multi", linearA, notionC)
-	_, twice := session("provider-twice", linearA, linearB)
-	_, stale := session("provider-expired", linearA)
-	deletedSubject, deleted := session("provider-deleted", notionC)
-	_, none := session("provider-none")
+	_, multi := session("provider-multi", noExpiry, linearA, notionC)
+	_, twice := session("provider-twice", noExpiry, linearA, linearB)
+	_, stale := session("provider-expired", expired, linearA)
+	deletedSubject, deleted := session("provider-deleted", noExpiry, notionC)
+	_, none := session("provider-none", noExpiry)
 	_, err := q.SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx, remotesessions_repo.SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams{
 		SubjectUrn: deletedSubject, UserSessionIssuerID: issuerID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
 	})

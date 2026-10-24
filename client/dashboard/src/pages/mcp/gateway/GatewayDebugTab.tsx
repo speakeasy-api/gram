@@ -124,15 +124,17 @@ export function GatewayDebugTab({
   const [searchInput, setSearchInput] = useState("");
   const [grouping, setGrouping] = useState<ConnectionGrouping>("subject");
 
+  // A committed search or filter change is a history entry, so Back restores
+  // the previous view. Only correcting a link's own URL replaces it.
   const updateParams = useCallback(
-    (update: (next: URLSearchParams) => void) =>
+    (update: (next: URLSearchParams) => void, replace = false) =>
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
           update(next);
           return next;
         },
-        { replace: true },
+        { replace },
       ),
     [setSearchParams],
   );
@@ -159,12 +161,12 @@ export function GatewayDebugTab({
     [linkedChips],
   );
   const setChips = useCallback(
-    (filters: ActiveLogFilter[]) =>
+    (filters: ActiveLogFilter[], replace = false) =>
       updateParams((next) => {
         const serialized = serializeFilters(filters);
         if (serialized) next.set(SESSION_FILTER_PARAM, serialized);
         else next.delete(SESSION_FILTER_PARAM);
-      }),
+      }, replace),
     [updateParams],
   );
   // Filters from a link that cannot apply are named once and taken out of it.
@@ -172,7 +174,8 @@ export function GatewayDebugTab({
   useEffect(() => {
     if (chips.length === linkedChips.length) return;
     setIgnoredChips(linkedChips.filter((chip) => !chips.includes(chip)));
-    setChips(chips);
+    // Replace, so Back skips the rejected link instead of re-correcting it.
+    setChips(chips, true);
   }, [chips, linkedChips, setChips]);
   const [selectionProblem, setSelectionProblem] = useState<string | null>(null);
   const editChips = useCallback(
@@ -339,11 +342,15 @@ export function GatewayDebugTab({
   } else if (buildingField) {
     const { facet, notice } = fieldState("builder", buildingField);
     valueNotice = notice;
-    valueOptions = facet?.values.map((v) => ({
-      value: v.value,
-      label: labelFor(buildingField, v.value),
-      count: v.count,
-    }));
+    // A selected value kept only so the rail can remove it is not a match for
+    // what was typed, so the builder does not offer it.
+    valueOptions = facet?.values
+      .filter((v) => v.matchesSearch)
+      .map((v) => ({
+        value: v.value,
+        label: labelFor(buildingField, v.value),
+        count: v.count,
+      }));
   }
 
   const railGroups: FacetGroup[] = RAIL_FIELDS.map((field) => {

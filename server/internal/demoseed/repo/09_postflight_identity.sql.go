@@ -1293,7 +1293,7 @@ type PostflightIDUpstreamClientChoicesParams struct {
 }
 
 // Check both the total and the expected credential/server/client tuples so
-// eight misassigned choices cannot satisfy postflight.
+// ten misassigned choices cannot satisfy postflight.
 func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg PostflightIDUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDUpstreamClientChoices,
 		arg.LinearSessionIds,

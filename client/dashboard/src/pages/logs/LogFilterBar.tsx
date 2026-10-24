@@ -525,21 +525,28 @@ export function LogFilterBar({
                   onKeyDown={(e) => {
                     switch (e.key) {
                       case "Tab":
+                      case "Enter": {
+                        // Commits the highlighted suggestion when one is
+                        // offered; stopping here keeps cmdk's root from
+                        // committing it a second time.
                         e.preventDefault();
-                        if (valueSuggestions.length > 0) {
-                          (popoverContentRef.current ?? document)
-                            .querySelector<HTMLElement>(
-                              "[cmdk-item][aria-selected='true']",
-                            )
-                            ?.click();
-                        } else {
+                        e.stopPropagation();
+                        const highlighted =
+                          valueSuggestions.length > 0
+                            ? (
+                                popoverContentRef.current ?? document
+                              ).querySelector<HTMLElement>(
+                                "[cmdk-item][aria-selected='true']",
+                              )
+                            : null;
+                        if (highlighted) highlighted.click();
+                        else if (
+                          e.key === "Enter" ||
+                          valueSuggestions.length === 0
+                        )
                           handleValueSubmit();
-                        }
                         break;
-                      case "Enter":
-                        e.preventDefault();
-                        handleValueSubmit();
-                        break;
+                      }
                       case "Escape":
                         e.preventDefault();
                         resetFlow();

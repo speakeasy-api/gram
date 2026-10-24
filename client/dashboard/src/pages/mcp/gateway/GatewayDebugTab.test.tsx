@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Component, type ReactNode } from "react";
-import { MemoryRouter, useLocation } from "react-router";
+import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { Operator as Op } from "@gram/client/models/components/logfilter";
 import { serializeFilters } from "@/pages/logs/log-filter-url";
@@ -143,16 +143,28 @@ class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
 
 function Location() {
   const location = useLocation();
-  return <output data-testid="location">{location.search}</output>;
+  const navigate = useNavigate();
+  return (
+    <>
+      <output data-testid="location">{location.search}</output>
+      <output data-testid="pathname">{location.pathname}</output>
+      <button type="button" onClick={() => void navigate(-1)}>
+        history back
+      </button>
+      <button type="button" onClick={() => void navigate(1)}>
+        history forward
+      </button>
+    </>
+  );
 }
 
-function renderAt(path = "/debug") {
+function renderAt(path = "/debug", before: string[] = []) {
   const client = new QueryClient({
     defaultOptions: { queries: { throwOnError: true, retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter initialEntries={[...before, path]}>
         <Boundary>
           <GatewayDebugTab gatewayId="gateway-1" />
         </Boundary>
@@ -747,6 +759,71 @@ it("filters by provider, naming sessions with none Speakeasy only", async () => 
   const grouping = screen.getByRole("group", { name: "Group connections by" });
   expect(within(grouping).getByText("Client")).toBeTruthy();
   expect(within(grouping).queryByText("Agent")).toBeNull();
+});
+
+it("restores provider selections with Back and Forward", async () => {
+  server.list.mockResolvedValue(page(["s1"]));
+  server.facets.mockResolvedValue(
+    facets({ provider: facet([value("none", 1)]) }),
+  );
+  renderAt("/debug", ["/elsewhere"]);
+  await screen.findByText("s1");
+  openGroup("Provider");
+  fireEvent.click(await screen.findByText("Speakeasy only"));
+  await waitFor(() => expect(params().get("sf")).toBe("provider:eq:none"));
+  await waitFor(() =>
+    expect(lastList()).toMatchObject({ providers: ["none"] }),
+  );
+
+  fireEvent.click(screen.getByText("history back"));
+  await waitFor(() => expect(params().get("sf")).toBeNull());
+  expect(screen.getByTestId("pathname").textContent).toBe("/debug");
+  await waitFor(() => expect(lastList().providers).toBeUndefined());
+
+  fireEvent.click(screen.getByText("history forward"));
+  await waitFor(() => expect(params().get("sf")).toBe("provider:eq:none"));
+  await waitFor(() =>
+    expect(lastList()).toMatchObject({ providers: ["none"] }),
+  );
+});
+
+it("replaces a link's unusable filters so Back leaves rather than loops", async () => {
+  server.list.mockResolvedValue(page(["s1"]));
+  server.facets.mockResolvedValue(facets());
+  renderAt("/debug?sf=color:eq:red", ["/elsewhere"]);
+  await screen.findByText(/Removed filters from this link/);
+  await waitFor(() => expect(params().get("sf")).toBeNull());
+
+  fireEvent.click(screen.getByText("history back"));
+  await waitFor(() =>
+    expect(screen.getByTestId("pathname").textContent).toBe("/elsewhere"),
+  );
+});
+
+it("offers only matching values in the builder and keeps a typed one", async () => {
+  server.list.mockResolvedValue(page(["s1"]));
+  server.facets.mockResolvedValue(
+    facets({ client: facet([value(CLIENT, 0, "Kept Client", false)], 0) }),
+  );
+  renderAt(`/debug?sf=client:eq:${CLIENT}`);
+  await screen.findByText("s1");
+  // The rail keeps the selected value, and its group opens with it.
+  expect(await screen.findByText("Kept Client")).toBeTruthy();
+
+  pickField("Client");
+  pick("=");
+  fireEvent.change(screen.getByPlaceholderText("value"), {
+    target: { value: OTHER_CLIENT },
+  });
+  expect(
+    screen.queryAllByRole("option").map((option) => option.textContent),
+  ).not.toContainEqual(expect.stringContaining("Kept Client"));
+  fireEvent.keyDown(screen.getByPlaceholderText("value"), { key: "Enter" });
+  await waitFor(() =>
+    expect(lastList()).toMatchObject({
+      clients: expect.arrayContaining([OTHER_CLIENT]),
+    }),
+  );
 });
 
 it("hides the unattributed notice when there are none", async () => {

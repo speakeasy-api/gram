@@ -1677,20 +1677,25 @@ WHERE (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.org
       )
     )
   )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM session_upstreams(@project_id::uuid, @organization_id::text) AS up
-    WHERE up.subject_urn = s.subject_urn::text
-      AND up.user_session_issuer_id = s.user_session_issuer_id
-      AND up.remote_session_issuer_id::text = ANY(sqlc.arg('exclude_providers')::text[])
-  )
-  AND NOT (
-    'none' = ANY(sqlc.arg('exclude_providers')::text[])
-    AND NOT EXISTS (
-      SELECT 1
-      FROM session_upstreams(@project_id::uuid, @organization_id::text) AS up
-      WHERE up.subject_urn = s.subject_urn::text
-        AND up.user_session_issuer_id = s.user_session_issuer_id
+  AND (
+    cardinality(sqlc.arg('exclude_providers')::text[]) = 0
+    OR (
+      NOT EXISTS (
+        SELECT 1
+        FROM session_upstreams(@project_id::uuid, @organization_id::text) AS up
+        WHERE up.subject_urn = s.subject_urn::text
+          AND up.user_session_issuer_id = s.user_session_issuer_id
+          AND up.remote_session_issuer_id::text = ANY(sqlc.arg('exclude_providers')::text[])
+      )
+      AND NOT (
+        'none' = ANY(sqlc.arg('exclude_providers')::text[])
+        AND NOT EXISTS (
+          SELECT 1
+          FROM session_upstreams(@project_id::uuid, @organization_id::text) AS up
+          WHERE up.subject_urn = s.subject_urn::text
+            AND up.user_session_issuer_id = s.user_session_issuer_id
+        )
+      )
     )
   )
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)

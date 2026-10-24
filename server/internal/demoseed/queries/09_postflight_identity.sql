@@ -222,7 +222,7 @@ SELECT count(*) FROM mcp_server_remote_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- Check both the total and the expected credential/server/client tuples so
--- eight misassigned choices cannot satisfy postflight.
+-- ten misassigned choices cannot satisfy postflight.
 -- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
   SELECT * FROM upstream_client_selections
