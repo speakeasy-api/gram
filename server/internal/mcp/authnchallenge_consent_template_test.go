@@ -995,6 +995,17 @@ func TestConsentTemplateRendersUpstreamCredentialPicker(t *testing.T) {
 	require.Contains(t, page, "Connect your account below to choose this.")
 	require.Regexp(t, `value="`+personal.String()+`"[^>]*disabled`, page, "an option that needs connecting cannot be picked")
 
+	reconnect, setup := uuid.New(), uuid.New()
+	page = render(&consentServerAuth{ServerID: uuid.New(), Status: consentAuthChoose, Options: []consentAuthClientOption{
+		{ID: shared, Name: "Engineering token", Type: authClientTypeStaticCredential, State: consentClientReady, Selected: true},
+		{ID: reconnect, Name: "Own account", Type: authClientTypeRemoteSession, State: consentClientReconnect},
+		{ID: setup, Name: "Identity provider", Type: authClientTypeEMA, State: consentClientSetup},
+	}})
+	require.Contains(t, page, "Reconnect your account below to choose this.")
+	require.Contains(t, page, "Not set up yet. Ask an administrator.")
+	require.Regexp(t, `value="`+reconnect.String()+`"[^>]*disabled`, page, "an option that needs reconnecting cannot be picked")
+	require.Regexp(t, `value="`+setup.String()+`"[^>]*disabled`, page, "an option that is not set up cannot be picked")
+
 	page = render(&consentServerAuth{ServerID: uuid.New(), Status: consentAuthChoose, Options: []consentAuthClientOption{
 		{ID: shared, Name: "Engineering token", Type: authClientTypeStaticCredential, State: consentClientReady, Selected: true},
 	}})

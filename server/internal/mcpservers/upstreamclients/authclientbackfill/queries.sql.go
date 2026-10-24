@@ -448,7 +448,7 @@ func (q *Queries) GetRequiresUpstreamAuthFixture(ctx context.Context, id uuid.UU
 }
 
 const getSelectionFixture = `-- name: GetSelectionFixture :one
-SELECT remote_session_client_id, auth_client_id, no_auth
+SELECT remote_session_client_id, auth_client_id, no_auth, source
 FROM upstream_client_selections
 WHERE credential_id = $1 AND mcp_server_id = $2 AND deleted IS FALSE
 `
@@ -462,12 +462,18 @@ type GetSelectionFixtureRow struct {
 	RemoteSessionClientID uuid.NullUUID
 	AuthClientID          uuid.NullUUID
 	NoAuth                bool
+	Source                string
 }
 
 func (q *Queries) GetSelectionFixture(ctx context.Context, arg GetSelectionFixtureParams) (GetSelectionFixtureRow, error) {
 	row := q.db.QueryRow(ctx, getSelectionFixture, arg.CredentialID, arg.McpServerID)
 	var i GetSelectionFixtureRow
-	err := row.Scan(&i.RemoteSessionClientID, &i.AuthClientID, &i.NoAuth)
+	err := row.Scan(
+		&i.RemoteSessionClientID,
+		&i.AuthClientID,
+		&i.NoAuth,
+		&i.Source,
+	)
 	return i, err
 }
 

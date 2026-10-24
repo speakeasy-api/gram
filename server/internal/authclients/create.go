@@ -263,7 +263,7 @@ func (s *Service) SetAuthClientHeaders(ctx context.Context, payload *gen.SetAuth
 	storedSecrets := make(map[string]pgtype.Text, len(stored))
 	for _, h := range stored {
 		if h.IsSecret && h.Value.Valid {
-			storedSecrets[strings.ToLower(h.Name)] = h.Value
+			storedSecrets[headerKey(h.Name)] = h.Value
 		}
 	}
 
@@ -458,6 +458,12 @@ type clientHeader struct {
 // ciphertext; a secret header given no value keeps it. A returned error's
 // message is shown to the administrator as is, so it names the header and how
 // to fix it, never a value.
+// headerKey is a header name's identity: names match regardless of case, and
+// '_' matches '-'.
+func headerKey(name string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.Trim(name, " "), "_", "-"))
+}
+
 func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInput, storedSecrets map[string]pgtype.Text) ([]clientHeader, error) {
 	if len(inputs) > maxHeadersPerClient {
 		return nil, fmt.Errorf("an auth client can send at most %d headers", maxHeadersPerClient)
@@ -467,12 +473,15 @@ func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInpu
 	headers := make([]clientHeader, 0, len(inputs))
 	seen := make(map[string]bool, len(inputs))
 	for _, in := range inputs {
+		if in == nil {
+			return nil, errors.New("a header entry is empty: give each header a name and a value")
+		}
 		canonical, err := proxy.NormalizeHeaderName(in.Name)
 		if err != nil {
 			return nil, fmt.Errorf("header name %q is not a valid HTTP header name: it cannot contain spaces, control characters or separators such as ':'", in.Name)
 		}
 		name := strings.Trim(in.Name, " ")
-		key := strings.ToLower(strings.ReplaceAll(canonical, "_", "-"))
+		key := headerKey(canonical)
 		if seen[key] {
 			return nil, fmt.Errorf("the client already has a header named %q: header names match regardless of case, and '_' matches '-'", name)
 		}
@@ -484,7 +493,7 @@ func validateClientHeaders(clientType string, inputs []*gen.AuthClientHeaderInpu
 
 		value := conv.PtrValOr(in.Value, "")
 		source := strings.Trim(conv.PtrValOr(in.ValueFromRequestHeader, ""), " ")
-		stored, hasStored := storedSecrets[strings.ToLower(name)]
+		stored, hasStored := storedSecrets[key]
 		keep := in.IsSecret && value == "" && source == "" && hasStored
 
 		switch {
