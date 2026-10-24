@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -133,7 +132,7 @@ func TestUpdateMcpServer_ClearIssuerRefusals(t *testing.T) {
 	require.Equal(t, issuerID, stored.UserSessionIssuerID.UUID.String(), "a refused clear keeps the issuer")
 }
 
-func TestUpdateMcpServer_ClearsHostedIssuerAndMirrorsIt(t *testing.T) {
+func TestUpdateMcpServer_ClearsHostedIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, f := newHostedFixture(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -143,7 +142,6 @@ func TestUpdateMcpServer_ClearsHostedIssuerAndMirrorsIt(t *testing.T) {
 
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.UserSessionIssuerID = &issuer }))
 	require.NoError(t, err)
-	hostedmcptest.RequireMirrored(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
 
 	both := f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) {
 		p.UserSessionIssuerID = &issuer
@@ -158,13 +156,11 @@ func TestUpdateMcpServer_ClearsHostedIssuerAndMirrorsIt(t *testing.T) {
 	requireNoIssuer(t, ctx, f.ti, f.projectID, f.toolset.ID.String())
 	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
-	require.False(t, toolset.UserSessionIssuerID.Valid, "the toolset column mirrors the cleared issuer")
-	hostedmcptest.RequireMirrored(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
+	require.False(t, toolset.UserSessionIssuerID.Valid, "the frozen toolset column is not written")
 
 	reattached, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.UserSessionIssuerID = &issuer }))
 	require.NoError(t, err)
 	require.Equal(t, issuer, *reattached.UserSessionIssuerID)
-	hostedmcptest.RequireMirrored(t, ctx, f.ti.conn, f.projectID, f.toolset.ID)
 }
 
 func usersessionsIssuerForTest(t *testing.T, ctx context.Context, f *hostedFixture, organizationID string) (string, error) {
