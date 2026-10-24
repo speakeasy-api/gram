@@ -5,7 +5,10 @@ import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { ResourceLink } from "@/pages/access/ResourceLink";
 import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
-import { AGENT_POLICY_SCOPES } from "@/pages/agents/agent-policy-grants";
+import {
+  AGENT_CREDENTIAL_BLOCK_SCOPE,
+  AGENT_POLICY_SCOPES,
+} from "@/pages/agents/agent-policy-grants";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicySelector } from "@gram/client/models/components/agentpolicyselector.js";
@@ -54,7 +57,9 @@ export function AgentIdentityPermissions({
   const { orgSlug } = useSlugs();
   // Credential restrictions are listed and edited in their own panel.
   const rows = canRead
-    ? (grants.data ?? []).filter((grant) => grant.scope !== "mcp:blocked_auth")
+    ? (grants.data ?? []).filter(
+        (grant) => grant.scope !== AGENT_CREDENTIAL_BLOCK_SCOPE,
+      )
     : [];
   // Only a grant naming a specific MCP server needs the org inventories;
   // project names come from the session.
@@ -173,7 +178,7 @@ export function AgentIdentityPermissions({
       {editing && canRead && grants.data && (
         <AgentPermissionEditor
           agent={agent}
-          grants={rows}
+          grants={grants.data}
           onClose={() => setEditing(false)}
         />
       )}

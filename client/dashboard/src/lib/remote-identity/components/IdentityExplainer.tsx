@@ -126,17 +126,17 @@ function IdentityExplainerContent(): JSX.Element {
                 label: "Service",
               },
             ]}
-            edges={["signs in", "one service account"]}
+            edges={["signs in", "one shared credential"]}
           />
         </div>
         <Text muted variant="small" className="mt-3 block font-mono text-xs">
-          Permissions: the service account&apos;s, set in the control plane
+          Permissions: the shared credential&apos;s, set in the control plane
         </Text>
         <UseItWhen
           items={[
             "Limit what an agent with bad judgment can do wherever this server is deployed.",
-            "Actions should be attributed to the service account in the upstream service.",
-            "The service does not support OAuth login.",
+            "Actions should be attributed to one account in the upstream service.",
+            "The service accepts a static API key, or OAuth client credentials for a service account.",
           ]}
         />
       </div>
