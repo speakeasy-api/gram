@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -77,26 +78,55 @@ func NewMCPConnectionMutationService(db *pgxpool.Pool, settings *MCPConnectionSe
 }
 
 type SetMCPAddressInput struct {
-	ProjectID       string                          `json:"project_id"`
-	TargetKind      MCPConnectionSettingsTargetKind `json:"target_kind"`
-	TargetID        string                          `json:"target_id"`
-	EndpointID      string                          `json:"endpoint_id,omitempty"`
-	Slug            string                          `json:"slug"`
-	CustomDomainID  string                          `json:"custom_domain_id,omitempty"`
-	ExpectedVersion string                          `json:"expected_version"`
-	IdempotencyKey  string                          `json:"idempotency_key"`
-	Confirmed       bool                            `json:"confirmed"`
+	ProjectID       string                          `json:"project_id" jsonschema:"project ID that owns the target"`
+	TargetKind      MCPConnectionSettingsTargetKind `json:"target_kind" jsonschema:"exact target type: mcp_server or gateway"`
+	TargetID        string                          `json:"target_id" jsonschema:"ID of the exact MCP server or gateway"`
+	EndpointID      string                          `json:"endpoint_id,omitempty" jsonschema:"exact endpoint ID from get_mcp_connection_settings to change; omit to add a new endpoint"`
+	Slug            string                          `json:"slug" jsonschema:"endpoint slug; on the platform domain it starts with the organization slug and a hyphen"`
+	CustomDomainID  string                          `json:"custom_domain_id,omitempty" jsonschema:"ID of the organization's custom domain for the endpoint; omit for the platform domain"`
+	ExpectedVersion string                          `json:"expected_version" jsonschema:"version from the latest get_mcp_connection_settings for this target"`
+	IdempotencyKey  string                          `json:"idempotency_key" jsonschema:"caller-chosen key, at most 128 characters, reused only to retry this exact change"`
+	Confirmed       bool                            `json:"confirmed" jsonschema:"false to preview the change without writing; true only after the user confirms the exact change the preview shows"`
 }
 
 type SetMCPNetworkAccessInput struct {
-	ProjectID       string                          `json:"project_id"`
-	TargetKind      MCPConnectionSettingsTargetKind `json:"target_kind"`
-	TargetID        string                          `json:"target_id"`
-	Mode            string                          `json:"mode"`
-	ExpectedVersion string                          `json:"expected_version"`
-	IdempotencyKey  string                          `json:"idempotency_key"`
-	Confirmed       bool                            `json:"confirmed"`
+	ProjectID       string                          `json:"project_id" jsonschema:"project ID that owns the target"`
+	TargetKind      MCPConnectionSettingsTargetKind `json:"target_kind" jsonschema:"exact target type: mcp_server or gateway"`
+	TargetID        string                          `json:"target_id" jsonschema:"ID of the exact MCP server or gateway"`
+	Mode            string                          `json:"mode" jsonschema:"requested network access: public_only, dual, or private_only"`
+	ExpectedVersion string                          `json:"expected_version" jsonschema:"version from the latest get_mcp_connection_settings for this target"`
+	IdempotencyKey  string                          `json:"idempotency_key" jsonschema:"caller-chosen key, at most 128 characters, reused only to retry this exact change"`
+	Confirmed       bool                            `json:"confirmed" jsonschema:"false to preview the change without writing; true only after the user confirms the exact change the preview shows"`
 }
+
+// MCPConnectionMutationPreview is what an unconfirmed call reports: the current settings and the exact change a
+// confirmed call with the same input would make. Nothing is written for it.
+type MCPConnectionMutationPreview struct {
+	ProjectID         string                          `json:"project_id"`
+	TargetKind        MCPConnectionSettingsTargetKind `json:"target_kind"`
+	TargetID          string                          `json:"target_id"`
+	Name              string                          `json:"name"`
+	Version           string                          `json:"version"`
+	Change            string                          `json:"change"`
+	EndpointBefore    *MCPConnectionEndpoint          `json:"endpoint_before,omitempty"`
+	EndpointAfter     *MCPConnectionEndpoint          `json:"endpoint_after,omitempty"`
+	NetworkModeBefore string                          `json:"network_mode_before"`
+	NetworkModeAfter  string                          `json:"network_mode_after"`
+	Endpoints         []MCPConnectionEndpoint         `json:"endpoints"`
+	Ingress           *MCPConnectionIngress           `json:"ingress,omitempty"`
+	PluginMemberships []MCPConnectionPluginMembership `json:"plugin_memberships"`
+}
+
+// connectionMutationPreviewError is the confirmation_required refusal of an unconfirmed call.
+type connectionMutationPreviewError struct {
+	Preview MCPConnectionMutationPreview
+}
+
+func (e *connectionMutationPreviewError) Error() string {
+	return "Nothing was changed. Show the user the exact target and the change in this preview, then call again with the same input, the same idempotency key, and confirmed: true once they confirm."
+}
+
+func (e *connectionMutationPreviewError) Unwrap() error { return ErrMCPConnectionMutationInvalid }
 
 type MCPConnectionMutationOutput struct {
 	Settings           *MCPConnectionSettings  `json:"settings,omitempty"`
@@ -131,10 +161,7 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 	input.EndpointID, input.Slug = strings.TrimSpace(input.EndpointID), strings.TrimSpace(input.Slug)
 	input.CustomDomainID, input.ExpectedVersion = strings.TrimSpace(input.CustomDomainID), strings.TrimSpace(input.ExpectedVersion)
 	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
-	if !input.Confirmed {
-		return MCPConnectionMutationOutput{}, connectionMutationInvalid("Confirm the exact project, target, endpoint address, and expected settings version before changing the address.")
-	}
-	kind, targetID, project, err := s.validateInput(ctx, principal, input.ProjectID, input.TargetKind, input.TargetID, input.ExpectedVersion, input.IdempotencyKey)
+	kind, targetID, project, current, err := s.validateInput(ctx, principal, input.ProjectID, input.TargetKind, input.TargetID, input.ExpectedVersion, input.IdempotencyKey)
 	if err != nil {
 		return MCPConnectionMutationOutput{}, err
 	}
@@ -159,6 +186,9 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 	if (endpointID == uuid.Nil) != (input.EndpointID == "") {
 		return MCPConnectionMutationOutput{}, connectionMutationInvalid("Provide either no endpoint ID to create an address or the exact endpoint ID to update.")
 	}
+	if !input.Confirmed {
+		return MCPConnectionMutationOutput{}, addressPreview(current, input.ExpectedVersion, endpointID, input.Slug, domainID)
+	}
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, EndpointID: input.EndpointID, Slug: input.Slug, CustomDomainID: input.CustomDomainID}
 	result, receipt, err := s.execute(ctx, principal, project, operationSetMCPAddress, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
 		settings, err := s.lockAndCheck(ctx, tx, principal, project, kind, targetID, input.ExpectedVersion)
@@ -173,10 +203,12 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 				return connectionMutationReceipt{}, connectionMutationInvalid("A private-only MCP address must use the network ingress namespace.")
 			}
 		}
-		authCtx := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID, OrganizationSlug: projectOrganizationSlug(ctx, s.db, principal.OrganizationID)}
-		if authCtx.OrganizationSlug == "" {
-			return connectionMutationReceipt{}, connectionMutationUnavailable(errors.New("organization slug unavailable"))
+		organization, err := organizationsrepo.New(tx).GetOrganizationMetadata(ctx, principal.OrganizationID)
+		if err != nil || organization.Slug == "" {
+			return connectionMutationReceipt{}, connectionMutationUnavailable(errors.Join(errors.New("organization slug unavailable"), err))
 		}
+		// Account type drives the same slug prefix rule a dashboard session applies.
+		authCtx := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID, OrganizationSlug: organization.Slug, AccountType: organization.GramAccountType}
 		if endpointID == uuid.Nil {
 			var create mcpendpoints.CreateMcpEndpointInTransactionInput
 			create.AuthContext, create.CustomDomainID, create.Slug = authCtx, domainID, input.Slug
@@ -222,23 +254,23 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 	input.ProjectID, input.TargetID = strings.TrimSpace(input.ProjectID), strings.TrimSpace(input.TargetID)
 	input.Mode, input.ExpectedVersion = strings.TrimSpace(input.Mode), strings.TrimSpace(input.ExpectedVersion)
 	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
-	if !input.Confirmed {
-		return MCPConnectionMutationOutput{}, connectionMutationInvalid("Confirm the exact project, target, requested network mode, and expected settings version before changing network access.")
-	}
 	mode, err := networkaccess.Parse(input.Mode)
 	if err != nil {
 		return MCPConnectionMutationOutput{}, connectionMutationInvalid("Mode must be public_only, dual, or private_only.")
 	}
-	kind, targetID, project, err := s.validateInput(ctx, principal, input.ProjectID, input.TargetKind, input.TargetID, input.ExpectedVersion, input.IdempotencyKey)
+	kind, targetID, project, current, err := s.validateInput(ctx, principal, input.ProjectID, input.TargetKind, input.TargetID, input.ExpectedVersion, input.IdempotencyKey)
 	if err != nil {
 		return MCPConnectionMutationOutput{}, err
+	}
+	if !input.Confirmed {
+		return MCPConnectionMutationOutput{}, networkAccessPreview(current, input.ExpectedVersion, mode)
 	}
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, Mode: string(mode)}
 	result, receipt, err := s.execute(ctx, principal, project, operationSetMCPNetworkAccess, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
 		var clearedRootDomainIDs []uuid.UUID
 		finalize, err := s.eligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: principal.OrganizationID, Mode: mode})
 		if err != nil {
-			return connectionMutationReceipt{}, connectionMutationUnavailable(err)
+			return connectionMutationReceipt{}, privateAccessUnavailable(err)
 		}
 		if err := networkingressrepo.New(tx).AcquireNetworkIngressOrganizationLock(ctx, principal.OrganizationID); err != nil {
 			return connectionMutationReceipt{}, fmt.Errorf("lock network ingress lifecycle: %w", err)
@@ -253,7 +285,7 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 			}
 			if server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID {
 				if err := finalize.Finalize(ctx, tx); err != nil {
-					return connectionMutationReceipt{}, connectionMutationUnavailable(err)
+					return connectionMutationReceipt{}, privateAccessUnavailable(err)
 				}
 				actor := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}
 				clearedRootDomainIDs, err = toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, s.audit, actor, targetID, mode)
@@ -283,39 +315,94 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 	return s.finish(ctx, principal, project.ID, input.ProjectID, kind, targetID, result, receipt)
 }
 
-func (s *MCPConnectionMutationService) validateInput(ctx context.Context, principal Principal, projectID string, kind MCPConnectionSettingsTargetKind, targetID, expectedVersion, idempotencyKey string) (MCPConnectionSettingsTargetKind, uuid.UUID, ResolvedProject, error) {
+func (s *MCPConnectionMutationService) validateInput(ctx context.Context, principal Principal, projectID string, kind MCPConnectionSettingsTargetKind, targetID, expectedVersion, idempotencyKey string) (MCPConnectionSettingsTargetKind, uuid.UUID, ResolvedProject, MCPConnectionSettings, error) {
+	fail := func(err error) (MCPConnectionSettingsTargetKind, uuid.UUID, ResolvedProject, MCPConnectionSettings, error) {
+		return "", uuid.Nil, ResolvedProject{}, MCPConnectionSettings{}, err
+	}
 	if s == nil || s.db == nil || s.settings == nil || s.endpoints == nil || s.audit == nil || s.authorizer == nil || s.eligibility == nil || s.now == nil || principal.OrganizationID == "" || principal.UserID == "" || len(idempotencyKey) == 0 || len(idempotencyKey) > 128 || len(expectedVersion) != sha256.Size*2 {
-		return "", uuid.Nil, ResolvedProject{}, connectionMutationInvalid("The connection mutation request is incomplete or invalid.")
+		return fail(connectionMutationInvalid("The connection mutation request is incomplete or invalid."))
 	}
 	projectID = strings.TrimSpace(projectID)
 	parsedProject, err := uuid.Parse(projectID)
 	if err != nil || (kind != MCPConnectionSettingsMCPServer && kind != MCPConnectionSettingsGateway) {
-		return "", uuid.Nil, ResolvedProject{}, connectionMutationInvalid("Provide an explicit project ID, target ID, and target kind.")
+		return fail(connectionMutationInvalid("Provide an explicit project ID, target ID, and target kind."))
 	}
 	parsedTarget, err := uuid.Parse(strings.TrimSpace(targetID))
 	if err != nil {
-		return "", uuid.Nil, ResolvedProject{}, connectionMutationInvalid("Provide a valid exact target ID.")
+		return fail(connectionMutationInvalid("Provide a valid exact target ID."))
 	}
 	project, err := platformrepo.New(s.db).ResolvePlatformMCPProjectByID(ctx, platformrepo.ResolvePlatformMCPProjectByIDParams{OrganizationID: principal.OrganizationID, ProjectID: parsedProject})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", uuid.Nil, ResolvedProject{}, ErrMCPConnectionMutationMissing
+		return fail(ErrMCPConnectionMutationMissing)
 	}
 	if err != nil {
-		return "", uuid.Nil, ResolvedProject{}, fmt.Errorf("resolve live connection mutation project: %w", err)
+		return fail(fmt.Errorf("resolve live connection mutation project: %w", err))
 	}
 	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceID: project.ID.String()}); err != nil {
-		return "", uuid.Nil, ResolvedProject{}, connectionMutationAuthorizationError(err, authz.ScopeMCPWrite)
+		return fail(connectionMutationAuthorizationError(err, authz.ScopeMCPWrite))
 	}
 	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: principal.OrganizationID}); err != nil {
-		return "", uuid.Nil, ResolvedProject{}, connectionMutationAuthorizationError(err, authz.ScopeOrgAdmin)
+		return fail(connectionMutationAuthorizationError(err, authz.ScopeOrgAdmin))
 	}
-	if _, err := s.settings.Get(ctx, principal, GetMCPConnectionSettingsInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: parsedTarget.String()}); err != nil {
-		if errors.Is(err, ErrMCPConnectionSettingsNotFound) {
-			return "", uuid.Nil, ResolvedProject{}, ErrMCPConnectionMutationMissing
+	settings, err := s.settings.Get(ctx, principal, GetMCPConnectionSettingsInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: parsedTarget.String()})
+	if errors.Is(err, ErrMCPConnectionSettingsNotFound) {
+		return fail(ErrMCPConnectionMutationMissing)
+	}
+	if err != nil {
+		return fail(err)
+	}
+	return kind, parsedTarget, ResolvedProject{ID: project.ID, Name: project.Name, Slug: project.Slug}, settings, nil
+}
+
+// addressPreview reports the address change a confirmed call would make, against the settings it would lock.
+func addressPreview(current MCPConnectionSettings, expectedVersion string, endpointID uuid.UUID, slug string, domainID uuid.NullUUID) error {
+	if !hmac.Equal([]byte(current.Version), []byte(expectedVersion)) {
+		return ErrMCPConnectionMutationConflict
+	}
+	preview := newConnectionMutationPreview(current)
+	after := &MCPConnectionEndpoint{Slug: slug}
+	if domainID.Valid {
+		after.CustomDomainID = domainID.UUID.String()
+	}
+	if endpointID == uuid.Nil {
+		preview.Change = "add_endpoint"
+	} else {
+		preview.Change = "change_endpoint"
+		for i := range current.Endpoints {
+			if current.Endpoints[i].ID == endpointID.String() {
+				before := current.Endpoints[i]
+				preview.EndpointBefore = &before
+			}
 		}
-		return "", uuid.Nil, ResolvedProject{}, err
+		if preview.EndpointBefore == nil {
+			return ErrMCPConnectionMutationMissing
+		}
+		after.ID = endpointID.String()
+		if after.CustomDomainID == preview.EndpointBefore.CustomDomainID {
+			after.Domain = preview.EndpointBefore.Domain
+		}
 	}
-	return kind, parsedTarget, ResolvedProject{ID: project.ID, Name: project.Name, Slug: project.Slug}, nil
+	preview.EndpointAfter = after
+	return &connectionMutationPreviewError{Preview: preview}
+}
+
+// networkAccessPreview reports the network mode change a confirmed call would make.
+func networkAccessPreview(current MCPConnectionSettings, expectedVersion string, mode networkaccess.Mode) error {
+	if !hmac.Equal([]byte(current.Version), []byte(expectedVersion)) {
+		return ErrMCPConnectionMutationConflict
+	}
+	preview := newConnectionMutationPreview(current)
+	preview.Change = "set_network_access"
+	preview.NetworkModeAfter = string(mode)
+	return &connectionMutationPreviewError{Preview: preview}
+}
+
+func newConnectionMutationPreview(current MCPConnectionSettings) MCPConnectionMutationPreview {
+	return MCPConnectionMutationPreview{
+		ProjectID: current.ProjectID, TargetKind: current.TargetKind, TargetID: current.TargetID, Name: current.Name, Version: current.Version,
+		NetworkModeBefore: current.NetworkMode, NetworkModeAfter: current.NetworkMode,
+		Endpoints: current.Endpoints, Ingress: current.Ingress, PluginMemberships: current.PluginMemberships,
+	}
 }
 
 func (s *MCPConnectionMutationService) lockAndCheck(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, kind MCPConnectionSettingsTargetKind, targetID uuid.UUID, expectedVersion string) (MCPConnectionSettings, error) {
@@ -411,12 +498,12 @@ func classifyConnectionMutationError(err error) error {
 		switch shareable.Code {
 		case oops.CodeNotFound:
 			return ErrMCPConnectionMutationMissing
-		case oops.CodeInvalid:
-			return connectionMutationInvalid("The selected endpoint or network access change is not available for this target.")
+		case oops.CodeInvalid, oops.CodeBadRequest:
+			return &RiskMutationError{Code: "invalid_request", Message: shareable.Error(), Cause: errors.Join(ErrMCPConnectionMutationInvalid, err)}
 		case oops.CodeForbidden:
 			return &RiskMutationError{Code: "forbidden", Message: "You do not have permission to change this MCP connection.", Cause: err}
 		case oops.CodeConflict:
-			return fmt.Errorf("%w: %s", ErrMCPConnectionMutationConflict, "The selected address is already in use or the target changed.")
+			return &RiskMutationError{Code: "conflict", Message: shareable.Error(), Cause: errors.Join(ErrMCPConnectionMutationConflict, err)}
 		default:
 			return connectionMutationUnavailable(err)
 		}
@@ -433,6 +520,11 @@ func connectionMutationAuthorizationError(err error, scope authz.Scope) error {
 
 func connectionMutationInvalid(message string) error {
 	return &RiskMutationError{Code: "invalid_request", Message: message, Cause: ErrMCPConnectionMutationInvalid}
+}
+
+// privateAccessUnavailable refuses a private mode the organization cannot use yet, as the dashboard does.
+func privateAccessUnavailable(cause error) error {
+	return &RiskMutationError{Code: "invalid_request", Message: "Private network access is not available for this organization: it needs private networking switched on and an enabled network ingress. Check get_network_ingress.", Cause: errors.Join(ErrMCPConnectionMutationInvalid, cause)}
 }
 
 func connectionMutationUnavailable(cause error) error {
