@@ -1,16 +1,13 @@
-import { mcpServerRouteParam } from "@/lib/sources";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { useRoutes } from "@/routes";
-import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
-import { ChevronRight } from "lucide-react";
 import { useEffect, useState, type JSX } from "react";
-import { Link } from "react-router";
+import { PersonServers } from "./PersonServers";
 import { WizardStepHeader } from "./WizardChrome";
+import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
 
 /**
@@ -35,6 +32,7 @@ export function StepServers({
   scopeLabel,
   selected,
   onChange,
+  connections,
 }: {
   servers: InventoryServer[];
   isLoading: boolean;
@@ -56,8 +54,13 @@ export function StepServers({
   scopeLabel: string;
   selected: ServerSelection[];
   onChange: (next: ServerSelection[]) => void;
+  /**
+   * The creator's own connections to the servers that authorize each person
+   * separately. When given, those servers can be chosen and the agent uses
+   * the creator's connection to them; without it they are only listed.
+   */
+  connections?: OwnerConnections;
 }): JSX.Element {
-  const routes = useRoutes();
   // "Change identity" opens the server's settings in another tab, so the
   // inventory this list was built from is stale the moment it is used. Coming
   // back to this tab is the signal that something may have changed.
@@ -70,16 +73,13 @@ export function StepServers({
   }, [onRetry]);
   const [search, setSearch] = useState("");
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
-  const [showBlocked, setShowBlocked] = useState(false);
 
   const query = search.trim().toLowerCase();
   const isSelected = (id: string) =>
     allServers || selected.some((entry) => entry.server.id === id);
   // A server that authorizes each person separately needs an account attached
-  // to the agent before a key can call it, and this flow has no step for that.
-  // Offering it would issue a key that reaches the gateway and then fails on
-  // every call to that server, so it is shown and not selectable; the agent's
-  // own credentials section connects the account.
+  // to the agent before a key can call it. It is listed apart, and chosen
+  // there only when the creator's own connection to it can be attached.
   const needsAccount = (server: InventoryServer) => Boolean(server.issuerId);
   const matches = servers.filter((server) => {
     if (showSelectedOnly && !isSelected(server.id)) return false;
@@ -88,10 +88,10 @@ export function StepServers({
       .toLowerCase()
       .includes(query);
   });
-  // Two lists, not one: a per-user server cannot be chosen here at all, and
+  // Two lists, not one: a per-user server is chosen on different terms, and
   // when most of the organization authorizes that way they crowd out the rows
-  // that can. They stay reachable — a reader looking for one of them needs to
-  // find it and be told why, not find nothing.
+  // a key reaches on its own. They stay reachable — a reader looking for one
+  // of them needs to find it and be told what it would sign in as.
   const shown = matches.filter((server) => !needsAccount(server));
   const blockedServers = matches.filter(needsAccount);
   // Counted across the whole scope rather than the filtered rows: it is told
@@ -201,7 +201,7 @@ export function StepServers({
               <span className="text-muted-foreground block text-xs">
                 Every server in {scopeLabel}, including ones added later.
                 {perUserCount > 0 &&
-                  ` The ${perUserCount} below that authorize each person separately stay out of the key: the agent reaches them once an account is connected.`}
+                  ` The ${perUserCount} below that sign in as a person stay out of it.`}
               </span>
             </span>
           </label>
@@ -255,77 +255,13 @@ export function StepServers({
               })}
             </ul>
           )}
-          {blockedServers.length > 0 && (
-            <div className="border-border border-t">
-              <button
-                type="button"
-                aria-expanded={showBlocked}
-                onClick={() => setShowBlocked((open) => !open)}
-                className="hover:bg-muted/40 flex w-full items-center gap-2 px-4 py-3 text-left"
-              >
-                <ChevronRight
-                  aria-hidden="true"
-                  className={cn(
-                    "size-4 shrink-0 transition-transform",
-                    showBlocked && "rotate-90",
-                  )}
-                />
-                <span className="flex-1 text-sm">
-                  Unavailable servers (need connected service account)
-                </span>
-                <Badge variant="neutral" size="sm">
-                  {blockedServers.length}
-                </Badge>
-              </button>
-              {showBlocked && (
-                <div className="border-border border-t">
-                  {/* Said once for the group rather than on every row, and it
-                      names both ways out: connect the account afterwards, or
-                      stop the server asking each person in the first place. */}
-                  <Text muted small className="block px-4 pt-3">
-                    These authorize each person separately, so an agent cannot
-                    use them until an account is connected from the agent's
-                    credentials section. A server that should answer to one
-                    shared credential instead can be changed in its settings.
-                  </Text>
-                  <ul className="divide-border divide-y">
-                    {blockedServers.map((server) => (
-                      <li
-                        key={server.id}
-                        className="flex items-center gap-4 px-4 py-3"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="flex flex-wrap items-center gap-2">
-                            <span className="truncate">{server.name}</span>
-                            <Badge variant="neutral" size="sm">
-                              {server.projectName || server.projectSlug}
-                            </Badge>
-                          </span>
-                          <span className="text-muted-foreground block truncate font-mono text-xs">
-                            /mcp/{server.slug}
-                          </span>
-                        </span>
-                        {/* A new tab, because this is a detour: the wizard
-                            holds the name, scope and selections in memory, and
-                            navigating away then coming back loses all of it. */}
-                        <Button size="sm" variant="secondary" asChild>
-                          <Link
-                            to={`${routes.mcp.details.settings.href(
-                              mcpServerRouteParam(server),
-                            )}#${MCP_AUTHENTICATION_SECTION_ID}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Change identity
-                          </Link>
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
+          <PersonServers
+            servers={blockedServers}
+            connections={connections}
+            allServers={allServers}
+            selected={selected}
+            onChange={onChange}
+          />
         </div>
       )}
     </div>

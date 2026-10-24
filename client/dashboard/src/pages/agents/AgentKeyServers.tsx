@@ -1,4 +1,8 @@
 import { sessionAccountLabel } from "@/components/sessions/session-account-identity";
+import {
+  connectionLifetime,
+  connectionLifetimeLabel,
+} from "@/components/sessions/connection-lifetime";
 import { useEffect, useState, type JSX } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useOrganization, useSession } from "@/contexts/Auth";
@@ -375,6 +379,9 @@ function ServerAccounts({
   const attachBinding = useRemoteSessionsAttachBindingMutation();
   const detachBinding = useRemoteSessionsDetachBindingMutation();
   const ownerScope = { organizationId: organization.id, userId: user.id };
+  // The runtime serves an agent only its owner's connections, so nobody else
+  // is offered their own: theirs would be attached and never used.
+  const isOwner = agent.ownerUserId === user.id;
   const requests = required.map((server) => ({
     gramProject: server.projectSlug,
     principalId: agent.id,
@@ -539,7 +546,14 @@ function ServerAccounts({
             />
             <h3 className="text-sm font-medium">{row.server.name}</h3>
           </div>
-          {row.server.connectUrl && (
+          {!isOwner && row.clients.length > 0 && (
+            <Text small muted>
+              Only {agent.ownerProfile?.displayName ?? "the agent's owner"} can
+              let this agent use a connection to this server. An agent uses its
+              owner&apos;s connections and nobody else&apos;s.
+            </Text>
+          )}
+          {isOwner && row.server.connectUrl && (
             <a
               href={row.server.connectUrl}
               target="_blank"
@@ -572,7 +586,7 @@ function ServerAccounts({
                 </Button>
               </div>
             ))}
-          {row.clients.map((client, clientIndex) => (
+          {(isOwner ? row.clients : []).map((client, clientIndex) => (
             <div key={client.id} className="space-y-2">
               {row.clients.length > 1 && (
                 <Text small muted>
@@ -603,6 +617,11 @@ function ServerAccounts({
                           {candidate.scopes.length > 0
                             ? `Access: ${candidate.scopes.join(", ")}`
                             : "No additional access requested"}
+                        </Text>
+                        <Text small muted>
+                          {connectionLifetimeLabel(
+                            connectionLifetime(candidate),
+                          )}
                         </Text>
                       </div>
                       <Button
