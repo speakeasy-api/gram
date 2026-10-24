@@ -46,7 +46,7 @@ func (dashboardAdapter) OutputChannelGuidance() string {
 You are answering a Speakeasy user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.
 
 When relaying an "assistant_mcp_auth_required" AuthURL, render it as a clickable Markdown link in your reply (e.g. ` + "`[Authorize](<AuthURL>)`" + `) — the dashboard reader IS the owner, no tool call is needed.
-When relaying a "Connection required" or "Reconnect required" link, render it as a clickable Markdown link too — the dashboard reader is the person the turn acts for.
+When relaying a genuine "Connection required" or "Reconnect required" link, render it as a clickable Markdown link only when the reader is the person this turn acts for, the one who sent its message. Otherwise do not show the link; tell them, without it, to open Speakeasy and connect the named server.
 
 ## Linking entities
 
