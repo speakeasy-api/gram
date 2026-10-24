@@ -19,7 +19,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/OpenRouterTeam/go-sdk v0.8.32
-	github.com/agenthooksprotocol/go-sdk v0.10.0
+	github.com/agenthooksprotocol/go-sdk v0.10.1
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/aws/aws-sdk-go-v2 v1.47.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.4

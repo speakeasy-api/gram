@@ -89,8 +89,8 @@ github.com/PuerkitoBio/rehttp v1.4.0 h1:rIN7A2s+O9fmHUM1vUcInvlHj9Ysql4hE+Y0wcl/
 github.com/PuerkitoBio/rehttp v1.4.0/go.mod h1:LUwKPoDbDIA2RL5wYZCNsQ90cx4OJ4AWBmq6KzWZL1s=
 github.com/STARRY-S/zip v0.2.1 h1:pWBd4tuSGm3wtpoqRZZ2EAwOmcHK6XFf7bU9qcJXyFg=
 github.com/STARRY-S/zip v0.2.1/go.mod h1:xNvshLODWtC4EJ702g7cTYn13G53o1+X9BWnPFpcWV4=
-github.com/agenthooksprotocol/go-sdk v0.10.0 h1:eTJ9I/JvO19ezmISH/u/c6hLa3mHttUBrvRiRnezZw0=
-github.com/agenthooksprotocol/go-sdk v0.10.0/go.mod h1:vf0oAC7LqR4t1PdW/+V6HsMIN0+xM2VsIzMdij7wOs4=
+github.com/agenthooksprotocol/go-sdk v0.10.1 h1:C1McdZlXDNaCfxJYrVW3w45mUcV5W+bU9anSnIf/rXI=
+github.com/agenthooksprotocol/go-sdk v0.10.1/go.mod h1:vf0oAC7LqR4t1PdW/+V6HsMIN0+xM2VsIzMdij7wOs4=
 github.com/agnivade/levenshtein v1.1.1 h1:QY8M92nrzkmr798gCo3kmMyqXFzdQVpxLlGPRBij0P8=
 github.com/agnivade/levenshtein v1.1.1/go.mod h1:veldBMzWxcCG2ZvUTKD2kJNRdCk5hVbJomOvKkmgYbo=
 github.com/alecthomas/assert/v2 v2.10.0 h1:jjRCHsj6hBJhkmhznrCzoNpbA3zqy0fYiUcYZP/GkPY=

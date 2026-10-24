@@ -55,7 +55,9 @@ Call `hooks/configuration` to discover the supported subscriptions:
 Each event is advertised once. Intercept subscriptions use a five-second timeout
 and the authenticated organization's current fail-open setting; policy presence
 does not change delivery mode. Content selection requests inline text bodies and
-metadata for other content.
+metadata for other content. Discovery lookup failures return the SDK-native JSON-RPC
+error `-32004` (`Backend internal error`) over HTTP 200, without subscriptions or
+an assumed failure policy. Authentication failures remain HTTP 401/403.
 
 Observe mode records events without enforcing policy. Prompt and tool
 interception require the harness to support denial at the subscribed boundary.

@@ -134,6 +134,7 @@ func TestAHPConfigurationAuthentication(t *testing.T) {
 	require.Equal(t, http.StatusOK, ahpConfigurationRequest(h, map[string]string{"Gram-Key": "example", "Gram-Project": "chosen"}).Code)
 	requireAHPConfiguration(t, h, "fail-closed")
 	r := httptest.NewRequest(http.MethodPost, "/ahp", strings.NewReader(strings.Repeat("x", (1<<20)+1)))
+	r.Header.Set("Content-Type", "application/json")
 	for key, value := range ahpAuthHeaders {
 		r.Header.Set(key, value)
 	}
@@ -142,6 +143,9 @@ func TestAHPConfigurationAuthentication(t *testing.T) {
 	require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
+	configuration, err := ti.service.ahpResolveConfiguration(canceled)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, configuration)
 	r = httptest.NewRequest(http.MethodPost, "/ahp", strings.NewReader(`{"jsonrpc":"2.0","id":"discovery","method":"hooks/configuration","params":{"protocolVersion":"draft"}}`)).WithContext(canceled)
 	r.Header.Set("Content-Type", "application/json")
 	for key, value := range ahpAuthHeaders {
@@ -149,8 +153,13 @@ func TestAHPConfigurationAuthentication(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, r)
-	require.Equal(t, http.StatusServiceUnavailable, w.Code)
-	require.NotContains(t, w.Body.String(), "subscriptions")
+	requireAHPConfigurationUnavailable(t, w)
 	ti.service.db = nil
-	require.Equal(t, http.StatusServiceUnavailable, ahpConfigurationRequest(h, ahpAuthHeaders).Code)
+	requireAHPConfigurationUnavailable(t, ahpConfigurationRequest(h, ahpAuthHeaders))
+}
+
+func requireAHPConfigurationUnavailable(t *testing.T, w *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusOK, w.Code)
+	require.JSONEq(t, `{"jsonrpc":"2.0","id":"discovery","error":{"code":-32004,"message":"Backend internal error"}}`, w.Body.String())
 }

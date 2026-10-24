@@ -1,19 +1,14 @@
 package hooks
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"time"
 
 	ahp "github.com/agenthooksprotocol/go-sdk"
 	"github.com/agenthooksprotocol/go-sdk/content"
 	"github.com/agenthooksprotocol/go-sdk/event"
-	ahpserver "github.com/agenthooksprotocol/go-sdk/server"
 	"github.com/agenthooksprotocol/go-sdk/subscription"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -49,64 +44,26 @@ func ahpConfiguration(failOpen bool) *ahp.Configuration {
 	)
 }
 
-// The SDK snapshots static configuration. Keep prevalidated variants, but
-// choose on each authenticated discovery request so posture changes
-// do not require restarting the server. Event dispatch keeps its existing path.
-func (s *Service) ahpConfigurationHandler(next http.Handler) (http.Handler, error) {
-	var variants [2]http.Handler
-	for i := range variants {
-		h, err := ahpserver.NewHandler(ahpserver.Handlers{Configuration: ahpConfiguration(i == 1)}, //nolint:exhaustruct // discovery-only handler; event requests use next
-			ahpserver.Options{MaxRequestBytes: 1 << 20, MaxResponseBytes: 64 << 10, Diagnostic: nil})
-		if err != nil {
-			return nil, fmt.Errorf("create AHP configuration handler: %w", err)
-		}
-		variants[i] = h
+// Resolve the authenticated organization's current posture on each discovery request.
+func (s *Service) ahpResolveConfiguration(ctx context.Context) (*ahp.Configuration, error) {
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || auth.ProjectID == nil || auth.ActiveOrganizationID == "" {
+		return nil, errors.New("AHP configuration requires authenticated organization")
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
-		if err != nil {
-			status := http.StatusBadRequest
-			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-				status = http.StatusRequestEntityTooLarge
-			}
-			http.Error(w, http.StatusText(status), status)
-			return
-		}
-		r.Body = io.NopCloser(bytes.NewReader(body))
-		var envelope struct {
-			Method string `json:"method"`
-		}
-		if json.Unmarshal(body, &envelope) != nil || envelope.Method != "hooks/configuration" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		auth, ok := contextvalues.GetAuthContext(r.Context())
-		if !ok || auth.ProjectID == nil || auth.ActiveOrganizationID == "" {
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-			return
-		}
-		// Unknown settings must not become a successful advertisement of the wrong failure policy.
-		if s.db == nil {
-			http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
-			return
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
-		defer cancel()
-		repo := riskrepo.New(s.db)
-		failOpen, err := repo.IsOrganizationHooksFailOpenEnabled(ctx, auth.ActiveOrganizationID)
-		if err != nil {
-			s.logger.WarnContext(ctx, "read AHP configuration fail-open setting",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(auth.ActiveOrganizationID),
-			)
-			http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
-			return
-		}
-		variant := 0
-		if failOpen {
-			variant = 1
-		}
-		variants[variant].ServeHTTP(w, r)
-	}), nil
+	// Unknown settings must not become a successful advertisement of the wrong failure policy.
+	if s.db == nil {
+		return nil, errors.New("AHP configuration database unavailable")
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	repo := riskrepo.New(s.db)
+	failOpen, err := repo.IsOrganizationHooksFailOpenEnabled(ctx, auth.ActiveOrganizationID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "read AHP configuration fail-open setting",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(auth.ActiveOrganizationID),
+		)
+		return nil, fmt.Errorf("read AHP configuration fail-open setting: %w", err)
+	}
+	return ahpConfiguration(failOpen), nil
 }
