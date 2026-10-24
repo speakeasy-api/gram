@@ -719,20 +719,25 @@ ORDER BY m.id, c.name, c.id;
 -- name: ListRememberedAuthClients :many
 -- The auth client a subject most recently approved for each MCP server
 -- through any of their user sessions. It only prefills a new consent and is
--- checked again before use.
-SELECT DISTINCT ON (sel.mcp_server_id)
-       sel.mcp_server_id,
-       sel.auth_client_id::uuid AS auth_client_id
-FROM upstream_client_selections AS sel
-JOIN user_sessions AS us
-  ON COALESCE(us.credential_id, us.id) = sel.credential_id
- AND us.subject_urn = @subject_urn::text
-WHERE sel.credential_kind = 'user_session'
-  AND sel.organization_id = @organization_id::text
-  AND sel.mcp_server_id = ANY(@mcp_server_ids::uuid[])
-  AND sel.auth_client_id IS NOT NULL
-  AND sel.deleted IS FALSE
-ORDER BY sel.mcp_server_id, sel.created_at DESC;
+-- checked again before use. A latest approval with no client remembers
+-- nothing.
+SELECT latest.mcp_server_id,
+       latest.auth_client_id::uuid AS auth_client_id
+FROM (
+  SELECT DISTINCT ON (sel.mcp_server_id)
+         sel.mcp_server_id,
+         sel.auth_client_id
+  FROM upstream_client_selections AS sel
+  JOIN user_sessions AS us
+    ON COALESCE(us.credential_id, us.id) = sel.credential_id
+   AND us.subject_urn = @subject_urn::text
+  WHERE sel.credential_kind = 'user_session'
+    AND sel.organization_id = @organization_id::text
+    AND sel.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+    AND sel.deleted IS FALSE
+  ORDER BY sel.mcp_server_id, sel.created_at DESC
+) AS latest
+WHERE latest.auth_client_id IS NOT NULL;
 
 -- name: ListGatewayMembersAddedAfterIssuance :many
 -- The members, of those given, that joined the gateway after the credential

@@ -218,7 +218,7 @@ func (s *AccessRoleMutationService) OfferUpstreamCredential(ctx context.Context,
 
 	upstream, err := upstreamAuthentication(ctx, s.reads.db, principal.OrganizationID, mcpID)
 	if err != nil {
-		return OfferMCPUpstreamCredentialOutput{}, fmt.Errorf("read upstream authentication after offering credential: %w", err)
+		return OfferMCPUpstreamCredentialOutput{}, &AccessRoleMutationError{Code: unavailableCode, Message: "The credential may have been offered, but the server's current state could not be read. Read the server's upstream authentication before retrying.", Cause: fmt.Errorf("%w: %w", ErrAccessRoleMutationUnavailable, err)}
 	}
 	return OfferMCPUpstreamCredentialOutput{UpstreamAuthentication: upstream}, nil
 }
