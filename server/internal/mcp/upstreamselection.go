@@ -380,6 +380,10 @@ type memberChoices struct {
 	// which has no upstream client choice to fall back to.
 	profile bool
 
+	// metaServerID is the gateway the members belong to; invalid for the
+	// organization gateway, which has no member list.
+	metaServerID uuid.NullUUID
+
 	mu       sync.Mutex
 	byServer map[uuid.UUID]*memberTokens
 }
@@ -417,10 +421,11 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 		selector, profile = s.profileSelector(authenticated.Credential, endpoint), true
 	}
 	return &memberChoices{
-		selector: selector,
-		enforced: enforced,
-		subject:  authentication.subject,
-		profile:  profile,
+		selector:     selector,
+		enforced:     enforced,
+		subject:      authentication.subject,
+		profile:      profile,
+		metaServerID: endpoint.MetaMcpServerID,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			if member.typedAuthClient {
 				tokens, err := s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
@@ -484,6 +489,9 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	var err error
 	if typed {
 		resolved, err = c.selector.resolveAuthClients(ctx, ids)
+		if err == nil && c.enforced && !c.profile && c.recordNewMemberChoices(ctx, logger, members, resolved) {
+			resolved, err = c.selector.resolveAuthClients(ctx, ids)
+		}
 		ids = ids[:0]
 		for id, res := range resolved {
 			if res.outcome != authClientLegacy {
