@@ -449,6 +449,12 @@ export function LogFilterBar({
         <PopoverAnchor asChild>
           <div
             ref={barRef}
+            // cmdk's root prevents Enter's default, which would cancel a
+            // native button's Enter click, so button Enters stop here.
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.target instanceof HTMLButtonElement)
+                e.stopPropagation();
+            }}
             className={cn(
               "border-border flex min-h-[42px] flex-wrap items-center gap-1.5 border px-3 py-1.5 transition-[border-color,box-shadow]",
               inputFocused && "border-ring ring-ring/50 ring-[3px]",
@@ -493,13 +499,15 @@ export function LogFilterBar({
               </span>
             )}
             {step === "operator" && (
-              <span className="border-ring bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-1 border px-2 py-0.5 font-mono text-xs">
-                {keyLabel(selectedKey)}
+              <span className="border-ring bg-accent text-accent-foreground inline-flex max-w-full shrink-0 items-center gap-1 border px-2 py-0.5 font-mono text-xs">
+                <span className="min-w-0 truncate">
+                  {keyLabel(selectedKey)}
+                </span>
               </span>
             )}
             {step === "value" ? (
-              <span className="border-ring bg-accent text-accent-foreground inline-flex shrink-0 items-center border px-2 py-0.5 font-mono text-xs">
-                <span>
+              <span className="border-ring bg-accent text-accent-foreground inline-flex max-w-full shrink-0 items-center border px-2 py-0.5 font-mono text-xs">
+                <span className="min-w-0 truncate">
                   {keyLabel(selectedKey)}
                   {operatorsFor?.(selectedKey).length === 1
                     ? ""
@@ -547,7 +555,7 @@ export function LogFilterBar({
                     if (isFocusLeavingBar(e)) handleValueSubmit();
                   }}
                   placeholder={valuePlaceholder}
-                  className="w-[80px] bg-transparent font-mono text-xs outline-none"
+                  className="w-[80px] min-w-0 bg-transparent font-mono text-xs outline-none"
                   style={{
                     width: `${Math.max(filterValue.length, valuePlaceholder.length)}ch`,
                   }}
@@ -801,25 +809,27 @@ function EditableFilterChip({
   };
 
   const valuePlaceholder = op === Op.In ? "value1, value2, ..." : "value";
+  const label = chipText(
+    formatKey(filter.path),
+    ops.length === 1 ? null : filter.op,
+    filter.value === undefined
+      ? undefined
+      : formatValue
+        ? formatValue(filter.path, filter.value, filter.op)
+        : filter.value,
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <span className="border-border bg-background text-foreground inline-flex shrink-0 items-center border font-mono text-xs">
+      <span className="border-border bg-background text-foreground inline-flex max-w-full shrink-0 items-center border font-mono text-xs">
         <PopoverTrigger asChild>
           <button
             type="button"
             aria-label={`Edit filter ${formatKey(filter.path)}`}
-            className="hover:bg-muted cursor-pointer py-0.5 pr-1 pl-2 transition-colors"
+            title={label}
+            className="hover:bg-muted min-w-0 cursor-pointer truncate py-0.5 pr-1 pl-2 transition-colors"
           >
-            {chipText(
-              formatKey(filter.path),
-              ops.length === 1 ? null : filter.op,
-              filter.value === undefined
-                ? undefined
-                : formatValue
-                  ? formatValue(filter.path, filter.value, filter.op)
-                  : filter.value,
-            )}
+            {label}
           </button>
         </PopoverTrigger>
         <button
@@ -829,7 +839,7 @@ function EditableFilterChip({
             e.stopPropagation();
             onRemove(filter.id);
           }}
-          className="text-muted-foreground hover:text-foreground hover:bg-muted px-1.5 py-0.5 transition-colors"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 px-1.5 py-0.5 transition-colors"
         >
           <X className="size-3" />
         </button>

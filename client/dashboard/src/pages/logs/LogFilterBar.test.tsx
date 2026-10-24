@@ -317,3 +317,26 @@ it("forgets an earlier refusal when the chip editor reopens", async () => {
   await screen.findByRole("button", { name: "Save" });
   expect(screen.queryByText("Not a client")).toBeNull();
 });
+
+it("leaves Enter on a chip's buttons to the browser and still submits from the input", () => {
+  const onSearchSubmit = vi.fn<(query: string) => void>();
+  render(
+    <Bar
+      filters={[{ id: "c1", path: "client", op: Op.Eq, value: "c-1" }]}
+      initialInput="dana"
+      onSearchSubmit={onSearchSubmit}
+    />,
+  );
+  // fireEvent returns false when a handler cancelled the event, which would
+  // stop the browser from clicking the focused button.
+  for (const name of ["Edit filter client", "Remove filter client"]) {
+    expect(
+      fireEvent.keyDown(screen.getByRole("button", { name }), { key: "Enter" }),
+    ).toBe(true);
+  }
+  expect(onSearchSubmit).not.toHaveBeenCalled();
+
+  fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+  expect(onSearchSubmit).toHaveBeenCalledTimes(1);
+  expect(onSearchSubmit).toHaveBeenLastCalledWith("dana");
+});
