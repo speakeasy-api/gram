@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
 // stubConnectionStatuses answers MemberConnectionStatus from a fixed table and
@@ -221,4 +222,17 @@ func TestGetMyConnections_NoPermissionIsNoAccess(t *testing.T) {
 	require.Equal(t, "no_access", c.State, "a member who may not connect can't fix it by signing in")
 	require.Equal(t, testSiteURL+"/request-access", *c.RequestAccessURL)
 	require.Nil(t, c.ConnectURL)
+}
+
+func TestGetMyConnections_RateLimitedPerMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ti.service.WithConnectionsLimiter(ratelimit.New(ratelimit.NewRedisStore(ti.redis), "test-get-my-connections-"+uuid.NewString(), ratelimit.PerMinute(1)))
+
+	_, err := ti.service.GetMyConnections(ctx, &gen.GetMyConnectionsPayload{Email: new(mockidp.MockUserEmail)})
+	require.NoError(t, err)
+	_, err = ti.service.GetMyConnections(ctx, &gen.GetMyConnectionsPayload{Email: new(mockidp.MockUserEmail)})
+	requireCode(t, err, oops.CodeRateLimitExceeded)
+	_, err = ti.service.GetMyConnections(ctx, &gen.GetMyConnectionsPayload{Email: new("other@example.com")})
+	require.NoError(t, err, "the budget is per member, not per key")
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -41,6 +42,19 @@ const (
 // connectFirstPartyPath is the route under an MCP endpoint that signs a member
 // in through the browser.
 const connectFirstPartyPath = "connect/first-party"
+
+// ConnectionsRate bounds getMyConnections reads per member. A device reads at
+// most every few seconds while a sign-in is in flight; the limit stops a leaked
+// org key from hammering one member's state. It is keyed per member, not per
+// key, because a fleet shares one org key.
+var ConnectionsRate = ratelimit.PerMinute(60)
+
+// WithConnectionsLimiter sets the per-member limit on getMyConnections. Nil
+// leaves it unlimited.
+func (s *Service) WithConnectionsLimiter(limiter *ratelimit.Limiter) *Service {
+	s.connectionsLimiter = limiter
+	return s
+}
 
 // WithConnectionStatuses sets the reader behind getMyConnections. Nil reports
 // every server as unknown.
@@ -67,6 +81,9 @@ func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnec
 	}
 
 	organizationID := authCtx.ActiveOrganizationID
+	if err := s.allowConnectionsRead(ctx, organizationID, email); err != nil {
+		return nil, err
+	}
 	principals, err := plugins.ResolveDeliveryPrincipals(ctx, s.db, organizationID, email, "")
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
@@ -129,6 +146,23 @@ func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnec
 		}
 	}
 	return result, nil
+}
+
+// allowConnectionsRead charges one read to the member's budget. A limiter
+// store outage fails open: it isn't a throttle.
+func (s *Service) allowConnectionsRead(ctx context.Context, organizationID, email string) error {
+	if s.connectionsLimiter == nil {
+		return nil
+	}
+	res, err := s.connectionsLimiter.Allow(ctx, organizationID+":"+email)
+	switch {
+	case err != nil:
+		s.logger.WarnContext(ctx, "getMyConnections rate limit unavailable", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return nil
+	case !res.Allowed:
+		return oops.E(oops.CodeRateLimitExceeded, nil, "too many sign-in state reads; retry shortly")
+	}
+	return nil
 }
 
 // serverConnection reports one server's state. A server the member cannot

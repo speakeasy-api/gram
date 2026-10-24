@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -90,6 +91,10 @@ type Service struct {
 	// connectionStatuses reads members' MCP server sign-in state for
 	// getMyConnections. Nil reports every server as unknown.
 	connectionStatuses MemberConnectionStatuses
+
+	// connectionsLimiter bounds getMyConnections reads per member. Nil leaves
+	// it unlimited.
+	connectionsLimiter *ratelimit.Limiter
 }
 
 // WorkloadTokenTargets resolves where a workload exchanges an identity
@@ -138,6 +143,7 @@ func NewService(
 		deviceAgentTokens:  deviceAgentTokens,
 		agentVersions:      nil,
 		connectionStatuses: nil,
+		connectionsLimiter: nil,
 	}
 }
 
