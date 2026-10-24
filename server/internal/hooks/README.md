@@ -46,20 +46,19 @@ configuration uncommitted.
 
 Call `hooks/configuration` to discover the supported subscriptions:
 
-- Intercept: `tool.before`, `tool.after`, `tool.permission.request`,
-  `user.message.inbound`, `user.message.outbound`, `model.request.before`,
-  `model.response.after`, `context.compact.before`, and `context.compact.after`.
-- Observe: `tool.permission.resolved`, `tool.batch.after`, `model.error`,
-  `turn.end`, `session.start`, and `session.end`.
+- Intercept: `user.message.inbound` and `tool.before`.
+- Observe: `session.start`, `session.end`, `turn.start`, `turn.end`,
+  `model.response.after`, and `tool.after`.
 
-Each event is advertised once. Intercept subscriptions use a five-second timeout
+Each event is advertised once. Intercept subscriptions use a 30-second timeout
 and the authenticated organization's current fail-open setting; policy presence
-does not change delivery mode. Content selection requests inline text bodies and
-metadata for other content. Discovery lookup failures return the SDK-native JSON-RPC
+does not change delivery mode. Both modes request `content: {"default": "body"}`.
+Discovery lookup failures return the SDK-native JSON-RPC
 error `-32004` (`Backend internal error`) over HTTP 200, without subscriptions or
 an assumed failure policy. Authentication failures remain HTTP 401/403.
 
-Observe mode records events without enforcing policy. Prompt and tool
+Observe mode records events without enforcing policy, except `turn.start`, which
+the SDK acknowledges without ingestion because no observer callback is registered. Prompt and tool
 interception require the harness to support denial at the subscribed boundary.
 Only inline text is supported; content references and uploads are not supported.
 

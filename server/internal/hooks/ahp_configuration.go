@@ -16,30 +16,24 @@ import (
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-// ahpConfiguration advertises only implemented callbacks. Each event occurs
+// ahpConfiguration advertises the default harness subscriptions. Each event occurs
 // once: intercept delivery already records the event, so adding an observer
 // for the same event would duplicate ingestion.
 func ahpConfiguration(failOpen bool) *ahp.Configuration {
-	boundaries := []event.Type{
-		event.ToolBefore, event.ToolAfter, event.ToolPermissionRequest,
-		event.UserMessageInbound, event.UserMessageOutbound,
-		event.ModelRequestBefore, event.ModelResponseAfter,
-		event.ContextCompactBefore, event.ContextCompactAfter,
-	}
+	boundaries := []event.Type{event.UserMessageInbound, event.ToolBefore}
 	observations := []event.Type{
-		event.ToolPermissionResolved, event.ToolBatchAfter, event.ModelError,
-		event.TurnEnd, event.SessionStart, event.SessionEnd,
+		event.SessionStart, event.SessionEnd, event.TurnStart, event.TurnEnd,
+		event.ModelResponseAfter, event.ToolAfter,
 	}
-	// Text is policy evidence; binary parts remain metadata. Discovery does not
-	// introduce an upload destination or authorize credential forwarding.
-	selection := content.NewSelection(ahp.ContentSelectionDefaultMetadata,
-		content.WithSelectionText(ahp.ContentSelectionTextBody))
+	// TurnStart observation is acknowledged by the SDK without ingestion.
+	// Discovery does not introduce uploads or authorize credential forwarding.
+	selection := content.NewSelection(ahp.ContentSelectionDefaultBody)
 	failurePolicy := subscription.FailClosed
 	if failOpen {
 		failurePolicy = subscription.FailOpen
 	}
 	return ahp.NewConfiguration(
-		subscription.NewIntercept(boundaries, 5*time.Second, failurePolicy, selection),
+		subscription.NewIntercept(boundaries, 30*time.Second, failurePolicy, selection),
 		subscription.NewObserve(selection, observations),
 	)
 }

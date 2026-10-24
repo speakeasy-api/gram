@@ -52,7 +52,7 @@ func requireAHPConfiguration(t *testing.T, h http.Handler, failurePolicy string)
 	events := map[string]string{}
 	intercepts := 0
 	for _, sub := range response.Result.Configuration.Subscriptions {
-		require.Equal(t, map[string]any{"default": "metadata", "text": "body"}, sub.Content)
+		require.Equal(t, map[string]any{"default": "body"}, sub.Content)
 		for _, event := range sub.Events {
 			require.NotContains(t, events, event, "must not deliver the same event twice")
 			events[event] = sub.Mode
@@ -60,7 +60,7 @@ func requireAHPConfiguration(t *testing.T, h http.Handler, failurePolicy string)
 		if sub.Mode == "intercept" {
 			intercepts += len(sub.Events)
 			require.Equal(t, failurePolicy, sub.FailurePolicy)
-			require.Equal(t, 5000, sub.TimeoutMS)
+			require.Equal(t, 30000, sub.TimeoutMS)
 		} else {
 			require.Equal(t, "observe", sub.Mode)
 			require.Empty(t, sub.FailurePolicy)
@@ -68,23 +68,16 @@ func requireAHPConfiguration(t *testing.T, h http.Handler, failurePolicy string)
 		}
 	}
 	require.Equal(t, map[string]string{
-		"tool.before":              "intercept",
-		"tool.after":               "intercept",
-		"tool.permission.request":  "intercept",
-		"user.message.inbound":     "intercept",
-		"user.message.outbound":    "intercept",
-		"model.request.before":     "intercept",
-		"model.response.after":     "intercept",
-		"context.compact.before":   "intercept",
-		"context.compact.after":    "intercept",
-		"tool.permission.resolved": "observe",
-		"tool.batch.after":         "observe",
-		"model.error":              "observe",
-		"turn.end":                 "observe",
-		"session.start":            "observe",
-		"session.end":              "observe",
+		"user.message.inbound": "intercept",
+		"tool.before":          "intercept",
+		"session.start":        "observe",
+		"session.end":          "observe",
+		"turn.start":           "observe",
+		"turn.end":             "observe",
+		"model.response.after": "observe",
+		"tool.after":           "observe",
 	}, events)
-	require.Equal(t, 9, intercepts)
+	require.Equal(t, 2, intercepts)
 }
 
 func TestAHPConfigurationDynamicPosture(t *testing.T) {
