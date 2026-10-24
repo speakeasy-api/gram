@@ -43,6 +43,9 @@ func (d *dockerCLIEngine) CreateKit(ctx context.Context, spec kitLocalContainerS
 	if err := validateKitLocalProjectionDirectory(spec.WorkloadAssertionFile); err != nil {
 		return "", err
 	}
+	if err := checkKitLocalProjectionAccess(ctx, spec, d.exec); err != nil {
+		return "", err
+	}
 	args := kitLocalCreateArgs(d.guestPort, spec)
 	id, err := d.exec(ctx, args...)
 	if err != nil {
@@ -50,6 +53,20 @@ func (d *dockerCLIEngine) CreateKit(ctx context.Context, spec kitLocalContainerS
 	}
 	return id, nil
 }
+
+// Probe through the actual daemon mapping instead of assuming host UID 1000
+// means guest UID 1000 (rootless engines usually map the host owner to root).
+// No assertion bytes are read, copied, printed, or stored in a runtime volume.
+func checkKitLocalProjectionAccess(ctx context.Context, spec kitLocalContainerSpec, run func(context.Context, ...string) (string, error)) error {
+	args := []string{"run", "--rm", "--network", "none", "--read-only", "--user", "1000:1000", "--workdir", "/", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+		"--mount", "type=bind,src=" + filepath.Dir(spec.WorkloadAssertionFile) + ",dst=" + filepath.Dir(KitWorkloadAssertionPath) + ",readonly",
+		"--entrypoint", "/bin/sh", spec.Image, "-c", `test -f "$1" && test -r "$1" && : < "$1"`, "kit-projection-check", KitWorkloadAssertionPath}
+	if _, err := run(ctx, args...); err != nil {
+		return fmt.Errorf("kit assertion projection must be readable by guest UID 1000 through the configured container daemon: provision the directory and each rotated assertion with ownership mapped to guest UID 1000, retaining 0700/0600 permissions; rootless host-owner-to-root mapping alone is unsupported (do not run Kit as root or widen permissions): %w", err)
+	}
+	return nil
+}
+
 func kitLocalCreateArgs(port int, spec kitLocalContainerSpec) []string {
 	args := []string{"create", "--name", spec.Name, "--user", "1000:1000", "--workdir", "/home/kit", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--publish", "127.0.0.1::" + strconv.Itoa(port), "--add-host", LocalRuntimeHostGatewayAlias + ":host-gateway", "--volume", spec.VolumeName + ":/home/kit", "--env", "HOME=/home/kit"}
 	// Bind the directory, not the assertion inode, so atomic file replacement

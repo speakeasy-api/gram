@@ -3,6 +3,7 @@ package assistants
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -132,4 +133,34 @@ func TestKitLocalProjectionRequiresPrivatePermissions(t *testing.T) {
 	require.ErrorContains(t, validateKitLocalProjectionDirectory(assertion), "0600")
 	require.NoError(t, os.Chmod(assertion, 0600))
 	require.NoError(t, validateKitLocalProjectionDirectory(assertion))
+}
+
+func TestKitLocalProjectionAccessUsesDaemonMapping(t *testing.T) {
+	t.Parallel()
+	for _, readable := range []bool{false, true} {
+		t.Run(map[bool]string{false: "unmapped-owner", true: "mapped-owner"}[readable], func(t *testing.T) {
+			t.Parallel()
+			spec := kitLocalContainerSpec{WorkloadAssertionFile: "/operator/projection/assertion", Image: "kit:v0.2.19"}
+			denied := errors.New("guest cannot open assertion")
+			called := false
+			err := checkKitLocalProjectionAccess(t.Context(), spec, func(_ context.Context, args ...string) (string, error) {
+				called = true
+				require.Equal(t, []string{"run", "--rm", "--network", "none", "--read-only", "--user", "1000:1000", "--workdir", "/", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+					"--mount", "type=bind,src=/operator/projection,dst=/var/run/secrets/speakeasy/workload,readonly",
+					"--entrypoint", "/bin/sh", spec.Image, "-c", `test -f "$1" && test -r "$1" && : < "$1"`, "kit-projection-check", KitWorkloadAssertionPath}, args)
+				if !readable {
+					return "", denied
+				}
+				return "", nil
+			})
+			require.True(t, called)
+			if readable {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, denied)
+				require.ErrorContains(t, err, "ownership mapped to guest UID 1000")
+				require.ErrorContains(t, err, "rootless host-owner-to-root mapping alone is unsupported")
+			}
+		})
+	}
 }
