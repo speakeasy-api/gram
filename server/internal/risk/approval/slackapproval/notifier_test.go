@@ -229,12 +229,13 @@ func TestNotifySendsThroughTheWorkspacesItCanUse(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	f.workspaces.unavailable = errors.New("Slack directory: sync_busy")
+	reviewer, _ := f.addMember(t, "Reviewer")
 	f.slack.mapUser(f.email(t, f.approverID), "UAPPROVER")
-	policy := f.addPolicy(t, userURN(f.approverID))
+	policy := f.addPolicy(t, userURN(f.approverID), userURN(reviewer))
 	approvalID := f.pendingRequest(t, policy, "")
 
-	// The usable workspace gets its DM; the error asks for a retry that
-	// reaches the busy one.
+	// The usable workspace gets its DM. The reviewer has none yet and may be
+	// in the busy workspace, so the error asks for a retry.
 	result, err := f.notifier.Notify(t.Context(), f.target(approvalID))
 	require.ErrorContains(t, err, "sync_busy")
 	require.Equal(t, 1, result.Sent)
@@ -244,6 +245,24 @@ func TestNotifySendsThroughTheWorkspacesItCanUse(t *testing.T) {
 	result, err = f.notifier.Notify(t.Context(), f.target(approvalID))
 	require.ErrorContains(t, err, "sync_busy", "with no usable workspace, the busy one is still retried")
 	require.Equal(t, 1, result.Sent, "a failed attempt still reports the DM sent before it")
+}
+
+func TestNotifyIgnoresABusyWorkspaceOnceEveryApproverHasADM(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.workspaces.unavailable = errors.New("Slack directory: sync_busy")
+	f.slack.mapUser(f.email(t, f.approverID), "UAPPROVER")
+	policy := f.addPolicy(t, userURN(f.approverID))
+	approvalID := f.pendingRequest(t, policy, "")
+
+	result, err := f.notifier.Notify(t.Context(), f.target(approvalID))
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Sent)
+
+	_, err = f.approvals.Decide(t.Context(), approval.DecideInput{OrganizationID: f.organizationID, ProjectID: f.projectID, ApprovalID: approvalID, Approve: true, DeciderUserID: f.approverID, DeciderDisplayName: nil, Via: approval.DecidedViaDashboard, Note: ""})
+	require.NoError(t, err)
+	require.NoError(t, f.notifier.Finish(t.Context(), f.target(approvalID)), "the busy workspace holds none of the DMs")
+	require.Len(t, f.slack.callsTo("chat.update"), 1)
 }
 
 func TestNotifyAfterADecisionReportsTheDMsSent(t *testing.T) {

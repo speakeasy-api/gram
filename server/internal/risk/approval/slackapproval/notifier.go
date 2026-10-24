@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -142,13 +143,11 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 			sent[message.RecipientUserID] = true
 		}
 	}
-	recorded := func() NotifyResult {
-		result := NotifyResult{Sent: len(sent), ExpiresAt: time.Time{}}
-		if row.ExpiresAt.Valid {
-			result.ExpiresAt = row.ExpiresAt.Time
-		}
-		return result
+	expiresAt := time.Time{}
+	if row.ExpiresAt.Valid {
+		expiresAt = row.ExpiresAt.Time
 	}
+	recorded := func() NotifyResult { return NotifyResult{Sent: len(sent), ExpiresAt: expiresAt} }
 
 	if n.approvals.EffectiveStatus(row) != approval.StatusPending {
 		return recorded(), nil
@@ -184,7 +183,7 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 	}
 	pending := pendingCard(content)
 
-	retry := unavailable
+	var retry error
 	for _, person := range recipients {
 		if sent[person.userID] {
 			continue
@@ -224,6 +223,11 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 		}
 		sent[person.userID] = true
 	}
+	// A workspace that could not be used matters only while an approver
+	// still has no DM: they may be in it.
+	if unavailable != nil && slices.ContainsFunc(recipients, func(person recipient) bool { return !sent[person.userID] }) {
+		retry = errors.Join(retry, unavailable)
+	}
 	if retry != nil {
 		return recorded(), fmt.Errorf("send approval DMs: %w", retry)
 	}
@@ -255,16 +259,22 @@ func (n *Notifier) Finish(ctx context.Context, target Target) error {
 		return err
 	}
 	// A message in a workspace that cannot be used right now is skipped, and
-	// the retry reaches it.
+	// the retry reaches it. A workspace that holds none of the messages does
+	// not cause a retry.
 	workspaces, unavailable := n.workspaces.MessagingWorkspaces(ctx, target.OrganizationID, slackscopes.ChatWrite)
 	tokens := make(map[string]string, len(workspaces))
 	for _, workspace := range workspaces {
 		tokens[workspace.TeamID] = workspace.Token
 	}
-	retry := unavailable
+	var retry error
+	skipped := false
 	for _, message := range messages {
+		if message.Provider != providerSlack || !message.SlackChannelID.Valid || !message.SlackMessageTs.Valid {
+			continue
+		}
 		token := tokens[message.SlackTeamID.String]
-		if message.Provider != providerSlack || token == "" || !message.SlackChannelID.Valid || !message.SlackMessageTs.Valid {
+		if token == "" {
+			skipped = true
 			continue
 		}
 		_, err := n.slack.CallWithToken(ctx, "chat.update", map[string]any{
@@ -280,6 +290,9 @@ func (n *Notifier) Finish(ctx context.Context, target Target) error {
 			}
 			n.logger.WarnContext(ctx, "update approval DM", attr.SlogRiskPolicyApprovalID(row.ID.String()), attr.SlogSlackTeamID(message.SlackTeamID.String), attr.SlogError(err))
 		}
+	}
+	if skipped {
+		retry = errors.Join(retry, unavailable)
 	}
 	if retry != nil {
 		return fmt.Errorf("update approval DMs: %w", retry)
@@ -514,8 +527,8 @@ func requesterName(requesterURN string, names map[string]string) string {
 	if !ok {
 		return requesterURN
 	}
-	if kind == string(urn.PrincipalTypeUser) && names[id] != "" {
-		return names[id]
+	if kind == string(urn.PrincipalTypeUser) {
+		return conv.Default(names[id], "a former member")
 	}
 	if kind == "agent" {
 		short, _, _ := strings.Cut(id, "-")

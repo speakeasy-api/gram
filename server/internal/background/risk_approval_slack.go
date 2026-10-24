@@ -90,7 +90,7 @@ func (a *riskApprovalSlackActivities) NotifyRiskApprovalApprovers(ctx context.Co
 		return result, nil
 	}
 	if keepsSentDMs(result, activity.GetInfo(ctx).Attempt) {
-		a.logger.WarnContext(ctx, "some approvers got no approval DM", attr.SlogRiskPolicyApprovalID(target.ApprovalID.String()), attr.SlogError(err))
+		a.logger.WarnContext(ctx, "some approvers got no approval DM", attr.SlogOrganizationID(target.OrganizationID), attr.SlogRiskPolicyApprovalID(target.ApprovalID.String()), attr.SlogError(err))
 		return result, nil
 	}
 	return result, fmt.Errorf("notify approvers: %w", err)
