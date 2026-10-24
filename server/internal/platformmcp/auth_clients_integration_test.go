@@ -365,10 +365,17 @@ func TestPlatformMCPChoosesAHeadlessCallersCredential(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, preview.Callers, "a preview changes nothing")
 
+	unconfigured := input
+	unconfigured.AuthClientID, unconfigured.Remove, unconfigured.Confirmed = "", true, true
+	got, err := service.ChooseHeadlessCallerCredential(ctx, principal, unconfigured)
+	require.NoError(t, err, "removing a choice a caller never had changes nothing")
+	require.Empty(t, got.Callers)
+
 	input.Confirmed = true
-	got, err := service.ChooseHeadlessCallerCredential(ctx, principal, input)
+	got, err = service.ChooseHeadlessCallerCredential(ctx, principal, input)
 	require.NoError(t, err)
 	require.Len(t, got.Callers, 1)
+	require.True(t, got.Callers[0].Chosen)
 	require.Equal(t, shared.String(), got.Callers[0].AuthClientID)
 	require.Equal(t, client.ID.String(), got.Callers[0].UserSessionClientID)
 
@@ -383,7 +390,8 @@ func TestPlatformMCPChoosesAHeadlessCallersCredential(t *testing.T) {
 	remove.AuthClientID, remove.Remove = "", true
 	got, err = service.ChooseHeadlessCallerCredential(ctx, principal, remove)
 	require.NoError(t, err)
-	require.Empty(t, got.Callers)
+	require.Len(t, got.Callers, 1, "the caller keeps its profile without a choice for this server")
+	require.False(t, got.Callers[0].Chosen)
 
 	audits, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionIssuanceSelectionProfileCreate)
 	require.NoError(t, err)
