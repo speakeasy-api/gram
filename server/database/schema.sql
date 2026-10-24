@@ -16327,8 +16327,19 @@ WHERE (iss.project_id = caller_project_id OR (iss.project_id IS NULL AND iss.org
       )
     )
     OR (
-      -- Skips the per-session admission joins when no provider name matches.
-      EXISTS (SELECT 1 FROM remote_session_issuers AS ri WHERE ri.slug ILIKE search_pattern AND ri.deleted IS FALSE)
+      -- Skips the per-session admission joins when no provider the caller's
+      -- clients reach has a matching name. Every admitted upstream goes
+      -- through such a client, so this never drops a match, and another
+      -- tenant's provider names cannot trigger the joins.
+      EXISTS (
+        SELECT 1
+        FROM remote_session_clients AS rc
+        JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+        WHERE ri.slug ILIKE search_pattern
+          AND (rc.project_id = caller_project_id OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = caller_organization_id)))
+          AND rc.deleted IS FALSE
+          AND ri.deleted IS FALSE
+      )
       AND EXISTS (
         SELECT 1
         FROM session_upstreams(caller_project_id, caller_organization_id) AS up
