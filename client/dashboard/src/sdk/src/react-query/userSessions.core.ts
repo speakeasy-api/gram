@@ -12,10 +12,14 @@ import { userSessionsList } from "../funcs/userSessionsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
-  ListUserSessionsQueryParamStatus,
+  ClientRegistrations,
+  ExcludeClientRegistrations,
+  ExcludeIdentityTypes,
+  IdentityTypes,
   ListUserSessionsRequest,
   ListUserSessionsResponse,
   ListUserSessionsSecurity,
+  QueryParamStatus,
 } from "../models/operations/listusersessions.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -86,6 +90,19 @@ export function buildUserSessionsQuery(
       clientId: request?.clientId,
       search: request?.search,
       metaMcpServerId: request?.metaMcpServerId,
+      identities: request?.identities,
+      excludeIdentities: request?.excludeIdentities,
+      identityTypes: request?.identityTypes,
+      excludeIdentityTypes: request?.excludeIdentityTypes,
+      servers: request?.servers,
+      excludeServers: request?.excludeServers,
+      clients: request?.clients,
+      excludeClients: request?.excludeClients,
+      clientRegistrations: request?.clientRegistrations,
+      excludeClientRegistrations: request?.excludeClientRegistrations,
+      lastUsedWithin: request?.lastUsedWithin,
+      lastUsedOlderThan: request?.lastUsedOlderThan,
+      lastUsedNever: request?.lastUsedNever,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -135,6 +152,19 @@ export function buildUserSessionsInfiniteQuery(
       clientId: request?.clientId,
       search: request?.search,
       metaMcpServerId: request?.metaMcpServerId,
+      identities: request?.identities,
+      excludeIdentities: request?.excludeIdentities,
+      identityTypes: request?.identityTypes,
+      excludeIdentityTypes: request?.excludeIdentityTypes,
+      servers: request?.servers,
+      excludeServers: request?.excludeServers,
+      clients: request?.clients,
+      excludeClients: request?.excludeClients,
+      clientRegistrations: request?.clientRegistrations,
+      excludeClientRegistrations: request?.excludeClientRegistrations,
+      lastUsedWithin: request?.lastUsedWithin,
+      lastUsedOlderThan: request?.lastUsedOlderThan,
+      lastUsedNever: request?.lastUsedNever,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -177,10 +207,23 @@ export function queryKeyUserSessions(
   parameters: {
     subjectUrn?: string | undefined;
     userSessionIssuerId?: string | undefined;
-    status?: ListUserSessionsQueryParamStatus | undefined;
+    status?: QueryParamStatus | undefined;
     clientId?: string | undefined;
     search?: string | undefined;
     metaMcpServerId?: string | undefined;
+    identities?: Array<string> | undefined;
+    excludeIdentities?: Array<string> | undefined;
+    identityTypes?: Array<IdentityTypes> | undefined;
+    excludeIdentityTypes?: Array<ExcludeIdentityTypes> | undefined;
+    servers?: Array<string> | undefined;
+    excludeServers?: Array<string> | undefined;
+    clients?: Array<string> | undefined;
+    excludeClients?: Array<string> | undefined;
+    clientRegistrations?: Array<ClientRegistrations> | undefined;
+    excludeClientRegistrations?: Array<ExcludeClientRegistrations> | undefined;
+    lastUsedWithin?: number | undefined;
+    lastUsedOlderThan?: number | undefined;
+    lastUsedNever?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
@@ -195,10 +238,23 @@ export function queryKeyUserSessionsInfinite(
   parameters: {
     subjectUrn?: string | undefined;
     userSessionIssuerId?: string | undefined;
-    status?: ListUserSessionsQueryParamStatus | undefined;
+    status?: QueryParamStatus | undefined;
     clientId?: string | undefined;
     search?: string | undefined;
     metaMcpServerId?: string | undefined;
+    identities?: Array<string> | undefined;
+    excludeIdentities?: Array<string> | undefined;
+    identityTypes?: Array<IdentityTypes> | undefined;
+    excludeIdentityTypes?: Array<ExcludeIdentityTypes> | undefined;
+    servers?: Array<string> | undefined;
+    excludeServers?: Array<string> | undefined;
+    clients?: Array<string> | undefined;
+    excludeClients?: Array<string> | undefined;
+    clientRegistrations?: Array<ClientRegistrations> | undefined;
+    excludeClientRegistrations?: Array<ExcludeClientRegistrations> | undefined;
+    lastUsedWithin?: number | undefined;
+    lastUsedOlderThan?: number | undefined;
+    lastUsedNever?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;

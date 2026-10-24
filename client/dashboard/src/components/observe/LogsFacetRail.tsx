@@ -17,6 +17,8 @@ export type FacetValue = {
   dotClassName?: string;
   /** A logo shown before the label, where the value names something with one. */
   icon?: ReactNode;
+  /** Counted in `totalCount`; false for a selected value kept only to stay removable. */
+  matchesSearch?: boolean;
 };
 
 export type FacetGroup = {
@@ -36,6 +38,11 @@ export type FacetGroup = {
    * eye in alphabetical order than ranked by volume.
    */
   keepValueOrder?: boolean;
+  /** Values the source holds when it sends only some of them. */
+  totalCount?: number;
+  /** Searches the source instead of the listed values. */
+  onSearch?: (text: string) => void;
+  searchNotice?: string;
 };
 
 /**
@@ -119,17 +126,28 @@ function FacetSection({
     [group.values, group.keepValueOrder],
   );
 
-  const searchable = values.length > FACET_SEARCH_THRESHOLD;
+  const remote = group.onSearch !== undefined;
+  const searchable =
+    (group.totalCount ?? values.length) > FACET_SEARCH_THRESHOLD ||
+    (remote && search !== "");
   const term = search.trim().toLowerCase();
   // A selected value always survives the search: it is the reason the rows
   // below look the way they do, and hiding the only way to switch it off
   // behind a cleared search box would be a trap.
   const matching =
-    searchable && term
+    searchable && term && !remote
       ? values.filter(
           (value) => value.selected || value.label.toLowerCase().includes(term),
         )
       : values;
+  const unlisted =
+    group.totalCount === undefined
+      ? 0
+      : Math.max(
+          0,
+          group.totalCount -
+            values.filter((value) => value.matchesSearch).length,
+        );
 
   const visible = showAll
     ? matching
@@ -181,7 +199,10 @@ function FacetSection({
           <input
             type="text"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              group.onSearch?.(event.target.value);
+            }}
             placeholder={`Filter ${group.label.toLowerCase()}`}
             aria-label={`Filter ${group.label}`}
             // A plain text input, not type="search": the native control paints
@@ -192,7 +213,10 @@ function FacetSection({
           {search && (
             <button
               type="button"
-              onClick={() => setSearch("")}
+              onClick={() => {
+                setSearch("");
+                group.onSearch?.("");
+              }}
               aria-label={`Clear ${group.label} filter`}
               className="text-muted-foreground/60 hover:text-foreground absolute top-1/2 right-1.5 -translate-y-1/2"
             >
@@ -200,6 +224,11 @@ function FacetSection({
             </button>
           )}
         </div>
+      )}
+      {open && searchable && group.searchNotice && (
+        <p className="text-destructive pl-3 text-[12px]">
+          {group.searchNotice}
+        </p>
       )}
 
       {open && (
@@ -264,6 +293,11 @@ function FacetSection({
               >
                 Show {hidden} more
               </button>
+            </li>
+          )}
+          {unlisted > 0 && (
+            <li className="text-muted-foreground py-1 pl-3 text-[12px]">
+              {unlisted.toLocaleString()} more — search to find them
             </li>
           )}
           {/* Only where the list was long enough to have been cut: a group

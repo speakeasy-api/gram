@@ -17,15 +17,17 @@ import (
 type Client struct {
 	ListUserSessionsEndpoint  goa.Endpoint
 	ListFacetsEndpoint        goa.Endpoint
+	QueryFacetsEndpoint       goa.Endpoint
 	MintUserSessionEndpoint   goa.Endpoint
 	RevokeUserSessionEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "userSessions" service client given the endpoints.
-func NewClient(listUserSessions, listFacets, mintUserSession, revokeUserSession goa.Endpoint) *Client {
+func NewClient(listUserSessions, listFacets, queryFacets, mintUserSession, revokeUserSession goa.Endpoint) *Client {
 	return &Client{
 		ListUserSessionsEndpoint:  listUserSessions,
 		ListFacetsEndpoint:        listFacets,
+		QueryFacetsEndpoint:       queryFacets,
 		MintUserSessionEndpoint:   mintUserSession,
 		RevokeUserSessionEndpoint: revokeUserSession,
 	}
@@ -74,6 +76,28 @@ func (c *Client) ListFacets(ctx context.Context, p *ListFacetsPayload) (res *Lis
 		return
 	}
 	return ires.(*ListUserSessionFacetsResult), nil
+}
+
+// QueryFacets calls the "queryFacets" endpoint of the "userSessions" service.
+// QueryFacets may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) QueryFacets(ctx context.Context, p *QueryFacetsPayload) (res *UserSessionFilterFacets, err error) {
+	var ires any
+	ires, err = c.QueryFacetsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*UserSessionFilterFacets), nil
 }
 
 // MintUserSession calls the "mintUserSession" endpoint of the "userSessions"

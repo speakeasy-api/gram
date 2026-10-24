@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/sessionfilter"
 )
 
 func TestListToolDescriptor(t *testing.T) {
@@ -23,11 +24,22 @@ func TestListToolDescriptor(t *testing.T) {
 	require.NotNil(t, desc.Annotations)
 
 	var schema struct {
-		Properties map[string]json.RawMessage `json:"properties"`
+		Properties map[string]struct {
+			MaxItems *int `json:"maxItems"`
+			Minimum  *int `json:"minimum"`
+			Maximum  *int `json:"maximum"`
+		} `json:"properties"`
 	}
 	require.NoError(t, json.Unmarshal(desc.InputSchema, &schema))
 	require.Contains(t, schema.Properties, "search")
 	require.Contains(t, schema.Properties, "meta_mcp_server_id")
+	for _, name := range []string{"identities", "exclude_identities", "identity_types", "exclude_identity_types", "servers", "exclude_servers", "clients", "exclude_clients", "client_registrations", "exclude_client_registrations"} {
+		require.Equal(t, new(sessionfilter.MaxValues), schema.Properties[name].MaxItems, name)
+	}
+	for _, name := range []string{"last_used_within", "last_used_older_than"} {
+		require.Equal(t, new(1), schema.Properties[name].Minimum, name)
+		require.Equal(t, new(sessionfilter.MaxLastUsedSeconds), schema.Properties[name].Maximum, name)
+	}
 }
 
 func TestListToolRejectsOverlongSearch(t *testing.T) {

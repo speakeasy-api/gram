@@ -834,6 +834,7 @@ trackedFiles:
   src/funcs/userSessionsList.ts: {}
   src/funcs/userSessionsListFacets.ts: {}
   src/funcs/userSessionsMint.ts: {}
+  src/funcs/userSessionsQueryFacets.ts: {}
   src/funcs/userSessionsRevoke.ts: {}
   src/funcs/variationsCreateGlobal.ts: {}
   src/funcs/variationsDeleteGlobal.ts: {}
@@ -2112,6 +2113,9 @@ trackedFiles:
   src/models/components/usersessionclient.ts: {}
   src/models/components/usersessionconsent.ts: {}
   src/models/components/usersessionfacetoption.ts: {}
+  src/models/components/usersessionfilterfacet.ts: {}
+  src/models/components/usersessionfilterfacets.ts: {}
+  src/models/components/usersessionfilterfacetvalue.ts: {}
   src/models/components/usersessionissuer.ts: {}
   src/models/components/usersessionissuerattachimpact.ts: {}
   src/models/components/usersessionissuerauthenticationhostimpact.ts: {}
@@ -2745,6 +2749,7 @@ trackedFiles:
   src/models/operations/query.ts: {}
   src/models/operations/queryskillefficacyinsights.ts: {}
   src/models/operations/querytumdetails.ts: {}
+  src/models/operations/queryusersessionfacets.ts: {}
   src/models/operations/readema.ts: {}
   src/models/operations/reassignagent.ts: {}
   src/models/operations/receiveworkoswebhook.ts: {}
@@ -4132,6 +4137,8 @@ trackedFiles:
   src/react-query/userSessionConsents.ts: {}
   src/react-query/userSessionFacets.core.ts: {}
   src/react-query/userSessionFacets.ts: {}
+  src/react-query/userSessionFilterFacets.core.ts: {}
+  src/react-query/userSessionFilterFacets.ts: {}
   src/react-query/userSessionIssuer.core.ts: {}
   src/react-query/userSessionIssuer.ts: {}
   src/react-query/userSessionIssuerAttachImpact.core.ts: {}
@@ -11414,6 +11421,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  queryUserSessionFacets:
+    speakeasy-default-query-user-session-facets:
+      responses:
+        "200":
+          application/json: {"client": {"distinct_count": 963723, "values": []}, "client_registration": {"distinct_count": 162288, "values": [{"count": 623646, "matches_search": false, "value": "<value>"}]}, "identity": {"distinct_count": 48694, "values": [{"count": 623646, "matches_search": true, "value": "<value>"}]}, "identity_type": {"distinct_count": 41491, "values": []}, "mcp_server": {"distinct_count": 462409, "values": [{"count": 623646, "matches_search": true, "value": "<value>"}]}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   readEMA:
     speakeasy-default-read-EMA:
       requestBody:

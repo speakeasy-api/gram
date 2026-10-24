@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
@@ -19,10 +19,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/gatewayscope"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/sessionfilter"
 )
 
 // loadUpstreamsForSessions resolves the outbound leg for a page of sessions in
@@ -135,55 +135,41 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
-	issuerFilter, err := conv.PtrToNullUUID(payload.UserSessionIssuerID)
+	filter, err := sessionfilter.Parse(sessionfilter.Input{
+		Status:                     payload.Status,
+		SubjectURN:                 payload.SubjectUrn,
+		IssuerID:                   payload.UserSessionIssuerID,
+		ClientID:                   payload.ClientID,
+		Search:                     payload.Search,
+		Identities:                 payload.Identities,
+		ExcludeIdentities:          payload.ExcludeIdentities,
+		IdentityTypes:              payload.IdentityTypes,
+		ExcludeIdentityTypes:       payload.ExcludeIdentityTypes,
+		Servers:                    payload.Servers,
+		ExcludeServers:             payload.ExcludeServers,
+		Clients:                    payload.Clients,
+		ExcludeClients:             payload.ExcludeClients,
+		ClientRegistrations:        payload.ClientRegistrations,
+		ExcludeClientRegistrations: payload.ExcludeClientRegistrations,
+		LastUsedWithin:             payload.LastUsedWithin,
+		LastUsedOlderThan:          payload.LastUsedOlderThan,
+		LastUsedNever:              conv.PtrValOr(payload.LastUsedNever, false),
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, s.logger)
+		return nil, fmt.Errorf("parse session filter: %w", err)
 	}
-
-	clientFilter, err := conv.PtrToNullUUID(payload.ClientID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, s.logger)
-	}
-
-	term := conv.SearchTerm(conv.PtrValOr(payload.Search, ""))
-	search := conv.ContainsPattern(term)
-	agentSubjectURNs := []string{}
-	if search.Valid {
-		agentIDs, err := s.agents.ReadableAgentIDsNamed(ctx, s.db, term)
-		if _, ok := errors.AsType[*oops.ShareableError](err); ok {
-			return nil, fmt.Errorf("search agent names: %w", err)
-		}
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "search agent names").LogError(ctx, s.logger)
-		}
-		for _, id := range agentIDs {
-			agentSubjectURNs = append(agentSubjectURNs, urn.NewAgentSubject(id).String())
-		}
-	}
-
-	resourceIdentity := pgtype.Text{String: "", Valid: false}
 	if payload.MetaMcpServerID != nil {
-		resourceIdentity, err = gatewayscope.ResourceIdentity(ctx, s.db, *authCtx.ProjectID, *payload.MetaMcpServerID)
-		if err != nil {
+		if filter.Gateway, err = gatewayscope.Resolve(ctx, s.db, *authCtx.ProjectID, *payload.MetaMcpServerID); err != nil {
 			return nil, fmt.Errorf("scope sessions to gateway: %w", err)
 		}
 	}
 
-	rows, err := repo.New(s.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
-		ProjectID:            *authCtx.ProjectID,
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		Status:               conv.PtrToPGTextEmpty(payload.Status),
-		SubjectUrn:           conv.PtrToPGTextEmpty(payload.SubjectUrn),
-		UserSessionIssuerID:  issuerFilter,
-		ClientID:             clientFilter,
-		ID:                   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Search:               search,
-		AgentSubjectUrns:     agentSubjectURNs,
-		FirstPartyClientName: sessiontokens.FirstPartyClientName,
-		ResourceIdentity:     resourceIdentity,
-		Cursor:               cursor,
-		LimitValue:           limit,
-	})
+	agentSubjectURNs, err := s.readableAgentSubjectsNamed(ctx, filter.Term)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := repo.New(s.db).ListUserSessionsByProjectID(ctx, filter.ListParams(*authCtx.ProjectID, authCtx.ActiveOrganizationID, agentSubjectURNs, cursor, limit))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list user sessions").LogError(ctx, s.logger)
 	}
@@ -210,6 +196,88 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		Items:      items,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// readableAgentSubjectsNamed lists the subjects of the agents the caller may
+// read whose names contain term. A blank term names none.
+func (s *Service) readableAgentSubjectsNamed(ctx context.Context, term string) ([]string, error) {
+	if term == "" {
+		return []string{}, nil
+	}
+	agentIDs, err := s.agents.ReadableAgentIDsNamed(ctx, s.db, term)
+	if _, ok := errors.AsType[*oops.ShareableError](err); ok {
+		return nil, fmt.Errorf("search agent names: %w", err)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "search agent names").LogError(ctx, s.logger)
+	}
+	subjects := make([]string, 0, len(agentIDs))
+	for _, id := range agentIDs {
+		subjects = append(subjects, urn.NewAgentSubject(id).String())
+	}
+	return subjects, nil
+}
+
+// QueryFacets counts each filter field's values over the sessions the list
+// would show for the same filters.
+func (s *Service) QueryFacets(ctx context.Context, payload *gen.QueryFacetsPayload) (*gen.UserSessionFilterFacets, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	filter, err := sessionfilter.Parse(sessionfilter.Input{
+		Status:                     payload.Status,
+		SubjectURN:                 payload.SubjectUrn,
+		IssuerID:                   payload.UserSessionIssuerID,
+		ClientID:                   payload.ClientID,
+		Search:                     payload.Search,
+		Identities:                 payload.Identities,
+		ExcludeIdentities:          payload.ExcludeIdentities,
+		IdentityTypes:              payload.IdentityTypes,
+		ExcludeIdentityTypes:       payload.ExcludeIdentityTypes,
+		Servers:                    payload.Servers,
+		ExcludeServers:             payload.ExcludeServers,
+		Clients:                    payload.Clients,
+		ExcludeClients:             payload.ExcludeClients,
+		ClientRegistrations:        payload.ClientRegistrations,
+		ExcludeClientRegistrations: payload.ExcludeClientRegistrations,
+		LastUsedWithin:             payload.LastUsedWithin,
+		LastUsedOlderThan:          payload.LastUsedOlderThan,
+		LastUsedNever:              conv.PtrValOr(payload.LastUsedNever, false),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parse session filter: %w", err)
+	}
+	if payload.MetaMcpServerID != nil {
+		if filter.Gateway, err = gatewayscope.Resolve(ctx, s.db, *authCtx.ProjectID, *payload.MetaMcpServerID); err != nil {
+			return nil, fmt.Errorf("scope sessions to gateway: %w", err)
+		}
+	}
+	fieldSearch, err := sessionfilter.ParseFacetSearch(payload.Field, payload.FieldSearch)
+	if err != nil {
+		return nil, fmt.Errorf("parse facet search: %w", err)
+	}
+
+	agentSubjectURNs, err := s.readableAgentSubjectsNamed(ctx, filter.Term)
+	if err != nil {
+		return nil, err
+	}
+	if fieldSearch.Field == sessionfilter.FieldIdentity {
+		if fieldSearch.AgentSubjectURNs, err = s.readableAgentSubjectsNamed(ctx, fieldSearch.Term); err != nil {
+			return nil, err
+		}
+	}
+
+	rows, err := repo.New(s.db).ListUserSessionFilterFacets(ctx, filter.FacetParams(*authCtx.ProjectID, authCtx.ActiveOrganizationID, agentSubjectURNs, fieldSearch))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count user session filter values").LogError(ctx, s.logger)
+	}
+
+	return buildUserSessionFilterFacets(rows, filter), nil
 }
 
 // ListFacets returns available facet values for the user session feed filters.
@@ -347,4 +415,46 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 	}
 
 	return nil
+}
+
+// buildUserSessionFilterFacets groups facet rows by field. selected lists each
+// field's chosen values; one the counts did not return is appended with a zero
+// count and no label, so a value supplied in a link is never named.
+func buildUserSessionFilterFacets(rows []repo.ListUserSessionFilterFacetsRow, filter sessionfilter.Filter) *gen.UserSessionFilterFacets {
+	var unattributed *int64
+	facets := map[string]*gen.UserSessionFilterFacet{}
+	for _, field := range []string{"identity", "identity_type", "mcp_server", "client", "client_registration"} {
+		facets[field] = &gen.UserSessionFilterFacet{Values: []*gen.UserSessionFilterFacetValue{}, DistinctCount: 0}
+	}
+	for _, row := range rows {
+		if row.Field == sessionfilter.FieldUnattributed && filter.Gateway.ResourceIdentity.Valid {
+			unattributed = new(row.Count)
+		}
+		facet, ok := facets[row.Field]
+		if !ok {
+			continue
+		}
+		facet.DistinctCount = row.DistinctCount
+		facet.Values = append(facet.Values, &gen.UserSessionFilterFacetValue{
+			Value:         row.Value,
+			DisplayName:   conv.PtrEmpty(row.Label),
+			Count:         row.Count,
+			MatchesSearch: row.MatchesSearch,
+		})
+	}
+	for field, facet := range facets {
+		for _, value := range filter.Selected(field) {
+			if !slices.ContainsFunc(facet.Values, func(v *gen.UserSessionFilterFacetValue) bool { return v.Value == value }) {
+				facet.Values = append(facet.Values, &gen.UserSessionFilterFacetValue{Value: value, DisplayName: nil, Count: 0, MatchesSearch: false})
+			}
+		}
+	}
+	return &gen.UserSessionFilterFacets{
+		Identity:           facets["identity"],
+		IdentityType:       facets["identity_type"],
+		McpServer:          facets["mcp_server"],
+		Client:             facets["client"],
+		ClientRegistration: facets["client_registration"],
+		UnattributedCount:  unattributed,
+	}
 }

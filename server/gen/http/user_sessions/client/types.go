@@ -55,6 +55,25 @@ type ListFacetsResponseBody struct {
 	Servers []*UserSessionFacetOptionResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 }
 
+// QueryFacetsResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body.
+type QueryFacetsResponseBody struct {
+	// Session subjects.
+	Identity *UserSessionFilterFacetResponseBody `form:"identity,omitempty" json:"identity,omitempty" xml:"identity,omitempty"`
+	// Session subject kinds.
+	IdentityType *UserSessionFilterFacetResponseBody `form:"identity_type,omitempty" json:"identity_type,omitempty" xml:"identity_type,omitempty"`
+	// Sign-in servers (user_session_issuer ids) the sessions came from.
+	McpServer *UserSessionFilterFacetResponseBody `form:"mcp_server,omitempty" json:"mcp_server,omitempty" xml:"mcp_server,omitempty"`
+	// Connecting clients.
+	Client *UserSessionFilterFacetResponseBody `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// How each client registered.
+	ClientRegistration *UserSessionFilterFacetResponseBody `form:"client_registration,omitempty" json:"client_registration,omitempty" xml:"client_registration,omitempty"`
+	// With meta_mcp_server_id: sessions on the gateway's current sign-in server
+	// that match the other filters but recorded no origin and have no consent
+	// selection naming a resource. 0 for a gateway without a sign-in server.
+	UnattributedCount *int64 `form:"unattributed_count,omitempty" json:"unattributed_count,omitempty" xml:"unattributed_count,omitempty"`
+}
+
 // MintUserSessionResponseBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP response body.
 type MintUserSessionResponseBody struct {
@@ -422,6 +441,190 @@ type ListFacetsUnexpectedResponseBody struct {
 // ListFacetsGatewayErrorResponseBody is the type of the "userSessions" service
 // "listFacets" endpoint HTTP response body for the "gateway_error" error.
 type ListFacetsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryFacetsUnauthorizedResponseBody is the type of the "userSessions"
+// service "queryFacets" endpoint HTTP response body for the "unauthorized"
+// error.
+type QueryFacetsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryFacetsForbiddenResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "forbidden" error.
+type QueryFacetsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryFacetsBadRequestResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "bad_request" error.
+type QueryFacetsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryFacetsNotFoundResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "not_found" error.
+type QueryFacetsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryFacetsConflictResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "conflict" error.
+type QueryFacetsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryFacetsUnsupportedMediaResponseBody is the type of the "userSessions"
+// service "queryFacets" endpoint HTTP response body for the
+// "unsupported_media" error.
+type QueryFacetsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryFacetsInvalidResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "invalid" error.
+type QueryFacetsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryFacetsInvariantViolationResponseBody is the type of the "userSessions"
+// service "queryFacets" endpoint HTTP response body for the
+// "invariant_violation" error.
+type QueryFacetsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryFacetsUnexpectedResponseBody is the type of the "userSessions" service
+// "queryFacets" endpoint HTTP response body for the "unexpected" error.
+type QueryFacetsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryFacetsGatewayErrorResponseBody is the type of the "userSessions"
+// service "queryFacets" endpoint HTTP response body for the "gateway_error"
+// error.
+type QueryFacetsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -964,6 +1167,29 @@ type UserSessionFacetOptionResponseBody struct {
 	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
 }
 
+// UserSessionFilterFacetResponseBody is used to define fields on response body
+// types.
+type UserSessionFilterFacetResponseBody struct {
+	// The most common values, then any selected value outside them.
+	Values []*UserSessionFilterFacetValueResponseBody `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
+	// How many distinct values match the field search.
+	DistinctCount *int64 `form:"distinct_count,omitempty" json:"distinct_count,omitempty" xml:"distinct_count,omitempty"`
+}
+
+// UserSessionFilterFacetValueResponseBody is used to define fields on response
+// body types.
+type UserSessionFilterFacetValueResponseBody struct {
+	// The value to filter by.
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// The label for the value, when one is visible to the caller.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Sessions with this value under the other filters.
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+	// Whether the value is one of the distinct_count values matching the field
+	// search. False for a selected value returned only so it stays removable.
+	MatchesSearch *bool `form:"matches_search,omitempty" json:"matches_search,omitempty" xml:"matches_search,omitempty"`
+}
+
 // NewMintUserSessionRequestBody builds the HTTP request body from the payload
 // of the "mintUserSession" endpoint of the "userSessions" service.
 func NewMintUserSessionRequestBody(p *usersessions.MintUserSessionPayload) *MintUserSessionRequestBody {
@@ -1314,6 +1540,171 @@ func NewListFacetsUnexpected(body *ListFacetsUnexpectedResponseBody) *goa.Servic
 // NewListFacetsGatewayError builds a userSessions service listFacets endpoint
 // gateway_error error.
 func NewListFacetsGatewayError(body *ListFacetsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryFacetsUserSessionFilterFacetsOK builds a "userSessions" service
+// "queryFacets" endpoint result from a HTTP "OK" response.
+func NewQueryFacetsUserSessionFilterFacetsOK(body *QueryFacetsResponseBody) *usersessions.UserSessionFilterFacets {
+	v := &usersessions.UserSessionFilterFacets{
+		UnattributedCount: body.UnattributedCount,
+	}
+	v.Identity = unmarshalUserSessionFilterFacetResponseBodyToUsersessionsUserSessionFilterFacet(body.Identity)
+	v.IdentityType = unmarshalUserSessionFilterFacetResponseBodyToUsersessionsUserSessionFilterFacet(body.IdentityType)
+	v.McpServer = unmarshalUserSessionFilterFacetResponseBodyToUsersessionsUserSessionFilterFacet(body.McpServer)
+	v.Client = unmarshalUserSessionFilterFacetResponseBodyToUsersessionsUserSessionFilterFacet(body.Client)
+	v.ClientRegistration = unmarshalUserSessionFilterFacetResponseBodyToUsersessionsUserSessionFilterFacet(body.ClientRegistration)
+
+	return v
+}
+
+// NewQueryFacetsUnauthorized builds a userSessions service queryFacets
+// endpoint unauthorized error.
+func NewQueryFacetsUnauthorized(body *QueryFacetsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryFacetsForbidden builds a userSessions service queryFacets endpoint
+// forbidden error.
+func NewQueryFacetsForbidden(body *QueryFacetsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryFacetsBadRequest builds a userSessions service queryFacets endpoint
+// bad_request error.
+func NewQueryFacetsBadRequest(body *QueryFacetsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryFacetsNotFound builds a userSessions service queryFacets endpoint
+// not_found error.
+func NewQueryFacetsNotFound(body *QueryFacetsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryFacetsConflict builds a userSessions service queryFacets endpoint
+// conflict error.
+func NewQueryFacetsConflict(body *QueryFacetsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryFacetsUnsupportedMedia builds a userSessions service queryFacets
+// endpoint unsupported_media error.
+func NewQueryFacetsUnsupportedMedia(body *QueryFacetsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryFacetsInvalid builds a userSessions service queryFacets endpoint
+// invalid error.
+func NewQueryFacetsInvalid(body *QueryFacetsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryFacetsInvariantViolation builds a userSessions service queryFacets
+// endpoint invariant_violation error.
+func NewQueryFacetsInvariantViolation(body *QueryFacetsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryFacetsUnexpected builds a userSessions service queryFacets endpoint
+// unexpected error.
+func NewQueryFacetsUnexpected(body *QueryFacetsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryFacetsGatewayError builds a userSessions service queryFacets
+// endpoint gateway_error error.
+func NewQueryFacetsGatewayError(body *QueryFacetsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1684,6 +2075,52 @@ func ValidateListFacetsResponseBody(body *ListFacetsResponseBody) (err error) {
 			if err2 := ValidateUserSessionFacetOptionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateQueryFacetsResponseBody runs the validations defined on
+// QueryFacetsResponseBody
+func ValidateQueryFacetsResponseBody(body *QueryFacetsResponseBody) (err error) {
+	if body.Identity == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("identity", "body"))
+	}
+	if body.IdentityType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("identity_type", "body"))
+	}
+	if body.McpServer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server", "body"))
+	}
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.ClientRegistration == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_registration", "body"))
+	}
+	if body.Identity != nil {
+		if err2 := ValidateUserSessionFilterFacetResponseBody(body.Identity); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.IdentityType != nil {
+		if err2 := ValidateUserSessionFilterFacetResponseBody(body.IdentityType); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.McpServer != nil {
+		if err2 := ValidateUserSessionFilterFacetResponseBody(body.McpServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Client != nil {
+		if err2 := ValidateUserSessionFilterFacetResponseBody(body.Client); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ClientRegistration != nil {
+		if err2 := ValidateUserSessionFilterFacetResponseBody(body.ClientRegistration); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -2160,6 +2597,246 @@ func ValidateListFacetsUnexpectedResponseBody(body *ListFacetsUnexpectedResponse
 // ValidateListFacetsGatewayErrorResponseBody runs the validations defined on
 // listFacets_gateway_error_response_body
 func ValidateListFacetsGatewayErrorResponseBody(body *ListFacetsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryFacetsUnauthorizedResponseBody runs the validations defined on
+// queryFacets_unauthorized_response_body
+func ValidateQueryFacetsUnauthorizedResponseBody(body *QueryFacetsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryFacetsForbiddenResponseBody runs the validations defined on
+// queryFacets_forbidden_response_body
+func ValidateQueryFacetsForbiddenResponseBody(body *QueryFacetsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryFacetsBadRequestResponseBody runs the validations defined on
+// queryFacets_bad_request_response_body
+func ValidateQueryFacetsBadRequestResponseBody(body *QueryFacetsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryFacetsNotFoundResponseBody runs the validations defined on
+// queryFacets_not_found_response_body
+func ValidateQueryFacetsNotFoundResponseBody(body *QueryFacetsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryFacetsConflictResponseBody runs the validations defined on
+// queryFacets_conflict_response_body
+func ValidateQueryFacetsConflictResponseBody(body *QueryFacetsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryFacetsUnsupportedMediaResponseBody runs the validations defined
+// on queryFacets_unsupported_media_response_body
+func ValidateQueryFacetsUnsupportedMediaResponseBody(body *QueryFacetsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryFacetsInvalidResponseBody runs the validations defined on
+// queryFacets_invalid_response_body
+func ValidateQueryFacetsInvalidResponseBody(body *QueryFacetsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryFacetsInvariantViolationResponseBody runs the validations
+// defined on queryFacets_invariant_violation_response_body
+func ValidateQueryFacetsInvariantViolationResponseBody(body *QueryFacetsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryFacetsUnexpectedResponseBody runs the validations defined on
+// queryFacets_unexpected_response_body
+func ValidateQueryFacetsUnexpectedResponseBody(body *QueryFacetsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryFacetsGatewayErrorResponseBody runs the validations defined on
+// queryFacets_gateway_error_response_body
+func ValidateQueryFacetsGatewayErrorResponseBody(body *QueryFacetsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2859,6 +3536,40 @@ func ValidateUserSessionFacetOptionResponseBody(body *UserSessionFacetOptionResp
 	}
 	if body.Count == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	return
+}
+
+// ValidateUserSessionFilterFacetResponseBody runs the validations defined on
+// UserSessionFilterFacetResponseBody
+func ValidateUserSessionFilterFacetResponseBody(body *UserSessionFilterFacetResponseBody) (err error) {
+	if body.Values == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
+	}
+	if body.DistinctCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("distinct_count", "body"))
+	}
+	for _, e := range body.Values {
+		if e != nil {
+			if err2 := ValidateUserSessionFilterFacetValueResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateUserSessionFilterFacetValueResponseBody runs the validations defined
+// on UserSessionFilterFacetValueResponseBody
+func ValidateUserSessionFilterFacetValueResponseBody(body *UserSessionFilterFacetValueResponseBody) (err error) {
+	if body.Value == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	if body.MatchesSearch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("matches_search", "body"))
 	}
 	return
 }
