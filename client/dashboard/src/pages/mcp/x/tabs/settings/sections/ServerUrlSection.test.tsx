@@ -311,7 +311,7 @@ describe("ServerUrlSection", () => {
     ).toBeTruthy();
   });
 
-  it("validates a hosted server's custom addresses against the hosted slug limit", () => {
+  it("passes the hosted flag to slug validation for a hosted server's custom addresses", () => {
     renderSection(hosted(), [platformEndpoint, customEndpoint]);
 
     expect(slugValidation).toHaveBeenCalledWith(

@@ -65,7 +65,7 @@ export function useMcpEndpointSlugValidation(
   return null;
 }
 
-function validateSlugFormat(
+export function validateSlugFormat(
   slug: string,
   customDomainId: string | null,
   hosted: boolean,
