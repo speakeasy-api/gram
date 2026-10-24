@@ -82,9 +82,14 @@ func (m *ChallengeManager) AuthClientNeedsReconnect(ctx context.Context, req Aut
 	if req.ProjectID == uuid.Nil || req.OrganizationID == "" || req.RegistrationID == uuid.Nil || req.Subject.IsZero() {
 		return false, ErrInvalidAuthorizationRequest
 	}
-	if attached, err := attachedCaller(ctx, req.Subject); err != nil {
+	attached, err := attachedCaller(ctx, req.Subject)
+	if err != nil {
 		return false, err
-	} else if attached {
+	}
+	client, reachErr := m.reachableClient(ctx, req.ProjectID, req.OrganizationID, req.RegistrationID)
+	// As ResolveAuthClientAccessTokens: a self-held credential belongs to
+	// nobody, so no attachment applies to it.
+	if attached && (errors.Is(reachErr, ErrChosenClientUnbound) || (reachErr == nil && client.CredentialOwner != string(CredentialOwnerSelf))) {
 		clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, false)
 		if err != nil {
 			return false, fmt.Errorf("list remote_session_clients: %w", err)
@@ -97,12 +102,11 @@ func (m *ChallengeManager) AuthClientNeedsReconnect(ctx context.Context, req Aut
 		}
 		return m.storedGrantsNeedReconnect(ctx, lookupSignIn, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, chosen, req.Subject)
 	}
-	client, err := m.reachableClient(ctx, req.ProjectID, req.OrganizationID, req.RegistrationID)
 	switch {
-	case errors.Is(err, ErrChosenClientUnbound):
+	case errors.Is(reachErr, ErrChosenClientUnbound):
 		return true, nil
-	case err != nil:
-		return false, err
+	case reachErr != nil:
+		return false, reachErr
 	}
 	return m.storedGrantsNeedReconnect(ctx, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.Subject)
 }

@@ -2751,7 +2751,7 @@ type AuthClientChoiceResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The client's name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// How the client authenticates upstream.
+	// How the client authenticates upstream. Only shared types are offered.
 	ClientType string `form:"client_type" json:"client_type" xml:"client_type"`
 }
 

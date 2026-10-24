@@ -89,8 +89,7 @@ func checkAgentKeyChoice(offered []upstreamclientsrepo.ListServerConsentAuthClie
 		if row.AuthClientID != clientID {
 			continue
 		}
-		switch row.ClientType.String {
-		case authz.AuthClientTypeServiceAccount, authz.AuthClientTypeStaticCredential, authz.AuthClientTypePassThrough:
+		if authz.IsSharedAuthClientType(row.ClientType.String) {
 			return nil
 		}
 		return oops.E(oops.CodeBadRequest, nil, "agent keys use shared credentials; an agent reaches a person's own connection only when it acts for them")

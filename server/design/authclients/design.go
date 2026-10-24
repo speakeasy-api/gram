@@ -136,7 +136,9 @@ var AuthClientChoice = Type("AuthClientChoice", func() {
 
 	Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
 	Attribute("name", String, "The client's name.")
-	Attribute("client_type", String, "How the client authenticates upstream.", clientTypeEnum)
+	Attribute("client_type", String, "How the client authenticates upstream. Only shared types are offered.", func() {
+		Enum("service_account", "static_credential", "pass_through")
+	})
 
 	Required("id", "name", "client_type")
 })
@@ -359,7 +361,7 @@ var _ = Service("authClients", func() {
 	})
 
 	Method("listMcpServerAuthClientChoices", func() {
-		Description("List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Only names and types are returned.")
+		Description("List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Returns each choice's id, name and client_type, and whether the upstream requires authentication; no headers or credentials.")
 
 		Payload(func() {
 			Attribute("mcp_server_id", String, "The MCP server id.", func() { Format(FormatUUID) })

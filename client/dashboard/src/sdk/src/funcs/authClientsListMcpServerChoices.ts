@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listMcpServerAuthClientChoices authClients
  *
  * @remarks
- * List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Only names and types are returned.
+ * List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Returns each choice's id, name and client_type, and whether the upstream requires authentication; no headers or credentials.
  */
 export function authClientsListMcpServerChoices(
   client: GramCore,

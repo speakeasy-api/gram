@@ -448,7 +448,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "auth-client:update-headers":
       return "changed the headers of auth client";
     case "auth-client:attach-mcp-server":
-      return "offered auth client on an MCP server";
+      return "added an MCP server to auth client";
     case "auth-client:enable":
       return "enabled auth client";
     case "auth-client:disable":
