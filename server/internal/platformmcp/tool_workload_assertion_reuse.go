@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
 
 // WorkloadAssertionReuseManagement preserves the management API's live scope,
@@ -45,45 +47,46 @@ type WorkloadAssertionReuseOutput struct {
 
 type WorkloadAssertionReuseService struct {
 	management     WorkloadAssertionReuseManagement
+	authorization  *authz.Engine
 	resolveProject func(context.Context, string, FindMCPInput) (ResolvedProject, error)
 }
 
 func (r *PostgresReader) WithWorkloadAssertionReuse(management WorkloadAssertionReuseManagement) *PostgresReader {
-	r.workloadAssertionReuse = &WorkloadAssertionReuseService{management: management, resolveProject: r.resolveInventoryProject}
+	r.workloadAssertionReuse = &WorkloadAssertionReuseService{management: management, authorization: r.authz, resolveProject: r.resolveInventoryProject}
 	return r
 }
 
-func (s *WorkloadAssertionReuseService) scopedContext(ctx context.Context, principal Principal, projectInput, issuerInput string) (context.Context, error) {
+func (s *WorkloadAssertionReuseService) scopedContext(ctx context.Context, principal Principal, projectInput, issuerInput string) (context.Context, string, string, error) {
 	if s == nil || s.management == nil || s.resolveProject == nil {
-		return nil, ErrUnavailable
+		return nil, "", "", ErrUnavailable
 	}
 	projectID, err := uuid.Parse(projectInput)
 	if err != nil || projectID == uuid.Nil {
-		return nil, oops.C(oops.CodeBadRequest)
+		return nil, "", "", oops.C(oops.CodeBadRequest)
 	}
 	issuerID, err := uuid.Parse(issuerInput)
 	if err != nil || issuerID == uuid.Nil {
-		return nil, oops.C(oops.CodeBadRequest)
+		return nil, "", "", oops.C(oops.CodeBadRequest)
 	}
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || ac == nil || principal.UserID == "" || principal.OrganizationID == "" || ac.UserID != principal.UserID || ac.ActiveOrganizationID != principal.OrganizationID {
-		return nil, oops.C(oops.CodeUnauthorized)
+		return nil, "", "", oops.C(oops.CodeUnauthorized)
 	}
 	// Do not manufacture API-key tenancy to expose project-tier issuers to an
 	// external user. The shared API intentionally restricts users to org tier.
 	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey {
-		return nil, oops.C(oops.CodeUnauthorized)
+		return nil, "", "", oops.C(oops.CodeUnauthorized)
 	}
 	project, err := s.resolveProject(ctx, principal.OrganizationID, FindMCPInput{ProjectID: projectID.String()})
 	if err != nil {
-		return nil, err
+		return nil, "", "", err
 	}
 	if project.ID != projectID {
-		return nil, ErrForbidden
+		return nil, "", "", ErrForbidden
 	}
 	scoped := *ac
 	scoped.ProjectID, scoped.ProjectSlug = &project.ID, &project.Slug
-	return contextvalues.SetAuthContext(ctx, &scoped), nil
+	return contextvalues.SetAuthContext(ctx, &scoped), projectID.String(), issuerID.String(), nil
 }
 
 func assertionReuseProjection(policy *gen.WorkloadIdentityPolicy, principal Principal, projectID, issuerID string) (WorkloadAssertionReuseOutput, error) {
@@ -98,51 +101,62 @@ func assertionReuseProjection(policy *gen.WorkloadIdentityPolicy, principal Prin
 }
 
 func (s *WorkloadAssertionReuseService) get(ctx context.Context, principal Principal, input GetWorkloadAssertionReuseInput) (WorkloadAssertionReuseOutput, error) {
-	ctx, err := s.scopedContext(ctx, principal, input.ProjectID, input.IssuerID)
+	ctx, projectID, issuerID, err := s.scopedContext(ctx, principal, input.ProjectID, input.IssuerID)
 	if err != nil {
-		return WorkloadAssertionReuseOutput{}, err
+		return WorkloadAssertionReuseOutput{}, fmt.Errorf("workload assertion reuse policy: %w", err)
 	}
 	policy, err := s.management.List(ctx, &gen.ListPayload{})
 	if err != nil {
-		return WorkloadAssertionReuseOutput{}, err
+		return WorkloadAssertionReuseOutput{}, fmt.Errorf("workload assertion reuse policy: %w", err)
 	}
-	return assertionReuseProjection(policy, principal, input.ProjectID, input.IssuerID)
+	return assertionReuseProjection(policy, principal, projectID, issuerID)
 }
 
 func (s *WorkloadAssertionReuseService) set(ctx context.Context, principal Principal, input SetWorkloadAssertionReuseInput) (WorkloadAssertionReuseOutput, error) {
 	if !input.Confirmed {
 		return WorkloadAssertionReuseOutput{}, oops.C(oops.CodeBadRequest)
 	}
-	ctx, err := s.scopedContext(ctx, principal, input.ProjectID, input.IssuerID)
+	ctx, projectID, issuerID, err := s.scopedContext(ctx, principal, input.ProjectID, input.IssuerID)
 	if err != nil {
-		return WorkloadAssertionReuseOutput{}, err
+		return WorkloadAssertionReuseOutput{}, fmt.Errorf("workload assertion reuse policy: %w", err)
+	}
+	if s.authorization == nil {
+		return WorkloadAssertionReuseOutput{}, ErrUnavailable
+	}
+	ctx, err = admission.AdministratorWriteContext(ctx, s.authorization, principal.OrganizationID)
+	if err != nil {
+		return WorkloadAssertionReuseOutput{}, fmt.Errorf("admit workload assertion reuse policy write: %w", err)
+	}
+	administrator := admission.ActorFromContext(ctx)
+	if !administrator.OrgAdmin || administrator.UserID != principal.UserID {
+		return WorkloadAssertionReuseOutput{}, oops.C(oops.CodeForbidden)
 	}
 	// A fresh read checks visibility and workload:read before the shared write
 	// checks workload:write. Absolute assignment is idempotent, not a toggle.
 	policy, err := s.management.List(ctx, &gen.ListPayload{})
 	if err != nil {
-		return WorkloadAssertionReuseOutput{}, err
+		return WorkloadAssertionReuseOutput{}, fmt.Errorf("workload assertion reuse policy: %w", err)
 	}
-	if _, err := assertionReuseProjection(policy, principal, input.ProjectID, input.IssuerID); err != nil {
-		return WorkloadAssertionReuseOutput{}, err
+	if _, err := assertionReuseProjection(policy, principal, projectID, issuerID); err != nil {
+		return WorkloadAssertionReuseOutput{}, fmt.Errorf("workload assertion reuse policy: %w", err)
 	}
-	_, err = s.management.UpdateIssuer(ctx, &gen.UpdateIssuerPayload{ID: input.IssuerID, AllowAssertionReuse: &input.AllowAssertionReuse})
+	_, err = s.management.UpdateIssuer(ctx, &gen.UpdateIssuerPayload{ID: issuerID, AllowAssertionReuse: &input.AllowAssertionReuse})
 	if err != nil {
-		return WorkloadAssertionReuseOutput{}, err
+		return WorkloadAssertionReuseOutput{}, fmt.Errorf("workload assertion reuse policy: %w", err)
 	}
 	// Re-read after the audited transaction commits; never echo the input.
 	policy, err = s.management.List(ctx, &gen.ListPayload{})
 	if err != nil {
-		return WorkloadAssertionReuseOutput{}, err
+		return WorkloadAssertionReuseOutput{}, fmt.Errorf("workload assertion reuse policy: %w", err)
 	}
-	return assertionReuseProjection(policy, principal, input.ProjectID, input.IssuerID)
+	return assertionReuseProjection(policy, principal, projectID, issuerID)
 }
 
 func registerWorkloadAssertionReuseTools(reg *Registrar, service *WorkloadAssertionReuseService) {
 	addTool(reg, &mcp.Tool{Name: "get_workload_assertion_reuse", Description: "Read replay protection for one exact organization-tier workload issuer. Requires workload:read. The exact project establishes organization context, not policy scope. Returns safe configuration only, never assertions, tokens, keys, or admissions.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)}}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: []authz.Scope{authz.ScopeWorkloadRead}}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetWorkloadAssertionReuseInput) (*mcp.CallToolResult, WorkloadAssertionReuseOutput, error) {
 		return principalToolCall(ctx, workloadAssertionReuseToolResult, func(p Principal) (WorkloadAssertionReuseOutput, error) { return service.get(ctx, p, input) })
 	})
-	addTool(reg, &mcp.Tool{Name: "set_workload_assertion_reuse", Description: "Set replay protection for one exact organization-tier workload issuer, without changing issuer trust, keys, or admissions. First read get_workload_assertion_reuse, then ask the user to confirm the exact issuer, desired value, and organization-wide impact before confirmed=true. Requires workload:read and workload:write. Enabling permits valid jti or uti assertions to be reused until expiry; disabling restores replay protection. Tokens without replay identifiers retain exact-token compatibility. This is an absolute, idempotent assignment, not a toggle or compare-and-swap: concurrent administrators use last committed write. Returns committed safe configuration, never credentials.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)}}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: []authz.Scope{authz.ScopeWorkloadWrite}}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkloadAssertionReuseInput) (*mcp.CallToolResult, WorkloadAssertionReuseOutput, error) {
+	addTool(reg, &mcp.Tool{Name: "set_workload_assertion_reuse", Description: "Set replay protection for one exact organization-tier workload issuer, without changing issuer trust, keys, or admissions. First read get_workload_assertion_reuse, then ask the user to confirm the exact issuer, desired value, and organization-wide impact before confirmed=true. Requires org:admin, workload:read, and workload:write. Enabling permits valid jti or uti assertions to be reused until expiry; disabling restores replay protection. Tokens without replay identifiers retain exact-token compatibility. This is an absolute, idempotent assignment, not a toggle or compare-and-swap: concurrent administrators use last committed write. Returns committed safe configuration, never credentials.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)}}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: []authz.Scope{authz.ScopeWorkloadWrite}}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetWorkloadAssertionReuseInput) (*mcp.CallToolResult, WorkloadAssertionReuseOutput, error) {
 		return principalToolCall(ctx, workloadAssertionReuseToolResult, func(p Principal) (WorkloadAssertionReuseOutput, error) { return service.set(ctx, p, input) })
 	})
 }
@@ -161,9 +175,11 @@ func workloadAssertionReuseToolResult(err error) (*mcp.CallToolResult, bool) {
 		case oops.CodeBadRequest, oops.CodeInvalid:
 			result.Code, result.Message = "invalid_request", "Provide exact project and issuer UUIDs and explicitly confirm an issuer-wide policy change."
 		case oops.CodeForbidden, oops.CodeUnauthorized:
-			result.Code, result.Message = "permission_denied", "A user identity and workload:read are required; changes also require workload:write."
+			result.Code, result.Message = "permission_denied", "A user identity and workload:read are required; changes also require org:admin and workload:write."
 		case oops.CodeNotFound:
 			result.Code, result.Message = "not_found", "That project or issuer is not available to you."
+		default:
+			// Unknown failures retain the bounded unavailable response.
 		}
 	}
 	payload, marshalErr := json.Marshal(result)

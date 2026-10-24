@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -607,7 +608,7 @@ func lockWorkloadAssertionPolicy(ctx context.Context, dbtx pgx.Tx, organizationI
 		if _, err := workloadpolicy_repo.New(dbtx).LockWorkloadIssuerForWrite(ctx, workloadpolicy_repo.LockWorkloadIssuerForWriteParams{
 			OrganizationID: organizationID, ID: presented.issuerID,
 		}); err != nil {
-			if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "40001" {
+			if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == pgerrcode.SerializationFailure {
 				return refuseWorkloadGrant("issuer_policy_changed", err)
 			}
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -657,9 +658,13 @@ func (s *Service) admitWorkloadGrantInTx(ctx context.Context, tx pgx.Tx, organiz
 	}
 	admission, err := runtimepolicy.AdmitWorkloadSessionInTx(ctx, tx)
 	if err != nil {
-		return ctx, err
+		return ctx, fmt.Errorf("admit workload grant in issuance transaction: %w", err)
 	}
-	return authz.WithWorkloadSessionAdmission(ctx, admission)
+	admitted, err := authz.WithWorkloadSessionAdmission(ctx, admission)
+	if err != nil {
+		return ctx, fmt.Errorf("install workload grant admission: %w", err)
+	}
+	return admitted, nil
 }
 
 // mintWorkloadGrantSession shares live workload admission and transactional issuance.

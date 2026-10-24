@@ -503,6 +503,7 @@ func TestUpdateIssuer_RollsBackWhenTheAuditEntryFails(t *testing.T) {
 	require.Equal(t, "Claude Tag", onlyIssuer(t, policy).Name)
 }
 
+//nolint:paralleltest,tparallel // Ordered updates intentionally share one issuer to test omitted-field preservation.
 func TestUpdateIssuer_AssertionReuseThroughGoClient(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -518,20 +519,20 @@ func TestUpdateIssuer_AssertionReuseThroughGoClient(t *testing.T) {
 		{name: "disable", value: new(false), want: false},
 		{name: "omitted preserves opt out", value: nil, want: false},
 	} {
-		// These updates deliberately share one issuer and run in order.
-		t.Log(tc.name)
-		payload := updatePayload(original.ID)
-		payload.Name = new("Projected token platform")
-		payload.AllowAssertionReuse = tc.value
-		decoded, err := genserver.DecodeUpdateIssuerRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(encodeUpdateIssuerRequest(t, payload))
-		require.NoError(t, err)
-		require.Equal(t, tc.value, decoded.AllowAssertionReuse)
-		policy, err := ti.service.UpdateIssuer(ctx, decoded)
-		require.NoError(t, err)
-		require.Equal(t, tc.want, onlyIssuer(t, policy).AllowAssertionReuse)
-		listed, err := ti.service.List(ctx, &gen.ListPayload{})
-		require.NoError(t, err)
-		require.Equal(t, tc.want, onlyIssuer(t, listed).AllowAssertionReuse)
+		t.Run(tc.name, func(t *testing.T) {
+			payload := updatePayload(original.ID)
+			payload.Name = new("Projected token platform")
+			payload.AllowAssertionReuse = tc.value
+			decoded, err := genserver.DecodeUpdateIssuerRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(encodeUpdateIssuerRequest(t, payload))
+			require.NoError(t, err)
+			require.Equal(t, tc.value, decoded.AllowAssertionReuse)
+			policy, err := ti.service.UpdateIssuer(ctx, decoded)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, onlyIssuer(t, policy).AllowAssertionReuse)
+			listed, err := ti.service.List(ctx, &gen.ListPayload{})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, onlyIssuer(t, listed).AllowAssertionReuse)
+		})
 	}
 }
 
