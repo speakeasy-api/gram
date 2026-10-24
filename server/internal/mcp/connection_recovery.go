@@ -83,6 +83,9 @@ func (s *Service) connectionRecoveryError(ctx context.Context, authentication *i
 		res.clientType != authClientTypeRemoteSession || !authentication.chosenClient.Valid || !authentication.endpoint.McpServerID.Valid {
 		return nil, false
 	}
+	if s.siteURL == nil {
+		return nil, false
+	}
 	endpoint := authentication.endpoint
 	userID := authenticated.Credential.AuthorizerUserID
 	statuses, err := s.remoteChallengeMgr.AuthClientRemoteSessionStatuses(ctx, urn.NewUserSubject(userID), endpoint.ProjectID, endpoint.OrganizationID, []uuid.UUID{authentication.chosenClient.UUID})
@@ -103,7 +106,9 @@ func (s *Service) connectionRecoveryError(ctx context.Context, authentication *i
 	if err := s.connectionRecoveryCache.Store(ctx, recovery); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store connection link").LogError(ctx, s.logger), true
 	}
-	link := s.platformBaseURL(ctx).JoinPath(connectionRecoveryPath, token).String()
+	// Issued on the dashboard's canonical origin only, so the assistant can
+	// tell a genuine link from one a tool's own error text makes up.
+	link := s.siteURL.JoinPath(connectionRecoveryPath, token).String()
 
 	name := res.serverName
 	if name == "" {
@@ -118,7 +123,9 @@ func (s *Service) connectionRecoveryError(ctx context.Context, authentication *i
 		"If you cannot reach them privately, do not post the link: ask them to open Speakeasy and %s %s instead.\n\n%s",
 		heading, action, name, action, name, link)
 	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: represented user's connection "+action+" required", issuerGateReasonInvalidRemoteSession)
-	return oops.E(oops.CodeFailedPrecondition, nil, "%s", message).LogWarn(ctx, s.logger, attr.SlogAuthClientID(res.clientID.String())), true
+	// Not logged: the message carries the link, and the rejection above is
+	// already recorded without it.
+	return oops.E(oops.CodeFailedPrecondition, nil, "%s", message), true
 }
 
 // HandleConnectionRecovery serves a connection link. The signed-in Speakeasy
@@ -201,7 +208,8 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 		return false, nil
 	}
 	ctx := r.Context()
-	login, err := s.connectionRecoveryCache.GetAndDelete(ctx, "connectionRecovery:"+remote.ParentChallengeID)
+	key := "connectionRecovery:" + remote.ParentChallengeID
+	login, err := s.connectionRecoveryCache.Get(ctx, key)
 	if err != nil || login.expired() || login.ID != remote.ParentChallengeID {
 		return true, errors.New("connection login expired")
 	}
@@ -209,8 +217,22 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 		remote.RemoteSessionClientID != login.RegistrationID || remote.OrganizationID != login.OrganizationID {
 		return true, errors.New("connection login does not match its link")
 	}
-	if _, err := s.verifyConnectionRecoveryUser(ctx, r, login); err != nil {
+	// The callback may land on a host without the dashboard session cookie.
+	// When the browser presents a session it must be the person; either way
+	// the person's access is checked again.
+	authed, err := s.connectionRecoverySession(ctx, r, login)
+	switch {
+	case errors.Is(err, errRecoveryNotSignedIn):
+		authed = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: login.OrganizationID, UserID: login.UserID}) //nolint:exhaustruct // the person the server-held login names, for their own permission check
+	case err != nil:
 		return true, err
+	}
+	if err := s.connectionRecoveryAccess(ctx, authed, login); err != nil {
+		return true, err
+	}
+	// Used up only once it has passed, so a stray callback cannot spend it.
+	if _, err := s.connectionRecoveryCache.GetAndDelete(ctx, key); err != nil {
+		return true, errors.New("connection login expired")
 	}
 	return true, nil
 }
@@ -219,6 +241,19 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 // recovery's person, acting as themselves, in its organization and still
 // allowed to use its client.
 func (s *Service) verifyConnectionRecoveryUser(ctx context.Context, r *http.Request, recovery connectionRecovery) (context.Context, error) {
+	authed, err := s.connectionRecoverySession(ctx, r, recovery)
+	if err != nil {
+		return ctx, err
+	}
+	if err := s.connectionRecoveryAccess(ctx, authed, recovery); err != nil {
+		return ctx, err
+	}
+	return authed, nil
+}
+
+// connectionRecoverySession authenticates the request's Speakeasy session as
+// the recovery's person acting as themselves.
+func (s *Service) connectionRecoverySession(ctx context.Context, r *http.Request, recovery connectionRecovery) (context.Context, error) {
 	cookie, err := r.Cookie(constants.SessionCookie)
 	if err != nil || cookie.Value == "" {
 		return ctx, errRecoveryNotSignedIn
@@ -238,12 +273,23 @@ func (s *Service) verifyConnectionRecoveryUser(ctx context.Context, r *http.Requ
 	if authCtx.UserID != recovery.UserID || contextvalues.IsSupportSession(authed) || contextvalues.IsLegacyImpersonatedSession(authed) {
 		return ctx, errRecoveryOtherUser
 	}
+	return authed, nil
+}
+
+// connectionRecoveryAccess checks the recovery's person is still an active
+// member of its organization and allowed to use its client. authed carries
+// that person's auth context.
+func (s *Service) connectionRecoveryAccess(ctx context.Context, authed context.Context, recovery connectionRecovery) error {
 	active, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{UserID: recovery.UserID, OrganizationID: recovery.OrganizationID})
 	if err != nil {
-		return ctx, fmt.Errorf("check connection user membership: %w", err)
+		return fmt.Errorf("check connection user membership: %w", err)
 	}
 	if !active {
-		return ctx, errRecoveryNoAccess
+		return errRecoveryNoAccess
+	}
+	authCtx, ok := contextvalues.GetAuthContext(authed)
+	if !ok || authCtx == nil {
+		return errRecoveryNotSignedIn
 	}
 	scoped := *authCtx
 	scoped.ActiveOrganizationID = recovery.OrganizationID
@@ -251,7 +297,7 @@ func (s *Service) verifyConnectionRecoveryUser(ctx context.Context, r *http.Requ
 	authed = contextvalues.SetAuthContext(authed, &scoped)
 	permitter, err := s.authClientPermitFor(authed, recovery.OrganizationID)
 	if err != nil {
-		return ctx, fmt.Errorf("load connection permitter: %w", err)
+		return fmt.Errorf("load connection permitter: %w", err)
 	}
 	allowed, err := permitter.Permitted(authed, authClientPermitRequest{
 		OrganizationID: recovery.OrganizationID, ProjectID: recovery.ProjectID, ServerID: recovery.McpServerID,
@@ -259,12 +305,12 @@ func (s *Service) verifyConnectionRecoveryUser(ctx context.Context, r *http.Requ
 		CredentialKind: "", CredentialID: uuid.Nil, Subject: urn.NewUserSubject(recovery.UserID),
 	})
 	if err != nil {
-		return ctx, fmt.Errorf("check connection permission: %w", err)
+		return fmt.Errorf("check connection permission: %w", err)
 	}
 	if !allowed {
-		return ctx, errRecoveryNoAccess
+		return errRecoveryNoAccess
 	}
-	return authed, nil
+	return nil
 }
 
 // answerConnectionRecoveryRefusal answers a link its browser may not use. A

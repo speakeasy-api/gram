@@ -116,6 +116,11 @@ func TestConnectionRecoveryStartsTheNamedPersonsLoginOnce(t *testing.T) {
 	recovery, err := f.ti.service.VerifyConnectionRecoveryCompletion(callback(f.otherID), remote)
 	require.True(t, recovery)
 	require.Error(t, err, "completing as someone else is refused")
+	recovery, err = f.ti.service.VerifyConnectionRecoveryCompletion(callback(f.userID), remote)
+	require.True(t, recovery)
+	require.NoError(t, err, "a refused callback does not spend the person's login")
+	_, err = f.ti.service.VerifyConnectionRecoveryCompletion(callback(f.userID), remote)
+	require.Error(t, err, "a login completes once")
 
 	path, err = f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
 	require.NoError(t, err)
@@ -124,11 +129,21 @@ func TestConnectionRecoveryStartsTheNamedPersonsLoginOnce(t *testing.T) {
 	require.NoError(t, err)
 	remote, err = f.ti.service.RemoteLoginState(f.ctx, location.Query().Get("state"))
 	require.NoError(t, err)
-	recovery, err = f.ti.service.VerifyConnectionRecoveryCompletion(callback(f.userID), remote)
+	signedOutCallback := httptest.NewRequestWithContext(f.ctx, http.MethodGet, "/mcp/remote_login_callback", nil)
+	recovery, err = f.ti.service.VerifyConnectionRecoveryCompletion(signedOutCallback, remote)
 	require.True(t, recovery)
+	require.NoError(t, err, "a callback on a host without the session completes on the person's rechecked access")
+
+	path, err = f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
 	require.NoError(t, err)
+	started = f.open(t, path, f.userID)
+	location, err = url.Parse(started.Header().Get("Location"))
+	require.NoError(t, err)
+	remote, err = f.ti.service.RemoteLoginState(f.ctx, location.Query().Get("state"))
+	require.NoError(t, err)
+	f.ti.service.SetAuthClientPermitted(false)
 	_, err = f.ti.service.VerifyConnectionRecoveryCompletion(callback(f.userID), remote)
-	require.Error(t, err, "a login completes once")
+	require.Error(t, err, "a person who lost access cannot complete")
 }
 
 func TestConnectionRecoveryShowsNoAccessWithoutAWayToConnect(t *testing.T) {
@@ -162,7 +177,12 @@ func TestPersonBackedTurnsUseTheirPersonsOwnConnection(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: ac.ActiveOrganizationID, OwnerUserID: ac.UserID, ProjectID: uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}, Name: "Connection subject agent " + uuid.NewString()[:8]})
+	// The agent's owner is someone else, so only the authorizing user's
+	// connection is the right answer.
+	owner := "user_owner_" + uuid.NewString()[:8]
+	require.NoError(t, testrepo.New(ti.conn).InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: owner, Email: owner + "@example.com", DisplayName: owner}))
+	require.NoError(t, testrepo.New(ti.conn).CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: ac.ActiveOrganizationID, UserID: pgtype.Text{String: owner, Valid: true}}))
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: ac.ActiveOrganizationID, OwnerUserID: owner, ProjectID: uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}, Name: "Connection subject agent " + uuid.NewString()[:8]})
 	require.NoError(t, err)
 	projectRead, err := authz.NewSelector(authz.ScopeProjectRead, ac.ProjectID.String()).MarshalJSON()
 	require.NoError(t, err)
@@ -187,13 +207,13 @@ func TestPersonBackedTurnsUseTheirPersonsOwnConnection(t *testing.T) {
 	answer, ok := ti.service.ConnectionRecoveryErrorFor(personBacked, endpoint, agentSubject, uuid.New(), uuid.New(), authz.AuthClientTypeRemoteSession)
 	require.True(t, ok)
 	require.Contains(t, answer.Error(), "Connection required")
-	require.Contains(t, answer.Error(), "/mcp/connection_recovery/")
+	require.Contains(t, answer.Error(), ti.siteURL.JoinPath("mcp", "connection_recovery").String()+"/", "links are issued on the canonical dashboard origin")
 	_, ok = ti.service.ConnectionRecoveryErrorFor(personBacked, endpoint, agentSubject, uuid.New(), uuid.New(), authz.AuthClientTypeServiceAccount)
 	require.False(t, ok, "a shared credential belongs to nobody, so no one connects it")
 	_, ok = ti.service.ConnectionRecoveryErrorFor(ctx, endpoint, urn.NewUserSubject(ac.UserID), uuid.New(), uuid.New(), authz.AuthClientTypeRemoteSession)
 	require.False(t, ok, "a person's own session reconnects through its client as before")
 
-	require.Equal(t, urn.NewUserSubject(ac.UserID), mcp.ConnectionSubject(mint(urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), ac.UserID), agentSubject), "a turn acting for a person resolves that person's connection")
+	require.Equal(t, urn.NewUserSubject(ac.UserID), mcp.ConnectionSubject(mint(urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), ac.UserID), agentSubject), "a turn acting for a person resolves that person's connection, not the agent owner's")
 	workload := urn.NewWorkloadPrincipal(uuid.New(), "assistant-trigger:"+uuid.NewString())
 	workloadSubject := urn.NewWorkloadSubject(uuid.New(), "assistant-trigger")
 	require.Equal(t, workloadSubject, mcp.ConnectionSubject(mint(workload, ""), workloadSubject), "a turn acting for nobody resolves no person's connection")
