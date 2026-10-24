@@ -325,6 +325,297 @@ func (q *Queries) GetApprovalByToken(ctx context.Context, token string) (RiskPol
 	return i, err
 }
 
+const getApprovalMessageBySlackMessage = `-- name: GetApprovalMessageBySlackMessage :one
+SELECT m.id, m.organization_id, m.project_id, m.approval_id, m.provider, m.kind, m.recipient_user_id, m.slack_team_id, m.slack_user_id, m.slack_channel_id, m.slack_message_ts, m.created_at, m.updated_at, m.deleted_at, m.deleted
+FROM risk_policy_approval_messages m
+JOIN slack_directory_connections c
+  ON c.organization_id = m.organization_id
+  AND c.slack_team_id = m.slack_team_id
+  AND c.disconnected_at IS NULL
+WHERE m.provider = 'slack'
+  AND m.slack_team_id = $1
+  AND m.slack_channel_id = $2
+  AND m.slack_message_ts = $3
+  AND m.deleted IS FALSE
+ORDER BY m.created_at, m.id
+LIMIT 1
+`
+
+type GetApprovalMessageBySlackMessageParams struct {
+	SlackTeamID    pgtype.Text
+	SlackChannelID pgtype.Text
+	SlackMessageTs pgtype.Text
+}
+
+type GetApprovalMessageBySlackMessageRow struct {
+	RiskPolicyApprovalMessage RiskPolicyApprovalMessage
+}
+
+// Resolves a Slack click to the DM it was made on. Slack signs the click, and
+// the click names its workspace, channel and message, so this lookup is not
+// tenant-scoped; the row it returns carries the tenant. A DM in a workspace
+// the organization has since disconnected finds no row.
+func (q *Queries) GetApprovalMessageBySlackMessage(ctx context.Context, arg GetApprovalMessageBySlackMessageParams) (GetApprovalMessageBySlackMessageRow, error) {
+	row := q.db.QueryRow(ctx, getApprovalMessageBySlackMessage, arg.SlackTeamID, arg.SlackChannelID, arg.SlackMessageTs)
+	var i GetApprovalMessageBySlackMessageRow
+	err := row.Scan(
+		&i.RiskPolicyApprovalMessage.ID,
+		&i.RiskPolicyApprovalMessage.OrganizationID,
+		&i.RiskPolicyApprovalMessage.ProjectID,
+		&i.RiskPolicyApprovalMessage.ApprovalID,
+		&i.RiskPolicyApprovalMessage.Provider,
+		&i.RiskPolicyApprovalMessage.Kind,
+		&i.RiskPolicyApprovalMessage.RecipientUserID,
+		&i.RiskPolicyApprovalMessage.SlackTeamID,
+		&i.RiskPolicyApprovalMessage.SlackUserID,
+		&i.RiskPolicyApprovalMessage.SlackChannelID,
+		&i.RiskPolicyApprovalMessage.SlackMessageTs,
+		&i.RiskPolicyApprovalMessage.CreatedAt,
+		&i.RiskPolicyApprovalMessage.UpdatedAt,
+		&i.RiskPolicyApprovalMessage.DeletedAt,
+		&i.RiskPolicyApprovalMessage.Deleted,
+	)
+	return i, err
+}
+
+const getApprovalProjectSlugs = `-- name: GetApprovalProjectSlugs :one
+SELECT o.slug AS organization_slug, p.slug AS project_slug, o.default_host
+FROM projects p
+JOIN organization_metadata o ON o.id = p.organization_id
+WHERE p.organization_id = $1
+  AND p.id = $2
+`
+
+type GetApprovalProjectSlugsParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type GetApprovalProjectSlugsRow struct {
+	OrganizationSlug string
+	ProjectSlug      string
+	DefaultHost      pgtype.Text
+}
+
+// What a link to the request's project needs: the slugs, and the
+// organization's default host for links sent without a request to follow.
+func (q *Queries) GetApprovalProjectSlugs(ctx context.Context, arg GetApprovalProjectSlugsParams) (GetApprovalProjectSlugsRow, error) {
+	row := q.db.QueryRow(ctx, getApprovalProjectSlugs, arg.OrganizationID, arg.ProjectID)
+	var i GetApprovalProjectSlugsRow
+	err := row.Scan(&i.OrganizationSlug, &i.ProjectSlug, &i.DefaultHost)
+	return i, err
+}
+
+const getApprovalServer = `-- name: GetApprovalServer :one
+SELECT name, slug
+FROM mcp_servers
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type GetApprovalServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetApprovalServerRow struct {
+	Name pgtype.Text
+	Slug pgtype.Text
+}
+
+// The MCP server a held call went to, named on the approver's card. A deleted
+// server finds no row.
+func (q *Queries) GetApprovalServer(ctx context.Context, arg GetApprovalServerParams) (GetApprovalServerRow, error) {
+	row := q.db.QueryRow(ctx, getApprovalServer, arg.ID, arg.ProjectID)
+	var i GetApprovalServerRow
+	err := row.Scan(&i.Name, &i.Slug)
+	return i, err
+}
+
+const insertApprovalMessage = `-- name: InsertApprovalMessage :one
+INSERT INTO risk_policy_approval_messages (
+  organization_id
+  , project_id
+  , approval_id
+  , provider
+  , kind
+  , recipient_user_id
+  , slack_team_id
+  , slack_user_id
+  , slack_channel_id
+  , slack_message_ts
+) VALUES (
+  $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+)
+ON CONFLICT (approval_id, provider, recipient_user_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING id, organization_id, project_id, approval_id, provider, kind, recipient_user_id, slack_team_id, slack_user_id, slack_channel_id, slack_message_ts, created_at, updated_at, deleted_at, deleted
+`
+
+type InsertApprovalMessageParams struct {
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	ApprovalID      uuid.UUID
+	Provider        string
+	Kind            string
+	RecipientUserID string
+	SlackTeamID     pgtype.Text
+	SlackUserID     pgtype.Text
+	SlackChannelID  pgtype.Text
+	SlackMessageTs  pgtype.Text
+}
+
+// Records a notification sent for a request. One per recipient and provider,
+// so a retried send that already recorded its message inserts nothing.
+func (q *Queries) InsertApprovalMessage(ctx context.Context, arg InsertApprovalMessageParams) (RiskPolicyApprovalMessage, error) {
+	row := q.db.QueryRow(ctx, insertApprovalMessage,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ApprovalID,
+		arg.Provider,
+		arg.Kind,
+		arg.RecipientUserID,
+		arg.SlackTeamID,
+		arg.SlackUserID,
+		arg.SlackChannelID,
+		arg.SlackMessageTs,
+	)
+	var i RiskPolicyApprovalMessage
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ApprovalID,
+		&i.Provider,
+		&i.Kind,
+		&i.RecipientUserID,
+		&i.SlackTeamID,
+		&i.SlackUserID,
+		&i.SlackChannelID,
+		&i.SlackMessageTs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const listApprovalMessages = `-- name: ListApprovalMessages :many
+SELECT id, organization_id, project_id, approval_id, provider, kind, recipient_user_id, slack_team_id, slack_user_id, slack_channel_id, slack_message_ts, created_at, updated_at, deleted_at, deleted
+FROM risk_policy_approval_messages
+WHERE organization_id = $1
+  AND project_id = $2
+  AND approval_id = $3
+  AND deleted IS FALSE
+ORDER BY created_at, id
+`
+
+type ListApprovalMessagesParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ApprovalID     uuid.UUID
+}
+
+func (q *Queries) ListApprovalMessages(ctx context.Context, arg ListApprovalMessagesParams) ([]RiskPolicyApprovalMessage, error) {
+	rows, err := q.db.Query(ctx, listApprovalMessages, arg.OrganizationID, arg.ProjectID, arg.ApprovalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicyApprovalMessage
+	for rows.Next() {
+		var i RiskPolicyApprovalMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.ApprovalID,
+			&i.Provider,
+			&i.Kind,
+			&i.RecipientUserID,
+			&i.SlackTeamID,
+			&i.SlackUserID,
+			&i.SlackChannelID,
+			&i.SlackMessageTs,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listApprovalRecipientMembers = `-- name: ListApprovalRecipientMembers :many
+SELECT u.id AS user_id, u.email, u.display_name
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+  AND ($2::boolean OR u.id = ANY($3::text[]))
+ORDER BY u.id = ANY($3::text[]) DESC, u.id
+LIMIT $4
+`
+
+type ListApprovalRecipientMembersParams struct {
+	OrganizationID string
+	AllMembers     bool
+	UserIds        []string
+	MaxRows        int32
+}
+
+type ListApprovalRecipientMembersRow struct {
+	UserID      string
+	Email       string
+	DisplayName string
+}
+
+// Active organization members who can receive approval requests: the members
+// in @user_ids, or every member when @all_members is set, which is how role
+// approvers expand to people. The members in @user_ids come first, so a
+// capped list keeps them, and then the order is by id, so it is stable.
+func (q *Queries) ListApprovalRecipientMembers(ctx context.Context, arg ListApprovalRecipientMembersParams) ([]ListApprovalRecipientMembersRow, error) {
+	rows, err := q.db.Query(ctx, listApprovalRecipientMembers,
+		arg.OrganizationID,
+		arg.AllMembers,
+		arg.UserIds,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListApprovalRecipientMembersRow
+	for rows.Next() {
+		var i ListApprovalRecipientMembersRow
+		if err := rows.Scan(&i.UserID, &i.Email, &i.DisplayName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listApprovals = `-- name: ListApprovals :many
 SELECT id, organization_id, project_id, risk_policy_id, policy_version, token, requester_urn, requester_user_id, surface, source_adapter, session_id, chat_id, toolset_id, mcp_server_id, server_url, tool_name, call_fingerprint, arguments_preview, reason, status, requested_scope, granted_scope, decided_by_urn, decided_via, decision_note, requested_at, decided_at, expires_at, consumed_at, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_approvals

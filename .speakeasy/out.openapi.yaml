@@ -111008,6 +111008,11 @@ components:
           type: integer
           description: Members observed in the last complete snapshot, including guests and bots.
           format: int64
+        missing_scopes:
+          type: array
+          items:
+            type: string
+          description: Permissions Speakeasy asks for that this install has not granted. Reinstalling the app grants them. Without chat:write, approval requests do not reach approvers in Slack.
         status:
           type: string
           description: Authorization status, independent of directory sync.
@@ -111054,6 +111059,7 @@ components:
         - status
         - generation
         - granted_scopes
+        - missing_scopes
         - updated_at
         - member_count
         - directory_status

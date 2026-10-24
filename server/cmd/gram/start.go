@@ -148,6 +148,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -405,6 +406,7 @@ func mcpRuntimeFlags() []cli.Flag {
 		},
 		&cli.StringFlag{Name: "slack-client-id", EnvVars: []string{"SLACK_CLIENT_ID"}, Usage: "OAuth client ID for the Speakeasy Slack app"},
 		&cli.StringFlag{Name: "slack-client-secret", EnvVars: []string{"SLACK_CLIENT_SECRET"}, Usage: "OAuth client secret for the Speakeasy Slack app"},
+		&cli.StringFlag{Name: "slack-signing-secret", EnvVars: []string{"SLACK_SIGNING_SECRET"}, Usage: "Signing secret of the Speakeasy Slack app, which verifies clicks on approval request DMs"},
 
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -1965,6 +1967,11 @@ func newStartCommand() *cli.Command {
 			mcp.Attach(mux, mcpRuntime.MCP, mcpRuntime.Metadata)
 			mcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.MCP)
 			attachApprovals(mux, logger, approvalService, mcpRuntime.MCP, ratelimit.NewRedisStore(redisClient))
+			if secret := c.String("slack-signing-secret"); secret != "" && secret != "unset" {
+				approvalCards := slackapproval.NewCards(db, approvalService, orgHosts)
+				slackInteractions := slackapproval.NewInteractions(logger, approvalCards, slackapproval.NewHTTPResponder(guardianPolicy.PooledClient()), secret)
+				o11y.AttachHandler(mux, http.MethodPost, slackapproval.InteractionsPath, slackInteractions.ServeHTTP)
+			}
 
 			analyticsSvc.WithConversationAccess(chatService)
 			chat.Attach(mux, chatService)
@@ -2166,6 +2173,7 @@ func newStartCommand() *cli.Command {
 						ExpectedARecords:             customDomainARecords,
 						GitHubEvidenceToken:          c.String("github-evidence-token"),
 						SiteURL:                      siteURL,
+						ServerURL:                    serverURL,
 						OrgHosts:                     orgHosts,
 						BillingTracker:               billingTracker,
 						BillingRepository:            billingRepo,

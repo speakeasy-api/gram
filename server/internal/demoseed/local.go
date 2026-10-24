@@ -56,6 +56,8 @@ type LocalFixturesOptions struct {
 	// ObservedEnv holds the current values of StaleOverrideVars, so the
 	// fixtures can warn when mise.local.toml is shadowing them.
 	ObservedEnv map[string]string
+	// Slack connects the org to the developer's Slack test app, when set.
+	Slack LocalSlackOptions
 }
 
 // RunLocalFixtures adds everything the local development organization needs on
@@ -173,7 +175,8 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
 	bustLocalCaches(ctx, logger, cache, spec.OrgID, dev.ID)
-	return nil
+
+	return connectLocalSlack(ctx, logger, db, spec.OrgID, dev, opts.Slack)
 }
 
 // warnOnStaleOverrides catches the one way this seed can leave a developer

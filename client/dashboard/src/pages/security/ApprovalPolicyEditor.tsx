@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/Card";
 import { Label } from "@/components/ui/Label";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
@@ -12,6 +12,8 @@ import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskList
 import { invalidateAllRiskPoliciesGet } from "@gram/client/react-query/riskPoliciesGet.js";
 import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
+import { useSlackDirectoryConnections } from "@gram/client/react-query/slackDirectoryConnections.js";
+import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -42,6 +44,8 @@ import {
   policyScopeSummary,
 } from "./policy-mcp-scope";
 import { type PolicyStep, useStepParam } from "./use-step-param";
+import { SESSION_SECURITY } from "../org/identity-provider/identityProviderQueries";
+import { canSendApprovalDMs } from "../org/slack-workspaces/approvalReadiness";
 
 const APPROVAL_STEPS: PolicyStep[] = [
   {
@@ -176,7 +180,35 @@ function ApproversPicker({
           Select at least one approver.
         </Text>
       )}
+      <SlackDeliveryHint />
     </div>
+  );
+}
+
+/** Tells admins when approvers will not get requests in Slack, and where to
+ *  fix it. Listing workspaces needs org admin; for anyone else the request
+ *  fails quietly and the hint stays hidden. */
+function SlackDeliveryHint(): JSX.Element | null {
+  const orgRoutes = useOrgRoutes();
+  const workspaces = useSlackDirectoryConnections(undefined, SESSION_SECURITY, {
+    retry: false,
+    throwOnError: false,
+  });
+  if (!workspaces.data || canSendApprovalDMs(workspaces.data.connections)) {
+    return null;
+  }
+  return (
+    <Text small muted>
+      Approvers are not sent requests in Slack yet. Connect Slack, or reinstall
+      the Slack app, on{" "}
+      <Link
+        className="underline"
+        to={`${orgRoutes.identity.href()}?tab=slack-workspaces`}
+      >
+        Slack workspaces
+      </Link>
+      . Until then, approvers decide on the Tool approvals tab.
+    </Text>
   );
 }
 
