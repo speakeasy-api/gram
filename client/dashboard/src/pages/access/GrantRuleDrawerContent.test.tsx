@@ -1,5 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+import type { Selector } from "@gram/client/models/components/selector.js";
 
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type { ServerGroup } from "./serverMerge";
@@ -229,8 +231,185 @@ it.each(["project", "inference"] as const)(
         : { resourceKind: "project", resourceId: "project_one" },
     ]);
     rerender(<GrantRuleDrawerContent {...props} selectors={selected} />);
-    expect(row.getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(row);
+    const selectedRow = screen.getByRole("checkbox", { name: "Project one" });
+    expect(selectedRow.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(selectedRow);
     expect(onChangeSelectors).toHaveBeenLastCalledWith([]);
+  },
+);
+
+const projectResourceTypes = [
+  "project",
+  "skill",
+  "mcp",
+  "assistant",
+  "inference",
+] as const;
+type ProjectResourceType = (typeof projectResourceTypes)[number];
+function projectSelector(resourceType: ProjectResourceType): Selector {
+  if (resourceType === "project" || resourceType === "skill") {
+    return { resourceKind: resourceType, resourceId: "project_one" };
+  }
+  return {
+    resourceKind: resourceType,
+    resourceId: "*",
+    projectId: "project_one",
+  };
+}
+function StatefulProjectPicker({
+  resourceType,
+  initialSelectors,
+  onChange,
+}: {
+  resourceType: ProjectResourceType;
+  initialSelectors: Selector[] | null;
+  onChange: (selectors: Selector[] | null) => void;
+}) {
+  const [selectors, setSelectors] = useState(initialSelectors);
+  const [generation, setGeneration] = useState(0);
+  return (
+    <>
+      <button onClick={() => setGeneration((current) => current + 1)}>
+        Reopen picker
+      </button>
+      <GrantRuleDrawerContent
+        key={generation}
+        resourceType={resourceType}
+        scope={
+          resourceType === "inference"
+            ? "inference:execute"
+            : `${resourceType}:read`
+        }
+        selectors={selectors}
+        onChangeSelectors={(next) => {
+          setSelectors(next);
+          onChange(next);
+        }}
+      />
+    </>
+  );
+}
+
+describe.each(projectResourceTypes)(
+  "unique %s project rows",
+  (resourceType) => {
+    it.each([false, true])(
+      "renders each project once through select, deselect and reopen (initially selected: %s)",
+      (initiallySelected) => {
+        const onChange = vi.fn<(selectors: Selector[] | null) => void>();
+        render(
+          <StatefulProjectPicker
+            resourceType={resourceType}
+            initialSelectors={
+              initiallySelected ? [projectSelector(resourceType)] : []
+            }
+            onChange={onChange}
+          />,
+        );
+        if (!initiallySelected) {
+          fireEvent.click(
+            screen.getByRole("button", { name: /Specific projects/ }),
+          );
+        }
+        const rows = () =>
+          screen.queryAllByRole("checkbox", { name: "Project one" });
+        expect.soft(rows()).toHaveLength(1);
+        fireEvent.click(screen.getByRole("button", { name: "Reopen picker" }));
+        if (!initiallySelected)
+          fireEvent.click(
+            screen.getByRole("button", { name: /Specific projects/ }),
+          );
+        expect.soft(rows()).toHaveLength(1);
+        if (initiallySelected) {
+          expect(screen.queryByText("No matching projects")).toBeNull();
+          expect(screen.queryByText("No projects found")).toBeNull();
+          expect(onChange).not.toHaveBeenCalled();
+          fireEvent.click(rows()[0]!);
+          expect(onChange).toHaveBeenLastCalledWith([]);
+          fireEvent.click(
+            screen.getByRole("button", { name: /Specific projects/ }),
+          );
+          expect(rows()).toHaveLength(1);
+        }
+        fireEvent.click(rows()[0]!);
+        expect(onChange).toHaveBeenLastCalledWith([
+          projectSelector(resourceType),
+        ]);
+        expect.soft(rows()).toHaveLength(1);
+        fireEvent.click(screen.getByRole("button", { name: "Reopen picker" }));
+        expect(rows()).toHaveLength(1);
+        expect.soft(rows()[0]?.getAttribute("aria-checked")).toBe("true");
+        expect(screen.queryByText("No matching projects")).toBeNull();
+        expect(screen.queryByText("No projects found")).toBeNull();
+        fireEvent.click(rows()[0]!);
+        expect(onChange).toHaveBeenLastCalledWith([]);
+        fireEvent.click(
+          screen.getByRole("button", { name: /Specific projects/ }),
+        );
+        expect.soft(rows()).toHaveLength(1);
+      },
+    );
+
+    it("keeps a selected project available when search hides its normal row", () => {
+      const onChange = vi.fn<(selectors: Selector[] | null) => void>();
+      render(
+        <StatefulProjectPicker
+          resourceType={resourceType}
+          initialSelectors={[projectSelector(resourceType)]}
+          onChange={onChange}
+        />,
+      );
+      fireEvent.change(screen.getByPlaceholderText("Search projects…"), {
+        target: { value: "not-a-matching-project" },
+      });
+      const row = screen.getByRole("checkbox", { name: "Project one" });
+      expect(row.getAttribute("aria-checked")).toBe("true");
+      expect(screen.queryByText("No matching projects")).toBeNull();
+      fireEvent.click(row);
+      expect(onChange).toHaveBeenLastCalledWith([]);
+      expect(
+        screen.queryAllByRole("checkbox", { name: "Project one" }),
+      ).toHaveLength(0);
+      fireEvent.click(
+        screen.getByRole("button", { name: /Specific projects/ }),
+      );
+      fireEvent.change(screen.getByPlaceholderText("Search projects…"), {
+        target: { value: "not-a-matching-project" },
+      });
+      expect(screen.getByText("No matching projects")).toBeTruthy();
+    });
+
+    it("does not create rows or change an unrestricted selection on reopen", () => {
+      const onChange = vi.fn<(selectors: Selector[] | null) => void>();
+      render(
+        <StatefulProjectPicker
+          resourceType={resourceType}
+          initialSelectors={null}
+          onChange={onChange}
+        />,
+      );
+      expect(
+        screen.queryAllByRole("checkbox", { name: "Project one" }),
+      ).toHaveLength(0);
+      fireEvent.click(screen.getByRole("button", { name: "Reopen picker" }));
+      expect(
+        screen.queryAllByRole("checkbox", { name: "Project one" }),
+      ).toHaveLength(0);
+      expect(onChange).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByRole("button", { name: /Specific projects/ }),
+      );
+      fireEvent.click(screen.getByRole("checkbox", { name: "Project one" }));
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /^All (projects|servers|assistants)/,
+        }),
+      );
+      expect(onChange).toHaveBeenLastCalledWith(null);
+      fireEvent.click(screen.getByRole("button", { name: "Reopen picker" }));
+      expect(
+        screen.queryAllByRole("checkbox", { name: "Project one" }),
+      ).toHaveLength(0);
+    });
   },
 );

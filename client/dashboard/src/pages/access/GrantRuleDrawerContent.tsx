@@ -190,16 +190,6 @@ export function GrantRuleDrawerContent({
     return projects.filter((p) => allowedProjectIds.has(p.id));
   }, [organization.projects, mcpServers, allowFilter]);
 
-  const filteredProjectList = useMemo(
-    () =>
-      resourceSearch
-        ? projectList.filter((p) =>
-            p.name.toLowerCase().includes(resourceSearch.toLowerCase()),
-          )
-        : projectList,
-    [projectList, resourceSearch],
-  );
-
   // Pre-filter mcpServers by allow scope, then apply search
   const scopedMcpServers = useMemo(() => {
     if (!allowFilter) return mcpServers;
@@ -272,6 +262,26 @@ export function GrantRuleDrawerContent({
     () => projectList.filter((p) => selectedResourceIds.has(p.id)),
     [projectList, selectedResourceIds],
   );
+
+  // Selected projects already have pinned rows above the searchable list.
+  // Keep them visible through search without rendering a second toggle.
+  const filteredProjectList = useMemo(() => {
+    const pinnedIds = projectSelectable
+      ? selectedResourceIds
+      : selectedProjectIds;
+    const query = resourceSearch.toLowerCase();
+    return projectList.filter(
+      (project) =>
+        !pinnedIds.has(project.id) &&
+        project.name.toLowerCase().includes(query),
+    );
+  }, [
+    projectList,
+    projectSelectable,
+    selectedResourceIds,
+    selectedProjectIds,
+    resourceSearch,
+  ]);
 
   const selectedServerRows = useMemo(() => {
     if (selectedResourceIds.size === 0) return [];
@@ -545,7 +555,8 @@ export function GrantRuleDrawerContent({
           </SelectedGroup>
         )}
         {projectSelectable ? (
-          filteredProjectList.length === 0 ? (
+          filteredProjectList.length === 0 &&
+          selectedResourceProjects.length === 0 ? (
             <div className="text-muted-foreground px-3 py-3 text-sm">
               {projectList.length === 0
                 ? "No projects found"
@@ -715,7 +726,8 @@ export function GrantRuleDrawerContent({
             />
           ))}
         </SelectedGroup>
-        {filteredProjectList.length === 0 ? (
+        {filteredProjectList.length === 0 &&
+        selectedProjectRows.length === 0 ? (
           <div className="text-muted-foreground px-3 py-3 text-sm">
             {projectList.length === 0
               ? "No projects found"
