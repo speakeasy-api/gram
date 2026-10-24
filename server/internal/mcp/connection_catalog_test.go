@@ -194,7 +194,7 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				// without the association a backfilled one mirrors.
 				_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 				require.NoError(t, err)
-				ti.service.PermitAllAuthClients()
+				ti.service.SetAuthClientPermitted(true)
 			}
 			ti.service.manual = true
 			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, tc.mode, metamcp.DiscoveryModeDirect, nil)
