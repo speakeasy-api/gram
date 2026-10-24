@@ -260,12 +260,19 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
     )
   );
 
--- The headless app's one profile, choosing the shared token on Linear.
+-- The headless app's one profile, choosing the shared token on Linear,
+-- which is still enabled and offered there.
 -- name: PostflightIDIssuanceProfileChoices :one
 SELECT count(*)
 FROM upstream_client_selections u
 JOIN issuance_selection_profiles p
   ON p.id = u.credential_id AND p.deleted IS FALSE
+JOIN mcp_auth_clients ac
+  ON ac.id = u.auth_client_id AND ac.organization_id = u.organization_id
+ AND ac.deleted IS FALSE AND ac.enabled
+JOIN mcp_server_auth_clients l
+  ON l.auth_client_id = ac.id AND l.mcp_server_id = u.mcp_server_id
+ AND l.project_id = @project_id::uuid AND l.deleted IS FALSE
 WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
   AND u.credential_kind = 'issuance_profile'
   AND p.user_session_client_id = @client_id::uuid

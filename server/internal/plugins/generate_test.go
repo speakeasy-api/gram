@@ -3343,7 +3343,7 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 		"automatic sign-in setup, not manual setup",
 		"`oauth_discovery: available` (`automatic_client_registration: none`)",
 		"incomplete or absent OAuth discovery",
-		"Service Account credential through the dashboard setup URL",
+		"Static credential (stored headers) through the dashboard setup URL",
 		"do not attempt attachment",
 	} {
 		require.Contains(t, workflow, required)

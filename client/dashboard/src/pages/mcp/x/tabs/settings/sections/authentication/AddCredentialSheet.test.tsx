@@ -8,16 +8,26 @@ import { AddCredentialSheet } from "./AddCredentialSheet";
 const mocks = vi.hoisted(() => ({
   attach: vi.fn(),
   create: vi.fn(),
-  clients: [] as unknown[],
+  clientPages: [] as unknown[][],
+  registrationsFailed: false,
+}));
+
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    authClients: {
+      list: () =>
+        Promise.resolve(
+          (async function* () {
+            for (const page of mocks.clientPages)
+              yield { result: { items: page } };
+          })(),
+        ),
+    },
+  }),
 }));
 
 vi.mock("@gram/client/react-query/authClients.js", () => ({
   invalidateAllAuthClients: () => Promise.resolve(),
-  useAuthClients: () => ({
-    data: { result: { items: mocks.clients } },
-    isLoading: false,
-    isError: false,
-  }),
 }));
 
 vi.mock("@gram/client/react-query/attachAuthClientToMcpServer.js", () => ({
@@ -38,7 +48,7 @@ vi.mock("@/lib/remote-identity", () => ({
   useAllRemoteSessionClients: () => ({
     items: [],
     isLoading: false,
-    isError: false,
+    isError: mocks.registrationsFailed,
     error: null,
     refetch: vi.fn(),
   }),
@@ -93,33 +103,42 @@ function renderSheet(tunneled = false) {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  mocks.registrationsFailed = false;
 });
 
 describe("AddCredentialSheet", () => {
-  it("offers only credentials this server can share", () => {
-    mocks.clients = [
-      client({ id: "shared", name: "Shared token" }),
-      client({
-        id: "already-here",
-        name: "Already here",
-        servers: [{ id: "this-server", projectId: "project-1", public: false }],
-      }),
-      client({
-        id: "other-project",
-        name: "Other project",
-        projectId: "project-2",
-      }),
+  it("offers only credentials this server can share", async () => {
+    mocks.clientPages = [
+      [client({ id: "shared", name: "Shared token" })],
+      [
+        client({
+          id: "already-here",
+          name: "Already here",
+          servers: [
+            { id: "this-server", projectId: "project-1", public: false },
+          ],
+        }),
+        client({
+          id: "other-project",
+          name: "Other project",
+          projectId: "project-2",
+        }),
+        client({ id: "second-page", name: "Second page token" }),
+      ],
     ];
     renderSheet();
 
-    fireEvent.click(screen.getByRole("combobox"));
+    fireEvent.click(await screen.findByRole("combobox"));
+    expect(
+      screen.getByRole("option", { name: /Second page token/ }),
+    ).toBeTruthy();
     expect(screen.getByRole("option", { name: /Shared token/ })).toBeTruthy();
     expect(screen.queryByRole("option", { name: /Already here/ })).toBeNull();
     expect(screen.queryByRole("option", { name: /Other project/ })).toBeNull();
   });
 
   it("creates a static credential offered on this server", () => {
-    mocks.clients = [];
+    mocks.clientPages = [];
     renderSheet();
 
     fireEvent.click(
@@ -155,8 +174,22 @@ describe("AddCredentialSheet", () => {
     });
   });
 
-  it("offers no header credentials on a tunneled server", () => {
-    mocks.clients = [];
+  it("offers no header credentials on a tunneled server", async () => {
+    mocks.clientPages = [
+      [
+        client({ id: "static", name: "Static token" }),
+        client({
+          id: "forwarded",
+          name: "Forwarded token",
+          clientType: "pass_through",
+        }),
+        client({
+          id: "service",
+          name: "Robot account",
+          clientType: "service_account",
+        }),
+      ],
+    ];
     renderSheet(true);
 
     expect(
@@ -168,5 +201,24 @@ describe("AddCredentialSheet", () => {
     expect(
       screen.getByRole("radio", { name: /New: service account/ }),
     ).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("combobox"));
+    expect(screen.getByRole("option", { name: /Robot account/ })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: /Static token/ })).toBeNull();
+    expect(
+      screen.queryByRole("option", { name: /Forwarded token/ }),
+    ).toBeNull();
+  });
+
+  it("says when sign-ins could not be loaded", () => {
+    mocks.clientPages = [];
+    mocks.registrationsFailed = true;
+    renderSheet();
+
+    fireEvent.click(
+      screen.getByRole("radio", { name: /New: service account/ }),
+    );
+    expect(screen.getByText(/Sign-ins could not be loaded/)).toBeTruthy();
+    expect(screen.queryByText(/No sign-in that gets its own token/)).toBeNull();
   });
 });

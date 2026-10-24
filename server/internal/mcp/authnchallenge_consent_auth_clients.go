@@ -299,8 +299,14 @@ func personalReadiness(clientType string, registrationID uuid.NullUUID, cards []
 		}
 		status := cardStatus(card)
 		if clientType == authz.AuthClientTypeEMA {
-			if status == gatewayServerChained || status == gatewayServerChainPending {
+			switch status {
+			case gatewayServerChained, gatewayServerChainPending:
 				return consentClientReady, ""
+			case gatewayServerReconnect:
+				return consentClientReconnect, card.ClientID
+			case gatewayServerNotConnected:
+				return consentClientConnect, card.ClientID
+			case gatewayServerConnected, gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerUnavailable, gatewayServerNoAccess:
 			}
 			return consentClientSetup, ""
 		}
@@ -407,7 +413,9 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 	}
 	selected := auth.Selected()
 	if selected == nil {
-		// No upstream authentication: nothing to pick.
+		// No upstream authentication: nothing to pick, and no card's client
+		// is recorded for the server.
+		delete(upstreamPicks, endpoint.McpServerID.UUID)
 		return nil, nil
 	}
 	if picked != uuid.Nil && selected.ID != picked {

@@ -2,6 +2,7 @@ package authclients_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -11,8 +12,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 func TestCreateStaticCredentialEncryptsSecretAndOffersIt(t *testing.T) {
@@ -146,6 +149,34 @@ func TestCreateAuthClientRefusesRegistrationFromAnotherOrganization(t *testing.T
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+func TestCreateAuthClientRefusesRegistrationWhoseIssuerIsAnotherProjects(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	other := seedProject(t, ctx, ti)
+	queries := remotesessionsrepo.New(ti.conn)
+	suffix := uuid.NewString()[:8]
+	issuer, err := queries.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID: uuid.NullUUID{UUID: other, Valid: true}, Slug: "other-" + suffix, Issuer: "https://" + suffix + ".other.example.com",
+		AuthorizationEndpoint: conv.ToPGText("https://" + suffix + ".other.example.com/authorize"), TokenEndpoint: conv.ToPGText("https://" + suffix + ".other.example.com/token"),
+		ScopesSupported: []string{}, GrantTypesSupported: []string{"client_credentials"}, ResponseTypesSupported: []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_post"}, CodeChallengeMethodsSupported: []string{"S256"},
+	})
+	require.NoError(t, err)
+	registration, err := queries.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		OrganizationID: conv.ToPGText(ti.organizationID), RemoteSessionIssuerID: issuer.ID, ClientID: "client-" + suffix,
+		ClientIDIssuedAt: conv.ToPGTimestamptz(time.Now()), TokenEndpointAuthMethod: conv.ToPGText("client_secret_post"), CredentialOwner: conv.ToPGText("self"),
+	})
+	require.NoError(t, err)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+
+	_, err = ti.service.CreateAuthClient(ctx, &gen.CreateAuthClientPayload{
+		ClientType: authz.AuthClientTypeServiceAccount, Name: "Borrowed issuer",
+		ProjectID: new(ti.projectID.String()), RemoteSessionClientID: new(registration.ID.String()),
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
 func TestAttachAuthClientSharesOneClientAcrossServers(t *testing.T) {
 	t.Parallel()
 
@@ -248,6 +279,63 @@ func TestSetAuthClientHeadersRotatesAndKeepsUnchangedSecrets(t *testing.T) {
 		Headers: []*gen.AuthClientHeaderInput{{Name: "X-New-Key", IsSecret: true}},
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	_, err = ti.service.SetAuthClientHeaders(ctx, &gen.SetAuthClientHeadersPayload{
+		ID:      client.ID,
+		Headers: []*gen.AuthClientHeaderInput{{Name: "x_api_key", IsSecret: true}},
+	})
+	require.NoError(t, err, "a stored secret is kept whichever spelling names it")
+
+	_, err = ti.service.SetAuthClientHeaders(ctx, &gen.SetAuthClientHeadersPayload{ID: client.ID, Headers: []*gen.AuthClientHeaderInput{nil}})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestSetAuthClientHeadersKeepsStoredNonSecretValues(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+
+	client, err := ti.service.CreateAuthClient(ctx, &gen.CreateAuthClientPayload{
+		ClientType: authz.AuthClientTypeStaticCredential,
+		Name:       "Token",
+		Headers: []*gen.AuthClientHeaderInput{
+			{Name: "X-Api-Key", IsSecret: true, Value: new("api-secret")},
+			{Name: "X-Api-Version", Value: new("2026-01-01")},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetAuthClientHeaders(ctx, &gen.SetAuthClientHeadersPayload{
+		ID: client.ID,
+		Headers: []*gen.AuthClientHeaderInput{
+			{Name: "X-Api-Key", IsSecret: true},
+			{Name: "X-Api-Version"},
+		},
+	})
+	require.NoError(t, err)
+
+	stored, err := repo.New(ti.conn).ListAuthClientStoredHeaders(ctx, repo.ListAuthClientStoredHeadersParams{AuthClientID: uuid.MustParse(client.ID), OrganizationID: ti.organizationID})
+	require.NoError(t, err)
+	values := map[string]string{}
+	for _, h := range stored {
+		if h.IsSecret {
+			plain, err := ti.enc.Decrypt(h.Value.String)
+			require.NoError(t, err)
+			values[h.Name] = plain
+			continue
+		}
+		values[h.Name] = h.Value.String
+	}
+	require.Equal(t, map[string]string{"X-Api-Key": "api-secret", "X-Api-Version": "2026-01-01"}, values)
+
+	for _, flipped := range []*gen.AuthClientHeaderInput{
+		{Name: "X-Api-Key"},
+		{Name: "X-Api-Version", IsSecret: true},
+	} {
+		_, err = ti.service.SetAuthClientHeaders(ctx, &gen.SetAuthClientHeadersPayload{ID: client.ID, Headers: []*gen.AuthClientHeaderInput{flipped}})
+		requireOopsCode(t, err, oops.CodeBadRequest)
+	}
 }
 
 func TestSetAuthClientHeadersLeavesBackfilledClientsToServerSettings(t *testing.T) {

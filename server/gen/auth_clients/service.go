@@ -63,7 +63,8 @@ type Service interface {
 	DetachAuthClientFromMcpServer(context.Context, *DetachAuthClientFromMcpServerPayload) (res *types.AuthClient, err error)
 	// List the shared upstream credentials an MCP server offers that a credential
 	// of the caller's, such as an agent key, can be set up to use. Requires access
-	// to connect to the server. Only names and types are returned.
+	// to connect to the server. Returns each choice's id, name and client_type,
+	// and whether the upstream requires authentication; no headers or credentials.
 	ListMcpServerAuthClientChoices(context.Context, *ListMcpServerAuthClientChoicesPayload) (res *ListMcpServerAuthClientChoicesResult, err error)
 	// List the issuance profiles for headless callers signing in through a
 	// sign-in. Requires org:read.
@@ -142,8 +143,8 @@ type AuthClientAudienceRule struct {
 }
 
 // A header an auth client sends upstream. Exactly one of value and
-// value_from_request_header is set, except that a secret header already
-// storing a value may omit both to keep it.
+// value_from_request_header is set, except that a header already storing a
+// value may omit both to keep it, as long as is_secret is unchanged.
 type AuthClientHeaderInput struct {
 	// The header name.
 	Name string
@@ -154,8 +155,8 @@ type AuthClientHeaderInput struct {
 	// Whether the value is secret. Secret values are stored encrypted and never
 	// returned.
 	IsSecret bool
-	// The value to send. Omit it on a secret header that already stores one to
-	// keep the stored value.
+	// The value to send. Omit it on a header that already stores one, with
+	// is_secret unchanged, to keep the stored value.
 	Value *string
 	// The caller's request header to copy the value from, for pass-through headers.
 	ValueFromRequestHeader *string

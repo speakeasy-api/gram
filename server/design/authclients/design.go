@@ -118,13 +118,13 @@ func creatableClientTypeEnum() {
 }
 
 var AuthClientHeaderInput = Type("AuthClientHeaderInput", func() {
-	Description("A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a secret header already storing a value may omit both to keep it.")
+	Description("A header an auth client sends upstream. Exactly one of value and value_from_request_header is set, except that a header already storing a value may omit both to keep it, as long as is_secret is unchanged.")
 
 	Attribute("name", String, "The header name.", func() { MinLength(1) })
 	Attribute("description", String, "What the header is for.")
 	Attribute("is_required", Boolean, "Whether a caller must supply the header when it is copied from the request.", func() { Default(false) })
 	Attribute("is_secret", Boolean, "Whether the value is secret. Secret values are stored encrypted and never returned.", func() { Default(false) })
-	Attribute("value", String, "The value to send. Omit it on a secret header that already stores one to keep the stored value.")
+	Attribute("value", String, "The value to send. Omit it on a header that already stores one, with is_secret unchanged, to keep the stored value.")
 	Attribute("value_from_request_header", String, "The caller's request header to copy the value from, for pass-through headers.")
 
 	Required("name")
@@ -136,7 +136,9 @@ var AuthClientChoice = Type("AuthClientChoice", func() {
 
 	Attribute("id", String, "The auth client id.", func() { Format(FormatUUID) })
 	Attribute("name", String, "The client's name.")
-	Attribute("client_type", String, "How the client authenticates upstream.", clientTypeEnum)
+	Attribute("client_type", String, "How the client authenticates upstream. Only shared types are offered.", func() {
+		Enum("service_account", "static_credential", "pass_through")
+	})
 
 	Required("id", "name", "client_type")
 })
@@ -385,7 +387,7 @@ var _ = Service("authClients", func() {
 	})
 
 	Method("listMcpServerAuthClientChoices", func() {
-		Description("List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Only names and types are returned.")
+		Description("List the shared upstream credentials an MCP server offers that a credential of the caller's, such as an agent key, can be set up to use. Requires access to connect to the server. Returns each choice's id, name and client_type, and whether the upstream requires authentication; no headers or credentials.")
 
 		Payload(func() {
 			Attribute("mcp_server_id", String, "The MCP server id.", func() { Format(FormatUUID) })

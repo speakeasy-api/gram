@@ -612,6 +612,9 @@ trackedFiles:
   src/funcs/remoteSessionsListServerClientAssociations.ts: {}
   src/funcs/remoteSessionsRevoke.ts: {}
   src/funcs/resourcesList.ts: {}
+  src/funcs/riskApprovalsDecide.ts: {}
+  src/funcs/riskApprovalsGet.ts: {}
+  src/funcs/riskApprovalsList.ts: {}
   src/funcs/riskBlocksGet.ts: {}
   src/funcs/riskBlocksSubmitFeedback.ts: {}
   src/funcs/riskCategoriesList.ts: {}
@@ -1482,6 +1485,7 @@ trackedFiles:
   src/models/components/listriskevalreviewsresult.ts: {}
   src/models/components/listriskexclusionsresult.ts: {}
   src/models/components/listriskpoliciesresult.ts: {}
+  src/models/components/listriskpolicyapprovalsresult.ts: {}
   src/models/components/listriskpolicybypassrequestsresult.ts: {}
   src/models/components/listriskresultsbychatresult.ts: {}
   src/models/components/listriskresultsforagentresult.ts: {}
@@ -1777,6 +1781,9 @@ trackedFiles:
   src/models/components/riskoverviewtimeseriesfinding.ts: {}
   src/models/components/riskoverviewuser.ts: {}
   src/models/components/riskpolicy.ts: {}
+  src/models/components/riskpolicyapproval.ts: {}
+  src/models/components/riskpolicyapprovalconfig.ts: {}
+  src/models/components/riskpolicyapprovaldecisionrequestbody.ts: {}
   src/models/components/riskpolicybypassapprovalrequestbody.ts: {}
   src/models/components/riskpolicybypassrequest.ts: {}
   src/models/components/riskpolicyevalreview.ts: {}
@@ -2296,6 +2303,7 @@ trackedFiles:
   src/models/operations/createwidget.ts: {}
   src/models/operations/createworkloaddevicejointoken.ts: {}
   src/models/operations/creditusage.ts: {}
+  src/models/operations/decideriskpolicyapproval.ts: {}
   src/models/operations/declineriskpolicychallenge.ts: {}
   src/models/operations/deleteagent.ts: {}
   src/models/operations/deleteagentpolicygrant.ts: {}
@@ -2499,6 +2507,7 @@ trackedFiles:
   src/models/operations/getriskmcpservercounts.ts: {}
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
+  src/models/operations/getriskpolicyapproval.ts: {}
   src/models/operations/getriskpolicychallenge.ts: {}
   src/models/operations/getrisksignals.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
@@ -2679,6 +2688,7 @@ trackedFiles:
   src/models/operations/listriskexclusions.ts: {}
   src/models/operations/listriskpolicies.ts: {}
   src/models/operations/listriskpoliciesformcpserver.ts: {}
+  src/models/operations/listriskpolicyapprovals.ts: {}
   src/models/operations/listriskpolicybypassrequests.ts: {}
   src/models/operations/listriskpresets.ts: {}
   src/models/operations/listriskresults.ts: {}
@@ -3846,6 +3856,7 @@ trackedFiles:
   src/react-query/riskCreateExclusion.ts: {}
   src/react-query/riskCreatePolicy.ts: {}
   src/react-query/riskCreatePolicyBypassRequest.ts: {}
+  src/react-query/riskDecideApproval.ts: {}
   src/react-query/riskDeclinePolicyChallenge.ts: {}
   src/react-query/riskDeleteCustomDetectionRule.ts: {}
   src/react-query/riskDeleteEvalReview.ts: {}
@@ -3853,11 +3864,15 @@ trackedFiles:
   src/react-query/riskDenyPolicyBypassRequest.ts: {}
   src/react-query/riskEvaluatePromptGuardrail.core.ts: {}
   src/react-query/riskEvaluatePromptGuardrail.ts: {}
+  src/react-query/riskGetApproval.core.ts: {}
+  src/react-query/riskGetApproval.ts: {}
   src/react-query/riskGetBlock.core.ts: {}
   src/react-query/riskGetBlock.ts: {}
   src/react-query/riskGetCustomDetectionRule.core.ts: {}
   src/react-query/riskGetCustomDetectionRule.ts: {}
   src/react-query/riskGetPolicyChallenge.ts: {}
+  src/react-query/riskListApprovals.core.ts: {}
+  src/react-query/riskListApprovals.ts: {}
   src/react-query/riskListCustomDetectionRules.core.ts: {}
   src/react-query/riskListCustomDetectionRules.ts: {}
   src/react-query/riskListDismissedResults.core.ts: {}
@@ -4213,6 +4228,7 @@ trackedFiles:
   src/sdk/agents.ts: {}
   src/sdk/aiintegrations.ts: {}
   src/sdk/analytics.ts: {}
+  src/sdk/approvals.ts: {}
   src/sdk/assets.ts: {}
   src/sdk/assistantmemories.ts: {}
   src/sdk/assistants.ts: {}
@@ -5772,6 +5788,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  decideRiskPolicyApproval:
+    speakeasy-default-decide-risk-policy-approval:
+      requestBody:
+        application/json: {"decision": "deny", "id": "aa18db54-ea83-42b3-a177-854b6ace699e"}
+      responses:
+        "200":
+          application/json: {"arguments_preview": {}, "can_decide": true, "created_at": "2026-09-16T17:40:45.127Z", "id": "4be3a10b-6287-4b36-ac40-5a5c6f12be45", "policy_id": "8795152d-0252-48a7-b533-03e2d5aca352", "policy_name": "<value>", "policy_version": 382199, "requester_urn": "<value>", "status": "blocked", "surface": "<value>", "tool_name": "<value>", "updated_at": "2025-11-04T07:51:14.620Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   declineRiskPolicyChallenge:
     speakeasy-default-decline-risk-policy-challenge:
       requestBody:
@@ -6595,7 +6622,7 @@ examples:
         application/json: {"generation": "6823eaf6-44ea-425d-8c11-239c2366c0cc", "id": "e13c0d80-47ed-4cc5-bff8-b227e9e0867e"}
       responses:
         "200":
-          application/json: {"directory_status": "current", "generation": "1b74e91f-8b01-4f39-93a7-82a8e6540723", "granted_scopes": ["<value 1>", "<value 2>", "<value 3>"], "id": "06bb2625-a5e6-4019-be53-d5421693e21a", "member_count": 526914, "status": "reconnect_required", "sync_status": "idle", "updated_at": "2025-05-02T19:36:43.715Z", "workspace_id": "<id>", "workspace_name": "<value>"}
+          application/json: {"directory_status": "current", "generation": "1b74e91f-8b01-4f39-93a7-82a8e6540723", "granted_scopes": ["<value 1>", "<value 2>", "<value 3>"], "id": "06bb2625-a5e6-4019-be53-d5421693e21a", "member_count": 526914, "missing_scopes": ["<value 1>"], "status": "reconnect_required", "sync_status": "idle", "updated_at": "2025-05-02T19:36:43.715Z", "workspace_id": "<id>", "workspace_name": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -8214,6 +8241,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getRiskPolicyApproval:
+    speakeasy-default-get-risk-policy-approval:
+      parameters:
+        query:
+          id: "48c8c401-d099-4fd1-8c80-ab90d69e5a00"
+      responses:
+        "200":
+          application/json: {"arguments_preview": {"key": "<value>", "key1": "<value>"}, "can_decide": true, "created_at": "2026-03-15T19:47:31.197Z", "id": "86a07cbc-4176-4a63-81ad-cd1cd9fd3bb3", "policy_id": "2f3ab995-5a1a-49c2-abbe-1aa050afb2d5", "policy_name": "<value>", "policy_version": 354650, "requester_urn": "<value>", "status": "approved", "surface": "<value>", "tool_name": "<value>", "updated_at": "2026-10-29T18:40:08.715Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getRiskPolicyChallenge:
     speakeasy-default-get-risk-policy-challenge:
       requestBody:
@@ -10413,6 +10452,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listRiskPolicyApprovals:
+    speakeasy-default-list-risk-policy-approvals:
+      parameters:
+        query:
+          limit: 50
+      responses:
+        "200":
+          application/json: {"approvals": [{"arguments_preview": {"key": "<value>", "key1": "<value>"}, "can_decide": true, "created_at": "2025-04-09T06:59:58.786Z", "id": "cf84dec6-1caf-4ead-a706-901afac3a0d9", "policy_id": "8cda6792-3e6a-4123-b801-bf9f7427f55b", "policy_name": "<value>", "policy_version": 324146, "requester_urn": "<value>", "status": "pending", "surface": "<value>", "tool_name": "<value>", "updated_at": "2024-03-16T10:32:00.165Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listRiskPolicyBypassRequests:
     speakeasy-default-list-risk-policy-bypass-requests:
       responses:
@@ -10734,7 +10785,7 @@ examples:
     speakeasy-default-list-slack-directory-connections:
       responses:
         "200":
-          application/json: {"authorization_configured": true, "connections": [{"directory_status": "never_synced", "generation": "ea2b909c-5bd5-40d7-b92b-c3fbfad348cf", "granted_scopes": ["<value 1>", "<value 2>"], "id": "f58b42f2-9778-4553-98bb-cf5e6d5656c4", "member_count": 702125, "status": "disconnected", "sync_status": "unknown", "updated_at": "2024-07-04T20:13:28.363Z", "workspace_id": "<id>", "workspace_name": "<value>"}]}
+          application/json: {"authorization_configured": true, "connections": [{"directory_status": "never_synced", "generation": "ea2b909c-5bd5-40d7-b92b-c3fbfad348cf", "granted_scopes": ["<value 1>", "<value 2>"], "id": "f58b42f2-9778-4553-98bb-cf5e6d5656c4", "member_count": 702125, "missing_scopes": [], "status": "disconnected", "sync_status": "unknown", "updated_at": "2024-07-04T20:13:28.363Z", "workspace_id": "<id>", "workspace_name": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

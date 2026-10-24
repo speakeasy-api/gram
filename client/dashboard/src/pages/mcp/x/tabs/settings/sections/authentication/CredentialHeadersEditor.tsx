@@ -6,6 +6,7 @@ import { Text } from "@/components/ui/Text";
 import { Lock, Plus, Trash2 } from "lucide-react";
 import {
   generatesAuthorization,
+  keepsStoredValue,
   newHeaderDraft,
   type HeaderDraft,
 } from "./credentialHeaders";
@@ -90,7 +91,7 @@ export function CredentialHeadersEditor({
                 <Input
                   aria-label={`Value for ${draft.name || "this header"}`}
                   placeholder={
-                    draft.keepsStored
+                    keepsStoredValue(draft)
                       ? "Stored. Enter a new value to replace it."
                       : "Value"
                   }
@@ -104,7 +105,9 @@ export function CredentialHeadersEditor({
                   <Checkbox
                     id={`${draft.key}-secret`}
                     checked={draft.isSecret}
-                    disabled={readOnly || draft.keepsStored}
+                    disabled={
+                      readOnly || (keepsStoredValue(draft) && !draft.value)
+                    }
                     onCheckedChange={(checked) =>
                       update(draft.key, { isSecret: checked === true })
                     }

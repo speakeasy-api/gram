@@ -18,9 +18,10 @@ import {
   useIssuanceProfiles,
 } from "@gram/client/react-query/issuanceProfiles.js";
 import { useSetIssuanceProfileMutation } from "@gram/client/react-query/setIssuanceProfile.js";
-import { useUserSessionClients } from "@gram/client/react-query/userSessionClients.js";
 import { useWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { collectPageItems } from "@/components/sessions/collectPageItems";
+import { useSdkClient } from "@/contexts/Sdk";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -76,7 +77,23 @@ export function HeadlessCallersSection({
 }): JSX.Element | null {
   const queryClient = useQueryClient();
   const profiles = useIssuanceProfiles({ userSessionIssuerId });
-  const clients = useUserSessionClients({ userSessionIssuerId }, undefined, {
+  const sdk = useSdkClient();
+  // Every registered app, not one page, so a later one can still be chosen.
+  const clients = useQuery({
+    queryKey: [
+      "@gram/client",
+      "userSessionClients",
+      "list",
+      { userSessionIssuerId, all: true },
+    ],
+    queryFn: ({ signal }) =>
+      collectPageItems(
+        sdk.userSessionClients.list(
+          { userSessionIssuerId, limit: 100 },
+          undefined,
+          { signal },
+        ),
+      ),
     throwOnError: false,
     retry: false,
   });
@@ -100,7 +117,7 @@ export function HeadlessCallersSection({
   });
 
   const allCallers: Caller[] = [
-    ...(clients.data?.result.items ?? []).map((client): Caller => ({
+    ...(clients.data ?? []).map((client): Caller => ({
       kind: "client",
       clientId: client.id,
       label: client.clientName,
@@ -135,11 +152,15 @@ export function HeadlessCallersSection({
       (selectedCaller?.kind !== "workload" || isShared(credential.clientType)),
   );
 
+  // A save replaces the caller's whole profile, so it waits for the current
+  // one: saving without it would drop the caller's other servers' choices.
+  const profilesReady = profiles.isSuccess;
   const write = (
     caller: Caller,
     existing: IssuanceProfile | undefined,
     authClientId: string | null,
   ) => {
+    if (!profilesReady) return;
     const others = (existing?.choices ?? []).filter(
       (c) => c.mcpServerId !== mcpServerId,
     );
@@ -211,7 +232,7 @@ export function HeadlessCallersSection({
                   variant="tertiary"
                   size="sm"
                   aria-label={`Remove the choice for ${profile.name}`}
-                  disabled={save.isPending}
+                  disabled={save.isPending || !profilesReady}
                   onClick={() => write(callerOf(profile), profile, null)}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -223,7 +244,12 @@ export function HeadlessCallersSection({
       )}
       {canManage ? (
         <div className="mt-3">
-          <Button variant="secondary" size="sm" onClick={() => setAdding(true)}>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!profilesReady}
+            onClick={() => setAdding(true)}
+          >
             <Button.LeftIcon>
               <Plus className="h-4 w-4" />
             </Button.LeftIcon>
@@ -239,7 +265,7 @@ export function HeadlessCallersSection({
         confirmLabel="Save"
         confirmVariant="primary"
         isPending={save.isPending}
-        confirmDisabled={!selectedCaller || !credentialChoice}
+        confirmDisabled={!selectedCaller || !credentialChoice || !profilesReady}
         onConfirm={() => {
           if (!selectedCaller) return;
           const existing = (profiles.data?.items ?? []).find(
