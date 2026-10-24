@@ -16,6 +16,7 @@ import (
 	ahpserver "github.com/agenthooksprotocol/go-sdk/server"
 	"github.com/agenthooksprotocol/go-sdk/subscription"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
@@ -95,6 +96,10 @@ func (s *Service) ahpConfigurationHandler(next http.Handler) (http.Handler, erro
 		repo := riskrepo.New(s.db)
 		failOpen, err := repo.IsOrganizationHooksFailOpenEnabled(ctx, auth.ActiveOrganizationID)
 		if err != nil {
+			s.logger.WarnContext(ctx, "read AHP configuration fail-open setting",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(auth.ActiveOrganizationID),
+			)
 			http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 			return
 		}

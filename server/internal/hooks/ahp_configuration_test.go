@@ -67,12 +67,24 @@ func requireAHPConfiguration(t *testing.T, h http.Handler, failurePolicy string)
 			require.Zero(t, sub.TimeoutMS)
 		}
 	}
-	require.Len(t, events, 15)
-	require.NotContains(t, events, "turn.start")
-	require.Equal(t, "observe", events["session.start"])
+	require.Equal(t, map[string]string{
+		"tool.before":              "intercept",
+		"tool.after":               "intercept",
+		"tool.permission.request":  "intercept",
+		"user.message.inbound":     "intercept",
+		"user.message.outbound":    "intercept",
+		"model.request.before":     "intercept",
+		"model.response.after":     "intercept",
+		"context.compact.before":   "intercept",
+		"context.compact.after":    "intercept",
+		"tool.permission.resolved": "observe",
+		"tool.batch.after":         "observe",
+		"model.error":              "observe",
+		"turn.end":                 "observe",
+		"session.start":            "observe",
+		"session.end":              "observe",
+	}, events)
 	require.Equal(t, 9, intercepts)
-	require.Equal(t, "intercept", events["tool.before"])
-	require.Equal(t, "intercept", events["context.compact.after"])
 }
 
 func TestAHPConfigurationDynamicPosture(t *testing.T) {
