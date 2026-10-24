@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -67,4 +68,19 @@ func TestRiskApprovalSlackWorkflowUpdatesCardsOnExpiry(t *testing.T) {
 	finished, took := riskApprovalSlackRun(t, 1, 30*time.Minute, 0)
 	require.Equal(t, int32(1), finished)
 	require.InDelta(t, float64(30*time.Minute+riskApprovalSlackExpiryGrace), float64(took), float64(time.Second), "the expiry timer, plus its grace, ends the wait")
+}
+
+func TestRiskApprovalSlackLastSendAttemptKeepsTheDMsItSent(t *testing.T) {
+	t.Parallel()
+	failed := errors.New("Slack is down")
+	sent := slackapproval.NotifyResult{Sent: 2, ExpiresAt: time.Now()}
+	nobody := slackapproval.NotifyResult{Sent: 0, ExpiresAt: time.Time{}}
+
+	_, err := keepSentOnLastAttempt(sent, failed, 1)
+	require.ErrorIs(t, err, failed, "an early attempt is retried")
+	result, err := keepSentOnLastAttempt(sent, failed, riskApprovalSlackActivityAttempts)
+	require.NoError(t, err, "the last attempt goes on with the DMs it sent")
+	require.Equal(t, sent, result)
+	_, err = keepSentOnLastAttempt(nobody, failed, riskApprovalSlackActivityAttempts)
+	require.ErrorIs(t, err, failed, "with nothing sent, the run fails as before")
 }

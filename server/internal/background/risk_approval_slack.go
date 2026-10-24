@@ -8,6 +8,7 @@ import (
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -30,6 +31,9 @@ const (
 	// before its cards are marked expired, so a slow clock cannot show
 	// Expired on a request that can still be decided.
 	riskApprovalSlackExpiryGrace = 30 * time.Second
+
+	// riskApprovalSlackActivityAttempts bounds the tries of each activity.
+	riskApprovalSlackActivityAttempts = 6
 )
 
 // RiskApprovalSlackWorkflow sends an approval request to its approvers as
@@ -44,7 +48,7 @@ const (
 func RiskApprovalSlackWorkflow(ctx workflow.Context, target slackapproval.Target) error {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,
-		RetryPolicy:         &temporal.RetryPolicy{InitialInterval: 5 * time.Second, BackoffCoefficient: 2, MaximumInterval: time.Minute, MaximumAttempts: 6},
+		RetryPolicy:         &temporal.RetryPolicy{InitialInterval: 5 * time.Second, BackoffCoefficient: 2, MaximumInterval: time.Minute, MaximumAttempts: riskApprovalSlackActivityAttempts},
 	})
 	var a *riskApprovalSlackActivities
 	var sent slackapproval.NotifyResult
@@ -79,10 +83,18 @@ type riskApprovalSlackActivities struct {
 
 func (a *riskApprovalSlackActivities) NotifyRiskApprovalApprovers(ctx context.Context, target slackapproval.Target) (slackapproval.NotifyResult, error) {
 	result, err := a.notifier.Notify(ctx, target)
-	if err != nil {
-		return result, fmt.Errorf("notify approvers: %w", err)
+	return keepSentOnLastAttempt(result, err, activity.GetInfo(ctx).Attempt)
+}
+
+// keepSentOnLastAttempt lets the last send attempt succeed with the DMs it
+// has, so the run still waits and gives those DMs the outcome instead of
+// failing and leaving their buttons live. Earlier attempts return the error,
+// and the retry reaches the approvers still missing a DM.
+func keepSentOnLastAttempt(result slackapproval.NotifyResult, err error, attempt int32) (slackapproval.NotifyResult, error) {
+	if err == nil || (result.Sent > 0 && attempt >= riskApprovalSlackActivityAttempts) {
+		return result, nil
 	}
-	return result, nil
+	return result, fmt.Errorf("notify approvers: %w", err)
 }
 
 func (a *riskApprovalSlackActivities) FinishRiskApprovalCards(ctx context.Context, target slackapproval.Target) error {
