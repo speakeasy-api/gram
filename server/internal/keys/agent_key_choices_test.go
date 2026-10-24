@@ -46,6 +46,7 @@ func TestKeysService_AgentKeyRecordsCredentialChoices(t *testing.T) {
 	}
 	for name, choice := range refused {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			payload := agentKeyPayload(agentID, projectID)
 			payload.Name = "refused " + name
 			payload.AuthClientChoices = []*gen.AgentKeyAuthClientChoice{choice}
