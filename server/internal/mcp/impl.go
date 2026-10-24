@@ -21,6 +21,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
+
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -28,10 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/trace"
-	goahttp "goa.design/goa/v3/http"
-	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -1842,7 +1843,7 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 	if err != nil {
 		return nil, noWrapper, fmt.Errorf("lookup hosted MCP network policy: %w", err)
 	}
-	if !hostedmcp.InSync(toolset, &wrapper) {
+	if !hostedmcp.IsCanonical(&wrapper, toolset.ID) {
 		return nil, noWrapper, errToolsetNotFound
 	}
 	// The canonical wrapper owns hosting state; the toolset slug is only the legacy alias.

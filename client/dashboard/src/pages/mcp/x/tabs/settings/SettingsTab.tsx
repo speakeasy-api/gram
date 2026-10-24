@@ -17,7 +17,6 @@ import {
 import { MCPPerformanceTab } from "@/pages/mcp/MCPPerformanceTab";
 import { PageSection } from "@/pages/mcp/PageSection";
 import { ExportJsonSection } from "@/pages/mcp/x/hosted/ExportJsonSection";
-import { HostedAddressSections } from "@/pages/mcp/x/hosted/HostedAddressSections";
 import { ServerInstructionsSection } from "@/pages/mcp/x/hosted/ServerInstructionsSection";
 import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
@@ -172,13 +171,15 @@ export function SettingsTab({
             resourceId={hostedToolset.id}
             level="section"
           >
-            <HostedAddressSections
-              toolset={hostedToolset}
+            <ServerUrlSection
+              backend={{ mcpServerId: mcpServer.id }}
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
+              mcpServer={mcpServer}
             />
             <NetworkAccessSection
               mcpServer={mcpServer}
+              endpoints={endpoints}
               toolset={hostedToolset}
             />
             <div id={MCP_AUTHENTICATION_SECTION_ID}>

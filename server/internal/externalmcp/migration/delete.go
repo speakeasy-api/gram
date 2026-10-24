@@ -48,9 +48,12 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 	// Only an MCP-enabled toolset is in a generated package, so only its
 	// deletion can change one. Membership is read before the hosted server
 	// goes, since that detaches server-backed plugin entries.
+	served, _, err := hostedmcp.LoadServerState(ctx, tx, toolset)
+	if err != nil {
+		return fmt.Errorf("load hosted MCP server: %w", err)
+	}
 	carried := false
-	if toolset.McpEnabled {
-		var err error
+	if served.McpEnabled {
 		carried, err = pluginsrepo.New(tx).HasPluginMembershipForToolset(ctx, pluginsrepo.HasPluginMembershipForToolsetParams{ProjectID: toolset.ProjectID, ToolsetID: toolset.ID})
 		if err != nil {
 			return fmt.Errorf("check toolset plugin membership: %w", err)

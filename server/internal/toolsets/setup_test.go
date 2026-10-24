@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functionstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -513,28 +515,30 @@ func createMinimalPublicToolset(t *testing.T, ctx context.Context, ti *testInsta
 	t.Helper()
 
 	created := createMinimalPrivateToolset(t, ctx, ti, name)
-	public := true
-
-	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		Slug:                   created.Slug,
-		Name:                   nil,
-		Description:            nil,
-		DefaultEnvironmentSlug: nil,
-		ToolUrns:               nil,
-		ResourceUrns:           nil,
-		PromptTemplateNames:    nil,
-		McpSlug:                nil,
-		McpEnabled:             nil,
-		McpIsPublic:            &public,
-		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
+	_, err := ti.service.UpdateHostedServer(ctx, mcpservers.HostedServerUpdate{
+		ToolsetID:             uuid.MustParse(created.ID),
+		Name:                  nil,
+		Visibility:            mcpservers.VisibilityPublic,
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		NetworkAccessMode:     nil,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, updated)
+	updated, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(created.Slug)})
+	require.NoError(t, err)
 	require.NotNil(t, updated.McpIsPublic)
 	require.True(t, *updated.McpIsPublic)
 
+	return updated
+}
+
+// setHostedVisibility applies an mcpServers.update visibility change to toolset's canonical server.
+func setHostedVisibility(t *testing.T, ctx context.Context, ti *testInstance, toolset *types.Toolset, visibility string) *types.Toolset {
+	t.Helper()
+
+	_, err := ti.service.UpdateHostedServer(ctx, hostedUpdate(toolset, visibility, nil))
+	require.NoError(t, err)
+	updated, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
+	require.NoError(t, err)
 	return updated
 }

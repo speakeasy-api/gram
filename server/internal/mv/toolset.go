@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/lo"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -22,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentR "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcpR "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	mcpmetadataR "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversR "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -38,7 +41,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsR "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	vr "github.com/speakeasy-api/gram/server/internal/variations/repo"
-	"golang.org/x/sync/errgroup"
 )
 
 // functionManifestVariable represents a variable definition from a function manifest.
@@ -427,6 +429,11 @@ func DescribeToolsetEntries(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolsets").LogError(ctx, logger)
 	}
 
+	hostingByID, err := canonicalHosting(ctx, db, organizationID, toolsetIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load hosted MCP state").LogError(ctx, logger)
+	}
+
 	// Assemble each toolset's entry from the shared, pre-fetched results —
 	// pure Go, no DB calls in this loop.
 	result := make([]*types.ToolsetEntry, 0, len(toolsets))
@@ -546,6 +553,10 @@ func DescribeToolsetEntries(
 			})
 		}
 
+		hosting := deriveToolsetHosting(toolsetHostingColumns{
+			McpSlug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID, McpEnabled: toolset.McpEnabled, McpIsPublic: toolset.McpIsPublic,
+			UserSessionIssuerID: toolset.UserSessionIssuerID, ExternalOauthServerID: toolset.ExternalOauthServerID, OauthProxyServerID: toolset.OauthProxyServerID,
+		}, hostingstate.For(hostingByID, toolset.ID))
 		result = append(result, &types.ToolsetEntry{
 			ID:                           toolset.ID.String(),
 			OrganizationID:               toolset.OrganizationID,
@@ -558,11 +569,11 @@ func DescribeToolsetEntries(
 			FunctionEnvironmentVariables: dedupeFunctionEnvVars(functionEnvVars),
 			ExternalMcpHeaderDefinitions: dedupeExternalMCPHeaderDefinitions(externalMCPHeaderDefinitions),
 			Description:                  conv.FromPGText[string](toolset.Description),
-			McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
-			McpEnabled:                   &toolset.McpEnabled,
+			McpSlug:                      hosting.McpSlug,
+			McpEnabled:                   &hosting.McpEnabled,
 			ToolSelectionMode:            toolset.ToolSelectionMode,
-			CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
-			McpIsPublic:                  &toolset.McpIsPublic,
+			CustomDomainID:               hosting.CustomDomainID,
+			McpIsPublic:                  &hosting.McpIsPublic,
 			Origin:                       originsByToolsetID[toolset.ID],
 			CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
@@ -625,6 +636,14 @@ func DescribeToolset(
 	} else if canonicalErr != nil && !errors.Is(canonicalErr, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("load hosted MCP network access mode: %w", canonicalErr)
 	}
+	hostingByID, err := canonicalHosting(ctx, tx, toolset.OrganizationID, []uuid.UUID{toolset.ID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load hosted MCP state").LogError(ctx, logger)
+	}
+	hosting := deriveToolsetHosting(toolsetHostingColumns{
+		McpSlug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID, McpEnabled: toolset.McpEnabled, McpIsPublic: toolset.McpIsPublic,
+		UserSessionIssuerID: toolset.UserSessionIssuerID, ExternalOauthServerID: toolset.ExternalOauthServerID, OauthProxyServerID: toolset.OauthProxyServerID,
+	}, hostingstate.For(hostingByID, toolset.ID))
 
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
 	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
@@ -765,14 +784,13 @@ func DescribeToolset(
 		}
 	}
 
-	// Surface the linked user_session_issuer if the toolset has one. The link
-	// lives on the toolsets row (toolsets.user_session_issuer_id, ON DELETE
-	// SET NULL); a missing link is the common case and is not an error.
+	// Surface the linked user_session_issuer, read from the canonical wrapper
+	// when there is one; a missing link is the common case and is not an error.
 	var userSessionIssuerID *string
 	var userSessionIssuerSlug *types.Slug
-	if toolset.UserSessionIssuerID.Valid {
+	if hosting.UserSessionIssuerID.Valid {
 		usi, err := usersessionsR.New(tx).GetUserSessionIssuerByID(ctx, usersessionsR.GetUserSessionIssuerByIDParams{
-			ID:             toolset.UserSessionIssuerID.UUID,
+			ID:             hosting.UserSessionIssuerID.UUID,
 			ProjectID:      pid,
 			OrganizationID: toolset.OrganizationID,
 		})
@@ -806,12 +824,12 @@ func DescribeToolset(
 		ToolsetVersion:               toolsetVersion,
 		Resources:                    toolsetTools.Resources,
 		PromptTemplates:              promptTemplates,
-		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
-		McpEnabled:                   &toolset.McpEnabled,
+		McpSlug:                      hosting.McpSlug,
+		McpEnabled:                   &hosting.McpEnabled,
 		NetworkAccessMode:            &mode,
 		ToolSelectionMode:            toolset.ToolSelectionMode,
-		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
-		McpIsPublic:                  &toolset.McpIsPublic,
+		CustomDomainID:               hosting.CustomDomainID,
+		McpIsPublic:                  &hosting.McpIsPublic,
 		Origin:                       toolsetOrigin,
 		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
@@ -1060,6 +1078,19 @@ func GetToolsetsSummary(
 		}
 	}
 
+	idsByOrganization := make(map[string][]uuid.UUID)
+	for _, ts := range toolsets {
+		idsByOrganization[ts.OrganizationID] = append(idsByOrganization[ts.OrganizationID], ts.ID)
+	}
+	hostingByID := make(map[uuid.UUID]hostingstate.Row, len(toolsets))
+	for organizationID, ids := range idsByOrganization {
+		rows, err := canonicalHosting(ctx, tx, organizationID, ids)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load hosted MCP state").LogError(ctx, logger)
+		}
+		maps.Copy(hostingByID, rows)
+	}
+
 	// Assemble results — look up each toolset's tools from the index.
 	result := make([]*types.ToolsetSummary, 0, len(toolsets))
 	for _, ts := range toolsets {
@@ -1071,6 +1102,10 @@ func GetToolsetsSummary(
 			}
 		}
 
+		hosting := deriveToolsetHosting(toolsetHostingColumns{
+			McpSlug: ts.McpSlug, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpEnabled: ts.McpEnabled, McpIsPublic: ts.McpIsPublic,
+			UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ExternalOauthServerID: ts.ExternalOauthServerID, OauthProxyServerID: ts.OauthProxyServerID,
+		}, hostingstate.For(hostingByID, ts.ID))
 		result = append(result, &types.ToolsetSummary{
 			ID:                     ts.ID.String(),
 			OrganizationID:         ts.OrganizationID,
@@ -1078,9 +1113,9 @@ func GetToolsetsSummary(
 			Name:                   ts.Name,
 			Slug:                   types.Slug(ts.Slug),
 			DefaultEnvironmentSlug: conv.FromPGText[types.Slug](ts.DefaultEnvironmentSlug),
-			McpSlug:                conv.FromPGText[types.Slug](ts.McpSlug),
-			McpEnabled:             &ts.McpEnabled,
-			McpIsPublic:            &ts.McpIsPublic,
+			McpSlug:                hosting.McpSlug,
+			McpEnabled:             &hosting.McpEnabled,
+			McpIsPublic:            &hosting.McpIsPublic,
 			ToolSelectionMode:      ts.ToolSelectionMode,
 			Tools:                  tools,
 			CreatedAt:              ts.CreatedAt.Time.Format(time.RFC3339),

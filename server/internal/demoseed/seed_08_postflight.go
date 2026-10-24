@@ -392,8 +392,13 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		},
 		{
 			what:  "hosted toolset wrappers",
-			count: byProject(s.q.PostflightCountUnwrappedToolsets),
-			fail:  postflightMustBeZero("%d hosted toolsets lack a matching canonical wrapper and endpoint"),
+			count: byProject(s.q.PostflightCountHostedToolsetDrift),
+			fail:  postflightMustBeZero("%d hosted toolsets do not mirror their canonical wrapper and its single endpoint"),
+		},
+		{
+			what:  "canonical wrappers",
+			count: byProject(s.q.PostflightCountCanonicalWrappers),
+			fail:  postflightMustEqual(4, "expected 4 canonical hosted MCP servers (support, ops, partner, discovery), found %d"),
 		},
 		{
 			what:  "gateway endpoints",

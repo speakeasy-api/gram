@@ -534,6 +534,7 @@ FROM (
     AND toolset.deleted IS FALSE
     AND project.organization_id = @organization_id::text
     AND toolset.project_id <> @target_project_id::uuid
+    AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 
   UNION ALL
 
@@ -1000,12 +1001,15 @@ WHERE binding.user_session_issuer_id = @source_issuer_id
       )
   );
 
--- name: UpdateMCPServersToUserSessionIssuer :execrows
+-- name: UpdateMCPServersToUserSessionIssuer :many
+-- Returns each moved server, with its updated_at before the move, so live hosted ones can be audited as their own update.
 UPDATE mcp_servers AS server
 SET user_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
-FROM projects AS project
+FROM projects AS project, mcp_servers AS previous
 WHERE server.user_session_issuer_id = @source_issuer_id
+  AND previous.id = server.id
+  AND previous.project_id = server.project_id
   AND project.id = server.project_id
   AND project.organization_id = @organization_id::text
   AND 2 = (
@@ -1018,7 +1022,8 @@ WHERE server.user_session_issuer_id = @source_issuer_id
         (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
         OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = @organization_id::text AND issuer_project.deleted IS FALSE)
       )
-  );
+  )
+RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id AND server.deleted IS FALSE)::boolean AS canonical, previous.updated_at AS previous_updated_at;
 
 -- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
 -- Every affected project must recompute its denormalized remote-session issuer
@@ -1033,6 +1038,7 @@ WHERE server.user_session_issuer_id IN (@source_issuer_id, @target_issuer_id)
 ORDER BY server.project_id;
 
 -- name: UpdateToolsetsToUserSessionIssuer :execrows
+-- Wrapped toolsets keep their issuer column equal to their canonical server's for pods that still read it.
 UPDATE toolsets AS toolset
 SET user_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
@@ -1134,6 +1140,7 @@ WHERE issuer.id = @id
     WHERE toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
       AND toolset.project_id = issuer.project_id
+      AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 
     UNION ALL
 
@@ -1177,6 +1184,7 @@ SELECT EXISTS (
         WHERE toolset.user_session_issuer_id = issuer.id
           AND toolset.deleted IS FALSE
           AND toolset.project_id = issuer.project_id
+          AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
 
         UNION ALL
 
@@ -1206,21 +1214,36 @@ WHERE issuer.id = @user_session_issuer_id
 ORDER BY project.name, COALESCE(server.name, server.slug, server.id::text), server.id;
 
 -- name: ListOrganizationUserSessionIssuerToolsets :many
-SELECT toolset.id,
-       toolset.name,
-       project.id AS project_id,
-       project.name AS project_name
-FROM user_session_issuers AS issuer
-JOIN toolsets AS toolset ON toolset.user_session_issuer_id = issuer.id
-JOIN projects AS project ON project.id = toolset.project_id
-WHERE issuer.id = @user_session_issuer_id
-  AND issuer.project_id IS NULL
-  AND issuer.organization_id = @organization_id::text
-  AND issuer.deleted IS FALSE
-  AND toolset.deleted IS FALSE
-  AND project.deleted IS FALSE
-  AND project.organization_id = issuer.organization_id
-ORDER BY project.name, toolset.name, toolset.id;
+-- Toolsets on the issuer: through their canonical wrapper's issuer, or their own column when they have none.
+SELECT listed.id, listed.name, listed.project_id, listed.project_name
+FROM (
+  SELECT toolset.id, toolset.name, project.id AS project_id, project.name AS project_name
+  FROM user_session_issuers AS issuer
+  JOIN mcp_servers AS wrapper ON wrapper.user_session_issuer_id = issuer.id AND wrapper.deleted IS FALSE
+  JOIN toolsets AS toolset ON toolset.id = wrapper.id AND toolset.id = wrapper.toolset_id AND toolset.project_id = wrapper.project_id
+  JOIN projects AS project ON project.id = toolset.project_id
+  WHERE issuer.id = @user_session_issuer_id
+    AND issuer.project_id IS NULL
+    AND issuer.organization_id = @organization_id::text
+    AND issuer.deleted IS FALSE
+    AND toolset.deleted IS FALSE
+    AND project.deleted IS FALSE
+    AND project.organization_id = issuer.organization_id
+  UNION ALL
+  SELECT toolset.id, toolset.name, project.id AS project_id, project.name AS project_name
+  FROM user_session_issuers AS issuer
+  JOIN toolsets AS toolset ON toolset.user_session_issuer_id = issuer.id
+  JOIN projects AS project ON project.id = toolset.project_id
+  WHERE issuer.id = @user_session_issuer_id
+    AND issuer.project_id IS NULL
+    AND issuer.organization_id = @organization_id::text
+    AND issuer.deleted IS FALSE
+    AND toolset.deleted IS FALSE
+    AND project.deleted IS FALSE
+    AND project.organization_id = issuer.organization_id
+    AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
+) AS listed
+ORDER BY listed.project_name, listed.name, listed.id;
 
 -- name: CountOrganizationUserSessionIssuerClients :one
 SELECT COUNT(*)::int
@@ -1269,6 +1292,7 @@ WHERE issuer.id = @id
       AND toolset.deleted IS FALSE
       AND project.deleted IS FALSE
       AND project.organization_id = issuer.organization_id
+      AND NOT EXISTS (SELECT 1 FROM mcp_servers AS wrapper WHERE wrapper.id = toolset.id AND wrapper.toolset_id = toolset.id AND wrapper.project_id = toolset.project_id AND wrapper.deleted IS FALSE)
   )
 RETURNING issuer.*
 ), tombstones AS (

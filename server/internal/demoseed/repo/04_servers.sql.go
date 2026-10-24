@@ -599,9 +599,10 @@ func (q *Queries) ServersInsertGitHubUserGrants(ctx context.Context, arg Servers
 const serversInsertHostedToolsetEndpoints = `-- name: ServersInsertHostedToolsetEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
 SELECT overlay(overlay(md5($1::text || t.slug) placing '5' from 13) placing '8' from 17)::uuid,
-       t.project_id, t.id, t.custom_domain_id, t.mcp_slug
-FROM toolsets t
-WHERE t.project_id = $2::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
+       s.project_id, s.id, NULL, s.slug
+FROM mcp_servers s
+JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = $2::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE
 `
 
 type ServersInsertHostedToolsetEndpointsParams struct {
@@ -618,23 +619,46 @@ func (q *Queries) ServersInsertHostedToolsetEndpoints(ctx context.Context, arg S
 
 const serversInsertHostedToolsetMCPServers = `-- name: ServersInsertHostedToolsetMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         user_session_issuer_id, tool_variations_group_id,
-                         visibility)
-SELECT t.id, t.project_id, t.name, t.mcp_slug, t.id, t.user_session_issuer_id,
-       t.tool_variations_group_id,
-       CASE WHEN NOT t.mcp_enabled THEN 'disabled'
-            WHEN t.mcp_is_public THEN 'public'
-            ELSE 'private' END
-FROM toolsets t
-WHERE t.project_id = $1::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
+                         user_session_issuer_id, visibility)
+SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
+FROM (VALUES
+  ($1::uuid, $2::text, NULL::uuid, 'private'),
+  ($3::uuid, $4::text, NULL::uuid, 'private'),
+  ($5::uuid, $6::text, $7::uuid, 'private'),
+  ($8::uuid, $9::text, NULL::uuid, 'public')
+) AS v(toolset_id, slug, user_session_issuer_id, visibility)
+JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = $10::uuid AND t.deleted IS FALSE
 `
 
-// Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
-// toolset id) and one endpoint at its address, mirroring its hosting
-// columns. The fresh-id servers above stay separate servers over the same
-// toolsets.
-func (q *Queries) ServersInsertHostedToolsetMCPServers(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, serversInsertHostedToolsetMCPServers, projectID)
+type ServersInsertHostedToolsetMCPServersParams struct {
+	Toolset1         uuid.UUID
+	SupportMcpSlug   string
+	Toolset2         uuid.UUID
+	OpsMcpSlug       string
+	Toolset3         uuid.UUID
+	PartnerMcpSlug   string
+	PartnerIssuerID  uuid.UUID
+	Toolset4         uuid.UUID
+	DiscoveryMcpSlug string
+	ProjectID        uuid.UUID
+}
+
+// Each hosted toolset owns a canonical wrapper (id = the toolset id) that
+// holds its hosting state, and one platform endpoint at the wrapper's slug.
+// The fresh-id servers above stay separate servers over the same toolsets.
+func (q *Queries) ServersInsertHostedToolsetMCPServers(ctx context.Context, arg ServersInsertHostedToolsetMCPServersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertHostedToolsetMCPServers,
+		arg.Toolset1,
+		arg.SupportMcpSlug,
+		arg.Toolset2,
+		arg.OpsMcpSlug,
+		arg.Toolset3,
+		arg.PartnerMcpSlug,
+		arg.PartnerIssuerID,
+		arg.Toolset4,
+		arg.DiscoveryMcpSlug,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -1571,6 +1595,27 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 		arg.HoursAgo,
 		arg.DaysAgo,
 	)
+	return err
+}
+
+const serversMirrorHostedToolsets = `-- name: ServersMirrorHostedToolsets :exec
+UPDATE toolsets AS t
+SET
+    mcp_slug = e.slug
+  , custom_domain_id = e.custom_domain_id
+  , mcp_enabled = s.visibility <> 'disabled'
+  , mcp_is_public = s.visibility = 'public'
+  , user_session_issuer_id = s.user_session_issuer_id
+  , tool_variations_group_id = s.tool_variations_group_id
+FROM mcp_servers AS s
+JOIN mcp_endpoints AS e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
+WHERE s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
+  AND t.project_id = $1::uuid AND t.deleted IS FALSE
+`
+
+// Hosted toolsets mirror their canonical server's hosting state for pods that still read the toolset columns.
+func (q *Queries) ServersMirrorHostedToolsets(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, serversMirrorHostedToolsets, projectID)
 	return err
 }
 

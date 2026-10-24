@@ -1,6 +1,6 @@
 # Hosted MCP wrappers backfill
 
-Gives every live hosted toolset (non-empty `mcp_slug`) created before eager wrapper creation its canonical wrapper: an `mcp_servers` row with `id = toolset.id` and `toolset_id = toolset.id`, plus exactly one `mcp_endpoints` row at the toolset's address. Each row is written by `hostedmcp.Sync`, the same code every toolset write path runs, so a backfilled wrapper is identical to one the live sync would produce. Postgres only; connects with `$GRAM_DATABASE_URL`.
+Gives every live hosted toolset (non-empty `mcp_slug`) that still has no canonical wrapper one: an `mcp_servers` row with `id = toolset.id` and `toolset_id = toolset.id`, plus exactly one `mcp_endpoints` row at the toolset's address. Each row is written by `hostedmcp.BackfillSync` from the toolset's frozen hosting columns. A toolset that already has a canonical wrapper is left untouched: the wrapper owns its hosting state. Postgres only; connects with `$GRAM_DATABASE_URL`.
 
 ```
 go run ./server/cmd/tools/migrations hosted-mcp-wrappers -h
@@ -14,27 +14,25 @@ Flags: `-apply` (default is a dry run), `-project <PROJECT_ID>` or `-all-project
 
 ## Behaviour
 
-Candidates are walked in toolset id order. Each toolset runs in its own transaction: a per-toolset advisory lock, the toolset row `FOR UPDATE` (the lock every `hostedmcp.Sync` caller holds; Sync then locks custom domains, endpoints, and the server in that order), the guards re-checked, then Sync. A dry run executes the same transaction and always rolls it back, so it briefly holds the same row locks but commits nothing.
+Candidates are walked in toolset id order. Each toolset runs in its own transaction: a per-toolset advisory lock, the toolset row `FOR UPDATE` (BackfillSync then locks custom domains, endpoints, and the server in that order), the guards re-checked, then BackfillSync. A dry run executes the same transaction and always rolls it back, so it briefly holds the same row locks but commits nothing.
 
-Writes are audited as the system principal `system:hosted-mcp-wrapper-backfill`. Audit rows are recorded without publishing audit webhook events to the outbox. A transient database error (deadlock, lock or statement timeout, cancellation, lost connection) stops the run instead of being reported as a Sync refusal; resume with `-cursor`. The toolset's `mcp_slug` is used verbatim, including platform slugs that predate the org-prefix rule; neither Sync nor the address check rewrites or rejects them.
+Writes are audited as the system principal `system:hosted-mcp-wrapper-backfill`. Audit rows are recorded without publishing audit webhook events to the outbox. A transient database error (deadlock, lock or statement timeout, cancellation, lost connection) stops the run instead of being reported as a BackfillSync refusal; resume with `-cursor`. The toolset's `mcp_slug` is used verbatim, including platform slugs that predate the org-prefix rule; neither BackfillSync nor the address check rewrites or rejects them.
 
 Toolset-backed `mcp_servers` rows with a fresh id (gateway members, create-from-source, Platform MCP) are separate servers. They are never adopted, modified, or deleted; they are only counted.
 
 ## Outcomes
 
-| Outcome                          | Meaning                                                                                                                                                            |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `would_create` / `created`       | No canonical wrapper existed; wrapper and endpoint created.                                                                                                        |
-| `would_reconcile` / `reconciled` | Canonical wrapper existed but drifted from the toolset (name, slug, visibility, issuer, variations group, or endpoint address); Sync fixed it.                     |
-| `already_complete`               | Canonical wrapper and its single matching endpoint exist; no writes.                                                                                               |
-| `dead_custom_domain`             | Toolset is bound to a soft-deleted custom domain: wrapper synced, no live endpoint (the domain took its endpoints with it). `wrote` says whether anything changed. |
-| `blocked_multiple_endpoints`     | Canonical wrapper has more than one live endpoint (can predate the AIM-485 root-mapping fix); left untouched.                                                      |
-| `blocked_slug_collision`         | Another server holds the endpoint address or the project-scoped server slug.                                                                                       |
-| `blocked_canonical_conflict`     | The toolset's id is held by a tombstoned or foreign `mcp_servers` row.                                                                                             |
-| `blocked_sync_rejected`          | Sync refused the toolset (for example private network access without an online ingress); the reason is Sync's message.                                             |
-| `skipped`                        | The toolset was deleted, lost its slug, or changed concurrently since listing; rerun.                                                                              |
+| Outcome                      | Meaning                                                                                                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `would_create` / `created`   | No canonical wrapper existed; wrapper and endpoint created.                                                                                                        |
+| `already_complete`           | A canonical wrapper already exists. It owns its hosting state, so the tool never changes it; no writes.                                                            |
+| `dead_custom_domain`         | Toolset is bound to a soft-deleted custom domain: wrapper synced, no live endpoint (the domain took its endpoints with it). `wrote` says whether anything changed. |
+| `blocked_slug_collision`     | Another server holds the endpoint address or the project-scoped server slug.                                                                                       |
+| `blocked_canonical_conflict` | The toolset's id is held by a tombstoned or foreign `mcp_servers` row.                                                                                             |
+| `blocked_sync_rejected`      | BackfillSync refused the toolset (for example private network access without an online ingress); the reason is its message.                                        |
+| `skipped`                    | The toolset was deleted, lost its slug, or changed concurrently since listing; rerun.                                                                              |
 
-Every row also carries `fresh_id_servers` (other live toolset-backed servers for the toolset), and the summary counts `fresh_id_servers_present`. Rows list `domains_to_reconcile` when Sync cleared a domain root; start a custom domain reconcile for each.
+Every row also carries `fresh_id_servers` (other live toolset-backed servers for the toolset), and the summary counts `fresh_id_servers_present`. Rows list `domains_to_reconcile` when BackfillSync cleared a domain root; start a custom domain reconcile for each.
 
 Stdout carries the mode, phase, outcome counts, rows scanned, toolsets walked, writes, and the last toolset id processed. The `-report` file holds ids, slugs, outcomes, reasons, and counts; it never holds names or emails.
 
