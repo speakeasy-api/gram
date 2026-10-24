@@ -1,4 +1,3 @@
-import { Checkbox } from "@/components/ui/Checkbox";
 import {
   ToolSelectionPanel,
   type ToolAnnotation,
@@ -1262,17 +1261,23 @@ function ResourceCheckbox({
     <button
       type="button"
       onClick={() => onToggle(id)}
+      role="checkbox"
+      aria-checked={checked}
       className={cn(
         "hover:bg-accent flex w-full cursor-pointer items-center gap-3 px-4",
         compact ? "h-9 text-sm" : "py-1.5 text-sm",
         checked && "font-medium",
       )}
     >
-      <Checkbox
-        checked={checked}
-        className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-        tabIndex={-1}
-      />
+      <span
+        aria-hidden="true"
+        className={cn(
+          "border-primary flex size-4 shrink-0 items-center justify-center border",
+          checked && "bg-primary text-primary-foreground",
+        )}
+      >
+        {checked && <Check className="size-3" />}
+      </span>
       <span className="truncate">{name}</span>
       {qualifier && <span className="sr-only">in {qualifier}</span>}
     </button>

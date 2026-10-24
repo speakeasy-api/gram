@@ -285,7 +285,7 @@ describe("useAgentIdentityCandidates", () => {
     );
     expect(aliases).toHaveLength(1);
     expect(aliases[0]).toMatchObject({
-      title: "Worker · Inference access",
+      title: "Worker · Permissions",
       fuzzyOnly: true,
       keywords: expect.arrayContaining(["inference", "permissions"]),
     });

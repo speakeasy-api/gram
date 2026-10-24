@@ -198,3 +198,39 @@ it("limits inference grants to projects rather than assistants or MCP servers", 
     { resourceKind: "inference", resourceId: "*", projectId: "project_one" },
   ]);
 });
+
+it.each(["project", "inference"] as const)(
+  "exposes %s project selection as one semantic checkbox per row",
+  (resourceType) => {
+    const onChangeSelectors = vi.fn();
+    const props = {
+      resourceType,
+      scope:
+        resourceType === "inference" ? "inference:execute" : "project:read",
+      onChangeSelectors,
+    } as const;
+    const { container, rerender } = render(
+      <GrantRuleDrawerContent {...props} selectors={[]} />,
+    );
+    const row = screen.getByRole("checkbox", { name: "Project one" });
+    expect(row.tagName).toBe("BUTTON");
+    expect(row.getAttribute("aria-checked")).toBe("false");
+    expect(row.tabIndex).toBe(0);
+    expect(container.querySelector("button button")).toBeNull();
+    fireEvent.click(row);
+    const selected = onChangeSelectors.mock.calls[0]![0];
+    expect(selected).toEqual([
+      resourceType === "inference"
+        ? {
+            resourceKind: "inference",
+            resourceId: "*",
+            projectId: "project_one",
+          }
+        : { resourceKind: "project", resourceId: "project_one" },
+    ]);
+    rerender(<GrantRuleDrawerContent {...props} selectors={selected} />);
+    expect(row.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(row);
+    expect(onChangeSelectors).toHaveBeenLastCalledWith([]);
+  },
+);

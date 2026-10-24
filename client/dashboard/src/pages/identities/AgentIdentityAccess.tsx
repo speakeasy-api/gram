@@ -1,4 +1,6 @@
-import { AgentInferenceAccess } from "@/pages/agents/AgentInferenceAccess";
+import { AgentPermissionEditor } from "@/pages/agents/AgentPermissionEditor";
+import { Button } from "@/components/ui/Button";
+import { useState } from "react";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { ResourceLink } from "@/pages/access/ResourceLink";
@@ -7,8 +9,7 @@ import { AGENT_POLICY_SCOPES } from "@/pages/agents/agent-policy-grants";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicySelector } from "@gram/client/models/components/agentpolicyselector.js";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { invalidateAllAgentsListPolicyGrants } from "@gram/client/react-query/agentsListPolicyGrants.js";
+import { useQuery } from "@tanstack/react-query";
 import { Text } from "@/components/ui/Text";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 
@@ -38,7 +39,7 @@ export function AgentIdentityPermissions({
 }): JSX.Element {
   const organization = useOrganization();
   const sdk = useSdkClient();
-  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
   // The policy endpoint requires setup/write access, independently of agent:read.
   const canRead = agent.permissions.write;
   const grants = useQuery({
@@ -148,6 +149,17 @@ export function AgentIdentityPermissions({
   return (
     <IdentityPanel
       title="Agent permissions"
+      action={
+        canRead && grants.data && !grants.isError ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setEditing(true)}
+          >
+            Edit permissions
+          </Button>
+        ) : undefined
+      }
       loading={canRead && grants.isLoading}
       error={canRead && grants.isError && rows.length === 0}
       refreshFailed={canRead && grants.isError && rows.length > 0}
@@ -155,14 +167,11 @@ export function AgentIdentityPermissions({
       footer="These configured permissions limit what credentials may delegate. Actual access also depends on the credential's grants, the owner's current permissions, and the agent's status."
     >
       {content}
-      {canRead && grants.data && !grants.isError && (
-        <AgentInferenceAccess
+      {editing && canRead && grants.data && (
+        <AgentPermissionEditor
           agent={agent}
           grants={rows}
-          onChanged={async () => {
-            await invalidateAllAgentsListPolicyGrants(queryClient);
-            await grants.refetch();
-          }}
+          onClose={() => setEditing(false)}
         />
       )}
     </IdentityPanel>

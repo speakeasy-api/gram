@@ -71,8 +71,7 @@ export function CreateInferenceExchangeIssuer({
       </h3>
       <p className="text-sm">
         Create one in {project.name} for workload token exchange, with a maximum
-        session duration of one hour. This does not register your external JWT
-        issuer or grant inference permission.
+        session duration of one hour.
       </p>
       {!canCreate && (
         <p className="text-sm">
@@ -90,7 +89,7 @@ export function CreateInferenceExchangeIssuer({
           value={slug}
           onChange={setSlug}
           placeholder="inference"
-          help="A unique name within this project. This is not the external issuer URL."
+          help="A unique name within this project."
         />
       </fieldset>
       <Button

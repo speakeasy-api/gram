@@ -1,0 +1,319 @@
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
+import { AgentPermissionEditor } from "./AgentPermissionEditor";
+const mocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  create: vi.fn(),
+  remove: vi.fn(),
+  close: vi.fn<() => void>(),
+  allowedProjects: ["project_one", "project_two", "project_three"],
+  permissionsLoading: false,
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (_scope: string, _resource: string, project: string) =>
+      mocks.allowedProjects.includes(project),
+    isLoading: mocks.permissionsLoading,
+    error: null,
+  }),
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useSession: () => ({ user: { id: "owner_example" } }),
+  useOrganization: () => ({
+    id: "org_example",
+    projects: [
+      { id: "project_one", name: "Project one", slug: "project-one" },
+      { id: "project_two", name: "Project two", slug: "project-two" },
+      { id: "project_three", name: "Project three", slug: "project-three" },
+    ],
+  }),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    agents: {
+      listPolicyGrants: mocks.list,
+      createPolicyGrant: mocks.create,
+      deletePolicyGrant: mocks.remove,
+    },
+  }),
+}));
+vi.mock("@/pages/access/useOrgMcpServers", () => ({
+  useOrgMcpServers: () => ({
+    groups: [],
+    settled: true,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
+vi.mock("@/pages/access/useOrgAssistants", () => ({
+  useOrgAssistants: () => ({
+    groups: [],
+    settled: true,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
+const agent: ManagedAgent = {
+  id: "agent_example",
+  name: "Example agent",
+  ownerUserId: "owner_example",
+  lifecycle: "active",
+  permissions: { read: true, write: true, authorize: true, transfer: true },
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+const inferenceGrant = (projectId: string): AgentPolicyGrant => ({
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  id: `grant_${projectId}`,
+  scope: "inference:execute",
+  effect: "allow",
+  selector: { resourceKind: "inference", resourceId: "*", projectId },
+});
+function setup(grants: AgentPolicyGrant[] = [], subject = agent) {
+  mocks.list.mockResolvedValue(grants);
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <MemoryRouter>
+        <AgentPermissionEditor
+          agent={subject}
+          grants={grants}
+          onClose={mocks.close}
+        />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+function openPlatform() {
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /Platform access/ }));
+}
+afterEach(cleanup);
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.allowedProjects = ["project_one", "project_two", "project_three"];
+  mocks.permissionsLoading = false;
+  mocks.create.mockResolvedValue({});
+  mocks.remove.mockResolvedValue({});
+});
+describe("Agent permission editor", () => {
+  it("creates inference grants for multiple projects through the canonical permission picker", async () => {
+    setup();
+    openPlatform();
+    fireEvent.click(screen.getByRole("button", { name: "Add permissions" }));
+    fireEvent.click(screen.getByText("inference:execute"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Choose resources/ }),
+    );
+    expect(screen.queryByText("Specific assistants")).toBeNull();
+    expect(screen.queryByText("Specific servers")).toBeNull();
+    fireEvent.click(screen.getAllByText("Project one")[0]!);
+    fireEvent.click(screen.getByText("Project two"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+    for (const projectId of ["project_one", "project_two"]) {
+      expect(mocks.create).toHaveBeenCalledWith({
+        createAgentPolicyGrantForm: {
+          agentId: agent.id,
+          scope: "inference:execute",
+          effect: "allow",
+          selector: inferenceGrant(projectId).selector,
+        },
+      });
+    }
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+  it("deletes only the chosen project's grant, preserving the other project, MCP and unsupported grants", async () => {
+    const grants: AgentPolicyGrant[] = [
+      inferenceGrant("project_one"),
+      inferenceGrant("project_two"),
+      {
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        id: "mcp_grant",
+        scope: "mcp:connect",
+        effect: "allow",
+        selector: { resourceKind: "mcp", resourceId: "server_example" },
+      },
+      {
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        id: "unsupported_grant",
+        scope: "mcp:read",
+        effect: "allow",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "*",
+          serverUrl: "https://example.test/mcp",
+        },
+      },
+    ];
+    setup(grants);
+    openPlatform();
+    fireEvent.click(screen.getByRole("button", { name: /Choose resources/ }));
+    fireEvent.click(screen.getAllByText("Project one")[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith({
+      agentPolicyGrantIDForm: {
+        agentId: agent.id,
+        grantId: "grant_project_one",
+      },
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("rejects a stale base without creating or deleting permissions", async () => {
+    setup([inferenceGrant("project_one")]);
+    mocks.list.mockResolvedValue([inferenceGrant("project_two")]);
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      expect.stringContaining("Permissions changed while you were editing"),
+    );
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.close).not.toHaveBeenCalled();
+  });
+  it("does not normalize redundant grants on a no-op save", async () => {
+    setup([
+      inferenceGrant("project_one"),
+      { ...inferenceGrant("project_one"), id: "duplicate_inference_grant" },
+      {
+        ...inferenceGrant("project_one"),
+        id: "all_inference_grant",
+        selector: { resourceKind: "inference", resourceId: "*" },
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+  it("disables policy changes without write permission", () => {
+    setup([inferenceGrant("project_one")], {
+      ...agent,
+      permissions: { ...agent.permissions, write: false },
+    });
+    openPlatform();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Save permissions",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Add permissions",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Remove inference:execute",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+});
+
+it("blocks a known unauthorized project before any permission write", async () => {
+  mocks.allowedProjects = ["project_one"];
+  setup([inferenceGrant("project_one")]);
+  openPlatform();
+  fireEvent.click(screen.getByRole("button", { name: /Choose resources/ }));
+  fireEvent.click(screen.getByText("Project two"));
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  expect(screen.getByRole("alert").textContent).toContain(
+    "You need inference permission in Project two",
+  );
+  const button = screen.getByRole("button", {
+    name: "Save permissions",
+  }) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  fireEvent.click(button);
+  expect(mocks.create).not.toHaveBeenCalled();
+  expect(mocks.remove).not.toHaveBeenCalled();
+});
+
+it("preserves existing grants after a second addition fails and reloads before retrying", async () => {
+  const existing = inferenceGrant("project_one");
+  const unrelated: AgentPolicyGrant = {
+    ...existing,
+    id: "existing_mcp",
+    scope: "mcp:connect",
+    selector: { resourceKind: "mcp", resourceId: "server_example" },
+  };
+  setup([existing, unrelated]);
+  openPlatform();
+  fireEvent.click(screen.getByRole("button", { name: /Choose resources/ }));
+  fireEvent.click(screen.getAllByText("Project one")[0]!);
+  fireEvent.click(screen.getByText("Project two"));
+  fireEvent.click(screen.getByText("Project three"));
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  mocks.create
+    .mockResolvedValueOnce(inferenceGrant("project_two"))
+    .mockRejectedValueOnce(new Error("Forbidden"));
+  fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "saved before the error",
+  );
+  expect(screen.getByRole("alert").textContent).toContain(
+    "closing does not undo saved changes",
+  );
+  expect(mocks.create).toHaveBeenCalledTimes(2);
+  expect(mocks.remove).not.toHaveBeenCalled();
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Save permissions",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  mocks.list.mockResolvedValue([
+    existing,
+    unrelated,
+    inferenceGrant("project_two"),
+  ]);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Reload saved permissions" }),
+  );
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  fireEvent.click(screen.getByRole("button", { name: /Choose resources/ }));
+  fireEvent.click(screen.getAllByText("Project one")[0]!);
+  fireEvent.click(screen.getByText("Project three"));
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+  await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+  expect(mocks.create).toHaveBeenCalledTimes(3);
+  expect(
+    mocks.create.mock.calls[2]?.[0].createAgentPolicyGrantForm.selector
+      .projectId,
+  ).toBe("project_three");
+  expect(mocks.remove).toHaveBeenCalledExactlyOnceWith({
+    agentPolicyGrantIDForm: { agentId: agent.id, grantId: existing.id },
+  });
+});

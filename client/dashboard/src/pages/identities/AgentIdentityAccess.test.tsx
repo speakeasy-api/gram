@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +13,11 @@ import { AgentIdentityPermissions } from "./AgentIdentityAccess";
 import { invalidateAgentPolicy } from "@/pages/agents/agent-policy-grants";
 
 const mocks = vi.hoisted(() => ({ list: vi.fn() }));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => true, isLoading: false, error: null }),
+}));
 vi.mock("@/contexts/Auth", () => ({
+  useSession: () => ({ user: { id: "owner_example" } }),
   useOrganization: () => ({
     id: "org_example",
     projects: [{ id: "project_example", name: "Example project" }],
@@ -68,6 +78,28 @@ beforeEach(() => {
   mocks.list.mockResolvedValue([]);
 });
 describe("Agent profile permissions", () => {
+  it("opens the shared permission editor without a separate inference card", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "inference_grant",
+        scope: "inference:execute",
+        selector: {
+          resourceKind: "inference",
+          resourceId: "*",
+          projectId: "project_example",
+        },
+      },
+    ]);
+    setup();
+    await screen.findByText("inference:execute");
+    expect(screen.getAllByText("Agent permissions")).toHaveLength(1);
+    expect(screen.queryByText("Inference access")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit permissions" }));
+    expect(
+      screen.getByRole("dialog", { name: "Edit permissions" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Platform access/ })).toBeTruthy();
+  });
   it("shows configured permissions and every selector constraint", async () => {
     mocks.list.mockResolvedValue([
       {

@@ -134,8 +134,8 @@ export function useAgentIdentityCandidates({
           {
             ...identity,
             id: `agent-inference-access:${agent.id}`,
-            title: `${agent.name} · Inference access`,
-            detail: "Agent permissions · project-scoped inference",
+            title: `${agent.name} · Permissions`,
+            detail: "Edit permissions · inference project access",
             keywords: [
               ...identity.keywords,
               "inference",
