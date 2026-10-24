@@ -1,12 +1,20 @@
 package mcp_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 
 	workloadpolicyrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
@@ -14,7 +22,7 @@ import (
 
 func (f workloadGrantFixture) setAssertionReuse(t *testing.T, allow bool) {
 	t.Helper()
-	_, err := f.ti.conn.Exec(t.Context(), `UPDATE workload_issuers SET allow_assertion_reuse = $1 WHERE id = $2`, allow, f.issuerID)
+	err := testrepo.New(f.ti.conn).SetWorkloadIssuerAssertionReuseFixture(t.Context(), testrepo.SetWorkloadIssuerAssertionReuseFixtureParams{AllowAssertionReuse: allow, ID: f.issuerID, OrganizationID: f.fx.orgID})
 	require.NoError(t, err)
 }
 
@@ -50,16 +58,19 @@ func TestWorkloadAssertionGrant_ConcurrentReuseMintsIndependentSessions(t *testi
 	f := newWorkloadGrantFixture(t)
 	f.setAssertionReuse(t, true)
 	assertion := f.assertion(t, f.advertisedIssuer)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
 	const count = 4
-	results := make(chan *httptest.ResponseRecorder, count)
+	results := make(chan workloadExchangeResult, count)
 	var wg sync.WaitGroup
 	for range count {
-		wg.Go(func() { results <- f.exchange(t, assertion, f.resource) })
+		wg.Go(func() { results <- f.exchangeResult(ctx, assertion) })
 	}
 	wg.Wait()
 	close(results)
 	for result := range results {
-		require.Equal(t, http.StatusOK, result.Code, result.Body.String())
+		require.NoError(t, result.err)
+		require.Equal(t, http.StatusOK, result.response.Code, result.response.Body.String())
 	}
 	require.Len(t, f.workloadSessions(t), count)
 	f.setAssertionReuse(t, false)
@@ -77,23 +88,101 @@ func TestWorkloadAssertionGrant_DisableDuringVerificationFailsClosed(t *testing.
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	_, err = workloadpolicyrepo.New(tx).LockWorkloadIssuerForWrite(t.Context(), workloadpolicyrepo.LockWorkloadIssuerForWriteParams{OrganizationID: f.fx.orgID, ID: f.issuerID})
 	require.NoError(t, err)
-	result := make(chan *httptest.ResponseRecorder, 1)
-	go func() { result <- f.exchange(t, assertion, f.resource) }()
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	result := make(chan workloadExchangeResult, 1)
+	go func() { result <- f.exchangeResult(ctx, assertion) }()
 	// The exchange has verified with opt-in, and now waits on the same lock
 	// as issuer policy edits. Commit the disable before its final policy read.
 	require.Eventually(t, func() bool {
-		var blocked bool
-		err := f.ti.conn.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%LockWorkloadIssuerForWrite%')`).Scan(&blocked)
+		blocked, err := testrepo.New(f.ti.conn).WorkloadIssuerWriteIsBlockedFixture(t.Context())
 		return err == nil && blocked
 	}, 10*time.Second, 10*time.Millisecond)
-	_, err = tx.Exec(t.Context(), `UPDATE workload_issuers SET allow_assertion_reuse = false WHERE id = $1`, f.issuerID)
+	err = testrepo.New(tx).SetWorkloadIssuerAssertionReuseFixture(t.Context(), testrepo.SetWorkloadIssuerAssertionReuseFixtureParams{AllowAssertionReuse: false, ID: f.issuerID, OrganizationID: f.fx.orgID})
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 	select {
 	case w := <-result:
-		requireWorkloadGrantRefused(t, w)
+		require.NoError(t, w.err)
+		requireWorkloadGrantRefused(t, w.response)
 	case <-time.After(10 * time.Second):
 		t.Fatal("exchange did not finish after policy edit")
 	}
 	require.Len(t, f.workloadSessions(t), 1)
+}
+
+// Worker goroutines return errors; only the test goroutine may call FailNow.
+type workloadExchangeResult struct {
+	response *httptest.ResponseRecorder
+	err      error
+}
+
+func (f workloadGrantFixture) exchangeResult(ctx context.Context, assertion string) workloadExchangeResult {
+	form := url.Values{"grant_type": {workloadGrantJWTBearer}, "assertion": {assertion}, "resource": {f.resource}}
+	slug := f.fx.toolset.McpSlug.String
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+slug+"/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	route := chi.NewRouteContext()
+	route.URLParams.Add("mcpSlug", slug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
+	response := httptest.NewRecorder()
+	err := f.ti.service.HandleToken(response, req)
+	return workloadExchangeResult{response: response, err: err}
+}
+
+func TestWorkloadAssertionGrant_SingleConnectionPool(t *testing.T) {
+	t.Parallel()
+	f := newWorkloadGrantFixtureWithPool(t, testenv.NewLogger(t), "", func(config *pgxpool.Config) {
+		config.MaxConns = 1
+		config.MinConns = 0
+	})
+	f.setAssertionReuse(t, true)
+	assertion := f.assertion(t, f.advertisedIssuer)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	result := f.exchangeResult(ctx, assertion)
+	require.NoError(t, result.err)
+	require.Equal(t, http.StatusOK, result.response.Code, result.response.Body.String())
+}
+
+func TestWorkloadAssertionGrant_DeviceDisableDuringVerificationFailsClosed(t *testing.T) {
+	t.Parallel()
+	f := newDeviceAgentGrantFixture(t)
+	f.setAssertionReuse(t, true)
+	assertion := f.assertion(t, f.tokenURL)
+	first := f.exchangeDeviceAgent(t, assertion)
+	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
+	tx, err := f.ti.conn.Begin(t.Context())
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(t.Context()) }()
+	_, err = workloadpolicyrepo.New(tx).LockWorkloadIssuerForWrite(t.Context(), workloadpolicyrepo.LockWorkloadIssuerForWriteParams{OrganizationID: f.fx.orgID, ID: f.issuerID})
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	results := make(chan workloadExchangeResult, 1)
+	go func() {
+		form := url.Values{"grant_type": {workloadGrantJWTBearer}, "assertion": {assertion}}
+		req := httptest.NewRequestWithContext(ctx, http.MethodPost, f.tokenURL, strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		route := chi.NewRouteContext()
+		route.URLParams.Add(deviceagenttoken.TokenPathOrganizationParam, f.fx.orgID)
+		req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
+		response := httptest.NewRecorder()
+		err := f.ti.service.HandleDeviceAgentToken(response, req)
+		results <- workloadExchangeResult{response: response, err: err}
+	}()
+	require.Eventually(t, func() bool {
+		blocked, err := testrepo.New(f.ti.conn).WorkloadIssuerWriteIsBlockedFixture(t.Context())
+		return err == nil && blocked
+	}, 10*time.Second, 10*time.Millisecond)
+	err = testrepo.New(tx).SetWorkloadIssuerAssertionReuseFixture(t.Context(), testrepo.SetWorkloadIssuerAssertionReuseFixtureParams{AllowAssertionReuse: false, ID: f.issuerID, OrganizationID: f.fx.orgID})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+	select {
+	case result := <-results:
+		require.NoError(t, result.err)
+		requireWorkloadGrantRefused(t, result.response)
+	case <-ctx.Done():
+		t.Fatal("device exchange did not finish after policy edit")
+	}
 }

@@ -6775,6 +6775,22 @@ func (q *Queries) SetUserSessionIssuerUseAuthenticationHostFixture(ctx context.C
 	return result.RowsAffected(), nil
 }
 
+const setWorkloadIssuerAssertionReuseFixture = `-- name: SetWorkloadIssuerAssertionReuseFixture :exec
+UPDATE workload_issuers SET allow_assertion_reuse = $1::boolean
+WHERE id = $2 AND organization_id = $3
+`
+
+type SetWorkloadIssuerAssertionReuseFixtureParams struct {
+	AllowAssertionReuse bool
+	ID                  uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) SetWorkloadIssuerAssertionReuseFixture(ctx context.Context, arg SetWorkloadIssuerAssertionReuseFixtureParams) error {
+	_, err := q.db.Exec(ctx, setWorkloadIssuerAssertionReuseFixture, arg.AllowAssertionReuse, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const setWorkloadIssuerKeySourceFixture = `-- name: SetWorkloadIssuerKeySourceFixture :execrows
 UPDATE workload_issuers
 SET key_source = $1
@@ -7398,4 +7414,20 @@ func (q *Queries) WithdrawJsonWebKeyKeepingUpdatedAtFixture(ctx context.Context,
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const workloadIssuerWriteIsBlockedFixture = `-- name: WorkloadIssuerWriteIsBlockedFixture :one
+SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database()
+      AND wait_event_type = 'Lock'
+      AND query LIKE '%LockWorkloadIssuerForWrite%'
+)::boolean
+`
+
+func (q *Queries) WorkloadIssuerWriteIsBlockedFixture(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, workloadIssuerWriteIsBlockedFixture)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }

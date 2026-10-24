@@ -85,7 +85,12 @@ it("does not save a cancelled opt-in", () => {
 });
 
 it("explains projected tokens, retained checks, and issuer-wide impact", () => {
-  render(<AssertionReuseField checked={false} onChange={vi.fn()} />);
+  render(
+    <AssertionReuseField
+      checked={false}
+      onChange={vi.fn<(checked: boolean) => void>()}
+    />,
+  );
   expect(screen.getByText(/projected service account tokens/)).toBeTruthy();
   expect(screen.getByText(/jti or uti are single-use/)).toBeTruthy();
   expect(screen.getByText(/every workload using this issuer/)).toBeTruthy();
