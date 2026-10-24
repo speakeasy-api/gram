@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -146,6 +147,7 @@ func TestListUserSessions_SearchMatchesShownLabels(t *testing.T) {
 		want   []string
 	}{
 		{search: "dana quill", want: []string{named}},
+		{search: "dana\x00 quill", want: []string{named}},
 		{search: "ORBIT@", want: []string{emailOnly}},
 		{search: "user:ghost", want: []string{unknownUser}},
 		{search: "nightly sync", want: []string{namedKey}},
@@ -196,8 +198,9 @@ func TestListUserSessions_SearchTreatsWildcardsLiterally(t *testing.T) {
 		require.Equal(t, []string{literalSession.ID.String()}, got, "search %q", search)
 	}
 
-	blank := "   "
-	require.Len(t, searchSessionIDs(t, ctx, ti, &gen.ListUserSessionsPayload{Search: &blank}), 2)
+	for _, blank := range []string{"   ", "\x00", " \x00 "} {
+		require.Len(t, searchSessionIDs(t, ctx, ti, &gen.ListUserSessionsPayload{Search: &blank}), 2, "search %q", blank)
+	}
 }
 
 func TestListUserSessions_SearchPagesWithOtherFilters(t *testing.T) {
@@ -273,6 +276,8 @@ func TestListUserSessions_SearchMatchesOnlyReadableAgentNames(t *testing.T) {
 	search := "upstream-agent"
 	human := contextvalues.WithValidatedGramSession(ctx, authCtx, false)
 	require.Equal(t, []string{owned.ID.String()}, searchSessionIDs(t, human, ti, &gen.ListUserSessionsPayload{Search: &search}))
+	withNUL := "upstream\x00-agent"
+	require.Equal(t, []string{owned.ID.String()}, searchSessionIDs(t, human, ti, &gen.ListUserSessionsPayload{Search: &withNUL}))
 
 	twinA := seedWorkloadAgent(t, ctx, ti.conn, "Twin bot A")
 	twinB := seedWorkloadAgent(t, ctx, ti.conn, "Twin bot B")
@@ -317,7 +322,11 @@ func TestPlatformListUserSessions_SearchesLiterally(t *testing.T) {
 	_, err = seedUserSessionForClient(t, ctx, ti.conn, issuerID, lookalike.ID, urn.NewUserSubject("lookalike"))
 	require.NoError(t, err)
 
-	input, err := json.Marshal(map[string]string{"search": "50%_off"})
+	atLimit, err := json.Marshal(map[string]string{"search": strings.Repeat("é", 200)})
+	require.NoError(t, err)
+	require.NoError(t, platformusersessions.NewListUserSessionsTool(ti.conn).Call(ctx, toolconfig.ToolCallEnv{}, bytes.NewReader(atLimit), &bytes.Buffer{}), "200 multibyte characters are within the limit")
+
+	input, err := json.Marshal(map[string]string{"search": "50%\x00_off"})
 	require.NoError(t, err)
 	var out bytes.Buffer
 	require.NoError(t, platformusersessions.NewListUserSessionsTool(ti.conn).Call(ctx, toolconfig.ToolCallEnv{}, bytes.NewReader(input), &out))

@@ -98,10 +98,15 @@ func EscapeLike(search string) string {
 	return likeEscaper.Replace(search)
 }
 
+// SearchTerm normalizes user search text: NUL bytes removed, then trimmed.
+func SearchTerm(search string) string {
+	return strings.TrimSpace(StripNUL(search))
+}
+
 // ContainsPattern turns a search into a LIKE pattern that matches it
 // literally anywhere in a value. A blank search yields no pattern.
 func ContainsPattern(search string) pgtype.Text {
-	trimmed := strings.TrimSpace(search)
+	trimmed := SearchTerm(search)
 	if trimmed == "" {
 		return pgtype.Text{String: "", Valid: false}
 	}
