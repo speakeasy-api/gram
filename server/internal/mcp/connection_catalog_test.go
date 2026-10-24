@@ -171,7 +171,7 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				require.NoError(t, err)
 			}
 			fixtures := authclientfixtures.New(ti.conn)
-			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: "admin", RemoteSessionClientID: registration})
+			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: "backfill", RemoteSessionClientID: registration})
 			require.NoError(t, err)
 			if kind == "static_credential" {
 				server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *auth.ProjectID})
@@ -180,7 +180,7 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: authClientID, OrganizationID: auth.ActiveOrganizationID, Name: "X-Fixture-Key", Value: pgtype.Text{String: "fixture-key", Valid: true}}))
 			}
-			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: authClientID}))
+			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: authClientID, Source: "backfill"}))
 			ti.service.manual = true
 			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, tc.mode, metamcp.DiscoveryModeDirect, nil)
 			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
@@ -295,7 +295,7 @@ func TestGatewayConsentAmbiguousTypedClientRequiresSetup(t *testing.T) {
 	for range 2 {
 		id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 		require.NoError(t, err)
-		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id}))
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
 	}
 	ti.service.manual = true
 	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)

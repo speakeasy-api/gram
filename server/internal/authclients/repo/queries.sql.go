@@ -12,6 +12,170 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const attachAuthClientToServer = `-- name: AttachAuthClientToServer :one
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+SELECT ms.project_id, ac.organization_id, ms.id, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients ac
+JOIN mcp_servers ms
+  ON ms.id = $1
+ AND ms.deleted IS FALSE
+ AND (ac.project_id IS NULL OR ac.project_id = ms.project_id)
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = ac.organization_id
+ AND p.deleted IS FALSE
+WHERE ac.id = $2
+  AND ac.organization_id = $3
+  AND ac.deleted IS FALSE
+ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING id
+`
+
+type AttachAuthClientToServerParams struct {
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+// Offers the client on the server as an administrator-owned association. An
+// existing live association is kept as it is.
+func (q *Queries) AttachAuthClientToServer(ctx context.Context, arg AttachAuthClientToServerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, attachAuthClientToServer, arg.McpServerID, arg.AuthClientID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createAuthClient = `-- name: CreateAuthClient :one
+INSERT INTO mcp_auth_clients (
+  organization_id,
+  project_id,
+  client_type,
+  source,
+  name,
+  created_by_user_id,
+  remote_session_client_id,
+  client_attachment_scope
+) VALUES (
+  $1,
+  $2::uuid,
+  $3,
+  'admin',
+  $4,
+  $5,
+  $6::uuid,
+  $7::text
+)
+RETURNING id, organization_id, project_id, attachment_scope, client_type, source, name, enabled, created_by_user_id, remote_session_client_id, client_attachment_scope, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateAuthClientParams struct {
+	OrganizationID        string
+	ProjectID             uuid.NullUUID
+	ClientType            string
+	Name                  string
+	CreatedByUserID       pgtype.Text
+	RemoteSessionClientID uuid.NullUUID
+	ClientAttachmentScope pgtype.Text
+}
+
+func (q *Queries) CreateAuthClient(ctx context.Context, arg CreateAuthClientParams) (McpAuthClient, error) {
+	row := q.db.QueryRow(ctx, createAuthClient,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ClientType,
+		arg.Name,
+		arg.CreatedByUserID,
+		arg.RemoteSessionClientID,
+		arg.ClientAttachmentScope,
+	)
+	var i McpAuthClient
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AttachmentScope,
+		&i.ClientType,
+		&i.Source,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedByUserID,
+		&i.RemoteSessionClientID,
+		&i.ClientAttachmentScope,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createAuthClientHeader = `-- name: CreateAuthClientHeader :exec
+INSERT INTO mcp_auth_client_headers (
+  auth_client_id,
+  organization_id,
+  name,
+  description,
+  is_required,
+  is_secret,
+  value,
+  value_from_request_header
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8
+)
+`
+
+type CreateAuthClientHeaderParams struct {
+	AuthClientID           uuid.UUID
+	OrganizationID         string
+	Name                   string
+	Description            pgtype.Text
+	IsRequired             bool
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+}
+
+func (q *Queries) CreateAuthClientHeader(ctx context.Context, arg CreateAuthClientHeaderParams) error {
+	_, err := q.db.Exec(ctx, createAuthClientHeader,
+		arg.AuthClientID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Description,
+		arg.IsRequired,
+		arg.IsSecret,
+		arg.Value,
+		arg.ValueFromRequestHeader,
+	)
+	return err
+}
+
+const deleteAuthClientHeaders = `-- name: DeleteAuthClientHeaders :exec
+UPDATE mcp_auth_client_headers
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE auth_client_id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type DeleteAuthClientHeadersParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteAuthClientHeaders(ctx context.Context, arg DeleteAuthClientHeadersParams) error {
+	_, err := q.db.Exec(ctx, deleteAuthClientHeaders, arg.AuthClientID, arg.OrganizationID)
+	return err
+}
+
 const detachAuthClientFromServer = `-- name: DetachAuthClientFromServer :one
 UPDATE mcp_server_auth_clients msac
 SET deleted_at = clock_timestamp(),
@@ -96,6 +260,62 @@ func (q *Queries) GetAuthClient(ctx context.Context, arg GetAuthClientParams) (M
 	return i, err
 }
 
+const getAuthClientRegistration = `-- name: GetAuthClientRegistration :one
+SELECT c.id,
+       c.attachment_scope,
+       c.credential_owner,
+       c.project_id,
+       c.organization_id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS rsi
+  ON rsi.id = c.remote_session_issuer_id
+ AND rsi.deleted IS FALSE
+ AND (rsi.organization_id IS NULL OR rsi.organization_id = $1::text)
+WHERE c.id = $2
+  AND c.deleted IS FALSE
+  AND (
+    (c.project_id IS NOT NULL AND c.project_id = $3::uuid)
+    OR (c.project_id IS NULL AND c.organization_id = $1::text)
+    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+  )
+  AND (c.project_id IS NULL OR EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = c.project_id
+      AND p.organization_id = $1::text
+      AND p.deleted IS FALSE
+  ))
+`
+
+type GetAuthClientRegistrationParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+}
+
+type GetAuthClientRegistrationRow struct {
+	ID              uuid.UUID
+	AttachmentScope pgtype.Text
+	CredentialOwner string
+	ProjectID       uuid.NullUUID
+	OrganizationID  pgtype.Text
+}
+
+// An OAuth registration a new remote_session or service_account client may
+// the organization, or platform-global.
+func (q *Queries) GetAuthClientRegistration(ctx context.Context, arg GetAuthClientRegistrationParams) (GetAuthClientRegistrationRow, error) {
+	row := q.db.QueryRow(ctx, getAuthClientRegistration, arg.OrganizationID, arg.ID, arg.ProjectID)
+	var i GetAuthClientRegistrationRow
+	err := row.Scan(
+		&i.ID,
+		&i.AttachmentScope,
+		&i.CredentialOwner,
+		&i.ProjectID,
+		&i.OrganizationID,
+	)
+	return i, err
+}
+
 const getOrganizationMCPServer = `-- name: GetOrganizationMCPServer :one
 SELECT
   ms.id,
@@ -142,6 +362,26 @@ func (q *Queries) GetOrganizationMCPServer(ctx context.Context, arg GetOrganizat
 		&i.ToolsetID,
 	)
 	return i, err
+}
+
+const getOrganizationProject = `-- name: GetOrganizationProject :one
+SELECT p.id
+FROM projects p
+WHERE p.id = $1
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+`
+
+type GetOrganizationProjectParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetOrganizationProject(ctx context.Context, arg GetOrganizationProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getOrganizationProject, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listAuthClientHeaders = `-- name: ListAuthClientHeaders :many
@@ -257,6 +497,49 @@ func (q *Queries) ListAuthClientServers(ctx context.Context, arg ListAuthClientS
 			&i.Slug,
 			&i.Visibility,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuthClientStoredHeaders = `-- name: ListAuthClientStoredHeaders :many
+SELECT h.name,
+       h.is_secret,
+       h.value
+FROM mcp_auth_client_headers h
+WHERE h.auth_client_id = $1
+  AND h.organization_id = $2
+  AND h.deleted IS FALSE
+`
+
+type ListAuthClientStoredHeadersParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+type ListAuthClientStoredHeadersRow struct {
+	Name     string
+	IsSecret bool
+	Value    pgtype.Text
+}
+
+// A client's live headers with their stored values, for a writer that keeps a
+// secret's stored value when no new one is given. Values stay encrypted.
+func (q *Queries) ListAuthClientStoredHeaders(ctx context.Context, arg ListAuthClientStoredHeadersParams) ([]ListAuthClientStoredHeadersRow, error) {
+	rows, err := q.db.Query(ctx, listAuthClientStoredHeaders, arg.AuthClientID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthClientStoredHeadersRow
+	for rows.Next() {
+		var i ListAuthClientStoredHeadersRow
+		if err := rows.Scan(&i.Name, &i.IsSecret, &i.Value); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -400,6 +683,54 @@ func (q *Queries) ListServerAuthClients(ctx context.Context, arg ListServerAuthC
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockAttachableMCPServer = `-- name: LockAttachableMCPServer :one
+SELECT
+  ms.id,
+  ms.project_id,
+  ms.name,
+  ms.requires_upstream_auth,
+  (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS proxied,
+  (ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE ms.id = $2
+  AND ms.deleted IS FALSE
+FOR UPDATE OF ms
+`
+
+type LockAttachableMCPServerParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type LockAttachableMCPServerRow struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	Name                 pgtype.Text
+	RequiresUpstreamAuth pgtype.Bool
+	Proxied              bool
+	Tunneled             bool
+}
+
+// A proxied (remote or tunneled) MCP server in the organization, locked so an
+// attachment serializes with SetMcpServerUpstreamAuthRequirement.
+func (q *Queries) LockAttachableMCPServer(ctx context.Context, arg LockAttachableMCPServerParams) (LockAttachableMCPServerRow, error) {
+	row := q.db.QueryRow(ctx, lockAttachableMCPServer, arg.OrganizationID, arg.ID)
+	var i LockAttachableMCPServerRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.RequiresUpstreamAuth,
+		&i.Proxied,
+		&i.Tunneled,
+	)
+	return i, err
 }
 
 const lockAuthClient = `-- name: LockAuthClient :one

@@ -2304,7 +2304,7 @@ INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id,
 VALUES (
     @project_id, @organization_id, @mcp_server_id, @auth_client_id,
     (SELECT ac.attachment_scope FROM mcp_auth_clients AS ac WHERE ac.id = @auth_client_id),
-    'admin'
+    @source
 );
 
 -- name: SetAuthClientEnabledFixture :exec

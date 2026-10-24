@@ -132,7 +132,7 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|upgrade-assistant-identity|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|logout-everywhere|register|info|transfer-out|transfer-in)",
-		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|detach-auth-client-from-mcp-server|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
+		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|create-auth-client|attach-auth-client-to-mcp-server|set-auth-client-headers|detach-auth-client-from-mcp-server|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
@@ -974,6 +974,21 @@ func ParseEndpoint(
 		authClientsUpdateAuthClientBodyFlag         = authClientsUpdateAuthClientFlags.String("body", "REQUIRED", "")
 		authClientsUpdateAuthClientSessionTokenFlag = authClientsUpdateAuthClientFlags.String("session-token", "", "")
 		authClientsUpdateAuthClientApikeyTokenFlag  = authClientsUpdateAuthClientFlags.String("apikey-token", "", "")
+
+		authClientsCreateAuthClientFlags            = flag.NewFlagSet("create-auth-client", flag.ExitOnError)
+		authClientsCreateAuthClientBodyFlag         = authClientsCreateAuthClientFlags.String("body", "REQUIRED", "")
+		authClientsCreateAuthClientSessionTokenFlag = authClientsCreateAuthClientFlags.String("session-token", "", "")
+		authClientsCreateAuthClientApikeyTokenFlag  = authClientsCreateAuthClientFlags.String("apikey-token", "", "")
+
+		authClientsAttachAuthClientToMcpServerFlags            = flag.NewFlagSet("attach-auth-client-to-mcp-server", flag.ExitOnError)
+		authClientsAttachAuthClientToMcpServerBodyFlag         = authClientsAttachAuthClientToMcpServerFlags.String("body", "REQUIRED", "")
+		authClientsAttachAuthClientToMcpServerSessionTokenFlag = authClientsAttachAuthClientToMcpServerFlags.String("session-token", "", "")
+		authClientsAttachAuthClientToMcpServerApikeyTokenFlag  = authClientsAttachAuthClientToMcpServerFlags.String("apikey-token", "", "")
+
+		authClientsSetAuthClientHeadersFlags            = flag.NewFlagSet("set-auth-client-headers", flag.ExitOnError)
+		authClientsSetAuthClientHeadersBodyFlag         = authClientsSetAuthClientHeadersFlags.String("body", "REQUIRED", "")
+		authClientsSetAuthClientHeadersSessionTokenFlag = authClientsSetAuthClientHeadersFlags.String("session-token", "", "")
+		authClientsSetAuthClientHeadersApikeyTokenFlag  = authClientsSetAuthClientHeadersFlags.String("apikey-token", "", "")
 
 		authClientsDetachAuthClientFromMcpServerFlags            = flag.NewFlagSet("detach-auth-client-from-mcp-server", flag.ExitOnError)
 		authClientsDetachAuthClientFromMcpServerBodyFlag         = authClientsDetachAuthClientFromMcpServerFlags.String("body", "REQUIRED", "")
@@ -5465,6 +5480,9 @@ func ParseEndpoint(
 	authClientsListAuthClientsFlags.Usage = authClientsListAuthClientsUsage
 	authClientsGetAuthClientFlags.Usage = authClientsGetAuthClientUsage
 	authClientsUpdateAuthClientFlags.Usage = authClientsUpdateAuthClientUsage
+	authClientsCreateAuthClientFlags.Usage = authClientsCreateAuthClientUsage
+	authClientsAttachAuthClientToMcpServerFlags.Usage = authClientsAttachAuthClientToMcpServerUsage
+	authClientsSetAuthClientHeadersFlags.Usage = authClientsSetAuthClientHeadersUsage
 	authClientsDetachAuthClientFromMcpServerFlags.Usage = authClientsDetachAuthClientFromMcpServerUsage
 	authClientsGetMcpServerAuthenticationFlags.Usage = authClientsGetMcpServerAuthenticationUsage
 	authClientsSetMcpServerUpstreamAuthRequirementFlags.Usage = authClientsSetMcpServerUpstreamAuthRequirementUsage
@@ -7118,6 +7136,15 @@ func ParseEndpoint(
 
 			case "update-auth-client":
 				epf = authClientsUpdateAuthClientFlags
+
+			case "create-auth-client":
+				epf = authClientsCreateAuthClientFlags
+
+			case "attach-auth-client-to-mcp-server":
+				epf = authClientsAttachAuthClientToMcpServerFlags
+
+			case "set-auth-client-headers":
+				epf = authClientsSetAuthClientHeadersFlags
 
 			case "detach-auth-client-from-mcp-server":
 				epf = authClientsDetachAuthClientFromMcpServerFlags
@@ -10334,6 +10361,15 @@ func ParseEndpoint(
 			case "update-auth-client":
 				endpoint = c.UpdateAuthClient()
 				data, err = authclientsc.BuildUpdateAuthClientPayload(*authClientsUpdateAuthClientBodyFlag, *authClientsUpdateAuthClientSessionTokenFlag, *authClientsUpdateAuthClientApikeyTokenFlag)
+			case "create-auth-client":
+				endpoint = c.CreateAuthClient()
+				data, err = authclientsc.BuildCreateAuthClientPayload(*authClientsCreateAuthClientBodyFlag, *authClientsCreateAuthClientSessionTokenFlag, *authClientsCreateAuthClientApikeyTokenFlag)
+			case "attach-auth-client-to-mcp-server":
+				endpoint = c.AttachAuthClientToMcpServer()
+				data, err = authclientsc.BuildAttachAuthClientToMcpServerPayload(*authClientsAttachAuthClientToMcpServerBodyFlag, *authClientsAttachAuthClientToMcpServerSessionTokenFlag, *authClientsAttachAuthClientToMcpServerApikeyTokenFlag)
+			case "set-auth-client-headers":
+				endpoint = c.SetAuthClientHeaders()
+				data, err = authclientsc.BuildSetAuthClientHeadersPayload(*authClientsSetAuthClientHeadersBodyFlag, *authClientsSetAuthClientHeadersSessionTokenFlag, *authClientsSetAuthClientHeadersApikeyTokenFlag)
 			case "detach-auth-client-from-mcp-server":
 				endpoint = c.DetachAuthClientFromMcpServer()
 				data, err = authclientsc.BuildDetachAuthClientFromMcpServerPayload(*authClientsDetachAuthClientFromMcpServerBodyFlag, *authClientsDetachAuthClientFromMcpServerSessionTokenFlag, *authClientsDetachAuthClientFromMcpServerApikeyTokenFlag)
@@ -16358,6 +16394,9 @@ func authClientsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-auth-clients: List the auth clients in the caller's organization. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-auth-client: Get an auth client in the caller's organization. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    update-auth-client: Rename, enable or disable an auth client. The change applies to the typed auth configuration of every MCP server that offers the client and takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials; elsewhere, including in shadow mode, an MCP server's existing upstream configuration keeps serving. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    create-auth-client: Create an auth client and, optionally, offer it on MCP servers. A remote_session or service_account client authenticates through an existing OAuth registration whose credential owner matches its type; a static_credential or pass_through client authenticates with its own headers. Creating a client gives nobody permission to use it: set its audience to decide who may. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    attach-auth-client-to-mcp-server: Offer an existing auth client on another MCP server instead of creating a copy. The client stays one client: changing or rotating it changes upstream behavior on every server that offers it. Offering a client grants nobody permission to use it or access to the server. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    set-auth-client-headers: Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    detach-auth-client-from-mcp-server: Stop an MCP server offering an auth client in its typed auth configuration. The client and its other servers are unchanged. Takes effect only where typed auth client resolution is enforced. It revokes no upstream credentials and does not remove the server's existing upstream OAuth association, which keeps serving elsewhere, including in shadow mode. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-authentication: Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    set-mcp-server-upstream-auth-requirement: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
@@ -16437,6 +16476,72 @@ func authClientsUpdateAuthClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients update-auth-client --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsCreateAuthClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients create-auth-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an auth client and, optionally, offer it on MCP servers. A remote_session or service_account client authenticates through an existing OAuth registration whose credential owner matches its type; a static_credential or pass_through client authenticates with its own headers. Creating a client gives nobody permission to use it: set its audience to decide who may. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients create-auth-client --body '{\n      \"client_type\": \"service_account\",\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"aa\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"mcp_server_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"name\": \"aa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsAttachAuthClientToMcpServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients attach-auth-client-to-mcp-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Offer an existing auth client on another MCP server instead of creating a copy. The client stays one client: changing or rotating it changes upstream behavior on every server that offers it. Offering a client grants nobody permission to use it or access to the server. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients attach-auth-client-to-mcp-server --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func authClientsSetAuthClientHeadersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth-clients set-auth-client-headers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the headers an auth client sends upstream. Rotating a shared client's credential changes upstream behavior on every server that offers it. Token-generating clients produce their own Authorization header, which cannot be configured. Clients created from a server's existing settings follow those settings and are edited there. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients set-auth-client-headers --body '{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"aa\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func authClientsDetachAuthClientFromMcpServerUsage() {
