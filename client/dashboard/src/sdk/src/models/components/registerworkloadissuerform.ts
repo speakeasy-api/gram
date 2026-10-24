@@ -10,6 +10,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
  */
 export type RegisterWorkloadIssuerForm = {
   /**
+   * Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.
+   */
+  allowAssertionReuse?: boolean | undefined;
+  /**
    * Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.
    */
   allowWildcardAdmission?: boolean | undefined;
@@ -41,6 +45,7 @@ export type RegisterWorkloadIssuerForm = {
 
 /** @internal */
 export type RegisterWorkloadIssuerForm$Outbound = {
+  allow_assertion_reuse?: boolean | undefined;
   allow_wildcard_admission?: boolean | undefined;
   description?: string | undefined;
   issuer: string;
@@ -56,6 +61,7 @@ export const RegisterWorkloadIssuerForm$outboundSchema: z.ZodMiniType<
   RegisterWorkloadIssuerForm
 > = z.pipe(
   z.object({
+    allowAssertionReuse: z.optional(z.boolean()),
     allowWildcardAdmission: z.optional(z.boolean()),
     description: z.optional(z.string()),
     issuer: z.string(),
@@ -66,6 +72,7 @@ export const RegisterWorkloadIssuerForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      allowAssertionReuse: "allow_assertion_reuse",
       allowWildcardAdmission: "allow_wildcard_admission",
       jwksUri: "jwks_uri",
       projectScoped: "project_scoped",

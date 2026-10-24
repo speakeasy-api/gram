@@ -593,39 +593,61 @@ describe("Federating a platform's own tokens", () => {
     expect(screen.getByText(/Choose an API key instead/)).toBeTruthy();
   });
 
-  it("creates the agent, trusts the platform and admits the subject to it", async () => {
-    await reachPlatformSetup();
+  it.each([false, true])(
+    "creates the agent with issuer assertion reuse %s",
+    async (allowAssertionReuse) => {
+      await reachPlatformSetup();
 
-    fireEvent.change(screen.getByLabelText("Anthropic organization ID"), {
-      target: { value: "org-123" },
-    });
-    // Saving asked only for the agent, which this wizard answers, so it is
-    // not a step of its own: it joined the step that collects.
-    expect(
-      screen.queryByRole("heading", { name: "Save the access rule" }),
-    ).toBeNull();
-    expect(screen.queryByLabelText("Agent")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Connect Claude Tag" }));
+      fireEvent.change(screen.getByLabelText("Anthropic organization ID"), {
+        target: { value: "org-123" },
+      });
+      // Saving asked only for the agent, which this wizard answers, so it is
+      // not a step of its own: it joined the step that collects.
+      expect(
+        screen.queryByRole("heading", { name: "Save the access rule" }),
+      ).toBeNull();
+      expect(screen.queryByLabelText("Agent")).toBeNull();
+      expect(
+        (
+          screen.getByRole("checkbox", {
+            name: "Allow assertion reuse",
+          }) as HTMLInputElement
+        ).checked,
+      ).toBe(false);
+      if (allowAssertionReuse) {
+        fireEvent.click(
+          screen.getByRole("checkbox", { name: "Allow assertion reuse" }),
+        );
+      }
+      fireEvent.click(
+        screen.getByRole("button", { name: "Connect Claude Tag" }),
+      );
 
-    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
-    // Nothing is created until the setup's own create step runs, and then the
-    // agent comes first: the access rule names it.
-    expect(mocks.createAgent).toHaveBeenCalledTimes(1);
-    expect(mocks.createKey).not.toHaveBeenCalled();
-    expect(
-      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
-    ).toEqual({
-      issuer: "https://issuer.example",
-      subject: "spiffe://example/org/org-123/agent/*",
-      matchKind: "wildcard",
-      agentId: "agent_new",
-      tags: [],
-    });
-    expect(
-      mocks.registerIssuer.mock.calls[0]?.[0]?.request
-        ?.registerWorkloadIssuerForm?.issuer,
-    ).toBe("https://issuer.example");
-  });
+      await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+      // Nothing is created until the setup's own create step runs, and then the
+      // agent comes first: the access rule names it.
+      expect(mocks.createAgent).toHaveBeenCalledTimes(1);
+      expect(mocks.createKey).not.toHaveBeenCalled();
+      expect(
+        mocks.admitSubject.mock.calls[0]?.[0]?.request
+          ?.admitWorkloadSubjectForm,
+      ).toEqual({
+        issuer: "https://issuer.example",
+        subject: "spiffe://example/org/org-123/agent/*",
+        matchKind: "wildcard",
+        agentId: "agent_new",
+        tags: [],
+      });
+      expect(
+        mocks.registerIssuer.mock.calls[0]?.[0]?.request
+          ?.registerWorkloadIssuerForm?.issuer,
+      ).toBe("https://issuer.example");
+      expect(
+        mocks.registerIssuer.mock.calls[0]?.[0]?.request
+          ?.registerWorkloadIssuerForm?.allowAssertionReuse,
+      ).toBe(allowAssertionReuse);
+    },
+  );
 });
 
 describe("Agent project", () => {

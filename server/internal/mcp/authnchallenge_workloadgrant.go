@@ -41,6 +41,7 @@ import (
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
+	workloadpolicy_repo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
 // workloadAssertionMaxLifetime bounds how far ahead an accepted assertion's
@@ -211,9 +212,11 @@ func workloadGrantStageUnavailable(reason string, err error) error {
 // the iss and sub it presented, and the issuer row iss resolved to once it
 // has. It is what a rejection log line records.
 type presentedWorkload struct {
-	issuerURL string
-	subject   string
-	issuerID  uuid.UUID
+	issuerURL              string
+	subject                string
+	issuerID               uuid.UUID
+	assertionPolicyChecked bool
+	allowAssertionReuse    bool
 }
 
 // admitWorkloadAssertion runs the grant's verification stages in order:
@@ -231,7 +234,10 @@ func admitWorkloadAssertion(
 	audiences []string,
 	raw string,
 ) (presentedWorkload, error) {
-	presented := presentedWorkload{issuerURL: "", subject: "", issuerID: uuid.Nil}
+	presented := presentedWorkload{
+		issuerURL: "", subject: "", issuerID: uuid.Nil,
+		assertionPolicyChecked: false, allowAssertionReuse: false,
+	}
 
 	token, err := assertioncore.ParseSigned(raw, workloadAssertionMaxBytes)
 	if err != nil {
@@ -267,6 +273,8 @@ func admitWorkloadAssertion(
 		return presented, workloadGrantStageUnavailable("issuer_lookup_unavailable", err)
 	}
 	presented.issuerID = issuer.ID
+	presented.assertionPolicyChecked = true
+	presented.allowAssertionReuse = issuer.AllowAssertionReuse.Valid && issuer.AllowAssertionReuse.Bool
 
 	keyID := ""
 	if len(token.Headers) == 1 {
@@ -278,13 +286,14 @@ func admitWorkloadAssertion(
 	}
 
 	if _, err := grant.verifier.Verify(ctx, raw, workload.Expectation{
-		Issuer:       issuer.Issuer,
-		Subject:      claims.Subject,
-		KeySource:    source,
-		ReplayIssuer: tenancy.UserSessionIssuerID.String(),
-		ReplayParty:  issuer.ID.String(),
-		Audiences:    audiences,
-		MaxLifetime:  workloadAssertionMaxLifetime,
+		Issuer:              issuer.Issuer,
+		Subject:             claims.Subject,
+		KeySource:           source,
+		ReplayIssuer:        tenancy.UserSessionIssuerID.String(),
+		ReplayParty:         issuer.ID.String(),
+		Audiences:           audiences,
+		MaxLifetime:         workloadAssertionMaxLifetime,
+		AllowAssertionReuse: presented.allowAssertionReuse,
 	}); err != nil {
 		reason := workload.ReasonOf(err)
 		switch {
@@ -589,6 +598,57 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	organizationID := grant.session.OrganizationID
 	subject := grant.session.Subject
 
+	// A database that cannot start or commit the transaction is an outage,
+	// not a verdict on the assertion: the caller is told to retry rather than
+	// handed a permanent failure.
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, workloadGrantStageUnavailable("session_persist_unavailable", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	if grant.presented.assertionPolicyChecked {
+		// Policy and admission writes take this same issuer lock. Hold it through
+		// fresh admission and session commit; verification's earlier policy read
+		// alone cannot authorize an exchange racing a policy disable.
+		if _, err := workloadpolicy_repo.New(dbtx).LockWorkloadIssuerForWrite(ctx, workloadpolicy_repo.LockWorkloadIssuerForWriteParams{
+			OrganizationID: organizationID, ID: grant.presented.issuerID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, refuseWorkloadGrant("issuer_untrusted", err)
+			}
+			return nil, workloadGrantStageUnavailable("issuer_lookup_unavailable", err)
+		}
+		projectID := uuid.NullUUID{}
+		if grant.projectID != nil {
+			projectID = uuid.NullUUID{UUID: *grant.projectID, Valid: true}
+		}
+		issuer, err := workloadidentity.ResolveIssuerByURL(ctx, dbtx, workloadidentity.ResolveIssuerParams{
+			OrganizationID: organizationID,
+			ProjectID:      projectID,
+			IssuerURL:      grant.presented.issuerURL,
+		})
+		if errors.Is(err, workloadidentity.ErrIssuerNotFound) {
+			return nil, refuseWorkloadGrant("issuer_untrusted", err)
+		}
+		if err != nil {
+			return nil, workloadGrantStageUnavailable("issuer_lookup_unavailable", err)
+		}
+		if issuer.ID != grant.presented.issuerID || (issuer.AllowAssertionReuse.Valid && issuer.AllowAssertionReuse.Bool) != grant.presented.allowAssertionReuse {
+			return nil, refuseWorkloadGrant("issuer_policy_changed", errors.New("workload issuer policy changed during verification"))
+		}
+		admitted, err := workloadidentity.IsAdmitted(ctx, dbtx, workloadidentity.AdmissionParams{
+			OrganizationID: organizationID, ProjectID: projectID,
+			WorkloadIssuerID: issuer.ID, Subject: grant.presented.subject,
+		})
+		if err != nil {
+			return nil, workloadGrantStageUnavailable("subject_admission_unavailable", err)
+		}
+		if !admitted {
+			return nil, refuseWorkloadGrant("subject_not_admitted", errWorkloadNotAdmitted)
+		}
+	}
+
 	authCtx, err := s.sessionAuthContext(ctx, organizationID, grant.projectID, "workload-grant:"+uuid.NewString())
 	if err != nil {
 		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
@@ -607,15 +667,6 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	case err != nil:
 		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
 	}
-
-	// A database that cannot start or commit the transaction is an outage,
-	// not a verdict on the assertion: the caller is told to retry rather than
-	// handed a permanent failure.
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, workloadGrantStageUnavailable("session_persist_unavailable", err)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	minted, err := s.issueSession(authorizationCtx, grant.client, usersessions_repo.New(dbtx), grant.session, logger)
 	if err != nil {

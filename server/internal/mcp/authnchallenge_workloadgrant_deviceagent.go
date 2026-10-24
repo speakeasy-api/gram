@@ -93,7 +93,10 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	}
 	serverURL := s.serverURL.String()
 
-	presented := presentedWorkload{issuerURL: "", subject: "", issuerID: uuid.Nil}
+	presented := presentedWorkload{
+		issuerURL: "", subject: "", issuerID: uuid.Nil,
+		assertionPolicyChecked: false, allowAssertionReuse: false,
+	}
 	token, err := assertioncore.ParseSigned(assertion, workloadAssertionMaxBytes)
 	if err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant(string(workload.ReasonMalformed), err))
