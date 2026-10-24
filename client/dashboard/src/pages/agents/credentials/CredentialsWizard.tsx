@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -32,7 +31,8 @@ import {
 import { StepInstall } from "./StepInstall";
 import { StepServers, type ServerSelection } from "./StepServers";
 import { StepVerify, type VerifyState } from "./StepVerify";
-import { StepWorkload, WorkloadPlatformPicker } from "./StepWorkload";
+import { CredentialPicker } from "./CredentialPicker";
+import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
@@ -157,12 +157,17 @@ export function CredentialsWizard({
   const { user } = useSession();
   const queryClient = useQueryClient();
   const inventory = useServerInventory();
-  const catalog = useCatalogEntries();
   // Trusting a platform and admitting a subject are both writes against the
   // organization's workload identities, so the choice is offered only to
   // someone who could carry it out.
-  const { hasAllScopes } = useRBAC();
+  const { hasAllScopes, hasAnyScope } = useRBAC();
   const canFederate = hasAllScopes(["workload:write"]);
+  // The catalog itself needs workload read access. Without it the request is
+  // refused, so it is not made, and the step shows the API key alone rather
+  // than an error. Write satisfies read on the server, so either scope counts.
+  const catalog = useCatalogEntries(
+    hasAnyScope(["workload:read", "workload:write"]),
+  );
   const renameAgent = useRenameAgentMutation();
   // Only to keep a prefilled name from colliding, so a failure to read the
   // list leaves the field empty rather than blocking the flow.
@@ -998,63 +1003,30 @@ export function CredentialsWizard({
               title="Credential"
               description="How the agent proves who it is when it connects."
             />
-            <RadioCardGroup
-              value={credential}
-              onValueChange={(next) => {
-                setCredential(next as Credential);
-                setHighlight("Credential");
-              }}
+            <CredentialPicker
+              credential={credential}
+              platformKey={platformKey}
+              entries={catalog.entries}
+              isPending={catalog.isPending}
+              isError={catalog.isError}
+              onRetry={catalog.refetch}
+              // Offered only to someone who could carry it out: a preset
+              // trusts a platform and admits a subject for the organization.
+              canFederate={canFederate}
               // Settled for an agent that exists: what it signs in with was
               // decided when it was registered, and changing it here would
               // mean removing a credential rather than editing one.
               disabled={editing}
-              className="sm:grid-cols-2"
-            >
-              <RadioCard value="api-key" title="API key" className="p-3">
-                <Text muted small>
-                  A key, delivered by a one-line setup script or copied by hand.
-                  Works in any runtime.
-                </Text>
-                <span className="text-muted-foreground mt-1 block font-mono text-xs">
-                  Long-lived · revocable
-                </span>
-              </RadioCard>
-              <RadioCard
-                value="workload"
-                // Offered only to someone who could carry it out: it trusts a
-                // platform and admits a subject for the whole organization.
-                disabled={!canFederate}
-                className="p-3"
-                title="Workload identity"
-              >
-                <Text muted small>
-                  Federate a token the platform already issues — GitHub Actions,
-                  Kubernetes, SPIFFE, GCP. No Speakeasy secret is created.
-                </Text>
-                <span className="text-muted-foreground mt-1 block font-mono text-xs">
-                  Short-lived tokens · no refresh token
-                </span>
-                {!canFederate && (
-                  <Text muted small className="mt-1 block">
-                    Needs permission to manage workload identities.
-                  </Text>
-                )}
-              </RadioCard>
-            </RadioCardGroup>
-            {credential === "workload" && (
-              <WorkloadPlatformPicker
-                entries={catalog.entries}
-                isPending={catalog.isPending}
-                isError={catalog.isError}
-                onRetry={catalog.refetch}
-                selectedKey={platformKey}
-                disabled={editing}
-                onSelect={(key) => {
-                  setPlatformKey(key);
-                  setHighlight("Platform");
-                }}
-              />
-            )}
+              onChooseApiKey={() => {
+                setCredential("api-key");
+                setHighlight("Credential");
+              }}
+              onChoosePlatform={(key) => {
+                setCredential("workload");
+                setPlatformKey(key);
+                setHighlight("Platform");
+              }}
+            />
           </div>
         );
       case 3:
@@ -1196,8 +1168,15 @@ export function CredentialsWizard({
           if (platformKey !== null) {
             note =
               workload.steps.length === 0
-                ? "Setup is unavailable. Refresh or choose another platform."
+                ? "Setup is unavailable. Refresh or choose another option."
                 : `${platform?.displayName ?? "Your platform"} issues the tokens; the next step sets it up.`;
+          }
+          // A preset opened from a link arrives chosen, even for someone who
+          // may not trust a platform. Editing only reads the setup back.
+          const refused = !editing && !canFederate;
+          if (refused) {
+            note =
+              "Using a platform's tokens needs permission to manage workload identities. Choose an API key instead.";
           }
           return (
             <WizardFooter
@@ -1205,7 +1184,7 @@ export function CredentialsWizard({
               onBack={() => setStep(1)}
               primary={
                 <Button
-                  disabled={workload.steps.length === 0}
+                  disabled={refused || workload.steps.length === 0}
                   onClick={() => setStep(3)}
                 >
                   Continue
