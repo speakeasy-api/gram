@@ -100,6 +100,20 @@ func (u *upstreamSelector) credentialKindOrDefault() string {
 	return u.credentialKind
 }
 
+// connectionSubject is whose stored connection a typed auth client serves for
+// the caller in ctx. A principal credential admitted to act for a user
+// resolves that user's own connection, never its agent's or the agent
+// owner's; admission binds the same user as the represented user, so the
+// auth client check matches the connection's owner against them. Every other
+// caller resolves its own.
+func connectionSubject(ctx context.Context, subject urn.SessionSubject) urn.SessionSubject {
+	authenticated, ok := principalcredential.FromContext(ctx)
+	if !ok || authenticated.Credential.AuthorizerUserID == "" {
+		return subject
+	}
+	return urn.NewUserSubject(authenticated.Credential.AuthorizerUserID)
+}
+
 // profileSelectorFor returns the selector for a principal credential that
 // binds an execution-selection profile version in the endpoint's organization
 // and project, or nil for any other credential. Its choices are read only by
@@ -390,7 +404,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 			ProjectID:           endpoint.ProjectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject:             authentication.subject,
+			Subject:             connectionSubject(ctx, authentication.subject),
 			RegistrationID:      authentication.chosenClient.UUID,
 			SkipUnusable:        skipUnusable,
 		})
@@ -488,7 +502,7 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 	return &memberChoices{
 		selector:     selector,
 		enforced:     enforced,
-		subject:      authentication.subject,
+		subject:      connectionSubject(ctx, authentication.subject),
 		profile:      profile,
 		metaServerID: endpoint.MetaMcpServerID,
 		onlyChosen:   false,
@@ -517,7 +531,7 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, endpoint *Resol
 			ProjectID:           member.projectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject:             subject,
+			Subject:             connectionSubject(ctx, subject),
 			RegistrationID:      member.chosenClientID.UUID,
 			SkipUnusable:        true,
 		})

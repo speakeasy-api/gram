@@ -1228,6 +1228,9 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		// The credential's chosen client is no longer bound to its issuer, the
 		// same unusable choice the selection read reports.
+		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
+			return recoveryErr
+		}
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable)
 		return writeRemoteSessionReconnectChallenge(w, authentication)
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
@@ -1250,6 +1253,11 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		header := bearerErrorChallengeHeader(authentication.protectedResourceURL, "", remoteSessionMisconfiguredDescription)
 		return writeChallenge(w, header, remoteSessionMisconfiguredDescription)
 	case errors.Is(err, remotesessions.ErrNoValidToken):
+		// A turn acting for a person cannot reauthorize on their behalf; the
+		// person gets a link to connect their own account instead.
+		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication); ok {
+			return recoveryErr
+		}
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession)
 		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
 			return errWorkloadReconnectRequired
