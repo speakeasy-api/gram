@@ -7,8 +7,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -102,4 +104,58 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	row, err = selection(single)
 	require.NoError(t, err)
 	require.Equal(t, validUUID(singleClient), row.AuthClientID)
+}
+
+func TestAgentKeySelectorReadsOnlyTheKeysOwnChoices(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_agent_key_selector")
+	require.NoError(t, err)
+	ctx := t.Context()
+	f := newAuthClientFixture(t, pool)
+	clientID := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
+	keyID := uuid.New()
+	endpoint := &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, McpServerID: validUUID(f.serverID)}
+
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
+	keyCtx := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: keyID.String()}, agent, contextvalues.PrincipalCredential{AuthorizerUserID: "user_1"})
+
+	selector, err := f.service.agentKeySelectorFor(keyCtx, endpoint)
+	require.NoError(t, err)
+	require.Nil(t, selector, "a key with no choice for the server keeps the issuer-derived path")
+
+	// A sibling key's choice for this server, and this key's choice for
+	// another server, are not this key's choice here.
+	otherServer, _ := f.server()
+	for _, other := range []upstreamclientsrepo.RecordAuthClientChoiceParams{
+		{CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: uuid.New(), Source: upstreamclients.SelectionSourceIssuance, OrganizationID: f.orgID, AuthClientID: validUUID(clientID), McpServerID: f.serverID},
+		{CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: keyID, Source: upstreamclients.SelectionSourceIssuance, OrganizationID: f.orgID, AuthClientID: uuid.NullUUID{}, McpServerID: otherServer},
+	} {
+		_, err = upstreamclientsrepo.New(pool).RecordAuthClientChoice(ctx, other)
+		require.NoError(t, err)
+	}
+	selector, err = f.service.agentKeySelectorFor(keyCtx, endpoint)
+	require.NoError(t, err)
+	require.Nil(t, selector, "other keys' choices and this key's other servers do not apply")
+
+	_, err = upstreamclientsrepo.New(pool).RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{
+		CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: keyID, Source: upstreamclients.SelectionSourceIssuance,
+		OrganizationID: f.orgID, AuthClientID: validUUID(clientID), McpServerID: f.serverID,
+	})
+	require.NoError(t, err)
+
+	selector, err = f.service.agentKeySelectorFor(keyCtx, endpoint)
+	require.NoError(t, err)
+	require.NotNil(t, selector)
+	require.Equal(t, upstreamclients.CredentialKindAPIKey, selector.credentialKind)
+	require.Equal(t, keyID, selector.credentialID)
+
+	res, err := selector.resolveAuthClient(ctx, f.serverID)
+	require.NoError(t, err)
+	require.Equal(t, clientID, res.clientID)
+
+	legacyCtx := contextvalues.WithLegacyAPIKeyAuthorization(ctx, &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: keyID.String(), UserID: "user_1"})
+	selector, err = f.service.agentKeySelectorFor(legacyCtx, endpoint)
+	require.NoError(t, err)
+	require.Nil(t, selector, "only agent keys are served through key choices")
 }

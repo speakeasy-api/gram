@@ -196,6 +196,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateProjectTokens *projectTokenCache
 	var gateMemberChoices *memberChoices
+	agentKeyChoicesRead := false
 	var gatePolicy *toolfilter.SessionPolicy
 	var gateAuthentication *issuerGateAuthentication
 	switch {
@@ -234,6 +235,15 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
 		}
+		if gateMemberChoices == nil && membership.agentID != uuid.Nil {
+			// Decided before the token path, so members the key has a choice
+			// for resolve lazily like any other chosen member.
+			agentKeyChoicesRead = true
+			gateMemberChoices, err = s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
+			}
+		}
 		if gateMemberChoices != nil || (toolSelection != nil && toolSelection.Catalog != nil) {
 			// Proxied members resolve only their chosen clients, so the
 			// issuer's other clients resolve lazily, for hosted members that
@@ -248,6 +258,13 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		}
 		gatePolicy = toolSelection
 		gateAuthentication = authentication
+	}
+	if gateMemberChoices == nil && membership.agentID != uuid.Nil && !agentKeyChoicesRead {
+		agentKeyChoices, err := s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
+		}
+		gateMemberChoices = agentKeyChoices
 	}
 	if prepared.empty() {
 		return nil

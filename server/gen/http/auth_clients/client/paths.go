@@ -42,6 +42,11 @@ func DetachAuthClientFromMcpServerAuthClientsPath() string {
 	return "/rpc/authClients.detachFromMcpServer"
 }
 
+// ListMcpServerAuthClientChoicesAuthClientsPath returns the URL path to the authClients service listMcpServerAuthClientChoices HTTP endpoint.
+func ListMcpServerAuthClientChoicesAuthClientsPath() string {
+	return "/rpc/authClients.listMcpServerChoices"
+}
+
 // GetMcpServerAuthenticationAuthClientsPath returns the URL path to the authClients service getMcpServerAuthentication HTTP endpoint.
 func GetMcpServerAuthenticationAuthClientsPath() string {
 	return "/rpc/authClients.getMcpServerAuthentication"

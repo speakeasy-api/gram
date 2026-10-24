@@ -810,6 +810,48 @@ export function CredentialsWizard({
         );
       }
 
+      // A server offering several shared credentials needs the key to name
+      // the one it uses; the server would otherwise keep serving it the way
+      // it did before credentials could be chosen.
+      const picked = allServers
+        ? []
+        : selected.filter(
+            (entry) =>
+              entry.server.kind === "Remote" ||
+              entry.server.kind === "Tunneled",
+          );
+      const offered = await Promise.all(
+        picked.map((entry) =>
+          sdk.authClients
+            .listMcpServerChoices({ mcpServerId: entry.server.id })
+            .then((result) => ({
+              entry,
+              ids: result.choices.map((choice) => choice.id),
+            }))
+            .catch(() => {
+              throw new Error(
+                `The credentials ${entry.server.name} offers could not be loaded. Try again.`,
+              );
+            }),
+        ),
+      );
+      // A pick the server no longer offers counts as no pick.
+      const unchosen = offered.filter(
+        ({ entry, ids }) =>
+          ids.length > 1 &&
+          (!entry.authClientId || !ids.includes(entry.authClientId)),
+      );
+      if (unchosen.length > 0) {
+        throw new Error(
+          `Choose which credential the key uses on ${unchosen.map(({ entry }) => entry.server.name).join(", ")}.`,
+        );
+      }
+      const authClientChoices = offered.flatMap(({ entry, ids }) =>
+        entry.authClientId && ids.includes(entry.authClientId)
+          ? [{ mcpServerId: entry.server.id, authClientId: entry.authClientId }]
+          : [],
+      );
+
       const expiresAt = new Date(Date.now() + KEY_LIFETIME_DAYS * 86_400_000);
       const issued = await sdk.keys.create({
         createKeyForm: {
@@ -822,6 +864,7 @@ export function CredentialsWizard({
           delegatedGrantsVersion: 2,
           requestedGrants,
           scopes: [],
+          authClientChoices,
         },
       });
       keyID.current = issued.id;

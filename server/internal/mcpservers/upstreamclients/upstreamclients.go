@@ -69,6 +69,11 @@ func Reconcile(ctx context.Context, dbtx repo.DBTX, organizationID string, proje
 // COALESCE(credential_id, id).
 const CredentialKindUserSession = "user_session"
 
+// CredentialKindAPIKey identifies an agent API key credential by its
+// api_keys row id. A rotation's replacement key gets the choices of the key
+// it replaces.
+const CredentialKindAPIKey = "api_key"
+
 // CredentialKindExecutionProfileVersion identifies one version of an
 // assistant's execution-selection profile, which the turn credentials it binds
 // read their choices through.
