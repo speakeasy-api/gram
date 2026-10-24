@@ -814,7 +814,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if approvalError == nil && upstreamAuth != nil && (upstreamAuth.Status == consentAuthNoAccess || upstreamAuth.Status == consentAuthSetupIncomplete) {
 		problem := &consentApprovalError{Message: upstreamAuth.Problem(), ActionURL: "", ActionLabel: ""}
 		if upstreamAuth.Status == consentAuthNoAccess {
-			problem.ActionURL = s.requestAccessURL(ctx, endpoint.McpServerID.UUID.String(), endpoint.Slug)
+			// The link names the person's organization, which their own
+			// context carries.
+			accessCtx := ctx
+			if stamped, serr := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID); serr == nil {
+				accessCtx = stamped
+			}
+			problem.ActionURL = s.requestAccessURL(accessCtx, endpoint.McpServerID.UUID.String(), endpoint.Slug)
 			if problem.ActionURL != "" {
 				problem.ActionLabel = "Request access"
 			}
