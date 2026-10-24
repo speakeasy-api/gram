@@ -110,7 +110,7 @@ import {
   type ShadowMCPDecisionConflict,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
-import { ApprovalPolicySummary } from "./ApprovalPolicySummary";
+import { ApprovalPolicyEditor } from "./ApprovalPolicyEditor";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
@@ -263,6 +263,7 @@ const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
   warn: "Warn",
   block: "Block",
   quarantine: "Quarantine",
+  require_approval: "Require approval",
 };
 
 // Mock title summarization from the guardrail prompt (a real impl would use the
@@ -293,7 +294,7 @@ export function PolicyEditorFor({
   policy: RiskPolicy;
 }): JSX.Element {
   if (policy.action === "require_approval") {
-    return <ApprovalPolicySummary policy={policy} />;
+    return <ApprovalPolicyEditor policy={policy} />;
   }
   if (!supportsPolicyEditing(policy))
     return (
@@ -391,6 +392,7 @@ function NewPolicyFrame({ children }: { children: ReactNode }): JSX.Element {
 
 function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
+  const toolApprovals = useFeatureFlag(FEATURE_FLAGS.toolApprovals).status;
   const [category] = useQueryState("category");
   const location = useLocation();
   const draft = readPolicyDraft(location.state);
@@ -425,6 +427,17 @@ function PolicyNewContent(): JSX.Element {
     return (
       <NewPolicyFrame>
         <ShadowAIPolicyEditor policy={null} />
+      </NewPolicyFrame>
+    );
+  }
+  // With the flag off, a stale link to the approval editor opens the chooser.
+  if (
+    kind === "approval" &&
+    (toolApprovals === "enabled" || toolApprovals === "loading")
+  ) {
+    return (
+      <NewPolicyFrame>
+        <ApprovalPolicyEditor policy={null} />
       </NewPolicyFrame>
     );
   }
