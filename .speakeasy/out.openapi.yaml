@@ -80288,6 +80288,14 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: Case-insensitive substring match on the person, agent, API key, workload, client, MCP server, or upstream provider shown for a session.
+          in: query
+          name: search
+          schema:
+            description: Case-insensitive substring match on the person, agent, API key, workload, client, MCP server, or upstream provider shown for a session.
+            maxLength: 200
+            type: string
+        - allowEmptyValue: true
           description: 'Pagination cursor: id of the last item from the previous page.'
           in: query
           name: cursor

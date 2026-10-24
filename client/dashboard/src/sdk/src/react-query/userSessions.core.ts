@@ -84,6 +84,7 @@ export function buildUserSessionsQuery(
       userSessionIssuerId: request?.userSessionIssuerId,
       status: request?.status,
       clientId: request?.clientId,
+      search: request?.search,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -131,6 +132,7 @@ export function buildUserSessionsInfiniteQuery(
       userSessionIssuerId: request?.userSessionIssuerId,
       status: request?.status,
       clientId: request?.clientId,
+      search: request?.search,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -175,6 +177,7 @@ export function queryKeyUserSessions(
     userSessionIssuerId?: string | undefined;
     status?: ListUserSessionsQueryParamStatus | undefined;
     clientId?: string | undefined;
+    search?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
@@ -191,6 +194,7 @@ export function queryKeyUserSessionsInfinite(
     userSessionIssuerId?: string | undefined;
     status?: ListUserSessionsQueryParamStatus | undefined;
     clientId?: string | undefined;
+    search?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;

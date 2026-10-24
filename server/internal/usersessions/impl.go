@@ -29,6 +29,7 @@ import (
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	cimdclientsgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers_cimd_clients"
 	sessionsgen "github.com/speakeasy-api/gram/server/gen/user_sessions"
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -49,12 +50,14 @@ import (
 // packages keeps the management-API surface logically grouped while a single
 // Service struct lets handlers share dependencies.
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	auth         *auth.Auth
-	sessions     *sessions.Manager
-	authz        *authz.Engine
+	tracer   trace.Tracer
+	logger   *slog.Logger
+	db       *pgxpool.Pool
+	auth     *auth.Auth
+	sessions *sessions.Manager
+	authz    *authz.Engine
+	// agents limits session search to agent names the caller may read.
+	agents       *agentmanagement.Authorizer
 	chatSessions TokenRevoker
 	audit        *audit.Logger
 	// signer mints the user-session JWT returned by mintUserSession. Same
@@ -130,6 +133,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		auth:         auth.New(logger, db, sessionManager, authzEngine),
 		sessions:     sessionManager,
 		authz:        authzEngine,
+		agents:       agentmanagement.NewAuthorizer(authzEngine),
 		chatSessions: chatSessionsManager,
 		audit:        auditLogger,
 		signer:       signer,

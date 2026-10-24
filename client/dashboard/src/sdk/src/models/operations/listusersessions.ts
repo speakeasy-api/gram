@@ -62,6 +62,10 @@ export type ListUserSessionsRequest = {
    */
   clientId?: string | undefined;
   /**
+   * Case-insensitive substring match on the person, agent, API key, workload, client, MCP server, or upstream provider shown for a session.
+   */
+  search?: string | undefined;
+  /**
    * Pagination cursor: id of the last item from the previous page.
    */
   cursor?: string | undefined;
@@ -199,6 +203,7 @@ export type ListUserSessionsRequest$Outbound = {
   user_session_issuer_id?: string | undefined;
   status?: string | undefined;
   client_id?: string | undefined;
+  search?: string | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
   "Gram-Session"?: string | undefined;
@@ -216,6 +221,7 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
     userSessionIssuerId: z.optional(z.string()),
     status: z.optional(ListUserSessionsQueryParamStatus$outboundSchema),
     clientId: z.optional(z.string()),
+    search: z.optional(z.string()),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramSession: z.optional(z.string()),
