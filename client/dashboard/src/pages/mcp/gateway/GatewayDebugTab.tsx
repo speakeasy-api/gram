@@ -12,6 +12,8 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 
+const MAX_SEARCH_LENGTH = 200;
+
 export function GatewayDebugTab({
   gatewayId,
 }: {
@@ -36,6 +38,8 @@ export function GatewayDebugTab({
     },
     [setSearchParams],
   );
+  const term = search.trim();
+  const searchTooLong = Array.from(term).length > MAX_SEARCH_LENGTH;
 
   const {
     data,
@@ -53,19 +57,30 @@ export function GatewayDebugTab({
     {
       gramProject: project.slug,
       metaMcpServerId: gatewayId,
-      search: search.trim() || undefined,
+      search: searchTooLong ? undefined : term || undefined,
     },
     undefined,
-    { placeholderData: keepPreviousData },
+    {
+      enabled: !searchTooLong,
+      placeholderData: keepPreviousData,
+      throwOnError: false,
+    },
   );
   const unresolved = useMemo(
     () => data?.pages.flatMap((page) => page.result.items) ?? [],
     [data],
   );
   const sessions = useSessionAgents(unresolved);
+  const actionable = !searchTooLong && sessions.length > 0;
 
   let body: JSX.Element;
-  if (isPending) {
+  if (searchTooLong) {
+    body = (
+      <p className="text-destructive text-sm">
+        Search must be {MAX_SEARCH_LENGTH} characters or fewer.
+      </p>
+    );
+  } else if (isPending || (isPlaceholderData && sessions.length === 0)) {
     body = (
       <div className="space-y-2">
         {Array.from({ length: 6 }).map((_, i) => (
@@ -87,7 +102,7 @@ export function GatewayDebugTab({
   } else if (sessions.length === 0) {
     body = (
       <p className="text-muted-foreground text-sm">
-        {search.trim()
+        {term
           ? "No connections match your search"
           : "No connections have been recorded for this gateway yet"}
       </p>
@@ -108,8 +123,8 @@ export function GatewayDebugTab({
   return (
     <Stack gap={4}>
       <Text small muted>
-        Sessions issued for this gateway. Sessions without a recorded origin are
-        not shown.
+        Sessions issued for this gateway, identified by their recorded origin or
+        consent selection. Unattributed sessions are not shown.
       </Text>
       <Page.Toolbar>
         <Page.Toolbar.Search
@@ -118,12 +133,14 @@ export function GatewayDebugTab({
           debounceMs={250}
           placeholder="Search connections"
         />
-        <Page.Toolbar.Refresh
-          onRefresh={() => void refetch()}
-          isRefreshing={isFetching}
-        />
+        {!searchTooLong && (
+          <Page.Toolbar.Refresh
+            onRefresh={() => void refetch()}
+            isRefreshing={isFetching}
+          />
+        )}
       </Page.Toolbar>
-      {sessions.length > 0 && (isRefetchError || isFetchNextPageError) && (
+      {actionable && (isRefetchError || isFetchNextPageError) && (
         <div className="flex items-center justify-between gap-3">
           <p className="text-destructive text-sm">
             {isFetchNextPageError
@@ -142,7 +159,7 @@ export function GatewayDebugTab({
         </div>
       )}
       {body}
-      {hasNextPage && !isPlaceholderData && (
+      {actionable && hasNextPage && !isPlaceholderData && (
         <div className="flex justify-center">
           <Button
             variant="tertiary"
