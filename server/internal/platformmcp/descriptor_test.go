@@ -688,7 +688,7 @@ func TestAdvertisedInventoryBackendKindIsClosed(t *testing.T) {
 	require.NotNil(t, mcps.Items)
 	backendKind := mcps.Items.Properties["backend_kind"]
 	require.NotNil(t, backendKind)
-	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "legacy"}, backendKind.Enum)
+	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "built_in", "legacy"}, backendKind.Enum)
 }
 
 func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {

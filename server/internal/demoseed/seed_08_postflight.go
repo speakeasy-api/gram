@@ -402,6 +402,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustEqual(1, "expected 1 removed gateway member, found %d"),
 		},
 		{
+			what:  "approvals server",
+			count: byProject(s.q.PostflightCountApprovalsServers),
+			fail:  postflightMustEqual(1, "expected 1 approvals server with an endpoint in the Default plugin, found %d"),
+		},
+		{
 			what:  "hosted toolset wrappers",
 			count: byProject(s.q.PostflightCountUnwrappedToolsets),
 			fail:  postflightMustBeZero("%d hosted toolsets lack a matching canonical wrapper and endpoint"),
