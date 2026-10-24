@@ -233,6 +233,6 @@ func TestGetMyConnections_RateLimitedPerMember(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ti.service.GetMyConnections(ctx, &gen.GetMyConnectionsPayload{Email: new(mockidp.MockUserEmail)})
 	requireCode(t, err, oops.CodeRateLimitExceeded)
-	_, err = ti.service.GetMyConnections(ctx, &gen.GetMyConnectionsPayload{Email: new("other@example.com")})
-	require.NoError(t, err, "the budget is per member, not per key")
+	_, err = ti.service.GetMyConnections(ctx, &gen.GetMyConnectionsPayload{Email: new("stranger@example.com")})
+	require.NoError(t, err, "a non-member costs nothing and reads nothing")
 }

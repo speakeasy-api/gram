@@ -81,9 +81,6 @@ func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnec
 	}
 
 	organizationID := authCtx.ActiveOrganizationID
-	if err := s.allowConnectionsRead(ctx, organizationID, email); err != nil {
-		return nil, err
-	}
 	principals, err := plugins.ResolveDeliveryPrincipals(ctx, s.db, organizationID, email, "")
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
@@ -93,6 +90,11 @@ func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnec
 	userID := memberUserID(principals)
 	if userID == "" {
 		return result, nil
+	}
+	// Charged per member after the membership check, so addresses outside
+	// the organization never create limiter state.
+	if err := s.allowConnectionsRead(ctx, organizationID, userID); err != nil {
+		return nil, err
 	}
 
 	pluginRows, err := s.repo.GetAgentPluginSet(ctx, repo.GetAgentPluginSetParams{
@@ -150,11 +152,11 @@ func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnec
 
 // allowConnectionsRead charges one read to the member's budget. A limiter
 // store outage fails open: it isn't a throttle.
-func (s *Service) allowConnectionsRead(ctx context.Context, organizationID, email string) error {
+func (s *Service) allowConnectionsRead(ctx context.Context, organizationID, userID string) error {
 	if s.connectionsLimiter == nil {
 		return nil
 	}
-	res, err := s.connectionsLimiter.Allow(ctx, organizationID+":"+email)
+	res, err := s.connectionsLimiter.Allow(ctx, organizationID+":"+userID)
 	switch {
 	case err != nil:
 		s.logger.WarnContext(ctx, "getMyConnections rate limit unavailable", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
