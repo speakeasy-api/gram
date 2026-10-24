@@ -450,58 +450,55 @@ export function GatewayDebugTab({
         Sessions issued for this gateway, identified by their recorded origin or
         consent selection. Unattributed sessions are not shown.
       </Text>
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <LogFilterBar
-            filters={chips}
-            onChange={editChips}
-            attributeKeys={[]}
-            keyOptions={SESSION_FILTER_FIELDS.map((option) => ({
-              ...option,
-              count:
-                option.key === "last_used"
-                  ? undefined
-                  : facets?.[FACET_KEYS[option.key]].distinctCount,
-            }))}
-            operatorsFor={sessionFilterOperators}
-            parseExpression={parseSessionFilterExpression}
-            valueOptions={valueOptions}
-            onValueInputChange={(key, text) => {
-              setBuildingField(key as SessionFacetField | "last_used");
-              if (key !== "last_used") {
-                setFieldSearch("builder", key as SessionFacetField, text);
+      <Page.Toolbar>
+        <Page.Toolbar.Leading>
+          <div className="min-w-0 flex-1">
+            <LogFilterBar
+              filters={chips}
+              onChange={editChips}
+              attributeKeys={[]}
+              keyOptions={SESSION_FILTER_FIELDS.map((option) => ({
+                ...option,
+                count:
+                  option.key === "last_used"
+                    ? undefined
+                    : facets?.[FACET_KEYS[option.key]].distinctCount,
+              }))}
+              operatorsFor={sessionFilterOperators}
+              parseExpression={parseSessionFilterExpression}
+              valueOptions={valueOptions}
+              onValueInputChange={(key, text) => {
+                setBuildingField(key as SessionFacetField | "last_used");
+                if (key !== "last_used") {
+                  setFieldSearch("builder", key as SessionFacetField, text);
+                }
+              }}
+              formatValue={(path, value, op) =>
+                formatSessionFilterValue(path, op, value, labelFor)
               }
-            }}
-            formatValue={(path, value, op) =>
-              formatSessionFilterValue(path, op, value, labelFor)
-            }
-            validateFilter={(path, op, value, next) =>
-              sessionFilterProblem(path, op, value) ??
-              sessionFilterLimitProblem(next)
-            }
-            valueNotice={valueNotice}
-            encodeInValue={(value) => encodeValues([value])}
-            exactValue={(path) => path === "identity"}
-            samples={SESSION_FILTER_SAMPLES}
-            placeholder="Search connections or pick a field"
-            searchInput={searchInput}
-            onSearchInputChange={setSearchInput}
-            onSearchSubmit={(value) => {
-              setSearch(value);
-              setSearchInput("");
-            }}
-            appliedSearch={search || undefined}
-          />
-        </div>
-        {!searchTooLong && (
-          <Page.Toolbar>
-            <Page.Toolbar.Refresh
-              onRefresh={refresh}
-              isRefreshing={isFetching}
+              validateFilter={(path, op, value, next) =>
+                sessionFilterProblem(path, op, value) ??
+                sessionFilterLimitProblem(next)
+              }
+              valueNotice={valueNotice}
+              encodeInValue={(value) => encodeValues([value])}
+              exactValue={(path) => path === "identity"}
+              samples={SESSION_FILTER_SAMPLES}
+              placeholder="Search connections or pick a field"
+              searchInput={searchInput}
+              onSearchInputChange={setSearchInput}
+              onSearchSubmit={(value) => {
+                setSearch(value);
+                setSearchInput("");
+              }}
+              appliedSearch={search || undefined}
             />
-          </Page.Toolbar>
+          </div>
+        </Page.Toolbar.Leading>
+        {!searchTooLong && (
+          <Page.Toolbar.Refresh onRefresh={refresh} isRefreshing={isFetching} />
         )}
-      </div>
+      </Page.Toolbar>
       {ignoredChips.length > 0 && (
         <p className="text-muted-foreground text-sm break-all">
           Removed filters from this link that can&apos;t apply:{" "}
@@ -562,8 +559,18 @@ export function GatewayDebugTab({
           />
         </div>
         <div className="min-w-0 flex-1 space-y-4">
-          <div className="flex justify-end">
+          <div
+            className="flex overflow-x-auto"
+            // Keyboard focus scrolls the narrow, scrollable row to the option.
+            onFocusCapture={(event) =>
+              event.target.scrollIntoView({
+                block: "nearest",
+                inline: "nearest",
+              })
+            }
+          >
             <SegmentedControl
+              className="ml-auto"
               value={grouping}
               onChange={setGrouping}
               options={GROUPING_OPTIONS}
