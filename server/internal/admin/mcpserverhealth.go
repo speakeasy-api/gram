@@ -257,8 +257,6 @@ func legacyAuth(server repo.AdminGetMcpServerAuthRow) *string {
 	switch {
 	case server.ExternalOauthServerID.Valid:
 		mode = "external_oauth"
-	case server.OauthProxyServerID.Valid:
-		mode = "oauth_proxy"
 	case server.Visibility == "private":
 		mode = "gram_private"
 	default:

@@ -42148,8 +42148,8 @@ func ValidateDescribeMcpServerHealthResponseBody(body *DescribeMcpServerHealthRe
 		}
 	}
 	if body.LegacyAuth != nil {
-		if !(*body.LegacyAuth == "external_oauth" || *body.LegacyAuth == "oauth_proxy" || *body.LegacyAuth == "gram_private") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.legacy_auth", *body.LegacyAuth, []any{"external_oauth", "oauth_proxy", "gram_private"}))
+		if !(*body.LegacyAuth == "external_oauth" || *body.LegacyAuth == "gram_private") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.legacy_auth", *body.LegacyAuth, []any{"external_oauth", "gram_private"}))
 		}
 	}
 	if body.UserSessionIssuer != nil {
