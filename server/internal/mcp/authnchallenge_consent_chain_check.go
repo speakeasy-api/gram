@@ -53,6 +53,14 @@ func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedM
 	if err != nil {
 		return nil, routing, fmt.Errorf("remote session statuses: %w", err)
 	}
+	typed, err := s.typedConsentRegistrations(ctx, endpoint, challengeState)
+	if err != nil {
+		return nil, routing, err
+	}
+	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, typed)
+	if err != nil {
+		return nil, routing, err
+	}
 	if len(statuses) > 0 {
 		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses)
 		if err != nil {
