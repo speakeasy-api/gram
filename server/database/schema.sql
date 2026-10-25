@@ -10135,8 +10135,8 @@ ON mcp_auth_client_headers (auth_client_id, name)
 WHERE deleted IS FALSE;
 
 -- Promotion revisions include deleted headers to detect authentication changes.
-CREATE INDEX IF NOT EXISTS mcp_auth_client_headers_auth_client_id_organization_id_idx
-ON mcp_auth_client_headers (auth_client_id, organization_id);
+CREATE INDEX IF NOT EXISTS mcp_auth_client_headers_auth_client_id_history_idx
+ON mcp_auth_client_headers (auth_client_id);
 
 -- Which auth clients each MCP server offers. Many-to-many: a shared client can
 -- serve several servers, and a server can offer several clients.
