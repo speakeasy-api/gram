@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	mcpeventsv1 "github.com/speakeasy-api/gram/infra/gen/gram/mcpevents/v1"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpevents"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"log/slog"
@@ -849,7 +848,7 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 				eventAuthorizer := platformmcp.NewEventAuthorizer(db, featureFlags)
-				eventService, err := mcpevents.NewService(db, encryptionClient, eventAuthorizer, mcpevents.NewWebhook(guardian.NewDefaultPolicy(tracerProvider)))
+				eventService, err := mcpevents.NewService(logger, db, encryptionClient, eventAuthorizer, mcpevents.NewWebhook(guardianPolicy))
 				if err != nil {
 					return fmt.Errorf("create Platform MCP event consumers: %w", err)
 				}

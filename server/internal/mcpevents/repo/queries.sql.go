@@ -13,10 +13,10 @@ import (
 )
 
 const cleanupExpiredEventSubscriptions = `-- name: CleanupExpiredEventSubscriptions :execrows
-DELETE FROM platform_mcp_event_subscriptions WHERE id IN (
- SELECT stale.id FROM platform_mcp_event_subscriptions AS stale
+DELETE FROM platform_mcp_event_subscriptions WHERE (organization_id, project_id, id) IN (
+ SELECT stale.organization_id, stale.project_id, stale.id FROM platform_mcp_event_subscriptions AS stale
  WHERE least(stale.expires_at, stale.deleted_at) < $1
- AND NOT EXISTS (SELECT 1 FROM platform_mcp_event_deliveries AS delivery WHERE delivery.subscription_id = stale.id)
+ AND NOT EXISTS (SELECT 1 FROM platform_mcp_event_deliveries AS delivery WHERE delivery.subscription_id = stale.id AND delivery.organization_id = stale.organization_id AND delivery.project_id = stale.project_id)
  ORDER BY least(stale.expires_at, stale.deleted_at), stale.id
  LIMIT $2 FOR UPDATE SKIP LOCKED
 )
@@ -37,8 +37,8 @@ func (q *Queries) CleanupExpiredEventSubscriptions(ctx context.Context, arg Clea
 }
 
 const cleanupOldEventDeliveries = `-- name: CleanupOldEventDeliveries :execrows
-DELETE FROM platform_mcp_event_deliveries WHERE id IN (
- SELECT stale.id FROM platform_mcp_event_deliveries AS stale WHERE stale.created_at < $1
+DELETE FROM platform_mcp_event_deliveries WHERE (organization_id, project_id, id) IN (
+ SELECT stale.organization_id, stale.project_id, stale.id FROM platform_mcp_event_deliveries AS stale WHERE stale.created_at < $1
  ORDER BY stale.created_at, stale.id LIMIT $2 FOR UPDATE SKIP LOCKED
 )
 `
@@ -126,9 +126,9 @@ func (q *Queries) CreateDelivery(ctx context.Context, arg CreateDeliveryParams) 
 }
 
 const detachExpiredEventSubscriptions = `-- name: DetachExpiredEventSubscriptions :execrows
-UPDATE platform_mcp_event_deliveries SET subscription_id = NULL WHERE id IN (
- SELECT delivery.id FROM platform_mcp_event_deliveries AS delivery
- JOIN platform_mcp_event_subscriptions AS subscription ON subscription.id = delivery.subscription_id
+UPDATE platform_mcp_event_deliveries SET subscription_id = NULL WHERE (organization_id, project_id, id) IN (
+ SELECT delivery.organization_id, delivery.project_id, delivery.id FROM platform_mcp_event_deliveries AS delivery
+ JOIN platform_mcp_event_subscriptions AS subscription ON subscription.id = delivery.subscription_id AND subscription.organization_id = delivery.organization_id AND subscription.project_id = delivery.project_id
  WHERE least(subscription.expires_at, subscription.deleted_at) < $1
  ORDER BY delivery.id LIMIT $2 FOR UPDATE OF delivery SKIP LOCKED
 )
@@ -180,6 +180,24 @@ func (q *Queries) GetDeliveryForUpdate(ctx context.Context, arg GetDeliveryForUp
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getReviewEventRequest = `-- name: GetReviewEventRequest :one
+SELECT id FROM mcp_approval_requests
+WHERE id = $1 AND project_id = $2 AND organization_id = $3 AND deleted IS FALSE
+`
+
+type GetReviewEventRequestParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetReviewEventRequest(ctx context.Context, arg GetReviewEventRequestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getReviewEventRequest, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getSubscription = `-- name: GetSubscription :one

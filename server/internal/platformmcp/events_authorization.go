@@ -125,7 +125,7 @@ func (a *EventAuthorizer) Authorize(ctx context.Context, owner mcpevents.Owner, 
 		if eventName == mcpevents.ReviewDecided {
 			_, err = approvalrepo.New(a.db).GetPlatformRequesterApprovalRequest(ctx, approvalrepo.GetPlatformRequesterApprovalRequestParams{ID: requestID, ProjectID: projectID, OrganizationID: owner.OrganizationID, UserID: owner.UserID})
 		} else {
-			_, err = approvalrepo.New(a.db).GetApprovalRequest(ctx, approvalrepo.GetApprovalRequestParams{ID: requestID, ProjectID: projectID})
+			_, err = eventrepo.New(a.db).GetReviewEventRequest(ctx, eventrepo.GetReviewEventRequestParams{ID: requestID, ProjectID: projectID, OrganizationID: owner.OrganizationID})
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return mcpevents.ErrDenied

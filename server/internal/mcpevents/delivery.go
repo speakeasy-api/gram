@@ -13,6 +13,7 @@ import (
 
 	mcpeventsv1 "github.com/speakeasy-api/gram/infra/gen/gram/mcpevents/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpevents/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -143,30 +144,12 @@ func (s *Service) Deliver(ctx context.Context, message *mcpeventsv1.Delivery, _ 
 	status := "suppressed"
 	retry := false
 	if err == nil && !subscription.DeletedAt.Valid && subscription.Generation == delivery.SubscriptionGeneration && subscription.ExpiresAt.Time.After(now) && delivery.CreatedAt.Time.Add(deliveryLifetime).After(now) && delivery.Attempts < maxDeliveryAttempts {
-		authErr := s.authorizer.WithTx(tx).Authorize(ctx, subscriptionOwner(subscription), projectID, subscription.EventName, delivery.RequestID)
-		if authErr != nil && !errors.Is(authErr, ErrDenied) {
-			return fmt.Errorf("authorize delivery: %w", authErr)
+		status, retry, err = s.attemptDelivery(ctx, tx, subscription, delivery, now)
+		if err != nil {
+			return err
 		}
-		if authErr == nil {
-			secret, err := s.encryption.Decrypt(subscription.SigningSecret)
-			if err != nil {
-				return fmt.Errorf("decrypt delivery key: %w", err)
-			}
-			keys := []string{secret}
-			if subscription.PreviousSigningSecret.Valid && subscription.PreviousSecretExpiresAt.Time.After(now) {
-				previous, err := s.encryption.Decrypt(subscription.PreviousSigningSecret.String)
-				if err != nil {
-					return fmt.Errorf("decrypt rotating delivery key: %w", err)
-				}
-				keys = append(keys, previous)
-			}
-			code, _, sendErr := s.webhook.send(ctx, subscription.ID, delivery.EventID.String(), subscription.CallbackUrl, keys, now, delivery.Payload)
-			status = "failed"
-			if sendErr == nil && code >= http.StatusOK && code < http.StatusMultipleChoices {
-				status = "delivered"
-			} else if code != http.StatusGone && code != http.StatusRequestEntityTooLarge && (sendErr != nil || code == http.StatusRequestTimeout || code == http.StatusTooEarly || code == http.StatusTooManyRequests || code >= http.StatusInternalServerError) && delivery.Attempts+1 < maxDeliveryAttempts {
-				status, retry = "pending", true
-			}
+		if retry && delivery.Attempts+1 >= maxDeliveryAttempts {
+			status, retry = "failed", false
 		}
 	}
 	if err := queries.SetDeliveryOutcome(ctx, repo.SetDeliveryOutcomeParams{ID: id, ProjectID: projectID, OrganizationID: delivery.OrganizationID, Status: status, Now: conv.ToPGTimestamptz(now)}); err != nil {
@@ -179,6 +162,49 @@ func (s *Service) Deliver(ctx context.Context, message *mcpeventsv1.Delivery, _ 
 		return errors.New("event callback temporarily unavailable")
 	}
 	return nil
+}
+
+// attemptDelivery isolates authorization reads in a savepoint so a failed SQL
+// statement cannot abort the transaction that persists the attempt counter.
+func (s *Service) attemptDelivery(ctx context.Context, tx pgx.Tx, subscription repo.PlatformMcpEventSubscription, delivery repo.PlatformMcpEventDelivery, now time.Time) (string, bool, error) {
+	authTx, err := tx.Begin(ctx)
+	if err != nil {
+		return "", false, fmt.Errorf("begin delivery authorization: %w", err)
+	}
+	authErr := s.authorizer.WithTx(authTx).Authorize(ctx, subscriptionOwner(subscription), delivery.ProjectID, subscription.EventName, delivery.RequestID)
+	if err := authTx.Rollback(ctx); err != nil {
+		return "", false, fmt.Errorf("finish delivery authorization: %w", err)
+	}
+	if errors.Is(authErr, ErrDenied) {
+		return "suppressed", false, nil
+	}
+	if authErr != nil {
+		s.logger.ErrorContext(ctx, "authorize event delivery", attr.SlogError(authErr), attr.SlogProjectID(delivery.ProjectID.String()))
+		return "pending", true, nil
+	}
+
+	secret, err := s.encryption.Decrypt(subscription.SigningSecret)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "decrypt event signing key", attr.SlogError(err), attr.SlogProjectID(delivery.ProjectID.String()))
+		return "failed", false, nil
+	}
+	keys := []string{secret}
+	if subscription.PreviousSigningSecret.Valid && subscription.PreviousSecretExpiresAt.Time.After(now) {
+		previous, err := s.encryption.Decrypt(subscription.PreviousSigningSecret.String)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "decrypt rotating event signing key", attr.SlogError(err), attr.SlogProjectID(delivery.ProjectID.String()))
+			return "failed", false, nil
+		}
+		keys = append(keys, previous)
+	}
+	code, _, sendErr := s.webhook.send(ctx, subscription.ID, delivery.EventID.String(), subscription.CallbackUrl, keys, now, delivery.Payload)
+	if sendErr == nil && code >= http.StatusOK && code < http.StatusMultipleChoices {
+		return "delivered", false, nil
+	}
+	if code != http.StatusGone && code != http.StatusRequestEntityTooLarge && (sendErr != nil || code == http.StatusRequestTimeout || code == http.StatusTooEarly || code == http.StatusTooManyRequests || code >= http.StatusInternalServerError) {
+		return "pending", true, nil
+	}
+	return "failed", false, nil
 }
 
 // RouteBatch settles individual source events independently after durable fan-out.

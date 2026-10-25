@@ -881,6 +881,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to kick startup seeds", attr.SlogError(err))
 	}
 
+	if err := AddMCPEventsCleanupSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add MCP events cleanup schedule", attr.SlogError(err))
+	}
+
 	// Everything below is registered under a fixed ID and belongs to the
 	// shared queue. PR previews poll their own queue in the dev namespace; if
 	// they registered these, each preview would re-point dev's schedule at its
@@ -955,10 +959,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddAssistantMemoriesReaperSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add assistant memories reaper schedule", attr.SlogError(err))
-	}
-
-	if err := AddMCPEventsCleanupSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add MCP events cleanup schedule", attr.SlogError(err))
 	}
 
 	if err := AddMCPFindingEvidenceCleanupSchedule(ctx, env); err != nil {

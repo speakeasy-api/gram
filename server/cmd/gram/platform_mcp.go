@@ -1321,10 +1321,9 @@ func newPlatformMCPDeploymentRedeploy(config platformMCPConfig, projects *platfo
 	})
 }
 
-
 func attachPlatformMCPEvents(config platformMCPConfig, runtime *platformmcp.Runtime, budget platformmcp.OperationBudget) error {
 	authorizer := platformmcp.NewEventAuthorizer(config.DB, config.FeatureFlags)
-	service, err := mcpevents.NewService(config.DB, config.Encryption, authorizer, mcpevents.NewWebhook(guardian.NewDefaultPolicy(config.TracerProvider)))
+	service, err := mcpevents.NewService(config.Logger, config.DB, config.Encryption, authorizer, mcpevents.NewWebhook(config.GuardianPolicy))
 	if err != nil {
 		return fmt.Errorf("create Platform MCP events: %w", err)
 	}

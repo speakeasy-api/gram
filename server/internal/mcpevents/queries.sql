@@ -80,26 +80,30 @@ ORDER BY user_id;
 
 -- These worker-only, bounded maintenance queries intentionally span tenants.
 -- name: CleanupExpiredEventSubscriptions :execrows
-DELETE FROM platform_mcp_event_subscriptions WHERE id IN (
- SELECT stale.id FROM platform_mcp_event_subscriptions AS stale
+DELETE FROM platform_mcp_event_subscriptions WHERE (organization_id, project_id, id) IN (
+ SELECT stale.organization_id, stale.project_id, stale.id FROM platform_mcp_event_subscriptions AS stale
  WHERE least(stale.expires_at, stale.deleted_at) < @cutoff
- AND NOT EXISTS (SELECT 1 FROM platform_mcp_event_deliveries AS delivery WHERE delivery.subscription_id = stale.id)
+ AND NOT EXISTS (SELECT 1 FROM platform_mcp_event_deliveries AS delivery WHERE delivery.subscription_id = stale.id AND delivery.organization_id = stale.organization_id AND delivery.project_id = stale.project_id)
  ORDER BY least(stale.expires_at, stale.deleted_at), stale.id
  LIMIT @batch_size FOR UPDATE SKIP LOCKED
 );
 
 -- name: CleanupOldEventDeliveries :execrows
-DELETE FROM platform_mcp_event_deliveries WHERE id IN (
- SELECT stale.id FROM platform_mcp_event_deliveries AS stale WHERE stale.created_at < @cutoff
+DELETE FROM platform_mcp_event_deliveries WHERE (organization_id, project_id, id) IN (
+ SELECT stale.organization_id, stale.project_id, stale.id FROM platform_mcp_event_deliveries AS stale WHERE stale.created_at < @cutoff
  ORDER BY stale.created_at, stale.id LIMIT @batch_size FOR UPDATE SKIP LOCKED
 );
 
 -- Detach retained delivery history in bounded batches before deleting parents;
 -- otherwise ON DELETE SET NULL can turn one parent deletion into unbounded writes.
 -- name: DetachExpiredEventSubscriptions :execrows
-UPDATE platform_mcp_event_deliveries SET subscription_id = NULL WHERE id IN (
- SELECT delivery.id FROM platform_mcp_event_deliveries AS delivery
- JOIN platform_mcp_event_subscriptions AS subscription ON subscription.id = delivery.subscription_id
+UPDATE platform_mcp_event_deliveries SET subscription_id = NULL WHERE (organization_id, project_id, id) IN (
+ SELECT delivery.organization_id, delivery.project_id, delivery.id FROM platform_mcp_event_deliveries AS delivery
+ JOIN platform_mcp_event_subscriptions AS subscription ON subscription.id = delivery.subscription_id AND subscription.organization_id = delivery.organization_id AND subscription.project_id = delivery.project_id
  WHERE least(subscription.expires_at, subscription.deleted_at) < @cutoff
  ORDER BY delivery.id LIMIT @batch_size FOR UPDATE OF delivery SKIP LOCKED
 );
+
+-- name: GetReviewEventRequest :one
+SELECT id FROM mcp_approval_requests
+WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id AND deleted IS FALSE;

@@ -374,7 +374,7 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 	if err := shadowadmission.LockProject(ctx, dbtx, projectID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error locking review demand").LogError(ctx, s.logger)
 	}
-	previous, err := queries.GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{ProjectID: projectID, TargetKind: adm.targetKind, TargetKey: adm.targetKey})
+	previous, err := queries.GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{OrganizationID: organizationID, ProjectID: projectID, TargetKind: adm.targetKind, TargetKey: adm.targetKey})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading review demand").LogError(ctx, s.logger)
 	}
@@ -545,7 +545,7 @@ func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureSer
 	// unreachable registry or a failed traffic lookup land in Gaps with
 	// evidence_collected_at still set — re-gathers in place, so an
 	// outage-time dossier does not keep its gaps forever.
-	existing, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{
+	existing, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{OrganizationID: organizationID,
 		ProjectID:  projectID,
 		TargetKind: targetKindServerURL,
 		TargetKey:  key,

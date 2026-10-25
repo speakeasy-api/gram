@@ -55,7 +55,7 @@ func (s *Service) ResolveDecisionTarget(ctx context.Context, organizationID stri
 	if s == nil || s.db == nil || organizationID == "" || projectID == uuid.Nil || strings.TrimSpace(targetKey) == "" || (targetKind != targetKindServerURL && targetKind != targetKindStdioCommand) {
 		return uuid.Nil, oops.E(oops.CodeBadRequest, nil, "invalid approval target")
 	}
-	request, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{ProjectID: projectID, TargetKind: targetKind, TargetKey: targetKey})
+	request, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{OrganizationID: organizationID, ProjectID: projectID, TargetKind: targetKind, TargetKey: targetKey})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && request.OrganizationID != organizationID) {
 		return uuid.Nil, oops.E(oops.CodeNotFound, nil, "approval request not found")
 	}

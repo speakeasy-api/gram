@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,7 +28,9 @@ func TestWebhookVerificationRequiresSignedEchoAndRejectsRedirects(t *testing.T) 
 	for _, behavior := range []string{"echo", "wrong", "redirect", "large"} {
 		t.Run(behavior, func(t *testing.T) {
 			t.Parallel()
+			var calls atomic.Int32
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
 				body, err := io.ReadAll(r.Body)
 				if err != nil || signer.Verify(body, r.Header) != nil {
 					w.WriteHeader(http.StatusUnauthorized)
@@ -50,7 +53,7 @@ func TestWebhookVerificationRequiresSignedEchoAndRejectsRedirects(t *testing.T) 
 				case "wrong":
 					_, _ = io.WriteString(w, `{"challenge":"wrong"}`)
 				case "redirect":
-					http.Redirect(w, r, "/should-not-follow", http.StatusTemporaryRedirect)
+					http.Redirect(w, r, "https://127.0.0.1/should-not-follow", http.StatusTemporaryRedirect)
 				case "large":
 					_, _ = io.WriteString(w, strings.Repeat("x", maxCallbackBytes+1))
 				}
@@ -61,9 +64,15 @@ func TestWebhookVerificationRequiresSignedEchoAndRejectsRedirects(t *testing.T) 
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(pool))
 			require.NoError(t, err)
 			err = NewWebhook(policy).Verify(t.Context(), "sub_test", Destination{Mode: "webhook", URL: server.URL, Secret: secret}, time.Now())
-			if behavior == "echo" {
+			switch behavior {
+			case "echo":
 				require.NoError(t, err)
-			} else {
+			case "redirect":
+				var failure *CallbackError
+				require.ErrorAs(t, err, &failure)
+				require.Equal(t, "challenge_failed", failure.Reason)
+				require.Equal(t, int32(1), calls.Load())
+			default:
 				require.Error(t, err)
 			}
 		})

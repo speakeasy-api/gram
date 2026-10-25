@@ -51,7 +51,8 @@ SELECT
         AND req.deleted IS FALSE
     ) AS requester_count
 FROM mcp_approval_requests r
-WHERE r.project_id = @project_id
+WHERE r.organization_id = @organization_id
+  AND r.project_id = @project_id
   AND r.target_kind = @target_kind
   AND r.target_key = @target_key
   AND r.deleted IS FALSE;

@@ -48,7 +48,7 @@ func (a *Activities) CleanupMCPEvents(ctx context.Context) error {
 // AddMCPEventsCleanupSchedule installs one hourly sweep for this task queue.
 func AddMCPEventsCleanupSchedule(ctx context.Context, env *tenv.Environment) error {
 	id := fmt.Sprintf("v1:mcp-events-cleanup:%s", env.Queue())
-	_, err := env.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
+	_, err := createScheduleWithCatchup(ctx, env.Client().ScheduleClient(), client.ScheduleOptions{
 		ID: id, CatchupWindow: time.Hour - time.Second, Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		Spec: client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: time.Hour}}},
 		Action: &client.ScheduleWorkflowAction{

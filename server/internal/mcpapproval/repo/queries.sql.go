@@ -397,16 +397,18 @@ SELECT
         AND req.deleted IS FALSE
     ) AS requester_count
 FROM mcp_approval_requests r
-WHERE r.project_id = $1
-  AND r.target_kind = $2
-  AND r.target_key = $3
+WHERE r.organization_id = $1
+  AND r.project_id = $2
+  AND r.target_kind = $3
+  AND r.target_key = $4
   AND r.deleted IS FALSE
 `
 
 type GetApprovalRequestByTargetParams struct {
-	ProjectID  uuid.UUID
-	TargetKind string
-	TargetKey  string
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TargetKind     string
+	TargetKey      string
 }
 
 type GetApprovalRequestByTargetRow struct {
@@ -437,7 +439,12 @@ type GetApprovalRequestByTargetRow struct {
 // it — a page view must not re-run evidence gathering or audit a create that
 // did not happen.
 func (q *Queries) GetApprovalRequestByTarget(ctx context.Context, arg GetApprovalRequestByTargetParams) (GetApprovalRequestByTargetRow, error) {
-	row := q.db.QueryRow(ctx, getApprovalRequestByTarget, arg.ProjectID, arg.TargetKind, arg.TargetKey)
+	row := q.db.QueryRow(ctx, getApprovalRequestByTarget,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetKey,
+	)
 	var i GetApprovalRequestByTargetRow
 	err := row.Scan(
 		&i.ID,

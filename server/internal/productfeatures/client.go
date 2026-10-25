@@ -94,7 +94,11 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 // an error so callers can distinguish an incomplete live security check from a
 // durable disabled result.
 func (c *Client) IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature Feature) (bool, error) {
-	return IsFeatureEnabledUncached(ctx, c.db, organizationID, feature)
+	enabled, err := IsFeatureEnabledUncached(ctx, c.db, organizationID, feature)
+	if err == nil || errors.Is(err, context.Canceled) {
+		return enabled, err
+	}
+	return false, oops.E(oops.CodeUnexpected, err, "failed to get uncached organization feature flag %q", string(feature)).LogError(ctx, c.logger, attr.SlogOrganizationID(organizationID))
 }
 
 // IsFeatureEnabledUncached checks durable capability state using the caller's

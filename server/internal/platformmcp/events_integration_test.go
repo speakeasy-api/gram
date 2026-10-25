@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -107,6 +108,14 @@ func newEventFixture(t *testing.T) eventFixture {
 			return
 		}
 		if control.Challenge != "" {
+			// A receiver may need the server's sole pool connection while verifying.
+			// This fails if Subscribe holds a transaction during the callback.
+			ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+			defer cancel()
+			if err := limited.Ping(ctx); err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
 			_ = json.NewEncoder(w).Encode(control)
 			return
 		}
@@ -120,7 +129,7 @@ func newEventFixture(t *testing.T) eventFixture {
 	require.NoError(t, err)
 	encryptionClient, err := encryption.NewWithBytes([]byte(strings.Repeat("e", 32)))
 	require.NoError(t, err)
-	service, err := mcpevents.NewService(limited, encryptionClient, authorizer, mcpevents.NewWebhook(policy))
+	service, err := mcpevents.NewService(testenv.NewLogger(t), limited, encryptionClient, authorizer, mcpevents.NewWebhook(policy))
 	require.NoError(t, err)
 	input := mcpevents.SubscriptionInput{Name: mcpevents.ReviewRequested, Arguments: mcpevents.Arguments{ProjectID: project.ID}, Delivery: mcpevents.Destination{Mode: "webhook", URL: server.URL, Secret: "whsec_" + base64.StdEncoding.EncodeToString([]byte(strings.Repeat("s", 32)))}}
 	return eventFixture{db: limited, service: service, authorizer: authorizer, flags: flags, owner: owner, principal: principal, input: input, requestID: request.ID, received: received, status: status}
@@ -409,4 +418,105 @@ func TestEventsQuotaBoundsMultipleSubscriptions(t *testing.T) {
 	require.ErrorIs(t, err, mcpevents.ErrLimit)
 	_, deliveries := routeReviewEvent(t, ctx, f, mcpevents.ReviewRequested, nil)
 	require.Len(t, deliveries, 20)
+}
+
+// failingEventAuthorizer injects a genuine statement error to prove the attempt
+// counter survives PostgreSQL's aborted-transaction state via the savepoint.
+type failingEventAuthorizer struct{ tx pgx.Tx }
+
+func (a failingEventAuthorizer) WithTx(tx pgx.Tx) mcpevents.Authorizer {
+	return failingEventAuthorizer{tx: tx}
+}
+func (a failingEventAuthorizer) Authorize(ctx context.Context, owner mcpevents.Owner, projectID uuid.UUID, eventName string, requestID uuid.UUID) error {
+	_, err := eventrepo.New(a.tx).CreateDelivery(ctx, eventrepo.CreateDeliveryParams{
+		ID: uuid.New(), ProjectID: projectID, OrganizationID: owner.OrganizationID,
+		SubscriptionID: conv.ToPGText("missing-subscription"), SubscriptionGeneration: uuid.New(),
+		EventID: uuid.New(), EventName: eventName, RequestID: requestID, Payload: []byte(`{}`),
+	})
+	if err == nil {
+		return errors.New("expected missing subscription")
+	}
+	return fmt.Errorf("inject failed authorization statement: %w", err)
+}
+
+func TestEventsAuthorizationSQLFailuresExhaustAttemptBudget(t *testing.T) {
+	t.Parallel()
+	f := newEventFixture(t)
+	ctx := t.Context()
+	_, err := f.service.Subscribe(ctx, f.owner, f.input)
+	require.NoError(t, err)
+	event, deliveries := routeReviewEvent(t, ctx, f, mcpevents.ReviewRequested, nil)
+	require.Len(t, deliveries, 1)
+	key, err := encryption.NewWithBytes([]byte(strings.Repeat("e", 32)))
+	require.NoError(t, err)
+	service, err := mcpevents.NewService(testenv.NewLogger(t), f.db, key, failingEventAuthorizer{tx: nil}, mcpevents.NewWebhook(guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))))
+	require.NoError(t, err)
+	message := mcpeventsv1.Delivery_builder{Id: new(deliveries[0].ID.String()), OrganizationId: new(f.owner.OrganizationID), ProjectId: new(f.input.Arguments.ProjectID.String())}.Build()
+	for range 7 {
+		require.Error(t, service.Deliver(ctx, message, gcp.MessageMetadata{}))
+	}
+	require.NoError(t, service.Deliver(ctx, message, gcp.MessageMetadata{}))
+	require.NoError(t, service.Deliver(ctx, message, gcp.MessageMetadata{}))
+	rows, err := eventrepo.New(f.db).ListEventDeliveries(ctx, eventrepo.ListEventDeliveriesParams{OrganizationID: f.owner.OrganizationID, ProjectID: f.input.Arguments.ProjectID, EventID: uuid.MustParse(event.GetEventId())})
+	require.NoError(t, err)
+	require.EqualValues(t, 8, rows[0].Attempts)
+	require.Equal(t, "failed", rows[0].Status)
+	require.Empty(t, f.received)
+}
+
+func TestEventsDecryptionFailureIsTerminal(t *testing.T) {
+	t.Parallel()
+	f := newEventFixture(t)
+	ctx := t.Context()
+	_, err := f.service.Subscribe(ctx, f.owner, f.input)
+	require.NoError(t, err)
+	event, deliveries := routeReviewEvent(t, ctx, f, mcpevents.ReviewRequested, nil)
+	require.Len(t, deliveries, 1)
+	wrongKey, err := encryption.NewWithBytes([]byte(strings.Repeat("x", 32)))
+	require.NoError(t, err)
+	service, err := mcpevents.NewService(testenv.NewLogger(t), f.db, wrongKey, f.authorizer, mcpevents.NewWebhook(guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))))
+	require.NoError(t, err)
+	message := mcpeventsv1.Delivery_builder{Id: new(deliveries[0].ID.String()), OrganizationId: new(f.owner.OrganizationID), ProjectId: new(f.input.Arguments.ProjectID.String())}.Build()
+	require.NoError(t, service.Deliver(ctx, message, gcp.MessageMetadata{}))
+	require.NoError(t, service.Deliver(ctx, message, gcp.MessageMetadata{}))
+	rows, err := eventrepo.New(f.db).ListEventDeliveries(ctx, eventrepo.ListEventDeliveriesParams{OrganizationID: f.owner.OrganizationID, ProjectID: f.input.Arguments.ProjectID, EventID: uuid.MustParse(event.GetEventId())})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows[0].Attempts)
+	require.Equal(t, "failed", rows[0].Status)
+	require.Empty(t, f.received)
+}
+
+func TestEventsStorageAndReviewReadsRejectCrossOrganizationReferences(t *testing.T) {
+	t.Parallel()
+	f := newEventFixture(t)
+	ctx := t.Context()
+	other, otherProject := seedRegistrationLifecycle(t, ctx, f.db)
+	subscription, err := f.service.Subscribe(ctx, f.owner, f.input)
+	require.NoError(t, err)
+	q := eventrepo.New(f.db)
+	_, err = q.GetReviewEventRequest(ctx, eventrepo.GetReviewEventRequestParams{ID: f.requestID, ProjectID: f.input.Arguments.ProjectID, OrganizationID: other.OrganizationID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = approvalrepo.New(f.db).GetApprovalRequestByTarget(ctx, approvalrepo.GetApprovalRequestByTargetParams{ProjectID: f.input.Arguments.ProjectID, OrganizationID: other.OrganizationID, TargetKind: "server_url", TargetKey: "https://events.example.test/mcp"})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	row, err := q.GetSubscription(ctx, eventrepo.GetSubscriptionParams{ID: subscription.ID, ProjectID: f.input.Arguments.ProjectID, OrganizationID: f.owner.OrganizationID})
+	require.NoError(t, err)
+	params := eventrepo.SaveSubscriptionParams{
+		ID: "cross-tenant-project", ProjectID: otherProject.ID, OrganizationID: row.OrganizationID,
+		ConnectionID: row.ConnectionID, ConnectionGeneration: row.ConnectionGeneration, ClientID: row.ClientID, UserID: row.UserID,
+		EventName: row.EventName, CallbackUrl: row.CallbackUrl, SigningSecret: row.SigningSecret,
+		PreviousSigningSecret: row.PreviousSigningSecret, PreviousSecretExpiresAt: row.PreviousSecretExpiresAt,
+		Generation: row.Generation, SubscribedAt: row.SubscribedAt, ExpiresAt: row.ExpiresAt, VerifiedAt: row.VerifiedAt,
+	}
+	_, err = q.SaveSubscription(ctx, params)
+	require.ErrorContains(t, err, "platform_mcp_event_subscriptions_project_fkey")
+	params.ID, params.ProjectID = "cross-tenant-connection", row.ProjectID
+	params.ConnectionID = conv.ToNullUUID(uuid.MustParse(other.ConnectionID))
+	_, err = q.SaveSubscription(ctx, params)
+	require.ErrorContains(t, err, "platform_mcp_event_subscriptions_connection_fkey")
+	_, err = q.CreateDelivery(ctx, eventrepo.CreateDeliveryParams{
+		ID: uuid.New(), OrganizationID: other.OrganizationID, ProjectID: otherProject.ID,
+		SubscriptionID: conv.ToPGText(row.ID), SubscriptionGeneration: row.Generation,
+		EventID: uuid.New(), EventName: row.EventName, RequestID: f.requestID, Payload: []byte(`{}`),
+	})
+	require.ErrorContains(t, err, "platform_mcp_event_deliveries_subscription_fkey")
 }

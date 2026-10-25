@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ import (
 
 // Service persists subscriptions and shares authorization with asynchronous delivery.
 type Service struct {
+	logger     *slog.Logger
 	db         *pgxpool.Pool
 	encryption *encryption.Client
 	authorizer Authorizer
@@ -27,11 +29,11 @@ type Service struct {
 }
 
 // NewService requires live authorization; a nil dependency is a configuration error.
-func NewService(db *pgxpool.Pool, encryptionClient *encryption.Client, authorizer Authorizer, webhook *Webhook) (*Service, error) {
-	if db == nil || encryptionClient == nil || authorizer == nil || webhook == nil {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, encryptionClient *encryption.Client, authorizer Authorizer, webhook *Webhook) (*Service, error) {
+	if logger == nil || db == nil || encryptionClient == nil || authorizer == nil || webhook == nil {
 		return nil, errors.New("event service dependencies are required")
 	}
-	return &Service{db: db, encryption: encryptionClient, authorizer: authorizer, webhook: webhook, now: time.Now}, nil
+	return &Service{logger: logger, db: db, encryption: encryptionClient, authorizer: authorizer, webhook: webhook, now: time.Now}, nil
 }
 
 // ValidateInput rejects unsupported filters and unbounded lifetimes before I/O.
@@ -58,6 +60,11 @@ func (s *Service) Subscribe(ctx context.Context, owner Owner, input Subscription
 		return SubscriptionResult{}, fmt.Errorf("authorize subscription: %w", err)
 	}
 	id := SubscriptionID(owner, input)
+	// Verification must not hold pooled connections or subscription/quota locks.
+	verifiedAt := s.now().UTC()
+	if err := s.webhook.Verify(ctx, id, input.Delivery, verifiedAt); err != nil {
+		return SubscriptionResult{}, err
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return SubscriptionResult{}, fmt.Errorf("begin subscription: %w", err)
@@ -96,14 +103,6 @@ func (s *Service) Subscribe(ctx context.Context, owner Owner, input Subscription
 		if err != nil {
 			return SubscriptionResult{}, fmt.Errorf("decrypt subscription key: %w", err)
 		}
-	}
-	// A bounded verification cache applies only to the same live subscription
-	// and secret. New secrets and renewed expired subscriptions prove ownership again.
-	verifiedAt := now
-	if active && currentSecret == input.Delivery.Secret && old.VerifiedAt.Time.Add(RotationWindow).After(now) {
-		verifiedAt = old.VerifiedAt.Time
-	} else if err := s.webhook.Verify(ctx, id, input.Delivery, now); err != nil {
-		return SubscriptionResult{}, err
 	}
 	if err := s.authorizer.WithTx(tx).Authorize(ctx, owner, projectID, input.Name, uuid.Nil); err != nil {
 		return SubscriptionResult{}, fmt.Errorf("reauthorize subscription: %w", err)
