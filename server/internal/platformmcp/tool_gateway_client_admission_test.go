@@ -163,7 +163,7 @@ func TestGatewayClientAdmissionOverCallTool(t *testing.T) {
 	require.Equal(t, restricted.String(), output.GatewayID)
 	require.True(t, output.SignIn)
 	require.Equal(t, "presets", output.Mode)
-	require.Contains(t, output.Meaning, "Known apps only")
+	require.Contains(t, output.Meaning, "Verified clients")
 	require.Len(t, output.CustomClientURLs, gatewayClientAdmissionURLLimit, "a bounded first page")
 	require.True(t, output.MoreCustomURLs, "one more URL is configured than listed")
 	for _, url := range output.CustomClientURLs {
@@ -176,7 +176,7 @@ func TestGatewayClientAdmissionOverCallTool(t *testing.T) {
 	_, output = call(exact, reporting)
 	require.Equal(t, "reporting", output.Mode)
 	require.Equal(t, []any{[]string{}, false}, []any{output.CustomClientURLs, output.MoreCustomURLs}, "stored URLs apply only in presets")
-	require.Contains(t, output.Meaning, "every app can sign in")
+	require.Contains(t, output.Meaning, "Any client (legacy reporting)")
 	_, output = call(exact, disabled)
 	require.Equal(t, []any{true, "disabled"}, []any{output.SignIn, output.Mode})
 	require.Contains(t, output.Meaning, "dynamic client registration")

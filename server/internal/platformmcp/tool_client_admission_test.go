@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -39,8 +40,9 @@ func TestSetClientAdmissionRequiresConfirmationAndAValidMode(t *testing.T) {
 func TestClientAdmissionModeGuidanceCoversEveryResolvableMode(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range []string{"presets", "open", "disabled", "reporting"} {
-		require.NotEmpty(t, modeGuidance(mode), "mode %q has no guidance", mode)
+	// Named as the dashboard's settings name them; the raw modes are unchanged.
+	for mode, label := range map[string]string{"presets": "Verified clients: ", "open": "Any client: ", "disabled": "Off: ", "reporting": "Any client (legacy reporting): "} {
+		require.True(t, strings.HasPrefix(modeGuidance(mode), label), "mode %q: %q", mode, modeGuidance(mode))
 	}
 	require.Empty(t, modeGuidance("not-a-mode"))
 }
