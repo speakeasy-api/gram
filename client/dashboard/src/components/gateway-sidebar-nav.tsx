@@ -10,7 +10,9 @@ import {
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useGatewayDebugAction } from "@/pages/mcp/gateway/useGatewayDebugAction";
 import {
   gatewayInstallPageUrl,
@@ -62,8 +64,12 @@ export function GatewaySidebarNav(): React.JSX.Element | null {
   // the resource, so hide it rather than render a permission wall.
   const canViewTeamAccess =
     !!metaMcpServer && hasScope("org:read") && hasScope("mcp:read", id);
+  const debugRollout = useFeatureFlag(FEATURE_FLAGS.gatewayDebug);
   const canDebug =
-    id !== "" && !!metaMcpServer && hasScope("project:read", project.id);
+    id !== "" &&
+    !!metaMcpServer &&
+    debugRollout.status === "enabled" &&
+    hasScope("project:read", project.id);
   useGatewayDebugAction(canDebug ? gatewayTabHref(routes, id, "debug") : null);
   if (!id) return null;
 

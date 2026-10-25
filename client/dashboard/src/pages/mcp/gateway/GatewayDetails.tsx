@@ -1,8 +1,11 @@
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { useProject } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { useGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
@@ -27,6 +30,7 @@ export default function GatewayDetails(): JSX.Element {
   const id = gatewayId ?? "";
   const activeTab = activeTabFromPath(location.pathname, id);
   const tabContentRef = useTabScrollReset(activeTab);
+  const debugRollout = useFeatureFlag(FEATURE_FLAGS.gatewayDebug);
 
   const {
     data: metaMcpServer,
@@ -103,12 +107,24 @@ export default function GatewayDetails(): JSX.Element {
           </RequireScope>
         );
       case "debug":
+        // A rollout gate, not authorization: project:read still decides who
+        // may see it. Nothing under it mounts, or fetches, until PostHog
+        // enables it; loading, off, missing and error all stay closed.
         return (
           <RequireScope scope="project:read" level="page">
-            <GatewayDebugTab
-              key={`${project.id}:${metaMcpServer.id}`}
-              gatewayId={metaMcpServer.id}
-            />
+            {debugRollout.status === "loading" ? null : debugRollout.status !==
+              "enabled" ? (
+              <InlineEmptyState
+                icon="bug"
+                heading="Debug is not available yet"
+                description="It is in preview with a few organizations. Ask your Speakeasy contact to turn it on."
+              />
+            ) : (
+              <GatewayDebugTab
+                key={`${project.id}:${metaMcpServer.id}`}
+                gatewayId={metaMcpServer.id}
+              />
+            )}
           </RequireScope>
         );
       case "settings":
