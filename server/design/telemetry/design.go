@@ -3360,9 +3360,22 @@ var GatewayConnectionKey = Type("GatewayConnectionKey", func() {
 	Required("stage", "subject", "provider_id", "client")
 })
 
+var GatewayConnectionCaller = Type("GatewayConnectionCaller", func() {
+	Description("One signed-in person or agent and the registered client they used, given as a hotspot's subject and client keys. It includes every provider and the attempts that recorded none.")
+	Attribute("subject", String, "The person's or agent's URN", func() {
+		MinLength(1)
+		MaxLength(512)
+	})
+	Attribute("client", String, "The registered client's ID", func() {
+		Format(FormatUUID)
+	})
+	Required("subject", "client")
+})
+
 var GetGatewayConnectionHealthPayload = Type("GetGatewayConnectionHealthPayload", func() {
 	gatewayConnectionWindow()
 	Attribute("key", GatewayConnectionKey, "Count only this hotspot's attempts, in its stage alone. Absent counts the whole gateway.")
+	Attribute("caller", GatewayConnectionCaller, "Count only this caller and client's attempts, each stage on its own, with every provider and with attempts that recorded none. Sign-in requests are recorded before the caller is known, so that stage is left out and listed as not recorded. Not with key.")
 })
 
 var ListGatewayConnectionHotspotsPayload = Type("ListGatewayConnectionHotspotsPayload", func() {
@@ -3374,16 +3387,16 @@ var ListGatewayConnectionHotspotsPayload = Type("ListGatewayConnectionHotspotsPa
 		Enum("count", "rate")
 		Default("count")
 	})
-	Attribute("min_attempts", Int64, "Leave out keys with fewer attempts in the window.", func() {
+	Attribute("min_attempts", Int64, "Leave out keys with fewer attempts in the window. Omitted, it is 5 for the whole gateway and 1 with caller, so a caller's single attempt with a provider is listed.", func() {
 		Minimum(1)
 		Maximum(100000)
-		Default(5)
 	})
 	Attribute("limit", Int64, "Hotspots to return.", func() {
 		Minimum(1)
 		Maximum(25)
 		Default(25)
 	})
+	Attribute("caller", GatewayConnectionCaller, "Rank only this caller and client's keys, one per provider or for no recorded provider, before min_attempts and limit apply. Pass min_attempts 1 to include keys with a single attempt.")
 	Required("stage")
 })
 
@@ -3411,6 +3424,9 @@ var GatewayConnectionStage = Type("GatewayConnectionStage", func() {
 	Attribute("last_seen_at", String, "Time of the latest attempt, absent when there was none", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("last_code_issued_at", String, "For inbound_token with a key or caller only: the start of the latest authorization-code request whose token response was written. Later refreshes do not change it; it is not when a client received or used the token.", func() {
+		Format(FormatDateTime)
+	})
 	Attribute("buckets", ArrayOf(GatewayConnectionBucket), "The window in ascending UTC-aligned buckets of interval_seconds, gap-filled; the first and last may be partial")
 	Required("stage", "attempts", "outcomes", "retries", "recovered", "buckets")
 })
@@ -3429,6 +3445,7 @@ var GetGatewayConnectionHealthResult = Type("GetGatewayConnectionHealthResult", 
 	Attribute("stages", ArrayOf(GatewayConnectionStage), "The recorded stages")
 	Attribute("not_recorded", ArrayOf(GatewayConnectionCoverage), "Stages that are not recorded")
 	Attribute("scope", String, "What the recorded stages observe")
+	Attribute("caller", GatewayConnectionCaller, "The caller these counts are scoped to, present only when caller was given and answered")
 	Required("from", "to", "interval_seconds", "stages", "not_recorded", "scope")
 })
 
@@ -3468,5 +3485,7 @@ var ListGatewayConnectionHotspotsResult = Type("ListGatewayConnectionHotspotsRes
 	Attribute("rank_by", String, "count or rate")
 	Attribute("min_attempts", Int64, "The attempt floor applied")
 	Attribute("hotspots", ArrayOf(GatewayConnectionHotspot), "Ranked hotspots; ties break by failed attempts, attempts, then key")
+	Attribute("truncated", Boolean, "More keys met min_attempts than limit returned. A server that does not report it leaves it out, which means unknown, not complete.")
+	Attribute("caller", GatewayConnectionCaller, "The caller these keys are scoped to, present only when caller was given and answered")
 	Required("from", "to", "stage", "rank_by", "min_attempts", "hotspots")
 })

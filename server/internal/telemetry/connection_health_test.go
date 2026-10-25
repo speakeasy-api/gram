@@ -155,12 +155,12 @@ func TestGetGatewayConnectionHealth_CountsEachStageExactly(t *testing.T) {
 	require.Equal(t, map[string]bool{"cimd_fetch": true, "upstream_refresh_background": true, "upstream_refresh_capture_limit": true, "upstream_endpoint_contact": true}, notRecorded, "metadata fetches, unattributed refreshes, refreshes beyond the per-request limit, and provider contacts stay unknown")
 	require.NotEmpty(t, result.Scope)
 
-	hotspots, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)), Stage: token, RankBy: "count", MinAttempts: 1, Limit: 25})
+	hotspots, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)), Stage: token, RankBy: "count", MinAttempts: new(int64(1)), Limit: 25})
 	require.NoError(t, err)
 	require.Len(t, hotspots.Hotspots, 1)
 	require.Equal(t, []int64{3, 0, 1}, []int64{hotspots.Hotspots[0].Attempts, hotspots.Hotspots[0].Failed, hotspots.Hotspots[0].Blocked}, "policy blocks are blocked, not failed")
 	for _, stage := range []string{callback, refresh} {
-		providerRows, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)), Stage: stage, RankBy: "count", MinAttempts: 1, Limit: 25})
+		providerRows, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)), Stage: stage, RankBy: "count", MinAttempts: new(int64(1)), Limit: 25})
 		require.NoError(t, err)
 		require.Len(t, providerRows.Hotspots, 1)
 		require.Equal(t, "Provider not recorded", providerRows.Hotspots[0].Provider.Label)
@@ -194,7 +194,7 @@ func TestGetGatewayConnectionHealth_RequiresProjectLogAndGatewayRead(t *testing.
 				return err //nolint:wrapcheck // the test reads the handler's own error
 			}(),
 			func() error {
-				_, err := ti.service.ListGatewayConnectionHotspots(caller, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gatewayID.String(), From: nil, To: nil, Stage: telemetry.ConnectionStageDiscoveryMember, RankBy: "count", MinAttempts: 5, Limit: 25})
+				_, err := ti.service.ListGatewayConnectionHotspots(caller, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gatewayID.String(), From: nil, To: nil, Stage: telemetry.ConnectionStageDiscoveryMember, RankBy: "count", MinAttempts: new(int64(5)), Limit: 25})
 				return err //nolint:wrapcheck // the test reads the handler's own error
 			}(),
 		} {
@@ -344,7 +344,7 @@ func TestListGatewayConnectionHotspots_RanksAndNamesOnlyVisibleKeys(t *testing.T
 
 	rank := func(caller context.Context, sort string, minAttempts int64) []*gen.GatewayConnectionHotspot {
 		t.Helper()
-		result, err := ti.service.ListGatewayConnectionHotspots(caller, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway.ID.String(), Stage: telemetry.ConnectionStageDiscoveryMember, RankBy: sort, MinAttempts: minAttempts, Limit: 25})
+		result, err := ti.service.ListGatewayConnectionHotspots(caller, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway.ID.String(), Stage: telemetry.ConnectionStageDiscoveryMember, RankBy: sort, MinAttempts: &minAttempts, Limit: 25})
 		require.NoError(t, err)
 		return result.Hotspots
 	}
@@ -449,7 +449,7 @@ func TestListGatewayConnectionHotspots_DeletedSignInServerNamesNoClient(t *testi
 	require.NoError(t, err)
 	logConnectionAttempt(t, ctx, ti, connectionAttempt{project: ti.projectID, gateway: gateway.ID.String(), stage: telemetry.ConnectionStageDiscoveryMember, outcome: "failed", reason: "rate_limited", subject: "", provider: "", client: client.ID.String(), at: time.Now().UTC().Add(-time.Hour)})
 
-	result, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway.ID.String(), From: nil, To: nil, Stage: telemetry.ConnectionStageDiscoveryMember, RankBy: "count", MinAttempts: 1, Limit: 25})
+	result, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway.ID.String(), From: nil, To: nil, Stage: telemetry.ConnectionStageDiscoveryMember, RankBy: "count", MinAttempts: new(int64(1)), Limit: 25})
 	require.NoError(t, err)
 	require.Len(t, result.Hotspots, 1)
 	require.Equal(t, "Unknown client", result.Hotspots[0].Client.Label)

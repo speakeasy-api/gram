@@ -8,11 +8,19 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  GatewayConnectionCaller,
+  GatewayConnectionCaller$inboundSchema,
+} from "./gatewayconnectioncaller.js";
+import {
   GatewayConnectionHotspot,
   GatewayConnectionHotspot$inboundSchema,
 } from "./gatewayconnectionhotspot.js";
 
 export type ListGatewayConnectionHotspotsResult = {
+  /**
+   * One signed-in person or agent and the registered client they used, given as a hotspot's subject and client keys. It includes every provider and the attempts that recorded none.
+   */
+  caller?: GatewayConnectionCaller | undefined;
   /**
    * Window start
    */
@@ -37,6 +45,10 @@ export type ListGatewayConnectionHotspotsResult = {
    * Window end, excluded
    */
   to: Date;
+  /**
+   * More keys met min_attempts than limit returned. A server that does not report it leaves it out, which means unknown, not complete.
+   */
+  truncated?: boolean | undefined;
 };
 
 /** @internal */
@@ -45,6 +57,7 @@ export const ListGatewayConnectionHotspotsResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    caller: z.optional(GatewayConnectionCaller$inboundSchema),
     from: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -54,6 +67,7 @@ export const ListGatewayConnectionHotspotsResult$inboundSchema: z.ZodMiniType<
     rank_by: z.string(),
     stage: z.string(),
     to: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    truncated: z.optional(z.boolean()),
   }),
   z.transform((v) => {
     return remap$(v, {

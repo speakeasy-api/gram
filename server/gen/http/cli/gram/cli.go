@@ -29933,7 +29933,7 @@ func telemetryGetGatewayConnectionHealthUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-gateway-connection-health --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"key\": {\n         \"client\": \"aaa\",\n         \"provider_id\": \"aaa\",\n         \"stage\": \"inbound_token\",\n         \"subject\": \"aaa\"\n      },\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-gateway-connection-health --body '{\n      \"caller\": {\n         \"client\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"subject\": \"aa\"\n      },\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"key\": {\n         \"client\": \"aaa\",\n         \"provider_id\": \"aaa\",\n         \"stage\": \"inbound_token\",\n         \"subject\": \"aaa\"\n      },\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryListGatewayConnectionHotspotsUsage() {
@@ -29957,7 +29957,7 @@ func telemetryListGatewayConnectionHotspotsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry list-gateway-connection-hotspots --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"min_attempts\": 2,\n      \"rank_by\": \"rate\",\n      \"stage\": \"inbound_token\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry list-gateway-connection-hotspots --body '{\n      \"caller\": {\n         \"client\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"subject\": \"aa\"\n      },\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"min_attempts\": 2,\n      \"rank_by\": \"rate\",\n      \"stage\": \"inbound_token\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryGetProjectOverviewUsage() {

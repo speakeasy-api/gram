@@ -9551,16 +9551,32 @@ func unmarshalGatewayConnectionKeyRequestBodyToTelemetryGatewayConnectionKey(v *
 	return res
 }
 
+// unmarshalGatewayConnectionCallerRequestBodyToTelemetryGatewayConnectionCaller
+// builds a value of type *telemetry.GatewayConnectionCaller from a value of
+// type *GatewayConnectionCallerRequestBody.
+func unmarshalGatewayConnectionCallerRequestBodyToTelemetryGatewayConnectionCaller(v *GatewayConnectionCallerRequestBody) *telemetry.GatewayConnectionCaller {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.GatewayConnectionCaller{
+		Subject: *v.Subject,
+		Client:  *v.Client,
+	}
+
+	return res
+}
+
 // marshalTelemetryGatewayConnectionStageToGatewayConnectionStageResponseBody
 // builds a value of type *GatewayConnectionStageResponseBody from a value of
 // type *telemetry.GatewayConnectionStage.
 func marshalTelemetryGatewayConnectionStageToGatewayConnectionStageResponseBody(v *telemetry.GatewayConnectionStage) *GatewayConnectionStageResponseBody {
 	res := &GatewayConnectionStageResponseBody{
-		Stage:      v.Stage,
-		Attempts:   v.Attempts,
-		Retries:    v.Retries,
-		Recovered:  v.Recovered,
-		LastSeenAt: v.LastSeenAt,
+		Stage:            v.Stage,
+		Attempts:         v.Attempts,
+		Retries:          v.Retries,
+		Recovered:        v.Recovered,
+		LastSeenAt:       v.LastSeenAt,
+		LastCodeIssuedAt: v.LastCodeIssuedAt,
 	}
 	if v.Outcomes != nil {
 		res.Outcomes = make([]*GatewayConnectionOutcomeCountResponseBody, len(v.Outcomes))
@@ -9632,6 +9648,21 @@ func marshalTelemetryGatewayConnectionCoverageToGatewayConnectionCoverageRespons
 	res := &GatewayConnectionCoverageResponseBody{
 		Stage: v.Stage,
 		Note:  v.Note,
+	}
+
+	return res
+}
+
+// marshalTelemetryGatewayConnectionCallerToGatewayConnectionCallerResponseBody
+// builds a value of type *GatewayConnectionCallerResponseBody from a value of
+// type *telemetry.GatewayConnectionCaller.
+func marshalTelemetryGatewayConnectionCallerToGatewayConnectionCallerResponseBody(v *telemetry.GatewayConnectionCaller) *GatewayConnectionCallerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &GatewayConnectionCallerResponseBody{
+		Subject: v.Subject,
+		Client:  v.Client,
 	}
 
 	return res

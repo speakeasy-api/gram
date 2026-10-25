@@ -94034,6 +94034,22 @@ components:
       required:
         - bucket_time_unix_nano
         - outcomes
+    GatewayConnectionCaller:
+      type: object
+      properties:
+        client:
+          type: string
+          description: The registered client's ID
+          format: uuid
+        subject:
+          type: string
+          description: The person's or agent's URN
+          minLength: 1
+          maxLength: 512
+      description: One signed-in person or agent and the registered client they used, given as a hotspot's subject and client keys. It includes every provider and the attempts that recorded none.
+      required:
+        - subject
+        - client
     GatewayConnectionCoverage:
       type: object
       properties:
@@ -94180,6 +94196,10 @@ components:
           items:
             $ref: '#/components/schemas/GatewayConnectionBucket'
           description: The window in ascending UTC-aligned buckets of interval_seconds, gap-filled; the first and last may be partial
+        last_code_issued_at:
+          type: string
+          description: 'For inbound_token with a key or caller only: the start of the latest authorization-code request whose token response was written. Later refreshes do not change it; it is not when a client received or used the token.'
+          format: date-time
         last_seen_at:
           type: string
           description: Time of the latest attempt, absent when there was none
@@ -94663,6 +94683,8 @@ components:
     GetGatewayConnectionHealthPayload:
       type: object
       properties:
+        caller:
+          $ref: '#/components/schemas/GatewayConnectionCaller'
         from:
           type: string
           description: Start of the window in ISO 8601 format. Defaults to 7 days before to; the window may span at most 30 days.
@@ -94684,6 +94706,8 @@ components:
     GetGatewayConnectionHealthResult:
       type: object
       properties:
+        caller:
+          $ref: '#/components/schemas/GatewayConnectionCaller'
         from:
           type: string
           description: Window start
@@ -98513,6 +98537,8 @@ components:
     ListGatewayConnectionHotspotsPayload:
       type: object
       properties:
+        caller:
+          $ref: '#/components/schemas/GatewayConnectionCaller'
         from:
           type: string
           description: Start of the window in ISO 8601 format. Defaults to 7 days before to; the window may span at most 30 days.
@@ -98531,8 +98557,7 @@ components:
           format: uuid
         min_attempts:
           type: integer
-          description: Leave out keys with fewer attempts in the window.
-          default: 5
+          description: Leave out keys with fewer attempts in the window. Omitted, it is 5 for the whole gateway and 1 with caller, so a caller's single attempt with a provider is listed.
           format: int64
           minimum: 1
           maximum: 100000
@@ -98564,6 +98589,8 @@ components:
     ListGatewayConnectionHotspotsResult:
       type: object
       properties:
+        caller:
+          $ref: '#/components/schemas/GatewayConnectionCaller'
         from:
           type: string
           description: Window start
@@ -98587,6 +98614,9 @@ components:
           type: string
           description: Window end, excluded
           format: date-time
+        truncated:
+          type: boolean
+          description: More keys met min_attempts than limit returned. A server that does not report it leaves it out, which means unknown, not complete.
       required:
         - from
         - to

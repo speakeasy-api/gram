@@ -51,6 +51,7 @@ func seedGatewayConsentChallenge(t *testing.T, ctx context.Context, ti *testInst
 			MetaMcpServerID: uuid.NullUUID{UUID: gatewayID, Valid: true},
 		},
 		ClientID:               client.ClientID,
+		RegisteredClientID:     uuid.NullUUID{UUID: client.ID, Valid: true},
 		RedirectURI:            client.RedirectUris[0],
 		State:                  "client-state",
 		CodeChallenge:          base64.RawURLEncoding.EncodeToString(challenge[:]),

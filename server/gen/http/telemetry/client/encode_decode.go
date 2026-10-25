@@ -9913,6 +9913,21 @@ func marshalTelemetryGatewayConnectionKeyToGatewayConnectionKeyRequestBody(v *te
 	return res
 }
 
+// marshalTelemetryGatewayConnectionCallerToGatewayConnectionCallerRequestBody
+// builds a value of type *GatewayConnectionCallerRequestBody from a value of
+// type *telemetry.GatewayConnectionCaller.
+func marshalTelemetryGatewayConnectionCallerToGatewayConnectionCallerRequestBody(v *telemetry.GatewayConnectionCaller) *GatewayConnectionCallerRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &GatewayConnectionCallerRequestBody{
+		Subject: v.Subject,
+		Client:  v.Client,
+	}
+
+	return res
+}
+
 // marshalGatewayConnectionKeyRequestBodyToTelemetryGatewayConnectionKey builds
 // a value of type *telemetry.GatewayConnectionKey from a value of type
 // *GatewayConnectionKeyRequestBody.
@@ -9930,16 +9945,32 @@ func marshalGatewayConnectionKeyRequestBodyToTelemetryGatewayConnectionKey(v *Ga
 	return res
 }
 
+// marshalGatewayConnectionCallerRequestBodyToTelemetryGatewayConnectionCaller
+// builds a value of type *telemetry.GatewayConnectionCaller from a value of
+// type *GatewayConnectionCallerRequestBody.
+func marshalGatewayConnectionCallerRequestBodyToTelemetryGatewayConnectionCaller(v *GatewayConnectionCallerRequestBody) *telemetry.GatewayConnectionCaller {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.GatewayConnectionCaller{
+		Subject: v.Subject,
+		Client:  v.Client,
+	}
+
+	return res
+}
+
 // unmarshalGatewayConnectionStageResponseBodyToTelemetryGatewayConnectionStage
 // builds a value of type *telemetry.GatewayConnectionStage from a value of
 // type *GatewayConnectionStageResponseBody.
 func unmarshalGatewayConnectionStageResponseBodyToTelemetryGatewayConnectionStage(v *GatewayConnectionStageResponseBody) *telemetry.GatewayConnectionStage {
 	res := &telemetry.GatewayConnectionStage{
-		Stage:      *v.Stage,
-		Attempts:   *v.Attempts,
-		Retries:    *v.Retries,
-		Recovered:  *v.Recovered,
-		LastSeenAt: v.LastSeenAt,
+		Stage:            *v.Stage,
+		Attempts:         *v.Attempts,
+		Retries:          *v.Retries,
+		Recovered:        *v.Recovered,
+		LastSeenAt:       v.LastSeenAt,
+		LastCodeIssuedAt: v.LastCodeIssuedAt,
 	}
 	res.Outcomes = make([]*telemetry.GatewayConnectionOutcomeCount, len(v.Outcomes))
 	for i, val := range v.Outcomes {
@@ -9999,6 +10030,21 @@ func unmarshalGatewayConnectionCoverageResponseBodyToTelemetryGatewayConnectionC
 	res := &telemetry.GatewayConnectionCoverage{
 		Stage: *v.Stage,
 		Note:  *v.Note,
+	}
+
+	return res
+}
+
+// unmarshalGatewayConnectionCallerResponseBodyToTelemetryGatewayConnectionCaller
+// builds a value of type *telemetry.GatewayConnectionCaller from a value of
+// type *GatewayConnectionCallerResponseBody.
+func unmarshalGatewayConnectionCallerResponseBodyToTelemetryGatewayConnectionCaller(v *GatewayConnectionCallerResponseBody) *telemetry.GatewayConnectionCaller {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.GatewayConnectionCaller{
+		Subject: *v.Subject,
+		Client:  *v.Client,
 	}
 
 	return res

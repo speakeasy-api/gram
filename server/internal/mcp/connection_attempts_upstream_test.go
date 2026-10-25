@@ -17,12 +17,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -532,4 +538,180 @@ func TestGatewayProviderCallbackConnectionRemovedBeforeRetry(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, []string{"failed", "configuration", "connection_changed", subject.String(), fx.inbound.ID.String()},
 		[]string{rows[0].Outcome, rows[0].FailureClass, rows[0].Reason, rows[0].Subject, rows[0].ClientKey})
+}
+
+// providerMember is a gateway member that signs in through its own
+// provider, at an owned token endpoint.
+type providerMember struct {
+	slug     string
+	remote   uuid.UUID
+	provider string
+}
+
+func seedProviderMember(t *testing.T, ctx context.Context, ti *testInstance, issuerID, gatewayID uuid.UUID, name string, order int32) providerMember {
+	t.Helper()
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	projectID, orgID := *auth.ProjectID, auth.ActiveOrganizationID
+	slug := strings.ToLower(name) + "-" + uuid.NewString()[:8]
+	serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, gatewayID, name, slug, order, newCatalogUpstream(t, 1).url)
+	token := newProviderTokenEndpoint(t)
+	token.answer = tokenAnswer(http.StatusOK, `{"access_token":"provider-access-secret","token_type":"Bearer","expires_in":3600,"refresh_token":"provider-refresh-secret"}`)
+	remote := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, slug, token.server.URL, []uuid.UUID{issuerID})
+	_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: serverID, RemoteSessionClientID: remote})
+	require.NoError(t, err)
+	row, err := remotesessions_repo.New(ti.conn).GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{ID: remote, ProjectID: projectID, OrganizationID: orgID})
+	require.NoError(t, err)
+	return providerMember{slug: slug, remote: remote, provider: row.RemoteSessionClient.RemoteSessionIssuerID.String()}
+}
+
+// The support case, through the real consent, provider callback, token, and
+// listing handlers for ONE person, registered client, and gateway. The
+// person connects provider A and lists the gateway; a member with provider B
+// is added; a retained cursor fails with the old token; the person connects
+// B and signs in again, and the retained cursor still fails with the new
+// token; a listing without a cursor lists A and B. The raw rows and the
+// caller-scoped reader agree on every fact, B's successful sign-in included.
+// The retained cursor is synthetic: Direct listings issue none.
+func TestGatewayAddedProviderMemberBesideStaleListings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	writes := watchConnectionAttempts(t, ti)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	projectID, orgID := *auth.ProjectID, auth.ActiveOrganizationID
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "chain-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, issuer.ID)
+	trackerA := seedProviderMember(t, ctx, ti, issuer.ID, gateway.ID, "Tracker", 1)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+	person := urn.NewUserSubject(mockidp.MockUserID)
+	listingCaller := authztest.WithExactGrants(t, t.Context(), authz.NewGrant(authz.ScopeMCPConnect, gateway.ID.String()))
+	// A retained invalid cursor, as a client keeps from an earlier listing;
+	// it is synthetic, since Direct listings issue none.
+	retainedCursor := map[string]any{"cursor": "eyJvZmZzZXQiOjEwMH0"}
+
+	// providerSignIn connects one member's provider from the gateway's consent
+	// page and returns through the provider callback, for the same person and
+	// registered client as their gateway sign-in.
+	providerSignIn := func(member providerMember) {
+		t.Helper()
+		stateID, csrf := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+		form := url.Values{"state": {stateID}, "csrf_token": {csrf}, "action": {"connect"}, "client_id": {member.remote.String()}}
+		connect := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+		connect.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		redirected := httptest.NewRecorder()
+		require.NoError(t, ti.service.ServeConsentAction(redirected, connect, endpoint))
+		require.Equal(t, http.StatusSeeOther, redirected.Code, redirected.Body.String())
+		loc, err := url.Parse(redirected.Header().Get("Location"))
+		require.NoError(t, err)
+		callback := httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/remote_login_callback?"+url.Values{"state": {loc.Query().Get("state")}, "code": {"provider-code-secret"}}.Encode(), nil)
+		require.NoError(t, ti.service.HandleRemoteLoginCallback(httptest.NewRecorder(), callback))
+		require.Equal(t, 1, writes.written(t), "the provider callback is one attempt")
+		_, err = remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: person, RemoteSessionClientID: member.remote})
+		require.NoError(t, err, "the provider credential was saved for this person")
+	}
+	toolsOf := func(listing directListing) []string {
+		names := []string{}
+		for _, tool := range listing.Result.Tools {
+			names = append(names, strings.SplitN(tool.Name, "--", 2)[0])
+		}
+		return names
+	}
+
+	// Baseline: provider A connected, a sign-in token written, a fresh listing.
+	providerSignIn(trackerA)
+	first := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
+	require.Equal(t, 1, writes.written(t), "the token request is one attempt")
+	baseline := listGatewayAs(t, listingCaller, ti, slug, first.token, map[string]any{})
+	require.Nil(t, baseline.Error)
+	require.Equal(t, []string{trackerA.slug}, toolsOf(baseline))
+	require.Equal(t, 2, writes.written(t), "a complete listing and its member")
+
+	// A member with provider B is added; the retained cursor still fails.
+	wikiB := seedProviderMember(t, ctx, ti, issuer.ID, gateway.ID, "Wiki", 2)
+	stale := listGatewayAs(t, listingCaller, ti, slug, first.token, retainedCursor)
+	require.NotNil(t, stale.Error)
+	require.Contains(t, stale.Error.Message, "restart tools/list")
+	require.Equal(t, 1, writes.written(t))
+
+	// Provider B connected and a second sign-in token written; the retained
+	// cursor fails with the new token too.
+	providerSignIn(wikiB)
+	second := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
+	require.Equal(t, 1, writes.written(t))
+	stale = listGatewayAs(t, listingCaller, ti, slug, second.token, retainedCursor)
+	require.NotNil(t, stale.Error, "signing in again does not make a retained cursor valid")
+	require.Equal(t, 1, writes.written(t))
+
+	// Without the cursor, the new token lists both members.
+	fresh := listGatewayAs(t, listingCaller, ti, slug, second.token, map[string]any{})
+	require.Nil(t, fresh.Error)
+	require.NotNil(t, fresh.Result)
+	require.Nil(t, fresh.Result.NextCursor)
+	require.ElementsMatch(t, []string{trackerA.slug, wikiB.slug}, toolsOf(fresh))
+	require.Equal(t, 3, writes.written(t), "a complete listing and its two members")
+
+	// Raw rows: every fact names the same person and registered client.
+	providers := []string{}
+	for _, row := range upstreamAttempts(t, projectID, gateway.ID) {
+		require.Equal(t, []string{"upstream_callback", "stored", person.String(), client.ID.String()},
+			[]string{row.Stage, row.Outcome, row.Subject, row.ClientKey})
+		require.NotContains(t, row.Attributes, "provider-code-secret")
+		require.NotContains(t, row.Attributes, "provider-access-secret")
+		providers = append(providers, row.ProviderID)
+	}
+	require.Equal(t, []string{trackerA.provider, wikiB.provider}, providers)
+	tokens := inboundAttempts(t, projectID, gateway.ID)
+	require.Len(t, tokens, 2)
+	for _, row := range tokens {
+		require.Equal(t, []string{"code_issued", person.String(), client.ID.String()}, []string{row.Outcome, row.Subject, row.ClientKey})
+	}
+	listings := []string{}
+	for _, row := range connectionAttempts(t, projectID, gateway.ID) {
+		require.Equal(t, []string{person.String(), client.ID.String()}, []string{row.Subject, row.ClientKey})
+		if row.Stage == "discovery_listing" {
+			listings = append(listings, row.Outcome+"/"+row.Reason)
+		}
+	}
+	require.Equal(t, []string{"complete/", "failed/stale_cursor", "failed/stale_cursor", "complete/"}, listings)
+
+	// The caller-scoped reader counts the same facts for this person and
+	// client alone, and lists each provider's successful sign-in.
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	reader := telemetry.NewConnectionHealth(ti.conn, chConn, func(context.Context, string) (bool, error) { return true, nil }, ti.authzEngine)
+	readCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, projectID.String()), authz.NewGrant(authz.ScopeLogRead, projectID.String()), authz.NewGrant(authz.ScopeMCPRead, gateway.ID.String()))
+	target := telemetry.ConnectionHealthTarget{ProjectID: projectID, OrganizationID: orgID, GatewayID: gateway.ID}
+	window, err := telemetry.ParseConnectionHealthWindow("", "", time.Now().Add(time.Minute))
+	require.NoError(t, err)
+	caller := &telemetry.ConnectionCaller{Subject: person.String(), ClientKey: client.ID.String()}
+	summary, err := reader.Summary(readCtx, target, window, telemetry.ConnectionHealthScope{Key: nil, Caller: caller})
+	require.NoError(t, err)
+	counts := map[string]uint64{}
+	var lastCode time.Time
+	for _, stage := range summary.Stages {
+		for _, outcome := range stage.Outcomes {
+			counts[stage.Stage+"/"+outcome.Outcome] = outcome.Count
+		}
+		if stage.Stage == telemetry.ConnectionStageInboundToken {
+			lastCode = stage.LastCodeIssued
+		}
+	}
+	require.Equal(t, map[string]uint64{
+		"inbound_token/code_issued":  2,
+		"upstream_callback/stored":   2,
+		"discovery_listing/failed":   2,
+		"discovery_listing/complete": 2,
+		"discovery_member/listed":    3,
+	}, counts)
+	require.False(t, lastCode.IsZero())
+	ranked, err := reader.Hotspots(readCtx, target, window, telemetry.ConnectionHotspotQuery{Stage: telemetry.ConnectionStageUpstreamCallback, ByRate: false, MinAttempts: 1, Limit: 25, Caller: caller})
+	require.NoError(t, err)
+	require.False(t, ranked.Truncated)
+	stored := map[string][]telemetry.ConnectionOutcomeCount{}
+	for _, hotspot := range ranked.Hotspots {
+		stored[hotspot.Provider.ID] = hotspot.Outcomes
+	}
+	one := []telemetry.ConnectionOutcomeCount{{Outcome: "stored", Count: 1}}
+	require.Equal(t, map[string][]telemetry.ConnectionOutcomeCount{trackerA.provider: one, wikiB.provider: one}, stored, "the newly added provider's successful sign-in is listed")
 }

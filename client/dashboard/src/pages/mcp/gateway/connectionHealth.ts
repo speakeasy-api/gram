@@ -11,6 +11,7 @@ import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import type { LogFilter } from "@gram/client/models/components/logfilter.js";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import type { GatewayConnectionHotspot } from "@gram/client/models/components/gatewayconnectionhotspot.js";
+import type { GatewayConnectionCaller } from "@gram/client/models/components/gatewayconnectioncaller.js";
 import type { GatewayConnectionKey } from "@gram/client/models/components/gatewayconnectionkey.js";
 import type { GatewayConnectionOutcomeCount } from "@gram/client/models/components/gatewayconnectionoutcomecount.js";
 import type { ListGatewayConnectionHotspotsPayloadStage } from "@gram/client/models/components/listgatewayconnectionhotspotspayload.js";
@@ -807,12 +808,28 @@ export function hotspotKey(
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Whether an answer says it was scoped to exactly this caller. */
+export function sameCaller(
+  echoed: GatewayConnectionCaller | undefined,
+  caller: GatewayConnectionCaller,
+): boolean {
+  return (
+    echoed !== undefined &&
+    echoed.subject === caller.subject &&
+    echoed.client === caller.client
+  );
+}
+
 /**
- * Whether a key can be matched to sign-in token responses: only a signed-in
- * caller using a registered client can have redeemed an authorization code.
+ * The person or agent and registered client a key names, which the server
+ * can count on their own; null for any other caller or client kind.
  */
-export function canMatchSignIn(key: GatewayConnectionKey): boolean {
-  return key.subject !== "" && UUID.test(key.client);
+export function callerOf(
+  key: GatewayConnectionKey,
+): GatewayConnectionCaller | null {
+  return /^(user|agent):/.test(key.subject) && UUID.test(key.client)
+    ? { subject: key.subject, client: key.client }
+    : null;
 }
 
 /**

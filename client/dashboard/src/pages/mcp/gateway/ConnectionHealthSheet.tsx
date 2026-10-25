@@ -19,12 +19,13 @@ import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
+import type { GatewayConnectionCaller } from "@gram/client/models/components/gatewayconnectioncaller.js";
 import type { GatewayConnectionHotspot } from "@gram/client/models/components/gatewayconnectionhotspot.js";
-import type { GatewayConnectionKey } from "@gram/client/models/components/gatewayconnectionkey.js";
 import type { GatewayConnectionStage } from "@gram/client/models/components/gatewayconnectionstage.js";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildGatewayConnectionHealthQuery } from "@gram/client/react-query/gatewayConnectionHealth.core.js";
+import { buildGatewayConnectionHotspotsQuery } from "@gram/client/react-query/gatewayConnectionHotspots.core.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
@@ -32,7 +33,8 @@ import { useMemo, type ReactNode } from "react";
 import {
   STAGE_OPTIONS,
   attemptFilters,
-  canMatchSignIn,
+  callerOf,
+  sameCaller,
   beforeWindowEnd,
   countOf,
   formatTime,
@@ -81,6 +83,7 @@ export function ConnectionHealthSheet({
   const project = useProject();
   const client = useGramContext();
   const key = hotspotKey(stage, hotspot);
+  const caller = key ? callerOf(key) : null;
   const filters = useMemo(
     () => (key ? attemptFilters(gatewayId, key) : []),
     [gatewayId, key],
@@ -223,10 +226,10 @@ export function ConnectionHealthSheet({
         recent={recent}
         related={
           stage === "discovery_listing" &&
-          (canMatchSignIn(key) ? (
-            <RelatedSignIn
+          (caller ? (
+            <CallerFacts
               gatewayId={gatewayId}
-              listingKey={key}
+              caller={caller}
               from={from}
               to={to}
               windowPhrase={windowPhrase}
@@ -234,10 +237,11 @@ export function ConnectionHealthSheet({
             />
           ) : (
             <section className="space-y-2">
-              <h3 className="text-eyebrow">Sign-in tokens</h3>
+              <h3 className="text-eyebrow">This person and client</h3>
               <Text small muted>
-                Sign-in token responses can be matched only to a signed-in
-                person using a registered client, so none are shown here.
+                Sign-ins and provider activity can be matched only to a
+                signed-in person or agent using a registered client, so none are
+                shown here.
               </Text>
             </section>
           ))
@@ -280,38 +284,34 @@ export function ConnectionHealthSheet({
   );
 }
 
-// RelatedSignIn shows, beside a listing hotspot, the sign-in tokens the gateway
-// wrote for the same person and client in the same window. It is an
-// observation next to the listings, never their cause, and the person and
+// CallerFacts shows, beside a listing hotspot, what the gateway recorded for
+// the same person or agent and registered client in the same window: sign-in
+// token responses, and each provider's sign-in callbacks and refreshes. They
+// are observations beside the listings, never their cause, and the person and
 // client may be several app instances.
-function RelatedSignIn({
+function CallerFacts({
   gatewayId,
-  listingKey,
+  caller,
   from,
   to,
   windowPhrase,
   ready,
 }: {
   gatewayId: string;
-  listingKey: GatewayConnectionKey;
+  caller: GatewayConnectionCaller;
   from: Date;
   to: Date;
   windowPhrase: string;
   ready: boolean;
 }): JSX.Element {
-  const organization = useOrganization();
   const project = useProject();
   const client = useGramContext();
-  const tokenKey: GatewayConnectionKey = {
-    ...listingKey,
-    stage: "inbound_token",
-  };
-  const payload = { metaMcpServerId: gatewayId, from, to, key: tokenKey };
+  const payload = { metaMcpServerId: gatewayId, from, to, caller };
   const built = buildGatewayConnectionHealthQuery(client, {
     gramProject: project.slug,
     getGatewayConnectionHealthPayload: payload,
   });
-  const tokens = useQuery({
+  const summary = useQuery({
     ...built,
     queryKey: [...built.queryKey, payload],
     enabled: ready,
@@ -322,139 +322,290 @@ function RelatedSignIn({
     throwOnError: false,
     retry: false,
   });
-  // Counted only from a settled read made since this opening.
-  const issued =
-    !tokens.isError &&
-    tokens.isFetchedAfterMount &&
-    !tokens.isFetching &&
-    matchesWindow(tokens.data, from, to)
-      ? countOf(
-          tokens.data?.stages.find((s) => s.stage === "inbound_token")
-            ?.outcomes ?? [],
-          "code_issued",
-        )
+  // Counted only from a settled read made since this opening, for this
+  // window, that says it counted only this caller: a server that ignores the
+  // caller scope answers for the whole gateway instead.
+  const answered =
+    !summary.isError &&
+    summary.isFetchedAfterMount &&
+    !summary.isFetching &&
+    matchesWindow(summary.data, from, to)
+      ? summary.data
       : undefined;
-  const filters = [
-    ...attemptFilters(gatewayId, tokenKey),
-    {
-      path: "gram.connection_attempt.outcome",
-      operator: "eq" as const,
-      values: ["code_issued"],
-    },
-    {
-      path: "gram.connection_attempt.grant_type",
-      operator: "eq" as const,
-      values: ["authorization_code"],
-    },
-  ];
-  // The latest one only, with the same exclusive end as the attempts list.
-  const latest = useQuery({
-    queryKey: [
-      "gateway-connection-latest-sign-in",
-      organization.id,
-      project.id,
-      gatewayId,
-      filters,
-      from.getTime(),
-      to.getTime(),
-    ],
-    queryFn: async () => {
-      let cursor: string | undefined;
-      for (let page = 0; page < 2; page++) {
-        const result = await unwrapAsync(
-          telemetrySearchLogs(client, {
-            gramProject: project.slug,
-            searchLogsPayload: {
-              from,
-              to,
-              filters,
-              sort: "desc",
-              limit: 1,
-              cursor,
-            },
-          }),
-        );
-        const kept = beforeWindowEnd(result.logs, to)[0];
-        if (kept) return toAttempt(kept).at;
-        cursor = result.nextCursor;
-        if (!cursor) break;
-      }
-      return null;
-    },
-    enabled: ready && issued !== undefined && issued > 0,
-    staleTime: 0,
-    refetchOnMount: "always",
-    throwOnError: false,
-    retry: false,
-  });
-  // A failed refetch keeps the earlier time, which is then not this answer.
-  const latestStarted =
-    !latest.isError && latest.isFetchedAfterMount && !latest.isFetching
-      ? latest.data
-      : undefined;
+  const settled =
+    answered && sameCaller(answered.caller, caller) ? answered : undefined;
+  const stageOf = (stage: HealthStage) =>
+    settled?.stages.find((s) => s.stage === stage);
 
   let content: ReactNode;
-  if (tokens.isError) {
-    content = (
-      <div className="flex items-center justify-between gap-3">
-        <Text small muted>
-          Couldn&apos;t load sign-in token responses for this person and client.
-        </Text>
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={() => void tokens.refetch()}
-        >
-          Retry
-        </Button>
-      </div>
-    );
-  } else if (issued === undefined) {
-    content = <Skeleton className="h-10 w-full" />;
-  } else if (issued === 0) {
+  if (isUnavailable(summary.error)) {
     content = (
       <Text small muted>
-        No sign-in token response is recorded for this person and client{" "}
-        {windowPhrase}.
+        This person or client isn&apos;t visible to you now, so what the gateway
+        recorded for them is not shown.
       </Text>
     );
+  } else if (summary.isError) {
+    content = (
+      <RetryLine
+        message="Couldn't load what the gateway recorded for this person and client."
+        onRetry={() => void summary.refetch()}
+      />
+    );
+  } else if (answered && !settled) {
+    content = (
+      <Text small muted>
+        This server can&apos;t count one person and client on their own yet, so
+        nothing is shown for them.
+      </Text>
+    );
+  } else if (!settled) {
+    content = <Skeleton className="h-24 w-full" />;
   } else {
+    const tokens = stageOf("inbound_token");
+    const issued = countOf(tokens?.outcomes ?? [], "code_issued");
+    // The one gap specific to counting a caller; the page lists the rest.
+    const authorizeGap = settled.notRecorded.find(
+      (gap) => gap.stage === "inbound_authorize",
+    );
     content = (
       <>
-        <Text small className="block">
-          {issued === 1
-            ? `The gateway wrote 1 sign-in token response for this person and client ${windowPhrase}.`
-            : `The gateway wrote ${issued.toLocaleString()} sign-in token responses for this person and client ${windowPhrase}.`}
-          {latestStarted &&
-            ` The latest sign-in code request started ${formatTime(latestStarted)}.`}
-        </Text>
-        {latest.isError && (
-          <div className="flex items-center justify-between gap-3">
-            <Text small muted>
-              The latest request time couldn&apos;t be loaded.
-            </Text>
-            <Button
-              variant="tertiary"
-              size="sm"
-              onClick={() => void latest.refetch()}
-            >
-              Retry
-            </Button>
-          </div>
+        <div className="space-y-1">
+          <h4 className="text-sm font-medium">Sign-in tokens</h4>
+          <Text small className="block">
+            {issued === 0
+              ? `No sign-in token response is recorded for this person and client ${windowPhrase}.`
+              : `The gateway wrote ${issued === 1 ? "1 sign-in token response" : `${issued.toLocaleString()} sign-in token responses`} for this person and client ${windowPhrase}.`}
+            {issued > 0 &&
+              tokens?.lastCodeIssuedAt &&
+              ` The latest sign-in code request started ${formatTime(tokens.lastCodeIssuedAt)}.`}
+          </Text>
+        </div>
+        {(["upstream_callback", "upstream_refresh"] as const).map((stage) => (
+          <ProviderFacts
+            key={stage}
+            gatewayId={gatewayId}
+            caller={caller}
+            stage={stage}
+            summary={stageOf(stage)}
+            from={from}
+            to={to}
+            windowPhrase={windowPhrase}
+          />
+        ))}
+        {authorizeGap && (
+          <Text small muted className="block">
+            {authorizeGap.note}
+          </Text>
         )}
         <Text small muted className="block">
-          Whether the app received or used a token is not observed. This person
-          and client may be several app instances, and a token response is not
-          shown as causing any listing.
+          These events match this person, client and time window. They may come
+          from different app instances. Saved provider credentials and written
+          token responses do not prove tool discovery succeeded.
         </Text>
       </>
     );
   }
   return (
-    <section className="space-y-2">
-      <h3 className="text-eyebrow">Sign-in tokens</h3>
+    <section className="space-y-3">
+      <h3 className="text-eyebrow">This person and client</h3>
       {content}
     </section>
+  );
+}
+
+const PROVIDER_FACTS: Record<
+  "upstream_callback" | "upstream_refresh",
+  { title: string; none: string; latest: string }
+> = {
+  upstream_callback: {
+    title: "Provider sign-ins",
+    none: "No provider sign-in is recorded for this person and client",
+    latest: "latest sign-in",
+  },
+  upstream_refresh: {
+    title: "Provider refreshes",
+    none: "No provider refresh caused by a request was recorded for this person and client",
+    latest: "latest refresh",
+  },
+};
+
+// ProviderFacts lists one provider stage's outcomes for the caller, one row
+// per provider, successful ones included. Its denominator is its own stage.
+function ProviderFacts({
+  gatewayId,
+  caller,
+  stage,
+  summary,
+  from,
+  to,
+  windowPhrase,
+}: {
+  gatewayId: string;
+  caller: GatewayConnectionCaller;
+  stage: "upstream_callback" | "upstream_refresh";
+  summary: GatewayConnectionStage | undefined;
+  from: Date;
+  to: Date;
+  windowPhrase: string;
+}): JSX.Element {
+  const project = useProject();
+  const client = useGramContext();
+  const copy = PROVIDER_FACTS[stage];
+  const attempts = summary?.attempts ?? 0;
+  const payload = {
+    metaMcpServerId: gatewayId,
+    from,
+    to,
+    stage,
+    caller,
+    rankBy: "count" as const,
+    minAttempts: 1,
+    limit: CALLER_PROVIDER_LIMIT,
+  };
+  const built = buildGatewayConnectionHotspotsQuery(client, {
+    gramProject: project.slug,
+    listGatewayConnectionHotspotsPayload: payload,
+  });
+  // Read only once the caller's summary has settled with attempts here.
+  const providers = useQuery({
+    ...built,
+    queryKey: [...built.queryKey, payload],
+    enabled: attempts > 0,
+    staleTime: 0,
+    refetchOnMount: "always",
+    throwOnError: false,
+    retry: false,
+  });
+  const answered =
+    !providers.isError &&
+    providers.isFetchedAfterMount &&
+    !providers.isFetching &&
+    matchesWindow(providers.data, from, to) &&
+    providers.data?.stage === stage
+      ? providers.data
+      : undefined;
+  const ranked =
+    answered && sameCaller(answered.caller, caller) ? answered : undefined;
+
+  let content: ReactNode;
+  if (attempts === 0) {
+    content = (
+      <Text small muted>
+        {copy.none} {windowPhrase}. That is no evidence either way.
+      </Text>
+    );
+  } else if (isUnavailable(providers.error)) {
+    content = (
+      <Text small muted>
+        This person or client isn&apos;t visible to you now, so their providers
+        are not shown.
+      </Text>
+    );
+  } else if (providers.isError) {
+    content = (
+      <RetryLine
+        message="Couldn't load the providers."
+        onRetry={() => void providers.refetch()}
+      />
+    );
+  } else if (answered && !ranked) {
+    content = (
+      <Text small muted>
+        This server can&apos;t list one person and client&apos;s providers yet.
+      </Text>
+    );
+  } else if (!ranked) {
+    content = <Skeleton className="h-16 w-full" />;
+  } else {
+    const listed = ranked.hotspots.reduce((sum, row) => sum + row.attempts, 0);
+    const unlisted = attempts - listed;
+    content = (
+      <>
+        <ul className="divide-y">
+          {ranked.hotspots.map((row, index) => (
+            <li
+              // Hidden providers share a label and have no key, so they are
+              // told apart by position.
+              key={
+                row.provider.key === undefined
+                  ? `hidden-${index}`
+                  : `provider-${row.provider.key}`
+              }
+              className="flex flex-wrap items-baseline justify-between gap-x-3 py-1.5"
+            >
+              <Text
+                small
+                className="min-w-0 truncate"
+                title={row.provider.label}
+              >
+                {row.provider.label}
+              </Text>
+              <Text small muted className="tabular-nums">
+                {outcomeSummary(stage, row.outcomes)}
+                {row.lastSeenAt &&
+                  ` · ${copy.latest} ${formatTime(row.lastSeenAt)}`}
+              </Text>
+            </li>
+          ))}
+        </ul>
+        {(ranked.truncated || unlisted > 0) && (
+          <Text small muted className="block">
+            {unlisted > 0
+              ? `${unlisted.toLocaleString()} more ${unlisted === 1 ? "attempt is" : "attempts are"} recorded with providers not listed here.`
+              : "More providers are recorded than are listed here."}
+          </Text>
+        )}
+      </>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <h4 className="text-sm font-medium">
+        {copy.title}
+        {attempts > 0 && (
+          <span className="text-muted-foreground font-normal">
+            {" "}
+            · {outcomeSummary(stage, summary?.outcomes ?? [])}
+          </span>
+        )}
+      </h4>
+      {content}
+    </div>
+  );
+}
+
+// The most providers one caller's stage lists; the server allows no more.
+const CALLER_PROVIDER_LIMIT = 25;
+
+function outcomeSummary(
+  stage: string,
+  outcomes: { outcome: string; count: number }[],
+): string {
+  return outcomes
+    .map(
+      (count) =>
+        `${outcomeLabel(stage, count.outcome)}: ${count.count.toLocaleString()}`,
+    )
+    .join(", ");
+}
+
+function RetryLine({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}): JSX.Element {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <Text small muted>
+        {message}
+      </Text>
+      <Button variant="tertiary" size="sm" onClick={onRetry}>
+        Retry
+      </Button>
+    </div>
   );
 }
 

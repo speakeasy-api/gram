@@ -252,6 +252,16 @@ type GatewayConnectionBucket struct {
 	Outcomes []*GatewayConnectionOutcomeCount
 }
 
+// One signed-in person or agent and the registered client they used, given as
+// a hotspot's subject and client keys. It includes every provider and the
+// attempts that recorded none.
+type GatewayConnectionCaller struct {
+	// The person's or agent's URN
+	Subject string
+	// The registered client's ID
+	Client string
+}
+
 // A connection stage that is not recorded, so its outcomes are unknown rather
 // than zero.
 type GatewayConnectionCoverage struct {
@@ -351,6 +361,10 @@ type GatewayConnectionStage struct {
 	Recovered int64
 	// Time of the latest attempt, absent when there was none
 	LastSeenAt *string
+	// For inbound_token with a key or caller only: the start of the latest
+	// authorization-code request whose token response was written. Later refreshes
+	// do not change it; it is not when a client received or used the token.
+	LastCodeIssuedAt *string
 	// The window in ascending UTC-aligned buckets of interval_seconds, gap-filled;
 	// the first and last may be partial
 	Buckets []*GatewayConnectionBucket
@@ -402,6 +416,11 @@ type GetGatewayConnectionHealthPayload struct {
 	// Count only this hotspot's attempts, in its stage alone. Absent counts the
 	// whole gateway.
 	Key *GatewayConnectionKey
+	// Count only this caller and client's attempts, each stage on its own, with
+	// every provider and with attempts that recorded none. Sign-in requests are
+	// recorded before the caller is known, so that stage is left out and listed as
+	// not recorded. Not with key.
+	Caller *GatewayConnectionCaller
 }
 
 // GetGatewayConnectionHealthResult is the result type of the telemetry service
@@ -419,6 +438,9 @@ type GetGatewayConnectionHealthResult struct {
 	NotRecorded []*GatewayConnectionCoverage
 	// What the recorded stages observe
 	Scope string
+	// The caller these counts are scoped to, present only when caller was given
+	// and answered
+	Caller *GatewayConnectionCaller
 }
 
 // GetHooksSummaryPayload is the payload type of the telemetry service
@@ -1507,10 +1529,16 @@ type ListGatewayConnectionHotspotsPayload struct {
 	Stage string
 	// count ranks by failed attempts; rate by failed attempts over all attempts.
 	RankBy string
-	// Leave out keys with fewer attempts in the window.
-	MinAttempts int64
+	// Leave out keys with fewer attempts in the window. Omitted, it is 5 for the
+	// whole gateway and 1 with caller, so a caller's single attempt with a
+	// provider is listed.
+	MinAttempts *int64
 	// Hotspots to return.
 	Limit int64
+	// Rank only this caller and client's keys, one per provider or for no recorded
+	// provider, before min_attempts and limit apply. Pass min_attempts 1 to
+	// include keys with a single attempt.
+	Caller *GatewayConnectionCaller
 }
 
 // ListGatewayConnectionHotspotsResult is the result type of the telemetry
@@ -1528,6 +1556,12 @@ type ListGatewayConnectionHotspotsResult struct {
 	MinAttempts int64
 	// Ranked hotspots; ties break by failed attempts, attempts, then key
 	Hotspots []*GatewayConnectionHotspot
+	// More keys met min_attempts than limit returned. A server that does not
+	// report it leaves it out, which means unknown, not complete.
+	Truncated *bool
+	// The caller these keys are scoped to, present only when caller was given and
+	// answered
+	Caller *GatewayConnectionCaller
 }
 
 // ListHooksTracesPayload is the payload type of the telemetry service

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { ListGatewayConnectionHotspotsResult$inboundSchema } from "@gram/client/models/components/listgatewayconnectionhotspotsresult.js";
 import type { GatewayConnectionHotspot } from "@gram/client/models/components/gatewayconnectionhotspot.js";
 import type { GatewayConnectionStage } from "@gram/client/models/components/gatewayconnectionstage.js";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import {
   attemptFilters,
   beforeWindowEnd,
+  callerOf,
   healthWindow,
   hotspotKey,
   matchingConnectionFilters,
@@ -201,6 +203,50 @@ describe("provider stages", () => {
     expect(reasonText("provider_oauth_new_code", "upstream_callback")).toBe(
       "The provider refused the sign-in request.",
     );
+  });
+});
+
+describe("hotspot results from an older server", () => {
+  it("decodes a ranking without truncated as unknown, not complete", () => {
+    const legacy = ListGatewayConnectionHotspotsResult$inboundSchema.parse({
+      from: "2026-01-01T00:00:00Z",
+      to: "2026-01-08T00:00:00Z",
+      stage: "discovery_listing",
+      rank_by: "count",
+      min_attempts: 5,
+      hotspots: [],
+    });
+    expect(legacy.truncated).toBeUndefined();
+    expect(legacy.caller).toBeUndefined();
+  });
+});
+
+describe("callerOf", () => {
+  it("names only a person or agent with a registered client", () => {
+    const listing = {
+      stage: "discovery_listing" as const,
+      subject: USER,
+      providerId: "",
+      client: CLIENT,
+    };
+    expect(callerOf(listing)).toEqual({ subject: USER, client: CLIENT });
+    expect(
+      callerOf({
+        ...listing,
+        subject: "agent:6c0d0000-0000-4000-a000-000000000009",
+      }),
+    ).toEqual({
+      subject: "agent:6c0d0000-0000-4000-a000-000000000009",
+      client: CLIENT,
+    });
+    for (const other of [
+      { ...listing, subject: "" },
+      { ...listing, subject: "apikey:example" },
+      { ...listing, client: "anonymous" },
+      { ...listing, client: "credential:user" },
+    ]) {
+      expect(callerOf(other)).toBeNull();
+    }
   });
 });
 

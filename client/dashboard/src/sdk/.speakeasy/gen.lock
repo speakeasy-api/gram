@@ -1222,6 +1222,7 @@ trackedFiles:
   src/models/components/functionresourcedefinition.ts: {}
   src/models/components/functiontooldefinition.ts: {}
   src/models/components/gatewayconnectionbucket.ts: {}
+  src/models/components/gatewayconnectioncaller.ts: {}
   src/models/components/gatewayconnectioncoverage.ts: {}
   src/models/components/gatewayconnectionhotspot.ts: {}
   src/models/components/gatewayconnectionkey.ts: {}
@@ -9762,7 +9763,7 @@ examples:
   listGatewayConnectionHotspots:
     speakeasy-default-list-gateway-connection-hotspots:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "limit": 25, "meta_mcp_server_id": "081864e7-cac9-46c9-a722-c3ee624f87f4", "min_attempts": 5, "rank_by": "count", "stage": "discovery_listing", "to": "2025-12-26T10:00:00Z"}
+        application/json: {"from": "2025-12-19T10:00:00Z", "limit": 25, "meta_mcp_server_id": "081864e7-cac9-46c9-a722-c3ee624f87f4", "rank_by": "count", "stage": "discovery_listing", "to": "2025-12-26T10:00:00Z"}
       responses:
         "200":
           application/json: {"from": "2024-07-16T17:23:04.635Z", "hotspots": [], "min_attempts": 293898, "rank_by": "<value>", "stage": "<value>", "to": "2024-10-07T04:54:03.714Z"}

@@ -225,6 +225,11 @@ type GetGatewayConnectionHealthRequestBody struct {
 	// Count only this hotspot's attempts, in its stage alone. Absent counts the
 	// whole gateway.
 	Key *GatewayConnectionKeyRequestBody `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// Count only this caller and client's attempts, each stage on its own, with
+	// every provider and with attempts that recorded none. Sign-in requests are
+	// recorded before the caller is known, so that stage is left out and listed as
+	// not recorded. Not with key.
+	Caller *GatewayConnectionCallerRequestBody `form:"caller,omitempty" json:"caller,omitempty" xml:"caller,omitempty"`
 }
 
 // ListGatewayConnectionHotspotsRequestBody is the type of the "telemetry"
@@ -242,10 +247,16 @@ type ListGatewayConnectionHotspotsRequestBody struct {
 	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
 	// count ranks by failed attempts; rate by failed attempts over all attempts.
 	RankBy *string `form:"rank_by,omitempty" json:"rank_by,omitempty" xml:"rank_by,omitempty"`
-	// Leave out keys with fewer attempts in the window.
+	// Leave out keys with fewer attempts in the window. Omitted, it is 5 for the
+	// whole gateway and 1 with caller, so a caller's single attempt with a
+	// provider is listed.
 	MinAttempts *int64 `form:"min_attempts,omitempty" json:"min_attempts,omitempty" xml:"min_attempts,omitempty"`
 	// Hotspots to return.
 	Limit *int64 `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+	// Rank only this caller and client's keys, one per provider or for no recorded
+	// provider, before min_attempts and limit apply. Pass min_attempts 1 to
+	// include keys with a single attempt.
+	Caller *GatewayConnectionCallerRequestBody `form:"caller,omitempty" json:"caller,omitempty" xml:"caller,omitempty"`
 }
 
 // GetProjectOverviewRequestBody is the type of the "telemetry" service
@@ -1048,6 +1059,9 @@ type GetGatewayConnectionHealthResponseBody struct {
 	NotRecorded []*GatewayConnectionCoverageResponseBody `form:"not_recorded" json:"not_recorded" xml:"not_recorded"`
 	// What the recorded stages observe
 	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// The caller these counts are scoped to, present only when caller was given
+	// and answered
+	Caller *GatewayConnectionCallerResponseBody `form:"caller,omitempty" json:"caller,omitempty" xml:"caller,omitempty"`
 }
 
 // ListGatewayConnectionHotspotsResponseBody is the type of the "telemetry"
@@ -1065,6 +1079,12 @@ type ListGatewayConnectionHotspotsResponseBody struct {
 	MinAttempts int64 `form:"min_attempts" json:"min_attempts" xml:"min_attempts"`
 	// Ranked hotspots; ties break by failed attempts, attempts, then key
 	Hotspots []*GatewayConnectionHotspotResponseBody `form:"hotspots" json:"hotspots" xml:"hotspots"`
+	// More keys met min_attempts than limit returned. A server that does not
+	// report it leaves it out, which means unknown, not complete.
+	Truncated *bool `form:"truncated,omitempty" json:"truncated,omitempty" xml:"truncated,omitempty"`
+	// The caller these keys are scoped to, present only when caller was given and
+	// answered
+	Caller *GatewayConnectionCallerResponseBody `form:"caller,omitempty" json:"caller,omitempty" xml:"caller,omitempty"`
 }
 
 // GetProjectOverviewResponseBody is the type of the "telemetry" service
@@ -8907,6 +8927,10 @@ type GatewayConnectionStageResponseBody struct {
 	Recovered int64 `form:"recovered" json:"recovered" xml:"recovered"`
 	// Time of the latest attempt, absent when there was none
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+	// For inbound_token with a key or caller only: the start of the latest
+	// authorization-code request whose token response was written. Later refreshes
+	// do not change it; it is not when a client received or used the token.
+	LastCodeIssuedAt *string `form:"last_code_issued_at,omitempty" json:"last_code_issued_at,omitempty" xml:"last_code_issued_at,omitempty"`
 	// The window in ascending UTC-aligned buckets of interval_seconds, gap-filled;
 	// the first and last may be partial
 	Buckets []*GatewayConnectionBucketResponseBody `form:"buckets" json:"buckets" xml:"buckets"`
@@ -8940,6 +8964,15 @@ type GatewayConnectionCoverageResponseBody struct {
 	Stage string `form:"stage" json:"stage" xml:"stage"`
 	// What is not observed
 	Note string `form:"note" json:"note" xml:"note"`
+}
+
+// GatewayConnectionCallerResponseBody is used to define fields on response
+// body types.
+type GatewayConnectionCallerResponseBody struct {
+	// The person's or agent's URN
+	Subject string `form:"subject" json:"subject" xml:"subject"`
+	// The registered client's ID
+	Client string `form:"client" json:"client" xml:"client"`
 }
 
 // GatewayConnectionHotspotResponseBody is used to define fields on response
@@ -9829,6 +9862,15 @@ type GatewayConnectionKeyRequestBody struct {
 	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
 }
 
+// GatewayConnectionCallerRequestBody is used to define fields on request body
+// types.
+type GatewayConnectionCallerRequestBody struct {
+	// The person's or agent's URN
+	Subject *string `form:"subject,omitempty" json:"subject,omitempty" xml:"subject,omitempty"`
+	// The registered client's ID
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+}
+
 // QueryFilterRequestBody is used to define fields on request body types.
 type QueryFilterRequestBody struct {
 	// Dimension to filter on
@@ -10138,6 +10180,9 @@ func NewGetGatewayConnectionHealthResponseBody(res *telemetry.GetGatewayConnecti
 	} else {
 		body.NotRecorded = []*GatewayConnectionCoverageResponseBody{}
 	}
+	if res.Caller != nil {
+		body.Caller = marshalTelemetryGatewayConnectionCallerToGatewayConnectionCallerResponseBody(res.Caller)
+	}
 	return body
 }
 
@@ -10151,6 +10196,7 @@ func NewListGatewayConnectionHotspotsResponseBody(res *telemetry.ListGatewayConn
 		Stage:       res.Stage,
 		RankBy:      res.RankBy,
 		MinAttempts: res.MinAttempts,
+		Truncated:   res.Truncated,
 	}
 	if res.Hotspots != nil {
 		body.Hotspots = make([]*GatewayConnectionHotspotResponseBody, len(res.Hotspots))
@@ -10163,6 +10209,9 @@ func NewListGatewayConnectionHotspotsResponseBody(res *telemetry.ListGatewayConn
 		}
 	} else {
 		body.Hotspots = []*GatewayConnectionHotspotResponseBody{}
+	}
+	if res.Caller != nil {
+		body.Caller = marshalTelemetryGatewayConnectionCallerToGatewayConnectionCallerResponseBody(res.Caller)
 	}
 	return body
 }
@@ -16761,6 +16810,9 @@ func NewGetGatewayConnectionHealthPayload(body *GetGatewayConnectionHealthReques
 	if body.Key != nil {
 		v.Key = unmarshalGatewayConnectionKeyRequestBodyToTelemetryGatewayConnectionKey(body.Key)
 	}
+	if body.Caller != nil {
+		v.Caller = unmarshalGatewayConnectionCallerRequestBodyToTelemetryGatewayConnectionCaller(body.Caller)
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -16776,12 +16828,10 @@ func NewListGatewayConnectionHotspotsPayload(body *ListGatewayConnectionHotspots
 		From:            body.From,
 		To:              body.To,
 		Stage:           *body.Stage,
+		MinAttempts:     body.MinAttempts,
 	}
 	if body.RankBy != nil {
 		v.RankBy = *body.RankBy
-	}
-	if body.MinAttempts != nil {
-		v.MinAttempts = *body.MinAttempts
 	}
 	if body.Limit != nil {
 		v.Limit = *body.Limit
@@ -16789,11 +16839,11 @@ func NewListGatewayConnectionHotspotsPayload(body *ListGatewayConnectionHotspots
 	if body.RankBy == nil {
 		v.RankBy = "count"
 	}
-	if body.MinAttempts == nil {
-		v.MinAttempts = 5
-	}
 	if body.Limit == nil {
 		v.Limit = 25
+	}
+	if body.Caller != nil {
+		v.Caller = unmarshalGatewayConnectionCallerRequestBodyToTelemetryGatewayConnectionCaller(body.Caller)
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -18436,6 +18486,11 @@ func ValidateGetGatewayConnectionHealthRequestBody(body *GetGatewayConnectionHea
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.Caller != nil {
+		if err2 := ValidateGatewayConnectionCallerRequestBody(body.Caller); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	return
 }
 
@@ -18485,6 +18540,11 @@ func ValidateListGatewayConnectionHotspotsRequestBody(body *ListGatewayConnectio
 	if body.Limit != nil {
 		if *body.Limit > 25 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 25, false))
+		}
+	}
+	if body.Caller != nil {
+		if err2 := ValidateGatewayConnectionCallerRequestBody(body.Caller); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -19584,6 +19644,31 @@ func ValidateGatewayConnectionKeyRequestBody(body *GatewayConnectionKeyRequestBo
 		if utf8.RuneCountInString(*body.Client) > 512 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.client", *body.Client, utf8.RuneCountInString(*body.Client), 512, false))
 		}
+	}
+	return
+}
+
+// ValidateGatewayConnectionCallerRequestBody runs the validations defined on
+// GatewayConnectionCallerRequestBody
+func ValidateGatewayConnectionCallerRequestBody(body *GatewayConnectionCallerRequestBody) (err error) {
+	if body.Subject == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject", "body"))
+	}
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.Subject != nil {
+		if utf8.RuneCountInString(*body.Subject) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.subject", *body.Subject, utf8.RuneCountInString(*body.Subject), 1, true))
+		}
+	}
+	if body.Subject != nil {
+		if utf8.RuneCountInString(*body.Subject) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.subject", *body.Subject, utf8.RuneCountInString(*body.Subject), 512, false))
+		}
+	}
+	if body.Client != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client", *body.Client, goa.FormatUUID))
 	}
 	return
 }
