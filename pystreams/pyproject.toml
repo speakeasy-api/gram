@@ -11,6 +11,7 @@ dependencies = [
   "click>=8.4.2",
   "en-core-web-lg",
   "gram-infra",
+  "httpx>=0.28.1",
   "maxminddb>=3.1.1",
   "opentelemetry-api>=1.44.0",
   "opentelemetry-sdk>=1.43.0",
@@ -38,6 +39,7 @@ dev = [
 # Entrypoint stands up the scan pool's forkserver while the process is pristine
 # before handing off to multi:cli — see pystreams.cmd.bootstrap for the why.
 multi = "pystreams.cmd.bootstrap:main"
+clairic-server = "pystreams.cmd.clairic_server:cli"
 presidio-load = "pystreams.cmd.presidio_load:cli"
 
 [build-system]

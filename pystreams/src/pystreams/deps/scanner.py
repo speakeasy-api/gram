@@ -1,15 +1,18 @@
-"""Construct the configured Presidio scanner.
+"""Construct the configured PII scanner.
 
 The ``multi`` command supports two scan strategies, selected by ``--scan-workers``:
 a pool of worker processes (the default) or an in-process thread scanner. This
 isolates that selection — and the analyzer/concurrency wiring each strategy needs
 — behind one async factory so the command body stays about lifecycle, not
-construction.
+construction. ``GRAM_PII_BACKEND=clairic`` selects the hosted POC instead.
 """
 
 from __future__ import annotations
 
+import os
+
 import structlog
+from asyncer import asyncify
 
 from pystreams.risk.scanner import (
     ProcessPoolScanner,
@@ -36,6 +39,15 @@ async def build_presidio_scanner(
     threads capped by ``max_scan_concurrency``. The pool owns its own per-worker
     spaCy models, so the in-process analyzer is only built for the threaded path.
     """
+    backend = os.environ.get("GRAM_PII_BACKEND", "presidio")
+    if backend == "clairic":
+        from pystreams.risk.clairic import ClairicScanner
+
+        logger.info("starting clairic PII scanner")
+        # HTTP client setup reads the TLS trust store; keep it off the loop.
+        return await asyncify(ClairicScanner.from_env)()
+    if backend != "presidio":
+        raise ValueError("GRAM_PII_BACKEND must be presidio or clairic")
     if scan_workers > 0:
         logger.info(
             "starting presidio scan pool",
