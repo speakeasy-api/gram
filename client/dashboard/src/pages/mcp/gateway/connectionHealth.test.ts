@@ -175,6 +175,33 @@ describe("provider stages", () => {
       reasonText("canceled"),
     );
   });
+
+  it("distinguishes provider OAuth refusals from local callback validation", () => {
+    expect(
+      reasonText("provider_oauth_invalid_request", "upstream_callback"),
+    ).toContain("provider could not accept");
+    expect(reasonText("invalid_request", "upstream_callback")).toContain(
+      "gateway could not read",
+    );
+    expect(reasonText("unauthorized", "upstream_callback")).toContain(
+      "gateway could not validate",
+    );
+    expect(
+      reasonText("provider_oauth_invalid_grant", "upstream_callback"),
+    ).toContain("sign-in code");
+    expect(reasonText("invalid_grant", "upstream_refresh")).toContain(
+      "connection's grant",
+    );
+    expect(reasonText("provider_rate_limited", "upstream_callback")).toContain(
+      "rate-limited",
+    );
+    expect(reasonText("provider_or_tunnel", "upstream_callback")).toContain(
+      "provider or MCP tunnel",
+    );
+    expect(reasonText("provider_oauth_new_code", "upstream_callback")).toBe(
+      "The provider refused the sign-in request.",
+    );
+  });
 });
 
 describe("hotspotKey", () => {

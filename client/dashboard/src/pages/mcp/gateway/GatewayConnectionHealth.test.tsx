@@ -277,7 +277,7 @@ it("names provider stages as recorded and lists what is not counted apart", asyn
     ),
   ).toBeTruthy();
   expect(
-    screen.getByText("Only Direct tool listings are recorded."),
+    screen.getByText("For tool listings, only Direct listings are recorded."),
   ).toBeTruthy();
 });
 

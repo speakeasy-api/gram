@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -31,12 +32,17 @@ func TestExchangeFailureKind_SeparatesLocalFaultsFromProvider(t *testing.T) {
 		want     RemoteLoginFailure
 		wantCode string
 	}{
-		{name: "signing unavailable", err: &tokenEndpointSigningError{err: fmt.Errorf("sign: %w", errTokenEndpointSigningUnavailable)}, want: RemoteLoginFailureSigning},
+		{name: "signing unavailable", err: &tokenEndpointSigningError{err: fmt.Errorf("sign: %w", errTokenEndpointSigningUnavailable)}, want: RemoteLoginFailureAssertionKey},
+		{name: "assertion key removed", err: &tokenEndpointSigningError{err: fmt.Errorf("key lookup: %w", pgx.ErrNoRows)}, want: RemoteLoginFailureAssertionKey},
 		{name: "signing failed", err: &tokenEndpointSigningError{err: errors.New("kms")}, want: RemoteLoginFailureSigning},
 		{name: "assertion key unconfigured", err: &tokenEndpointSigningError{err: fmt.Errorf("sign: %w", errClientAssertionKeyUnconfigured)}, want: RemoteLoginFailureAssertionKey},
 		{name: "transport", err: &tokenExchangeUnavailableError{err: errors.New("dial tcp: connection refused")}, want: RemoteLoginFailureUnreachable},
 		{name: "no tunnel route", err: &tokenExchangeUnavailableError{err: fmt.Errorf("post: %w", tunnelrouting.ErrNoTunnelRoute)}, want: RemoteLoginFailureTunnel},
 		{name: "tunnel agent", err: tunnelFailure, tunneled: true, want: RemoteLoginFailureTunnel},
+		{name: "bare tunneled 502 is ambiguous", err: endpoint(http.StatusBadGateway, ""), tunneled: true, want: RemoteLoginFailureProviderOrTunnel},
+		{name: "tunneled provider OAuth 502", err: endpoint(http.StatusBadGateway, `{"error":"server_error"}`), tunneled: true, want: RemoteLoginFailureServerError, wantCode: "server_error"},
+		{name: "direct 502 is provider", err: endpoint(http.StatusBadGateway, ""), want: RemoteLoginFailureServerError},
+		{name: "provider rate limited", err: endpoint(http.StatusTooManyRequests, "{}"), want: RemoteLoginFailureRateLimited},
 		{name: "provider 503", err: endpoint(http.StatusServiceUnavailable, ""), want: RemoteLoginFailureUnavailable},
 		{name: "provider 500", err: endpoint(http.StatusInternalServerError, ""), want: RemoteLoginFailureServerError},
 		{name: "provider rejects", err: endpoint(http.StatusBadRequest, `{"error":"invalid_grant","error_description":"vendor text"}`), want: RemoteLoginFailureRejected, wantCode: "invalid_grant"},

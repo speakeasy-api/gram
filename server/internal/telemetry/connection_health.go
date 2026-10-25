@@ -28,6 +28,10 @@ import (
 )
 
 const (
+	// ConnectionAttemptMaxRefreshesPerRequest bounds gateway refresh capture;
+	// the producer and coverage disclosure share this limit.
+	ConnectionAttemptMaxRefreshesPerRequest = 64
+
 	// ConnectionHealthDefaultWindow is the window a health read covers when
 	// the caller names none.
 	ConnectionHealthDefaultWindow = 7 * 24 * time.Hour
@@ -67,8 +71,8 @@ const (
 	ConnectionStageUpstreamRefresh  = "upstream_refresh"
 )
 
-// connectionStages are the recorded stages, in the order a connection meets
-// them. Each counts its own attempts.
+// connectionStages are the recorded stages in display order. Each counts its
+// own attempts; their order does not imply a causal sequence.
 var connectionStages = []string{
 	ConnectionStageInboundAuthorize, ConnectionStageInboundToken, ConnectionStageUpstreamCallback,
 	ConnectionStageUpstreamRefresh, ConnectionStageDiscoveryListing, ConnectionStageDiscoveryMember,
@@ -103,7 +107,7 @@ type ConnectionHealthCoverage struct {
 var connectionHealthNotRecorded = []ConnectionHealthCoverage{
 	{Stage: "cimd_fetch", Note: "Client metadata document fetches are not recorded yet."},
 	{Stage: "upstream_refresh_background", Note: "Scheduled and manual provider refreshes are not attributed to a gateway."},
-	{Stage: "upstream_refresh_capture_limit", Note: "At most 64 provider refreshes are recorded per gateway request; any beyond that are not counted."},
+	{Stage: "upstream_refresh_capture_limit", Note: fmt.Sprintf("At most %d provider refreshes are recorded per gateway request; any beyond that are not counted.", ConnectionAttemptMaxRefreshesPerRequest)},
 	{Stage: "upstream_endpoint_contact", Note: "Requests to provider endpoints are not counted: a callback or refresh is one logical attempt, whether or not the provider was contacted."},
 }
 
@@ -458,6 +462,11 @@ func (h *ConnectionHealth) Hotspots(ctx context.Context, target ConnectionHealth
 			Outcomes: outcomeCounts(totals),
 			Reasons:  topReasons(reasons),
 			LastSeen: time.Time{},
+		}
+		if row.ProviderID == "" && (query.Stage == ConnectionStageUpstreamCallback || query.Stage == ConnectionStageUpstreamRefresh) {
+			// Provider work happened, but its identity was not resolved. An
+			// absent dimension is not evidence that no provider was involved.
+			hotspot.Provider.Label = "Provider not recorded"
 		}
 		if row.LastSeenUnixNano > 0 {
 			hotspot.LastSeen = time.Unix(0, row.LastSeenUnixNano).UTC()

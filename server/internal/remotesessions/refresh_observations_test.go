@@ -90,20 +90,38 @@ func TestRefreshObservations_ConcurrentWinnerAndAdopter(t *testing.T) {
 func TestRefreshObservations_OnlyRequestRefreshesReport(t *testing.T) {
 	t.Parallel()
 
+	var posts atomic.Int64
 	ctx, env := newSyntheticExpiryEnv(t, "refresh-observe-trigger", func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if r.Form.Get("grant_type") == "refresh_token" {
+			posts.Add(1)
+			_, _ = w.Write([]byte(`{"access_token":"fresh-access","refresh_token":"live-refresh","expires_in":3600}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"access_token":"expired-access","refresh_token":"live-refresh","expires_in":1}`))
 	})
 	sink := remotesessions.NewRefreshObservations(4)
 	observed := remotesessions.WithRefreshObservations(ctx, sink)
 	for _, trigger := range []remotesessionmetrics.RefreshTrigger{remotesessionmetrics.RefreshTriggerScheduled, remotesessionmetrics.RefreshTriggerManual} {
-		_, _ = env.refresher.RefreshNow(observed, env.session, "", trigger)
+		_, err := env.refresher.RefreshNow(observed, env.session, "", trigger)
+		require.NoError(t, err)
 	}
+	require.EqualValues(t, 1, posts.Load(), "the scheduled refresh really contacted the provider; the next adopted its result")
 	observations, dropped := sink.Close()
 	require.Empty(t, observations)
 	require.Zero(t, dropped)
+
+	// The same context and session do report when the trigger is a request.
+	control := remotesessions.NewRefreshObservations(4)
+	_, err := env.refresher.RefreshNow(remotesessions.WithRefreshObservations(ctx, control), env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	require.NoError(t, err)
+	observations, dropped = control.Close()
+	require.Zero(t, dropped)
+	require.Len(t, observations, 1)
+	require.True(t, observations[0].Finished)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, observations[0].Outcome)
 }

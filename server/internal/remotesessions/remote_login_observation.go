@@ -2,6 +2,7 @@ package remotesessions
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/google/uuid"
 
@@ -88,6 +89,11 @@ const (
 	RemoteLoginFailureUnreachable RemoteLoginFailure = "provider_unreachable"
 	// RemoteLoginFailureTunnel: the MCP tunnel could not reach the provider.
 	RemoteLoginFailureTunnel RemoteLoginFailure = "tunnel_unreachable"
+	// RemoteLoginFailureProviderOrTunnel: a bare tunneled 502 cannot identify
+	// whether the provider or the tunnel agent failed.
+	RemoteLoginFailureProviderOrTunnel RemoteLoginFailure = "provider_or_tunnel"
+	// RemoteLoginFailureRateLimited: the provider refused the exchange for now.
+	RemoteLoginFailureRateLimited RemoteLoginFailure = "provider_rate_limited"
 	// RemoteLoginFailureUnavailable: the provider answered 503 or
 	// temporarily_unavailable.
 	RemoteLoginFailureUnavailable RemoteLoginFailure = "provider_unavailable"
@@ -114,7 +120,7 @@ const (
 // provider's registered error code when it sent one.
 func exchangeFailureKind(err error, tunneled bool) (RemoteLoginFailure, string) {
 	if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
-		if errors.Is(err, errClientAssertionKeyUnconfigured) {
+		if clientAssertionUnconfigured(err) {
 			return RemoteLoginFailureAssertionKey, ""
 		}
 		return RemoteLoginFailureSigning, ""
@@ -137,6 +143,10 @@ func exchangeFailureKind(err error, tunneled bool) (RemoteLoginFailure, string) 
 	switch {
 	case tunneled && endpointErr.tunnelError != "":
 		return RemoteLoginFailureTunnel, registered
+	case tunneled && endpointErr.statusCode == http.StatusBadGateway && code == "":
+		return RemoteLoginFailureProviderOrTunnel, registered
+	case endpointErr.statusCode == http.StatusTooManyRequests:
+		return RemoteLoginFailureRateLimited, registered
 	case code == "" && endpointErr.statusCode/100 == 2:
 		// A success status is only malformed when it carries no OAuth error.
 		return RemoteLoginFailureInvalidResponse, ""

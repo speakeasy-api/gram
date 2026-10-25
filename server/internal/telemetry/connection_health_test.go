@@ -159,6 +159,14 @@ func TestGetGatewayConnectionHealth_CountsEachStageExactly(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, hotspots.Hotspots, 1)
 	require.Equal(t, []int64{3, 0, 1}, []int64{hotspots.Hotspots[0].Attempts, hotspots.Hotspots[0].Failed, hotspots.Hotspots[0].Blocked}, "policy blocks are blocked, not failed")
+	for _, stage := range []string{callback, refresh} {
+		providerRows, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)), Stage: stage, RankBy: "count", MinAttempts: 1, Limit: 25})
+		require.NoError(t, err)
+		require.Len(t, providerRows.Hotspots, 1)
+		require.Equal(t, "Provider not recorded", providerRows.Hotspots[0].Provider.Label)
+		require.NotNil(t, providerRows.Hotspots[0].Provider.Key)
+		require.Empty(t, *providerRows.Hotspots[0].Provider.Key, "empty still matches exact-none, never every provider")
+	}
 }
 
 func TestGetGatewayConnectionHealth_RequiresProjectLogAndGatewayRead(t *testing.T) {

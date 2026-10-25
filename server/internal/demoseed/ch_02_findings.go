@@ -1046,7 +1046,7 @@ func (s *seeder) chfGatewayInboundAttempts() []chfTelemetryRow {
 		{"provider-refresh-1", "upstream_refresh", "refreshed", "", "", "", person, client, provider, complete.Add(30 * time.Minute)},
 		{"refresh-1", "inbound_token", "refreshed", "", "", "refresh_token", person, client, "", complete.Add(time.Hour)},
 		{"provider-refresh-2", "upstream_refresh", "failed", "configuration", "invalid_grant", "", person, client, provider, complete.Add(3 * time.Hour)},
-		{"callback-declined", "upstream_callback", "failed", "configuration", "access_denied", "", declined, client, provider, s.now.Add(-30 * time.Hour)},
+		{"callback-declined", "upstream_callback", "failed", "configuration", "provider_oauth_access_denied", "", declined, client, provider, s.now.Add(-30 * time.Hour)},
 		{"callback-unknown", "upstream_callback", "failed", "configuration", "unauthorized", "", "", "unverified_client", provider, s.now.Add(-20 * time.Hour)},
 		{"authorize-blocked", "inbound_authorize", "policy_blocked", "configuration", "cimd_denied_not_listed", "", "", "unverified_client", "", s.now.Add(-50 * time.Hour)},
 	}

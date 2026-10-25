@@ -198,7 +198,7 @@ export function GatewayConnectionHealth({
             <ul className="mt-2 list-disc space-y-1 pl-5">
               <li>
                 <Text small muted>
-                  Only Direct tool listings are recorded.
+                  For tool listings, only Direct listings are recorded.
                 </Text>
               </li>
               {summary?.notRecorded.map((gap) => (
@@ -208,6 +208,14 @@ export function GatewayConnectionHealth({
                   </Text>
                 </li>
               ))}
+              {!summary && (
+                <li>
+                  <Text small muted>
+                    Coverage notes are unavailable until connection health
+                    loads.
+                  </Text>
+                </li>
+              )}
             </ul>
           </CollapsibleContent>
         </Collapsible>
@@ -484,7 +492,9 @@ function Hotspots({
         </Text>
       ),
     },
-    ...(stage !== "discovery_listing"
+    ...(["discovery_member", "inbound_authorize", "inbound_token"].includes(
+      stage,
+    )
       ? [
           {
             key: "blocked",

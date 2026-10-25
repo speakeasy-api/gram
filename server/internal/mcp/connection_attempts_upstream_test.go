@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -238,15 +239,19 @@ func TestGatewayProviderCallbackDenied(t *testing.T) {
 	require.Error(t, fx.callback(ctx, loc.Query().Get("state"), url.Values{"error": {"access_denied"}, "error_description": {"vendor-description-secret"}}))
 	_, loc = fx.startSignIn(t, ctx, fx.inbound.ClientID)
 	require.Error(t, fx.callback(ctx, loc.Query().Get("state"), url.Values{"error": {"temporarily_unavailable"}}))
+	_, loc = fx.startSignIn(t, ctx, fx.inbound.ClientID)
+	require.Error(t, fx.callback(ctx, loc.Query().Get("state"), url.Values{"error": {"invalid_request"}}))
+	require.Equal(t, 1, writes.written(t))
 	require.Equal(t, 1, writes.written(t))
 	require.Equal(t, 1, writes.written(t))
 
 	rows := upstreamAttempts(t, fx.projectID, fx.gatewayID)
-	require.Len(t, rows, 2)
-	require.Equal(t, []string{"failed", "configuration", "access_denied", subject.String(), fx.inbound.ID.String(), fx.provider.String()},
+	require.Len(t, rows, 3)
+	require.Equal(t, []string{"failed", "configuration", "provider_oauth_access_denied", subject.String(), fx.inbound.ID.String(), fx.provider.String()},
 		[]string{rows[0].Outcome, rows[0].FailureClass, rows[0].Reason, rows[0].Subject, rows[0].ClientKey, rows[0].ProviderID})
-	require.Equal(t, []string{"failed", "endpoint", "temporarily_unavailable", fx.provider.String()},
+	require.Equal(t, []string{"failed", "endpoint", "provider_oauth_temporarily_unavailable", fx.provider.String()},
 		[]string{rows[1].Outcome, rows[1].FailureClass, rows[1].Reason, rows[1].ProviderID})
+	require.Equal(t, "provider_oauth_invalid_request", rows[2].Reason)
 	require.NotContains(t, rows[0].Attributes, "vendor-description-secret")
 }
 
@@ -262,6 +267,7 @@ func TestGatewayProviderCallbackExchangeFailures(t *testing.T) {
 		tokenAnswer(http.StatusServiceUnavailable, `{"error_description":"vendor-outage-secret"}`),
 		tokenAnswer(http.StatusBadRequest, `{"error":"invalid_grant","error_description":"vendor-grant-secret"}`),
 		tokenAnswer(http.StatusOK, `{"error":"server_error"}`),
+		tokenAnswer(http.StatusTooManyRequests, `{}`),
 	} {
 		fx.token.answer = answer
 		_, loc := fx.startSignIn(t, ctx, fx.inbound.ClientID)
@@ -270,7 +276,7 @@ func TestGatewayProviderCallbackExchangeFailures(t *testing.T) {
 	}
 
 	rows := upstreamAttempts(t, fx.projectID, fx.gatewayID)
-	require.Len(t, rows, 3)
+	require.Len(t, rows, 4)
 	got := make([][3]string, 0, len(rows))
 	for _, row := range rows {
 		got = append(got, [3]string{row.Outcome, row.FailureClass, row.Reason})
@@ -279,8 +285,9 @@ func TestGatewayProviderCallbackExchangeFailures(t *testing.T) {
 	}
 	require.Equal(t, [][3]string{
 		{"failed", "endpoint", "provider_unavailable"},
-		{"failed", "configuration", "invalid_grant"},
+		{"failed", "configuration", "provider_oauth_invalid_grant"},
 		{"failed", "endpoint", "provider_server_error"},
+		{"failed", "endpoint", "provider_rate_limited"},
 	}, got)
 }
 
@@ -340,6 +347,7 @@ func TestGatewayProviderCallbackCanceled(t *testing.T) {
 // gateway sharing the same sign-in.
 type gatewayRefreshFixture struct {
 	ti        *testInstance
+	inbound   usersessions_repo.UserSessionClient
 	projectID uuid.UUID
 	slug      string
 	gatewayID uuid.UUID
@@ -359,6 +367,12 @@ func seedGatewayRefresh(t *testing.T, prefix string) (context.Context, gatewayRe
 	require.True(t, ok)
 	projectID, orgID := *auth.ProjectID, auth.ActiveOrganizationID
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	inbound, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+		ClientID: "refresh-client-" + uuid.NewString(), ClientSecretHash: pgtype.Text{}, ClientName: "Example Desktop",
+		RedirectUris: []string{"http://127.0.0.1/callback"}, ClientSecretExpiresAt: pgtype.Timestamptz{},
+		TokenEndpointAuthMethod: "none", ClientJwks: nil, ClientJwksUri: pgtype.Text{}, UserSessionIssuerID: issuer,
+	})
+	require.NoError(t, err)
 	slug := prefix + "-" + uuid.NewString()[:8]
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, issuer)
 	sibling := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug+"-sibling", issuer)
@@ -370,7 +384,7 @@ func seedGatewayRefresh(t *testing.T, prefix string) (context.Context, gatewayRe
 	row, err := remotesessions_repo.New(ti.conn).GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{ID: remote, ProjectID: projectID, OrganizationID: orgID})
 	require.NoError(t, err)
 	return ctx, gatewayRefreshFixture{
-		ti: ti, projectID: projectID, slug: slug, gatewayID: gateway.ID, siblingID: sibling.ID, issuerID: issuer,
+		ti: ti, inbound: inbound, projectID: projectID, slug: slug, gatewayID: gateway.ID, siblingID: sibling.ID, issuerID: issuer,
 		remote: remote, provider: row.RemoteSessionClient.RemoteSessionIssuerID, upstream: upstream, token: token, posts: posts,
 	}
 }
@@ -405,7 +419,20 @@ func (fx gatewayRefreshFixture) person(t *testing.T, ctx context.Context, expire
 		IdentitySource: pgtype.Text{}, Enrichment: nil,
 	})
 	require.NoError(t, err)
-	return subject, mintMetaIssuerBearer(t, fx.ti, fx.slug, fx.issuerID, subject)
+	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject: subject, Audience: urn.NewUserSessionIssuer(fx.issuerID).String(),
+		Issuer: fx.ti.serverURL.String() + "/mcp/" + fx.slug, Lifetime: time.Hour,
+		ClientID: fx.inbound.ClientID,
+	})
+	require.NoError(t, err)
+	_, err = usersessions_repo.New(fx.ti.conn).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
+		UserSessionIssuerID: fx.issuerID, UserSessionClientID: uuid.NullUUID{UUID: fx.inbound.ID, Valid: true},
+		SubjectUrn: subject, Jti: jti, RefreshTokenHash: pgtype.Text{String: "test-refresh-" + uuid.NewString(), Valid: true},
+		RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true}, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		ToolSelection: nil, SignInID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	return subject, token
 }
 
 // A request that needs an expired provider credential refreshes it once, and
@@ -428,6 +455,7 @@ func TestGatewayRequestRefreshRecorded(t *testing.T) {
 	require.Equal(t, []string{"upstream_refresh", "refreshed", "", subject.String(), fx.provider.String()},
 		[]string{rows[0].Stage, rows[0].Outcome, rows[0].Reason, rows[0].Subject, rows[0].ProviderID})
 	require.NotEqual(t, fx.remote.String(), rows[0].ClientKey, "the provider client is never the gateway client")
+	require.Equal(t, fx.inbound.ID.String(), rows[0].ClientKey, "the validated registered client is recorded")
 	for _, secret := range []string{"refreshed-access-secret", "rotated-refresh-secret", "stored-refresh-secret", bearer, fx.token.server.URL} {
 		require.NotContains(t, rows[0].Attributes, secret)
 	}
@@ -486,4 +514,22 @@ func TestGatewayProviderCallbackRetriesWithoutResource(t *testing.T) {
 		{"retried", "", "", subject.String(), fx.inbound.ID.String()},
 		{"failed", "configuration", "resource_rejected", subject.String(), fx.inbound.ID.String()},
 	}, got)
+}
+
+// A removed connection stops the first resource-less retry before it can be
+// minted. It is distinct from the provider refusing the resource twice.
+func TestGatewayProviderCallbackConnectionRemovedBeforeRetry(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedGatewayCallback(t, "callback-gone-"+uuid.NewString()[:8])
+	writes := watchConnectionAttempts(t, fx.ti)
+	subject, loc := fx.startSignIn(t, ctx, fx.inbound.ClientID)
+	deleted, err := remotesessions_repo.New(fx.ti.conn).SoftDeleteRemoteSessionClientFixture(ctx, fx.remote)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+	require.Error(t, fx.callback(ctx, loc.Query().Get("state"), url.Values{"error": {"invalid_target"}}))
+	require.Equal(t, 1, writes.written(t))
+	rows := upstreamAttempts(t, fx.projectID, fx.gatewayID)
+	require.Len(t, rows, 1)
+	require.Equal(t, []string{"failed", "configuration", "connection_changed", subject.String(), fx.inbound.ID.String()},
+		[]string{rows[0].Outcome, rows[0].FailureClass, rows[0].Reason, rows[0].Subject, rows[0].ClientKey})
 }

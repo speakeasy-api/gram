@@ -695,6 +695,10 @@ const PROVIDER_REASONS: Record<string, string> = {
   resource_rejected:
     "The provider refused the requested server address again. Check the provider's configuration.",
   provider_unreachable: "The provider could not be reached. Try again later.",
+  provider_or_tunnel:
+    "The provider or MCP tunnel returned an error. Check the tunnel and try again.",
+  provider_rate_limited:
+    "The provider rate-limited the sign-in. Try again later.",
   tunnel_unreachable:
     "The MCP tunnel could not reach the provider. Check that the tunnel is connected.",
   provider_unavailable:
@@ -751,6 +755,23 @@ const GATEWAY_REASONS = new Set([
 
 /** Plain copy for a reason code; the code itself stays technical detail. */
 export function reasonText(reason: string, stage?: string): string {
+  if (stage === "upstream_callback") {
+    const oauth = reason.startsWith("provider_oauth_")
+      ? reason.slice("provider_oauth_".length)
+      : undefined;
+    if (oauth === "invalid_grant")
+      return "The provider refused the sign-in code. Start provider sign-in again.";
+    if (oauth === "invalid_request")
+      return "The provider could not accept the sign-in request. Ask an administrator to review the provider connection.";
+    if (oauth !== undefined)
+      return (
+        PROVIDER_REASONS[oauth] ?? "The provider refused the sign-in request."
+      );
+    if (reason === "unauthorized")
+      return "The gateway could not validate the provider sign-in. Start provider sign-in again.";
+    if (reason === "invalid_request")
+      return "The gateway could not read the provider callback. Start provider sign-in again.";
+  }
   if (stage && PROVIDER_STAGES.has(stage)) {
     const provider = PROVIDER_REASONS[reason];
     if (provider) return provider;

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -31,18 +32,22 @@ func TestCallbackResult(t *testing.T) {
 	}{
 		{name: "stored", obs: observed(remotesessions.RemoteLoginPhaseStored, "", ""), want: inboundResult{outcome: outcomeStored, class: classNone, reason: reasonNone}},
 		{name: "retried", obs: observed(remotesessions.RemoteLoginPhaseRetried, "", ""), want: inboundResult{outcome: outcomeRetried, class: classNone, reason: reasonNone}},
-		{name: "person declined", obs: observed(remotesessions.RemoteLoginPhaseDenied, "", "access_denied"), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: "access_denied"}},
-		{name: "provider server_error", obs: observed(remotesessions.RemoteLoginPhaseDenied, "", "server_error"), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classEndpoint, reason: "server_error"}},
-		{name: "provider temporarily_unavailable", obs: observed(remotesessions.RemoteLoginPhaseDenied, "", "temporarily_unavailable"), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classEndpoint, reason: "temporarily_unavailable"}},
+		{name: "person declined", obs: observed(remotesessions.RemoteLoginPhaseDenied, "", "access_denied"), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: "provider_oauth_access_denied"}},
+		{name: "provider server_error", obs: observed(remotesessions.RemoteLoginPhaseDenied, "", "server_error"), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classEndpoint, reason: "provider_oauth_server_error"}},
+		{name: "provider temporarily_unavailable", obs: observed(remotesessions.RemoteLoginPhaseDenied, "", "temporarily_unavailable"), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classEndpoint, reason: "provider_oauth_temporarily_unavailable"}},
+		{name: "provider invalid_request is not gateway invalid_request", obs: observed(remotesessions.RemoteLoginPhaseDenied, "", "invalid_request"), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: "provider_oauth_invalid_request"}},
 		{name: "unregistered denial", obs: observed(remotesessions.RemoteLoginPhaseDenied, "", ""), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: reasonProviderDenied}},
 		{name: "retry refused", obs: observed(remotesessions.RemoteLoginPhaseRetrying, "", ""), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: reasonResourceRejected}},
+		{name: "connection removed before retry", obs: observed(remotesessions.RemoteLoginPhaseRetrying, remotesessions.RemoteLoginFailureConnectionGone, ""), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: "connection_changed"}},
 		{name: "retry could not be minted", obs: observed(remotesessions.RemoteLoginPhaseRetrying, "", ""), err: unexpected, want: inboundResult{outcome: outcomeFailed, class: classInternal, reason: reasonUnexpected}},
 		{name: "state mismatch", obs: observed(remotesessions.RemoteLoginPhaseValidating, "", ""), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: "unauthorized"}},
 		{name: "signing", obs: observed(remotesessions.RemoteLoginPhaseExchanging, remotesessions.RemoteLoginFailureSigning, ""), err: oops.E(oops.CodeUnavailable, nil, "x"), want: inboundResult{outcome: outcomeFailed, class: classInternal, reason: "assertion_signing"}},
 		{name: "assertion key", obs: observed(remotesessions.RemoteLoginPhaseExchanging, remotesessions.RemoteLoginFailureAssertionKey, ""), err: unexpected, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: "assertion_key_unconfigured"}},
 		{name: "provider 503", obs: observed(remotesessions.RemoteLoginPhaseExchanging, remotesessions.RemoteLoginFailureUnavailable, ""), err: oops.E(oops.CodeUnavailable, nil, "x"), want: inboundResult{outcome: outcomeFailed, class: classEndpoint, reason: "provider_unavailable"}},
+		{name: "provider 429", obs: observed(remotesessions.RemoteLoginPhaseExchanging, remotesessions.RemoteLoginFailureRateLimited, ""), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classEndpoint, reason: "provider_rate_limited"}},
+		{name: "ambiguous tunneled 502", obs: observed(remotesessions.RemoteLoginPhaseExchanging, remotesessions.RemoteLoginFailureProviderOrTunnel, ""), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classEndpoint, reason: "provider_or_tunnel"}},
 		{name: "transport", obs: observed(remotesessions.RemoteLoginPhaseExchanging, remotesessions.RemoteLoginFailureUnreachable, ""), err: oops.E(oops.CodeGatewayError, nil, "x"), want: inboundResult{outcome: outcomeFailed, class: classEndpoint, reason: "provider_unreachable"}},
-		{name: "exchange invalid_grant", obs: observed(remotesessions.RemoteLoginPhaseExchanging, remotesessions.RemoteLoginFailureRejected, "invalid_grant"), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: "invalid_grant"}},
+		{name: "exchange invalid_grant", obs: observed(remotesessions.RemoteLoginPhaseExchanging, remotesessions.RemoteLoginFailureRejected, "invalid_grant"), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: "provider_oauth_invalid_grant"}},
 		{name: "connection removed while storing", obs: observed(remotesessions.RemoteLoginPhaseStoring, remotesessions.RemoteLoginFailureConnectionGone, ""), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: "connection_changed"}},
 		{name: "unrenewable token", obs: observed(remotesessions.RemoteLoginPhaseStoring, remotesessions.RemoteLoginFailureUnrenewableToken, ""), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: "unrenewable_token"}},
 		{name: "login expired", obs: observed(remotesessions.RemoteLoginPhaseStoring, remotesessions.RemoteLoginFailureLoginExpired, ""), err: unauthorized, want: inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: "login_expired"}},
@@ -90,14 +95,14 @@ func TestRefreshResult(t *testing.T) {
 func TestRefreshRowsAreOnePerRecordedRefresh(t *testing.T) {
 	t.Parallel()
 
-	observations := make([]remotesessions.RefreshObservation, 0, gatewayRefreshObservationLimit)
-	for range gatewayRefreshObservationLimit {
+	observations := make([]remotesessions.RefreshObservation, 0, tm.ConnectionAttemptMaxRefreshesPerRequest)
+	for range tm.ConnectionAttemptMaxRefreshesPerRequest {
 		observations = append(observations, remotesessions.RefreshObservation{Started: time.Now(), ProviderIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, Finished: true, Outcome: remotesessionmetrics.RefreshOutcomeRefreshed})
 	}
 	caller := attemptCaller{projectID: uuid.New(), organizationID: "org", gatewayID: uuid.New(), userSessionIssuerID: uuid.Nil, subject: urn.SessionSubject{Kind: "", ID: ""}, oauthClientID: "", traceID: ""}
 	rows, err := refreshRows(caller, observations, "anonymous")
 	require.NoError(t, err)
-	require.Len(t, rows, gatewayRefreshObservationLimit)
+	require.Len(t, rows, tm.ConnectionAttemptMaxRefreshesPerRequest)
 	for i, row := range rows {
 		require.Equal(t, attemptStageUpstreamRefresh, row.Attributes[attr.ConnectionAttemptStageKey])
 		require.Equal(t, observations[i].ProviderIssuerID.UUID.String(), row.Attributes[attr.ConnectionAttemptProviderIDKey])

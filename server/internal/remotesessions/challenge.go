@@ -1607,7 +1607,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (result RemoteLo
 				Description: truncateForMessage(q.Get("error_description")),
 				URI:         truncateForMessage(q.Get("error_uri")),
 			}
-			return m.retryWithoutResource(ctx, logger, state, cause)
+			return m.retryWithoutResource(ctx, logger, state, cause, obs)
 		}
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
 		obs.Phase = RemoteLoginPhaseDenied
@@ -1710,7 +1710,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (result RemoteLo
 	if err != nil {
 		if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok && oauthErr.Code == oautherr.CodeInvalidTarget {
 			obs.Phase = RemoteLoginPhaseRetrying
-			return m.retryWithoutResource(ctx, logger, state, err)
+			return m.retryWithoutResource(ctx, logger, state, err, obs)
 		}
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
 		obs.Failure, obs.ProviderErrorCode = exchangeFailureKind(err, clientRow.TunneledMcpServerID.Valid)
@@ -1976,7 +1976,7 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 // invalid_target. Refused when the leg already omitted the resource or is the
 // retry itself, so an issuer cannot loop the user. Persists nothing: the
 // rejection may be of this resource alone, so it stays scoped to this login.
-func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slog.Logger, state RemoteLoginState, cause error) (RemoteLoginResult, error) {
+func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slog.Logger, state RemoteLoginState, cause error, obs *RemoteLoginObservation) (RemoteLoginResult, error) {
 	var none RemoteLoginResult
 	logger = logger.With(attr.SlogOAuthError(oautherr.CodeInvalidTarget))
 	if state.Resource == "" || state.OmitResource || state.ResourceRetried {
@@ -1993,6 +1993,7 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 	}
 	idx := slices.IndexFunc(clients, func(c Client) bool { return c.ID == state.RemoteSessionClientID })
 	if idx < 0 {
+		obs.Failure = RemoteLoginFailureConnectionGone
 		return none, oops.E(oops.CodeUnauthorized, cause, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 	client := clients[idx]

@@ -25,12 +25,6 @@ const (
 	attemptStageUpstreamRefresh  = "upstream_refresh"
 )
 
-// gatewayRefreshObservationLimit bounds the refreshes one gateway request
-// records. A request refreshes at most once per provider connection, so this
-// is well above a real gateway; any beyond it are logged, never recorded as
-// attempts. The reader's coverage notes disclose the limit.
-const gatewayRefreshObservationLimit = 64
-
 // Provider outcomes. Each counts one logical callback or refresh, not a call
 // to the provider: stored means the credential was committed, not that the
 // person's browser reached the client; adopted means another request's
@@ -74,13 +68,16 @@ func callbackResult(ctx context.Context, obs *remotesessions.RemoteLoginObservat
 	switch obs.Phase {
 	case remotesessions.RemoteLoginPhaseDenied:
 		if providerUnavailableCodes[obs.ProviderErrorCode] {
-			return failed(classEndpoint, attemptReason(obs.ProviderErrorCode))
+			return failed(classEndpoint, providerOAuthReason(obs.ProviderErrorCode))
 		}
 		if obs.ProviderErrorCode != "" {
-			return failed(classConfiguration, attemptReason(obs.ProviderErrorCode))
+			return failed(classConfiguration, providerOAuthReason(obs.ProviderErrorCode))
 		}
 		return failed(classConfiguration, reasonProviderDenied)
 	case remotesessions.RemoteLoginPhaseRetrying:
+		if obs.Failure == remotesessions.RemoteLoginFailureConnectionGone {
+			return failed(classConfiguration, attemptReason(obs.Failure))
+		}
 		// Only a refused retry is the resource's; anything else that stopped
 		// minting the retry is classified by its code.
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeUnauthorized {
@@ -106,21 +103,28 @@ func callbackResult(ctx context.Context, obs *remotesessions.RemoteLoginObservat
 	return failed(classInternal, reasonUnexpected)
 }
 
-// exchangeResult classifies a failed code exchange by the failure the
-// remote session package typed: only an answer, or no answer, from the
-// provider counts against its endpoint.
+// providerOAuthReason keeps provider OAuth refusals distinct from gateway
+// reasons with the same name, such as invalid_request. Codes are allowlisted
+// by the remote session package before reaching this boundary.
+func providerOAuthReason(code string) attemptReason {
+	return attemptReason("provider_oauth_" + code)
+}
+
+// exchangeResult separates provider/tunnel communication failures from local
+// signing and configuration faults using the remote session package's types.
 func exchangeResult(obs *remotesessions.RemoteLoginObservation) inboundResult {
 	failed := func(class failureClass, reason attemptReason) inboundResult {
 		return inboundResult{outcome: outcomeFailed, class: class, reason: reason}
 	}
 	switch obs.Failure {
 	case remotesessions.RemoteLoginFailureUnreachable, remotesessions.RemoteLoginFailureTunnel,
+		remotesessions.RemoteLoginFailureProviderOrTunnel, remotesessions.RemoteLoginFailureRateLimited,
 		remotesessions.RemoteLoginFailureUnavailable, remotesessions.RemoteLoginFailureServerError,
 		remotesessions.RemoteLoginFailureInvalidResponse:
 		return failed(classEndpoint, attemptReason(obs.Failure))
 	case remotesessions.RemoteLoginFailureRejected:
 		if obs.ProviderErrorCode != "" {
-			return failed(classConfiguration, attemptReason(obs.ProviderErrorCode))
+			return failed(classConfiguration, providerOAuthReason(obs.ProviderErrorCode))
 		}
 		return failed(classConfiguration, reasonProviderRejected)
 	case remotesessions.RemoteLoginFailureAssertionKey:
@@ -235,7 +239,7 @@ func refreshResult(observation remotesessions.RefreshObservation) inboundResult 
 // causes report to it, and returns the function that records them once the
 // request is served. Recording never waits on telemetry.
 func (s *Service) observeGatewayRefreshes(ctx context.Context, caller attemptCaller) (context.Context, func()) {
-	sink := remotesessions.NewRefreshObservations(gatewayRefreshObservationLimit)
+	sink := remotesessions.NewRefreshObservations(tm.ConnectionAttemptMaxRefreshesPerRequest)
 	finish := func() {
 		observations, dropped := sink.Close()
 		if len(observations) == 0 && dropped == 0 {
