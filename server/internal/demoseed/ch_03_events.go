@@ -126,6 +126,19 @@ func (s *seeder) chTelemetryChecks() []chCheck {
 			msg:      "demo seed postflight: gateway provider attempts missing",
 		},
 		{
+			cond: `(SELECT sum(attempts) FROM mcp_connection_attempt_summaries
+   WHERE gram_project_id = toUUID(@proj)
+     AND server_kind = 'meta'
+     AND stage = 'inbound_token'
+     AND outcome = 'policy_blocked'
+     AND reason = 'subject_not_admitted'
+     AND subject = ''
+     AND client_key = 'unverified_client'
+     AND grant_type = 'urn:ietf:params:oauth:grant-type:jwt-bearer') != 1`,
+			settings: "",
+			msg:      "demo seed postflight: expected exactly one gateway workload assertion refusal",
+		},
+		{
 			cond: `(SELECT uniqExact(mcp_server_id) FROM telemetry_logs
    WHERE gram_project_id = toUUID(@proj)
      AND meta_mcp_server_id != ''
