@@ -535,6 +535,10 @@ const ROUTE_STRUCTURE = {
             title: "Gateway Clients and Sessions",
             url: "sessions",
           },
+          debug: {
+            title: "Gateway Debug",
+            url: "debug",
+          },
           settings: {
             title: "Gateway Settings",
             url: "settings",

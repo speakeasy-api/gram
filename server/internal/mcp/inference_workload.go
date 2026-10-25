@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -89,7 +90,7 @@ func (s *Service) handleInferenceWorkloadGrant(ctx context.Context, w http.Respo
 	}
 	credential := workloadSessionCredential{DelegatedGrants: grants, DelegatedGrantsVersion: int32(version)}
 	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
-	session := workloadSessionIssuance(workloadSessionTarget{userSessionIssuerID: shared.issuerID, projectID: projectID, organizationID: issuer.organizationID, issuer: shared.issuer, audience: InferenceResource}, subject, credential)
+	session := workloadSessionIssuance(workloadSessionTarget{userSessionIssuerID: shared.issuerID, projectID: projectID, organizationID: issuer.organizationID, issuer: shared.issuer, audience: InferenceResource, resourceIdentity: pgtype.Text{String: "", Valid: false}}, subject, credential)
 	// The session row inherits its issuer tenancy (organization issuers have
 	// no project_id). Persist the exact target in the immutable resource and
 	// ceiling so completion never takes tenancy from caller headers.

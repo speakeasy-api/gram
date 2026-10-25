@@ -3,6 +3,7 @@ package usersessions_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -634,6 +635,7 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 				}
 				require.Contains(t, bySubject, agent.String(), "attachment projection must retain the agent subject")
 				require.Empty(t, bySubject[unattached.String()], "a sibling agent never inherits another agent's attachment")
+				requireUpstreamSearchMatchesListing(t, ctx, ti, bySubject, "attachment.example.com")
 				return bySubject
 			}
 			before := list()
@@ -679,6 +681,30 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 			}
 		})
 	}
+}
+
+// requireUpstreamSearchMatchesListing checks that searching for a provider
+// finds exactly the sessions whose listed upstreams show it.
+func requireUpstreamSearchMatchesListing(t *testing.T, ctx context.Context, ti *testInstance, listed map[string][]*types.UserSessionUpstream, provider string) {
+	t.Helper()
+
+	want := []string{}
+	for subject, upstreams := range listed {
+		for _, upstream := range upstreams {
+			if strings.Contains(upstream.IssuerSlug, provider) {
+				want = append(want, subject)
+				break
+			}
+		}
+	}
+
+	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{Search: &provider})
+	require.NoError(t, err)
+	got := make([]string, 0, len(res.Items))
+	for _, item := range res.Items {
+		got = append(got, item.SubjectUrn)
+	}
+	require.ElementsMatch(t, want, got)
 }
 
 // attachmentFixtureArgs identifies the isolated rows owned by each projection case.

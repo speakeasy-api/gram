@@ -7,7 +7,8 @@ import {
   type Telemetry,
 } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "./useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { FEATURE_FLAGS, type FeatureFlag } from "@/lib/featureFlags";
+import { failOpenMissingFlags } from "@/contexts/TelemetryProvider";
 
 type FeatureFlagsCallback = Parameters<Telemetry["onFeatureFlags"]>[0];
 type FeatureFlagOptions = Parameters<Telemetry["isFeatureEnabled"]>[1];
@@ -18,9 +19,13 @@ type FeatureFlagOptionsWithDefault = FeatureFlagOptions & {
 function renderFeatureFlag({
   initiallyAvailable = false,
   initialValue,
+  flag = FEATURE_FLAGS.explore,
+  preview = false,
 }: {
   initiallyAvailable?: boolean;
   initialValue?: boolean;
+  flag?: FeatureFlag;
+  preview?: boolean;
 } = {}) {
   let flagValue = initialValue;
   let featureFlagsCallback: FeatureFlagsCallback | undefined;
@@ -54,11 +59,14 @@ function renderFeatureFlag({
     isFeatureEnabled: telemetryIsFeatureEnabled,
     onFeatureFlags,
   };
+  const providerTelemetry = preview
+    ? failOpenMissingFlags(telemetry)
+    : telemetry;
 
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <TelemetryStateProvider
-        telemetry={telemetry}
+        telemetry={providerTelemetry}
         featureFlagsInitiallyAvailable={initiallyAvailable}
       >
         {children}
@@ -66,7 +74,7 @@ function renderFeatureFlag({
     );
   }
 
-  const hook = renderHook(() => useFeatureFlag(FEATURE_FLAGS.explore), {
+  const hook = renderHook(() => useFeatureFlag(flag), {
     wrapper: Wrapper,
   });
 
@@ -90,6 +98,22 @@ function renderFeatureFlag({
 }
 
 describe("useFeatureFlag", () => {
+  it("keeps missing Debug unavailable through the preview provider", () => {
+    const { result, emitFlagResult } = renderFeatureFlag({
+      flag: FEATURE_FLAGS.gatewayDebug,
+      preview: true,
+    });
+
+    emitFlagResult(undefined);
+    expect(result.current).toEqual({ status: "missing" });
+    emitFlagResult(true);
+    expect(result.current).toEqual({ status: "enabled" });
+    emitFlagResult(false);
+    expect(result.current).toEqual({ status: "disabled" });
+    emitFlagResult(undefined);
+    expect(result.current).toEqual({ status: "missing" });
+  });
+
   it("reports loading before PostHog provides flags", () => {
     const { result, isFeatureEnabled, onFeatureFlags } = renderFeatureFlag();
 

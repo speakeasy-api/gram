@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	usersessions "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	goa "goa.design/goa/v3/pkg"
@@ -18,7 +19,7 @@ import (
 
 // BuildListUserSessionsPayload builds the payload for the userSessions
 // listUserSessions endpoint from CLI flags.
-func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsStatus string, userSessionsListUserSessionsClientID string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
+func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsStatus string, userSessionsListUserSessionsClientID string, userSessionsListUserSessionsSearch string, userSessionsListUserSessionsMetaMcpServerID string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
 	var err error
 	var subjectUrn *string
 	{
@@ -53,6 +54,28 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 		if userSessionsListUserSessionsClientID != "" {
 			clientID = &userSessionsListUserSessionsClientID
 			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var search *string
+	{
+		if userSessionsListUserSessionsSearch != "" {
+			search = &userSessionsListUserSessionsSearch
+			if utf8.RuneCountInString(*search) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var metaMcpServerID *string
+	{
+		if userSessionsListUserSessionsMetaMcpServerID != "" {
+			metaMcpServerID = &userSessionsListUserSessionsMetaMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -103,6 +126,8 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.Status = status
 	v.ClientID = clientID
+	v.Search = search
+	v.MetaMcpServerID = metaMcpServerID
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken

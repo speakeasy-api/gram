@@ -139,7 +139,11 @@ func TestSharedAuthorizationServer_WorkloadWithoutResourceReachesIssuerServers(t
 	policy, err := usersessionsrepo.New(f.ti.conn).GetUserSessionPolicyByJTI(t.Context(), usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: f.fx.target.UserSessionIssuerID, Jti: jti})
 	require.NoError(t, err)
 	require.False(t, policy.Refreshable)
-	require.Len(t, f.workloadSessions(t), 1)
+	sessions := f.workloadSessions(t)
+	require.Len(t, sessions, 1)
+	stored, err := usersessionsrepo.New(f.ti.conn).GetUserSessionByID(t.Context(), usersessionsrepo.GetUserSessionByIDParams{ID: sessions[0].ID, ProjectID: f.fx.target.ProjectID, OrganizationID: f.fx.orgID})
+	require.NoError(t, err)
+	require.False(t, stored.ResourceIdentity.Valid, "an issuer-wide session serves no single resource")
 
 	for _, endpoint := range []*mcp.ResolvedMcpEndpoint{workloadSessionEndpoint(f.fx), second} {
 		_, err := f.applyIssuerGate(t, resp.AccessToken, endpoint)

@@ -54,6 +54,17 @@ describe("failOpenMissingFlags", () => {
     expect(wrap(undefined).isFeatureEnabled("gram-explore")).toBe(true);
   });
 
+  it("keeps a missing Debug rollout flag unavailable on previews", () => {
+    expect(wrap(undefined).isFeatureEnabled("gateway-debug")).toBeUndefined();
+  });
+
+  it.each([true, false])(
+    "preserves Debug's explicit %s evaluation",
+    (value) => {
+      expect(wrap(value).isFeatureEnabled("gateway-debug")).toBe(value);
+    },
+  );
+
   it("preserves an explicit off so rollouts can be tested", () => {
     expect(wrap(false).isFeatureEnabled("gram-explore")).toBe(false);
   });

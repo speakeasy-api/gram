@@ -130,6 +130,9 @@ type mintSessionParams struct {
 	CredentialID  uuid.NullUUID
 	Subject       urn.SessionSubject
 	ToolSelection []byte
+	// ResourceIdentity is the stable identity of the resource the session is
+	// for: the endpoint's on a new grant, the old session's on refresh.
+	ResourceIdentity pgtype.Text
 	// UpstreamClientPicks is the consent page's upstream client pick per MCP
 	// server, recorded as a new credential's choices.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID
@@ -596,6 +599,11 @@ func (s *Service) handleTokenJWTBearerGrant(
 		return oops.E(oops.CodeUnexpected, err, "authorize ID-JAG subject").LogError(ctx, logger)
 	}
 
+	resourceIdentity, err := endpointResourceIdentity(endpoint)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "identify ID-JAG session resource").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin ID-JAG session transaction").LogError(ctx, logger)
@@ -616,6 +624,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                result.Subject,
 		ToolSelection:          nil,
+		ResourceIdentity:       resourceIdentity,
 		UpstreamClientPicks:    nil,
 		Catalog:                nil,
 	}, logger)
@@ -893,6 +902,11 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return oops.E(oops.CodeUnexpected, err, "select session issuance policy").LogError(ctx, logger)
 	}
+	resourceIdentity, err := endpointResourceIdentity(endpoint)
+	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+		return oops.E(oops.CodeUnexpected, err, "identify session resource").LogError(ctx, logger)
+	}
 
 	// The session row and its upstream client choices commit together, so a
 	// failed choice write never leaves a live credential without them.
@@ -924,6 +938,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                subject,
 		ToolSelection:          toolSelection,
+		ResourceIdentity:       resourceIdentity,
 		UpstreamClientPicks:    grant.UpstreamClientPicks,
 		Catalog:                catalog,
 	}, logger)
@@ -1381,6 +1396,7 @@ func (s *Service) rotateRefreshToken(
 		CredentialID:           uuid.NullUUID{UUID: sessionCredentialID(oldSession), Valid: true},
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
+		ResourceIdentity:       oldSession.ResourceIdentity,
 		UpstreamClientPicks:    nil,
 		Catalog:                nil,
 	}, logger)
@@ -1911,6 +1927,7 @@ func (s *Service) mintSession(
 		DelegatedGrants:        params.DelegatedGrants,
 		DelegatedGrantsVersion: params.DelegatedGrantsVersion,
 		ToolSelection:          params.ToolSelection,
+		ResourceIdentity:       params.ResourceIdentity,
 		SignInID:               params.SignInID,
 		CredentialID:           params.CredentialID,
 		AuthorizationExpiresAt: params.AuthorizationExpiresAt,
@@ -1944,6 +1961,11 @@ type sessionIssuance struct {
 	// Resource is the RFC 8707 resource recorded on a resource-bound session,
 	// empty for any other.
 	Resource string
+
+	// ResourceIdentity is the stable identity of the resource the session is
+	// for. NULL when it serves no single resource, as an issuer-wide workload
+	// session does, or continues a session that recorded none.
+	ResourceIdentity pgtype.Text
 
 	// Refreshable issues a refresh token.
 	Refreshable bool
@@ -2102,6 +2124,7 @@ func (s *Service) issueSession(
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: *issuance.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
 		ToolSelection:          issuance.ToolSelection,
 		Resource:               conv.ToPGTextEmpty(issuance.Resource),
+		ResourceIdentity:       issuance.ResourceIdentity,
 		SignInID:               issuance.SignInID,
 		SignInUserID:           signInUserID(issuance),
 		CredentialID:           issuance.CredentialID,

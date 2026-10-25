@@ -205,6 +205,8 @@ export function setUserSessionsData(
       userSessionIssuerId?: string | undefined;
       status?: ListUserSessionsQueryParamStatus | undefined;
       clientId?: string | undefined;
+      search?: string | undefined;
+      metaMcpServerId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
@@ -227,6 +229,8 @@ export function invalidateUserSessions(
       userSessionIssuerId?: string | undefined;
       status?: ListUserSessionsQueryParamStatus | undefined;
       clientId?: string | undefined;
+      search?: string | undefined;
+      metaMcpServerId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;

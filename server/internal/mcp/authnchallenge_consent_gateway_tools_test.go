@@ -16,6 +16,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
@@ -255,6 +256,7 @@ func TestGatewayToolSelectionSurvivesRefresh(t *testing.T) {
 		row, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
 		require.NoError(t, err)
 		require.JSONEq(t, string(original), string(row.ToolSelection))
+		require.False(t, row.ResourceIdentity.Valid, "a session that recorded no resource identity keeps none through refresh")
 		refreshToken = issued.RefreshToken
 	}
 }
@@ -317,4 +319,52 @@ func TestGatewayConsentListsConnectedSourcesWhenOneProviderIsMissing(t *testing.
 		}
 	}
 	require.True(t, listed, "Docs was discovered")
+}
+
+func TestGatewaySessionRecordsGatewayIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "gateway-identity-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuer.ID)
+	sharedSlug := "gateway-identity-shared-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, sharedSlug, issuer.ID)
+
+	challenge := sha256.Sum256([]byte(gatewayConsentVerifier))
+	code := uuid.NewString()
+	grants := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+	require.NoError(t, grants.Store(ctx, mcp.UserSessionGrant{
+		Code: code, UserSessionIssuerID: issuer.ID, UserSessionClientID: client.ID,
+		ClientID: client.ClientID, RedirectURI: client.RedirectUris[0],
+		CodeChallenge: base64.RawURLEncoding.EncodeToString(challenge[:]), CodeChallengeMethod: "S256",
+		Subject: urn.NewUserSubject(mockidp.MockUserID), CreatedAt: time.Now(),
+	}))
+
+	recorded := func(w *httptest.ResponseRecorder) (pgtype.Text, string) {
+		t.Helper()
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var issued struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &issued))
+		claims, err := usersessions.NewSigner("test-jwt-secret").Validate(issued.AccessToken, urn.NewUserSessionIssuer(issuer.ID).String())
+		require.NoError(t, err)
+		row, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
+		require.NoError(t, err)
+		return row.ResourceIdentity, issued.RefreshToken
+	}
+
+	want := pgtype.Text{String: "meta_mcp_server:" + gateway.ID.String(), Valid: true}
+	identity, refreshToken := recorded(postForm(t, ti, slug, "token", codeGrantForm(client, code, gatewayConsentVerifier)))
+	require.Equal(t, want, identity)
+
+	identity, refreshToken = recorded(postRefreshGrant(t, ti, slug, client.ClientID, refreshToken, ""))
+	require.Equal(t, want, identity, "refresh keeps the recorded gateway")
+
+	identity, _ = recorded(postRefreshGrant(t, ti, sharedSlug, client.ClientID, refreshToken, ""))
+	require.Equal(t, want, identity, "refresh through another gateway on the same issuer keeps the original")
 }

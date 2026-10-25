@@ -233,6 +233,14 @@ const (
 	// and protecting existing blocks, never depend on it. Targeted the same
 	// way as FlagAuthClientResolver.
 	FlagAuthClientUpstreamSelectorWrites Flag = "auth-client-upstream-selector-writes"
+
+	// FlagGatewayDebug gates a gateway's Debug page, its sidebar entry and its
+	// Command K action. Evaluated in the dashboard only; targeted by PostHog
+	// organization group (org slug) or slug group (<org>/<project>). Fails
+	// closed while loading, missing or erroring. A rollout gate, not
+	// authorization: the session APIs and Platform MCP tools behind the page
+	// stay available under project:read. Removed once Debug is GA.
+	FlagGatewayDebug Flag = "gateway-debug"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

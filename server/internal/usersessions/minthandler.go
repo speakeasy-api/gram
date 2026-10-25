@@ -55,8 +55,11 @@ type mintTarget struct {
 	// resourceID is the toolset / mcp_server id the audience derives from; the
 	// mcp:connect RBAC check runs against it.
 	resourceID string
-	issuerURL  string
-	logAttr    slog.Attr
+	// resourceIdentity is recorded on the session as the resource it is for,
+	// in the form consent selections use.
+	resourceIdentity string
+	issuerURL        string
+	logAttr          slog.Attr
 }
 
 // MintUserSession issues a user-session JWT against an issuer-gated audience —
@@ -128,7 +131,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 			return nil, oops.E(oops.CodeBadRequest, nil, "discovery_mode requires a gateway and a supported mode")
 		}
 		toolPolicy, err = json.Marshal(&toolfilter.SessionPolicy{
-			Resource:  "meta_mcp_server:" + target.resourceID,
+			Resource:  target.resourceIdentity,
 			Selection: nil,
 			Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
 			Catalog:   nil,
@@ -202,11 +205,12 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		ExpiresAt:        pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
 		ToolSelection:    toolPolicy,
-		// Dashboard sessions are issuer-scoped, never bound to one resource.
-		Resource:     pgtype.Text{String: "", Valid: false},
-		SignInID:     signInID,
-		SignInUserID: conv.ToPGText(authCtx.UserID),
-		CredentialID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		// Dashboard sessions are issuer-scoped, so no RFC 8707 resource binds them.
+		Resource:         pgtype.Text{String: "", Valid: false},
+		ResourceIdentity: conv.ToPGText(target.resourceIdentity),
+		SignInID:         signInID,
+		SignInUserID:     conv.ToPGText(authCtx.UserID),
+		CredentialID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -312,11 +316,12 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	}
 
 	return &mintTarget{
-		issuerID:   toolset.UserSessionIssuerID.UUID,
-		audience:   urn.NewToolset(toolset.ID).String(),
-		issuerURL:  issuerURL,
-		resourceID: toolset.ID.String(),
-		logAttr:    attr.SlogToolsetID(toolset.ID.String()),
+		issuerID:         toolset.UserSessionIssuerID.UUID,
+		audience:         urn.NewToolset(toolset.ID).String(),
+		issuerURL:        issuerURL,
+		resourceID:       toolset.ID.String(),
+		resourceIdentity: "toolset:" + toolset.ID.String(),
+		logAttr:          attr.SlogToolsetID(toolset.ID.String()),
 	}, nil
 }
 
@@ -397,11 +402,12 @@ func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.
 
 func serverMintTargetAt(server *mcpserversrepo.McpServer, issuerURL string) *mintTarget {
 	return &mintTarget{
-		issuerID:   server.UserSessionIssuerID.UUID,
-		audience:   urn.NewUserSessionIssuer(server.UserSessionIssuerID.UUID).String(),
-		issuerURL:  issuerURL,
-		resourceID: server.ID.String(),
-		logAttr:    attr.SlogMcpServerID(server.ID.String()),
+		issuerID:         server.UserSessionIssuerID.UUID,
+		audience:         urn.NewUserSessionIssuer(server.UserSessionIssuerID.UUID).String(),
+		issuerURL:        issuerURL,
+		resourceID:       server.ID.String(),
+		resourceIdentity: "mcp_server:" + server.ID.String(),
+		logAttr:          attr.SlogMcpServerID(server.ID.String()),
 	}
 }
 
@@ -488,11 +494,12 @@ func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDS
 	}
 
 	return &mintTarget{
-		issuerID:   metaServer.UserSessionIssuerID.UUID,
-		audience:   urn.NewUserSessionIssuer(metaServer.UserSessionIssuerID.UUID).String(),
-		issuerURL:  issuerURL,
-		resourceID: metaServer.ID.String(),
-		logAttr:    attr.SlogMetaMcpServerID(metaServer.ID.String()),
+		issuerID:         metaServer.UserSessionIssuerID.UUID,
+		audience:         urn.NewUserSessionIssuer(metaServer.UserSessionIssuerID.UUID).String(),
+		issuerURL:        issuerURL,
+		resourceID:       metaServer.ID.String(),
+		resourceIdentity: "meta_mcp_server:" + metaServer.ID.String(),
+		logAttr:          attr.SlogMetaMcpServerID(metaServer.ID.String()),
 	}, nil
 }
 
