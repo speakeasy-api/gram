@@ -172,22 +172,30 @@ Per-user attribution on shared gateways is tracked separately in DNO-971.
 `{block: true, blockReason}`, the tool never executes, and the reason text is
 delivered to the model as the tool result.
 
-Two behaviors worth knowing:
+Three behaviors worth knowing:
 
 - **`after_tool_call` still fires for a blocked call**, with the block text as
   the result. The provider marks these as blocked rather than completed; a
   blocked call must not show up as a successful tool call.
-- **OpenClaw does not impose the 15s fail-closed policy timeout** we originally
-  briefed. A `before_tool_call` handler that stalls is awaited in full. Per-hook
+- **Gates fail open when the relay is unavailable.** If the hooks relay never
+  starts (for example, the hooks binary cannot install on the host), exits, or
+  misses the 10s gate deadline, `before_tool_call` and `before_agent_run` allow
+  the call. The shim prints
+  `speakeasy-observability: the Speakeasy hooks relay is unavailable, so tool calls are allowed and not checked`
+  to the gateway's stderr once per process. Verdicts the relay does return,
+  including policy blocks, still block, and the org's fail-open setting still
+  applies inside the relay.
+- **OpenClaw does not impose the 15s policy timeout** we originally briefed.
+  A `before_tool_call` handler that stalls is awaited in full. Per-hook
   `timeoutMs` exists on the registration API but is opt-in in the versions we
   have tested, so **our shim owns its own deadlines**. There are three, and they
   are not interchangeable:
 
-  | Budget               | Value | What it bounds                                                                                                         |
-  | -------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------- |
-  | `GATE_TIMEOUT_MS`    | 10s   | `before_tool_call` and `before_agent_run`. Blocking hooks fail closed here, so a stalled gate resolves in 10s, not 60. |
-  | `DEFAULT_TIMEOUT_MS` | 30s   | The observe-only hooks                                                                                                 |
-  | `--timeout=60s`      | 60s   | The `agenthooks serve` process itself, not any individual handler deadline                                             |
+  | Budget               | Value | What it bounds                                                                                                                  |
+  | -------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------- |
+  | `GATE_TIMEOUT_MS`    | 10s   | `before_tool_call` and `before_agent_run`. A gate with no relay verdict by then allows the call, so it resolves in 10s, not 60. |
+  | `DEFAULT_TIMEOUT_MS` | 30s   | The observe-only hooks                                                                                                          |
+  | `--timeout=60s`      | 60s   | The `agenthooks serve` process itself, not any individual handler deadline                                                      |
 
   Without shim-owned deadlines a hung control-plane call would stall the agent
   turn indefinitely.
