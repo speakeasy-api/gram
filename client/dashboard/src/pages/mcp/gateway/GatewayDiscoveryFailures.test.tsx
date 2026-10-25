@@ -185,6 +185,36 @@ it("distinguishes an aggregate error from an empty range", () => {
   expect(
     screen.queryByText("No omitted servers were recorded in this time range"),
   ).toBeNull();
+  expect(
+    screen.queryByText(
+      "Discovery failures are not available from this server yet",
+    ),
+  ).toBeNull();
+  expect(state.search).not.toHaveBeenCalled();
+});
+it("reports a server without the series as unavailable, not as no omissions", () => {
+  setup({ failures: undefined });
+  expect(
+    screen.getByText(
+      "Discovery failures are not available from this server yet",
+    ),
+  ).toBeTruthy();
+  expect(
+    screen.queryByText("No omitted servers were recorded in this time range"),
+  ).toBeNull();
+  expect(screen.queryByText("First interval")).toBeNull();
+  expect(state.search).not.toHaveBeenCalled();
+});
+it("shows neither empty message while the series loads", () => {
+  setup({ loading: true, failures: undefined });
+  expect(
+    screen.queryByText(
+      "Discovery failures are not available from this server yet",
+    ),
+  ).toBeNull();
+  expect(
+    screen.queryByText("No omitted servers were recorded in this time range"),
+  ).toBeNull();
   expect(state.search).not.toHaveBeenCalled();
 });
 

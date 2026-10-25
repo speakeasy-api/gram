@@ -84,7 +84,8 @@ export function GatewayDiscoveryFailures({
           },
         }),
       ),
-    enabled: canRead && count > 0 && !loading && !error,
+    enabled:
+      canRead && failures !== undefined && count > 0 && !loading && !error,
     staleTime: 60_000,
     throwOnError: false,
   });
@@ -115,9 +116,15 @@ export function GatewayDiscoveryFailures({
       ...tooltipLines(diagnosticMessage(log.attributes)),
     ];
   };
+  // A server that predates discovery failures answers without the series,
+  // which is unknown rather than a range with no omissions.
   let content = (
     <WidgetEmptyState
-      message="No omitted servers were recorded in this time range"
+      message={
+        failures === undefined
+          ? "Discovery failures are not available from this server yet"
+          : "No omitted servers were recorded in this time range"
+      }
       className="h-[260px]"
     />
   );
