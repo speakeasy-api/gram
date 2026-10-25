@@ -19,6 +19,11 @@ import { ConfigContext } from "@/components/ui/context/config";
 import type { Theme } from "@/components/ui/context/theme";
 import { WizardStepHeader } from "./WizardChrome";
 import { isCredentialSafe } from "./gateway";
+import { deviceAgentManagedConfig } from "./deviceAgentConfig";
+import {
+  MANAGED_CONFIG_PATHS,
+  SANDBOX_INSTALL_SCRIPT_URL,
+} from "@/pages/device-agent/release-paths";
 
 /**
  * The step that hands the runtime its credential. One command for a machine
@@ -27,6 +32,20 @@ import { isCredentialSafe } from "./gateway";
  */
 
 const KEY_ENV = "SPEAKEASY_AGENT_KEY";
+
+// A headless machine is a Linux box: a VPS, a CI runner, a sandbox.
+const LINUX_MANAGED_CONFIG_PATH =
+  MANAGED_CONFIG_PATHS.find((row) => row.os === "Linux")?.path ??
+  "/etc/speakeasy/managed.json";
+
+/** The origin of an endpoint, or empty when there is no endpoint yet. */
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
+}
 
 /**
  * A code block, syntax highlighted and dark whatever the app theme is: these
@@ -99,6 +118,7 @@ export function StepInstall({
   onIssue,
   issuing,
   secret,
+  agentID,
   gatewayURL,
   serverCount,
 }: {
@@ -110,6 +130,8 @@ export function StepInstall({
   onIssue: () => void;
   issuing: boolean;
   secret: string | null;
+  /** Empty until the agent exists. */
+  agentID: string;
   gatewayURL: string;
   /** `"all"` where the agent's reach is a wildcard rather than a list. */
   serverCount: number | "all";
@@ -132,6 +154,13 @@ export function StepInstall({
       ? "Every server sits"
       : `${serverCount} ${serverCount === 1 ? "server sits" : "servers sit"}`;
   const key = secret ?? `<your ${KEY_ENV}>`;
+  // The gateway is served by the same server the device agent must reach, so
+  // its origin is the control plane, wherever this dashboard is deployed.
+  const managedConfig = deviceAgentManagedConfig({
+    agentKey: key,
+    agentID,
+    serverOrigin: originOf(gatewayURL),
+  });
   // One complete call per runtime, not the pair of values on their own: the
   // question the step has to answer is what to do with them.
   // Streamable HTTP, not the SDK's built-in "sse" transport: the gateway
@@ -237,6 +266,9 @@ export function StepInstall({
                   One-line setup
                 </PageTabsTrigger>
                 <PageTabsTrigger value="manual">Manual</PageTabsTrigger>
+                <PageTabsTrigger value="device-agent">
+                  Device Agent
+                </PageTabsTrigger>
                 <PageTabsTrigger value="programmatic">
                   Programmatic
                 </PageTabsTrigger>
@@ -384,6 +416,66 @@ export function StepInstall({
                   agent may reach changes what it finds there, without
                   reconnecting.
                 </Text>
+              </div>
+            </TabsContent>
+
+            <TabsContent
+              value="device-agent"
+              forceMount
+              className="data-[state=inactive]:hidden"
+            >
+              <div className="space-y-4 p-4">
+                <Text muted small>
+                  For a machine with no person at it — a VPS, CI runner or
+                  sandbox. The Speakeasy device agent sets up MCP for Claude
+                  Code, Codex and Cursor on that machine, and keeps this agent
+                  identity&apos;s key out of their config files.
+                </Text>
+                <CodeBlock
+                  value={`curl -fsSL ${SANDBOX_INSTALL_SCRIPT_URL} | sh -s -- --install-dir /usr/local/bin`}
+                  label="1 · Install the device agent — Linux"
+                  language="shell"
+                />
+                <div className="space-y-2">
+                  <CodeBlock
+                    value={managedConfig}
+                    label="2 · Save as managed.json — shown once"
+                    language="json"
+                    breakAnywhere
+                  />
+                  <CodeBlock
+                    value={`sudo install -D -o root -g <group> -m 0640 managed.json ${LINUX_MANAGED_CONFIG_PATH} && rm managed.json`}
+                    label={`Move it to ${LINUX_MANAGED_CONFIG_PATH}`}
+                    language="shell"
+                  />
+                  <Text muted small>
+                    Replace <code className="text-xs">&lt;group&gt;</code> with
+                    the group of the account that runs the AI tools. That
+                    account can read the file; other accounts cannot.
+                  </Text>
+                </div>
+                <div className="space-y-2">
+                  <CodeBlock
+                    value="speakeasyd sync --once"
+                    label="3 · Configure the tools — as the account that runs them"
+                    language="shell"
+                  />
+                  <Text muted small>
+                    Then <code className="text-xs">claude mcp list</code> should
+                    show <code className="text-xs">speakeasy-gateway</code> as
+                    connected.
+                  </Text>
+                </div>
+                <div className="space-y-2">
+                  <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
+                    What this sets up
+                  </span>
+                  <Text muted small className="block">
+                    MCP access only, to {reachPhrase} through this agent
+                    identity&apos;s permissions. Plugin sync and hooks are not
+                    included yet.
+                  </Text>
+                </div>
               </div>
             </TabsContent>
 

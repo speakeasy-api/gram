@@ -1041,6 +1041,7 @@ export function CredentialsWizard({
             onIssue={() => void provision()}
             issuing={provisioning || minting}
             secret={secret}
+            agentID={agentID ?? ""}
             gatewayURL={gatewayURL}
             serverCount={allServers ? "all" : selected.length}
           />
