@@ -642,6 +642,35 @@ func (q *Queries) ServersInsertGatewayAgentSession(ctx context.Context, arg Serv
 	return err
 }
 
+const serversInsertGatewayCimdClient = `-- name: ServersInsertGatewayCimdClient :exec
+INSERT INTO user_session_issuer_cimd_clients (id, project_id, organization_id,
+                                              user_session_issuer_id,
+                                              client_id_metadata_uri)
+VALUES ($1::uuid, $2::uuid, $3::text, $4::uuid,
+        $5::text)
+`
+
+type ServersInsertGatewayCimdClientParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	OrgID               string
+	IssuerID            uuid.UUID
+	ClientIDMetadataUri string
+}
+
+// One custom client metadata URL the gateway admits on top of the reviewed
+// list. The project delete cascades it on the next run.
+func (q *Queries) ServersInsertGatewayCimdClient(ctx context.Context, arg ServersInsertGatewayCimdClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertGatewayCimdClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.IssuerID,
+		arg.ClientIDMetadataUri,
+	)
+	return err
+}
+
 const serversInsertGatewayEndpoints = `-- name: ServersInsertGatewayEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
   ($1::uuid, $2::uuid,
@@ -1665,15 +1694,17 @@ func (q *Queries) ServersInsertUserSessionClients(ctx context.Context, arg Serve
 const serversInsertUserSessionIssuers = `-- name: ServersInsertUserSessionIssuers :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                   authn_challenge_mode, session_duration,
-                                  authorization_server_mode) VALUES
+                                  authorization_server_mode,
+                                  client_id_metadata_admission_mode) VALUES
   ($1::uuid, NULL, $2::text, 'acme-workforce',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'shared'),
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'shared', NULL),
   ($3::uuid, $4::uuid, $2::text, 'linear',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint', NULL),
   ($5::uuid, $4::uuid, $2::text, 'slack',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint', NULL),
   ($6::uuid, $4::uuid, $2::text, 'acme-agent-gateway',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint',
+   'presets')
 `
 
 type ServersInsertUserSessionIssuersParams struct {
@@ -1694,6 +1725,8 @@ type ServersInsertUserSessionIssuersParams struct {
 // servers at /oauth/usi/{id}. It is left unpinned: this seed runs against
 // every deployment, and an unpinned issuer URL follows the deployment's own
 // server URL.
+// The gateway's issuer admits only known apps, so the gateway's Debug tab
+// shows a restricted client admission setting beside its policy blocks.
 func (q *Queries) ServersInsertUserSessionIssuers(ctx context.Context, arg ServersInsertUserSessionIssuersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertUserSessionIssuers,
 		arg.WorkforceID,

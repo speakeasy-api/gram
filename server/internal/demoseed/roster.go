@@ -118,6 +118,10 @@ const demoSecretHash = "$2a$10$DEMOSEEDNOTAREALBCRYPTHASHxxxxxxxxxxxxxxxxxxxxxxx
 
 const demoCIMDURL = "https://agents.example.com/.well-known/oauth-client"
 
+// demoGatewayCIMDURL is the custom client metadata URL the demo gateway
+// admits on top of the reviewed list.
+const demoGatewayCIMDURL = "https://partner-desk.example.com/.well-known/oauth-client"
+
 const (
 	skillContentRefunds = "---\nname: support-refunds\ndescription: How to process customer refunds safely.\n---\n\n# Refund handling\n\n1. Verify the order id and amount with the customer.\n2. Use the process_refund tool with the confirmed amount.\n3. Never accept full card numbers in chat.\n"
 	skillContentTriage  = "---\nname: triage-incident\ndescription: Steps for triaging a production incident.\n---\n\n# Incident triage\n\n1. Pull error logs with search_logs for the affected window.\n2. Correlate with recent deploys via list_deploys.\n3. Escalate to on-call when the error budget is at risk.\n"

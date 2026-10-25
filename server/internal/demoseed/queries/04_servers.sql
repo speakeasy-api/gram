@@ -25,18 +25,31 @@ INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
 -- servers at /oauth/usi/{id}. It is left unpinned: this seed runs against
 -- every deployment, and an unpinned issuer URL follows the deployment's own
 -- server URL.
+-- The gateway's issuer admits only known apps, so the gateway's Debug tab
+-- shows a restricted client admission setting beside its policy blocks.
 -- name: ServersInsertUserSessionIssuers :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                   authn_challenge_mode, session_duration,
-                                  authorization_server_mode) VALUES
+                                  authorization_server_mode,
+                                  client_id_metadata_admission_mode) VALUES
   (@workforce_id::uuid, NULL, @org_id::text, 'acme-workforce',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'shared'),
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'shared', NULL),
   (@linear_id::uuid, @project_id::uuid, @org_id::text, 'linear',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint', NULL),
   (@slack_id::uuid, @project_id::uuid, @org_id::text, 'slack',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint', NULL),
   (@gateway_id::uuid, @project_id::uuid, @org_id::text, 'acme-agent-gateway',
-   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint',
+   'presets');
+
+-- One custom client metadata URL the gateway admits on top of the reviewed
+-- list. The project delete cascades it on the next run.
+-- name: ServersInsertGatewayCimdClient :exec
+INSERT INTO user_session_issuer_cimd_clients (id, project_id, organization_id,
+                                              user_session_issuer_id,
+                                              client_id_metadata_uri)
+VALUES (@id::uuid, @project_id::uuid, @org_id::text, @issuer_id::uuid,
+        @client_id_metadata_uri::text);
 
 -- name: ServersInsertMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,

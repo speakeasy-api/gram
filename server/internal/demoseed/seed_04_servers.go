@@ -68,6 +68,15 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo user session issuers: %w", err)
 	}
+	if err := s.q.ServersInsertGatewayCimdClient(ctx, repo.ServersInsertGatewayCimdClientParams{
+		ID:                  s.det("cimd-gateway-1"),
+		ProjectID:           proj,
+		OrgID:               org,
+		IssuerID:            s.det("issuer-gateway"),
+		ClientIDMetadataUri: demoGatewayCIMDURL,
+	}); err != nil {
+		return fmt.Errorf("insert demo gateway custom cimd client: %w", err)
+	}
 
 	if err := s.q.ServersInsertMCPServers(ctx, repo.ServersInsertMCPServersParams{
 		SupportID:         s.det("mcpserver-support"),

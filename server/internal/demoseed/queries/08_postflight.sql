@@ -44,6 +44,10 @@ WHERE organization_id = @org_id::text AND feature_name = 'network_ingress';
 SELECT count(*) FROM network_ingresses
 WHERE organization_id = @org_id::text;
 
+-- name: PostflightCountGatewayCimdClients :one
+SELECT count(*)
+FROM user_session_issuer_cimd_clients WHERE project_id = @project_id::uuid AND deleted IS FALSE;
+
 -- name: PostflightCountHTTPTools :one
 SELECT count(*)
 FROM http_tool_definitions WHERE project_id = @project_id::uuid AND deleted IS FALSE;

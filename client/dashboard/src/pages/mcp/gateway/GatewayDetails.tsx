@@ -123,6 +123,7 @@ export default function GatewayDetails(): JSX.Element {
               <GatewayDebugTab
                 key={`${project.id}:${metaMcpServer.id}`}
                 gatewayId={metaMcpServer.id}
+                issuerId={metaMcpServer.userSessionIssuerId}
               />
             )}
           </RequireScope>
