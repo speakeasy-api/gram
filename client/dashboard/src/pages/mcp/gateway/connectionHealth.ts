@@ -866,7 +866,11 @@ export function failureRate(
   hotspot: Pick<GatewayConnectionHotspot, "attempts" | "failed">,
 ): string {
   if (hotspot.attempts === 0) return "—";
-  return `${((hotspot.failed / hotspot.attempts) * 100).toFixed(0)}%`;
+  const percent = Math.round((hotspot.failed / hotspot.attempts) * 100);
+  // Whole percents would read a rare failure as 0% or a rare success as 100%.
+  if (percent === 0 && hotspot.failed > 0) return "<1%";
+  if (percent === 100 && hotspot.failed < hotspot.attempts) return ">99%";
+  return `${percent}%`;
 }
 
 /**

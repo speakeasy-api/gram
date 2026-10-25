@@ -37,6 +37,7 @@ import {
   sameCaller,
   beforeWindowEnd,
   countOf,
+  failureRate,
   formatTime,
   grantLabel,
   hotspotKey,
@@ -640,7 +641,7 @@ function KeyedDetail({
   const total = stage.attempts.toLocaleString();
   const rate =
     stage.attempts > 0
-      ? `${((failed / stage.attempts) * 100).toFixed(0)}% of ${total}`
+      ? `${failureRate({ attempts: stage.attempts, failed })} of ${total}`
       : `of ${total}`;
   const inbound =
     stage.stage === "inbound_authorize" || stage.stage === "inbound_token";

@@ -354,6 +354,23 @@ it("reads the row's own key over the shared window", async () => {
   expect(screen.getByText("50% of 2")).toBeTruthy();
 });
 
+it("formats the row's failure rate like the summary and table", async () => {
+  state.healthResult = (payload) => {
+    const health = keyed(payload);
+    health.stages[0] = {
+      ...health.stages[0]!,
+      attempts: 250,
+      outcomes: [
+        { outcome: "complete", count: 249 },
+        { outcome: "failed", count: 1 },
+      ],
+    };
+    return health;
+  };
+  renderSheet();
+  expect(await screen.findByText("<1% of 250")).toBeTruthy();
+});
+
 it("drops the attempt at the window end and refills from the next page", async () => {
   renderSheet();
   await screen.findByText("Latest 3 attempts in this window");

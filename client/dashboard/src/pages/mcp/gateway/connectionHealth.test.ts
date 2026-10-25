@@ -197,6 +197,22 @@ describe("stage failure rate", () => {
     );
   });
 
+  it("never rounds a rare failure to 0% or a rare success to 100%", () => {
+    expect(
+      failedOf(
+        stageTiles(stage("discovery_listing", { complete: 249, failed: 1 })),
+      )[1],
+    ).toBe("<1% of 250");
+    expect(
+      failedOf(
+        stageTiles(stage("discovery_listing", { complete: 1, failed: 249 })),
+      )[1],
+    ).toBe(">99% of 250");
+    expect(failureRate({ attempts: 201, failed: 1 })).toBe("<1%");
+    expect(failureRate({ attempts: 2, failed: 2 })).toBe("100%");
+    expect(failureRate({ attempts: 2, failed: 0 })).toBe("0%");
+  });
+
   it("keeps the refresh failure note about still-usable credentials", () => {
     const failed = stageTiles(
       stage("upstream_refresh", { refreshed: 1, failed: 1 }),
