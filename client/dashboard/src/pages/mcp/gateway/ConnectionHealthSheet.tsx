@@ -287,9 +287,10 @@ export function ConnectionHealthSheet({
 
 // CallerFacts shows, beside a listing hotspot, what the gateway recorded for
 // the same person or agent and registered client in the same window: sign-in
-// token responses, and each provider's sign-in callbacks and refreshes. They
-// are observations beside the listings, never their cause, and the person and
-// client may be several app instances.
+// token responses, each provider's sign-in callbacks and refreshes, and the
+// member checks inside their listings. They are observations beside the
+// listings, never their cause, and the person and client may be several app
+// instances.
 function CallerFacts({
   gatewayId,
   caller,
@@ -382,7 +383,9 @@ function CallerFacts({
               ` The latest sign-in code request started ${formatTime(tokens.lastCodeIssuedAt)}.`}
           </Text>
         </div>
-        {(["upstream_callback", "upstream_refresh"] as const).map((stage) => (
+        {(
+          ["upstream_callback", "upstream_refresh", "discovery_member"] as const
+        ).map((stage) => (
           <ProviderFacts
             key={stage}
             gatewayId={gatewayId}
@@ -400,9 +403,10 @@ function CallerFacts({
           </Text>
         )}
         <Text small muted className="block">
-          These events match this person, client and time window. They may come
-          from different app instances. Saved provider credentials and written
-          token responses do not prove tool discovery succeeded.
+          These events match this person, client and time window, not one
+          listing. They may come from different app instances. Saved provider
+          credentials and written token responses do not prove tool discovery
+          succeeded.
         </Text>
       </>
     );
@@ -415,8 +419,13 @@ function CallerFacts({
   );
 }
 
+type CallerProviderStage =
+  | "upstream_callback"
+  | "upstream_refresh"
+  | "discovery_member";
+
 const PROVIDER_FACTS: Record<
-  "upstream_callback" | "upstream_refresh",
+  CallerProviderStage,
   { title: string; none: string; latest: string }
 > = {
   upstream_callback: {
@@ -429,10 +438,17 @@ const PROVIDER_FACTS: Record<
     none: "No provider refresh caused by a request was recorded for this person and client",
     latest: "latest refresh",
   },
+  discovery_member: {
+    title: "Member checks by provider",
+    none: "No member check is recorded for this person and client",
+    latest: "latest check",
+  },
 };
 
-// ProviderFacts lists one provider stage's outcomes for the caller, one row
-// per provider, successful ones included. Its denominator is its own stage.
+// ProviderFacts lists one stage's outcomes for the caller, one row per
+// provider, successful ones included. Its denominator is its own stage. Member
+// checks are grouped by their member's provider too, so members without one
+// share a row, and each row names its most frequent reason.
 function ProviderFacts({
   gatewayId,
   caller,
@@ -444,7 +460,7 @@ function ProviderFacts({
 }: {
   gatewayId: string;
   caller: GatewayConnectionCaller;
-  stage: "upstream_callback" | "upstream_refresh";
+  stage: CallerProviderStage;
   summary: GatewayConnectionStage | undefined;
   from: Date;
   to: Date;
@@ -454,6 +470,21 @@ function ProviderFacts({
   const client = useGramContext();
   const copy = PROVIDER_FACTS[stage];
   const attempts = summary?.attempts ?? 0;
+  const member = stage === "discovery_member";
+  // Extra calls during recorded member checks. Recovered counts only checks
+  // recorded as listed after a retry, a subset of listed.
+  const retries = member ? (summary?.retries ?? 0) : 0;
+  const recovered = member ? (summary?.recovered ?? 0) : 0;
+  let listedAfter = "none recorded as listed after a retry";
+  if (recovered > 0) {
+    listedAfter = `${recovered.toLocaleString()} listed after a retry`;
+  }
+  let retryNote = "";
+  if (retries > 0) {
+    retryNote = ` · ${retries.toLocaleString()} internal ${retries === 1 ? "retry" : "retries"}, ${listedAfter}`;
+  } else if (recovered > 0) {
+    retryNote = ` · ${listedAfter}`;
+  }
   const payload = {
     metaMcpServerId: gatewayId,
     from,
@@ -547,9 +578,21 @@ function ProviderFacts({
                 {row.lastSeenAt &&
                   ` · ${copy.latest} ${formatTime(row.lastSeenAt)}`}
               </Text>
+              {member && row.reasons[0] && (
+                <Text small muted className="basis-full">
+                  {reasonText(row.reasons[0].reason, stage)}
+                </Text>
+              )}
             </li>
           ))}
         </ul>
+        {member && (
+          <Text small muted className="block">
+            Each row counts every member server using that provider. Servers
+            without a provider share one row. Internal retries happen inside one
+            listing, not on a later reconnect.
+          </Text>
+        )}
         {(ranked.truncated || unlisted > 0) && (
           <Text small muted className="block">
             {unlisted > 0
@@ -568,6 +611,7 @@ function ProviderFacts({
           <span className="text-muted-foreground font-normal">
             {" "}
             · {outcomeSummary(stage, summary?.outcomes ?? [])}
+            {retryNote}
           </span>
         )}
       </h4>
@@ -638,6 +682,7 @@ function KeyedDetail({
   const blocked =
     countOf(stage.outcomes, "credential_blocked") +
     countOf(stage.outcomes, "consent_blocked");
+  const partial = countOf(stage.outcomes, "partial");
   const total = stage.attempts.toLocaleString();
   const rate =
     stage.attempts > 0
@@ -668,6 +713,15 @@ function KeyedDetail({
               tone={failed > 0 ? "destructive" : "neutral"}
               subtext={rate}
             />
+            {stage.stage === "discovery_listing" && (
+              <StatTile
+                title="Partial"
+                value={partial}
+                format="number"
+                tone={partial > 0 ? "warning" : "neutral"}
+                subtext={`of ${total}`}
+              />
+            )}
             {stage.stage === "discovery_member" && (
               <StatTile
                 title="Needs sign-in or consent"

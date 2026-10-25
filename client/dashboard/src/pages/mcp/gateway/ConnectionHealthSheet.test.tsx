@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import { ConnectionHealthSheet } from "./ConnectionHealthSheet";
-import { matchingConnectionFilters } from "./connectionHealth";
+import { matchingConnectionFilters, reasonText } from "./connectionHealth";
 
 type Payload = Record<string, unknown> & { from: Date; to: Date };
 
@@ -505,6 +505,101 @@ it("shows the same person and client's token responses and each provider's sign-
   ).toBeTruthy();
   // The caller-specific gap the server reported.
   expect(screen.getByText(AUTHORIZE_GAP)).toBeTruthy();
+});
+
+it("shows the same person and client's member checks by provider, with blocked, retried and reasons kept apart", async () => {
+  state.callerResult = (payload) => ({
+    ...callerSummary(payload),
+    stages: callerSummary(payload).stages.map((stage) =>
+      stage.stage === "discovery_member"
+        ? {
+            ...stageView("discovery_member", {
+              listed: 3,
+              failed: 1,
+              credential_blocked: 1,
+              consent_blocked: 1,
+            }),
+            retries: 3,
+            recovered: 1,
+          }
+        : stage,
+    ),
+  });
+  const members = [
+    {
+      ...providerRow("Example Tracker", PROVIDER_A, { listed: 2, failed: 1 }),
+      reasons: [{ reason: "upstream_unavailable", count: 1 }],
+    },
+    {
+      ...providerRow("", "", { listed: 1, consent_blocked: 1 }),
+      provider: { kind: "none", label: "No upstream provider", key: "" },
+      blocked: 1,
+      reasons: [{ reason: "consent_not_approved", count: 1 }],
+    },
+    {
+      ...providerRow("", "", { credential_blocked: 1 }),
+      provider: { kind: "provider", label: "Unknown provider" },
+      blocked: 1,
+      reasons: [{ reason: "credential_rejected", count: 1 }],
+    },
+  ];
+  state.providerResult = (payload) =>
+    payload.stage === "discovery_member"
+      ? { ...providerRanking(payload), hotspots: members }
+      : providerRanking(payload);
+  showRegistered();
+  expect(
+    await screen.findByText(
+      /Listed: 3, Failed: 1, Needs sign-in: 1, Needs consent: 1 · 3 internal retries, 1 listed after a retry/,
+    ),
+  ).toBeTruthy();
+  expect(await screen.findByText("No upstream provider")).toBeTruthy();
+  expect(screen.getByText("Unknown provider")).toBeTruthy();
+  expect(screen.getByText(/^Listed: 2, Failed: 1 · latest check/)).toBeTruthy();
+  expect(screen.getByText(/^Listed: 1, Needs consent: 1/)).toBeTruthy();
+  expect(screen.getByText(/^Needs sign-in: 1/)).toBeTruthy();
+  for (const reason of [
+    "upstream_unavailable",
+    "consent_not_approved",
+    "credential_rejected",
+  ]) {
+    expect(
+      screen.getByText(reasonText(reason, "discovery_member")),
+    ).toBeTruthy();
+  }
+  expect(
+    state.providers.mock.calls
+      .map((call) => call[0])
+      .find((payload) => payload.stage === "discovery_member"),
+  ).toMatchObject({ from, to, caller, minAttempts: 1, limit: 25 });
+  expect(screen.getByText(/time window, not one listing/)).toBeTruthy();
+  expect(screen.getByText(/^Member checks by provider/)).toBeTruthy();
+  expect(
+    screen.getByText(/Servers without a provider share one row\./),
+  ).toBeTruthy();
+  expect(screen.getByText(/not on a later reconnect/)).toBeTruthy();
+  // A listing sheet counts partial listings beside failed ones.
+  expect(screen.getByText("Partial")).toBeTruthy();
+});
+
+it("says when the caller's retried member checks never ended listed", async () => {
+  state.callerResult = (payload) => ({
+    ...callerSummary(payload),
+    stages: callerSummary(payload).stages.map((stage) =>
+      stage.stage === "discovery_member"
+        ? {
+            ...stageView("discovery_member", { listed: 4, failed: 1 }),
+            retries: 2,
+          }
+        : stage,
+    ),
+  });
+  showRegistered();
+  expect(
+    await screen.findByText(
+      /Listed: 4, Failed: 1 · 2 internal retries, none recorded as listed after a retry/,
+    ),
+  ).toBeTruthy();
 });
 
 it("says how many attempts the listed providers leave out", async () => {
