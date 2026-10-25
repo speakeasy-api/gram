@@ -1,0 +1,239 @@
+import { ChartCard } from "@/components/chart/ChartCard";
+import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
+import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
+import type { UserSessionTrend } from "@gram/client/models/components/usersessiontrend.js";
+import { useUserSessionTrend } from "@gram/client/react-query/userSessionTrend.js";
+import { useState } from "react";
+import { isUnavailable, type HealthWindow } from "./connectionHealth";
+import { trendChartData } from "./connectionTrend";
+
+// Hourly buckets up to a week; a 30-day window reads by day.
+const BUCKETS: Record<HealthWindow, "hour" | "day"> = {
+  "24h": "hour",
+  "7d": "hour",
+  "30d": "day",
+};
+
+const EVENTS_CHART = "connection-trend-events";
+const ACTIVE_CHART = "connection-trend-active";
+
+/**
+ * A gateway's connections over the Debug tab's window: credentials created
+ * and revoked during each interval, and those active (unexpired, with no
+ * recorded revocation) just before each interval ends.
+ */
+export function GatewayConnectionTrend({
+  gatewayId,
+  span,
+  from,
+  to,
+  phrase,
+}: {
+  gatewayId: string;
+  span: HealthWindow;
+  from: Date;
+  to: Date;
+  phrase: string;
+}): JSX.Element | null {
+  const project = useProject();
+  const { hasScope, isLoading } = useRBAC();
+  const canRead =
+    !isLoading &&
+    hasScope("project:read", project.id) &&
+    hasScope("mcp:read", gatewayId, project.id);
+  const [expandedChart, setExpandedChart] = useState<string | null>(null);
+  const trend = useUserSessionTrend(
+    {
+      gramProject: project.slug,
+      metaMcpServerId: gatewayId,
+      from,
+      to,
+      bucket: BUCKETS[span],
+    },
+    undefined,
+    { enabled: canRead, throwOnError: false, retry: false },
+  );
+
+  if (!isLoading && !canRead) return null;
+
+  // Only an answer for this exact window, and never one a failed refetch
+  // left behind.
+  let answered: UserSessionTrend | undefined;
+  if (
+    !trend.isError &&
+    trend.data &&
+    trend.data.from.getTime() === from.getTime() &&
+    trend.data.to.getTime() === to.getTime()
+  ) {
+    answered = trend.data;
+  }
+
+  let body: JSX.Element;
+  if (isUnavailable(trend.error)) {
+    body = (
+      <WidgetEmptyState
+        message="This gateway's connection history is not available to you."
+        className="h-[120px]"
+      />
+    );
+  } else if (trend.isError) {
+    body = (
+      <div className="flex items-center justify-between gap-3">
+        <Text small className="text-destructive">
+          Couldn&apos;t load connections over time.
+        </Text>
+        <Button
+          variant="tertiary"
+          size="sm"
+          onClick={() => void trend.refetch()}
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  } else if (!answered) {
+    body = <Skeleton className="h-64 w-full" />;
+  } else {
+    body = (
+      <TrendBody
+        trend={answered}
+        from={from}
+        to={to}
+        phrase={phrase}
+        expandedChart={expandedChart}
+        onExpand={setExpandedChart}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <h2 className="text-heading-sm">Connections over time</h2>
+        <Text small muted>
+          Connections to this gateway created and revoked {phrase}, and how many
+          were active. A refresh continues a connection, so it is neither.
+          Active means a connection was unexpired with no revocation recorded;
+          it does not mean it worked, could reach its tools, or was used.
+        </Text>
+      </div>
+      {body}
+    </div>
+  );
+}
+
+function TrendBody({
+  trend,
+  from,
+  to,
+  phrase,
+  expandedChart,
+  onExpand,
+}: {
+  trend: UserSessionTrend;
+  from: Date;
+  to: Date;
+  phrase: string;
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
+}): JSX.Element {
+  const activeColor = useSeriesColors()[0]!;
+  const charts = trendChartData(trend, from, to, activeColor);
+  const quiet =
+    trend.created === 0 &&
+    trend.revoked === 0 &&
+    trend.buckets.every((bucket) => bucket.active === 0);
+  const incomplete =
+    trend.excludedLegacyRows > 0 || (trend.unattributedRows ?? 0) > 0;
+
+  return (
+    <>
+      <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
+        <StatTile
+          title="Active at start"
+          value={trend.activeAtStart}
+          format="number"
+          tone="neutral"
+          tooltip="Connections unexpired, with no recorded revocation, just before the window starts."
+        />
+        <StatTile
+          title="Created"
+          value={trend.created}
+          format="number"
+          tone="information"
+          tooltip="First issued in the window. Refreshes are not counted."
+        />
+        <StatTile
+          title="Revoked"
+          value={trend.revoked}
+          format="number"
+          tone={trend.revoked > 0 ? "warning" : "neutral"}
+          tooltip="Ended by a revocation before their deadline. Connections that reach their deadline are not counted."
+        />
+        <StatTile
+          title="Active at end"
+          value={trend.activeAtEnd}
+          format="number"
+          tone="neutral"
+          tooltip="Connections unexpired, with no recorded revocation, just before the window ends: until their sign-in deadline if they can refresh, or until their token expires."
+        />
+      </StatTileGroup>
+      {quiet ? (
+        <WidgetEmptyState
+          message={
+            incomplete
+              ? `No recorded connection history to chart ${phrase}.`
+              : `No connections to this gateway ${phrase}.`
+          }
+          className="h-[120px]"
+        />
+      ) : (
+        <>
+          <ChartCard
+            title="Created and revoked"
+            chartId={EVENTS_CHART}
+            expandedChart={expandedChart}
+            onExpand={onExpand}
+            hasData
+          >
+            <StackedTimeBarChart
+              {...charts.events}
+              height={expandedChart === EVENTS_CHART ? 420 : 200}
+              expanded={expandedChart === EVENTS_CHART}
+            />
+          </ChartCard>
+          <ChartCard
+            title="Active at each interval's end"
+            chartId={ACTIVE_CHART}
+            expandedChart={expandedChart}
+            onExpand={onExpand}
+            hasData
+          >
+            <StackedTimeBarChart
+              {...charts.active}
+              height={expandedChart === ACTIVE_CHART ? 420 : 200}
+              expanded={expandedChart === ACTIVE_CHART}
+            />
+          </ChartCard>
+          <Text muted small>
+            UTC intervals of one {trend.bucket}. Created and revoked happen
+            during an interval; active is the count just before it ends.
+          </Text>
+        </>
+      )}
+      {incomplete && (
+        <Text muted small className="block">
+          Some older connection records can&apos;t be counted, so this history
+          may be incomplete.
+        </Text>
+      )}
+    </>
+  );
+}

@@ -101,31 +101,49 @@ const MATCHING_CLIENT = "0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0a";
 vi.mock("./GatewayClientAdmission", () => ({
   GatewayClientAdmission: () => null,
 }));
+// The window each section was last given.
+const windows = vi.hoisted(() => ({
+  trend: [] as { span: string; from: Date; to: Date }[],
+  health: [] as { span: string; from: Date; to: Date }[],
+}));
+vi.mock("./GatewayConnectionTrend", () => ({
+  GatewayConnectionTrend: (props: { span: string; from: Date; to: Date }) => {
+    windows.trend.push(props);
+    return null;
+  },
+}));
 vi.mock("./GatewayConnectionHealth", async () => {
   const { matchingConnectionFilters: matching } =
     await import("./connectionHealth");
   return {
     GatewayConnectionHealth: ({
       onShowConnections,
+      ...window
     }: {
       onShowConnections: (filters: unknown[]) => void;
-    }) => (
-      <button
-        type="button"
-        onClick={() =>
-          onShowConnections(
-            matching({
-              stage: "discovery_listing",
-              subject: "user:user_lucas",
-              providerId: "",
-              client: "0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0a",
-            }).filters,
-          )
-        }
-      >
-        Show matching connections
-      </button>
-    ),
+      span: string;
+      from: Date;
+      to: Date;
+    }) => {
+      windows.health.push(window);
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            onShowConnections(
+              matching({
+                stage: "discovery_listing",
+                subject: "user:user_lucas",
+                providerId: "",
+                client: "0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0a",
+              }).filters,
+            )
+          }
+        >
+          Show matching connections
+        </button>
+      );
+    },
   };
 });
 vi.mock("@/components/page-layout", () => ({
@@ -134,6 +152,7 @@ vi.mock("@/components/page-layout", () => ({
       ({ children }: { children: ReactNode }) => <div>{children}</div>,
       {
         Leading: ({ children }: { children: ReactNode }) => <>{children}</>,
+        Actions: ({ children }: { children: ReactNode }) => <>{children}</>,
         Refresh: ({ onRefresh }: { onRefresh: () => void }) => (
           <button type="button" onClick={onRefresh}>
             Refresh
@@ -438,8 +457,10 @@ it("sends no list or facet request for an overlong search and recovers", async (
   ).toBeTruthy();
   expect(screen.getByText(`search: ${overlong}`)).toBeTruthy();
   expect(location()).toBe(`?q=${overlong}`);
-  expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  // The tab's refresh stays available for the trend and health sections, but
+  // sends no connection request for a search that cannot be sent.
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
   expect(server.list).not.toHaveBeenCalled();
   expect(server.facets).not.toHaveBeenCalled();
 
@@ -1171,4 +1192,34 @@ it("shows a hotspot's matching connections without an earlier search, in one Bac
   await waitFor(() =>
     expect(screen.getByTestId("pathname").textContent).toBe("/elsewhere"),
   );
+});
+
+it("gives the trend and health sections one window and one snapshot", async () => {
+  server.list.mockResolvedValue(page([]));
+  server.facets.mockResolvedValue(facets());
+  renderAt();
+  await waitFor(() => expect(windows.trend.length).toBeGreaterThan(0));
+  const first = windows.trend.at(-1)!;
+  const sameWindow = (a: { span: string; from: Date; to: Date }, b: typeof a) =>
+    a.span === b.span &&
+    a.from.getTime() === b.from.getTime() &&
+    a.to.getTime() === b.to.getTime();
+  expect(first.span).toBe("7d");
+  expect(first.to.getTime() - first.from.getTime()).toBe(7 * 24 * 3_600_000);
+  expect(sameWindow(first, windows.health.at(-1)!)).toBe(true);
+
+  fireEvent.click(screen.getByRole("button", { name: "24h" }));
+  await waitFor(() => expect(windows.trend.at(-1)!.span).toBe("24h"));
+  const day = windows.trend.at(-1)!;
+  expect(day.to.getTime(), "a window change keeps the snapshot").toBe(
+    first.to.getTime(),
+  );
+  expect(day.to.getTime() - day.from.getTime()).toBe(24 * 3_600_000);
+  expect(sameWindow(day, windows.health.at(-1)!)).toBe(true);
+  expect(screen.getAllByRole("button", { name: "24h" })).toHaveLength(1);
+
+  // The tab's one refresh retakes the snapshot both sections read.
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await waitFor(() => expect(windows.trend.at(-1)!.to).not.toBe(day.to));
+  expect(sameWindow(windows.trend.at(-1)!, windows.health.at(-1)!)).toBe(true);
 });

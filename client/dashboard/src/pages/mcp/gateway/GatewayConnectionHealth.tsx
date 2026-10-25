@@ -39,13 +39,11 @@ import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ConnectionHealthSheet } from "./ConnectionHealthSheet";
 import {
-  HEALTH_WINDOWS,
   STAGE_OPTIONS,
   WINDOW_PHRASE,
   countOf,
   failureRate,
   formatTime,
-  healthWindow,
   hotspotKey,
   isUnavailable,
   matchesWindow,
@@ -91,23 +89,27 @@ type HotspotRow = GatewayConnectionHotspot & { position: number };
  */
 export function GatewayConnectionHealth({
   gatewayId,
+  span,
+  from,
+  to,
   onShowConnections,
 }: {
   gatewayId: string;
+  // The Debug tab's shared window, and the from/to snapshot it last took.
+  span: HealthWindow;
+  from: Date;
+  to: Date;
   onShowConnections: (filters: ActiveLogFilter[]) => void;
 }): JSX.Element | null {
   const project = useProject();
   const canRead = useCanViewToolLogs();
-  const [span, setSpan] = useState<HealthWindow>("7d");
   const [stageName, setStageName] = useState<HealthStage>("discovery_listing");
   const [rankBy, setRankBy] = useState<RankBy>("count");
   const [minAttempts, setMinAttempts] = useState("5");
-  const [now, setNow] = useState(() => new Date());
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
   const [selected, setSelected] = useState<GatewayConnectionHotspot | null>(
     null,
   );
-  const { from, to } = useMemo(() => healthWindow(span, now), [span, now]);
   const phrase = WINDOW_PHRASE[span];
 
   // The generated keys leave out the request body, so each payload joins
@@ -248,18 +250,6 @@ export function GatewayConnectionHealth({
             </SelectContent>
           </Select>
         </Page.Toolbar.Leading>
-        <Page.Toolbar.Actions>
-          <SegmentedControl
-            value={span}
-            onChange={setSpan}
-            options={HEALTH_WINDOWS}
-            ariaLabel="Time window"
-          />
-        </Page.Toolbar.Actions>
-        <Page.Toolbar.Refresh
-          onRefresh={() => setNow(new Date())}
-          isRefreshing={health.isFetching || hotspots.isFetching}
-        />
       </Page.Toolbar>
       {unavailable ? (
         <WidgetEmptyState

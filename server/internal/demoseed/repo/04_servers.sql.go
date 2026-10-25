@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const serversInsertAgentConnectGrant = `-- name: ServersInsertAgentConnectGrant :exec
@@ -624,8 +625,9 @@ type ServersInsertGatewayAgentSessionParams struct {
 // One managed-agent session through the gateway. The agent's upstream
 // attachments are on the Linear sign-in server only, so on the gateway it is
 // admitted to no provider and reads as Speakeasy only. Inert like the
-// deployment's managed-agent session: an empty delegation, an invalid refresh
-// hash and a jti no token carries.
+// deployment's managed-agent session: an empty delegation, a refresh hash no
+// token matches and a jti no token carries. Its access token has expired while
+// its refresh grant is still live, as an idle agent's does.
 func (q *Queries) ServersInsertGatewayAgentSession(ctx context.Context, arg ServersInsertGatewayAgentSessionParams) error {
 	_, err := q.db.Exec(ctx, serversInsertGatewayAgentSession,
 		arg.ID,
@@ -708,6 +710,65 @@ func (q *Queries) ServersInsertGatewayEndpoints(ctx context.Context, arg Servers
 		arg.SlackEndpointID,
 		arg.SlackServerID,
 		arg.SlackSlug,
+	)
+	return err
+}
+
+const serversInsertGatewaySessionHistory = `-- name: ServersInsertGatewaySessionHistory :exec
+INSERT INTO user_sessions
+  (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
+   subject_urn, resource_identity, tool_selection, credential_id, jti,
+   refresh_token_hash, refresh_expires_at, expires_at, created_at, deleted_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::uuid, $5::uuid,
+   'user:' || $6::text, $7::text,
+   $8::jsonb, $9::uuid, $10::text,
+   $11::text,
+   now() + ($12::text)::interval, now() + ($13::text)::interval,
+   now() - ($14::text)::interval, now() - ($15::text)::interval)
+`
+
+type ServersInsertGatewaySessionHistoryParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	OrgID               string
+	UserSessionIssuerID uuid.UUID
+	UserSessionClientID uuid.UUID
+	UserID              string
+	ResourceIdentity    pgtype.Text
+	ToolSelection       []byte
+	CredentialID        uuid.NullUUID
+	Jti                 string
+	RefreshTokenHash    string
+	RefreshExpiresIn    string
+	ExpiresIn           string
+	CreatedAgo          string
+	DeletedAgo          string
+}
+
+// One row of a gateway connection's history: a credential issued, refreshed,
+// revoked or expired at fixed offsets from now(), for the gateway's
+// connections over time. Every one is deleted by now, so the live sessions
+// list is unchanged. A refreshed row continues credential_id; a legacy row
+// names the gateway only in its consent selection.
+func (q *Queries) ServersInsertGatewaySessionHistory(ctx context.Context, arg ServersInsertGatewaySessionHistoryParams) error {
+	_, err := q.db.Exec(ctx, serversInsertGatewaySessionHistory,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.UserSessionIssuerID,
+		arg.UserSessionClientID,
+		arg.UserID,
+		arg.ResourceIdentity,
+		arg.ToolSelection,
+		arg.CredentialID,
+		arg.Jti,
+		arg.RefreshTokenHash,
+		arg.RefreshExpiresIn,
+		arg.ExpiresIn,
+		arg.CreatedAgo,
+		arg.DeletedAgo,
 	)
 	return err
 }

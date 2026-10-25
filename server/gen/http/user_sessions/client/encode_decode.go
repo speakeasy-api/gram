@@ -876,6 +876,250 @@ func DecodeQueryFacetsResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
+// BuildGetTrendRequest instantiates a HTTP request object with method and path
+// set to call the "userSessions" service "getTrend" endpoint
+func (c *Client) BuildGetTrendRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetTrendUserSessionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("userSessions", "getTrend", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetTrendRequest returns an encoder for requests sent to the
+// userSessions getTrend server.
+func EncodeGetTrendRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usersessions.GetTrendPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("userSessions", "getTrend", "*usersessions.GetTrendPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("meta_mcp_server_id", p.MetaMcpServerID)
+		values.Add("from", p.From)
+		values.Add("to", p.To)
+		values.Add("bucket", p.Bucket)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetTrendResponse returns a decoder for responses returned by the
+// userSessions getTrend endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeGetTrendResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetTrendResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetTrendResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "getTrend", err)
+			}
+			err = ValidateGetTrendResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "getTrend", err)
+			}
+			res := NewGetTrendUserSessionTrendOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetTrendUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "getTrend", err)
+			}
+			err = ValidateGetTrendUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "getTrend", err)
+			}
+			return nil, NewGetTrendUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetTrendForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "getTrend", err)
+			}
+			err = ValidateGetTrendForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "getTrend", err)
+			}
+			return nil, NewGetTrendForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetTrendBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "getTrend", err)
+			}
+			err = ValidateGetTrendBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "getTrend", err)
+			}
+			return nil, NewGetTrendBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetTrendNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "getTrend", err)
+			}
+			err = ValidateGetTrendNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "getTrend", err)
+			}
+			return nil, NewGetTrendNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetTrendConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "getTrend", err)
+			}
+			err = ValidateGetTrendConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "getTrend", err)
+			}
+			return nil, NewGetTrendConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetTrendUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "getTrend", err)
+			}
+			err = ValidateGetTrendUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "getTrend", err)
+			}
+			return nil, NewGetTrendUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetTrendInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "getTrend", err)
+			}
+			err = ValidateGetTrendInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "getTrend", err)
+			}
+			return nil, NewGetTrendInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetTrendInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "getTrend", err)
+				}
+				err = ValidateGetTrendInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "getTrend", err)
+				}
+				return nil, NewGetTrendInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetTrendUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "getTrend", err)
+				}
+				err = ValidateGetTrendUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "getTrend", err)
+				}
+				return nil, NewGetTrendUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("userSessions", "getTrend", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetTrendGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "getTrend", err)
+			}
+			err = ValidateGetTrendGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "getTrend", err)
+			}
+			return nil, NewGetTrendGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("userSessions", "getTrend", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildMintUserSessionRequest instantiates a HTTP request object with method
 // and path set to call the "userSessions" service "mintUserSession" endpoint
 func (c *Client) BuildMintUserSessionRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1487,6 +1731,21 @@ func unmarshalUserSessionFilterFacetValueResponseBodyToUsersessionsUserSessionFi
 		DisplayName:   v.DisplayName,
 		Count:         *v.Count,
 		MatchesSearch: *v.MatchesSearch,
+	}
+
+	return res
+}
+
+// unmarshalUserSessionTrendBucketResponseBodyToUsersessionsUserSessionTrendBucket
+// builds a value of type *usersessions.UserSessionTrendBucket from a value of
+// type *UserSessionTrendBucketResponseBody.
+func unmarshalUserSessionTrendBucketResponseBodyToUsersessionsUserSessionTrendBucket(v *UserSessionTrendBucketResponseBody) *usersessions.UserSessionTrendBucket {
+	res := &usersessions.UserSessionTrendBucket{
+		Start:   *v.Start,
+		End:     *v.End,
+		Created: *v.Created,
+		Revoked: *v.Revoked,
+		Active:  *v.Active,
 	}
 
 	return res

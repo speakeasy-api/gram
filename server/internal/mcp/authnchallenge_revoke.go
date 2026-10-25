@@ -164,7 +164,7 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 // signature, but tolerating expired claims so stale tokens can still be
 // revoked), looks up the user_sessions row by jti, and — when the row
 // belongs to the authenticated client — pushes the jti into the revocation
-// cache. Signature verification matters here: public clients present no
+// cache, and soft-deletes the row when it cannot refresh. Signature verification matters here: public clients present no
 // client_secret, so holding a validly-signed token is what proves the
 // caller may revoke it. Returns true only when the row was found AND owned
 // by the caller; ownership mismatches return false so the dispatch falls
@@ -192,6 +192,15 @@ func (s *Service) tryRevokeAccessToken(ctx context.Context, logger *slog.Logger,
 	}
 	if err := s.chatSessionsManager.RevokeToken(ctx, jti); err != nil {
 		logger.ErrorContext(ctx, "failed to push jti into revocation cache", attr.SlogError(err))
+	}
+	// A session that cannot refresh ends with its access token, so its
+	// revocation is recorded where its history is read. A refreshable one
+	// keeps its grant.
+	if _, err := usersessions_repo.New(s.db).RevokeAccessOnlyUserSession(ctx, usersessions_repo.RevokeAccessOnlyUserSessionParams{
+		ID:                  row.ID,
+		UserSessionIssuerID: issuerID,
+	}); err != nil {
+		logger.ErrorContext(ctx, "failed to record access-only session revocation", attr.SlogError(err))
 	}
 	return true
 }

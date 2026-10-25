@@ -78,6 +78,38 @@ type QueryFacetsResponseBody struct {
 	UnattributedCount *int64 `form:"unattributed_count,omitempty" json:"unattributed_count,omitempty" xml:"unattributed_count,omitempty"`
 }
 
+// GetTrendResponseBody is the type of the "userSessions" service "getTrend"
+// endpoint HTTP response body.
+type GetTrendResponseBody struct {
+	// Window start.
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// Window end, excluded.
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Bucket width.
+	Bucket *string `form:"bucket,omitempty" json:"bucket,omitempty" xml:"bucket,omitempty"`
+	// Every bucket in the window, empty ones included.
+	Buckets []*UserSessionTrendBucketResponseBody `form:"buckets,omitempty" json:"buckets,omitempty" xml:"buckets,omitempty"`
+	// Credentials unexpired, with no recorded revocation, immediately before the
+	// window start.
+	ActiveAtStart *int64 `form:"active_at_start,omitempty" json:"active_at_start,omitempty" xml:"active_at_start,omitempty"`
+	// Credentials first issued in the window.
+	Created *int64 `form:"created,omitempty" json:"created,omitempty" xml:"created,omitempty"`
+	// Credentials revoked in the window.
+	Revoked *int64 `form:"revoked,omitempty" json:"revoked,omitempty" xml:"revoked,omitempty"`
+	// Credentials unexpired, with no recorded revocation, immediately before the
+	// window end, equal to the last bucket's active.
+	ActiveAtEnd *int64 `form:"active_at_end,omitempty" json:"active_at_end,omitempty" xml:"active_at_end,omitempty"`
+	// Session records in the window that name the gateway only through their
+	// consent selection, written before lineage was kept. Left out of every count:
+	// a refresh among them cannot be told from a new sign-in, so this counts
+	// records, not connections.
+	ExcludedLegacyRows *int64 `form:"excluded_legacy_rows,omitempty" json:"excluded_legacy_rows,omitempty" xml:"excluded_legacy_rows,omitempty"`
+	// Session records in the window on the gateway's current sign-in server that
+	// record no gateway, left out of every count. Records, not connections. Absent
+	// when the gateway has no sign-in server.
+	UnattributedRows *int64 `form:"unattributed_rows,omitempty" json:"unattributed_rows,omitempty" xml:"unattributed_rows,omitempty"`
+}
+
 // MintUserSessionResponseBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP response body.
 type MintUserSessionResponseBody struct {
@@ -644,6 +676,188 @@ type QueryFacetsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetTrendUnauthorizedResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "unauthorized" error.
+type GetTrendUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTrendForbiddenResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "forbidden" error.
+type GetTrendForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTrendBadRequestResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "bad_request" error.
+type GetTrendBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTrendNotFoundResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "not_found" error.
+type GetTrendNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTrendConflictResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "conflict" error.
+type GetTrendConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTrendUnsupportedMediaResponseBody is the type of the "userSessions"
+// service "getTrend" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetTrendUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTrendInvalidResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "invalid" error.
+type GetTrendInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTrendInvariantViolationResponseBody is the type of the "userSessions"
+// service "getTrend" endpoint HTTP response body for the "invariant_violation"
+// error.
+type GetTrendInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTrendUnexpectedResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "unexpected" error.
+type GetTrendUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTrendGatewayErrorResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "gateway_error" error.
+type GetTrendGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // MintUserSessionUnauthorizedResponseBody is the type of the "userSessions"
 // service "mintUserSession" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1194,6 +1408,25 @@ type UserSessionFilterFacetValueResponseBody struct {
 	MatchesSearch *bool `form:"matches_search,omitempty" json:"matches_search,omitempty" xml:"matches_search,omitempty"`
 }
 
+// UserSessionTrendBucketResponseBody is used to define fields on response body
+// types.
+type UserSessionTrendBucketResponseBody struct {
+	// Bucket start, inclusive; the window start for the first bucket.
+	Start *string `form:"start,omitempty" json:"start,omitempty" xml:"start,omitempty"`
+	// Bucket end, exclusive; the window end for the last bucket.
+	End *string `form:"end,omitempty" json:"end,omitempty" xml:"end,omitempty"`
+	// Credentials first issued during the bucket.
+	Created *int64 `form:"created,omitempty" json:"created,omitempty" xml:"created,omitempty"`
+	// Credentials ended by an explicit revocation before their deadline during the
+	// bucket.
+	Revoked *int64 `form:"revoked,omitempty" json:"revoked,omitempty" xml:"revoked,omitempty"`
+	// Credentials unexpired, with no recorded revocation, immediately before the
+	// bucket's end: refreshable ones until their authorization deadline, others
+	// until their token expires. A recorded lifetime, not request activity,
+	// permission or tool discovery.
+	Active *int64 `form:"active,omitempty" json:"active,omitempty" xml:"active,omitempty"`
+}
+
 // NewMintUserSessionRequestBody builds the HTTP request body from the payload
 // of the "mintUserSession" endpoint of the "userSessions" service.
 func NewMintUserSessionRequestBody(p *usersessions.MintUserSessionPayload) *MintUserSessionRequestBody {
@@ -1722,6 +1955,182 @@ func NewQueryFacetsGatewayError(body *QueryFacetsGatewayErrorResponseBody) *goa.
 	return v
 }
 
+// NewGetTrendUserSessionTrendOK builds a "userSessions" service "getTrend"
+// endpoint result from a HTTP "OK" response.
+func NewGetTrendUserSessionTrendOK(body *GetTrendResponseBody) *usersessions.UserSessionTrend {
+	v := &usersessions.UserSessionTrend{
+		From:               *body.From,
+		To:                 *body.To,
+		Bucket:             *body.Bucket,
+		ActiveAtStart:      *body.ActiveAtStart,
+		Created:            *body.Created,
+		Revoked:            *body.Revoked,
+		ActiveAtEnd:        *body.ActiveAtEnd,
+		ExcludedLegacyRows: *body.ExcludedLegacyRows,
+		UnattributedRows:   body.UnattributedRows,
+	}
+	v.Buckets = make([]*usersessions.UserSessionTrendBucket, len(body.Buckets))
+	for i, val := range body.Buckets {
+		if val == nil {
+			v.Buckets[i] = nil
+			continue
+		}
+		v.Buckets[i] = unmarshalUserSessionTrendBucketResponseBodyToUsersessionsUserSessionTrendBucket(val)
+	}
+
+	return v
+}
+
+// NewGetTrendUnauthorized builds a userSessions service getTrend endpoint
+// unauthorized error.
+func NewGetTrendUnauthorized(body *GetTrendUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTrendForbidden builds a userSessions service getTrend endpoint
+// forbidden error.
+func NewGetTrendForbidden(body *GetTrendForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTrendBadRequest builds a userSessions service getTrend endpoint
+// bad_request error.
+func NewGetTrendBadRequest(body *GetTrendBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTrendNotFound builds a userSessions service getTrend endpoint
+// not_found error.
+func NewGetTrendNotFound(body *GetTrendNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTrendConflict builds a userSessions service getTrend endpoint conflict
+// error.
+func NewGetTrendConflict(body *GetTrendConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTrendUnsupportedMedia builds a userSessions service getTrend endpoint
+// unsupported_media error.
+func NewGetTrendUnsupportedMedia(body *GetTrendUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTrendInvalid builds a userSessions service getTrend endpoint invalid
+// error.
+func NewGetTrendInvalid(body *GetTrendInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTrendInvariantViolation builds a userSessions service getTrend
+// endpoint invariant_violation error.
+func NewGetTrendInvariantViolation(body *GetTrendInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTrendUnexpected builds a userSessions service getTrend endpoint
+// unexpected error.
+func NewGetTrendUnexpected(body *GetTrendUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTrendGatewayError builds a userSessions service getTrend endpoint
+// gateway_error error.
+func NewGetTrendGatewayError(body *GetTrendGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewMintUserSessionResultOK builds a "userSessions" service "mintUserSession"
 // endpoint result from a HTTP "OK" response.
 func NewMintUserSessionResultOK(body *MintUserSessionResponseBody) *usersessions.MintUserSessionResult {
@@ -2134,6 +2543,52 @@ func ValidateQueryFacetsResponseBody(body *QueryFacetsResponseBody) (err error) 
 	if body.Provider != nil {
 		if err2 := ValidateUserSessionFilterFacetResponseBody(body.Provider); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateGetTrendResponseBody runs the validations defined on
+// GetTrendResponseBody
+func ValidateGetTrendResponseBody(body *GetTrendResponseBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.Bucket == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket", "body"))
+	}
+	if body.Buckets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("buckets", "body"))
+	}
+	if body.ActiveAtStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_at_start", "body"))
+	}
+	if body.Created == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created", "body"))
+	}
+	if body.Revoked == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked", "body"))
+	}
+	if body.ActiveAtEnd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_at_end", "body"))
+	}
+	if body.ExcludedLegacyRows == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("excluded_legacy_rows", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	for _, e := range body.Buckets {
+		if e != nil {
+			if err2 := ValidateUserSessionTrendBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -2871,6 +3326,246 @@ func ValidateQueryFacetsGatewayErrorResponseBody(body *QueryFacetsGatewayErrorRe
 	return
 }
 
+// ValidateGetTrendUnauthorizedResponseBody runs the validations defined on
+// getTrend_unauthorized_response_body
+func ValidateGetTrendUnauthorizedResponseBody(body *GetTrendUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTrendForbiddenResponseBody runs the validations defined on
+// getTrend_forbidden_response_body
+func ValidateGetTrendForbiddenResponseBody(body *GetTrendForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTrendBadRequestResponseBody runs the validations defined on
+// getTrend_bad_request_response_body
+func ValidateGetTrendBadRequestResponseBody(body *GetTrendBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTrendNotFoundResponseBody runs the validations defined on
+// getTrend_not_found_response_body
+func ValidateGetTrendNotFoundResponseBody(body *GetTrendNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTrendConflictResponseBody runs the validations defined on
+// getTrend_conflict_response_body
+func ValidateGetTrendConflictResponseBody(body *GetTrendConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTrendUnsupportedMediaResponseBody runs the validations defined on
+// getTrend_unsupported_media_response_body
+func ValidateGetTrendUnsupportedMediaResponseBody(body *GetTrendUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTrendInvalidResponseBody runs the validations defined on
+// getTrend_invalid_response_body
+func ValidateGetTrendInvalidResponseBody(body *GetTrendInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTrendInvariantViolationResponseBody runs the validations defined
+// on getTrend_invariant_violation_response_body
+func ValidateGetTrendInvariantViolationResponseBody(body *GetTrendInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTrendUnexpectedResponseBody runs the validations defined on
+// getTrend_unexpected_response_body
+func ValidateGetTrendUnexpectedResponseBody(body *GetTrendUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTrendGatewayErrorResponseBody runs the validations defined on
+// getTrend_gateway_error_response_body
+func ValidateGetTrendGatewayErrorResponseBody(body *GetTrendGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateMintUserSessionUnauthorizedResponseBody runs the validations defined
 // on mintUserSession_unauthorized_response_body
 func ValidateMintUserSessionUnauthorizedResponseBody(body *MintUserSessionUnauthorizedResponseBody) (err error) {
@@ -3583,6 +4278,33 @@ func ValidateUserSessionFilterFacetValueResponseBody(body *UserSessionFilterFace
 	}
 	if body.MatchesSearch == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("matches_search", "body"))
+	}
+	return
+}
+
+// ValidateUserSessionTrendBucketResponseBody runs the validations defined on
+// UserSessionTrendBucketResponseBody
+func ValidateUserSessionTrendBucketResponseBody(body *UserSessionTrendBucketResponseBody) (err error) {
+	if body.Start == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("start", "body"))
+	}
+	if body.End == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("end", "body"))
+	}
+	if body.Created == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created", "body"))
+	}
+	if body.Revoked == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked", "body"))
+	}
+	if body.Active == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active", "body"))
+	}
+	if body.Start != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.start", *body.Start, goa.FormatDateTime))
+	}
+	if body.End != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.end", *body.End, goa.FormatDateTime))
 	}
 	return
 }

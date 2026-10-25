@@ -22,6 +22,11 @@ func QueryFacetsUserSessionsPath() string {
 	return "/rpc/userSessions.queryFacets"
 }
 
+// GetTrendUserSessionsPath returns the URL path to the userSessions service getTrend HTTP endpoint.
+func GetTrendUserSessionsPath() string {
+	return "/rpc/userSessions.getTrend"
+}
+
 // MintUserSessionUserSessionsPath returns the URL path to the userSessions service mintUserSession HTTP endpoint.
 func MintUserSessionUserSessionsPath() string {
 	return "/rpc/userSessions.mint"

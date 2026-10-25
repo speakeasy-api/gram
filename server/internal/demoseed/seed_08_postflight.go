@@ -150,6 +150,20 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		},
 		read("http tools", &toolCount, byProject(s.q.PostflightCountHTTPTools)),
 		{
+			what: "gateway credentials",
+			count: func() (int64, error) {
+				return s.q.PostflightCountGatewayCredentials(ctx, repo.PostflightCountGatewayCredentialsParams{ProjectID: proj, ResourceIdentity: s.serversResourceIdentity("gateway")})
+			},
+			fail: postflightMustEqual(7, "expected 7 gateway credentials, refreshes counted once, found %d"),
+		},
+		{
+			what: "gateway legacy sessions",
+			count: func() (int64, error) {
+				return s.q.PostflightCountGatewayLegacySessions(ctx, repo.PostflightCountGatewayLegacySessionsParams{ProjectID: proj, ResourceIdentity: s.serversResourceIdentity("gateway")})
+			},
+			fail: postflightMustEqual(1, "expected 1 legacy gateway session record, found %d"),
+		},
+		{
 			what:  "gateway custom cimd clients",
 			count: byProject(s.q.PostflightCountGatewayCimdClients),
 			fail:  postflightMustEqual(1, "expected 1 gateway custom cimd client, found %d"),

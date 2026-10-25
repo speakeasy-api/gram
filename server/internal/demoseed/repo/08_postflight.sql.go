@@ -275,6 +275,25 @@ func (q *Queries) PostflightCountGatewayCimdClients(ctx context.Context, project
 	return count, err
 }
 
+const postflightCountGatewayCredentials = `-- name: PostflightCountGatewayCredentials :one
+SELECT count(DISTINCT COALESCE(credential_id, id))
+FROM user_sessions
+WHERE project_id = $1::uuid AND resource_identity = $2::text
+`
+
+type PostflightCountGatewayCredentialsParams struct {
+	ProjectID        uuid.UUID
+	ResourceIdentity string
+}
+
+// The gateway's credentials, each counted once however often it refreshed.
+func (q *Queries) PostflightCountGatewayCredentials(ctx context.Context, arg PostflightCountGatewayCredentialsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountGatewayCredentials, arg.ProjectID, arg.ResourceIdentity)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountGatewayEndpoints = `-- name: PostflightCountGatewayEndpoints :one
 SELECT count(*)
 FROM mcp_endpoints e
@@ -284,6 +303,26 @@ WHERE e.project_id = $1::uuid AND e.deleted IS FALSE
 
 func (q *Queries) PostflightCountGatewayEndpoints(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountGatewayEndpoints, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountGatewayLegacySessions = `-- name: PostflightCountGatewayLegacySessions :one
+SELECT count(*)
+FROM user_sessions
+WHERE project_id = $1::uuid AND resource_identity IS NULL
+  AND tool_selection->>'resource' = $2::text
+`
+
+type PostflightCountGatewayLegacySessionsParams struct {
+	ProjectID        uuid.UUID
+	ResourceIdentity string
+}
+
+// Records naming the gateway only through their consent selection.
+func (q *Queries) PostflightCountGatewayLegacySessions(ctx context.Context, arg PostflightCountGatewayLegacySessionsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountGatewayLegacySessions, arg.ProjectID, arg.ResourceIdentity)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

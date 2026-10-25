@@ -1776,6 +1776,18 @@ WHERE (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id
 ORDER BY created_at DESC, id DESC
 LIMIT 1;
 
+-- name: RevokeAccessOnlyUserSession :execrows
+-- Records an access-token revocation as the session's end when the session
+-- cannot refresh, so the access token was all it had. A refreshable session
+-- keeps its grant: revoking one access token does not end it. Called only
+-- after the caller has proven it owns the session.
+UPDATE user_sessions
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND deleted IS FALSE
+  AND NOT COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false);
+
 -- name: GetUserSessionByJTI :one
 -- Looks up the session row by jti, scoped to the issuer. Used by the OAuth
 -- /revoke endpoint to verify a presented access token belongs to the
@@ -3095,3 +3107,121 @@ JOIN user_session_issuers AS iss
 WHERE c.user_session_issuer_id = @user_session_issuer_id
   AND c.id = ANY(@ids::uuid[])
   AND c.deleted IS FALSE;
+
+-- name: GetGatewaySessionTrendEvents :many
+-- A gateway's credential history over [from_time, to_time), from rows that
+-- record the gateway as their resource_identity: those rows were written by
+-- the lineage-keeping writer, so COALESCE(credential_id, id) names each
+-- credential across its refreshes. A rotated row ends when its successor
+-- starts; any other row ends at its deletion or at the deadline it is usable
+-- until (the authorization deadline when it can refresh, its token's expiry
+-- otherwise), whichever is first. A deletion before that deadline with no
+-- successor is a revocation.
+--
+-- Returns one baseline row (credentials active immediately before from_time), then
+-- per bucket the credentials starting (root: first issued) and ending
+-- (flagged: revoked) in it. Buckets are date_bin of stride from the UTC epoch.
+WITH scoped AS (
+  SELECT s.id, s.credential_id, s.created_at, s.deleted_at,
+         -- An actual refresh token hash, as GetUserSessionPolicyByJTI reads it.
+         CASE
+           WHEN COALESCE(s.refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false) THEN s.refresh_expires_at
+           ELSE s.expires_at
+         END AS deadline
+  FROM user_sessions AS s
+  -- Every row that records a resource_identity has an organization_id: the
+  -- writer stamps it from the issuer, so the organization index bounds the
+  -- read to this tenant before the gateway and project are matched.
+  WHERE s.organization_id = @organization_id::text
+    AND (s.project_id = @project_id::uuid OR s.project_id IS NULL)
+    AND s.resource_identity = @resource_identity::text
+),
+lived AS (
+  SELECT created_at, COALESCE(credential_id, id) = id AS root, deleted_at, deadline,
+         lead(created_at) OVER (PARTITION BY COALESCE(credential_id, id) ORDER BY created_at, id) AS successor_at
+  FROM scoped
+),
+spans AS (
+  SELECT created_at, root,
+         COALESCE(successor_at, LEAST(COALESCE(deleted_at, deadline), deadline)) AS ended_at,
+         (successor_at IS NULL AND deleted_at IS NOT NULL AND deleted_at < deadline) AS revoked
+  FROM lived
+  WHERE created_at < @to_time::timestamptz
+)
+SELECT 'baseline'::text AS kind, @from_time::timestamptz AS bucket, count(*)::bigint AS total, 0::bigint AS flagged
+FROM spans
+WHERE created_at < @from_time::timestamptz AND ended_at >= @from_time::timestamptz
+UNION ALL
+SELECT 'start'::text, date_bin(@stride::interval, created_at, 'epoch'::timestamptz), count(*)::bigint, (count(*) FILTER (WHERE root))::bigint
+FROM spans
+WHERE created_at >= @from_time::timestamptz
+GROUP BY 2
+UNION ALL
+SELECT 'end'::text, date_bin(@stride::interval, ended_at, 'epoch'::timestamptz), count(*)::bigint, (count(*) FILTER (WHERE revoked))::bigint
+FROM spans
+WHERE ended_at >= @from_time::timestamptz AND ended_at < @to_time::timestamptz
+GROUP BY 2;
+
+-- name: CountGatewaySessionTrendExcluded :one
+-- Session rows in a gateway's window that the trend leaves out: legacy rows
+-- that name the gateway only through their consent selection, written before
+-- lineage was kept, and rows on the gateway's current sign-in server that
+-- record no gateway at all. These are rows, not credentials. A row is in the
+-- window when it was created before to_time and neither deleted nor past the
+-- deadline it is usable until before from_time.
+--
+-- Rows with an organization are read through its index. Rows from before
+-- sessions recorded one have none; they were never moved between issuers
+-- (a move records the organization), so they are found through the
+-- project's own issuers.
+WITH candidates AS (
+  SELECT s.user_session_issuer_id, s.tool_selection, s.created_at, s.deleted_at,
+         s.refresh_token_hash, s.refresh_expires_at, s.expires_at
+  FROM user_sessions AS s
+  WHERE s.organization_id = @organization_id::text
+    AND (s.project_id = @project_id::uuid OR s.project_id IS NULL)
+    AND s.resource_identity IS NULL
+    AND s.created_at < @to_time::timestamptz
+  UNION ALL
+  SELECT s.user_session_issuer_id, s.tool_selection, s.created_at, s.deleted_at,
+         s.refresh_token_hash, s.refresh_expires_at, s.expires_at
+  FROM user_session_issuers AS iss
+  JOIN user_sessions AS s ON s.user_session_issuer_id = iss.id
+  WHERE iss.project_id = @project_id::uuid
+    AND s.organization_id IS NULL
+    AND s.project_id = @project_id::uuid
+    AND s.resource_identity IS NULL
+    AND s.created_at < @to_time::timestamptz
+),
+usable AS (
+  SELECT user_session_issuer_id, tool_selection, deleted_at,
+         CASE
+           WHEN COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false) THEN refresh_expires_at
+           ELSE expires_at
+         END AS deadline
+  FROM candidates
+)
+SELECT
+  (count(*) FILTER (WHERE tool_selection->>'resource' = @resource_identity::text))::bigint AS legacy_rows,
+  (count(*) FILTER (WHERE tool_selection->>'resource' IS NULL AND user_session_issuer_id = sqlc.narg('issuer_id')::uuid))::bigint AS unattributed_rows
+FROM usable
+WHERE LEAST(COALESCE(deleted_at, deadline), deadline) >= @from_time::timestamptz;
+
+-- name: SetUserSessionLifetimeFixture :execrows
+-- Test-only fixture: places a session's issue, deletion and deadlines at
+-- fixed times, for history read at bucket edges, and sets its credential.
+UPDATE user_sessions
+SET created_at = @created_at,
+    deleted_at = sqlc.narg('deleted_at')::timestamptz,
+    refresh_expires_at = @refresh_expires_at,
+    expires_at = @expires_at,
+    credential_id = sqlc.narg('credential_id')::uuid
+WHERE id = @id
+  AND user_session_issuer_id = @user_session_issuer_id;
+
+-- name: GetUserSessionDeletedAtFixture :one
+-- Test-only fixture: when a session was deleted, if it was.
+SELECT deleted_at
+FROM user_sessions
+WHERE id = @id
+  AND user_session_issuer_id = @user_session_issuer_id;

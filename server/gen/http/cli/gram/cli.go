@@ -210,7 +210,7 @@ func UsageCommands() []string {
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|get-attach-impact|delete-user-session-issuer)",
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
-		"user-sessions (list-user-sessions|list-facets|query-facets|mint-user-session|revoke-user-session)",
+		"user-sessions (list-user-sessions|list-facets|query-facets|get-trend|mint-user-session|revoke-user-session)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject|create-device-join-token|register-device)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
@@ -5191,6 +5191,15 @@ func ParseEndpoint(
 		userSessionsQueryFacetsApikeyTokenFlag                = userSessionsQueryFacetsFlags.String("apikey-token", "", "")
 		userSessionsQueryFacetsProjectSlugInputFlag           = userSessionsQueryFacetsFlags.String("project-slug-input", "", "")
 
+		userSessionsGetTrendFlags                = flag.NewFlagSet("get-trend", flag.ExitOnError)
+		userSessionsGetTrendMetaMcpServerIDFlag  = userSessionsGetTrendFlags.String("meta-mcp-server-id", "REQUIRED", "")
+		userSessionsGetTrendFromFlag             = userSessionsGetTrendFlags.String("from", "REQUIRED", "")
+		userSessionsGetTrendToFlag               = userSessionsGetTrendFlags.String("to", "REQUIRED", "")
+		userSessionsGetTrendBucketFlag           = userSessionsGetTrendFlags.String("bucket", "REQUIRED", "")
+		userSessionsGetTrendSessionTokenFlag     = userSessionsGetTrendFlags.String("session-token", "", "")
+		userSessionsGetTrendApikeyTokenFlag      = userSessionsGetTrendFlags.String("apikey-token", "", "")
+		userSessionsGetTrendProjectSlugInputFlag = userSessionsGetTrendFlags.String("project-slug-input", "", "")
+
 		userSessionsMintUserSessionFlags                = flag.NewFlagSet("mint-user-session", flag.ExitOnError)
 		userSessionsMintUserSessionBodyFlag             = userSessionsMintUserSessionFlags.String("body", "REQUIRED", "")
 		userSessionsMintUserSessionSessionTokenFlag     = userSessionsMintUserSessionFlags.String("session-token", "", "")
@@ -6417,6 +6426,7 @@ func ParseEndpoint(
 	userSessionsListUserSessionsFlags.Usage = userSessionsListUserSessionsUsage
 	userSessionsListFacetsFlags.Usage = userSessionsListFacetsUsage
 	userSessionsQueryFacetsFlags.Usage = userSessionsQueryFacetsUsage
+	userSessionsGetTrendFlags.Usage = userSessionsGetTrendUsage
 	userSessionsMintUserSessionFlags.Usage = userSessionsMintUserSessionUsage
 	userSessionsRevokeUserSessionFlags.Usage = userSessionsRevokeUserSessionUsage
 
@@ -9750,6 +9760,9 @@ func ParseEndpoint(
 			case "query-facets":
 				epf = userSessionsQueryFacetsFlags
 
+			case "get-trend":
+				epf = userSessionsGetTrendFlags
+
 			case "mint-user-session":
 				epf = userSessionsMintUserSessionFlags
 
@@ -12970,6 +12983,9 @@ func ParseEndpoint(
 			case "query-facets":
 				endpoint = c.QueryFacets()
 				data, err = usersessionsc.BuildQueryFacetsPayload(*userSessionsQueryFacetsSubjectUrnFlag, *userSessionsQueryFacetsUserSessionIssuerIDFlag, *userSessionsQueryFacetsStatusFlag, *userSessionsQueryFacetsClientIDFlag, *userSessionsQueryFacetsSearchFlag, *userSessionsQueryFacetsMetaMcpServerIDFlag, *userSessionsQueryFacetsIdentitiesFlag, *userSessionsQueryFacetsExcludeIdentitiesFlag, *userSessionsQueryFacetsIdentityTypesFlag, *userSessionsQueryFacetsExcludeIdentityTypesFlag, *userSessionsQueryFacetsServersFlag, *userSessionsQueryFacetsExcludeServersFlag, *userSessionsQueryFacetsClientsFlag, *userSessionsQueryFacetsExcludeClientsFlag, *userSessionsQueryFacetsClientRegistrationsFlag, *userSessionsQueryFacetsExcludeClientRegistrationsFlag, *userSessionsQueryFacetsProvidersFlag, *userSessionsQueryFacetsExcludeProvidersFlag, *userSessionsQueryFacetsLastUsedWithinFlag, *userSessionsQueryFacetsLastUsedOlderThanFlag, *userSessionsQueryFacetsLastUsedNeverFlag, *userSessionsQueryFacetsFieldFlag, *userSessionsQueryFacetsFieldSearchFlag, *userSessionsQueryFacetsSessionTokenFlag, *userSessionsQueryFacetsApikeyTokenFlag, *userSessionsQueryFacetsProjectSlugInputFlag)
+			case "get-trend":
+				endpoint = c.GetTrend()
+				data, err = usersessionsc.BuildGetTrendPayload(*userSessionsGetTrendMetaMcpServerIDFlag, *userSessionsGetTrendFromFlag, *userSessionsGetTrendToFlag, *userSessionsGetTrendBucketFlag, *userSessionsGetTrendSessionTokenFlag, *userSessionsGetTrendApikeyTokenFlag, *userSessionsGetTrendProjectSlugInputFlag)
 			case "mint-user-session":
 				endpoint = c.MintUserSession()
 				data, err = usersessionsc.BuildMintUserSessionPayload(*userSessionsMintUserSessionBodyFlag, *userSessionsMintUserSessionSessionTokenFlag, *userSessionsMintUserSessionProjectSlugInputFlag)
@@ -35133,6 +35149,7 @@ func userSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-user-sessions: List issued user_sessions in the caller's project. refresh_token_hash is never returned.`)
 	fmt.Fprintln(os.Stderr, `    list-facets: List available user session facet values (clients, users, servers) in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    query-facets: Count the values of each session filter field over the sessions userSessions.list would return for the same filters. Each field ignores its own selection and applies every other filter. Returns the top values per field plus any selected value.`)
+	fmt.Fprintln(os.Stderr, `    get-trend: Count one gateway's connections over a window: credentials created and revoked during each bucket, and those active (unexpired, with no recorded revocation) immediately before each bucket's end. Active is a recorded credential lifetime, not proof the connection works, was permitted or was used. A refresh continues a credential, so it is neither a creation nor a revocation. Session records written before lineage was kept are left out and their rows counted in excluded_legacy_rows; rows on the gateway's current sign-in server that record no gateway are counted in unattributed_rows. Requires project:read on the project and mcp:read on the gateway; a gateway the caller may not read is not found.`)
 	fmt.Fprintln(os.Stderr, `    mint-user-session: Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: an MCP server, a meta MCP server, or a legacy toolset without an mcp_servers wrapper. Exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.`)
 	fmt.Fprintln(os.Stderr, `    revoke-user-session: Push the session's jti into the revocation cache and soft-delete the row.`)
 	fmt.Fprintln(os.Stderr)
@@ -35295,6 +35312,36 @@ func userSessionsQueryFacetsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions query-facets --subject-urn \"abc123\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --exclude-identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --exclude-servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --exclude-client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --providers '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-providers '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --last-used-within 2 --last-used-older-than 2 --last-used-never false --field \"identity_type\" --field-search \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionsGetTrendUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-sessions get-trend", os.Args[0])
+	fmt.Fprint(os.Stderr, " -meta-mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -bucket STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Count one gateway's connections over a window: credentials created and revoked during each bucket, and those active (unexpired, with no recorded revocation) immediately before each bucket's end. Active is a recorded credential lifetime, not proof the connection works, was permitted or was used. A refresh continues a credential, so it is neither a creation nor a revocation. Session records written before lineage was kept are left out and their rows counted in excluded_legacy_rows; rows on the gateway's current sign-in server that record no gateway are counted in unattributed_rows. Requires project:read on the project and mcp:read on the gateway; a gateway the caller may not read is not found.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -meta-mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -bucket STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions get-trend --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --bucket \"day\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionsMintUserSessionUsage() {

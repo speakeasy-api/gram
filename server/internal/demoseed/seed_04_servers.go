@@ -2,10 +2,14 @@ package demoseed
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strconv"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -21,6 +25,18 @@ type serversUserSession struct {
 	expiresIn        string
 	lastUsedAgo      string
 	createdAgo       string
+}
+
+// serversSessionHistory is one deleted row of the gateway's connection
+// history. lineage names the root row a refresh continues; legacy rows name
+// the gateway only in their consent selection. Offsets are interval strings
+// applied to now().
+type serversSessionHistory struct {
+	name, lineage               string
+	user                        int
+	legacy, accessOnly          bool
+	refreshExpiresIn, expiresIn string
+	createdAgo, deletedAgo      string
 }
 
 // serversValidatedSession is one upstream session on Linear's CIMD client.
@@ -313,13 +329,66 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			UserID:              user(us.user),
 			ResourceIdentity:    s.serversResourceIdentity(us.issuer),
 			Jti:                 "demo-jti-" + num,
-			RefreshTokenHash:    s.det("user-session-refresh-" + num).String(),
+			RefreshTokenHash:    s.serversRefreshHash("user-session-refresh-" + num),
 			RefreshExpiresIn:    us.refreshExpiresIn,
 			ExpiresIn:           us.expiresIn,
 			LastUsedAgo:         us.lastUsedAgo,
 			CreatedAgo:          us.createdAgo,
 		}); err != nil {
 			return fmt.Errorf("insert demo user session %d: %w", us.n, err)
+		}
+	}
+
+	// The gateway's connection history: one credential issued 20 days ago,
+	// refreshed twice and revoked two days ago, which is one creation and one
+	// revocation, not three; another revoked after three days; one whose
+	// expired refresh was tombstoned after its deadline, which is expiry; and a
+	// dashboard token ended by revoking its access token. One legacy record
+	// predates lineage, so it is left out of the counts and disclosed.
+	catalog, err := json.Marshal(map[string]string{"resource": s.serversResourceIdentity("gateway")})
+	if err != nil {
+		return fmt.Errorf("encode demo legacy gateway selection: %w", err)
+	}
+	history := []serversSessionHistory{
+		{name: "chain", lineage: "", user: 2, legacy: false, accessOnly: false, refreshExpiresIn: "240 hours", expiresIn: "-479 hours", createdAgo: "480 hours", deletedAgo: "360 hours"},
+		{name: "chain-2", lineage: "chain", user: 2, legacy: false, accessOnly: false, refreshExpiresIn: "240 hours", expiresIn: "-359 hours", createdAgo: "360 hours", deletedAgo: "216 hours"},
+		{name: "chain-3", lineage: "chain", user: 2, legacy: false, accessOnly: false, refreshExpiresIn: "240 hours", expiresIn: "-215 hours", createdAgo: "216 hours", deletedAgo: "48 hours"},
+		{name: "revoked", lineage: "", user: 3, legacy: false, accessOnly: false, refreshExpiresIn: "200 hours", expiresIn: "-143 hours", createdAgo: "144 hours", deletedAgo: "72 hours"},
+		{name: "expired", lineage: "", user: 5, legacy: false, accessOnly: false, refreshExpiresIn: "-288 hours", expiresIn: "-623 hours", createdAgo: "624 hours", deletedAgo: "280 hours"},
+		{name: "dashboard", lineage: "", user: 3, legacy: false, accessOnly: true, refreshExpiresIn: "240 hours", expiresIn: "-95 hours", createdAgo: "96 hours", deletedAgo: "95 hours 30 minutes"},
+		{name: "legacy", lineage: "", user: 5, legacy: true, accessOnly: false, refreshExpiresIn: "-200 hours", expiresIn: "-671 hours", createdAgo: "672 hours", deletedAgo: "504 hours"},
+	}
+	for _, h := range history {
+		jti := "demo-history-jti-" + h.name
+		params := repo.ServersInsertGatewaySessionHistoryParams{
+			ID:                  s.det("gateway-history-" + h.name),
+			ProjectID:           proj,
+			OrgID:               org,
+			UserSessionIssuerID: s.det("issuer-gateway"),
+			UserSessionClientID: s.det("usc-gateway"),
+			UserID:              user(h.user),
+			ResourceIdentity:    pgtype.Text{String: s.serversResourceIdentity("gateway"), Valid: !h.legacy},
+			ToolSelection:       nil,
+			CredentialID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Jti:                 jti,
+			RefreshTokenHash:    s.serversRefreshHash("gateway-history-refresh-" + h.name),
+			RefreshExpiresIn:    h.refreshExpiresIn,
+			ExpiresIn:           h.expiresIn,
+			CreatedAgo:          h.createdAgo,
+			DeletedAgo:          h.deletedAgo,
+		}
+		if h.legacy {
+			params.ToolSelection = catalog
+		}
+		if h.lineage != "" {
+			params.CredentialID = uuid.NullUUID{UUID: s.det("gateway-history-" + h.lineage), Valid: true}
+		}
+		if h.accessOnly {
+			// A dashboard token stores this marker and no refresh token.
+			params.RefreshTokenHash = "dashboard-mint:" + jti
+		}
+		if err := s.q.ServersInsertGatewaySessionHistory(ctx, params); err != nil {
+			return fmt.Errorf("insert demo gateway session history %s: %w", h.name, err)
 		}
 	}
 
@@ -333,7 +402,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		ResourceIdentity:    s.serversResourceIdentity("gateway"),
 		AuthorizerUserID:    user(1),
 		Jti:                 s.det("gateway-agent-jti").String(),
-		RefreshTokenHash:    "DEMO-NOT-A-VALID-HASH-" + s.det("gateway-agent-refresh").String(),
+		RefreshTokenHash:    s.serversRefreshHash("gateway-agent-refresh"),
 	}); err != nil {
 		return fmt.Errorf("insert demo gateway agent session: %w", err)
 	}
@@ -740,6 +809,13 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 
 // serversResourceIdentity is the resource a session on the named seeded issuer
 // is recorded for.
+// serversRefreshHash is a refresh token hash in the shape real ones take,
+// 43 characters of base64url, for a token no one holds.
+func (s *seeder) serversRefreshHash(name string) string {
+	sum := sha256.Sum256([]byte(s.name(name)))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
 func (s *seeder) serversResourceIdentity(issuer string) string {
 	if issuer == "gateway" {
 		return "meta_mcp_server:" + s.det("metamcp-1").String()

@@ -29,6 +29,17 @@ type Service interface {
 	// own selection and applies every other filter. Returns the top values per
 	// field plus any selected value.
 	QueryFacets(context.Context, *QueryFacetsPayload) (res *UserSessionFilterFacets, err error)
+	// Count one gateway's connections over a window: credentials created and
+	// revoked during each bucket, and those active (unexpired, with no recorded
+	// revocation) immediately before each bucket's end. Active is a recorded
+	// credential lifetime, not proof the connection works, was permitted or was
+	// used. A refresh continues a credential, so it is neither a creation nor a
+	// revocation. Session records written before lineage was kept are left out and
+	// their rows counted in excluded_legacy_rows; rows on the gateway's current
+	// sign-in server that record no gateway are counted in unattributed_rows.
+	// Requires project:read on the project and mcp:read on the gateway; a gateway
+	// the caller may not read is not found.
+	GetTrend(context.Context, *GetTrendPayload) (res *UserSessionTrend, err error)
 	// Mint a user_session on behalf of the authenticated dashboard user, bound to
 	// an issuer-gated audience: an MCP server, a meta MCP server, or a legacy
 	// toolset without an mcp_servers wrapper. Exactly one of toolset_id,
@@ -61,7 +72,23 @@ const ServiceName = "userSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"listUserSessions", "listFacets", "queryFacets", "mintUserSession", "revokeUserSession"}
+var MethodNames = [6]string{"listUserSessions", "listFacets", "queryFacets", "getTrend", "mintUserSession", "revokeUserSession"}
+
+// GetTrendPayload is the payload type of the userSessions service getTrend
+// method.
+type GetTrendPayload struct {
+	// The gateway, live in the caller's project.
+	MetaMcpServerID string
+	// Window start, inclusive.
+	From string
+	// Window end, exclusive. At most 31 days after from.
+	To string
+	// Bucket width, aligned to UTC hours or days.
+	Bucket           string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
 
 // ListFacetsPayload is the payload type of the userSessions service listFacets
 // method.
@@ -314,6 +341,55 @@ type UserSessionFilterFacets struct {
 	// that match the other filters but recorded no origin and have no consent
 	// selection naming a resource. 0 for a gateway without a sign-in server.
 	UnattributedCount *int64
+}
+
+// UserSessionTrend is the result type of the userSessions service getTrend
+// method.
+type UserSessionTrend struct {
+	// Window start.
+	From string
+	// Window end, excluded.
+	To string
+	// Bucket width.
+	Bucket string
+	// Every bucket in the window, empty ones included.
+	Buckets []*UserSessionTrendBucket
+	// Credentials unexpired, with no recorded revocation, immediately before the
+	// window start.
+	ActiveAtStart int64
+	// Credentials first issued in the window.
+	Created int64
+	// Credentials revoked in the window.
+	Revoked int64
+	// Credentials unexpired, with no recorded revocation, immediately before the
+	// window end, equal to the last bucket's active.
+	ActiveAtEnd int64
+	// Session records in the window that name the gateway only through their
+	// consent selection, written before lineage was kept. Left out of every count:
+	// a refresh among them cannot be told from a new sign-in, so this counts
+	// records, not connections.
+	ExcludedLegacyRows int64
+	// Session records in the window on the gateway's current sign-in server that
+	// record no gateway, left out of every count. Records, not connections. Absent
+	// when the gateway has no sign-in server.
+	UnattributedRows *int64
+}
+
+type UserSessionTrendBucket struct {
+	// Bucket start, inclusive; the window start for the first bucket.
+	Start string
+	// Bucket end, exclusive; the window end for the last bucket.
+	End string
+	// Credentials first issued during the bucket.
+	Created int64
+	// Credentials ended by an explicit revocation before their deadline during the
+	// bucket.
+	Revoked int64
+	// Credentials unexpired, with no recorded revocation, immediately before the
+	// bucket's end: refreshable ones until their authorization deadline, others
+	// until their token expires. A recorded lifetime, not request activity,
+	// permission or tool discovery.
+	Active int64
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

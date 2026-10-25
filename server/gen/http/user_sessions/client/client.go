@@ -29,6 +29,10 @@ type Client struct {
 	// endpoint.
 	QueryFacetsDoer goahttp.Doer
 
+	// GetTrend Doer is the HTTP client used to make requests to the getTrend
+	// endpoint.
+	GetTrendDoer goahttp.Doer
+
 	// MintUserSession Doer is the HTTP client used to make requests to the
 	// mintUserSession endpoint.
 	MintUserSessionDoer goahttp.Doer
@@ -60,6 +64,7 @@ func NewClient(
 		ListUserSessionsDoer:  doer,
 		ListFacetsDoer:        doer,
 		QueryFacetsDoer:       doer,
+		GetTrendDoer:          doer,
 		MintUserSessionDoer:   doer,
 		RevokeUserSessionDoer: doer,
 		RestoreResponseBody:   restoreBody,
@@ -137,6 +142,30 @@ func (c *Client) QueryFacets() goa.Endpoint {
 		resp, err := c.QueryFacetsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("userSessions", "queryFacets", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetTrend returns an endpoint that makes HTTP requests to the userSessions
+// service getTrend server.
+func (c *Client) GetTrend() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetTrendRequest(c.encoder)
+		decodeResponse = DecodeGetTrendResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetTrendRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetTrendDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessions", "getTrend", err)
 		}
 		return decodeResponse(resp)
 	}

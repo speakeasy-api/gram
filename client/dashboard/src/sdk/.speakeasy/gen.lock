@@ -833,6 +833,7 @@ trackedFiles:
   src/funcs/userSessionIssuersGetAttachImpact.ts: {}
   src/funcs/userSessionIssuersList.ts: {}
   src/funcs/userSessionIssuersUpdate.ts: {}
+  src/funcs/userSessionsGetTrend.ts: {}
   src/funcs/userSessionsList.ts: {}
   src/funcs/userSessionsListFacets.ts: {}
   src/funcs/userSessionsMint.ts: {}
@@ -2139,6 +2140,8 @@ trackedFiles:
   src/models/components/usersessionissuercimdclient.ts: {}
   src/models/components/usersessionissuerfieldmismatch.ts: {}
   src/models/components/usersessionissuermcpserver.ts: {}
+  src/models/components/usersessiontrend.ts: {}
+  src/models/components/usersessiontrendbucket.ts: {}
   src/models/components/usersessionupstream.ts: {}
   src/models/components/usersessionworkload.ts: {}
   src/models/components/usersessionworkloadadmission.ts: {}
@@ -2547,6 +2550,7 @@ trackedFiles:
   src/models/operations/getusersessionissuer.ts: {}
   src/models/operations/getusersessionissuerattachimpact.ts: {}
   src/models/operations/getusersessionissuercimdclient.ts: {}
+  src/models/operations/getusersessiontrend.ts: {}
   src/models/operations/getwidget.ts: {}
   src/models/operations/getworkloadcustomflows.ts: {}
   src/models/operations/getworkunitstrend.ts: {}
@@ -4172,6 +4176,8 @@ trackedFiles:
   src/react-query/userSessionIssuerCimdClients.ts: {}
   src/react-query/userSessionIssuers.core.ts: {}
   src/react-query/userSessionIssuers.ts: {}
+  src/react-query/userSessionTrend.core.ts: {}
+  src/react-query/userSessionTrend.ts: {}
   src/react-query/userSessions.core.ts: {}
   src/react-query/userSessions.ts: {}
   src/react-query/validateAPIKey.core.ts: {}
@@ -8781,6 +8787,21 @@ examples:
       responses:
         "200":
           application/json: {"client_id_metadata_uri": "https://partial-fledgling.biz/", "created_at": "2024-02-02T03:51:06.494Z", "id": "c80d795e-b6cb-451d-bfc7-4f2c8d17db95", "organization_id": "<id>", "project_id": "ef33b1a1-9603-4282-9688-775fc9fc8a84", "updated_at": "2025-07-12T10:12:46.995Z", "user_session_issuer_id": "0211b5a2-8d88-42c5-98fd-966ec1012a87"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getUserSessionTrend:
+    speakeasy-default-get-user-session-trend:
+      parameters:
+        query:
+          meta_mcp_server_id: "7771fc84-9c23-4765-9afb-f953f19e680b"
+          from: "2025-01-28T05:42:30.147Z"
+          to: "2025-06-21T16:40:02.064Z"
+          bucket: "hour"
+      responses:
+        "200":
+          application/json: {"active_at_end": 508632, "active_at_start": 964375, "bucket": "<value>", "buckets": [], "created": 46640, "excluded_legacy_rows": 297153, "from": "2024-05-03T11:59:55.241Z", "revoked": 447493, "to": "2024-03-13T01:33:29.983Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

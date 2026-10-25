@@ -22,6 +22,7 @@ type Server struct {
 	ListUserSessions  http.Handler
 	ListFacets        http.Handler
 	QueryFacets       http.Handler
+	GetTrend          http.Handler
 	MintUserSession   http.Handler
 	RevokeUserSession http.Handler
 }
@@ -56,12 +57,14 @@ func New(
 			{"ListUserSessions", "GET", "/rpc/userSessions.list"},
 			{"ListFacets", "GET", "/rpc/userSessions.listFacets"},
 			{"QueryFacets", "GET", "/rpc/userSessions.queryFacets"},
+			{"GetTrend", "GET", "/rpc/userSessions.getTrend"},
 			{"MintUserSession", "POST", "/rpc/userSessions.mint"},
 			{"RevokeUserSession", "POST", "/rpc/userSessions.revoke"},
 		},
 		ListUserSessions:  NewListUserSessionsHandler(e.ListUserSessions, mux, decoder, encoder, errhandler, formatter),
 		ListFacets:        NewListFacetsHandler(e.ListFacets, mux, decoder, encoder, errhandler, formatter),
 		QueryFacets:       NewQueryFacetsHandler(e.QueryFacets, mux, decoder, encoder, errhandler, formatter),
+		GetTrend:          NewGetTrendHandler(e.GetTrend, mux, decoder, encoder, errhandler, formatter),
 		MintUserSession:   NewMintUserSessionHandler(e.MintUserSession, mux, decoder, encoder, errhandler, formatter),
 		RevokeUserSession: NewRevokeUserSessionHandler(e.RevokeUserSession, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -75,6 +78,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListUserSessions = m(s.ListUserSessions)
 	s.ListFacets = m(s.ListFacets)
 	s.QueryFacets = m(s.QueryFacets)
+	s.GetTrend = m(s.GetTrend)
 	s.MintUserSession = m(s.MintUserSession)
 	s.RevokeUserSession = m(s.RevokeUserSession)
 }
@@ -87,6 +91,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListUserSessionsHandler(mux, h.ListUserSessions)
 	MountListFacetsHandler(mux, h.ListFacets)
 	MountQueryFacetsHandler(mux, h.QueryFacets)
+	MountGetTrendHandler(mux, h.GetTrend)
 	MountMintUserSessionHandler(mux, h.MintUserSession)
 	MountRevokeUserSessionHandler(mux, h.RevokeUserSession)
 }
@@ -232,6 +237,59 @@ func NewQueryFacetsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "queryFacets")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetTrendHandler configures the mux to serve the "userSessions" service
+// "getTrend" endpoint.
+func MountGetTrendHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/userSessions.getTrend", f)
+}
+
+// NewGetTrendHandler creates a HTTP handler which loads the HTTP request and
+// calls the "userSessions" service "getTrend" endpoint.
+func NewGetTrendHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetTrendRequest(mux, decoder)
+		encodeResponse = EncodeGetTrendResponse(encoder)
+		encodeError    = EncodeGetTrendError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getTrend")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessions")
 		payload, err := decodeRequest(r)
 		if err != nil {
