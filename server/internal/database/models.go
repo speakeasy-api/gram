@@ -4570,6 +4570,79 @@ type PlatformMcpDistribution struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type PlatformMcpEventDelivery struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	SubscriptionID pgtype.Text
+	// @access: confidential
+	SubscriptionGeneration uuid.UUID
+	// @access: confidential
+	EventID uuid.UUID
+	// @access: confidential
+	EventName string
+	// @access: confidential
+	RequestID uuid.UUID
+	// Server-constructed event references only; excludes evidence and user content.
+	// @access: confidential
+	Payload []byte
+	// @access: confidential
+	Status string
+	// @access: confidential
+	Attempts int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type PlatformMcpEventSubscription struct {
+	// @access: confidential
+	ID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ConnectionID uuid.NullUUID
+	// @access: confidential
+	ConnectionGeneration uuid.UUID
+	// @access: confidential
+	ClientID string
+	// @access: confidential
+	UserID string
+	// @access: confidential
+	EventName string
+	// @access: restricted
+	CallbackUrl string
+	// Encrypted webhook signing key.
+	// @access: secret-restricted
+	SigningSecret string
+	// Encrypted webhook signing key.
+	// @access: secret-restricted
+	PreviousSigningSecret pgtype.Text
+	// @access: confidential
+	PreviousSecretExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	Generation uuid.UUID
+	// @access: confidential
+	SubscribedAt pgtype.Timestamptz
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	VerifiedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type PlatformMcpFeedback struct {
 	// @access: confidential
 	ID uuid.UUID
