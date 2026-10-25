@@ -145,10 +145,10 @@ func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
 func metaMemberClientCredentialError(member metaMember, err error) error {
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		retryable := !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled)
-		return memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q cannot reach its upstream authorization server right now; retry shortly", member.slug)}, status: 0, retryable: retryable, retryAfter: 0}
+		return memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q cannot reach its upstream authorization server right now; retry shortly", member.slug), reason: reasonAuthorizationServerUnavailable}, status: 0, retryable: retryable, retryAfter: 0}
 	}
 
-	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator", member.slug)}
+	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator", member.slug), reason: reasonCredentialMisconfigured}
 }
 
 // subjectConnectedClients returns the clients that do not hold their upstream

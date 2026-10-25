@@ -307,7 +307,7 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 	}
 	approved, found := gate.catalog.Members[member.slug]
 	if !found || approved.ServerID != member.serverID || approved.ProjectID != member.projectID {
-		return &metaMemberError{message: catalogMemberNotApproved}
+		return &metaMemberError{message: catalogMemberNotApproved, reason: reasonConsentNotApproved}
 	}
 
 	if member.backend == metaMemberBackendProxied && (gate.execute || gate.catalogMode == toolfilter.CatalogModeLive) {
@@ -319,11 +319,11 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 			return member.upstreamUnavailable
 		}
 		if approved.Auth == nil || approved.Auth.RegistrationID != member.chosenClientID || approved.Auth.ClientID != clientID {
-			return &metaMemberError{message: "This server's authentication changed. Give consent again to approve it."}
+			return &metaMemberError{message: "This server's authentication changed. Give consent again to approve it.", reason: reasonConsentAuthChanged}
 		}
 	}
 	if member.configurationHash == "" || member.configurationHash != approved.BackendHash {
-		return &metaMemberError{message: "This server's configuration changed. Give consent again to approve it."}
+		return &metaMemberError{message: "This server's configuration changed. Give consent again to approve it.", reason: reasonConsentConfigChanged}
 	}
 	return nil
 }

@@ -2070,7 +2070,7 @@ func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
-	intervalSeconds := max(calculateInterval(timeStart, timeEnd), (timeEnd-timeStart)/int64(time.Second)/maxDiscoveryFailureBuckets+1)
+	intervalSeconds := discoveryFailureInterval(timeStart, timeEnd)
 
 	usage, err := s.chRepo.GetMetaMCPServerUsage(ctx, repo.GetMetaMCPServerUsageParams{
 		GramProjectID:   authCtx.ProjectID.String(),
@@ -2829,6 +2829,21 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 // year of daily buckets. Telemetry is kept for 90 days, so a wider window only
 // widens the buckets instead of growing the response.
 const maxDiscoveryFailureBuckets = 366
+
+// discoveryFailureIntervalStep is the connection attempt rollup's bucket
+// width, the finest discovery failure interval.
+const discoveryFailureIntervalStep = 1800
+
+// discoveryFailureInterval is the usual interval for the window, at least 30
+// minutes and rounded up to a multiple of it, so its UTC-aligned buckets are
+// whole rollup buckets. Aligning the first bucket can add one bucket, so the
+// window is split into at most one fewer than the bound.
+func discoveryFailureInterval(timeStart, timeEnd int64) int64 {
+	windowSeconds := (timeEnd - timeStart + int64(time.Second) - 1) / int64(time.Second)
+	limit := maxDiscoveryFailureBuckets - 1
+	interval := max(calculateInterval(timeStart, timeEnd), (windowSeconds+int64(limit)-1)/int64(limit))
+	return (interval + discoveryFailureIntervalStep - 1) / discoveryFailureIntervalStep * discoveryFailureIntervalStep
+}
 
 // calculateInterval determines the appropriate time bucket interval based on the time range.
 // Returns interval in seconds.

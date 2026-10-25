@@ -140,6 +140,9 @@ type testInstance struct {
 	// remoteProxyManager builds the service's remote and tunnel proxies; tests
 	// that assert tunnel activity metrics install a collector on it.
 	remoteProxyManager *remotemcp.ProxyManager
+	// telemLogger is the service's telemetry writer; tests observe what it
+	// committed instead of polling for it.
+	telemLogger *telemetry.Logger
 }
 
 // migratedService models an organization after the upstream OAuth migration:
@@ -746,6 +749,7 @@ func buildTestMCPService(
 		clientCredentials:    clientCredentials,
 		toolCallRecords:      toolCallRecords,
 		remoteProxyManager:   remoteProxyManager,
+		telemLogger:          telemLogger,
 	}
 }
 

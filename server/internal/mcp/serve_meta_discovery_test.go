@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -154,6 +155,7 @@ func (l directListing) names() []string {
 func TestGatewayDirectListsWholeInventoryInOneResponse(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
+	writes := watchConnectionAttempts(t, ti)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
@@ -167,11 +169,27 @@ func TestGatewayDirectListsWholeInventoryInOneResponse(t *testing.T) {
 	require.Nil(t, listing.Error)
 	require.Len(t, listing.Result.Tools, 101)
 	require.Nil(t, listing.Result.NextCursor)
+
+	rows := attemptsAfter(t, writes, *authCtx.ProjectID, gateway.ID, 2)
+	require.Equal(t, []string{"discovery_listing", "complete", "", ""}, []string{rows[0].Stage, rows[0].Outcome, rows[0].FailureClass, rows[0].Reason})
+	require.Equal(t, []string{"discovery_member", "listed", "", ""}, []string{rows[1].Stage, rows[1].Outcome, rows[1].FailureClass, rows[1].Reason})
+	require.Equal(t, []uint64{1, 0}, []uint64{rows[1].Calls, rows[1].Retries})
+	require.Equal(t, rows[0].ID, rows[1].ListingID)
+	requireUUIDv7(t, rows[0].ID)
+	requireUUIDv7(t, rows[1].ID)
+	require.NotEqual(t, rows[0].ID, rows[1].ID)
+	// An ungated gateway has no validated caller or registered client.
+	require.Empty(t, rows[1].Subject)
+	require.Equal(t, "anonymous", rows[1].ClientKey)
+	requireAttemptRowsAreNotUsage(t, rows)
+	requireNoTraceOrToolUsage(t, *authCtx.ProjectID)
+	require.Equal(t, map[string][3]uint64{"discovery_listing/complete/": {1, 0, 0}, "discovery_member/listed/": {1, 0, 0}}, attemptRollup(t, *authCtx.ProjectID, gateway.ID))
 }
 
 func TestGatewayDirectRejectsCursorFromAPaginatedListing(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
+	writes := watchConnectionAttempts(t, ti)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
@@ -181,6 +199,9 @@ func TestGatewayDirectRejectsCursorFromAPaginatedListing(t *testing.T) {
 	require.Nil(t, listing.Result)
 	require.NotNil(t, listing.Error)
 	require.Contains(t, listing.Error.Message, "restart tools/list")
+	// The listing failed before members were known, so only it is recorded.
+	rows := attemptsAfter(t, writes, *authCtx.ProjectID, gateway.ID, 1)
+	require.Equal(t, []string{"discovery_listing", "failed", "configuration", "stale_cursor"}, []string{rows[0].Stage, rows[0].Outcome, rows[0].FailureClass, rows[0].Reason})
 }
 
 // scriptedUpstream is a streamable-HTTP MCP server whose tools/list pages its
@@ -244,6 +265,11 @@ func newScriptedUpstream(t *testing.T, tools []any, pageSize int) *scriptedUpstr
 			u.failures.Add(1)
 			if failRetryAfter != "" {
 				w.Header().Set("Retry-After", failRetryAfter)
+			}
+			// A body naming {{id}} is a JSON-RPC answer to this request.
+			if strings.Contains(failBody, "{{id}}") {
+				failBody = strings.ReplaceAll(failBody, "{{id}}", string(request.ID))
+				w.Header().Set("Content-Type", "application/json")
 			}
 			w.WriteHeader(failStatus)
 			_, _ = w.Write([]byte(failBody))
@@ -372,19 +398,23 @@ func TestGatewayDirectOmitsAndRecordsAMemberThatFails(t *testing.T) {
 		body     string
 		retried  bool
 		recorded int
+		reason   string
 	}{
-		{name: "rate limited with a non-JSON body", status: http.StatusTooManyRequests, body: "rate limited", retried: true, recorded: http.StatusTooManyRequests},
-		{name: "rate limited with a JSON-RPC error", status: http.StatusTooManyRequests, body: `{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"rate limited"}}`, retried: true, recorded: http.StatusTooManyRequests},
-		{name: "server error", status: http.StatusInternalServerError, body: "", retried: true, recorded: http.StatusInternalServerError},
-		{name: "unavailable", status: http.StatusServiceUnavailable, body: "", retried: true, recorded: http.StatusServiceUnavailable},
-		{name: "client error", status: http.StatusBadRequest, body: "", retried: false, recorded: http.StatusBadRequest},
-		{name: "JSON-RPC error", status: http.StatusOK, body: `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"internal"}}`, retried: false, recorded: http.StatusBadGateway},
-		{name: "unreadable success", status: http.StatusOK, body: "not json", retried: false, recorded: http.StatusBadGateway},
+		{name: "rate limited with a non-JSON body", status: http.StatusTooManyRequests, body: "rate limited", retried: true, recorded: http.StatusTooManyRequests, reason: "rate_limited"},
+		{name: "rate limited with a JSON-RPC error", status: http.StatusTooManyRequests, body: `{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"rate limited"}}`, retried: true, recorded: http.StatusTooManyRequests, reason: "rate_limited"},
+		{name: "server error", status: http.StatusInternalServerError, body: "", retried: true, recorded: http.StatusInternalServerError, reason: "upstream_unavailable"},
+		{name: "unavailable", status: http.StatusServiceUnavailable, body: "", retried: true, recorded: http.StatusServiceUnavailable, reason: "upstream_unavailable"},
+		{name: "client error", status: http.StatusBadRequest, body: "", retried: false, recorded: http.StatusBadRequest, reason: "upstream_rejected"},
+		{name: "JSON-RPC error", status: http.StatusOK, body: `{"jsonrpc":"2.0","id":{{id}},"error":{"code":-32603,"message":"internal"}}`, retried: false, recorded: http.StatusBadGateway, reason: "upstream_rejected"},
+		{name: "untyped answer to another request", status: http.StatusOK, body: `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"internal"}}`, retried: false, recorded: http.StatusBadGateway, reason: "invalid_response"},
+		// The SDK reports a body it cannot parse as a JSON-RPC error.
+		{name: "unreadable success", status: http.StatusOK, body: "not json", retried: false, recorded: http.StatusBadGateway, reason: "upstream_rejected"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPService(t)
+			writes := watchConnectionAttempts(t, ti)
 			authCtx, _ := contextvalues.GetAuthContext(ctx)
 			slug := "gateway-" + uuid.NewString()
 			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
@@ -409,6 +439,21 @@ func TestGatewayDirectOmitsAndRecordsAMemberThatFails(t *testing.T) {
 			}
 			logs := omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 1)
 			requireOmittedMemberLog(t, logs[0], tc.recorded, memberSlug)
+
+			// The omission is the failed member's attempt row itself, not a
+			// second fact.
+			rows := attemptsAfter(t, writes, *authCtx.ProjectID, gateway.ID, 3)
+			require.Equal(t, "partial", rows[0].Outcome)
+			byOutcome := memberAttemptsByOutcome(rows)
+			require.Len(t, byOutcome["listed"], 1)
+			require.Len(t, byOutcome["failed"], 1)
+			failed := byOutcome["failed"][0]
+			require.Equal(t, "endpoint", failed.FailureClass)
+			require.Equal(t, tc.reason, failed.Reason)
+			require.Equal(t, uint64(upstream.failures.Load()), failed.Calls)
+			require.Equal(t, failed.Calls-1, failed.Retries)
+			requireAttemptRowsAreNotUsage(t, rows)
+			requireNoTraceOrToolUsage(t, *authCtx.ProjectID)
 		})
 	}
 }
@@ -416,6 +461,7 @@ func TestGatewayDirectOmitsAndRecordsAMemberThatFails(t *testing.T) {
 func TestGatewayDirectRetriesARateLimitedMemberAfterRetryAfter(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
+	writes := watchConnectionAttempts(t, ti)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
@@ -430,6 +476,11 @@ func TestGatewayDirectRetriesARateLimitedMemberAfterRetryAfter(t *testing.T) {
 	require.Len(t, listing.Result.Tools, 120)
 	require.GreaterOrEqual(t, time.Since(started), time.Second)
 	require.Equal(t, int32(1), upstream.failures.Load())
+	// Listed on its second describe: one retry, and a recovery.
+	rows := attemptsAfter(t, writes, *authCtx.ProjectID, gateway.ID, 2)
+	require.Equal(t, []string{"complete", "listed"}, []string{rows[0].Outcome, rows[1].Outcome})
+	require.Equal(t, []uint64{2, 1}, []uint64{rows[1].Calls, rows[1].Retries})
+	require.Equal(t, [3]uint64{1, 1, 1}, attemptRollup(t, *authCtx.ProjectID, gateway.ID)["discovery_member/listed/"])
 	upstream.setTools(scriptedTools("tool", 121))
 	listing = listDirectGateway(t, ti, slug, map[string]any{})
 	require.Nil(t, listing.Error)
@@ -491,6 +542,7 @@ func TestGatewayDirectOmitsMembersThatRejectTheCredential(t *testing.T) {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPService(t)
+			writes := watchConnectionAttempts(t, ti)
 			authCtx, _ := contextvalues.GetAuthContext(ctx)
 			slug := "gateway-" + uuid.NewString()
 			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
@@ -510,8 +562,17 @@ func TestGatewayDirectOmitsMembersThatRejectTheCredential(t *testing.T) {
 			require.Nil(t, listing.Error)
 			require.Equal(t, []string{member.slug + "--alpha"}, listing.names())
 			// A credential exclusion is not a failure, so only the failing
-			// member is recorded.
+			// member is recorded as left out.
 			requireOmittedMemberLog(t, omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 1)[0], http.StatusBadRequest, failingSlug)
+			// Its attempt is recorded as blocked, which the caller fixes by
+			// signing in, not as a failure.
+			byOutcome := memberAttemptsByOutcome(attemptsAfter(t, writes, *authCtx.ProjectID, gateway.ID, 4))
+			require.Len(t, byOutcome["credential_blocked"], 1)
+			blocked := byOutcome["credential_blocked"][0]
+			require.Equal(t, []string{"configuration", "needs_sign_in"}, []string{blocked.FailureClass, blocked.Reason})
+			require.Empty(t, blocked.EventSource)
+			require.Len(t, byOutcome["failed"], 1)
+			require.Len(t, byOutcome["listed"], 1)
 		})
 	}
 }
@@ -641,6 +702,7 @@ func TestGatewayDirectDescribesMembersConcurrently(t *testing.T) {
 func TestGatewayDirectBoundsTheWholeInventory(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPServiceWithMetaRuntime(t, testenv.NewMeterProvider(t), mcp.MetaRuntimeConfig{MemberCallTimeout: 500 * time.Millisecond, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0})
+	writes := watchConnectionAttempts(t, ti)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
@@ -666,6 +728,25 @@ func TestGatewayDirectBoundsTheWholeInventory(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"tools":[]`)
 	// The listing's own deadline has ended, but each skipped member is recorded.
 	omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 25)
+	// No member listed. Members that started ran out their time against the
+	// upstream; the rest never got a slot, which is the gateway's queue.
+	rows := attemptsAfter(t, writes, *authCtx.ProjectID, gateway.ID, 26)
+	require.Equal(t, []string{"failed", "endpoint", "no_member_listed"}, []string{rows[0].Outcome, rows[0].FailureClass, rows[0].Reason})
+	described, queued := 0, 0
+	for _, row := range rows[1:] {
+		require.Equal(t, "failed", row.Outcome)
+		switch row.Calls {
+		case 0:
+			queued++
+			require.Equal(t, []string{"internal", "listing_budget_exhausted"}, []string{row.FailureClass, row.Reason})
+		default:
+			described++
+			require.Equal(t, []string{"endpoint", "listing_timeout"}, []string{row.FailureClass, row.Reason})
+		}
+	}
+	require.GreaterOrEqual(t, described, 6)
+	require.Positive(t, queued)
+	requireAttemptRowsAreNotUsage(t, rows)
 }
 
 func TestGatewayDirectGivesQueuedMembersTheirOwnDeadline(t *testing.T) {
@@ -698,6 +779,7 @@ func TestGatewayDirectGivesQueuedMembersTheirOwnDeadline(t *testing.T) {
 func TestGatewayDirectCanceledListingFailsWithoutListing(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPServiceWithMetaRuntime(t, testenv.NewMeterProvider(t), mcp.MetaRuntimeConfig{MemberCallTimeout: 5 * time.Second, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0})
+	writes := watchConnectionAttempts(t, ti)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
@@ -719,4 +801,8 @@ func TestGatewayDirectCanceledListingFailsWithoutListing(t *testing.T) {
 	if err == nil {
 		require.NotContains(t, w.Body.String(), "--ping")
 	}
+	// The canceled listing is still recorded, after the request ended, and
+	// names no member result it never had.
+	rows := attemptsAfter(t, writes, *authCtx.ProjectID, gateway.ID, 1)
+	require.Equal(t, []string{"discovery_listing", "failed", "canceled", "canceled"}, []string{rows[0].Stage, rows[0].Outcome, rows[0].FailureClass, rows[0].Reason})
 }

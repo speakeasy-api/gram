@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -20,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 // maxConcurrentMemberDescribes bounds how many member describes one gateway
@@ -53,15 +51,15 @@ const (
 	// maxDirectGatewayCatalogBytes bounds the encoded tool definitions of one
 	// Direct listing.
 	maxDirectGatewayCatalogBytes = 16 << 20
-
-	// omittedMemberLogTimeout bounds recording the members a listing left out,
-	// so a slow telemetry store cannot hold the listing's answer.
-	omittedMemberLogTimeout = 500 * time.Millisecond
 )
 
 type memberDescribeResult struct {
 	catalog *memberCatalog
 	err     error
+
+	// calls is how often the listing described the member: 0 when its
+	// deadline passed before the member got a slot.
+	calls int
 }
 
 // describeMetaMembers describes members concurrently and returns results in
@@ -82,6 +80,7 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 					break
 				}
 				memberCtx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
+				results[i].calls++
 				results[i].catalog, results[i].err = s.describeMetaMember(memberCtx, logger, gate, member)
 				cancel()
 				slots.Release(1)
@@ -125,7 +124,12 @@ func expiredListingResult(member metaMember, result memberDescribeResult) member
 	if _, memberFailure := errors.AsType[*metaMemberError](result.err); memberFailure {
 		return result
 	}
-	return memberDescribeResult{catalog: nil, err: memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}, status: 0, retryable: false, retryAfter: 0}}
+	// A member that never got a slot is the gateway's queue, not its upstream.
+	reason := reasonListingTimeout
+	if result.calls == 0 {
+		reason = reasonListingBudgetExhausted
+	}
+	return memberDescribeResult{catalog: nil, err: memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug), reason: reason}, status: 0, retryable: false, retryAfter: 0}, calls: result.calls}
 }
 
 // memberAccessDenied reports a member the caller may not describe, which a
@@ -150,16 +154,17 @@ type gatewayTool struct {
 
 // collectGatewayTools describes members' permission-filtered catalogs under
 // gateway-qualified names and returns the members it skipped with why: those
-// the caller cannot see, member failures, and malformed catalogs. A failure
-// outside a member's classification fails the whole inventory unless
+// the caller cannot see, member failures, and malformed catalogs. It also
+// returns every member's describe result, in member order. A failure outside
+// a member's classification fails the whole inventory unless
 // tolerateAnyFailure is set, and a canceled request always does.
-func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, tolerateAnyFailure bool, captured map[string]*memberCatalog) ([]gatewayTool, []unavailableMember, error) {
+func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, tolerateAnyFailure bool, captured map[string]*memberCatalog) ([]gatewayTool, []unavailableMember, []memberDescribeResult, error) {
 	tools := make([]gatewayTool, 0)
 	unavailable := []unavailableMember{}
 	names := map[string]bool{}
 	described := s.describeMetaMembers(ctx, logger, gate, members)
 	if err := ctx.Err(); err != nil {
-		return nil, nil, fmt.Errorf("describe gateway members: %w", err)
+		return nil, nil, nil, fmt.Errorf("describe gateway members: %w", err)
 	}
 	for i, member := range members {
 		catalog, err := described[i].catalog, described[i].err
@@ -173,7 +178,7 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 				unavailable = append(unavailable, unavailableMember{member: member, err: err})
 				continue
 			}
-			return nil, nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
+			return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
 		}
 		if catalog.incomplete {
 			unavailable = append(unavailable, unavailableMember{member: member, err: nil})
@@ -186,22 +191,23 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 			qualified := *entry
 			qualified.Name = metamcp.QualifyName(member.slug, entry.Name)
 			if names[qualified.Name] {
-				return nil, nil, oops.E(oops.CodeConflict, nil, "gateway contains an ambiguous tool name")
+				return nil, nil, nil, oops.E(oops.CodeConflict, nil, "gateway contains an ambiguous tool name")
 			}
 			names[qualified.Name] = true
 			tools = append(tools, gatewayTool{entry: &qualified, member: member})
 			if len(tools) > 10000 {
-				return nil, nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
+				return nil, nil, nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
 			}
 		}
 	}
-	return tools, unavailable, nil
+	return tools, unavailable, described, nil
 }
 
 // listDirectGatewayTools exposes qualified member tools through the same
 // permission-filtered catalogs used by Progressive discovery. The inventory is
 // already bounded, so it is returned whole: a cursor would have to name a
-// listing that live members can change between pages.
+// listing that live members can change between pages. Every call records one
+// listing attempt and, once members are known, one attempt per visible member.
 func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logger, endpoint *mcpendpointsrepo.McpEndpoint, server *metamcprepo.MetaMcpServer, gate *metaGateContext, req *rawRequest) (json.RawMessage, error) {
 	start := time.Now()
 	var params struct {
@@ -209,69 +215,47 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 	}
 	if len(req.Params) > 0 {
 		if err := json.Unmarshal(req.Params, &params); err != nil {
+			s.recordDirectListing(ctx, gate, start, listingFailure(ctx, classConfiguration, reasonInvalidRequest), nil)
 			return nil, oops.E(oops.CodeInvalid, err, "invalid tools/list parameters")
 		}
 	}
 	// No page carries a cursor, so one can only come from an earlier paginated
 	// listing; the client restarts rather than appending a whole inventory.
 	if params.Cursor != "" {
+		s.recordDirectListing(ctx, gate, start, listingFailure(ctx, classConfiguration, reasonStaleCursor), nil)
 		return nil, oops.E(oops.CodeInvalid, nil, "gateway inventory changed or cursor is invalid; restart tools/list")
 	}
 	ctx, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, server.ID, endpoint.ProjectID)
 	if err != nil {
+		s.recordDirectListing(ctx, gate, start, listingFailure(ctx, classInternal, reasonMemberSnapshotFailed), nil)
 		return nil, err
 	}
-	inventory, unavailable, err := s.collectGatewayTools(ctx, logger, gate, members, false, nil)
+	inventory, _, described, err := s.collectGatewayTools(ctx, logger, gate, members, false, nil)
 	if err != nil {
+		s.recordDirectListing(ctx, gate, start, inventoryFailure(ctx, err), nil)
 		return nil, err
 	}
-	// Each member a failure left out is recorded as gateway discovery, so the
-	// gateway's diagnostics show what the listing is missing; exclusions such
-	// as visibility, credentials, and consent are not failures. Rows carry the
-	// upstream's status and fixed text, never the member's message, which can
-	// quote its upstream's response.
-	omittedLogs := make([]tm.LogParams, 0, len(unavailable))
-	for _, omitted := range unavailable {
-		status := http.StatusBadGateway
-		reason := "returned tool definitions the gateway could not list"
-		if omitted.err != nil {
-			upstream, ok := errors.AsType[memberDiscoveryError](omitted.err)
-			if !ok {
-				continue
-			}
-			if upstream.status != 0 {
-				status = upstream.status
-			}
-			switch {
-			case upstream.status == http.StatusTooManyRequests:
-				reason = "was rate limited"
-			case upstream.status >= http.StatusInternalServerError:
-				reason = "was unavailable"
-			case upstream.status != 0:
-				reason = "rejected the tool listing"
-			default:
-				reason = "could not be listed"
-			}
+	attempts := make([]memberAttempt, 0, len(members)+len(gate.unapprovedMembers))
+	for i, member := range members {
+		if attempt, recorded := memberAttemptFor(member, described[i]); recorded {
+			attempts = append(attempts, attempt)
 		}
-		row := metaDiscoveryLogParams(ctx, gate, "tools/list", start, nil)
-		tm.HTTPLogAttributes(row.Attributes).RecordStatusCode(status)
-		row.Attributes[attr.ErrorMessageKey] = fmt.Sprintf("server %q %s and was left out of the tool listing", omitted.member.slug, reason)
-		omittedLogs = append(omittedLogs, row)
 	}
-	if len(omittedLogs) > 0 {
-		logCtx, cancel := context.WithTimeout(ctx, omittedMemberLogTimeout)
-		err := s.telemLogger.LogBulkBounded(logCtx, omittedLogs)
-		cancel()
-		if err != nil {
-			logger.ErrorContext(ctx, "record gateway members left out of tools/list", attr.SlogError(err))
-		}
+	for _, member := range gate.unapprovedMembers {
+		attempts = append(attempts, unapprovedMemberAttempt(member))
 	}
 	tools := make([]*toolListEntry, 0, len(inventory))
 	for _, tool := range inventory {
 		tools = append(tools, tool.entry)
 	}
 	slices.SortFunc(tools, func(a, b *toolListEntry) int { return strings.Compare(a.Name, b.Name) })
-	return encodeDirectGatewayToolList(req.ID, tools)
+	encoded, err := encodeDirectGatewayToolList(req.ID, tools)
+	if err != nil {
+		s.recordDirectListing(ctx, gate, start, encodingFailure(ctx, err), attempts)
+		return nil, err
+	}
+	s.recordDirectListing(ctx, gate, start, listingResult(attempts), attempts)
+	return encoded, nil
 }
 
 // encodeDirectGatewayToolList encodes a whole Direct listing. The size bound

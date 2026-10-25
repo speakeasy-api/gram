@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // metaGateContext carries the per-request state the meta MCP tools need:
@@ -74,6 +75,8 @@ type metaGateContext struct {
 	memberChoices *memberChoices
 	// userSessionIssuerID is the gated endpoint's issuer; uuid.Nil when ungated.
 	userSessionIssuerID uuid.UUID
+	// subject is the caller the issuer gate validated; zero when ungated.
+	subject urn.SessionSubject
 	// connectRoot is the gateway's root URL, under which each member has a
 	// connect page a signed-in person opens to connect it. Empty when nobody
 	// signs in to the gateway in a browser: ungated and agent gateways.
@@ -267,6 +270,10 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 			}
 		}
 	}
+	var gateSubject urn.SessionSubject
+	if gateAuthentication != nil {
+		gateSubject = gateAuthentication.subject
+	}
 	gate := &metaGateContext{
 		projectID:    mcpEndpoint.ProjectID,
 		metaServerID: metaServer.ID,
@@ -280,6 +287,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		memberChoices:       gateMemberChoices,
 		// Uninitialized when ungated, which disables identity chaining.
 		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
+		subject:             gateSubject,
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,
 		catalog:             nil,

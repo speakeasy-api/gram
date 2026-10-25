@@ -8413,12 +8413,13 @@ type MetaMcpMemberUsageResponseBody struct {
 // MetaMcpDiscoveryFailuresResponseBody is used to define fields on response
 // body types.
 type MetaMcpDiscoveryFailuresResponseBody struct {
-	// Bucket width in seconds, chosen from the length of the requested window
+	// Bucket width in seconds: a multiple of 30 minutes, chosen from the length of
+	// the requested window
 	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
-	// Buckets covering the requested window in ascending time order, gap-filled
-	// with zeros. The first bucket starts at the window start, and failures are
-	// counted up to but excluding the window end, so the last bucket may be
-	// partial.
+	// Buckets in ascending time order, gap-filled with zeros and aligned to UTC
+	// multiples of the interval, so the first bucket can start before the window
+	// start. Failures are counted from the window start up to but excluding the
+	// window end, so the first and last buckets may be partial.
 	Buckets []*MetaMcpDiscoveryFailureBucketResponseBody `form:"buckets" json:"buckets" xml:"buckets"`
 }
 

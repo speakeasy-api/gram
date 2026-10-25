@@ -284,11 +284,11 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 		case !outcome.Applicable():
 			return "", nil
 		case outcome.Reason == identitychaining.ReasonReauthenticationRequired:
-			return "", &metaMemberError{message: fmt.Sprintf("server %q needs a fresh sign-in to renew enterprise-managed access; sign in to this gateway again", member.slug)}
+			return "", &metaMemberError{message: fmt.Sprintf("server %q needs a fresh sign-in to renew enterprise-managed access; sign in to this gateway again", member.slug), reason: reasonReauthenticationRequired}
 		case outcome.Retryable:
-			return "", memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q enterprise-managed authorization is temporarily unavailable (%s); retry shortly", member.slug, outcome.Reason)}, status: 0, retryable: outcome.SafeToRepeat(), retryAfter: 0}
+			return "", memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q enterprise-managed authorization is temporarily unavailable (%s); retry shortly", member.slug, outcome.Reason), reason: reasonEnterpriseAuthorizationUnavailable}, status: 0, retryable: outcome.SafeToRepeat(), retryAfter: 0}
 		}
-		return "", &metaMemberError{message: fmt.Sprintf("server %q enterprise-managed authorization failed (%s); contact your administrator", member.slug, outcome.Reason)}
+		return "", &metaMemberError{message: fmt.Sprintf("server %q enterprise-managed authorization failed (%s); contact your administrator", member.slug, outcome.Reason), reason: reasonEnterpriseAuthorizationFailed}
 	}
 }
 

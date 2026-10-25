@@ -472,7 +472,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 		// reaches no proxied member once the organization enforces.
 		for i := range members {
 			if members[i].backend == metaMemberBackendProxied {
-				members[i].upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", members[i].slug)}
+				members[i].upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", members[i].slug), reason: reasonReauthenticationRequired}
 			}
 		}
 		return
@@ -563,11 +563,11 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember, res authClientResolution, err error) {
 	member.authClient = &res
 	if errors.Is(err, errUpstreamSelectionMissing) || errors.Is(err, errUpstreamSelectionUnusable) {
-		member.upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
+		member.upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug), reason: reasonReauthenticationRequired}
 		return
 	}
 	if err != nil {
-		member.upstreamUnavailable = memberDiscoveryError{metaMemberError: &metaMemberError{message: "This server's connection could not be checked; try again later."}, status: 0, retryable: false, retryAfter: 0}
+		member.upstreamUnavailable = memberDiscoveryError{metaMemberError: &metaMemberError{message: "This server's connection could not be checked; try again later.", reason: reasonConnectionCheckFailed}, status: 0, retryable: false, retryAfter: 0}
 		return
 	}
 	switch res.outcome {
@@ -575,7 +575,7 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 		member.upstreamUnavailable = s.authClientNoAccessError(ctx, member.serverID, res)
 		return
 	case authClientGap:
-		member.upstreamUnavailable = memberCredentialError{&metaMemberError{message: "This server's authentication needs setup or a new sign-in."}}
+		member.upstreamUnavailable = memberCredentialError{&metaMemberError{message: "This server's authentication needs setup or a new sign-in.", reason: reasonNeedsSignIn}}
 		return
 	case authClientResolved, authClientNoAuth, authClientLegacy:
 	}
@@ -608,16 +608,16 @@ func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid
 		case <-entry.done:
 			return entry.tokens, entry.err
 		case <-ctx.Done():
-			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug), reason: reasonCredentialLoadFailed}, status: 0, retryable: false, retryAfter: 0}
 		}
 	}
 
 	tokens, err := c.resolve(ctx, member)
 	switch {
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
-		err = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
+		err = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug), reason: reasonReauthenticationRequired}
 	case err != nil:
-		err = memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+		err = memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug), reason: reasonCredentialLoadFailed}, status: 0, retryable: false, retryAfter: 0}
 	}
 	if err != nil {
 		c.mu.Lock()

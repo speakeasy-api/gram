@@ -3080,10 +3080,10 @@ var MetaMcpDiscoveryFailureBucket = Type("MetaMcpDiscoveryFailureBucket", func()
 })
 
 var MetaMcpDiscoveryFailures = Type("MetaMcpDiscoveryFailures", func() {
-	Description("Time series of members the gateway left out of its tool listings because they could not be listed.")
+	Description("Time series of members the gateway left out of its Direct tool listings because they could not be listed. Progressive discovery is not observed.")
 
-	Attribute("interval_seconds", Int64, "Bucket width in seconds, chosen from the length of the requested window")
-	Attribute("buckets", ArrayOf(MetaMcpDiscoveryFailureBucket), "Buckets covering the requested window in ascending time order, gap-filled with zeros. The first bucket starts at the window start, and failures are counted up to but excluding the window end, so the last bucket may be partial.")
+	Attribute("interval_seconds", Int64, "Bucket width in seconds: a multiple of 30 minutes, chosen from the length of the requested window")
+	Attribute("buckets", ArrayOf(MetaMcpDiscoveryFailureBucket), "Buckets in ascending time order, gap-filled with zeros and aligned to UTC multiples of the interval, so the first bucket can start before the window start. Failures are counted from the window start up to but excluding the window end, so the first and last buckets may be partial.")
 
 	Required("interval_seconds", "buckets")
 })

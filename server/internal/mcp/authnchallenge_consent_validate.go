@@ -302,6 +302,7 @@ func (s *Service) metaValidationTarget(
 		memberChoices: nil,
 		// Consent probes never acquire credentials by identity chaining.
 		userSessionIssuerID: uuid.Nil,
+		subject:             subject,
 		connectRoot:         "",
 		chainUpstream:       nil,
 		catalog:             nil,

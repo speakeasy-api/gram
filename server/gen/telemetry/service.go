@@ -1511,15 +1511,16 @@ type MetaMcpDiscoveryFailureBucket struct {
 	Count int64
 }
 
-// Time series of members the gateway left out of its tool listings because
-// they could not be listed.
+// Time series of members the gateway left out of its Direct tool listings
+// because they could not be listed. Progressive discovery is not observed.
 type MetaMcpDiscoveryFailures struct {
-	// Bucket width in seconds, chosen from the length of the requested window
+	// Bucket width in seconds: a multiple of 30 minutes, chosen from the length of
+	// the requested window
 	IntervalSeconds int64
-	// Buckets covering the requested window in ascending time order, gap-filled
-	// with zeros. The first bucket starts at the window start, and failures are
-	// counted up to but excluding the window end, so the last bucket may be
-	// partial.
+	// Buckets in ascending time order, gap-filled with zeros and aligned to UTC
+	// multiples of the interval, so the first bucket can start before the window
+	// start. Failures are counted from the window start up to but excluding the
+	// window end, so the first and last buckets may be partial.
 	Buckets []*MetaMcpDiscoveryFailureBucket
 }
 

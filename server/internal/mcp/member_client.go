@@ -328,28 +328,35 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt *memberRou
 	}
 	// Rate limits and server errors retry whatever JSON-RPC body they carry.
 	retryableStatus := status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
-	upstreamFailure := func(message string, retryable bool) error {
-		return memberDiscoveryError{metaMemberError: &metaMemberError{message: message}, status: status, retryable: retryable, retryAfter: rt.retryAfter(time.Now())}
+	statusReason := reasonUpstreamRejected
+	switch {
+	case status == http.StatusTooManyRequests:
+		statusReason = reasonRateLimited
+	case status >= http.StatusInternalServerError:
+		statusReason = reasonUpstreamUnavailable
+	}
+	upstreamFailure := func(message string, reason attemptReason, retryable bool) error {
+		return memberDiscoveryError{metaMemberError: &metaMemberError{message: message, reason: reason}, status: status, retryable: retryable, retryAfter: rt.retryAfter(time.Now())}
 	}
 	switch {
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
-		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false)
+		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), reasonListingTimeout, false)
 	case errors.Is(err, errMemberResponseTooLarge) || errors.Is(exchangeErr, errMemberResponseTooLarge):
-		return upstreamFailure(fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug), false)
+		return upstreamFailure(fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug), reasonResponseTooLarge, false)
 	case errors.Is(err, errMemberUnroutable) || errors.Is(exchangeErr, errMemberUnroutable):
 		// A tunnel with no live route is a member outage, not a meta MCP bug.
-		return upstreamFailure(fmt.Sprintf("server %q is not reachable right now", member.slug), false)
+		return upstreamFailure(fmt.Sprintf("server %q is not reachable right now", member.slug), reasonUnreachable, false)
 	case exchangeErr != nil:
-		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), true)
+		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), reasonUnreachable, true)
 	}
 	if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok {
-		return upstreamFailure(fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message), retryableStatus)
+		return upstreamFailure(fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message), statusReason, retryableStatus)
 	}
 	if status != 0 {
-		return upstreamFailure(fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status), retryableStatus)
+		return upstreamFailure(fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status), statusReason, retryableStatus)
 	}
 	logger.WarnContext(ctx, "unclassified meta MCP member failure", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
-	return upstreamFailure(fmt.Sprintf("server %q returned a response the meta MCP could not read", member.slug), false)
+	return upstreamFailure(fmt.Sprintf("server %q returned a response the meta MCP could not read", member.slug), reasonInvalidResponse, false)
 }
 
 // memberClientTransport retains the original connection so failed negotiation

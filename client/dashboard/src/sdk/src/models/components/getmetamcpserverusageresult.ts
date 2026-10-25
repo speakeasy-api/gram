@@ -25,7 +25,7 @@ import {
  */
 export type GetMetaMcpServerUsageResult = {
   /**
-   * Time series of members the gateway left out of its tool listings because they could not be listed.
+   * Time series of members the gateway left out of its Direct tool listings because they could not be listed. Progressive discovery is not observed.
    */
   discoveryFailures?: MetaMcpDiscoveryFailures | undefined;
   /**

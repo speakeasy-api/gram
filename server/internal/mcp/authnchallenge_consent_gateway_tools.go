@@ -150,6 +150,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		projectTokens:       nil,
 		memberChoices:       nil,
 		userSessionIssuerID: endpoint.UserSessionIssuerID,
+		subject:             subject,
 		connectRoot:         "",
 		chainUpstream:       nil,
 		catalog:             nil,
@@ -206,7 +207,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		return nil, nil, nil, err
 	}
 	captured := map[string]*memberCatalog{}
-	inventory, unavailableMembers, err := s.collectGatewayTools(ctx, logger, gate, members, true, captured)
+	inventory, unavailableMembers, _, err := s.collectGatewayTools(ctx, logger, gate, members, true, captured)
 	if err != nil {
 		return nil, nil, nil, err
 	}
