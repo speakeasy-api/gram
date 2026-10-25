@@ -3085,10 +3085,13 @@ SET assistant_runtime_id = NULL, assistant_trigger_workload_binding_id = NULL
 WHERE id = @client_id AND organization_id = @organization_id;
 
 -- name: ListUserSessionClientLabelsByIDs :many
--- Names the clients registered with one sign-in server among the given IDs.
--- Deleted clients are left out.
-SELECT id, client_name
-FROM user_session_clients
-WHERE user_session_issuer_id = @user_session_issuer_id
-  AND id = ANY(@ids::uuid[])
-  AND deleted IS FALSE;
+-- Names the clients registered with one live sign-in server among the given
+-- IDs. Deleted clients, and every client of a deleted server, are left out.
+SELECT c.id, c.client_name
+FROM user_session_clients AS c
+JOIN user_session_issuers AS iss
+  ON iss.id = c.user_session_issuer_id
+ AND iss.deleted IS FALSE
+WHERE c.user_session_issuer_id = @user_session_issuer_id
+  AND c.id = ANY(@ids::uuid[])
+  AND c.deleted IS FALSE;

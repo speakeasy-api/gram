@@ -3588,11 +3588,14 @@ func (q *Queries) ListUserSessionClientFacets(ctx context.Context, arg ListUserS
 }
 
 const listUserSessionClientLabelsByIDs = `-- name: ListUserSessionClientLabelsByIDs :many
-SELECT id, client_name
-FROM user_session_clients
-WHERE user_session_issuer_id = $1
-  AND id = ANY($2::uuid[])
-  AND deleted IS FALSE
+SELECT c.id, c.client_name
+FROM user_session_clients AS c
+JOIN user_session_issuers AS iss
+  ON iss.id = c.user_session_issuer_id
+ AND iss.deleted IS FALSE
+WHERE c.user_session_issuer_id = $1
+  AND c.id = ANY($2::uuid[])
+  AND c.deleted IS FALSE
 `
 
 type ListUserSessionClientLabelsByIDsParams struct {
@@ -3605,8 +3608,8 @@ type ListUserSessionClientLabelsByIDsRow struct {
 	ClientName string
 }
 
-// Names the clients registered with one sign-in server among the given IDs.
-// Deleted clients are left out.
+// Names the clients registered with one live sign-in server among the given
+// IDs. Deleted clients, and every client of a deleted server, are left out.
 func (q *Queries) ListUserSessionClientLabelsByIDs(ctx context.Context, arg ListUserSessionClientLabelsByIDsParams) ([]ListUserSessionClientLabelsByIDsRow, error) {
 	rows, err := q.db.Query(ctx, listUserSessionClientLabelsByIDs, arg.UserSessionIssuerID, arg.Ids)
 	if err != nil {

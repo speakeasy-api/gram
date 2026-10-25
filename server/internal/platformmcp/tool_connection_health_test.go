@@ -16,10 +16,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestGatewayConnectionHealthToolSchemaMatchesUnavailable(t *testing.T) {
@@ -55,7 +58,7 @@ func TestGatewayConnectionHealthStaysInEveryCatalog(t *testing.T) {
 	}
 }
 
-func TestGatewayConnectionHealthReadsTheNamedProjectWithItsOwnGrants(t *testing.T) {
+func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_connection_health")
@@ -63,107 +66,172 @@ func TestGatewayConnectionHealthReadsTheNamedProjectWithItsOwnGrants(t *testing.
 	chConn, err := platformMCPInfra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	gateway := func(projectID uuid.UUID) uuid.UUID {
-		row, err := metamcprepo.New(conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{OrganizationID: principal.OrganizationID, ProjectID: projectID, Name: "Gateway", UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Visibility: visibility.Private, NetworkAccessMode: pgtype.Text{String: "", Valid: false}})
+	// The caller is a member, so the attempts they made name them.
+	_, err = usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{ID: principal.UserID, Email: "health-member@example.invalid", DisplayName: "Health Member", PhotoUrl: pgtype.Text{}, Admin: false})
+	require.NoError(t, err)
+	_, err = organizationsrepo.New(conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: principal.OrganizationID, UserID: pgtype.Text{String: principal.UserID, Valid: true}})
+	require.NoError(t, err)
+	sessions := usersessionsrepo.New(conn)
+	issuer, err := sessions.CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{ProjectID: project.ID, OrganizationID: pgtype.Text{String: principal.OrganizationID, Valid: true}, Slug: "health-" + uuid.NewString()[:8], AuthnChallengeMode: "interactive", SessionDuration: pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true}, AuthorizationServerMode: pgtype.Text{}, UseAuthenticationHost: pgtype.Bool{}})
+	require.NoError(t, err)
+	client, err := sessions.CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{ClientID: "client-" + uuid.NewString(), ClientSecretHash: pgtype.Text{}, ClientName: "Example Desktop", RedirectUris: []string{"http://127.0.0.1/callback"}, ClientSecretExpiresAt: pgtype.Timestamptz{}, TokenEndpointAuthMethod: "none", ClientJwks: nil, ClientJwksUri: pgtype.Text{}, UserSessionIssuerID: issuer.ID})
+	require.NoError(t, err)
+	gateway := func(projectID uuid.UUID, issuerID uuid.NullUUID) uuid.UUID {
+		row, err := metamcprepo.New(conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{OrganizationID: principal.OrganizationID, ProjectID: projectID, Name: "Gateway", UserSessionIssuerID: issuerID, Visibility: visibility.Private, NetworkAccessMode: pgtype.Text{String: "", Valid: false}})
 		require.NoError(t, err)
 		return row.ID
 	}
-	gatewayID := gateway(project.ID)
+	gatewayID := gateway(project.ID, uuid.NullUUID{UUID: issuer.ID, Valid: true})
 	other, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Other", Slug: "other-" + uuid.NewString()[:8], OrganizationID: principal.OrganizationID})
 	require.NoError(t, err)
-	elsewhere := gateway(other.ID)
+	elsewhere := gateway(other.ID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	logger := testenv.NewLogger(t)
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
 	writer := telemetry.NewLogger(ctx, logger, nil, nil, chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(logger))
-	at := time.Now().UTC().Add(-time.Hour)
-	attempt := func(projectID, gatewayID uuid.UUID, stage, outcome, subject string) telemetry.LogParams {
+	at := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	member := urn.NewUserSubject(principal.UserID).String()
+	outsider := urn.NewUserSubject("user_" + uuid.NewString()).String()
+	agent := urn.NewAgentSubject(uuid.New()).String()
+	unknownProvider := uuid.NewString()
+	registered := client.ID.String()
+	attempt := func(projectID, gatewayID uuid.UUID, stage, outcome, subject, provider, clientKey string) telemetry.LogParams {
 		attrs := map[attr.Key]any{
-			attr.EventURNKey:                   "urn:telemetry:gram_service:log:mcp_connection_attempt",
-			attr.MetaMcpServerIDKey:            gatewayID.String(),
-			attr.ConnectionAttemptStageKey:     stage,
-			attr.ConnectionAttemptOutcomeKey:   outcome,
-			attr.ConnectionAttemptReasonKey:    "",
-			attr.ConnectionAttemptSubjectKey:   subject,
-			attr.ConnectionAttemptClientKeyKey: "anonymous",
+			attr.EventURNKey:                    "urn:telemetry:gram_service:log:mcp_connection_attempt",
+			attr.MetaMcpServerIDKey:             gatewayID.String(),
+			attr.ConnectionAttemptStageKey:      stage,
+			attr.ConnectionAttemptOutcomeKey:    outcome,
+			attr.ConnectionAttemptReasonKey:     "",
+			attr.ConnectionAttemptSubjectKey:    subject,
+			attr.ConnectionAttemptProviderIDKey: provider,
+			attr.ConnectionAttemptClientKeyKey:  clientKey,
 		}
 		if stage == telemetry.ConnectionStageDiscoveryMember {
 			attrs[attr.McpServerIDKey] = uuid.NewString()
 		}
 		return telemetry.LogParams{Timestamp: at, ToolInfo: telemetry.ToolInfo{ID: "", URN: "", Name: "", ProjectID: projectID.String(), DeploymentID: "", FunctionID: nil, OrganizationID: principal.OrganizationID}, UserInfo: telemetry.UserInfoByID(""), Attributes: attrs}
 	}
-	member := urn.NewUserSubject(principal.UserID).String()
+	member5 := func(outcome string) telemetry.LogParams {
+		return attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, outcome, member, "", registered)
+	}
 	require.NoError(t, writer.LogBulk(ctx, []telemetry.LogParams{
-		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryListing, "partial", member),
-		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, "listed", member),
-		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, "failed", member),
-		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, "listed", ""),
-		attempt(other.ID, elsewhere, telemetry.ConnectionStageDiscoveryMember, "failed", member),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryListing, "complete", member, "", registered),
+		member5("listed"), member5("listed"), member5("listed"), member5("failed"), member5("failed"),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, "listed", "", "", "anonymous"),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, "listed", "", "", "anonymous"),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, "failed", outsider, "", "anonymous"),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, "failed", agent, "", "credential:agent"),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, "failed", member, unknownProvider, registered),
+		attempt(other.ID, elsewhere, telemetry.ConnectionStageDiscoveryMember, "failed", member, "", "anonymous"),
 	}))
 
 	engine := authz.NewEngine(logger, conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(logger, conn).WithAuthorization(engine).WithConnectionHealth(telemetry.NewConnectionHealth(conn, chConn, enabled, engine))
-	// The caller's dashboard context names another project; the tool reads
-	// only the project its input names.
-	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &other.ID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
-	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	projectRead := authz.NewGrant(authz.ScopeProjectRead, project.ID.String())
 	logRead := authz.NewGrant(authz.ScopeLogRead, project.ID.String())
 	gatewayRead := authz.NewGrant(authz.ScopeMCPRead, gatewayID.String())
-	call := func(grants []authz.Grant, input GatewayConnectionHealthInput) (GatewayConnectionHealthOutput, error) {
-		return reader.GetGatewayConnectionHealth(authz.GrantsToContext(ctx, grants), principal, input)
+	grants := []authz.Grant{projectRead, logRead, gatewayRead}
+	server := newTestMCPServer()
+	server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			// The dashboard context names another project; the tool reads only
+			// the project its arguments name.
+			ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &other.ID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+			return next(authz.GrantsToContext(contextWithPrincipal(ctx, principal), grants), method, req)
+		}
+	})
+	reg := newRegistrar(server)
+	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	registerGatewayConnectionHealthTool(reg, reader)
+	session := connectTestClient(t, server)
+	// call sends JSON arguments through the MCP client and decodes the JSON
+	// the tool serialized, returning the raw text as well.
+	call := func(arguments map[string]any) (*mcp.CallToolResult, GatewayConnectionHealthOutput, string) {
+		t.Helper()
+		var output GatewayConnectionHealthOutput
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: gatewayConnectionHealthToolName, Arguments: arguments})
+		require.NoError(t, err)
+		if result.IsError {
+			return result, output, ""
+		}
+		body, err := json.Marshal(result.StructuredContent)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(body, &output))
+		return result, output, string(body)
 	}
-	input := GatewayConnectionHealthInput{ProjectID: project.ID.String(), GatewayID: gatewayID.String(), HotspotMinAttempts: 1}
+	refusal := func(arguments map[string]any) string {
+		t.Helper()
+		result, _, _ := call(arguments)
+		require.True(t, result.IsError)
+		require.Len(t, result.Content, 1)
+		text, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok)
+		require.NotContains(t, text.Text, unavailableCode, "permissions and missing targets are never reported as unavailable")
+		return text.Text
+	}
+	base := func() map[string]any {
+		return map[string]any{"project_id": project.ID.String(), "gateway_id": gatewayID.String(), "from": at.Add(-time.Hour).Format(time.RFC3339), "to": at.Add(time.Hour).Format(time.RFC3339), "hotspot_min_attempts": 2}
+	}
+	keyed := func(subject, provider, clientKey string) map[string]any {
+		arguments := base()
+		arguments["key"] = map[string]any{"stage": telemetry.ConnectionStageDiscoveryMember, "subject": subject, "provider_id": provider, "client": clientKey}
+		return arguments
+	}
 
-	output, err := call([]authz.Grant{projectRead, logRead, gatewayRead}, input)
-	require.NoError(t, err)
+	_, output, raw := call(base())
 	require.Equal(t, project.ID.String(), output.ProjectID)
+	require.Equal(t, at.Add(-time.Hour).Format(time.RFC3339Nano), output.From)
+	require.Equal(t, at.Add(time.Hour).Format(time.RFC3339Nano), output.To)
+	require.EqualValues(t, 1800, output.IntervalSeconds)
+	require.Contains(t, raw, `"interval_seconds":1800`)
 	require.Len(t, output.Stages, 2)
 	require.EqualValues(t, 1, output.Stages[0].Attempts)
-	require.EqualValues(t, 3, output.Stages[1].Attempts, "only the named project's attempts count")
-	require.Empty(t, output.Stages[1].Buckets, "the summary carries no timeline")
-	require.NotEmpty(t, output.Hotspots)
-	require.NotEmpty(t, output.NotRecorded)
-	require.Equal(t, 7*24*time.Hour, mustParseTime(t, output.To).Sub(mustParseTime(t, output.From)))
+	require.EqualValues(t, 10, output.Stages[1].Attempts, "only the named project's attempts count")
+	require.NotNil(t, output.Ranking)
+	require.Equal(t, []any{telemetry.ConnectionStageDiscoveryMember, "count", 2}, []any{output.Ranking.Stage, output.Ranking.Sort, output.Ranking.MinAttempts})
+	require.Len(t, output.Ranking.Hotspots, 2, "single-attempt keys stay under the floor")
+	top := output.Ranking.Hotspots[0]
+	require.Equal(t, "Health Member", top.Subject.Label)
+	require.Equal(t, member, *top.Subject.Key)
+	require.Empty(t, *top.Provider.Key)
+	require.Equal(t, "Example Desktop", top.Client.Label)
+	require.Equal(t, registered, *top.Client.Key)
 
-	// One hotspot alone: its own attempts and timeline, no ranking.
-	keyed := input
-	keyed.Key = &GatewayConnectionKeyInput{Stage: telemetry.ConnectionStageDiscoveryMember, Subject: member, ProviderID: "", Client: "anonymous"}
-	output, err = call([]authz.Grant{projectRead, logRead, gatewayRead}, keyed)
-	require.NoError(t, err)
+	// One visible hotspot alone, through the nested key: its own attempts and
+	// timeline, and no ranking.
+	_, output, raw = call(keyed(member, "", registered))
+	require.NotContains(t, raw, `"ranking"`)
 	require.Len(t, output.Stages, 1)
-	require.EqualValues(t, 2, output.Stages[0].Attempts)
+	require.EqualValues(t, 5, output.Stages[0].Attempts)
 	require.NotEmpty(t, output.Stages[0].Buckets)
-	require.Empty(t, output.Hotspots)
+	require.EqualValues(t, 1800, output.IntervalSeconds)
+	_, output, _ = call(keyed("", "", "anonymous"))
+	require.EqualValues(t, 2, output.Stages[0].Attempts, "empty key values are selectable")
 
-	_, err = call([]authz.Grant{logRead, gatewayRead}, input)
-	require.Error(t, err, "log:read without project:read reads nothing")
-	require.True(t, isAuthorizationDenied(err), "%v", err)
-	_, err = call([]authz.Grant{projectRead, gatewayRead}, input)
-	require.Error(t, err, "project:read without log:read reads nothing")
-	_, err = call([]authz.Grant{projectRead, logRead}, input)
-	require.ErrorIs(t, err, ErrMCPConnectionSettingsNotFound, "a gateway the caller may not read is not found")
-	elsewhereInput := input
-	elsewhereInput.GatewayID = elsewhere.String()
-	_, err = call([]authz.Grant{projectRead, logRead, gatewayRead, authz.NewGrant(authz.ScopeMCPRead, elsewhere.String())}, elsewhereInput)
-	require.ErrorIs(t, err, ErrMCPConnectionSettingsNotFound, "another project's gateway is not found")
+	for name, key := range map[string][3]string{
+		"person outside the organization": {outsider, "", "anonymous"},
+		"agent the caller may not read":   {agent, "", "credential:agent"},
+		"provider the project cannot see": {member, unknownProvider, registered},
+	} {
+		require.Contains(t, refusal(keyed(key[0], key[1], key[2])), "not_found", name)
+	}
 
-	far := input
-	far.From, far.To = "9999-12-24T00:00:00Z", "9999-12-31T00:00:00Z"
-	_, err = call([]authz.Grant{projectRead, logRead, gatewayRead}, far)
-	var refusal *ToolRefusalError
-	require.ErrorAs(t, err, &refusal)
-	require.Equal(t, "invalid_request", refusal.Code)
+	grants = []authz.Grant{logRead, gatewayRead}
+	require.Contains(t, refusal(base()), ErrForbidden.Error(), "no project:read")
+	grants = []authz.Grant{projectRead, gatewayRead}
+	require.Contains(t, refusal(base()), ErrForbidden.Error(), "no log:read")
+	grants = []authz.Grant{projectRead, logRead}
+	require.Contains(t, refusal(base()), "not_found", "no read on the gateway")
+	grants = []authz.Grant{projectRead, logRead, gatewayRead, authz.NewGrant(authz.ScopeMCPRead, elsewhere.String())}
+	crossProject := base()
+	crossProject["gateway_id"] = elsewhere.String()
+	require.Contains(t, refusal(crossProject), "not_found", "another project's gateway")
+	missing := base()
+	missing["gateway_id"] = uuid.NewString()
+	require.Contains(t, refusal(missing), "not_found", "no such gateway")
 
-	reader.WithConnectionHealth(telemetry.NewConnectionHealth(conn, chConn, func(context.Context, string) (bool, error) { return false, nil }, engine))
-	_, err = call([]authz.Grant{projectRead, logRead, gatewayRead}, input)
-	require.ErrorAs(t, err, &refusal)
-	require.Equal(t, "observability_disabled", refusal.Code)
-}
-
-func mustParseTime(t *testing.T, value string) time.Time {
-	t.Helper()
-	parsed, err := time.Parse(time.RFC3339Nano, value)
-	require.NoError(t, err)
-	return parsed
+	grants = []authz.Grant{projectRead, logRead, gatewayRead}
+	tooLong := base()
+	tooLong["from"], tooLong["to"] = "2026-01-01T00:00:00Z", "2026-01-31T00:00:00.000000001Z"
+	require.Contains(t, refusal(tooLong), "give both from and to")
 }

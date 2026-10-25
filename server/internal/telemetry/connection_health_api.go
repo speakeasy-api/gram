@@ -137,6 +137,8 @@ func (s *Service) connectionHealthError(ctx context.Context, err error) error {
 		return oops.E(oops.CodeNotFound, err, "logs are not enabled for this organization")
 	case errors.Is(err, ErrConnectionHealthGatewayNotFound):
 		return oops.E(oops.CodeNotFound, err, "gateway not found")
+	case errors.Is(err, ErrConnectionHealthKeyNotFound):
+		return oops.E(oops.CodeNotFound, err, "no visible hotspot with this key")
 	case errors.Is(err, ErrConnectionHealthInvalid):
 		return oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}

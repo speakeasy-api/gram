@@ -3,6 +3,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -93,17 +94,26 @@ type GatewayConnectionNotRecorded struct {
 }
 
 type GatewayConnectionHealthOutput struct {
-	ProjectID          string                            `json:"project_id"`
-	GatewayID          string                            `json:"gateway_id"`
-	From               string                            `json:"from"`
-	To                 string                            `json:"to"`
-	Stages             []GatewayConnectionStageSummary   `json:"stages"`
-	HotspotStage       string                            `json:"hotspot_stage"`
-	HotspotSort        string                            `json:"hotspot_sort"`
-	HotspotMinAttempts int                               `json:"hotspot_min_attempts"`
-	Hotspots           []GatewayConnectionHotspotSummary `json:"hotspots"`
-	NotRecorded        []GatewayConnectionNotRecorded    `json:"not_recorded"`
-	Scope              string                            `json:"scope"`
+	ProjectID string `json:"project_id"`
+	GatewayID string `json:"gateway_id"`
+	From      string `json:"from"`
+	To        string `json:"to"`
+	// IntervalSeconds is the width of a key's timeline buckets, a multiple of
+	// 30 minutes aligned to UTC, over the same window as the counts.
+	IntervalSeconds int64                           `json:"interval_seconds"`
+	Stages          []GatewayConnectionStageSummary `json:"stages"`
+	// Ranking is absent when a key asks about one hotspot.
+	Ranking     *GatewayConnectionRanking      `json:"ranking,omitempty"`
+	NotRecorded []GatewayConnectionNotRecorded `json:"not_recorded"`
+	Scope       string                         `json:"scope"`
+}
+
+// GatewayConnectionRanking is the hotspots of one stage over the window.
+type GatewayConnectionRanking struct {
+	Stage       string                            `json:"stage"`
+	Sort        string                            `json:"sort"`
+	MinAttempts int                               `json:"min_attempts"`
+	Hotspots    []GatewayConnectionHotspotSummary `json:"hotspots"`
 }
 
 func (r *PostgresReader) WithConnectionHealth(health *telemetry.ConnectionHealth) *PostgresReader {
@@ -167,17 +177,18 @@ func (r *PostgresReader) GetGatewayConnectionHealth(ctx context.Context, princip
 	}
 
 	output := GatewayConnectionHealthOutput{
-		ProjectID:          project.ID.String(),
-		GatewayID:          gatewayID.String(),
-		From:               window.Start.Format(time.RFC3339Nano),
-		To:                 window.End.Format(time.RFC3339Nano),
-		Stages:             make([]GatewayConnectionStageSummary, 0, len(summary.Stages)),
-		HotspotStage:       hotspots.Stage,
-		HotspotSort:        sort,
-		HotspotMinAttempts: hotspots.MinAttempts,
-		Hotspots:           make([]GatewayConnectionHotspotSummary, 0, len(hotspots.Hotspots)),
-		NotRecorded:        make([]GatewayConnectionNotRecorded, 0, len(summary.NotRecorded)),
-		Scope:              summary.Scope,
+		ProjectID:       project.ID.String(),
+		GatewayID:       gatewayID.String(),
+		From:            window.Start.Format(time.RFC3339Nano),
+		To:              window.End.Format(time.RFC3339Nano),
+		IntervalSeconds: summary.IntervalSeconds,
+		Stages:          make([]GatewayConnectionStageSummary, 0, len(summary.Stages)),
+		Ranking:         nil,
+		NotRecorded:     make([]GatewayConnectionNotRecorded, 0, len(summary.NotRecorded)),
+		Scope:           summary.Scope,
+	}
+	if key == nil {
+		output.Ranking = &GatewayConnectionRanking{Stage: hotspots.Stage, Sort: sort, MinAttempts: hotspots.MinAttempts, Hotspots: make([]GatewayConnectionHotspotSummary, 0, len(hotspots.Hotspots))}
 	}
 	for _, stage := range summary.Stages {
 		view := GatewayConnectionStageSummary{Stage: stage.Stage, Attempts: stage.Attempts, Outcomes: connectionOutcomes(stage.Outcomes), Retries: stage.Retries, Recovered: stage.Recovered, LastSeenAt: connectionTime(stage.LastSeen), Buckets: nil}
@@ -193,7 +204,7 @@ func (r *PostgresReader) GetGatewayConnectionHealth(ctx context.Context, princip
 		for _, reason := range hotspot.Reasons {
 			reasons = append(reasons, GatewayConnectionReason{Reason: reason.Reason, Count: reason.Count})
 		}
-		output.Hotspots = append(output.Hotspots, GatewayConnectionHotspotSummary{
+		output.Ranking.Hotspots = append(output.Ranking.Hotspots, GatewayConnectionHotspotSummary{
 			Subject:    connectionName(hotspot.Subject),
 			Provider:   connectionName(hotspot.Provider),
 			Client:     connectionName(hotspot.Client),
@@ -211,12 +222,26 @@ func (r *PostgresReader) GetGatewayConnectionHealth(ctx context.Context, princip
 	return output, nil
 }
 
+// connectionHealthNotFound refuses a gateway or hotspot that is missing or
+// that the caller may not see, alike, so neither reveals the other.
+func connectionHealthNotFound(message string) error {
+	payload, err := json.Marshal(map[string]string{"code": "not_found", "message": message})
+	if err != nil {
+		payload = []byte(`{"code":"not_found"}`)
+	}
+	return &ToolRefusalError{Code: "not_found", Payload: string(payload)}
+}
+
 func connectionHealthToolError(err error) error {
 	switch {
+	case isAuthorizationDenied(err):
+		return ErrForbidden
 	case errors.Is(err, telemetryerrs.ErrLogsDisabled):
 		return &ToolRefusalError{Code: "observability_disabled", Payload: "Enable observability for this organization to inspect gateway connection health."}
 	case errors.Is(err, telemetry.ErrConnectionHealthGatewayNotFound):
-		return ErrMCPConnectionSettingsNotFound
+		return connectionHealthNotFound("No gateway with that ID in this project is visible to you. Check the gateway ID and project.")
+	case errors.Is(err, telemetry.ErrConnectionHealthKeyNotFound):
+		return connectionHealthNotFound("No hotspot with that key is visible to you. Use the key values a ranking returned.")
 	case errors.Is(err, telemetry.ErrConnectionHealthInvalid):
 		return &ToolRefusalError{Code: "invalid_request", Payload: err.Error()}
 	}

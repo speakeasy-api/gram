@@ -352,4 +352,73 @@ func TestListGatewayConnectionHotspots_RanksAndNamesOnlyVisibleKeys(t *testing.T
 	require.NotNil(t, denied, "an agent the caller may not read is not named")
 	require.Nil(t, denied.ID)
 	require.Nil(t, denied.Key)
+
+	// A key is answered only when every part of it is visible, however few
+	// attempts it has; hidden parts are refused as if absent.
+	session := contextvalues.WithValidatedGramSession(ctx, authCtx, false)
+	keyRead := func(subject, providerID, clientKey string) error {
+		_, err := ti.service.GetGatewayConnectionHealth(session, &gen.GetGatewayConnectionHealthPayload{MetaMcpServerID: gateway.ID.String(), From: nil, To: nil, Key: &gen.GatewayConnectionKey{Stage: telemetry.ConnectionStageDiscoveryMember, Subject: subject, ProviderID: providerID, Client: clientKey}})
+		return err //nolint:wrapcheck // the test reads the handler's own error
+	}
+	require.NoError(t, keyRead(ownAgent, "", "credential:agent"), "a visible key below the floor is still answered")
+	for name, key := range map[string][3]string{
+		"person outside the organization":  {stranger, "", "anonymous"},
+		"agent the caller may not read":    {othersAgent, "", "credential:agent"},
+		"provider the project cannot see":  {member, unknownProvider, registered},
+		"client of another sign-in server": {member, provider.ID.String(), otherIssuersClient},
+	} {
+		err := keyRead(key[0], key[1], key[2])
+		shareable, ok := errors.AsType[*oops.ShareableError](err)
+		require.True(t, ok, "%s: %v", name, err)
+		require.Equal(t, oops.CodeNotFound, shareable.Code, name)
+	}
+}
+
+// A client of a sign-in server that has been deleted is not named, and its
+// key is not answered.
+func TestListGatewayConnectionHotspots_DeletedSignInServerNamesNoClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.MustParse(ti.projectID)
+	sessions := usersessionsrepo.New(ti.conn)
+	issuer, err := sessions.CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:               projectID,
+		OrganizationID:          conv.ToPGText(ti.orgID),
+		Slug:                    "retired-" + uuid.NewString()[:8],
+		AuthnChallengeMode:      "interactive",
+		SessionDuration:         pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+		AuthorizationServerMode: pgtype.Text{String: "", Valid: false},
+		UseAuthenticationHost:   pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+	client, err := sessions.CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
+		ClientID:                "client-" + uuid.NewString(),
+		ClientSecretHash:        pgtype.Text{String: "", Valid: false},
+		ClientName:              "Retired Client",
+		RedirectUris:            []string{"http://127.0.0.1/callback"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{},
+		TokenEndpointAuthMethod: "none",
+		ClientJwks:              nil,
+		ClientJwksUri:           pgtype.Text{String: "", Valid: false},
+		UserSessionIssuerID:     issuer.ID,
+	})
+	require.NoError(t, err)
+	_, err = sessions.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{ID: issuer.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	gateway, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{OrganizationID: ti.orgID, ProjectID: projectID, Name: "Retired Gateway", UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, Visibility: visibility.Private})
+	require.NoError(t, err)
+	logConnectionAttempt(t, ctx, ti, connectionAttempt{project: ti.projectID, gateway: gateway.ID.String(), stage: telemetry.ConnectionStageDiscoveryMember, outcome: "failed", reason: "rate_limited", subject: "", provider: "", client: client.ID.String(), at: time.Now().UTC().Add(-time.Hour)})
+
+	result, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway.ID.String(), From: nil, To: nil, Stage: telemetry.ConnectionStageDiscoveryMember, RankBy: "count", MinAttempts: 1, Limit: 25})
+	require.NoError(t, err)
+	require.Len(t, result.Hotspots, 1)
+	require.Equal(t, "Unknown client", result.Hotspots[0].Client.Label)
+	require.Nil(t, result.Hotspots[0].Client.ID)
+	require.Nil(t, result.Hotspots[0].Client.Key)
+
+	_, err = ti.service.GetGatewayConnectionHealth(ctx, &gen.GetGatewayConnectionHealthPayload{MetaMcpServerID: gateway.ID.String(), From: nil, To: nil, Key: &gen.GatewayConnectionKey{Stage: telemetry.ConnectionStageDiscoveryMember, Subject: "", ProviderID: "", Client: client.ID.String()}})
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	require.True(t, ok, "%v", err)
+	require.Equal(t, oops.CodeNotFound, shareable.Code)
 }

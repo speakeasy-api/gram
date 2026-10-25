@@ -70,6 +70,10 @@ var (
 
 	// ErrConnectionHealthInvalid means the request is outside its bounds.
 	ErrConnectionHealthInvalid = errors.New("invalid connection health request")
+
+	// ErrConnectionHealthKeyNotFound means a key names a caller, provider, or
+	// client the reader may not see, which is answered as if it had none.
+	ErrConnectionHealthKeyNotFound = errors.New("no visible hotspot with this key")
 )
 
 // ConnectionHealthCoverage names a stage the gateway does not record, so a
@@ -150,7 +154,7 @@ func ParseConnectionHealthWindow(from, to string, now time.Time) (ConnectionHeal
 	case !start.Before(end):
 		return ConnectionHealthWindow{Start: time.Time{}, End: time.Time{}}, fmt.Errorf("%w: from must be before to", ErrConnectionHealthInvalid)
 	case end.Sub(start) > ConnectionHealthMaxWindow:
-		return ConnectionHealthWindow{Start: time.Time{}, End: time.Time{}}, fmt.Errorf("%w: the window may span at most 30 days", ErrConnectionHealthInvalid)
+		return ConnectionHealthWindow{Start: time.Time{}, End: time.Time{}}, fmt.Errorf("%w: the window may span at most 30 days; for a full 30 days, give both from and to", ErrConnectionHealthInvalid)
 	}
 	return ConnectionHealthWindow{Start: start, End: end}, nil
 }
@@ -248,8 +252,21 @@ func (h *ConnectionHealth) Summary(ctx context.Context, target ConnectionHealthT
 			return none, err
 		}
 	}
-	if _, err := h.gateway(ctx, target); err != nil {
+	gateway, err := h.gateway(ctx, target)
+	if err != nil {
 		return none, err
+	}
+	if key != nil {
+		// A key is answered only when the caller may see every part of it, as
+		// the hotspot labels would show it; how much traffic it has is not a
+		// condition.
+		labels, err := h.resolveLabels(ctx, target, gateway.UserSessionIssuerID, []repo.GatewayConnectionHotspot{{Subject: key.Subject, ProviderID: key.ProviderID, ClientKey: key.ClientKey, Attempts: 0, Failed: 0, Blocked: 0, Outcomes: nil, LastSeenUnixNano: 0}})
+		if err != nil {
+			return none, err
+		}
+		if !labels.subject(key.Subject).Selectable || !labels.provider(key.ProviderID).Selectable || !labels.client(key.ClientKey).Selectable {
+			return none, ErrConnectionHealthKeyNotFound
+		}
 	}
 	stageNames := []string{ConnectionStageDiscoveryListing, ConnectionStageDiscoveryMember}
 	var repoKey *repo.GatewayConnectionKey
