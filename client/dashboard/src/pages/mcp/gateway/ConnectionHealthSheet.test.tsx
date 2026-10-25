@@ -138,14 +138,12 @@ afterEach(() => {
 
 function renderSheet(
   onShowConnections = vi.fn<(filters: ActiveLogFilter[]) => void>(),
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
 ) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
   // The section's unkeyed summary under the generated key must not be read
   // as this key's counts.
   client.setQueryData(["health"], keyed({ from, to }));
-  render(
+  const { unmount } = render(
     <QueryClientProvider client={client}>
       <ConnectionHealthSheet
         gatewayId="gateway-1"
@@ -159,8 +157,76 @@ function renderSheet(
       />
     </QueryClientProvider>,
   );
-  return { onShowConnections, client };
+  return { onShowConnections, client, unmount };
 }
+
+function deferred() {
+  let resolve: (value: unknown) => void = () => {};
+  let reject: (error: unknown) => void = () => {};
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+it.each([
+  ["the default stale time", 0],
+  ["an infinite stale time", Infinity],
+])(
+  "asks again on reopening with %s and reads no raw attempts until the fresh read succeeds",
+  async (_, staleTime) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime } },
+    });
+    const first = renderSheet(undefined, client);
+    await screen.findByText("Latest 3 attempts in this window");
+    first.unmount();
+    const searches = state.search.mock.calls.length;
+    const reads = state.health.mock.calls.length;
+
+    const fresh = deferred();
+    state.healthResult = () => fresh.promise;
+    renderSheet(undefined, client);
+    await waitFor(() => expect(state.health.mock.calls.length).toBe(reads + 1));
+    // The cached answer from the first opening is neither shown nor trusted.
+    expect(screen.queryByText("Attempts")).toBeNull();
+    expect(screen.queryByText(/Latest \d+ attempts/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Show matching connections" }),
+    ).toBeNull();
+    expect(state.search.mock.calls.length).toBe(searches);
+
+    fresh.reject(Object.assign(new Error("refused"), { statusCode: 403 }));
+    expect(
+      await screen.findByText(/This connection is not visible to you/),
+    ).toBeTruthy();
+    expect(state.search.mock.calls.length).toBe(searches);
+    expect(
+      screen.queryByRole("button", { name: "Show matching connections" }),
+    ).toBeNull();
+  },
+);
+
+it("shows the detail again once the fresh read on reopening succeeds", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  const first = renderSheet(undefined, client);
+  await screen.findByText("Latest 3 attempts in this window");
+  first.unmount();
+
+  const fresh = deferred();
+  state.healthResult = () => fresh.promise;
+  renderSheet(undefined, client);
+  await waitFor(() => expect(state.health).toHaveBeenCalledTimes(2));
+  expect(screen.queryByText("Attempts")).toBeNull();
+  fresh.resolve(keyed({ from, to }));
+  expect(await screen.findByText("Attempts")).toBeTruthy();
+  expect(
+    await screen.findByRole("button", { name: "Show matching connections" }),
+  ).toBeTruthy();
+});
 
 it("reads the row's own key over the shared window", async () => {
   renderSheet();

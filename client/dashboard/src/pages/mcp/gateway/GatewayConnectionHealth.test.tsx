@@ -311,6 +311,47 @@ it("replaces earlier results with the retry state when a refetch fails", async (
   expect(screen.queryByText("Amara Example")).toBeNull();
 });
 
+it("asks for 25 combinations and says when the shown rows come from that cap", async () => {
+  state.hotspotsResult = ranking([visible, ...Array(24).fill(healthy)]);
+  renderSection();
+  expect(
+    await screen.findByText(
+      /1 with failures among the top 25 combinations ranked by failures/,
+    ),
+  ).toBeTruthy();
+  expect(state.hotspots.mock.lastCall![0]).toMatchObject({ limit: 25 });
+});
+
+it("says the cap was reached when every capped combination is healthy", async () => {
+  state.hotspotsResult = ranking(Array(25).fill(healthy));
+  renderSection();
+  expect(
+    await screen.findByText(
+      "None of the top 25 combinations ranked by failures had failures in the last 7 days.",
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText(/Nothing failed/)).toBeNull();
+});
+
+it("does not mention a cap below it", async () => {
+  renderSection();
+  expect(
+    await screen.findByText(/^3 with failures, ranked by failures/),
+  ).toBeTruthy();
+  expect(screen.queryByText(/top 25/)).toBeNull();
+});
+
+it("heads the member blocked column briefly and explains it in a tooltip", async () => {
+  renderSection();
+  await screen.findByText("Listings over time");
+  fireEvent.click(screen.getByRole("button", { name: "Member checks" }));
+  expect(
+    await screen.findByRole("button", { name: "About Blocked" }),
+  ).toBeTruthy();
+  expect(screen.getByText("Blocked")).toBeTruthy();
+  expect(screen.queryByText("Needs sign-in or consent")).toBeNull();
+});
+
 it("holds skeletons while loading", () => {
   state.healthResult = () => new Promise(() => {});
   state.hotspotsResult = () => new Promise(() => {});

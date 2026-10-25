@@ -5,6 +5,7 @@ import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import { Column, Table } from "@/components/ui/Table";
@@ -50,6 +51,9 @@ const MIN_ATTEMPT_OPTIONS = [
 ];
 
 const CHART_ID = "gateway-connection-health";
+
+// The most ranked combinations asked for; the server allows no more.
+const HOTSPOT_LIMIT = 25;
 
 type HotspotRow = GatewayConnectionHotspot & { position: number };
 
@@ -99,6 +103,7 @@ export function GatewayConnectionHealth({
     stage: stageName,
     rankBy,
     minAttempts: Number(minAttempts),
+    limit: HOTSPOT_LIMIT,
   };
   const hotspotsQuery = buildGatewayConnectionHotspotsQuery(client, {
     gramProject: project.slug,
@@ -241,6 +246,7 @@ export function GatewayConnectionHealth({
             </Page.Toolbar>
             <Hotspots
               rows={ranked ? rows : undefined}
+              capped={(ranked?.hotspots.length ?? 0) >= HOTSPOT_LIMIT}
               failed={hotspots.isError}
               onRetry={() => void hotspots.refetch()}
               stage={stageName}
@@ -345,6 +351,7 @@ function StageSummary({
 
 function Hotspots({
   rows,
+  capped,
   failed,
   onRetry,
   stage,
@@ -355,6 +362,9 @@ function Hotspots({
   onSelect,
 }: {
   rows: HotspotRow[] | undefined;
+  // The server returned as many combinations as asked for, so additional
+  // combinations may exist beyond them.
+  capped: boolean;
   failed: boolean;
   onRetry: () => void;
   stage: HealthStage;
@@ -420,7 +430,20 @@ function Hotspots({
       ? [
           {
             key: "blocked",
-            header: "Needs sign-in or consent",
+            header: (
+              <span className="inline-flex items-center gap-1.5">
+                Blocked
+                <SimpleTooltip tooltip="Needs sign-in, updated connection settings, or consent. View the row for the reason.">
+                  <button
+                    type="button"
+                    aria-label="About Blocked"
+                    className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
+                  >
+                    <Icon name="info" className="size-3" />
+                  </button>
+                </SimpleTooltip>
+              </span>
+            ),
             width: "120px",
             render: (row: HotspotRow) => (
               <Text>{row.blocked.toLocaleString()}</Text>
@@ -463,10 +486,17 @@ function Hotspots({
     },
   ];
 
+  const ranking = rankBy === "count" ? "failures" : "failure rate";
+  const failing =
+    stage === "discovery_member" ? "failed or blocked checks" : "failures";
   if (rows.length === 0) {
     return (
       <WidgetEmptyState
-        message={`Nothing failed ${phrase} for anyone with ${floor} ${stageLabel}.`}
+        message={
+          capped
+            ? `None of the top ${HOTSPOT_LIMIT} combinations ranked by ${ranking} had ${failing} ${phrase}.`
+            : `Nothing failed ${phrase} for anyone with ${floor} ${stageLabel}.`
+        }
         className="h-[120px]"
       />
     );
@@ -485,7 +515,9 @@ function Hotspots({
         />
       </div>
       <Text muted small>
-        {`${rows.length} with ${stage === "discovery_member" ? "failed or blocked checks" : "failures"}, ranked by ${rankBy === "count" ? "failures" : "failure rate"}`}
+        {capped
+          ? `${rows.length} with ${failing} among the top ${HOTSPOT_LIMIT} combinations ranked by ${ranking}`
+          : `${rows.length} with ${failing}, ranked by ${ranking}`}
         {minAttempts !== "1" && `, with ${floor} ${stageLabel} each`} {phrase}.
       </Text>
     </>

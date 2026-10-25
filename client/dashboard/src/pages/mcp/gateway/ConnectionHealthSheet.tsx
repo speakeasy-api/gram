@@ -96,14 +96,23 @@ export function ConnectionHealthSheet({
     ...healthQuery,
     queryKey: [...healthQuery.queryKey, healthPayload],
     enabled: key !== null,
+    // Cached data from an earlier opening is not this caller's answer now:
+    // every opening asks the server again, whatever the stale time.
+    refetchOnMount: "always",
     throwOnError: false,
     retry: false,
   });
-  // A failed refetch keeps its earlier data, so a refusal must hide it too.
+  // A failed refetch keeps its earlier data, so a refusal must hide it too,
+  // and only a read since this opening counts.
   const keyed =
-    !health.isError && matchesWindow(health.data, from, to)
+    !health.isError &&
+    health.isFetchedAfterMount &&
+    matchesWindow(health.data, from, to)
       ? health.data?.stages.find((s) => s.stage === stage)
       : undefined;
+  // Raw attempts are read only once the server has just confirmed this key is
+  // visible, never while that answer is still pending.
+  const rawReady = keyed !== undefined && !health.isFetching;
   const queryKey = [
     organization.id,
     project.id,
@@ -145,7 +154,7 @@ export function ConnectionHealthSheet({
         more: logs.length > PAGE_SIZE || cursor !== undefined,
       };
     },
-    enabled: keyed !== undefined,
+    enabled: rawReady,
     throwOnError: false,
     retry: false,
   });
@@ -164,7 +173,7 @@ export function ConnectionHealthSheet({
       const log = beforeWindowEnd(result.logs, to)[0];
       return log ? toAttempt(log).at : null;
     },
-    enabled: keyed !== undefined,
+    enabled: rawReady,
     throwOnError: false,
     retry: false,
   });
