@@ -7929,6 +7929,8 @@ type UserSession struct {
 	// @access: restricted
 	Resource pgtype.Text
 	// @access: confidential
+	ResourceIdentity pgtype.Text
+	// @access: confidential
 	SignInID uuid.NullUUID
 	// @access: confidential
 	CredentialID uuid.NullUUID
