@@ -23,3 +23,16 @@ func TestOutcomeSafeToRepeat(t *testing.T) {
 	require.False(t, stale.SafeToRepeat(), "stale configuration is retryable but not repeatable")
 	require.False(t, rejected.SafeToRepeat())
 }
+
+func TestExhaustedOutcomeIsNotSafeToRepeat(t *testing.T) {
+	t.Parallel()
+
+	safe := newOutcome(StageRedemption, ReasonTransientFailure, ConfidenceInferred, true)
+	submitted := safe
+	submitted.Submitted = true
+	for _, failures := range [][]Outcome{{safe, submitted}, {submitted, safe}, {safe, safe}} {
+		outcome := exhausted(failures)
+		require.False(t, outcome.SafeToRepeat(), "a combined outcome omits individual submission details")
+	}
+	require.True(t, exhausted([]Outcome{safe}).SafeToRepeat(), "a single provider retains its complete outcome")
+}
