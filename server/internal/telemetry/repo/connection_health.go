@@ -20,6 +20,10 @@ type GatewayConnectionAttemptsParams struct {
 
 	// Key, when set, counts only one stage's caller × provider × client.
 	Key *GatewayConnectionKey
+
+	// Caller, when set, counts only one caller and client, in every stage and
+	// for every provider. It is never set together with Key.
+	Caller *GatewayConnectionCaller
 }
 
 // GatewayConnectionKey is one hotspot's raw key within a stage. An empty
@@ -29,6 +33,36 @@ type GatewayConnectionKey struct {
 	Subject    string
 	ProviderID string
 	ClientKey  string
+}
+
+// GatewayConnectionCaller is one caller and client as raw attempt values.
+type GatewayConnectionCaller struct {
+	Subject   string
+	ClientKey string
+}
+
+// connectionAttemptFilter is the optional key and caller predicates' bind
+// values, in the order the queries consume them: a stage and provider, then a
+// subject and client. A key sets both; a caller sets only the second.
+type connectionAttemptFilter struct {
+	keyed, callered    uint8
+	stage, providerID  string
+	subject, clientKey string
+}
+
+func connectionAttemptFilterFor(key *GatewayConnectionKey, caller *GatewayConnectionCaller) connectionAttemptFilter {
+	var filter connectionAttemptFilter
+	switch {
+	case key != nil:
+		filter = connectionAttemptFilter{keyed: 1, callered: 1, stage: key.Stage, providerID: key.ProviderID, subject: key.Subject, clientKey: key.ClientKey}
+	case caller != nil:
+		filter = connectionAttemptFilter{keyed: 0, callered: 1, stage: "", providerID: "", subject: caller.Subject, clientKey: caller.ClientKey}
+	}
+	return filter
+}
+
+func (f connectionAttemptFilter) args() []any {
+	return []any{f.keyed, f.stage, f.providerID, f.callered, f.subject, f.clientKey}
 }
 
 // GatewayConnectionAttemptBucket is one stage and outcome's attempts in one
@@ -54,10 +88,13 @@ func (q *Queries) GatewayConnectionAttempts(ctx context.Context, arg GatewayConn
 	}
 	slices := connectionAttemptSlicesFor(arg.TimeStart, arg.TimeEnd)
 	intervalNanos := arg.IntervalSeconds * int64(time.Second)
-	keyed, key := uint8(0), GatewayConnectionKey{Stage: "", Subject: "", ProviderID: "", ClientKey: ""}
-	if arg.Key != nil {
-		keyed, key = 1, *arg.Key
-	}
+	filter := connectionAttemptFilterFor(arg.Key, arg.Caller)
+	args := []any{arg.IntervalSeconds, arg.IntervalSeconds, arg.GramProjectID, arg.MetaMCPServerID,
+		slices.interiorStart / int64(time.Second), slices.interiorEnd / int64(time.Second)}
+	args = append(args, filter.args()...)
+	args = append(args, intervalNanos, intervalNanos, arg.GramProjectID,
+		slices.edges[0][0], slices.edges[0][1], slices.edges[1][0], slices.edges[1][1], arg.MetaMCPServerID)
+	args = append(args, filter.args()...)
 	rows, err := q.conn.Query(ctx,
 		`SELECT stage, outcome, interval_start,
 		        sum(attempts) AS attempts, sum(retries) AS retries, sum(recovered) AS recovered, max(last_seen) AS last_seen
@@ -69,7 +106,8 @@ func (q *Queries) GatewayConnectionAttempts(ctx context.Context, arg GatewayConn
 		   FROM mcp_connection_attempt_summaries
 		   WHERE gram_project_id = toUUID(?) AND server_kind = 'meta' AND server_id = ?
 		     AND bucket >= fromUnixTimestamp(?) AND bucket < fromUnixTimestamp(?)
-		     AND (? = 0 OR (stage = ? AND subject = ? AND provider_id = ? AND client_key = ?))
+		     AND (? = 0 OR (stage = ? AND provider_id = ?))
+		     AND (? = 0 OR (subject = ? AND client_key = ?))
 		   GROUP BY stage, outcome, interval_start
 		   UNION ALL
 		   SELECT toString(attributes.gram.connection_attempt.stage) AS stage,
@@ -85,20 +123,14 @@ func (q *Queries) GatewayConnectionAttempts(ctx context.Context, arg GatewayConn
 		     AND event_urn = 'urn:telemetry:gram_service:log:mcp_connection_attempt'
 		     AND meta_mcp_server_id = ?
 		     AND stage != ''
-		     AND (? = 0 OR (stage = ?
-		       AND toString(attributes.gram.connection_attempt.subject) = ?
-		       AND toString(attributes.gram.connection_attempt.provider_id) = ?
+		     AND (? = 0 OR (stage = ? AND toString(attributes.gram.connection_attempt.provider_id) = ?))
+		     AND (? = 0 OR (toString(attributes.gram.connection_attempt.subject) = ?
 		       AND toString(attributes.gram.connection_attempt.client_key) = ?))
 		   GROUP BY stage, outcome, interval_start
 		 )
 		 GROUP BY stage, outcome, interval_start
 		 ORDER BY stage, interval_start, outcome`,
-		arg.IntervalSeconds, arg.IntervalSeconds, arg.GramProjectID, arg.MetaMCPServerID,
-		slices.interiorStart/int64(time.Second), slices.interiorEnd/int64(time.Second),
-		keyed, key.Stage, key.Subject, key.ProviderID, key.ClientKey,
-		intervalNanos, intervalNanos, arg.GramProjectID,
-		slices.edges[0][0], slices.edges[0][1], slices.edges[1][0], slices.edges[1][1], arg.MetaMCPServerID,
-		keyed, key.Stage, key.Subject, key.ProviderID, key.ClientKey)
+		args...)
 	if err != nil {
 		return nil, fmt.Errorf("query gateway connection attempts: %w", err)
 	}
@@ -127,6 +159,10 @@ type GatewayConnectionHotspotsParams struct {
 	ByRate      bool
 	MinAttempts uint64
 	Limit       uint64
+
+	// Caller, when set, ranks only that caller and client's keys, before the
+	// floor and limit apply.
+	Caller *GatewayConnectionCaller
 }
 
 // GatewayConnectionOutcomeCount is the attempts with one outcome and reason.
@@ -160,6 +196,7 @@ func (q *Queries) GatewayConnectionHotspots(ctx context.Context, arg GatewayConn
 		order = "failed / attempts DESC, failed DESC, attempts DESC"
 	}
 	slices := connectionAttemptSlicesFor(arg.TimeStart, arg.TimeEnd)
+	filter := connectionAttemptFilterFor(nil, arg.Caller)
 	rows, err := q.conn.Query(ctx,
 		`SELECT subject, provider_id, client_key,
 		        sum(n) AS attempts,
@@ -175,6 +212,7 @@ func (q *Queries) GatewayConnectionHotspots(ctx context.Context, arg GatewayConn
 		     FROM mcp_connection_attempt_summaries
 		     WHERE gram_project_id = toUUID(?) AND server_kind = 'meta' AND server_id = ? AND stage = ?
 		       AND bucket >= fromUnixTimestamp(?) AND bucket < fromUnixTimestamp(?)
+		       AND (? = 0 OR (subject = ? AND client_key = ?))
 		     GROUP BY subject, provider_id, client_key, outcome, reason
 		     UNION ALL
 		     SELECT toString(attributes.gram.connection_attempt.subject) AS subject,
@@ -189,6 +227,8 @@ func (q *Queries) GatewayConnectionHotspots(ctx context.Context, arg GatewayConn
 		       AND event_urn = 'urn:telemetry:gram_service:log:mcp_connection_attempt'
 		       AND meta_mcp_server_id = ?
 		       AND toString(attributes.gram.connection_attempt.stage) = ?
+		       AND (? = 0 OR (toString(attributes.gram.connection_attempt.subject) = ?
+		         AND toString(attributes.gram.connection_attempt.client_key) = ?))
 		     GROUP BY subject, provider_id, client_key, outcome, reason
 		   )
 		   GROUP BY subject, provider_id, client_key, outcome, reason
@@ -199,7 +239,9 @@ func (q *Queries) GatewayConnectionHotspots(ctx context.Context, arg GatewayConn
 		 LIMIT ?`,
 		arg.GramProjectID, arg.MetaMCPServerID, arg.Stage,
 		slices.interiorStart/int64(time.Second), slices.interiorEnd/int64(time.Second),
+		filter.callered, filter.subject, filter.clientKey,
 		arg.GramProjectID, slices.edges[0][0], slices.edges[0][1], slices.edges[1][0], slices.edges[1][1], arg.MetaMCPServerID, arg.Stage,
+		filter.callered, filter.subject, filter.clientKey,
 		arg.MinAttempts, arg.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("query gateway connection hotspots: %w", err)

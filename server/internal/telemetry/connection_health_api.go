@@ -22,11 +22,12 @@ func (s *Service) GetGatewayConnectionHealth(ctx context.Context, payload *telem
 	if err != nil {
 		return nil, err
 	}
-	var key *ConnectionHealthKey
+	var scope ConnectionHealthScope
 	if payload.Key != nil {
-		key = &ConnectionHealthKey{Stage: payload.Key.Stage, Subject: payload.Key.Subject, ProviderID: payload.Key.ProviderID, ClientKey: payload.Key.Client}
+		scope.Key = &ConnectionHealthKey{Stage: payload.Key.Stage, Subject: payload.Key.Subject, ProviderID: payload.Key.ProviderID, ClientKey: payload.Key.Client}
 	}
-	summary, err := NewConnectionHealth(s.db, s.chConn, s.logsEnabled, s.authz).Summary(ctx, target, window, key)
+	scope.Caller = callerScope(payload.Caller)
+	summary, err := NewConnectionHealth(s.db, s.chConn, s.logsEnabled, s.authz).Summary(ctx, target, window, scope)
 	if err != nil {
 		return nil, s.connectionHealthError(ctx, err)
 	}
@@ -36,15 +37,22 @@ func (s *Service) GetGatewayConnectionHealth(ctx context.Context, payload *telem
 		for _, bucket := range stage.Buckets {
 			buckets = append(buckets, &telem_gen.GatewayConnectionBucket{BucketTimeUnixNano: strconv.FormatInt(bucket.Start.UnixNano(), 10), Outcomes: outcomeCountViews(bucket.Outcomes)})
 		}
-		stages = append(stages, &telem_gen.GatewayConnectionStage{
-			Stage:      stage.Stage,
-			Attempts:   uint64ToInt64(stage.Attempts),
-			Outcomes:   outcomeCountViews(stage.Outcomes),
-			Retries:    uint64ToInt64(stage.Retries),
-			Recovered:  uint64ToInt64(stage.Recovered),
-			LastSeenAt: timeView(stage.LastSeen),
-			Buckets:    buckets,
-		})
+		view := &telem_gen.GatewayConnectionStage{
+			Stage:            stage.Stage,
+			Attempts:         uint64ToInt64(stage.Attempts),
+			Outcomes:         outcomeCountViews(stage.Outcomes),
+			Retries:          uint64ToInt64(stage.Retries),
+			Recovered:        uint64ToInt64(stage.Recovered),
+			LastSeenAt:       timeView(stage.LastSeen),
+			LastCodeIssuedAt: nil,
+			Buckets:          buckets,
+		}
+		// One caller's sign-in codes have a meaningful latest time; the whole
+		// gateway's do not name anyone.
+		if scope.Key != nil || scope.Caller != nil {
+			view.LastCodeIssuedAt = timeView(stage.LastCodeIssued)
+		}
+		stages = append(stages, view)
 	}
 	notRecorded := make([]*telem_gen.GatewayConnectionCoverage, 0, len(summary.NotRecorded))
 	for _, coverage := range summary.NotRecorded {
@@ -57,6 +65,7 @@ func (s *Service) GetGatewayConnectionHealth(ctx context.Context, payload *telem
 		Stages:          stages,
 		NotRecorded:     notRecorded,
 		Scope:           summary.Scope,
+		Caller:          payload.Caller,
 	}, nil
 }
 
@@ -72,6 +81,7 @@ func (s *Service) ListGatewayConnectionHotspots(ctx context.Context, payload *te
 		ByRate:      payload.RankBy == "rate",
 		MinAttempts: int(payload.MinAttempts),
 		Limit:       int(payload.Limit),
+		Caller:      callerScope(payload.Caller),
 	})
 	if err != nil {
 		return nil, s.connectionHealthError(ctx, err)
@@ -105,7 +115,16 @@ func (s *Service) ListGatewayConnectionHotspots(ctx context.Context, payload *te
 		RankBy:      rankBy,
 		MinAttempts: int64(hotspots.MinAttempts),
 		Hotspots:    views,
+		Truncated:   hotspots.Truncated,
+		Caller:      payload.Caller,
 	}, nil
+}
+
+func callerScope(caller *telem_gen.GatewayConnectionCaller) *ConnectionCaller {
+	if caller == nil {
+		return nil
+	}
+	return &ConnectionCaller{Subject: caller.Subject, ClientKey: caller.Client}
 }
 
 // connectionHealthRequest reads the caller's project, the gateway, and the
@@ -139,6 +158,8 @@ func (s *Service) connectionHealthError(ctx context.Context, err error) error {
 		return oops.E(oops.CodeNotFound, err, "gateway not found")
 	case errors.Is(err, ErrConnectionHealthKeyNotFound):
 		return oops.E(oops.CodeNotFound, err, "no visible hotspot with this key")
+	case errors.Is(err, ErrConnectionHealthCallerNotFound):
+		return oops.E(oops.CodeNotFound, err, "no visible caller with this client")
 	case errors.Is(err, ErrConnectionHealthInvalid):
 		return oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}

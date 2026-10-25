@@ -93,6 +93,10 @@ var (
 	// ErrConnectionHealthKeyNotFound means a key names a caller, provider, or
 	// client the reader may not see, which is answered as if it had none.
 	ErrConnectionHealthKeyNotFound = errors.New("no visible hotspot with this key")
+
+	// ErrConnectionHealthCallerNotFound means a caller scope names a person,
+	// agent, or registered client the reader may not see now.
+	ErrConnectionHealthCallerNotFound = errors.New("no visible caller with this client")
 )
 
 // ConnectionHealthCoverage names a stage the gateway does not record, so a
@@ -110,6 +114,17 @@ var connectionHealthNotRecorded = []ConnectionHealthCoverage{
 	{Stage: "upstream_refresh_capture_limit", Note: fmt.Sprintf("At most %d provider refreshes are recorded per gateway request; any beyond that are not counted.", ConnectionAttemptMaxRefreshesPerRequest)},
 	{Stage: "upstream_endpoint_contact", Note: "Requests to provider endpoints are not counted: a callback or refresh is one logical attempt, whether or not the provider was contacted."},
 }
+
+// callerStages are the stages a caller scope counts. Sign-in requests are
+// recorded before the caller is known, so none would ever match one.
+var callerStages = []string{
+	ConnectionStageInboundToken, ConnectionStageUpstreamCallback, ConnectionStageUpstreamRefresh,
+	ConnectionStageDiscoveryListing, ConnectionStageDiscoveryMember,
+}
+
+// callerNotRecorded is what a caller scope cannot count, before the gaps every
+// read shares.
+var callerNotRecorded = ConnectionHealthCoverage{Stage: ConnectionStageInboundAuthorize, Note: "Sign-in requests are recorded before the caller is known, so they are not counted for one person or agent."}
 
 // connectionHealthScope says what the recorded stages observe.
 const connectionHealthScope = "Sign-in and token requests this gateway answered are recorded, not whether a redirect arrived, sign-in finished, or a token was used. Provider sign-in callbacks are recorded when the state names this gateway; a stored credential is not proof the person returned to their client. Provider refreshes are recorded only when a request to this gateway caused them. Only Direct tools/list listings are recorded: Progressive discovery and organization gateways are not observed."
@@ -224,6 +239,49 @@ type ConnectionHealthKey struct {
 	ClientKey  string
 }
 
+// ConnectionCaller narrows a read to one person or agent and the registered
+// client they signed in with. It keeps every provider and the attempts that
+// recorded none.
+type ConnectionCaller struct {
+	Subject   string
+	ClientKey string
+}
+
+// validate accepts only a person or agent URN and a registered client ID.
+func (c ConnectionCaller) validate() error {
+	subject, err := urn.ParseSessionSubject(c.Subject)
+	if len(c.Subject) > maxConnectionKeyLength || err != nil || (subject.Kind != urn.SessionSubjectKindUser && subject.Kind != urn.SessionSubjectKindAgent) {
+		return fmt.Errorf("%w: caller subject must be a person or agent URN", ErrConnectionHealthInvalid)
+	}
+	if _, err := uuid.Parse(c.ClientKey); err != nil {
+		return fmt.Errorf("%w: caller client must be a registered client ID", ErrConnectionHealthInvalid)
+	}
+	return nil
+}
+
+func (c ConnectionCaller) repo() *repo.GatewayConnectionCaller {
+	return &repo.GatewayConnectionCaller{Subject: c.Subject, ClientKey: c.ClientKey}
+}
+
+// ConnectionHealthScope is what a summary counts: the whole gateway when
+// empty, one hotspot key, or one caller. Key and Caller are exclusive.
+type ConnectionHealthScope struct {
+	Key    *ConnectionHealthKey
+	Caller *ConnectionCaller
+}
+
+func (s ConnectionHealthScope) validate() error {
+	switch {
+	case s.Key != nil && s.Caller != nil:
+		return fmt.Errorf("%w: give key or caller, not both", ErrConnectionHealthInvalid)
+	case s.Key != nil:
+		return s.Key.validate()
+	case s.Caller != nil:
+		return s.Caller.validate()
+	}
+	return nil
+}
+
 // maxConnectionKeyLength bounds each raw key value a caller may filter by.
 const maxConnectionKeyLength = 512
 
@@ -265,14 +323,15 @@ func recordedClientKind(raw string) bool {
 
 // Summary counts the gateway's attempts per recorded stage and outcome, with
 // a timeline in UTC-aligned buckets. With a key, it counts only that
-// hotspot's attempts, in its stage alone, so its denominator is its own.
-func (h *ConnectionHealth) Summary(ctx context.Context, target ConnectionHealthTarget, window ConnectionHealthWindow, key *ConnectionHealthKey) (ConnectionHealthSummary, error) {
+// hotspot's attempts, in its stage alone, so its denominator is its own. With
+// a caller, it counts only that caller and client's attempts, each stage on
+// its own, with or without a recorded provider.
+func (h *ConnectionHealth) Summary(ctx context.Context, target ConnectionHealthTarget, window ConnectionHealthWindow, scope ConnectionHealthScope) (ConnectionHealthSummary, error) {
 	var none ConnectionHealthSummary
-	if key != nil {
-		if err := key.validate(); err != nil {
-			return none, err
-		}
+	if err := scope.validate(); err != nil {
+		return none, err
 	}
+	key := scope.Key
 	gateway, err := h.gateway(ctx, target)
 	if err != nil {
 		return none, err
@@ -289,11 +348,19 @@ func (h *ConnectionHealth) Summary(ctx context.Context, target ConnectionHealthT
 			return none, ErrConnectionHealthKeyNotFound
 		}
 	}
-	stageNames := connectionStages
+	stageNames, notRecorded := connectionStages, connectionHealthNotRecorded
 	var repoKey *repo.GatewayConnectionKey
-	if key != nil {
+	var repoCaller *repo.GatewayConnectionCaller
+	switch {
+	case key != nil:
 		stageNames = []string{key.Stage}
 		repoKey = &repo.GatewayConnectionKey{Stage: key.Stage, Subject: key.Subject, ProviderID: key.ProviderID, ClientKey: key.ClientKey}
+	case scope.Caller != nil:
+		if err := h.visibleCaller(ctx, target, gateway.UserSessionIssuerID, *scope.Caller); err != nil {
+			return none, err
+		}
+		stageNames, notRecorded = callerStages, append([]ConnectionHealthCoverage{callerNotRecorded}, connectionHealthNotRecorded...)
+		repoCaller = scope.Caller.repo()
 	}
 	timeStart, timeEnd := window.Start.UnixNano(), window.End.UnixNano()
 	interval := discoveryFailureInterval(timeStart, timeEnd)
@@ -304,6 +371,7 @@ func (h *ConnectionHealth) Summary(ctx context.Context, target ConnectionHealthT
 		TimeEnd:         timeEnd,
 		IntervalSeconds: interval,
 		Key:             repoKey,
+		Caller:          repoCaller,
 	})
 	if err != nil {
 		return none, fmt.Errorf("read gateway connection attempts: %w", err)
@@ -341,7 +409,21 @@ func (h *ConnectionHealth) Summary(ctx context.Context, target ConnectionHealthT
 		}
 		stages = append(stages, summary)
 	}
-	return ConnectionHealthSummary{Window: window, IntervalSeconds: interval, Stages: stages, NotRecorded: connectionHealthNotRecorded, Scope: connectionHealthScope}, nil
+	return ConnectionHealthSummary{Window: window, IntervalSeconds: interval, Stages: stages, NotRecorded: notRecorded, Scope: connectionHealthScope}, nil
+}
+
+// visibleCaller answers a caller scope only when the reader may see that
+// person or agent and the client is registered with the gateway's sign-in
+// server now, as the hotspot labels would name them.
+func (h *ConnectionHealth) visibleCaller(ctx context.Context, target ConnectionHealthTarget, issuerID uuid.NullUUID, caller ConnectionCaller) error {
+	labels, err := h.resolveLabels(ctx, target, issuerID, []repo.GatewayConnectionHotspot{{Subject: caller.Subject, ProviderID: "", ClientKey: caller.ClientKey, Attempts: 0, Failed: 0, Blocked: 0, Outcomes: nil, LastSeenUnixNano: 0}})
+	if err != nil {
+		return err
+	}
+	if !labels.subject(caller.Subject).Selectable || labels.client(caller.ClientKey).Kind != "registered" {
+		return ErrConnectionHealthCallerNotFound
+	}
+	return nil
 }
 
 // ConnectionHotspotQuery selects and ranks hotspots within one stage.
@@ -350,6 +432,9 @@ type ConnectionHotspotQuery struct {
 	ByRate      bool
 	MinAttempts int
 	Limit       int
+	// Caller, when set, ranks only that caller and client's keys, before the
+	// floor and limit apply.
+	Caller *ConnectionCaller
 }
 
 // ConnectionLabel names a caller, provider, or client. ID is set only when
@@ -404,6 +489,8 @@ type ConnectionHotspots struct {
 	ByRate      bool
 	MinAttempts int
 	Hotspots    []ConnectionHotspot
+	// Truncated reports that more keys met the floor than Limit returned.
+	Truncated bool
 }
 
 // Hotspots ranks a stage's caller × provider × client keys by failed attempts
@@ -422,10 +509,23 @@ func (h *ConnectionHealth) Hotspots(ctx context.Context, target ConnectionHealth
 	if query.MinAttempts < 1 || query.MinAttempts > connectionHotspotMaxMinAttempts || query.Limit < 1 || query.Limit > ConnectionHotspotMaxLimit {
 		return none, fmt.Errorf("%w: min_attempts must be 1 to %d and limit 1 to %d", ErrConnectionHealthInvalid, connectionHotspotMaxMinAttempts, ConnectionHotspotMaxLimit)
 	}
+	var repoCaller *repo.GatewayConnectionCaller
+	if query.Caller != nil {
+		if err := query.Caller.validate(); err != nil {
+			return none, err
+		}
+		repoCaller = query.Caller.repo()
+	}
 	gateway, err := h.gateway(ctx, target)
 	if err != nil {
 		return none, err
 	}
+	if query.Caller != nil {
+		if err := h.visibleCaller(ctx, target, gateway.UserSessionIssuerID, *query.Caller); err != nil {
+			return none, err
+		}
+	}
+	// One row past the limit says whether the page is complete.
 	rows, err := h.ch.GatewayConnectionHotspots(ctx, repo.GatewayConnectionHotspotsParams{
 		GramProjectID:   target.ProjectID.String(),
 		MetaMCPServerID: target.GatewayID.String(),
@@ -434,11 +534,14 @@ func (h *ConnectionHealth) Hotspots(ctx context.Context, target ConnectionHealth
 		Stage:           query.Stage,
 		ByRate:          query.ByRate,
 		MinAttempts:     uint64(query.MinAttempts),
-		Limit:           uint64(query.Limit),
+		Limit:           uint64(query.Limit) + 1,
+		Caller:          repoCaller,
 	})
 	if err != nil {
 		return none, fmt.Errorf("read gateway connection hotspots: %w", err)
 	}
+	truncated := len(rows) > query.Limit
+	rows = rows[:min(len(rows), query.Limit)]
 	labels, err := h.resolveLabels(ctx, target, gateway.UserSessionIssuerID, rows)
 	if err != nil {
 		return none, err
@@ -463,17 +566,23 @@ func (h *ConnectionHealth) Hotspots(ctx context.Context, target ConnectionHealth
 			Reasons:  topReasons(reasons),
 			LastSeen: time.Time{},
 		}
-		if row.ProviderID == "" && (query.Stage == ConnectionStageUpstreamCallback || query.Stage == ConnectionStageUpstreamRefresh) {
+		switch {
+		case row.ProviderID == "" && (query.Stage == ConnectionStageUpstreamCallback || query.Stage == ConnectionStageUpstreamRefresh):
 			// Provider work happened, but its identity was not resolved. An
 			// absent dimension is not evidence that no provider was involved.
 			hotspot.Provider = keyedLabel("unrecorded", "Provider not recorded", "")
+		case row.ProviderID == "" && query.Stage == ConnectionStageDiscoveryListing:
+			// A listing spans the gateway's members, so it records no provider;
+			// that is not evidence the listing involved none. The key stays the
+			// exact empty value.
+			hotspot.Provider = keyedLabel("gateway_wide", "Whole gateway, no provider recorded", "")
 		}
 		if row.LastSeenUnixNano > 0 {
 			hotspot.LastSeen = time.Unix(0, row.LastSeenUnixNano).UTC()
 		}
 		hotspots = append(hotspots, hotspot)
 	}
-	return ConnectionHotspots{Window: window, Stage: query.Stage, ByRate: query.ByRate, MinAttempts: query.MinAttempts, Hotspots: hotspots}, nil
+	return ConnectionHotspots{Window: window, Stage: query.Stage, ByRate: query.ByRate, MinAttempts: query.MinAttempts, Hotspots: hotspots, Truncated: truncated}, nil
 }
 
 // gateway authorizes the read and loads the gateway. A gateway that is not in

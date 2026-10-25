@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"testing"
 	"time"
 
@@ -146,6 +147,9 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 		attempt(project.ID, gatewayID, telemetry.ConnectionStageUpstreamRefresh, "refreshed", member, provider, registered),
 		attempt(project.ID, gatewayID, telemetry.ConnectionStageUpstreamRefresh, "adopted", member, provider, registered),
 		attempt(project.ID, gatewayID, telemetry.ConnectionStageUpstreamRefresh, "failed", member, provider, registered),
+		// A successful callback whose provider was not resolved is still this
+		// person's, kept apart from the named provider.
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageUpstreamCallback, "stored", member, "", registered),
 	}))
 
 	engine := authz.NewEngine(logger, conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
@@ -215,7 +219,7 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 	require.Equal(t, []string{"inbound_authorize", "inbound_token", "upstream_callback", "upstream_refresh", "discovery_listing", "discovery_member"}, stageNames)
 	require.Zero(t, output.Stages[0].Attempts, "a stage without attempts is listed, empty")
 	require.EqualValues(t, 3, output.Stages[1].Attempts, "a policy block stays in the token stage's denominator")
-	require.EqualValues(t, 2, output.Stages[2].Attempts)
+	require.EqualValues(t, 3, output.Stages[2].Attempts, "callbacks with and without a resolved provider")
 	require.EqualValues(t, 3, output.Stages[3].Attempts)
 	require.EqualValues(t, 1, output.Stages[4].Attempts)
 	require.EqualValues(t, 10, output.Stages[5].Attempts, "only the named project's attempts count")
@@ -276,6 +280,49 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 		}
 		require.Equal(t, want, got, stage)
 	}
+	// One person and client through the nested caller: each stage counted for
+	// them alone, and their provider keys ranked with no attempt floor.
+	callerArgs := func(extra map[string]any) map[string]any {
+		arguments := base()
+		delete(arguments, "hotspot_min_attempts")
+		arguments["caller"] = map[string]any{"subject": member, "client": registered}
+		arguments["hotspot_stage"] = telemetry.ConnectionStageUpstreamCallback
+		maps.Copy(arguments, extra)
+		return arguments
+	}
+	_, output, raw = call(callerArgs(nil))
+	require.Contains(t, raw, `"truncated":false`)
+	callerStages := map[string]GatewayConnectionStageSummary{}
+	for _, stage := range output.Stages {
+		callerStages[stage.Stage] = stage
+	}
+	require.NotContains(t, callerStages, telemetry.ConnectionStageInboundAuthorize)
+	require.Equal(t, telemetry.ConnectionStageInboundAuthorize, output.NotRecorded[0].Stage)
+	require.EqualValues(t, 3, callerStages[telemetry.ConnectionStageUpstreamCallback].Attempts, "named and unrecorded providers both count")
+	require.EqualValues(t, 3, callerStages[telemetry.ConnectionStageUpstreamRefresh].Attempts)
+	require.Equal(t, at.Format(time.RFC3339Nano), callerStages[telemetry.ConnectionStageInboundToken].LastCodeIssuedAt)
+	require.EqualValues(t, 6, callerStages[telemetry.ConnectionStageDiscoveryMember].Attempts, "their checks with every provider, a hidden one too; other callers' are left out")
+	require.NotNil(t, output.Ranking)
+	require.Equal(t, 1, output.Ranking.MinAttempts)
+	providers := map[string]uint64{}
+	for _, hotspot := range output.Ranking.Hotspots {
+		require.Equal(t, member, *hotspot.Subject.Key)
+		providers[hotspot.Provider.Kind+":"+*hotspot.Provider.Key] = hotspot.Attempts
+	}
+	require.Equal(t, map[string]uint64{"provider:" + provider: 2, "unrecorded:": 1}, providers, "the single successful unrecorded callback is not floored out")
+	for name, refused := range map[string]struct {
+		arguments map[string]any
+		message   string
+	}{
+		"a floor above one": {callerArgs(map[string]any{"hotspot_min_attempts": 5}), "hotspot_min_attempts must be 1"},
+		"a negative floor":  {callerArgs(map[string]any{"hotspot_min_attempts": -1}), "hotspot_min_attempts must be 1"},
+		"key and caller":    {callerArgs(map[string]any{"key": map[string]any{"stage": telemetry.ConnectionStageInboundToken, "subject": member, "provider_id": "", "client": registered}}), "give key or caller, not both"},
+		"a recorded kind":   {callerArgs(map[string]any{"caller": map[string]any{"subject": member, "client": "anonymous"}}), "caller client must be a registered client ID"},
+	} {
+		require.Contains(t, refusal(refused.arguments), refused.message, name)
+	}
+	require.Contains(t, refusal(callerArgs(map[string]any{"caller": map[string]any{"subject": outsider, "client": registered}})), "not_found", "a person outside the organization")
+
 	_, output, _ = call(keyed(telemetry.ConnectionStageDiscoveryMember, "", "", "anonymous"))
 	require.EqualValues(t, 2, output.Stages[0].Attempts, "empty key values are selectable")
 

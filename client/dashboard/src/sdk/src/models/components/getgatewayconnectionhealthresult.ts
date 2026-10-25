@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  GatewayConnectionCaller,
+  GatewayConnectionCaller$inboundSchema,
+} from "./gatewayconnectioncaller.js";
+import {
   GatewayConnectionCoverage,
   GatewayConnectionCoverage$inboundSchema,
 } from "./gatewayconnectioncoverage.js";
@@ -17,6 +21,10 @@ import {
 } from "./gatewayconnectionstage.js";
 
 export type GetGatewayConnectionHealthResult = {
+  /**
+   * One signed-in person or agent and the registered client they used, given as a hotspot's subject and client keys. It includes every provider and the attempts that recorded none.
+   */
+  caller?: GatewayConnectionCaller | undefined;
   /**
    * Window start
    */
@@ -49,6 +57,7 @@ export const GetGatewayConnectionHealthResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    caller: z.optional(GatewayConnectionCaller$inboundSchema),
     from: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

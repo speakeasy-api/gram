@@ -5,6 +5,7 @@ import type { TelemetryLogRecord } from "@gram/client/models/components/telemetr
 import {
   attemptFilters,
   beforeWindowEnd,
+  callerOf,
   healthWindow,
   hotspotKey,
   matchingConnectionFilters,
@@ -201,6 +202,32 @@ describe("provider stages", () => {
     expect(reasonText("provider_oauth_new_code", "upstream_callback")).toBe(
       "The provider refused the sign-in request.",
     );
+  });
+});
+
+describe("callerOf", () => {
+  it("names only a person or agent with a registered client", () => {
+    const listing = {
+      stage: "discovery_listing" as const,
+      subject: USER,
+      providerId: "",
+      client: CLIENT,
+    };
+    expect(callerOf(listing)).toEqual({ subject: USER, client: CLIENT });
+    expect(
+      callerOf({
+        ...listing,
+        subject: "agent:6c0d0000-0000-4000-a000-000000000009",
+      }),
+    ).not.toBeNull();
+    for (const other of [
+      { ...listing, subject: "" },
+      { ...listing, subject: "apikey:example" },
+      { ...listing, client: "anonymous" },
+      { ...listing, client: "credential:user" },
+    ]) {
+      expect(callerOf(other)).toBeNull();
+    }
   });
 });
 

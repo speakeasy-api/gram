@@ -49,6 +49,10 @@ export type GatewayConnectionStage = {
    */
   buckets: Array<GatewayConnectionBucket>;
   /**
+   * For inbound_token with a key or caller only: the start of the latest authorization-code request whose token response was written. Later refreshes do not change it; it is not when a client received or used the token.
+   */
+  lastCodeIssuedAt?: Date | undefined;
+  /**
    * Time of the latest attempt, absent when there was none
    */
   lastSeenAt?: Date | undefined;
@@ -84,6 +88,9 @@ export const GatewayConnectionStage$inboundSchema: z.ZodMiniType<
   z.object({
     attempts: z.int(),
     buckets: z.array(GatewayConnectionBucket$inboundSchema),
+    last_code_issued_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     last_seen_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -94,6 +101,7 @@ export const GatewayConnectionStage$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "last_code_issued_at": "lastCodeIssuedAt",
       "last_seen_at": "lastSeenAt",
     });
   }),

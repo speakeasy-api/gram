@@ -695,7 +695,7 @@ func BuildGetGatewayConnectionHealthPayload(telemetryGetGatewayConnectionHealthB
 	{
 		err = json.Unmarshal([]byte(telemetryGetGatewayConnectionHealthBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"key\": {\n         \"client\": \"aaa\",\n         \"provider_id\": \"aaa\",\n         \"stage\": \"inbound_token\",\n         \"subject\": \"aaa\"\n      },\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"caller\": {\n         \"client\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"subject\": \"aa\"\n      },\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"key\": {\n         \"client\": \"aaa\",\n         \"provider_id\": \"aaa\",\n         \"stage\": \"inbound_token\",\n         \"subject\": \"aaa\"\n      },\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
 		if body.From != nil {
@@ -706,6 +706,11 @@ func BuildGetGatewayConnectionHealthPayload(telemetryGetGatewayConnectionHealthB
 		}
 		if body.Key != nil {
 			if err2 := ValidateGatewayConnectionKeyRequestBody(body.Key); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if body.Caller != nil {
+			if err2 := ValidateGatewayConnectionCallerRequestBody(body.Caller); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -739,6 +744,9 @@ func BuildGetGatewayConnectionHealthPayload(telemetryGetGatewayConnectionHealthB
 	if body.Key != nil {
 		v.Key = marshalGatewayConnectionKeyRequestBodyToTelemetryGatewayConnectionKey(body.Key)
 	}
+	if body.Caller != nil {
+		v.Caller = marshalGatewayConnectionCallerRequestBodyToTelemetryGatewayConnectionCaller(body.Caller)
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -754,7 +762,7 @@ func BuildListGatewayConnectionHotspotsPayload(telemetryListGatewayConnectionHot
 	{
 		err = json.Unmarshal([]byte(telemetryListGatewayConnectionHotspotsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"min_attempts\": 2,\n      \"rank_by\": \"rate\",\n      \"stage\": \"inbound_token\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"caller\": {\n         \"client\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"subject\": \"aa\"\n      },\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"min_attempts\": 2,\n      \"rank_by\": \"rate\",\n      \"stage\": \"inbound_token\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
 		if body.From != nil {
@@ -780,6 +788,11 @@ func BuildListGatewayConnectionHotspotsPayload(telemetryListGatewayConnectionHot
 		}
 		if body.Limit > 25 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 25, false))
+		}
+		if body.Caller != nil {
+			if err2 := ValidateGatewayConnectionCallerRequestBody(body.Caller); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -829,6 +842,9 @@ func BuildListGatewayConnectionHotspotsPayload(telemetryListGatewayConnectionHot
 		if v.Limit == zero {
 			v.Limit = 25
 		}
+	}
+	if body.Caller != nil {
+		v.Caller = marshalGatewayConnectionCallerRequestBodyToTelemetryGatewayConnectionCaller(body.Caller)
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

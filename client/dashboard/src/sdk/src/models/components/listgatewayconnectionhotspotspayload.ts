@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  GatewayConnectionCaller,
+  GatewayConnectionCaller$Outbound,
+  GatewayConnectionCaller$outboundSchema,
+} from "./gatewayconnectioncaller.js";
 
 /**
  * count ranks by failed attempts; rate by failed attempts over all attempts.
@@ -37,6 +42,10 @@ export type ListGatewayConnectionHotspotsPayloadStage = ClosedEnum<
 >;
 
 export type ListGatewayConnectionHotspotsPayload = {
+  /**
+   * One signed-in person or agent and the registered client they used, given as a hotspot's subject and client keys. It includes every provider and the attempts that recorded none.
+   */
+  caller?: GatewayConnectionCaller | undefined;
   /**
    * Start of the window in ISO 8601 format. Defaults to 7 days before to; the window may span at most 30 days.
    */
@@ -80,6 +89,7 @@ export const ListGatewayConnectionHotspotsPayloadStage$outboundSchema:
 
 /** @internal */
 export type ListGatewayConnectionHotspotsPayload$Outbound = {
+  caller?: GatewayConnectionCaller$Outbound | undefined;
   from?: string | undefined;
   limit: number;
   meta_mcp_server_id: string;
@@ -95,6 +105,7 @@ export const ListGatewayConnectionHotspotsPayload$outboundSchema: z.ZodMiniType<
   ListGatewayConnectionHotspotsPayload
 > = z.pipe(
   z.object({
+    caller: z.optional(GatewayConnectionCaller$outboundSchema),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     limit: z._default(z.int(), 25),
     metaMcpServerId: z.string(),
