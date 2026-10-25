@@ -141,6 +141,8 @@ export function setUserSessionFilterFacetsData(
       excludeClientRegistrations?:
         | Array<QueryParamExcludeClientRegistrations>
         | undefined;
+      providers?: Array<string> | undefined;
+      excludeProviders?: Array<string> | undefined;
       lastUsedWithin?: number | undefined;
       lastUsedOlderThan?: number | undefined;
       lastUsedNever?: boolean | undefined;
@@ -180,6 +182,8 @@ export function invalidateUserSessionFilterFacets(
       excludeClientRegistrations?:
         | Array<QueryParamExcludeClientRegistrations>
         | undefined;
+      providers?: Array<string> | undefined;
+      excludeProviders?: Array<string> | undefined;
       lastUsedWithin?: number | undefined;
       lastUsedOlderThan?: number | undefined;
       lastUsedNever?: boolean | undefined;

@@ -49,12 +49,16 @@ describe("session filter chips", () => {
       chip("client", Op.NotEq, "none"),
       chip("identity_type", Op.Eq, "agent"),
       chip("client_registration", Op.In, "cimd,dcr"),
+      chip("provider", Op.Eq, "none"),
+      chip("provider", Op.NotEq, "p2"),
     ]);
     expect(query).toEqual({
       servers: ["s1", "s2", "s3"],
       excludeClients: ["dashboard", "none"],
       identityTypes: ["agent"],
       clientRegistrations: ["cimd", "dcr"],
+      providers: ["none"],
+      excludeProviders: ["p2"],
     });
   });
 
@@ -146,6 +150,11 @@ describe("session filter chips", () => {
       sessionFilterProblem("identity_type", Op.Eq, "robot"),
     ).not.toBeNull();
     expect(sessionFilterProblem("mcp_server", Op.Eq, "linear")).not.toBeNull();
+    expect(
+      sessionFilterProblem("provider", Op.In, encodeValues(["none", uuid])),
+    ).toBeNull();
+    expect(sessionFilterProblem("provider", Op.Eq, "linear")).not.toBeNull();
+    expect(sessionFilterProblem("provider", Op.Eq, "dashboard")).not.toBeNull();
   });
 
   it("decodes only in-chip values when showing them", () => {

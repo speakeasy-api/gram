@@ -123,6 +123,13 @@ type ListUserSessionsPayload struct {
 	ClientRegistrations []string
 	// Leave out sessions whose client registered this way.
 	ExcludeClientRegistrations []string
+	// Only sessions admitted to one of these upstream providers: a
+	// remote_session_issuer id, or "none" for sessions with no admitted provider
+	// sign-in. Sessions of one subject on one sign-in server share providers.
+	Providers []string
+	// Leave out sessions admitted to any of these providers, using the same values
+	// as providers.
+	ExcludeProviders []string
 	// Only sessions used within this many seconds, inclusive. Sessions with no
 	// recorded use never match.
 	LastUsedWithin *int
@@ -224,6 +231,13 @@ type QueryFacetsPayload struct {
 	ClientRegistrations []string
 	// Leave out sessions whose client registered this way.
 	ExcludeClientRegistrations []string
+	// Only sessions admitted to one of these upstream providers: a
+	// remote_session_issuer id, or "none" for sessions with no admitted provider
+	// sign-in. Sessions of one subject on one sign-in server share providers.
+	Providers []string
+	// Leave out sessions admitted to any of these providers, using the same values
+	// as providers.
+	ExcludeProviders []string
 	// Only sessions used within this many seconds, inclusive. Sessions with no
 	// recorded use never match.
 	LastUsedWithin *int
@@ -292,6 +306,10 @@ type UserSessionFilterFacets struct {
 	Client *UserSessionFilterFacet
 	// How each client registered.
 	ClientRegistration *UserSessionFilterFacet
+	// Upstream providers the sessions are admitted to (remote_session_issuer ids),
+	// plus none for sessions with none. A session with several providers counts
+	// under each.
+	Provider *UserSessionFilterFacet
 	// With meta_mcp_server_id: sessions on the gateway's current sign-in server
 	// that match the other filters but recorded no origin and have no consent
 	// selection naming a resource. 0 for a gateway without a sign-in server.

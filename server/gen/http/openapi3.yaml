@@ -87828,6 +87828,26 @@ paths:
                     maxItems: 50
                     type: array
                 - allowEmptyValue: true
+                  description: 'Only sessions admitted to one of these upstream providers: a remote_session_issuer id, or "none" for sessions with no admitted provider sign-in. Sessions of one subject on one sign-in server share providers.'
+                  in: query
+                  name: providers
+                  schema:
+                    description: 'Only sessions admitted to one of these upstream providers: a remote_session_issuer id, or "none" for sessions with no admitted provider sign-in. Sessions of one subject on one sign-in server share providers.'
+                    items:
+                        type: string
+                    maxItems: 50
+                    type: array
+                - allowEmptyValue: true
+                  description: Leave out sessions admitted to any of these providers, using the same values as providers.
+                  in: query
+                  name: exclude_providers
+                  schema:
+                    description: Leave out sessions admitted to any of these providers, using the same values as providers.
+                    items:
+                        type: string
+                    maxItems: 50
+                    type: array
+                - allowEmptyValue: true
                   description: Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match.
                   in: query
                   name: last_used_within
@@ -88345,6 +88365,26 @@ paths:
                     maxItems: 50
                     type: array
                 - allowEmptyValue: true
+                  description: 'Only sessions admitted to one of these upstream providers: a remote_session_issuer id, or "none" for sessions with no admitted provider sign-in. Sessions of one subject on one sign-in server share providers.'
+                  in: query
+                  name: providers
+                  schema:
+                    description: 'Only sessions admitted to one of these upstream providers: a remote_session_issuer id, or "none" for sessions with no admitted provider sign-in. Sessions of one subject on one sign-in server share providers.'
+                    items:
+                        type: string
+                    maxItems: 50
+                    type: array
+                - allowEmptyValue: true
+                  description: Leave out sessions admitted to any of these providers, using the same values as providers.
+                  in: query
+                  name: exclude_providers
+                  schema:
+                    description: Leave out sessions admitted to any of these providers, using the same values as providers.
+                    items:
+                        type: string
+                    maxItems: 50
+                    type: array
+                - allowEmptyValue: true
                   description: Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match.
                   in: query
                   name: last_used_within
@@ -88383,6 +88423,7 @@ paths:
                         - mcp_server
                         - client
                         - client_registration
+                        - provider
                     type: string
                 - allowEmptyValue: true
                   description: Case-insensitive substring match on the values and labels of field.
@@ -129981,6 +130022,8 @@ components:
                     $ref: '#/components/schemas/UserSessionFilterFacet'
                 mcp_server:
                     $ref: '#/components/schemas/UserSessionFilterFacet'
+                provider:
+                    $ref: '#/components/schemas/UserSessionFilterFacet'
                 unattributed_count:
                     type: integer
                     description: 'With meta_mcp_server_id: sessions on the gateway''s current sign-in server that match the other filters but recorded no origin and have no consent selection naming a resource. 0 for a gateway without a sign-in server.'
@@ -129991,6 +130034,7 @@ components:
                 - mcp_server
                 - client
                 - client_registration
+                - provider
         UserSessionIssuer:
             type: object
             properties:

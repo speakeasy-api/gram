@@ -314,6 +314,21 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
+	if err := s.q.ServersInsertGatewayAgentSession(ctx, repo.ServersInsertGatewayAgentSessionParams{
+		ID:                  s.det("gateway-agent-session"),
+		ProjectID:           proj,
+		OrganizationID:      org,
+		UserSessionIssuerID: s.det("issuer-gateway"),
+		UserSessionClientID: s.det("usc-gateway"),
+		SubjectUrn:          "agent:" + s.det("managed-agent-4").String(),
+		ResourceIdentity:    s.serversResourceIdentity("gateway"),
+		AuthorizerUserID:    user(1),
+		Jti:                 s.det("gateway-agent-jti").String(),
+		RefreshTokenHash:    "DEMO-NOT-A-VALID-HASH-" + s.det("gateway-agent-refresh").String(),
+	}); err != nil {
+		return fmt.Errorf("insert demo gateway agent session: %w", err)
+	}
+
 	if err := s.q.ServersInsertAttachmentClient(ctx, repo.ServersInsertAttachmentClientParams{
 		ID:                    s.det("attachment-client"),
 		ProjectID:             proj,
@@ -343,36 +358,37 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	// recorded for every server it reaches: Linear through its main client,
 	// Slack with no upstream authentication.
 	choices := []struct {
-		session int
-		server  string
-		client  string
+		credential string
+		server     string
+		client     string
 	}{
-		{session: 6, server: "linear", client: "remote-identity-client-linear"},
-		{session: 7, server: "linear", client: "remote-identity-client-linear"},
-		{session: 8, server: "slack", client: ""},
-		{session: 9, server: "slack", client: ""},
-		{session: 10, server: "linear", client: "remote-identity-client-linear"},
-		{session: 10, server: "slack", client: ""},
-		{session: 11, server: "linear", client: "remote-identity-client-linear"},
-		{session: 11, server: "slack", client: ""},
+		{credential: "user-session-6", server: "linear", client: "remote-identity-client-linear"},
+		{credential: "user-session-7", server: "linear", client: "remote-identity-client-linear"},
+		{credential: "user-session-8", server: "slack", client: ""},
+		{credential: "user-session-9", server: "slack", client: ""},
+		{credential: "user-session-10", server: "linear", client: "remote-identity-client-linear"},
+		{credential: "user-session-10", server: "slack", client: ""},
+		{credential: "user-session-11", server: "linear", client: "remote-identity-client-linear"},
+		{credential: "user-session-11", server: "slack", client: ""},
+		{credential: "gateway-agent-session", server: "linear", client: "remote-identity-client-linear"},
+		{credential: "gateway-agent-session", server: "slack", client: ""},
 	}
 	for _, c := range choices {
-		num := strconv.Itoa(c.session)
 		client := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		if c.client != "" {
 			client = uuid.NullUUID{UUID: s.det(c.client), Valid: true}
 		}
 		if err := s.q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
-			ID:                    s.det("upstream-client-choice-" + num + "-" + c.server),
+			ID:                    s.det("upstream-client-choice-" + c.credential + "-" + c.server),
 			ProjectID:             proj,
 			OrgID:                 org,
 			CredentialKind:        upstreamclients.CredentialKindUserSession,
-			CredentialID:          s.det("user-session-" + num),
+			CredentialID:          s.det(c.credential),
 			McpServerID:           s.det("mcpserver-" + c.server),
 			RemoteSessionClientID: client,
 			Source:                upstreamclients.SelectionSourceIssuance,
 		}); err != nil {
-			return fmt.Errorf("insert demo upstream client choice for session %d on %s: %w", c.session, c.server, err)
+			return fmt.Errorf("insert demo upstream client choice for %s on %s: %w", c.credential, c.server, err)
 		}
 	}
 	if err := s.q.ServersInsertAttachmentSession(ctx, repo.ServersInsertAttachmentSessionParams{

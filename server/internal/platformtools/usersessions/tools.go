@@ -45,6 +45,8 @@ type listInput struct {
 	ExcludeClients             []string `json:"exclude_clients,omitempty" jsonschema:"Leave out sessions from these clients."`
 	ClientRegistrations        []string `json:"client_registrations,omitempty" jsonschema:"Only sessions whose client registered this way: cimd, dcr, assistant, or none."`
 	ExcludeClientRegistrations []string `json:"exclude_client_registrations,omitempty" jsonschema:"Leave out sessions whose client registered this way."`
+	Providers                  []string `json:"providers,omitempty" jsonschema:"Only sessions admitted to one of these upstream providers: a provider (remote session issuer) UUID, or none for sessions with no admitted provider sign-in."`
+	ExcludeProviders           []string `json:"exclude_providers,omitempty" jsonschema:"Leave out sessions admitted to any of these providers: a provider (remote session issuer) UUID, or none to leave out sessions with no admitted provider sign-in."`
 	LastUsedWithin             *int     `json:"last_used_within,omitempty" jsonschema:"Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match."`
 	LastUsedOlderThan          *int     `json:"last_used_older_than,omitempty" jsonschema:"Only sessions last used more than this many seconds ago. Sessions with no recorded use never match."`
 	LastUsedNever              bool     `json:"last_used_never,omitempty" jsonschema:"Only sessions with no recorded use."`
@@ -187,6 +189,8 @@ func (t *ListTool) Descriptor() core.ToolDescriptor {
 			core.WithPropertyItemsRange("exclude_clients", 0, sessionfilter.MaxValues),
 			core.WithPropertyItemsRange("client_registrations", 0, sessionfilter.MaxValues),
 			core.WithPropertyItemsRange("exclude_client_registrations", 0, sessionfilter.MaxValues),
+			core.WithPropertyItemsRange("providers", 0, sessionfilter.MaxValues),
+			core.WithPropertyItemsRange("exclude_providers", 0, sessionfilter.MaxValues),
 			core.WithPropertyNumberRange("last_used_within", 1, sessionfilter.MaxLastUsedSeconds),
 			core.WithPropertyNumberRange("last_used_older_than", 1, sessionfilter.MaxLastUsedSeconds),
 		),
@@ -241,6 +245,8 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		ExcludeClients:             in.ExcludeClients,
 		ClientRegistrations:        in.ClientRegistrations,
 		ExcludeClientRegistrations: in.ExcludeClientRegistrations,
+		Providers:                  in.Providers,
+		ExcludeProviders:           in.ExcludeProviders,
 		LastUsedWithin:             in.LastUsedWithin,
 		LastUsedOlderThan:          in.LastUsedOlderThan,
 		LastUsedNever:              in.LastUsedNever,
@@ -329,6 +335,8 @@ func (t *GetTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io
 		ExcludeClients:             nil,
 		ClientRegistrations:        nil,
 		ExcludeClientRegistrations: nil,
+		Providers:                  nil,
+		ExcludeProviders:           nil,
 		LastUsedWithin:             nil,
 		LastUsedOlderThan:          nil,
 		LastUsedNever:              false,

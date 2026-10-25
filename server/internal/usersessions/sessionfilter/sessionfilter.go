@@ -36,6 +36,13 @@ const (
 	// ClientNone selects sessions with no client that are not dashboard mints.
 	ClientNone = "none"
 
+	// ProviderNone selects sessions with no admitted provider sign-in.
+	ProviderNone = "none"
+
+	// FieldProvider is the facet field counting each session's admitted
+	// upstream providers.
+	FieldProvider = "provider"
+
 	// FieldIdentity is the facet field whose search also matches readable
 	// agent names.
 	FieldIdentity = "identity"
@@ -49,7 +56,7 @@ var (
 	statuses            = []string{"active", "expired", "revoked", "all"}
 	identityTypes       = []string{"user", "agent", "workload", "apikey", "anonymous"}
 	clientRegistrations = []string{"cimd", "dcr", "assistant", "none"}
-	facetFields         = []string{FieldIdentity, "identity_type", "mcp_server", "client", "client_registration"}
+	facetFields         = []string{FieldIdentity, "identity_type", "mcp_server", "client", "client_registration", FieldProvider}
 )
 
 // Input is a session filter as a caller received it.
@@ -69,6 +76,8 @@ type Input struct {
 	ExcludeClients             []string
 	ClientRegistrations        []string
 	ExcludeClientRegistrations []string
+	Providers                  []string
+	ExcludeProviders           []string
 	LastUsedWithin             *int
 	LastUsedOlderThan          *int
 	LastUsedNever              bool
@@ -97,6 +106,8 @@ type Filter struct {
 	excludeClients             []string
 	clientRegistrations        []string
 	excludeClientRegistrations []string
+	providers                  []string
+	excludeProviders           []string
 	lastUsedWithin             pgtype.Interval
 	lastUsedOlderThan          pgtype.Interval
 	lastUsedNever              bool
@@ -142,16 +153,22 @@ func Parse(in Input) (Filter, error) {
 	if f.excludeServers, err = uuids("exclude_servers", in.ExcludeServers); err != nil {
 		return Filter{}, err
 	}
-	if f.clients, err = clients("clients", in.Clients); err != nil {
+	if f.clients, err = idsOr("clients", in.Clients, ClientDashboard, ClientNone); err != nil {
 		return Filter{}, err
 	}
-	if f.excludeClients, err = clients("exclude_clients", in.ExcludeClients); err != nil {
+	if f.excludeClients, err = idsOr("exclude_clients", in.ExcludeClients, ClientDashboard, ClientNone); err != nil {
 		return Filter{}, err
 	}
 	if f.clientRegistrations, err = values("client_registrations", in.ClientRegistrations, clientRegistrations); err != nil {
 		return Filter{}, err
 	}
 	if f.excludeClientRegistrations, err = values("exclude_client_registrations", in.ExcludeClientRegistrations, clientRegistrations); err != nil {
+		return Filter{}, err
+	}
+	if f.providers, err = idsOr("providers", in.Providers, ProviderNone); err != nil {
+		return Filter{}, err
+	}
+	if f.excludeProviders, err = idsOr("exclude_providers", in.ExcludeProviders, ProviderNone); err != nil {
 		return Filter{}, err
 	}
 	if f.lastUsedWithin, err = seconds("last_used_within", in.LastUsedWithin); err != nil {
@@ -189,6 +206,8 @@ func (f Filter) ListParams(projectID uuid.UUID, organizationID string, agentSubj
 		ExcludeClients:             f.excludeClients,
 		ClientRegistrations:        f.clientRegistrations,
 		ExcludeClientRegistrations: f.excludeClientRegistrations,
+		Providers:                  f.providers,
+		ExcludeProviders:           f.excludeProviders,
 		LastUsedWithin:             f.lastUsedWithin,
 		LastUsedOlderThan:          f.lastUsedOlderThan,
 		LastUsedNever:              f.lastUsedNever,
@@ -237,6 +256,8 @@ func (f Filter) FacetParams(projectID uuid.UUID, organizationID string, agentSub
 		ExcludeClients:              f.excludeClients,
 		ClientRegistrations:         f.clientRegistrations,
 		ExcludeClientRegistrations:  f.excludeClientRegistrations,
+		Providers:                   f.providers,
+		ExcludeProviders:            f.excludeProviders,
 		FirstPartyClientName:        sessiontokens.FirstPartyClientName,
 		LastUsedWithin:              f.lastUsedWithin,
 		LastUsedOlderThan:           f.lastUsedOlderThan,
@@ -275,6 +296,8 @@ func (f Filter) Selected(field string) []string {
 		return slices.Concat(f.clients, f.excludeClients)
 	case "client_registration":
 		return slices.Concat(f.clientRegistrations, f.excludeClientRegistrations)
+	case FieldProvider:
+		return slices.Concat(f.providers, f.excludeProviders)
 	default:
 		return nil
 	}
@@ -336,14 +359,15 @@ func uuids(name string, in []string) ([]uuid.UUID, error) {
 	return out, nil
 }
 
-func clients(name string, in []string) ([]string, error) {
+// idsOr accepts UUIDs, normalized, and the named sentinel values.
+func idsOr(name string, in []string, sentinels ...string) ([]string, error) {
 	raw, err := values(name, in, nil)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]string, 0, len(raw))
 	for _, value := range raw {
-		if value != ClientDashboard && value != ClientNone {
+		if !slices.Contains(sentinels, value) {
 			id, err := uuid.Parse(value)
 			if err != nil {
 				return nil, oops.E(oops.CodeBadRequest, err, "invalid %s value %q", name, value)

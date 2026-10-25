@@ -73,7 +73,7 @@ var _ = Service("userSessions", func() {
 		Payload(func() {
 			sessionFilterAttributes()
 			Attribute("field", String, "Narrow this field's values with field_search.", func() {
-				Enum("identity", "identity_type", "mcp_server", "client", "client_registration")
+				Enum("identity", "identity_type", "mcp_server", "client", "client_registration", "provider")
 			})
 			Attribute("field_search", String, "Case-insensitive substring match on the values and labels of field.", func() {
 				MaxLength(200)
@@ -362,6 +362,12 @@ func sessionFilterAttributes() {
 	Attribute("exclude_client_registrations", ArrayOf(String, func() { Enum(clientRegistrations...) }), "Leave out sessions whose client registered this way.", func() {
 		MaxLength(maxFilterValues)
 	})
+	Attribute("providers", ArrayOf(String), "Only sessions admitted to one of these upstream providers: a remote_session_issuer id, or \"none\" for sessions with no admitted provider sign-in. Sessions of one subject on one sign-in server share providers.", func() {
+		MaxLength(maxFilterValues)
+	})
+	Attribute("exclude_providers", ArrayOf(String), "Leave out sessions admitted to any of these providers, using the same values as providers.", func() {
+		MaxLength(maxFilterValues)
+	})
 	Attribute("last_used_within", Int, "Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match.", func() {
 		Minimum(1)
 		Maximum(maxLastUsedSeconds)
@@ -390,6 +396,8 @@ func sessionFilterParams() {
 	Param("exclude_clients")
 	Param("client_registrations")
 	Param("exclude_client_registrations")
+	Param("providers")
+	Param("exclude_providers")
 	Param("last_used_within")
 	Param("last_used_older_than")
 	Param("last_used_never")
@@ -419,8 +427,9 @@ var UserSessionFilterFacets = Type("UserSessionFilterFacets", func() {
 	Attribute("mcp_server", UserSessionFilterFacet, "Sign-in servers (user_session_issuer ids) the sessions came from.")
 	Attribute("client", UserSessionFilterFacet, "Connecting clients.")
 	Attribute("client_registration", UserSessionFilterFacet, "How each client registered.")
+	Attribute("provider", UserSessionFilterFacet, "Upstream providers the sessions are admitted to (remote_session_issuer ids), plus none for sessions with none. A session with several providers counts under each.")
 	Attribute("unattributed_count", Int64, "With meta_mcp_server_id: sessions on the gateway's current sign-in server that match the other filters but recorded no origin and have no consent selection naming a resource. 0 for a gateway without a sign-in server.")
-	Required("identity", "identity_type", "mcp_server", "client", "client_registration")
+	Required("identity", "identity_type", "mcp_server", "client", "client_registration", "provider")
 })
 
 var UserSessionFacetOption = Type("UserSessionFacetOption", func() {

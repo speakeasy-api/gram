@@ -11425,7 +11425,7 @@ examples:
     speakeasy-default-query-user-session-facets:
       responses:
         "200":
-          application/json: {"client": {"distinct_count": 963723, "values": []}, "client_registration": {"distinct_count": 162288, "values": [{"count": 623646, "matches_search": false, "value": "<value>"}]}, "identity": {"distinct_count": 48694, "values": [{"count": 623646, "matches_search": true, "value": "<value>"}]}, "identity_type": {"distinct_count": 41491, "values": []}, "mcp_server": {"distinct_count": 462409, "values": [{"count": 623646, "matches_search": true, "value": "<value>"}]}}
+          application/json: {"client": {"distinct_count": 963723, "values": []}, "client_registration": {"distinct_count": 162288, "values": [{"count": 623646, "matches_search": false, "value": "<value>"}]}, "identity": {"distinct_count": 48694, "values": [{"count": 623646, "matches_search": true, "value": "<value>"}]}, "identity_type": {"distinct_count": 41491, "values": []}, "mcp_server": {"distinct_count": 462409, "values": [{"count": 623646, "matches_search": true, "value": "<value>"}]}, "provider": {"distinct_count": 963723, "values": []}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

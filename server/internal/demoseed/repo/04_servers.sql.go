@@ -593,6 +593,55 @@ func (q *Queries) ServersInsertEngineeringEssentialsServers(ctx context.Context,
 	return result.RowsAffected(), nil
 }
 
+const serversInsertGatewayAgentSession = `-- name: ServersInsertGatewayAgentSession :exec
+INSERT INTO user_sessions
+  (id, project_id, organization_id, user_session_issuer_id,
+   user_session_client_id, subject_urn, resource_identity, authorizer_user_id, delegated_grants,
+   delegated_grants_version, jti, refresh_token_hash, refresh_expires_at,
+   expires_at, last_used_at, created_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::uuid, $5::uuid,
+   $6::text, $7::text, $8::text, '[]'::jsonb, 1,
+   $9::text, $10::text,
+   now() + interval '7 days', now() - interval '10 minutes',
+   now() - interval '25 minutes', now() - interval '2 days')
+`
+
+type ServersInsertGatewayAgentSessionParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+	UserSessionClientID uuid.UUID
+	SubjectUrn          string
+	ResourceIdentity    string
+	AuthorizerUserID    string
+	Jti                 string
+	RefreshTokenHash    string
+}
+
+// One managed-agent session through the gateway. The agent's upstream
+// attachments are on the Linear sign-in server only, so on the gateway it is
+// admitted to no provider and reads as Speakeasy only. Inert like the
+// deployment's managed-agent session: an empty delegation, an invalid refresh
+// hash and a jti no token carries.
+func (q *Queries) ServersInsertGatewayAgentSession(ctx context.Context, arg ServersInsertGatewayAgentSessionParams) error {
+	_, err := q.db.Exec(ctx, serversInsertGatewayAgentSession,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.UserSessionClientID,
+		arg.SubjectUrn,
+		arg.ResourceIdentity,
+		arg.AuthorizerUserID,
+		arg.Jti,
+		arg.RefreshTokenHash,
+	)
+	return err
+}
+
 const serversInsertGatewayEndpoints = `-- name: ServersInsertGatewayEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
   ($1::uuid, $2::uuid,

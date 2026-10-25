@@ -71,6 +71,12 @@ type ListGatewayConnectionsInput struct {
 	// ExcludeRegistrations leaves out clients registered these ways.
 	ExcludeRegistrations []string `json:"exclude_client_registrations,omitempty" jsonschema:"leave out clients registered this way; at most 50"`
 
+	// Providers keeps only sessions admitted to these upstream providers.
+	Providers []string `json:"providers,omitempty" jsonschema:"only sessions admitted to one of these upstream providers: a provider (remote session issuer) id, or none for sessions with no admitted provider sign-in; at most 50"`
+
+	// ExcludeProviders leaves out sessions admitted to any of these providers.
+	ExcludeProviders []string `json:"exclude_providers,omitempty" jsonschema:"leave out sessions admitted to any of these providers: a provider (remote session issuer) id, or none to leave out sessions with no admitted provider sign-in; at most 50"`
+
 	// LastUsedWithin keeps sessions used within this many seconds.
 	LastUsedWithin *int `json:"last_used_within_seconds,omitempty" jsonschema:"only sessions used within this many seconds; sessions with no recorded use do not match"`
 
@@ -137,6 +143,10 @@ type GatewayConnection struct {
 
 	// UpstreamProviders are the providers the session holds connections to.
 	UpstreamProviders []string `json:"upstream_providers"`
+
+	// UpstreamProviderIDs are the ids of UpstreamProviders, in the same order,
+	// as the providers filter takes them.
+	UpstreamProviderIDs []string `json:"upstream_provider_ids"`
 
 	// CreatedAt is when the session was issued.
 	CreatedAt string `json:"created_at"`
@@ -219,6 +229,7 @@ func (s *GatewayConnectionsService) List(ctx context.Context, principal Principa
 		IdentityTypes: input.IdentityTypes, ExcludeIdentityTypes: input.ExcludeIdentityTypes,
 		Clients: input.Clients, ExcludeClients: input.ExcludeClients,
 		ClientRegistrations: input.ClientRegistrations, ExcludeClientRegistrations: input.ExcludeRegistrations,
+		Providers: input.Providers, ExcludeProviders: input.ExcludeProviders,
 		LastUsedWithin: input.LastUsedWithin, LastUsedOlderThan: input.LastUsedOlderThan, LastUsedNever: &input.LastUsedNever,
 		Cursor: conv.PtrEmpty(input.Cursor), Limit: conv.PtrEmpty(input.Limit),
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
@@ -233,6 +244,7 @@ func (s *GatewayConnectionsService) List(ctx context.Context, principal Principa
 		IdentityTypes: input.IdentityTypes, ExcludeIdentityTypes: input.ExcludeIdentityTypes,
 		Clients: input.Clients, ExcludeClients: input.ExcludeClients,
 		ClientRegistrations: input.ClientRegistrations, ExcludeClientRegistrations: input.ExcludeRegistrations,
+		Providers: input.Providers, ExcludeProviders: input.ExcludeProviders,
 		LastUsedWithin: input.LastUsedWithin, LastUsedOlderThan: input.LastUsedOlderThan, LastUsedNever: &input.LastUsedNever,
 		Field: nil, FieldSearch: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
@@ -261,13 +273,15 @@ func gatewayConnection(session *types.UserSession) GatewayConnection {
 		displayName = ""
 	}
 	providers := make([]string, 0, len(session.Upstreams))
+	providerIDs := make([]string, 0, len(session.Upstreams))
 	for _, upstream := range session.Upstreams {
 		providers = append(providers, upstream.IssuerSlug)
+		providerIDs = append(providerIDs, upstream.RemoteSessionIssuerID)
 	}
 	return GatewayConnection{
 		ID: session.ID, Identity: session.SubjectUrn, IdentityType: session.SubjectType, DisplayName: displayName,
 		ClientID: conv.PtrValOr(session.UserSessionClientID, ""), ClientName: conv.PtrValOr(session.ClientName, ""),
-		SignInServerID: session.UserSessionIssuerID, SignInServer: session.IssuerSlug, UpstreamProviders: providers,
+		SignInServerID: session.UserSessionIssuerID, SignInServer: session.IssuerSlug, UpstreamProviders: providers, UpstreamProviderIDs: providerIDs,
 		CreatedAt: session.CreatedAt, ExpiresAt: session.RefreshExpiresAt,
 		LastUsedAt: conv.PtrValOr(session.LastUsedAt, ""), RevokedAt: conv.PtrValOr(session.RevokedAt, ""),
 	}

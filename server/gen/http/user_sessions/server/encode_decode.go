@@ -56,6 +56,8 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 			excludeClients             []string
 			clientRegistrations        []string
 			excludeClientRegistrations []string
+			providers                  []string
+			excludeProviders           []string
 			lastUsedWithin             *int
 			lastUsedOlderThan          *int
 			lastUsedNever              *bool
@@ -176,6 +178,14 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("exclude_client_registrations[*]", e, []any{"cimd", "dcr", "assistant", "none"}))
 			}
 		}
+		providers = qp["providers"]
+		if len(providers) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("providers", providers, len(providers), 50, false))
+		}
+		excludeProviders = qp["exclude_providers"]
+		if len(excludeProviders) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_providers", excludeProviders, len(excludeProviders), 50, false))
+		}
 		{
 			lastUsedWithinRaw := qp.Get("last_used_within")
 			if lastUsedWithinRaw != "" {
@@ -261,7 +271,7 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListUserSessionsPayload(subjectUrn, userSessionIssuerID, status, clientID, search, metaMcpServerID, identities, excludeIdentities, identityTypes, excludeIdentityTypes, servers, excludeServers, clients, excludeClients, clientRegistrations, excludeClientRegistrations, lastUsedWithin, lastUsedOlderThan, lastUsedNever, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListUserSessionsPayload(subjectUrn, userSessionIssuerID, status, clientID, search, metaMcpServerID, identities, excludeIdentities, identityTypes, excludeIdentityTypes, servers, excludeServers, clients, excludeClients, clientRegistrations, excludeClientRegistrations, providers, excludeProviders, lastUsedWithin, lastUsedOlderThan, lastUsedNever, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -695,6 +705,8 @@ func DecodeQueryFacetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 			excludeClients             []string
 			clientRegistrations        []string
 			excludeClientRegistrations []string
+			providers                  []string
+			excludeProviders           []string
 			lastUsedWithin             *int
 			lastUsedOlderThan          *int
 			lastUsedNever              *bool
@@ -815,6 +827,14 @@ func DecodeQueryFacetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("exclude_client_registrations[*]", e, []any{"cimd", "dcr", "assistant", "none"}))
 			}
 		}
+		providers = qp["providers"]
+		if len(providers) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("providers", providers, len(providers), 50, false))
+		}
+		excludeProviders = qp["exclude_providers"]
+		if len(excludeProviders) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_providers", excludeProviders, len(excludeProviders), 50, false))
+		}
 		{
 			lastUsedWithinRaw := qp.Get("last_used_within")
 			if lastUsedWithinRaw != "" {
@@ -872,8 +892,8 @@ func DecodeQueryFacetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 			field = &fieldRaw
 		}
 		if field != nil {
-			if !(*field == "identity" || *field == "identity_type" || *field == "mcp_server" || *field == "client" || *field == "client_registration") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("field", *field, []any{"identity", "identity_type", "mcp_server", "client", "client_registration"}))
+			if !(*field == "identity" || *field == "identity_type" || *field == "mcp_server" || *field == "client" || *field == "client_registration" || *field == "provider") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("field", *field, []any{"identity", "identity_type", "mcp_server", "client", "client_registration", "provider"}))
 			}
 		}
 		fieldSearchRaw := qp.Get("field_search")
@@ -900,7 +920,7 @@ func DecodeQueryFacetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if err != nil {
 			return payload, err
 		}
-		payload = NewQueryFacetsPayload(subjectUrn, userSessionIssuerID, status, clientID, search, metaMcpServerID, identities, excludeIdentities, identityTypes, excludeIdentityTypes, servers, excludeServers, clients, excludeClients, clientRegistrations, excludeClientRegistrations, lastUsedWithin, lastUsedOlderThan, lastUsedNever, field, fieldSearch, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewQueryFacetsPayload(subjectUrn, userSessionIssuerID, status, clientID, search, metaMcpServerID, identities, excludeIdentities, identityTypes, excludeIdentityTypes, servers, excludeServers, clients, excludeClients, clientRegistrations, excludeClientRegistrations, providers, excludeProviders, lastUsedWithin, lastUsedOlderThan, lastUsedNever, field, fieldSearch, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

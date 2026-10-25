@@ -100,6 +100,8 @@ export function buildUserSessionsQuery(
       excludeClients: request?.excludeClients,
       clientRegistrations: request?.clientRegistrations,
       excludeClientRegistrations: request?.excludeClientRegistrations,
+      providers: request?.providers,
+      excludeProviders: request?.excludeProviders,
       lastUsedWithin: request?.lastUsedWithin,
       lastUsedOlderThan: request?.lastUsedOlderThan,
       lastUsedNever: request?.lastUsedNever,
@@ -162,6 +164,8 @@ export function buildUserSessionsInfiniteQuery(
       excludeClients: request?.excludeClients,
       clientRegistrations: request?.clientRegistrations,
       excludeClientRegistrations: request?.excludeClientRegistrations,
+      providers: request?.providers,
+      excludeProviders: request?.excludeProviders,
       lastUsedWithin: request?.lastUsedWithin,
       lastUsedOlderThan: request?.lastUsedOlderThan,
       lastUsedNever: request?.lastUsedNever,
@@ -221,6 +225,8 @@ export function queryKeyUserSessions(
     excludeClients?: Array<string> | undefined;
     clientRegistrations?: Array<ClientRegistrations> | undefined;
     excludeClientRegistrations?: Array<ExcludeClientRegistrations> | undefined;
+    providers?: Array<string> | undefined;
+    excludeProviders?: Array<string> | undefined;
     lastUsedWithin?: number | undefined;
     lastUsedOlderThan?: number | undefined;
     lastUsedNever?: boolean | undefined;
@@ -252,6 +258,8 @@ export function queryKeyUserSessionsInfinite(
     excludeClients?: Array<string> | undefined;
     clientRegistrations?: Array<ClientRegistrations> | undefined;
     excludeClientRegistrations?: Array<ExcludeClientRegistrations> | undefined;
+    providers?: Array<string> | undefined;
+    excludeProviders?: Array<string> | undefined;
     lastUsedWithin?: number | undefined;
     lastUsedOlderThan?: number | undefined;
     lastUsedNever?: boolean | undefined;

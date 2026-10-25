@@ -104,6 +104,12 @@ func EncodeListUserSessionsRequest(encoder func(*http.Request) goahttp.Encoder) 
 		for _, value := range p.ExcludeClientRegistrations {
 			values.Add("exclude_client_registrations", value)
 		}
+		for _, value := range p.Providers {
+			values.Add("providers", value)
+		}
+		for _, value := range p.ExcludeProviders {
+			values.Add("exclude_providers", value)
+		}
 		if p.LastUsedWithin != nil {
 			values.Add("last_used_within", fmt.Sprintf("%v", *p.LastUsedWithin))
 		}
@@ -644,6 +650,12 @@ func EncodeQueryFacetsRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		}
 		for _, value := range p.ExcludeClientRegistrations {
 			values.Add("exclude_client_registrations", value)
+		}
+		for _, value := range p.Providers {
+			values.Add("providers", value)
+		}
+		for _, value := range p.ExcludeProviders {
+			values.Add("exclude_providers", value)
 		}
 		if p.LastUsedWithin != nil {
 			values.Add("last_used_within", fmt.Sprintf("%v", *p.LastUsedWithin))

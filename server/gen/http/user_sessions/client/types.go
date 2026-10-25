@@ -68,6 +68,10 @@ type QueryFacetsResponseBody struct {
 	Client *UserSessionFilterFacetResponseBody `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
 	// How each client registered.
 	ClientRegistration *UserSessionFilterFacetResponseBody `form:"client_registration,omitempty" json:"client_registration,omitempty" xml:"client_registration,omitempty"`
+	// Upstream providers the sessions are admitted to (remote_session_issuer ids),
+	// plus none for sessions with none. A session with several providers counts
+	// under each.
+	Provider *UserSessionFilterFacetResponseBody `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// With meta_mcp_server_id: sessions on the gateway's current sign-in server
 	// that match the other filters but recorded no origin and have no consent
 	// selection naming a resource. 0 for a gateway without a sign-in server.
@@ -1563,6 +1567,7 @@ func NewQueryFacetsUserSessionFilterFacetsOK(body *QueryFacetsResponseBody) *use
 	v.McpServer = unmarshalUserSessionFilterFacetResponseBodyToUsersessionsUserSessionFilterFacet(body.McpServer)
 	v.Client = unmarshalUserSessionFilterFacetResponseBodyToUsersessionsUserSessionFilterFacet(body.Client)
 	v.ClientRegistration = unmarshalUserSessionFilterFacetResponseBodyToUsersessionsUserSessionFilterFacet(body.ClientRegistration)
+	v.Provider = unmarshalUserSessionFilterFacetResponseBodyToUsersessionsUserSessionFilterFacet(body.Provider)
 
 	return v
 }
@@ -2098,6 +2103,9 @@ func ValidateQueryFacetsResponseBody(body *QueryFacetsResponseBody) (err error) 
 	if body.ClientRegistration == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_registration", "body"))
 	}
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
 	if body.Identity != nil {
 		if err2 := ValidateUserSessionFilterFacetResponseBody(body.Identity); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -2120,6 +2128,11 @@ func ValidateQueryFacetsResponseBody(body *QueryFacetsResponseBody) (err error) 
 	}
 	if body.ClientRegistration != nil {
 		if err2 := ValidateUserSessionFilterFacetResponseBody(body.ClientRegistration); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Provider != nil {
+		if err2 := ValidateUserSessionFilterFacetResponseBody(body.Provider); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}

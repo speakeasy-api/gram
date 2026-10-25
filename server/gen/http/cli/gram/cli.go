@@ -5135,6 +5135,8 @@ func ParseEndpoint(
 		userSessionsListUserSessionsExcludeClientsFlag             = userSessionsListUserSessionsFlags.String("exclude-clients", "", "")
 		userSessionsListUserSessionsClientRegistrationsFlag        = userSessionsListUserSessionsFlags.String("client-registrations", "", "")
 		userSessionsListUserSessionsExcludeClientRegistrationsFlag = userSessionsListUserSessionsFlags.String("exclude-client-registrations", "", "")
+		userSessionsListUserSessionsProvidersFlag                  = userSessionsListUserSessionsFlags.String("providers", "", "")
+		userSessionsListUserSessionsExcludeProvidersFlag           = userSessionsListUserSessionsFlags.String("exclude-providers", "", "")
 		userSessionsListUserSessionsLastUsedWithinFlag             = userSessionsListUserSessionsFlags.String("last-used-within", "", "")
 		userSessionsListUserSessionsLastUsedOlderThanFlag          = userSessionsListUserSessionsFlags.String("last-used-older-than", "", "")
 		userSessionsListUserSessionsLastUsedNeverFlag              = userSessionsListUserSessionsFlags.String("last-used-never", "", "")
@@ -5166,6 +5168,8 @@ func ParseEndpoint(
 		userSessionsQueryFacetsExcludeClientsFlag             = userSessionsQueryFacetsFlags.String("exclude-clients", "", "")
 		userSessionsQueryFacetsClientRegistrationsFlag        = userSessionsQueryFacetsFlags.String("client-registrations", "", "")
 		userSessionsQueryFacetsExcludeClientRegistrationsFlag = userSessionsQueryFacetsFlags.String("exclude-client-registrations", "", "")
+		userSessionsQueryFacetsProvidersFlag                  = userSessionsQueryFacetsFlags.String("providers", "", "")
+		userSessionsQueryFacetsExcludeProvidersFlag           = userSessionsQueryFacetsFlags.String("exclude-providers", "", "")
 		userSessionsQueryFacetsLastUsedWithinFlag             = userSessionsQueryFacetsFlags.String("last-used-within", "", "")
 		userSessionsQueryFacetsLastUsedOlderThanFlag          = userSessionsQueryFacetsFlags.String("last-used-older-than", "", "")
 		userSessionsQueryFacetsLastUsedNeverFlag              = userSessionsQueryFacetsFlags.String("last-used-never", "", "")
@@ -12933,13 +12937,13 @@ func ParseEndpoint(
 			switch epn {
 			case "list-user-sessions":
 				endpoint = c.ListUserSessions()
-				data, err = usersessionsc.BuildListUserSessionsPayload(*userSessionsListUserSessionsSubjectUrnFlag, *userSessionsListUserSessionsUserSessionIssuerIDFlag, *userSessionsListUserSessionsStatusFlag, *userSessionsListUserSessionsClientIDFlag, *userSessionsListUserSessionsSearchFlag, *userSessionsListUserSessionsMetaMcpServerIDFlag, *userSessionsListUserSessionsIdentitiesFlag, *userSessionsListUserSessionsExcludeIdentitiesFlag, *userSessionsListUserSessionsIdentityTypesFlag, *userSessionsListUserSessionsExcludeIdentityTypesFlag, *userSessionsListUserSessionsServersFlag, *userSessionsListUserSessionsExcludeServersFlag, *userSessionsListUserSessionsClientsFlag, *userSessionsListUserSessionsExcludeClientsFlag, *userSessionsListUserSessionsClientRegistrationsFlag, *userSessionsListUserSessionsExcludeClientRegistrationsFlag, *userSessionsListUserSessionsLastUsedWithinFlag, *userSessionsListUserSessionsLastUsedOlderThanFlag, *userSessionsListUserSessionsLastUsedNeverFlag, *userSessionsListUserSessionsCursorFlag, *userSessionsListUserSessionsLimitFlag, *userSessionsListUserSessionsSessionTokenFlag, *userSessionsListUserSessionsApikeyTokenFlag, *userSessionsListUserSessionsProjectSlugInputFlag)
+				data, err = usersessionsc.BuildListUserSessionsPayload(*userSessionsListUserSessionsSubjectUrnFlag, *userSessionsListUserSessionsUserSessionIssuerIDFlag, *userSessionsListUserSessionsStatusFlag, *userSessionsListUserSessionsClientIDFlag, *userSessionsListUserSessionsSearchFlag, *userSessionsListUserSessionsMetaMcpServerIDFlag, *userSessionsListUserSessionsIdentitiesFlag, *userSessionsListUserSessionsExcludeIdentitiesFlag, *userSessionsListUserSessionsIdentityTypesFlag, *userSessionsListUserSessionsExcludeIdentityTypesFlag, *userSessionsListUserSessionsServersFlag, *userSessionsListUserSessionsExcludeServersFlag, *userSessionsListUserSessionsClientsFlag, *userSessionsListUserSessionsExcludeClientsFlag, *userSessionsListUserSessionsClientRegistrationsFlag, *userSessionsListUserSessionsExcludeClientRegistrationsFlag, *userSessionsListUserSessionsProvidersFlag, *userSessionsListUserSessionsExcludeProvidersFlag, *userSessionsListUserSessionsLastUsedWithinFlag, *userSessionsListUserSessionsLastUsedOlderThanFlag, *userSessionsListUserSessionsLastUsedNeverFlag, *userSessionsListUserSessionsCursorFlag, *userSessionsListUserSessionsLimitFlag, *userSessionsListUserSessionsSessionTokenFlag, *userSessionsListUserSessionsApikeyTokenFlag, *userSessionsListUserSessionsProjectSlugInputFlag)
 			case "list-facets":
 				endpoint = c.ListFacets()
 				data, err = usersessionsc.BuildListFacetsPayload(*userSessionsListFacetsSessionTokenFlag, *userSessionsListFacetsApikeyTokenFlag, *userSessionsListFacetsProjectSlugInputFlag)
 			case "query-facets":
 				endpoint = c.QueryFacets()
-				data, err = usersessionsc.BuildQueryFacetsPayload(*userSessionsQueryFacetsSubjectUrnFlag, *userSessionsQueryFacetsUserSessionIssuerIDFlag, *userSessionsQueryFacetsStatusFlag, *userSessionsQueryFacetsClientIDFlag, *userSessionsQueryFacetsSearchFlag, *userSessionsQueryFacetsMetaMcpServerIDFlag, *userSessionsQueryFacetsIdentitiesFlag, *userSessionsQueryFacetsExcludeIdentitiesFlag, *userSessionsQueryFacetsIdentityTypesFlag, *userSessionsQueryFacetsExcludeIdentityTypesFlag, *userSessionsQueryFacetsServersFlag, *userSessionsQueryFacetsExcludeServersFlag, *userSessionsQueryFacetsClientsFlag, *userSessionsQueryFacetsExcludeClientsFlag, *userSessionsQueryFacetsClientRegistrationsFlag, *userSessionsQueryFacetsExcludeClientRegistrationsFlag, *userSessionsQueryFacetsLastUsedWithinFlag, *userSessionsQueryFacetsLastUsedOlderThanFlag, *userSessionsQueryFacetsLastUsedNeverFlag, *userSessionsQueryFacetsFieldFlag, *userSessionsQueryFacetsFieldSearchFlag, *userSessionsQueryFacetsSessionTokenFlag, *userSessionsQueryFacetsApikeyTokenFlag, *userSessionsQueryFacetsProjectSlugInputFlag)
+				data, err = usersessionsc.BuildQueryFacetsPayload(*userSessionsQueryFacetsSubjectUrnFlag, *userSessionsQueryFacetsUserSessionIssuerIDFlag, *userSessionsQueryFacetsStatusFlag, *userSessionsQueryFacetsClientIDFlag, *userSessionsQueryFacetsSearchFlag, *userSessionsQueryFacetsMetaMcpServerIDFlag, *userSessionsQueryFacetsIdentitiesFlag, *userSessionsQueryFacetsExcludeIdentitiesFlag, *userSessionsQueryFacetsIdentityTypesFlag, *userSessionsQueryFacetsExcludeIdentityTypesFlag, *userSessionsQueryFacetsServersFlag, *userSessionsQueryFacetsExcludeServersFlag, *userSessionsQueryFacetsClientsFlag, *userSessionsQueryFacetsExcludeClientsFlag, *userSessionsQueryFacetsClientRegistrationsFlag, *userSessionsQueryFacetsExcludeClientRegistrationsFlag, *userSessionsQueryFacetsProvidersFlag, *userSessionsQueryFacetsExcludeProvidersFlag, *userSessionsQueryFacetsLastUsedWithinFlag, *userSessionsQueryFacetsLastUsedOlderThanFlag, *userSessionsQueryFacetsLastUsedNeverFlag, *userSessionsQueryFacetsFieldFlag, *userSessionsQueryFacetsFieldSearchFlag, *userSessionsQueryFacetsSessionTokenFlag, *userSessionsQueryFacetsApikeyTokenFlag, *userSessionsQueryFacetsProjectSlugInputFlag)
 			case "mint-user-session":
 				endpoint = c.MintUserSession()
 				data, err = usersessionsc.BuildMintUserSessionPayload(*userSessionsMintUserSessionBodyFlag, *userSessionsMintUserSessionSessionTokenFlag, *userSessionsMintUserSessionProjectSlugInputFlag)
@@ -35078,6 +35082,8 @@ func userSessionsListUserSessionsUsage() {
 	fmt.Fprint(os.Stderr, " -exclude-clients JSON")
 	fmt.Fprint(os.Stderr, " -client-registrations JSON")
 	fmt.Fprint(os.Stderr, " -exclude-client-registrations JSON")
+	fmt.Fprint(os.Stderr, " -providers JSON")
+	fmt.Fprint(os.Stderr, " -exclude-providers JSON")
 	fmt.Fprint(os.Stderr, " -last-used-within INT")
 	fmt.Fprint(os.Stderr, " -last-used-older-than INT")
 	fmt.Fprint(os.Stderr, " -last-used-never BOOL")
@@ -35109,6 +35115,8 @@ func userSessionsListUserSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    -exclude-clients JSON: `)
 	fmt.Fprintln(os.Stderr, `    -client-registrations JSON: `)
 	fmt.Fprintln(os.Stderr, `    -exclude-client-registrations JSON: `)
+	fmt.Fprintln(os.Stderr, `    -providers JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-providers JSON: `)
 	fmt.Fprintln(os.Stderr, `    -last-used-within INT: `)
 	fmt.Fprintln(os.Stderr, `    -last-used-older-than INT: `)
 	fmt.Fprintln(os.Stderr, `    -last-used-never BOOL: `)
@@ -35120,7 +35128,7 @@ func userSessionsListUserSessionsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions list-user-sessions --subject-urn \"abc123\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --exclude-identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --exclude-servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --exclude-client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --last-used-within 2 --last-used-older-than 2 --last-used-never false --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions list-user-sessions --subject-urn \"abc123\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --exclude-identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --exclude-servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --exclude-client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --providers '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-providers '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --last-used-within 2 --last-used-older-than 2 --last-used-never false --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionsListFacetsUsage() {
@@ -35164,6 +35172,8 @@ func userSessionsQueryFacetsUsage() {
 	fmt.Fprint(os.Stderr, " -exclude-clients JSON")
 	fmt.Fprint(os.Stderr, " -client-registrations JSON")
 	fmt.Fprint(os.Stderr, " -exclude-client-registrations JSON")
+	fmt.Fprint(os.Stderr, " -providers JSON")
+	fmt.Fprint(os.Stderr, " -exclude-providers JSON")
 	fmt.Fprint(os.Stderr, " -last-used-within INT")
 	fmt.Fprint(os.Stderr, " -last-used-older-than INT")
 	fmt.Fprint(os.Stderr, " -last-used-never BOOL")
@@ -35195,6 +35205,8 @@ func userSessionsQueryFacetsUsage() {
 	fmt.Fprintln(os.Stderr, `    -exclude-clients JSON: `)
 	fmt.Fprintln(os.Stderr, `    -client-registrations JSON: `)
 	fmt.Fprintln(os.Stderr, `    -exclude-client-registrations JSON: `)
+	fmt.Fprintln(os.Stderr, `    -providers JSON: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-providers JSON: `)
 	fmt.Fprintln(os.Stderr, `    -last-used-within INT: `)
 	fmt.Fprintln(os.Stderr, `    -last-used-older-than INT: `)
 	fmt.Fprintln(os.Stderr, `    -last-used-never BOOL: `)
@@ -35206,7 +35218,7 @@ func userSessionsQueryFacetsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions query-facets --subject-urn \"abc123\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --exclude-identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --exclude-servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --exclude-client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --last-used-within 2 --last-used-older-than 2 --last-used-never false --field \"identity_type\" --field-search \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions query-facets --subject-urn \"abc123\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --status \"expired\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --search \"aaa\" --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-identities '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --exclude-identity-types '[\n      \"agent\",\n      \"agent\",\n      \"agent\"\n   ]' --servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --exclude-servers '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-clients '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --exclude-client-registrations '[\n      \"dcr\",\n      \"dcr\",\n      \"dcr\"\n   ]' --providers '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --exclude-providers '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --last-used-within 2 --last-used-older-than 2 --last-used-never false --field \"identity_type\" --field-search \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionsMintUserSessionUsage() {

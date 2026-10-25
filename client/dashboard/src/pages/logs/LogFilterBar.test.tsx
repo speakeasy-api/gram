@@ -340,3 +340,52 @@ it("leaves Enter on a chip's buttons to the browser and still submits from the i
   expect(onSearchSubmit).toHaveBeenCalledTimes(1);
   expect(onSearchSubmit).toHaveBeenLastCalledWith("dana");
 });
+
+it("commits the highlighted suggestion on Enter, once", async () => {
+  const onChange = vi.fn<(filters: ActiveLogFilter[]) => void>();
+  render(
+    <Bar
+      onChange={onChange}
+      keyOptions={[{ key: "provider" }]}
+      operatorsFor={() => [Op.Eq]}
+      valueOptions={[{ value: "none", label: "Speakeasy only" }]}
+    />,
+  );
+  fireEvent.focus(screen.getByRole("combobox"));
+  fireEvent.click(option("provider"));
+  fireEvent.change(screen.getByPlaceholderText("value"), {
+    target: { value: "speak" },
+  });
+  // The arrow key moves cmdk's highlight; Enter must commit what it highlights.
+  fireEvent.keyDown(screen.getByPlaceholderText("value"), { key: "ArrowDown" });
+  await waitFor(() =>
+    expect(option("Speakeasy only").getAttribute("aria-selected")).toBe("true"),
+  );
+  fireEvent.keyDown(screen.getByPlaceholderText("value"), { key: "Enter" });
+  expect(onChange).toHaveBeenCalledOnce();
+  expect(onChange).toHaveBeenLastCalledWith([
+    expect.objectContaining({ path: "provider", value: "none" }),
+  ]);
+});
+
+it("commits the typed value on Enter when nothing is offered", () => {
+  const onChange = vi.fn<(filters: ActiveLogFilter[]) => void>();
+  render(
+    <Bar
+      onChange={onChange}
+      keyOptions={[{ key: "identity" }]}
+      operatorsFor={() => [Op.Eq]}
+      valueOptions={[]}
+    />,
+  );
+  fireEvent.focus(screen.getByRole("combobox"));
+  fireEvent.click(option("identity"));
+  fireEvent.change(screen.getByPlaceholderText("value"), {
+    target: { value: "user:unknown" },
+  });
+  fireEvent.keyDown(screen.getByPlaceholderText("value"), { key: "Enter" });
+  expect(onChange).toHaveBeenCalledOnce();
+  expect(onChange).toHaveBeenLastCalledWith([
+    expect.objectContaining({ path: "identity", value: "user:unknown" }),
+  ]);
+});

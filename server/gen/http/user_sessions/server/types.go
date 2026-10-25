@@ -67,6 +67,10 @@ type QueryFacetsResponseBody struct {
 	Client *UserSessionFilterFacetResponseBody `form:"client" json:"client" xml:"client"`
 	// How each client registered.
 	ClientRegistration *UserSessionFilterFacetResponseBody `form:"client_registration" json:"client_registration" xml:"client_registration"`
+	// Upstream providers the sessions are admitted to (remote_session_issuer ids),
+	// plus none for sessions with none. A session with several providers counts
+	// under each.
+	Provider *UserSessionFilterFacetResponseBody `form:"provider" json:"provider" xml:"provider"`
 	// With meta_mcp_server_id: sessions on the gateway's current sign-in server
 	// that match the other filters but recorded no origin and have no consent
 	// selection naming a resource. 0 for a gateway without a sign-in server.
@@ -1274,6 +1278,9 @@ func NewQueryFacetsResponseBody(res *usersessions.UserSessionFilterFacets) *Quer
 	if res.ClientRegistration != nil {
 		body.ClientRegistration = marshalUsersessionsUserSessionFilterFacetToUserSessionFilterFacetResponseBody(res.ClientRegistration)
 	}
+	if res.Provider != nil {
+		body.Provider = marshalUsersessionsUserSessionFilterFacetToUserSessionFilterFacetResponseBody(res.Provider)
+	}
 	return body
 }
 
@@ -2003,7 +2010,7 @@ func NewRevokeUserSessionGatewayErrorResponseBody(res *goa.ServiceError) *Revoke
 
 // NewListUserSessionsPayload builds a userSessions service listUserSessions
 // endpoint payload.
-func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string, status *string, clientID *string, search *string, metaMcpServerID *string, identities []string, excludeIdentities []string, identityTypes []string, excludeIdentityTypes []string, servers []string, excludeServers []string, clients []string, excludeClients []string, clientRegistrations []string, excludeClientRegistrations []string, lastUsedWithin *int, lastUsedOlderThan *int, lastUsedNever *bool, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
+func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string, status *string, clientID *string, search *string, metaMcpServerID *string, identities []string, excludeIdentities []string, identityTypes []string, excludeIdentityTypes []string, servers []string, excludeServers []string, clients []string, excludeClients []string, clientRegistrations []string, excludeClientRegistrations []string, providers []string, excludeProviders []string, lastUsedWithin *int, lastUsedOlderThan *int, lastUsedNever *bool, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
 	v := &usersessions.ListUserSessionsPayload{}
 	v.SubjectUrn = subjectUrn
 	v.UserSessionIssuerID = userSessionIssuerID
@@ -2021,6 +2028,8 @@ func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string,
 	v.ExcludeClients = excludeClients
 	v.ClientRegistrations = clientRegistrations
 	v.ExcludeClientRegistrations = excludeClientRegistrations
+	v.Providers = providers
+	v.ExcludeProviders = excludeProviders
 	v.LastUsedWithin = lastUsedWithin
 	v.LastUsedOlderThan = lastUsedOlderThan
 	v.LastUsedNever = lastUsedNever
@@ -2046,7 +2055,7 @@ func NewListFacetsPayload(sessionToken *string, apikeyToken *string, projectSlug
 
 // NewQueryFacetsPayload builds a userSessions service queryFacets endpoint
 // payload.
-func NewQueryFacetsPayload(subjectUrn *string, userSessionIssuerID *string, status *string, clientID *string, search *string, metaMcpServerID *string, identities []string, excludeIdentities []string, identityTypes []string, excludeIdentityTypes []string, servers []string, excludeServers []string, clients []string, excludeClients []string, clientRegistrations []string, excludeClientRegistrations []string, lastUsedWithin *int, lastUsedOlderThan *int, lastUsedNever *bool, field *string, fieldSearch *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.QueryFacetsPayload {
+func NewQueryFacetsPayload(subjectUrn *string, userSessionIssuerID *string, status *string, clientID *string, search *string, metaMcpServerID *string, identities []string, excludeIdentities []string, identityTypes []string, excludeIdentityTypes []string, servers []string, excludeServers []string, clients []string, excludeClients []string, clientRegistrations []string, excludeClientRegistrations []string, providers []string, excludeProviders []string, lastUsedWithin *int, lastUsedOlderThan *int, lastUsedNever *bool, field *string, fieldSearch *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.QueryFacetsPayload {
 	v := &usersessions.QueryFacetsPayload{}
 	v.SubjectUrn = subjectUrn
 	v.UserSessionIssuerID = userSessionIssuerID
@@ -2064,6 +2073,8 @@ func NewQueryFacetsPayload(subjectUrn *string, userSessionIssuerID *string, stat
 	v.ExcludeClients = excludeClients
 	v.ClientRegistrations = clientRegistrations
 	v.ExcludeClientRegistrations = excludeClientRegistrations
+	v.Providers = providers
+	v.ExcludeProviders = excludeProviders
 	v.LastUsedWithin = lastUsedWithin
 	v.LastUsedOlderThan = lastUsedOlderThan
 	v.LastUsedNever = lastUsedNever

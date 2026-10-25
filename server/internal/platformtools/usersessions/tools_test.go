@@ -33,7 +33,7 @@ func TestListToolDescriptor(t *testing.T) {
 	require.NoError(t, json.Unmarshal(desc.InputSchema, &schema))
 	require.Contains(t, schema.Properties, "search")
 	require.Contains(t, schema.Properties, "meta_mcp_server_id")
-	for _, name := range []string{"identities", "exclude_identities", "identity_types", "exclude_identity_types", "servers", "exclude_servers", "clients", "exclude_clients", "client_registrations", "exclude_client_registrations"} {
+	for _, name := range []string{"identities", "exclude_identities", "identity_types", "exclude_identity_types", "servers", "exclude_servers", "clients", "exclude_clients", "client_registrations", "exclude_client_registrations", "providers", "exclude_providers"} {
 		require.Equal(t, new(sessionfilter.MaxValues), schema.Properties[name].MaxItems, name)
 	}
 	for _, name := range []string{"last_used_within", "last_used_older_than"} {

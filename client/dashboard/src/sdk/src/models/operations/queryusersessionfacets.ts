@@ -88,6 +88,7 @@ export const Field = {
   McpServer: "mcp_server",
   Client: "client",
   ClientRegistration: "client_registration",
+  Provider: "provider",
 } as const;
 /**
  * Narrow this field's values with field_search.
@@ -161,6 +162,14 @@ export type QueryUserSessionFacetsRequest = {
   excludeClientRegistrations?:
     | Array<QueryParamExcludeClientRegistrations>
     | undefined;
+  /**
+   * Only sessions admitted to one of these upstream providers: a remote_session_issuer id, or "none" for sessions with no admitted provider sign-in. Sessions of one subject on one sign-in server share providers.
+   */
+  providers?: Array<string> | undefined;
+  /**
+   * Leave out sessions admitted to any of these providers, using the same values as providers.
+   */
+  excludeProviders?: Array<string> | undefined;
   /**
    * Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match.
    */
@@ -347,6 +356,8 @@ export type QueryUserSessionFacetsRequest$Outbound = {
   exclude_clients?: Array<string> | undefined;
   client_registrations?: Array<string> | undefined;
   exclude_client_registrations?: Array<string> | undefined;
+  providers?: Array<string> | undefined;
+  exclude_providers?: Array<string> | undefined;
   last_used_within?: number | undefined;
   last_used_older_than?: number | undefined;
   last_used_never?: boolean | undefined;
@@ -385,6 +396,8 @@ export const QueryUserSessionFacetsRequest$outboundSchema: z.ZodMiniType<
     excludeClientRegistrations: z.optional(
       z.array(QueryParamExcludeClientRegistrations$outboundSchema),
     ),
+    providers: z.optional(z.array(z.string())),
+    excludeProviders: z.optional(z.array(z.string())),
     lastUsedWithin: z.optional(z.int()),
     lastUsedOlderThan: z.optional(z.int()),
     lastUsedNever: z.optional(z.boolean()),
@@ -407,6 +420,7 @@ export const QueryUserSessionFacetsRequest$outboundSchema: z.ZodMiniType<
       excludeClients: "exclude_clients",
       clientRegistrations: "client_registrations",
       excludeClientRegistrations: "exclude_client_registrations",
+      excludeProviders: "exclude_providers",
       lastUsedWithin: "last_used_within",
       lastUsedOlderThan: "last_used_older_than",
       lastUsedNever: "last_used_never",
