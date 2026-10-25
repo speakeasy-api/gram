@@ -9717,6 +9717,10 @@ CREATE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_idx
 ON remote_mcp_server_headers (remote_mcp_server_id)
 WHERE deleted IS FALSE;
 
+-- Promotion revisions include deleted headers to detect authentication changes.
+CREATE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_history_idx
+ON remote_mcp_server_headers (remote_mcp_server_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_name_key
 ON remote_mcp_server_headers (remote_mcp_server_id, name)
 WHERE deleted IS FALSE;
