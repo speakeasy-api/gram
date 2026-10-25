@@ -5,8 +5,8 @@ import {
   buildCloudDefaultEnvironmentSnippet,
   buildCloudSetupCommand,
   CLOUD_ORG_TOKEN_SENTINEL,
-  RELEASES_BASE,
 } from "./cloud-setup";
+import { RELEASES_BASE } from "./release-paths";
 
 const input = {
   version: "1.2.3",

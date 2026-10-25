@@ -8,9 +8,8 @@
 // The control plane the device agent dials when the config names none.
 const DEFAULT_CONTROL_PLANE = "https://app.getgram.ai";
 
-// TODO(device-agent): the managed.json field names for an agent identity key
-// are not final in the device agent yet. This function is the only place they
-// are spelled; rename them here when that lands.
+// The only place the managed.json field names for an agent identity key are
+// spelled; they match the device agent's docs/MANAGED_CONFIG.md.
 export function deviceAgentManagedConfig({
   agentKey,
   agentID,

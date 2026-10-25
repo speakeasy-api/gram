@@ -432,7 +432,7 @@ export function StepInstall({
                   identity&apos;s key out of their config files.
                 </Text>
                 <CodeBlock
-                  value={`curl -fsSL ${SANDBOX_INSTALL_SCRIPT_URL} | sh -s -- --install-dir /usr/local/bin`}
+                  value={`curl -fsSL ${SANDBOX_INSTALL_SCRIPT_URL} | sudo sh`}
                   label="1 · Install the device agent — Linux"
                   language="shell"
                 />
@@ -468,9 +468,7 @@ export function StepInstall({
                   </Text>
                 </div>
                 <div className="space-y-2">
-                  <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
-                    What this sets up
-                  </span>
+                  <span className="text-eyebrow">What this sets up</span>
                   <Text muted small className="block">
                     MCP access only, to {reachPhrase} through this agent
                     identity&apos;s permissions. Plugin sync and hooks are not
