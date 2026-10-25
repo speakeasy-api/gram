@@ -840,7 +840,7 @@ func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error 
 			chatID:  nil,
 		})
 	}
-	return s.chfInsertTelemetry(ctx, ch, "gateway discovery telemetry", append(rows, s.chfGatewayListingAttempts()...))
+	return s.chfInsertTelemetry(ctx, ch, "gateway discovery telemetry", append(append(rows, s.chfGatewayListingAttempts()...), s.chfGatewayInboundAttempts()...))
 }
 
 // chfClassRank orders failure classes the way a failed listing picks one.
@@ -904,7 +904,7 @@ func (s *seeder) chfGatewayListingAttempts() []chfTelemetryRow {
 	sinceBucket := s.now.Sub(currentBucket)
 	rows := make([]chfTelemetryRow, 0, 200)
 	for n := range 40 {
-		ts := s.chfNoFuture(s.now.Add(-time.Duration(40-n)*6*time.Hour - time.Duration(hash64("gwlist", n)%300)*time.Minute))
+		ts := s.chfGatewayListingTime(n)
 		if n >= 38 {
 			ts = s.now.Add(-time.Duration(40-n) * time.Second)
 			if sinceBucket > 3*time.Second {
@@ -1002,6 +1002,79 @@ func (s *seeder) chfGatewayListingAttempts() []chfTelemetryRow {
 		}
 	}
 	return rows
+}
+
+// chfGatewayListingTime is when Direct listing n of the gateway's 40 ran:
+// six hours apart, oldest first, each a few hours early.
+func (s *seeder) chfGatewayListingTime(n int) time.Time {
+	return s.chfNoFuture(s.now.Add(-time.Duration(40-n)*6*time.Hour - time.Duration(hash64("gwlist", n)%300)*time.Minute))
+}
+
+// chfGatewayInboundAttempts is synthetic sign-in and token traffic for the
+// person whose listing 21 failed with stale_cursor, on the same gateway client.
+// They are redirected to sign-in and the gateway writes an authorization-code
+// token before listing 21; they sign in again and get a second token, and the
+// old cursor still fails a few minutes later; listing 22, without a cursor, is
+// complete. A later refresh is counted apart from sign-ins, and one client the
+// metadata admission policy does not list is blocked before it is verified.
+// The rows record what the gateway answered, not that a client used a token or
+// that any step caused the next.
+func (s *seeder) chfGatewayInboundAttempts() []chfTelemetryRow {
+	gateway := s.det("metamcp-1").String()
+	person := urn.NewUserSubject(s.userID(demoUsers[5].handle)).String()
+	client := s.det("usc-gateway").String()
+	stale := s.chfGatewayListingTime(21)
+	complete := s.chfGatewayListingTime(22)
+	type attempt struct {
+		name, stage, outcome, class, reason, grant, subject, client string
+		at                                                          time.Time
+	}
+	attempts := []attempt{
+		{"authorize-1", "inbound_authorize", "accepted", "", "", "", "", client, stale.Add(-45 * time.Minute)},
+		{"token-1", "inbound_token", "code_issued", "", "", "authorization_code", person, client, stale.Add(-40 * time.Minute)},
+		{"authorize-2", "inbound_authorize", "accepted", "", "", "", "", client, stale.Add(10 * time.Minute)},
+		{"token-2", "inbound_token", "code_issued", "", "", "authorization_code", person, client, stale.Add(15 * time.Minute)},
+		{"refresh-1", "inbound_token", "refreshed", "", "", "refresh_token", person, client, complete.Add(time.Hour)},
+		{"authorize-blocked", "inbound_authorize", "policy_blocked", "configuration", "cimd_denied_not_listed", "", "", "unverified_client", s.now.Add(-50 * time.Hour)},
+	}
+	resource := `,"gram.project.id":"` + s.projectID().String() + `"`
+	row := func(id, attrs string, at time.Time) chfTelemetryRow {
+		return chfTelemetryRow{
+			ts:   s.chfNoFuture(at),
+			body: "",
+			attrs: `{"gram.event.urn":"urn:telemetry:gram_service:log:mcp_connection_attempt"` +
+				`,"gram.meta_mcp_server.id":"` + gateway + `"` +
+				`,"gram.connection_attempt.id":"` + id + `"` + attrs + resource + `}`,
+			traceID: "",
+			urn:     "",
+			service: "gram-mcp-gateway",
+			chatID:  nil,
+		}
+	}
+	rows := make([]chfTelemetryRow, 0, len(attempts)+1)
+	for _, a := range attempts {
+		attrs := `,"gram.connection_attempt.stage":"` + a.stage + `"` +
+			`,"gram.connection_attempt.outcome":"` + a.outcome + `"` +
+			`,"gram.connection_attempt.failure_class":"` + a.class + `"` +
+			`,"gram.connection_attempt.reason":"` + a.reason + `"` +
+			`,"gram.connection_attempt.client_key":"` + a.client + `"`
+		if a.subject != "" {
+			attrs += `,"gram.connection_attempt.subject":"` + a.subject + `"`
+		}
+		if a.grant != "" {
+			attrs += `,"gram.connection_attempt.grant_type":"` + a.grant + `"`
+		}
+		rows = append(rows, row(s.det("gwinbound-"+a.name).String(), attrs, a.at))
+	}
+	// The old cursor, sent again after the second token, fails the same way.
+	return append(rows, row(s.det("gwlist-stale-again").String(),
+		`,"gram.connection_attempt.stage":"discovery_listing"`+
+			`,"gram.connection_attempt.outcome":"failed"`+
+			`,"gram.connection_attempt.failure_class":"configuration"`+
+			`,"gram.connection_attempt.reason":"stale_cursor"`+
+			`,"gram.connection_attempt.subject":"`+person+`"`+
+			`,"gram.connection_attempt.client_key":"`+client+`"`,
+		stale.Add(20*time.Minute)))
 }
 
 var (

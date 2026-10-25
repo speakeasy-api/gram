@@ -22,6 +22,8 @@ export type RankBy = ClosedEnum<typeof RankBy>;
  * The recorded stage to rank within; units from different stages are never combined.
  */
 export const ListGatewayConnectionHotspotsPayloadStage = {
+  InboundAuthorize: "inbound_authorize",
+  InboundToken: "inbound_token",
   DiscoveryListing: "discovery_listing",
   DiscoveryMember: "discovery_member",
 } as const;

@@ -24,7 +24,7 @@ type GatewayConnectionHealthInput struct {
 	GatewayID          string `json:"gateway_id" jsonschema:"exact gateway ID"`
 	From               string `json:"from,omitempty" jsonschema:"window start, RFC 3339; defaults to 7 days before to; at most 30 days"`
 	To                 string `json:"to,omitempty" jsonschema:"window end, RFC 3339, excluded; defaults to now"`
-	HotspotStage       string `json:"hotspot_stage,omitempty" jsonschema:"discovery_member (default) or discovery_listing"`
+	HotspotStage       string `json:"hotspot_stage,omitempty" jsonschema:"inbound_authorize, inbound_token, discovery_listing, or discovery_member (default)"`
 	HotspotSort        string `json:"hotspot_sort,omitempty" jsonschema:"count (default) ranks by failed attempts; rate by failed attempts over all attempts"`
 	HotspotMinAttempts int    `json:"hotspot_min_attempts,omitempty" jsonschema:"leave out callers with fewer attempts; default 5"`
 	HotspotLimit       int    `json:"hotspot_limit,omitempty" jsonschema:"hotspots to return, 1 to 25; default 10"`
@@ -34,7 +34,7 @@ type GatewayConnectionHealthInput struct {
 
 // GatewayConnectionKeyInput is one hotspot as a hotspot's ids give it.
 type GatewayConnectionKeyInput struct {
-	Stage      string `json:"stage" jsonschema:"discovery_listing or discovery_member"`
+	Stage      string `json:"stage" jsonschema:"inbound_authorize, inbound_token, discovery_listing, or discovery_member"`
 	Subject    string `json:"subject" jsonschema:"the hotspot subject's key, possibly empty"`
 	ProviderID string `json:"provider_id" jsonschema:"the hotspot provider's key, possibly empty"`
 	Client     string `json:"client" jsonschema:"the hotspot client's key, possibly empty"`
@@ -52,6 +52,9 @@ type GatewayConnectionStageSummary struct {
 	Retries    uint64                     `json:"retries" jsonschema:"extra describe calls members needed within their own listings"`
 	Recovered  uint64                     `json:"recovered" jsonschema:"members listed only after a retry within the same listing; not recovery after a later reconnect"`
 	LastSeenAt string                     `json:"last_seen_at,omitempty"`
+	// LastCodeIssuedAt is included for a keyed token stage and names the
+	// latest sign-in code request's start whose token response was written.
+	LastCodeIssuedAt string `json:"last_code_issued_at,omitempty" jsonschema:"latest authorization-code request start with a written token response; only for a keyed token stage; not delivery, token use, or provider sign-in completion"`
 
 	// Buckets is the stage's timeline, returned only for a key.
 	Buckets []GatewayConnectionBucketSummary `json:"buckets,omitempty"`
@@ -191,8 +194,9 @@ func (r *PostgresReader) GetGatewayConnectionHealth(ctx context.Context, princip
 		output.Ranking = &GatewayConnectionRanking{Stage: hotspots.Stage, Sort: sort, MinAttempts: hotspots.MinAttempts, Hotspots: make([]GatewayConnectionHotspotSummary, 0, len(hotspots.Hotspots))}
 	}
 	for _, stage := range summary.Stages {
-		view := GatewayConnectionStageSummary{Stage: stage.Stage, Attempts: stage.Attempts, Outcomes: connectionOutcomes(stage.Outcomes), Retries: stage.Retries, Recovered: stage.Recovered, LastSeenAt: connectionTime(stage.LastSeen), Buckets: nil}
+		view := GatewayConnectionStageSummary{Stage: stage.Stage, Attempts: stage.Attempts, Outcomes: connectionOutcomes(stage.Outcomes), Retries: stage.Retries, Recovered: stage.Recovered, LastSeenAt: connectionTime(stage.LastSeen), LastCodeIssuedAt: "", Buckets: nil}
 		if key != nil {
+			view.LastCodeIssuedAt = connectionTime(stage.LastCodeIssued)
 			for _, bucket := range stage.Buckets {
 				view.Buckets = append(view.Buckets, GatewayConnectionBucketSummary{Start: connectionTime(bucket.Start), Outcomes: connectionOutcomes(bucket.Outcomes)})
 			}
@@ -274,11 +278,13 @@ func connectionTime(t time.Time) string {
 const gatewayConnectionHealthToolName = "get_gateway_connection_health"
 
 const gatewayConnectionHealthDescription = "Summarize one exact gateway's connection attempts over at most 30 days (default 7): per recorded stage, the attempts and their outcomes, and the callers, providers, and clients with the most failures. " +
-	"Each stage is counted on its own: discovery_listing counts Direct tools/list calls (complete, partial, failed) and discovery_member counts the members each listing reached (listed, failed, credential_blocked, consent_blocked). " +
-	"A stage's attempts is the denominator for every outcome in it; blocked attempts are a credential or consent the caller fixes, reported apart from failures and never dropped from attempts. " +
+	"Each stage is counted on its own. inbound_authorize counts sign-in requests (accepted, policy_blocked, failed); accepted means a redirect to sign-in was attempted, not that it arrived or that sign-in finished. " +
+	"inbound_token counts token requests: successful outcomes distinguish code_issued (authorization code), refreshed, refresh_replayed (the same refresh answered again), and assertion_issued (enterprise assertion); policy_blocked and failed are not split by grant. A keyed token read also returns last_code_issued_at when present: the latest sign-in code request's start whose response was written, independent of later refreshes. A written token response is not proof that a client used it or that a connection is new, and refreshes are never sign-ins. " +
+	"discovery_listing counts Direct tools/list calls (complete, partial, failed) and discovery_member counts the members each listing reached (listed, failed, credential_blocked, consent_blocked). unknown is an attempt whose outcome was not recorded. " +
+	"A stage's attempts is the denominator for every outcome in it; blocked attempts (a credential or consent the caller fixes, or an administrator's client or workload policy) are reported apart from failures and never dropped from attempts. " +
 	"No observed attempts is no evidence about that stage, never proof that it is healthy. " +
-	"not_recorded lists stages that are not observed yet, including sign-in, so they are unknown, not healthy: a listing failure does not show whether sign-in succeeded. " +
-	"Reasons are sanitized codes; stale_cursor means the client should reconnect to restart its tool listing, and consent_not_approved that reconnecting lets the person approve the new server. Later outcomes are what was observed, not proof that an action caused them. " +
+	"not_recorded lists stages that are not observed yet, such as client metadata fetches and upstream provider sign-in and refresh, so they are unknown, not healthy. " +
+	"Reasons are sanitized codes; stale_cursor means the client should restart tool discovery (if signing in again leaves the error, remove and add the connection in the client), and consent_not_approved that reconnecting lets the person approve the new server. Later outcomes are what was observed, not proof that an action caused them. " +
 	"Names are given only for people in the organization, agents you may read, and providers and clients the project can see; others are labeled by kind without an ID. " +
 	"To see one hotspot's own outcomes and timeline, pass key with its stage and the key values of its subject, provider, and client; a value without a key is not visible to you and cannot be selected. Requires project:read and log:read on the project and mcp:read on the gateway."
 

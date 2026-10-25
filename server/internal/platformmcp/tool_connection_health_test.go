@@ -109,7 +109,11 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 		if stage == telemetry.ConnectionStageDiscoveryMember {
 			attrs[attr.McpServerIDKey] = uuid.NewString()
 		}
-		return telemetry.LogParams{Timestamp: at, ToolInfo: telemetry.ToolInfo{ID: "", URN: "", Name: "", ProjectID: projectID.String(), DeploymentID: "", FunctionID: nil, OrganizationID: principal.OrganizationID}, UserInfo: telemetry.UserInfoByID(""), Attributes: attrs}
+		timestamp := at
+		if stage == telemetry.ConnectionStageInboundToken && outcome == "refreshed" {
+			timestamp = at.Add(time.Minute)
+		}
+		return telemetry.LogParams{Timestamp: timestamp, ToolInfo: telemetry.ToolInfo{ID: "", URN: "", Name: "", ProjectID: projectID.String(), DeploymentID: "", FunctionID: nil, OrganizationID: principal.OrganizationID}, UserInfo: telemetry.UserInfoByID(""), Attributes: attrs}
 	}
 	member5 := func(outcome string) telemetry.LogParams {
 		return attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, outcome, member, "", registered)
@@ -123,6 +127,9 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, "failed", agent, "", "credential:agent"),
 		attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, "failed", member, unknownProvider, registered),
 		attempt(other.ID, elsewhere, telemetry.ConnectionStageDiscoveryMember, "failed", member, "", "anonymous"),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageInboundToken, "code_issued", member, "", registered),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageInboundToken, "refreshed", member, "", registered),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageInboundToken, "policy_blocked", member, "", registered),
 	}))
 
 	engine := authz.NewEngine(logger, conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
@@ -172,9 +179,9 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 	base := func() map[string]any {
 		return map[string]any{"project_id": project.ID.String(), "gateway_id": gatewayID.String(), "from": at.Add(-time.Hour).Format(time.RFC3339), "to": at.Add(time.Hour).Format(time.RFC3339), "hotspot_min_attempts": 2}
 	}
-	keyed := func(subject, provider, clientKey string) map[string]any {
+	keyed := func(stage, subject, provider, clientKey string) map[string]any {
 		arguments := base()
-		arguments["key"] = map[string]any{"stage": telemetry.ConnectionStageDiscoveryMember, "subject": subject, "provider_id": provider, "client": clientKey}
+		arguments["key"] = map[string]any{"stage": stage, "subject": subject, "provider_id": provider, "client": clientKey}
 		return arguments
 	}
 
@@ -184,9 +191,12 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 	require.Equal(t, at.Add(time.Hour).Format(time.RFC3339Nano), output.To)
 	require.EqualValues(t, 1800, output.IntervalSeconds)
 	require.Contains(t, raw, `"interval_seconds":1800`)
-	require.Len(t, output.Stages, 2)
-	require.EqualValues(t, 1, output.Stages[0].Attempts)
-	require.EqualValues(t, 10, output.Stages[1].Attempts, "only the named project's attempts count")
+	require.Len(t, output.Stages, 4)
+	require.Equal(t, []string{"inbound_authorize", "inbound_token"}, []string{output.Stages[0].Stage, output.Stages[1].Stage})
+	require.Zero(t, output.Stages[0].Attempts, "a stage without attempts is listed, empty")
+	require.EqualValues(t, 3, output.Stages[1].Attempts, "a policy block stays in the token stage's denominator")
+	require.EqualValues(t, 1, output.Stages[2].Attempts)
+	require.EqualValues(t, 10, output.Stages[3].Attempts, "only the named project's attempts count")
 	require.NotNil(t, output.Ranking)
 	require.Equal(t, []any{telemetry.ConnectionStageDiscoveryMember, "count", 2}, []any{output.Ranking.Stage, output.Ranking.Sort, output.Ranking.MinAttempts})
 	require.Len(t, output.Ranking.Hotspots, 2, "single-attempt keys stay under the floor")
@@ -199,13 +209,36 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 
 	// One visible hotspot alone, through the nested key: its own attempts and
 	// timeline, and no ranking.
-	_, output, raw = call(keyed(member, "", registered))
+	_, output, raw = call(keyed(telemetry.ConnectionStageDiscoveryMember, member, "", registered))
 	require.NotContains(t, raw, `"ranking"`)
 	require.Len(t, output.Stages, 1)
 	require.EqualValues(t, 5, output.Stages[0].Attempts)
 	require.NotEmpty(t, output.Stages[0].Buckets)
 	require.EqualValues(t, 1800, output.IntervalSeconds)
-	_, output, _ = call(keyed("", "", "anonymous"))
+	// The token stage of the same person and client, through the nested key:
+	// its own outcomes and timeline, and no ranking.
+	_, output, raw = call(keyed(telemetry.ConnectionStageInboundToken, member, "", registered))
+	require.NotContains(t, raw, `"ranking"`)
+	require.Len(t, output.Stages, 1)
+	require.Equal(t, telemetry.ConnectionStageInboundToken, output.Stages[0].Stage)
+	require.Equal(t, at.Format(time.RFC3339Nano), output.Stages[0].LastCodeIssuedAt)
+	require.Equal(t, at.Add(time.Minute).Format(time.RFC3339Nano), output.Stages[0].LastSeenAt, "a later refresh cannot mask the last sign-in code request")
+	require.Contains(t, raw, `"last_code_issued_at"`)
+	require.EqualValues(t, 3, output.Stages[0].Attempts)
+	outcomes := map[string]uint64{}
+	for _, outcome := range output.Stages[0].Outcomes {
+		outcomes[outcome.Outcome] = outcome.Count
+	}
+	require.Equal(t, map[string]uint64{"code_issued": 1, "refreshed": 1, "policy_blocked": 1}, outcomes)
+	var bucketed uint64
+	for _, bucket := range output.Stages[0].Buckets {
+		for _, outcome := range bucket.Outcomes {
+			bucketed += outcome.Count
+		}
+	}
+	require.EqualValues(t, 3, bucketed, "the timeline sums to the stage's attempts")
+
+	_, output, _ = call(keyed(telemetry.ConnectionStageDiscoveryMember, "", "", "anonymous"))
 	require.EqualValues(t, 2, output.Stages[0].Attempts, "empty key values are selectable")
 
 	for name, key := range map[string][3]string{
@@ -213,7 +246,7 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 		"agent the caller may not read":   {agent, "", "credential:agent"},
 		"provider the project cannot see": {member, unknownProvider, registered},
 	} {
-		require.Contains(t, refusal(keyed(key[0], key[1], key[2])), "not_found", name)
+		require.Contains(t, refusal(keyed(telemetry.ConnectionStageDiscoveryMember, key[0], key[1], key[2])), "not_found", name)
 	}
 
 	grants = []authz.Grant{logRead, gatewayRead}

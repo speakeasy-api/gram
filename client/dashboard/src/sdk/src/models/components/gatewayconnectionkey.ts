@@ -10,6 +10,8 @@ import { ClosedEnum } from "../../types/enums.js";
  * The stage the hotspot is in
  */
 export const GatewayConnectionKeyStage = {
+  InboundAuthorize: "inbound_authorize",
+  InboundToken: "inbound_token",
   DiscoveryListing: "discovery_listing",
   DiscoveryMember: "discovery_member",
 } as const;

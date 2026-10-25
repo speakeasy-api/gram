@@ -61,6 +61,38 @@ describe("beforeWindowEnd", () => {
 });
 
 describe("stageTiles", () => {
+  it("accounts for every inbound outcome, including unknown and enterprise tokens", () => {
+    for (const [name, outcomes] of [
+      [
+        "inbound_authorize",
+        { accepted: 2, policy_blocked: 3, failed: 4, unknown: 1 },
+      ],
+      [
+        "inbound_token",
+        {
+          code_issued: 2,
+          refreshed: 3,
+          refresh_replayed: 1,
+          assertion_issued: 2,
+          policy_blocked: 3,
+          failed: 4,
+          unknown: 1,
+        },
+      ],
+    ] as const) {
+      const tiles = stageTiles(stage(name, outcomes));
+      expect(tiles.slice(1).reduce((sum, tile) => sum + tile.value, 0)).toBe(
+        tiles[0]!.value,
+      );
+      expect(
+        tiles.find((tile) => tile.title === "Outcome not recorded")?.value,
+      ).toBe(1);
+      expect(
+        tiles.find((tile) => tile.title === "Blocked by policy")?.value,
+      ).toBe(3);
+    }
+  });
+
   it("counts listings against all listings", () => {
     const tiles = stageTiles(
       stage("discovery_listing", { complete: 7, partial: 2, failed: 1 }),
@@ -254,6 +286,116 @@ describe("reasonText", () => {
     "no_member_listed",
     "member_check_failed",
   ];
+
+  // Sign-in and token reasons the gateway records as typed refusals or by its
+  // outcome classification (server/internal/mcp/connection_attempts_inbound.go).
+  const INBOUND = [
+    "access_denied",
+    "agent_admission_denied",
+    "agent_admission_unavailable",
+    "agent_handoff_missing",
+    "agent_target_mismatch",
+    "ai_tool_blocked",
+    "assertion_audience_not_single",
+    "assertion_client_presented_secret",
+    "assertion_key_source_missing",
+    "assertion_subject_invalid",
+    "assertion_verifier_unavailable",
+    "authorization_expired",
+    "canceled",
+    "cimd_admission_denied",
+    "cimd_admission_disabled",
+    "cimd_denied_disabled",
+    "cimd_denied_not_listed",
+    "cimd_denied_oversized",
+    "cimd_denied_unknown_mode",
+    "cimd_fetch_failed",
+    "cimd_metadata_invalid",
+    "client_id_names_endpoint",
+    "client_method_unreadable",
+    "client_secret_mismatch",
+    "code_client_mismatch",
+    "code_endpoint_mismatch",
+    "code_not_found_or_expired",
+    "conflict",
+    "device_key_id_mismatch",
+    "device_key_lookup_rate_limited",
+    "device_key_not_registered",
+    "device_key_unavailable",
+    "endpoint_not_agent_addressable",
+    "federation_unavailable",
+    "forbidden",
+    "invalid_client",
+    "invalid_grant",
+    "invalid_request",
+    "invalid_scope",
+    "invalid_target",
+    "issuer_changed_during_rotation",
+    "issuer_jwks_uri_invalid",
+    "issuer_key_source_unknown",
+    "issuer_keys_rate_limited",
+    "issuer_lookup_rate_limited",
+    "issuer_lookup_unavailable",
+    "issuer_untrusted",
+    "missing_client_id",
+    "missing_token",
+    "not_found",
+    "oauth_error",
+    "pkce_mismatch",
+    "public_client_presented_credentials",
+    "redirect_uri_mismatch",
+    "redirect_uri_not_registered",
+    "redirect_validation_failed",
+    "refresh_token_client_mismatch",
+    "refresh_token_expired",
+    "refresh_token_replay_cache_error",
+    "refresh_token_replay_context_cancelled",
+    "refresh_token_replay_decrypt_error",
+    "refresh_token_replay_key_mismatch",
+    "refresh_token_replay_payload_invalid",
+    "refresh_token_replay_resign_error",
+    "refresh_token_replay_session_mismatch",
+    "refresh_token_replay_wait_timeout",
+    "refresh_token_replay_write_error",
+    "refresh_token_resource_mismatch",
+    "refresh_token_revoked",
+    "refresh_token_unknown_or_already_used",
+    "resource_mismatch",
+    "resource_not_agent_addressable",
+    "response_write_failed",
+    "secret_client_presented_assertion",
+    "server_error",
+    "session_persist_unavailable",
+    "sign_in_changed_during_rotation",
+    "sign_in_revoked",
+    "subject_admission_unavailable",
+    "subject_not_admitted",
+    "subject_not_authorized",
+    "temporarily_unavailable",
+    "tool_selection_malformed",
+    "tool_selection_resource_mismatch",
+    "unauthorized",
+    "unauthorized_client",
+    "unavailable",
+    "unexpected",
+    "unknown_client_id",
+    "unobserved_exit",
+    "unsupported_grant_type",
+    "unsupported_response_type",
+    "upstream_reconnect_required",
+    "workload_assertion_refused",
+    "workload_grant_unavailable",
+  ];
+
+  it("has plain copy for every typed sign-in and token reason", () => {
+    for (const reason of INBOUND) {
+      const text = reasonText(reason);
+      expect(text, reason).not.toBe("Another failure was recorded.");
+      // A one-word code may be a plain word too; a snake_case code never is.
+      if (reason.includes("_")) expect(text, reason).not.toContain(reason);
+    }
+    expect(reasonText("cimd_denied_oversized")).toContain("address");
+  });
 
   it("has plain copy for every recorded reason", () => {
     for (const reason of RECORDED) {

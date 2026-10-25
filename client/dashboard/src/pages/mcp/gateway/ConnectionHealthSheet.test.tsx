@@ -16,7 +16,10 @@ type Payload = Record<string, unknown> & { from: Date; to: Date };
 const state = vi.hoisted(() => ({
   health: vi.fn(),
   search: vi.fn(),
+  tokenHealth: vi.fn(),
+  latestSearch: vi.fn(),
   healthResult: (_payload: Payload): unknown => undefined,
+  tokenResult: (_payload: Payload): unknown => undefined,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1" }),
@@ -25,8 +28,18 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
+// The related sign-in read asks for code_issued rows only; it is heard apart
+// from the listing's own attempts.
 vi.mock("@gram/client/funcs/telemetrySearchLogs", () => ({
-  telemetrySearchLogs: state.search,
+  telemetrySearchLogs: (
+    client: unknown,
+    request: { searchLogsPayload: { filters: { path: string }[] } },
+  ) =>
+    request.searchLogsPayload.filters.some(
+      (filter) => filter.path === "gram.connection_attempt.outcome",
+    )
+      ? state.latestSearch(client, request)
+      : state.search(client, request),
 }));
 // The generated key leaves out the body, as the real builder does.
 vi.mock("@gram/client/react-query/gatewayConnectionHealth.core.js", () => ({
@@ -36,8 +49,16 @@ vi.mock("@gram/client/react-query/gatewayConnectionHealth.core.js", () => ({
   ) => ({
     queryKey: ["health"],
     queryFn: async () => {
-      state.health(request.getGatewayConnectionHealthPayload);
-      return state.healthResult(request.getGatewayConnectionHealthPayload);
+      const payload = request.getGatewayConnectionHealthPayload;
+      if (
+        (payload.key as { stage?: string } | undefined)?.stage ===
+        "inbound_token"
+      ) {
+        state.tokenHealth(payload);
+        return state.tokenResult(payload);
+      }
+      state.health(payload);
+      return state.healthResult(payload);
     },
   }),
 }));
@@ -108,8 +129,37 @@ function ok(logs: unknown[], nextCursor?: string) {
   return Promise.resolve({ ok: true, value: { logs, nextCursor } });
 }
 
+function tokens(payload: Payload) {
+  return {
+    from: payload.from,
+    to: payload.to,
+    intervalSeconds: 3600,
+    notRecorded: [],
+    scope: "",
+    stages: [
+      {
+        stage: "inbound_token",
+        attempts: 3,
+        outcomes: [
+          { outcome: "code_issued", count: 2 },
+          { outcome: "refreshed", count: 1 },
+        ],
+        retries: 0,
+        recovered: 0,
+        buckets: [],
+      },
+    ],
+  };
+}
+
+const LATEST_SIGN_IN_NS = END_NS - 7_200_000_000_000n;
+
 beforeEach(() => {
   state.healthResult = keyed;
+  state.tokenResult = tokens;
+  state.latestSearch.mockImplementation(() =>
+    ok([log("sign-in", LATEST_SIGN_IN_NS, "code_issued")]),
+  );
   state.search.mockImplementation(
     (_client: unknown, request: { searchLogsPayload: Payload }) => {
       const payload = request.searchLogsPayload;
@@ -139,6 +189,7 @@ afterEach(() => {
 function renderSheet(
   onShowConnections = vi.fn<(filters: ActiveLogFilter[]) => void>(),
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  shown: typeof hotspot = hotspot,
 ) {
   // The section's unkeyed summary under the generated key must not be read
   // as this key's counts.
@@ -148,7 +199,7 @@ function renderSheet(
       <ConnectionHealthSheet
         gatewayId="gateway-1"
         stage="discovery_listing"
-        hotspot={hotspot}
+        hotspot={shown}
         from={from}
         to={to}
         windowPhrase="in the last 7 days"
@@ -324,4 +375,140 @@ it("narrows connections by exact matches only and says what it cannot match", as
     ]),
   );
   expect(screen.queryByRole("button", { name: /revoke/i })).toBeNull();
+});
+
+const latestText = /The latest sign-in code request started/;
+const REGISTERED = "6c0d0000-0000-4000-a000-000000000002";
+// A listing hotspot whose client is registered, so it can be matched to
+// sign-in token responses.
+const registered = {
+  ...hotspot,
+  client: { kind: "registered", label: "Example client", key: REGISTERED },
+};
+const registeredKey = { ...key, client: REGISTERED };
+const showRegistered = (client?: QueryClient) =>
+  renderSheet(undefined, client, registered);
+
+it("shows the sign-in token responses written for the same person and client", async () => {
+  showRegistered();
+  expect(
+    await screen.findByText(/The gateway wrote 2 sign-in token responses/),
+  ).toBeTruthy();
+  expect(await screen.findByText(latestText)).toBeTruthy();
+  expect(state.tokenHealth.mock.calls[0]![0]).toMatchObject({
+    from,
+    to,
+    key: { ...registeredKey, stage: "inbound_token" },
+  });
+  const latest = state.latestSearch.mock.calls[0]![1].searchLogsPayload;
+  expect(latest).toMatchObject({ from, to, sort: "desc", limit: 1 });
+  expect(latest.filters).toContainEqual({
+    path: "gram.connection_attempt.grant_type",
+    operator: "eq",
+    values: ["authorization_code"],
+  });
+  expect(
+    screen.getByText(
+      /Whether the app received or used a token is not observed/,
+    ),
+  ).toBeTruthy();
+});
+
+it("says none is recorded rather than that none was written", async () => {
+  state.tokenResult = (payload) => ({
+    ...tokens(payload),
+    stages: [
+      {
+        ...tokens(payload).stages[0]!,
+        attempts: 1,
+        outcomes: [{ outcome: "refreshed", count: 1 }],
+      },
+    ],
+  });
+  showRegistered();
+  expect(
+    await screen.findByText(
+      /No sign-in token response is recorded for this person and client/,
+    ),
+  ).toBeTruthy();
+  expect(state.latestSearch).not.toHaveBeenCalled();
+});
+
+it("reads no related evidence on reopening until a fresh token read succeeds", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  const first = showRegistered(client);
+  await screen.findByText(latestText);
+  first.unmount();
+  const latestReads = state.latestSearch.mock.calls.length;
+
+  const fresh = deferred();
+  state.tokenResult = () => fresh.promise;
+  showRegistered(client);
+  await screen.findByText("Latest 3 attempts in this window");
+  await waitFor(() => expect(state.tokenHealth).toHaveBeenCalledTimes(2));
+  expect(screen.queryByText(/sign-in token responses/)).toBeNull();
+  expect(screen.queryByText(latestText)).toBeNull();
+  expect(state.latestSearch.mock.calls.length).toBe(latestReads);
+
+  fresh.reject(Object.assign(new Error("refused"), { statusCode: 403 }));
+  expect(
+    await screen.findByText(/Couldn't load sign-in token responses/),
+  ).toBeTruthy();
+  expect(screen.queryByText(latestText)).toBeNull();
+  expect(state.latestSearch.mock.calls.length).toBe(latestReads);
+});
+
+it("hides an earlier latest time when its refetch fails", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  const first = showRegistered(client);
+  await screen.findByText(latestText);
+  first.unmount();
+
+  state.latestSearch.mockImplementation(() =>
+    Promise.reject(Object.assign(new Error("boom"), { statusCode: 500 })),
+  );
+  showRegistered(client);
+  expect(
+    await screen.findByText("The latest request time couldn't be loaded."),
+  ).toBeTruthy();
+  expect(screen.queryByText(latestText)).toBeNull();
+
+  state.latestSearch.mockImplementation(() =>
+    ok([log("sign-in", LATEST_SIGN_IN_NS, "code_issued")]),
+  );
+  fireEvent.click(screen.getAllByRole("button", { name: "Retry" }).at(-1)!);
+  expect(await screen.findByText(latestText)).toBeTruthy();
+});
+
+it("does not look for sign-in tokens a key cannot be matched to", async () => {
+  renderSheet();
+  await screen.findByText("Latest 3 attempts in this window");
+  expect(
+    screen.getByText(
+      /can be matched only to a signed-in person using a registered client/,
+    ),
+  ).toBeTruthy();
+  expect(state.tokenHealth).not.toHaveBeenCalled();
+  expect(state.latestSearch).not.toHaveBeenCalled();
+  expect(
+    screen.queryByText(/No sign-in token response is recorded/),
+  ).toBeNull();
+});
+
+it("retries a failed related sign-in summary without showing cached evidence", async () => {
+  state.tokenResult = refuse(500);
+  showRegistered();
+  await screen.findByText(
+    "Couldn't load sign-in token responses for this person and client.",
+  );
+  expect(state.latestSearch).not.toHaveBeenCalled();
+  state.tokenResult = tokens;
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(
+    await screen.findByText(/The gateway wrote 2 sign-in token responses/),
+  ).toBeTruthy();
 });

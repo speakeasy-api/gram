@@ -3346,7 +3346,7 @@ var gatewayConnectionWindow = func() {
 var GatewayConnectionKey = Type("GatewayConnectionKey", func() {
 	Description("One hotspot to count alone: a stage's caller, provider, and client, given as the key values the hotspot's labels return. An empty value matches attempts that recorded none, such as an anonymous caller or a member with no upstream provider.")
 	Attribute("stage", String, "The stage the hotspot is in", func() {
-		Enum("discovery_listing", "discovery_member")
+		Enum("inbound_authorize", "inbound_token", "discovery_listing", "discovery_member")
 	})
 	Attribute("subject", String, "The caller's URN, or empty for no signed-in caller", func() {
 		MaxLength(512)
@@ -3368,7 +3368,7 @@ var GetGatewayConnectionHealthPayload = Type("GetGatewayConnectionHealthPayload"
 var ListGatewayConnectionHotspotsPayload = Type("ListGatewayConnectionHotspotsPayload", func() {
 	gatewayConnectionWindow()
 	Attribute("stage", String, "The recorded stage to rank within; units from different stages are never combined.", func() {
-		Enum("discovery_listing", "discovery_member")
+		Enum("inbound_authorize", "inbound_token", "discovery_listing", "discovery_member")
 	})
 	Attribute("rank_by", String, "count ranks by failed attempts; rate by failed attempts over all attempts.", func() {
 		Enum("count", "rate")
@@ -3388,7 +3388,7 @@ var ListGatewayConnectionHotspotsPayload = Type("ListGatewayConnectionHotspotsPa
 })
 
 var GatewayConnectionOutcomeCount = Type("GatewayConnectionOutcomeCount", func() {
-	Attribute("outcome", String, "The attempt outcome within its stage, such as complete, partial, failed, listed, credential_blocked, or consent_blocked.")
+	Attribute("outcome", String, "The attempt outcome within its stage, such as accepted, code_issued, refreshed, refresh_replayed, assertion_issued, complete, partial, listed, failed, credential_blocked, consent_blocked, policy_blocked, or unknown.")
 	Attribute("count", Int64, "Attempts with this outcome.")
 	Required("outcome", "count")
 })
@@ -3401,8 +3401,8 @@ var GatewayConnectionBucket = Type("GatewayConnectionBucket", func() {
 
 var GatewayConnectionStage = Type("GatewayConnectionStage", func() {
 	Description("One recorded stage over the window. attempts is the denominator for every outcome of this stage.")
-	Attribute("stage", String, "discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.", func() {
-		Enum("discovery_listing", "discovery_member")
+	Attribute("stage", String, "inbound_authorize counts sign-in requests (accepted means a redirect to sign-in was attempted; delivery and completion are not observed); inbound_token counts token requests it answered, by grant (an answered request is not proof a client used the token); discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.", func() {
+		Enum("inbound_authorize", "inbound_token", "discovery_listing", "discovery_member")
 	})
 	Attribute("attempts", Int64, "All recorded attempts in this stage")
 	Attribute("outcomes", ArrayOf(GatewayConnectionOutcomeCount), "Nonzero outcomes, summing to attempts")
@@ -3454,7 +3454,7 @@ var GatewayConnectionHotspot = Type("GatewayConnectionHotspot", func() {
 	Attribute("client", GatewayConnectionLabel)
 	Attribute("attempts", Int64, "All attempts in the stage")
 	Attribute("failed", Int64, "Attempts that failed")
-	Attribute("blocked", Int64, "Attempts blocked by a credential or consent the caller can fix; not failures")
+	Attribute("blocked", Int64, "Attempts blocked by a credential or consent the caller can fix, or by an administrator's client or workload policy; not failures")
 	Attribute("outcomes", ArrayOf(GatewayConnectionOutcomeCount), "Nonzero outcomes, summing to attempts")
 	Attribute("reasons", ArrayOf(GatewayConnectionReasonCount), "The most frequent sanitized reasons")
 	Attribute("last_seen_at", String, "Time of the latest attempt", func() { Format(FormatDateTime) })

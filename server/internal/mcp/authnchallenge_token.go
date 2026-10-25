@@ -302,7 +302,13 @@ func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds present
 // token endpoint, called by HandleToken after slug resolution. Parses the form and
 // dispatches on grant_type before any client authentication, so each grant
 // branch applies its own client-authentication requirement.
-func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (err error) {
+	r, obs := observeInbound(r, endpoint, attemptStageInboundToken)
+	defer func() { s.finishInbound(r.Context(), obs, err) }()
+	return s.serveToken(w, r, endpoint)
+}
+
+func (s *Service) serveToken(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 
 	r.Body = http.MaxBytesReader(w, r.Body, tokenFormMaxBytes)
@@ -334,6 +340,7 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, creds.method, grantType, oautherr.CodeUnsupportedGrantType)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
 	}
+	inboundObservationFrom(ctx).setGrantType(grantType)
 	if credentialError == oautherr.CodeInvalidClient {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", "", "", grantType, credentialError)
 		return writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
@@ -370,6 +377,7 @@ func (s *Service) serveTokenGrant(
 			return err
 		}
 		clientID = clientRow.ClientID
+		inboundObservationFrom(ctx).setClient(clientRow.ID)
 		grantErr = grant.authenticated(ctx, w, r, endpoint, clientRow, baseURL, creds.method, logger)
 	case grant.clientAuth == tokenClientAuthNone && grant.clientless != nil:
 		grantErr = grant.clientless(ctx, w, r, endpoint, creds, baseURL, logger)
@@ -433,6 +441,7 @@ func (s *Service) authenticateTokenClient(
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
+			inboundObservationFrom(ctx).refuse(classConfiguration, cimdDenialReason(admissionErr.Reason))
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_denied")
 			return nil, writeInvalidClientError(ctx, w, r, logger, admissionErr.Description())
 		}
@@ -442,6 +451,7 @@ func (s *Service) authenticateTokenClient(
 		}
 		if errors.Is(err, errCIMDFetchFailed) {
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
+			inboundObservationFrom(ctx).refuse(classEndpoint, reasonCIMDFetchFailed)
 			return nil, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -576,6 +586,8 @@ func (s *Service) handleTokenJWTBearerGrant(
 	// The session does not exist yet, but authz treats an AuthContext without a
 	// session as an internal call. A namespaced assertion JTI makes this context
 	// session-like solely while loading and checking the resolved user's grants.
+	// The assertion is verified, so its subject is the caller from here on.
+	inboundObservationFrom(ctx).setSubject(result.Subject)
 	authorizationCtx, err := s.contextForSessionSubject(ctx, endpoint, result.Subject, "id-jag:"+result.Claims.JTI, clientRow.ClientID)
 	if err == nil && endpoint.MetaMcpServerID.Valid {
 		var members []metaMember
@@ -635,6 +647,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		return oops.E(oops.CodeUnexpected, err, "commit ID-JAG session exchange").LogError(ctx, logger)
 	}
 
+	inboundObservationFrom(ctx).issue(outcomeAssertionIssued, minted.Subject)
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
 		return err
 	}
@@ -775,6 +788,12 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return rejectGrant("agent authorization handoff is missing")
 	}
 	subject := grant.Subject
+	// The code, client, redirect and verifier all matched, so the grant's
+	// person is the caller. An agent handoff names its agent only once its
+	// target is confirmed below.
+	if grant.AgentAuthorization == nil {
+		inboundObservationFrom(ctx).setSubject(subject)
+	}
 	var admissionTx pgx.Tx
 	admissionQueries := usersessions_repo.New(s.db)
 	defer func() {
@@ -797,6 +816,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 			return rejectGrant("agent authorization is invalid")
 		}
 		subject = urn.NewAgentSubject(agentAuthorization.AgentID)
+		inboundObservationFrom(ctx).setSubject(subject)
 		authorizationCtx, cerr := s.contextForSessionSubject(ctx, endpoint, subject, "", clientRow.ClientID)
 		if cerr == nil {
 			authorizationCtx, cerr = s.admitAgentSession(authorizationCtx, endpoint, subject, credential)
@@ -961,6 +981,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	if err := admissionTx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnavailable, err, "commit session issuance")
 	}
+	inboundObservationFrom(ctx).issue(outcomeCodeIssued, minted.Subject)
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return err
@@ -1147,6 +1168,11 @@ func (s *Service) rotateRefreshToken(
 	})
 	if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
 		return true, oops.E(oops.CodeUnexpected, lookupErr, "load refresh token session").LogError(ctx, logger)
+	}
+	// A refresh token held by the client it was issued to names its session's
+	// caller; one presented by another client names no one.
+	if lookupErr == nil && refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID {
+		inboundObservationFrom(ctx).setSubject(refreshSession.SubjectUrn)
 	}
 	if lookupErr == nil && refreshSession.SubjectUrn.Kind == urn.SessionSubjectKindAgent &&
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
@@ -1434,6 +1460,7 @@ func (s *Service) rotateRefreshToken(
 		logger.WarnContext(postCommitCtx, "failed to revoke old access token jti on refresh", attr.SlogError(revokeErr))
 	}
 
+	inboundObservationFrom(ctx).issue(outcomeRefreshed, minted.Subject)
 	return published, writeTokenSuccess(ctx, w, logger, minted.Body)
 }
 
@@ -1597,6 +1624,9 @@ func (s *Service) writeRefreshTokenReplay(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_client_mismatch")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
 	}
+	if payload.Subject != nil {
+		inboundObservationFrom(ctx).setSubject(*payload.Subject)
+	}
 	// Re-signing below moves an issuer-scoped session between surfaces of the
 	// same issuer. A resource-bound session must not move at all, so a replay
 	// is served only for the resource the rotation was for.
@@ -1706,6 +1736,7 @@ func (s *Service) writeRefreshTokenReplay(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_payload_invalid")
 		return oops.E(oops.CodeUnexpected, err, "marshal refresh token replay response").LogError(ctx, logger)
 	}
+	inboundObservationFrom(ctx).issue(outcomeRefreshReplayed, *payload.Subject)
 	if err := writeTokenSuccess(ctx, w, logger, body); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_write_error")
 		return err
@@ -2200,7 +2231,9 @@ func writeTokenSuccess(ctx context.Context, w http.ResponseWriter, logger *slog.
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(body); err != nil {
+	_, err := w.Write(body)
+	inboundObservationFrom(ctx).responseWritten(err)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "write token response").LogError(ctx, logger)
 	}
 	return nil
@@ -2238,6 +2271,7 @@ func writeTokenError(ctx context.Context, w http.ResponseWriter, logger *slog.Lo
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "marshal token error").LogError(ctx, logger)
 	}
+	inboundObservationFrom(ctx).answer(status, code)
 
 	logger.InfoContext(ctx, "token request rejected",
 		attr.SlogOAuthError(code),
