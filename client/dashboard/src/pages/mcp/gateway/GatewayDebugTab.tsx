@@ -33,6 +33,7 @@ import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.j
 import { keepPreviousData, useQueries } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
+import { GatewayConnectionHealth } from "./GatewayConnectionHealth";
 import {
   CLIENT_REGISTRATION_LABELS,
   CLIENT_VALUE_LABELS,
@@ -459,6 +460,10 @@ export function GatewayDebugTab({
 
   return (
     <Stack gap={4}>
+      <GatewayConnectionHealth
+        gatewayId={gatewayId}
+        onShowConnections={editChips}
+      />
       <Text small muted>
         Sessions issued for this gateway, identified by their recorded origin or
         consent selection. Unattributed sessions are not shown.
