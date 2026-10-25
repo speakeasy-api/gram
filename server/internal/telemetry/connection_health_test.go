@@ -164,6 +164,7 @@ func TestGetGatewayConnectionHealth_CountsEachStageExactly(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, providerRows.Hotspots, 1)
 		require.Equal(t, "Provider not recorded", providerRows.Hotspots[0].Provider.Label)
+		require.Equal(t, "unrecorded", providerRows.Hotspots[0].Provider.Kind)
 		require.NotNil(t, providerRows.Hotspots[0].Provider.Key)
 		require.Empty(t, *providerRows.Hotspots[0].Provider.Key, "empty still matches exact-none, never every provider")
 	}

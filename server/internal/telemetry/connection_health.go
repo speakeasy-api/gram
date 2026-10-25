@@ -466,7 +466,7 @@ func (h *ConnectionHealth) Hotspots(ctx context.Context, target ConnectionHealth
 		if row.ProviderID == "" && (query.Stage == ConnectionStageUpstreamCallback || query.Stage == ConnectionStageUpstreamRefresh) {
 			// Provider work happened, but its identity was not resolved. An
 			// absent dimension is not evidence that no provider was involved.
-			hotspot.Provider.Label = "Provider not recorded"
+			hotspot.Provider = keyedLabel("unrecorded", "Provider not recorded", "")
 		}
 		if row.LastSeenUnixNano > 0 {
 			hotspot.LastSeen = time.Unix(0, row.LastSeenUnixNano).UTC()

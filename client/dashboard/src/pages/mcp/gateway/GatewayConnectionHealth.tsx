@@ -211,8 +211,7 @@ export function GatewayConnectionHealth({
               {!summary && (
                 <li>
                   <Text small muted>
-                    Coverage notes are unavailable until connection health
-                    loads.
+                    Coverage notes are unavailable.
                   </Text>
                 </li>
               )}
