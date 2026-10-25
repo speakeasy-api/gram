@@ -39,6 +39,13 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 LIMIT 1;
 
+-- name: ListAgentsByIDs :many
+SELECT *
+FROM agents
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[])
+  AND deleted IS FALSE;
+
 -- name: LockAgentIncludingDeleted :one
 -- Locks an agent whatever its lifecycle, for cleanup that must still run
 -- after the agent is deleted.

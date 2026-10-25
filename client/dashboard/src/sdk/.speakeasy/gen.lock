@@ -715,6 +715,7 @@ trackedFiles:
   src/funcs/spendRulesRulesUpdate.ts: {}
   src/funcs/telemetryCaptureEvent.ts: {}
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts: {}
+  src/funcs/telemetryGetGatewayConnectionHealth.ts: {}
   src/funcs/telemetryGetHooksSummary.ts: {}
   src/funcs/telemetryGetMcpNetworkTraffic.ts: {}
   src/funcs/telemetryGetMcpServerActivity.ts: {}
@@ -740,6 +741,7 @@ trackedFiles:
   src/funcs/telemetryGetUserMetricsSummary.ts: {}
   src/funcs/telemetryListAttributeKeys.ts: {}
   src/funcs/telemetryListFilterOptions.ts: {}
+  src/funcs/telemetryListGatewayConnectionHotspots.ts: {}
   src/funcs/telemetryListHooksTraces.ts: {}
   src/funcs/telemetryListSessions.ts: {}
   src/funcs/telemetryListToolUsageTraces.ts: {}
@@ -1219,6 +1221,14 @@ trackedFiles:
   src/models/components/functionenvironmentvariable.ts: {}
   src/models/components/functionresourcedefinition.ts: {}
   src/models/components/functiontooldefinition.ts: {}
+  src/models/components/gatewayconnectionbucket.ts: {}
+  src/models/components/gatewayconnectioncoverage.ts: {}
+  src/models/components/gatewayconnectionhotspot.ts: {}
+  src/models/components/gatewayconnectionkey.ts: {}
+  src/models/components/gatewayconnectionlabel.ts: {}
+  src/models/components/gatewayconnectionoutcomecount.ts: {}
+  src/models/components/gatewayconnectionreasoncount.ts: {}
+  src/models/components/gatewayconnectionstage.ts: {}
   src/models/components/gcpiamcredential.ts: {}
   src/models/components/gcpkmskey.ts: {}
   src/models/components/gcpsetupinfo.ts: {}
@@ -1236,6 +1246,8 @@ trackedFiles:
   src/models/components/geteventfacetsresult.ts: {}
   src/models/components/geteventvolumepayload.ts: {}
   src/models/components/geteventvolumeresult.ts: {}
+  src/models/components/getgatewayconnectionhealthpayload.ts: {}
+  src/models/components/getgatewayconnectionhealthresult.ts: {}
   src/models/components/gethookssummarypayload.ts: {}
   src/models/components/gethookssummaryresult.ts: {}
   src/models/components/getidentityproviderconnectionresult.ts: {}
@@ -1419,6 +1431,8 @@ trackedFiles:
   src/models/components/listexternalkeysresult.ts: {}
   src/models/components/listfilteroptionspayload.ts: {}
   src/models/components/listfilteroptionsresult.ts: {}
+  src/models/components/listgatewayconnectionhotspotspayload.ts: {}
+  src/models/components/listgatewayconnectionhotspotsresult.ts: {}
   src/models/components/listglobalremotesessionissuersresult.ts: {}
   src/models/components/listhookstracespayload.ts: {}
   src/models/components/listhookstracesresult.ts: {}
@@ -2415,6 +2429,7 @@ trackedFiles:
   src/models/operations/getemployeedataflowgraph.ts: {}
   src/models/operations/geteventfacets.ts: {}
   src/models/operations/geteventvolume.ts: {}
+  src/models/operations/getgatewayconnectionhealth.ts: {}
   src/models/operations/getgcpiamcredential.ts: {}
   src/models/operations/getgcpiamplatformcredential.ts: {}
   src/models/operations/getgcpkmskey.ts: {}
@@ -2607,6 +2622,7 @@ trackedFiles:
   src/models/operations/listexternalcredentials.ts: {}
   src/models/operations/listexternalkeys.ts: {}
   src/models/operations/listfilteroptions.ts: {}
+  src/models/operations/listgatewayconnectionhotspots.ts: {}
   src/models/operations/listgcpiamcredentials.ts: {}
   src/models/operations/listgcpkmskeys.ts: {}
   src/models/operations/listglobalremotesessionclients.ts: {}
@@ -3298,6 +3314,10 @@ trackedFiles:
   src/react-query/fetchOpenAPIv3FromURL.ts: {}
   src/react-query/fetchOrganizationRemoteSessionIssuerMetadata.ts: {}
   src/react-query/fetchRemoteSessionIssuerMetadata.ts: {}
+  src/react-query/gatewayConnectionHealth.core.ts: {}
+  src/react-query/gatewayConnectionHealth.ts: {}
+  src/react-query/gatewayConnectionHotspots.core.ts: {}
+  src/react-query/gatewayConnectionHotspots.ts: {}
   src/react-query/gcpSetupInfo.core.ts: {}
   src/react-query/gcpSetupInfo.ts: {}
   src/react-query/generateWorkOSAdminPortalLink.ts: {}
@@ -7363,6 +7383,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getGatewayConnectionHealth:
+    speakeasy-default-get-gateway-connection-health:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "meta_mcp_server_id": "a196d93a-759d-46b7-8c07-9b80169ae990", "to": "2025-12-26T10:00:00Z"}
+      responses:
+        "200":
+          application/json: {"from": "2024-07-13T04:34:10.141Z", "interval_seconds": 57762, "not_recorded": [], "scope": "<value>", "stages": [{"attempts": 222554, "buckets": [], "outcomes": [], "recovered": 314886, "retries": 99509, "stage": "discovery_member"}], "to": "2024-12-18T19:39:20.313Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getGcpIamCredential:
     speakeasy-default-get-gcp-iam-credential:
       parameters:
@@ -9728,6 +9759,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listGatewayConnectionHotspots:
+    speakeasy-default-list-gateway-connection-hotspots:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "limit": 25, "meta_mcp_server_id": "081864e7-cac9-46c9-a722-c3ee624f87f4", "min_attempts": 5, "rank_by": "count", "stage": "discovery_listing", "to": "2025-12-26T10:00:00Z"}
+      responses:
+        "200":
+          application/json: {"from": "2024-07-16T17:23:04.635Z", "hotspots": [], "min_attempts": 293898, "rank_by": "<value>", "stage": "<value>", "to": "2024-10-07T04:54:03.714Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listGcpIamCredentials:
     speakeasy-default-list-gcp-iam-credentials:
       responses:

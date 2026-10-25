@@ -63,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -198,6 +199,9 @@ type platformMCPConfig struct {
 	// Nil keeps the tool visible as unavailable rather than returning an empty list.
 	RecentToolCalls platformmcp.RecentToolCallReader
 	NetworkTraffic  platformmcp.MCPNetworkTrafficReader
+	// ConnectionHealth reads gateway connection attempts. Nil keeps the tool
+	// visible as unavailable.
+	ConnectionHealth *telemetry.ConnectionHealth
 	// EventFeed reads the org-scoped OpenTelemetry event feed. Nil keeps the
 	// tool visible as unavailable rather than returning an empty list.
 	EventFeed platformmcp.EventFeedReader
@@ -524,6 +528,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
+		WithConnectionHealth(config.ConnectionHealth).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithNetworkIngressStatus(config.DashboardURL).
 		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber)).
@@ -1218,6 +1223,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
+		WithConnectionHealth(config.ConnectionHealth).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithNetworkIngressStatus(config.DashboardURL).
 		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber)).

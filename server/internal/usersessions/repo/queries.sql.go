@@ -3587,6 +3587,49 @@ func (q *Queries) ListUserSessionClientFacets(ctx context.Context, arg ListUserS
 	return items, nil
 }
 
+const listUserSessionClientLabelsByIDs = `-- name: ListUserSessionClientLabelsByIDs :many
+SELECT c.id, c.client_name
+FROM user_session_clients AS c
+JOIN user_session_issuers AS iss
+  ON iss.id = c.user_session_issuer_id
+ AND iss.deleted IS FALSE
+WHERE c.user_session_issuer_id = $1
+  AND c.id = ANY($2::uuid[])
+  AND c.deleted IS FALSE
+`
+
+type ListUserSessionClientLabelsByIDsParams struct {
+	UserSessionIssuerID uuid.UUID
+	Ids                 []uuid.UUID
+}
+
+type ListUserSessionClientLabelsByIDsRow struct {
+	ID         uuid.UUID
+	ClientName string
+}
+
+// Names the clients registered with one live sign-in server among the given
+// IDs. Deleted clients, and every client of a deleted server, are left out.
+func (q *Queries) ListUserSessionClientLabelsByIDs(ctx context.Context, arg ListUserSessionClientLabelsByIDsParams) ([]ListUserSessionClientLabelsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionClientLabelsByIDs, arg.UserSessionIssuerID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionClientLabelsByIDsRow
+	for rows.Next() {
+		var i ListUserSessionClientLabelsByIDsRow
+		if err := rows.Scan(&i.ID, &i.ClientName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionClientsByProjectID = `-- name: ListUserSessionClientsByProjectID :many
 SELECT cli.id, cli.assistant_trigger_workload_binding_id, cli.assistant_runtime_id, cli.project_id, cli.organization_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.token_endpoint_auth_method, cli.client_jwks, cli.client_jwks_uri, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 FROM user_session_clients AS cli

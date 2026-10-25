@@ -839,6 +839,53 @@ func (q *Queries) ListAgentPolicyGrants(ctx context.Context, arg ListAgentPolicy
 	return items, nil
 }
 
+const listAgentsByIDs = `-- name: ListAgentsByIDs :many
+SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+FROM agents
+WHERE organization_id = $1
+  AND id = ANY($2::uuid[])
+  AND deleted IS FALSE
+`
+
+type ListAgentsByIDsParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+func (q *Queries) ListAgentsByIDs(ctx context.Context, arg ListAgentsByIDsParams) ([]Agent, error) {
+	rows, err := q.db.Query(ctx, listAgentsByIDs, arg.OrganizationID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Agent
+	for rows.Next() {
+		var i Agent
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OwnerUserID,
+			&i.ProjectID,
+			&i.Name,
+			&i.SuspendedAt,
+			&i.RevokedAt,
+			&i.OwnerReassignmentRequiredAt,
+			&i.OwnerReassignmentReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listConnectionBlocks = `-- name: ListConnectionBlocks :many
 SELECT id, organization_id, agent_id, owner_user_id, remote_session_client_id, taken_over_at, created_at, updated_at
 FROM agent_connection_blocks

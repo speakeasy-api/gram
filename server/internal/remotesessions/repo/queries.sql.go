@@ -10175,6 +10175,52 @@ func (q *Queries) ListRemoteSessionClientsOrphanedByUserSessionIssuer(ctx contex
 	return items, nil
 }
 
+const listRemoteSessionIssuerLabelsByIDs = `-- name: ListRemoteSessionIssuerLabelsByIDs :many
+SELECT id, slug, name
+FROM remote_session_issuers
+WHERE id = ANY($1::uuid[])
+  AND (
+    project_id = $2
+    OR (project_id IS NULL AND organization_id = $3)
+    OR (project_id IS NULL AND organization_id IS NULL)
+  )
+  AND deleted IS FALSE
+`
+
+type ListRemoteSessionIssuerLabelsByIDsParams struct {
+	Ids            []uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+}
+
+type ListRemoteSessionIssuerLabelsByIDsRow struct {
+	ID   uuid.UUID
+	Slug string
+	Name pgtype.Text
+}
+
+// Names the providers a project can see among the given issuer IDs: its own,
+// its organization's, and the shared catalog's. Deleted issuers are left out.
+func (q *Queries) ListRemoteSessionIssuerLabelsByIDs(ctx context.Context, arg ListRemoteSessionIssuerLabelsByIDsParams) ([]ListRemoteSessionIssuerLabelsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionIssuerLabelsByIDs, arg.Ids, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionIssuerLabelsByIDsRow
+	for rows.Next() {
+		var i ListRemoteSessionIssuerLabelsByIDsRow
+		if err := rows.Scan(&i.ID, &i.Slug, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionIssuersByIssuerURL = `-- name: ListRemoteSessionIssuersByIssuerURL :many
 SELECT id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, omit_scope_fallback, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers

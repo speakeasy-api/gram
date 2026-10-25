@@ -1954,6 +1954,7 @@ func newStartCommand() *cli.Command {
 				CanonicalIdentity:         telemSvc,
 				RecentToolCalls:           telemetryrepo.New(chDB),
 				NetworkTraffic:            telemetryrepo.New(chDB),
+				ConnectionHealth:          tm.NewConnectionHealth(db, chDB, logsEnabled, authzEngine),
 				EventFeed:                 otelchrepo.New(chDB),
 				LogsEnabled:               platformmcp.FeatureChecker(logsEnabled),
 				ShadowInventory:           accessService,

@@ -4,6 +4,7 @@
 
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
 import { telemetryGetEmployeeDataFlowGraph } from "../funcs/telemetryGetEmployeeDataFlowGraph.js";
+import { telemetryGetGatewayConnectionHealth } from "../funcs/telemetryGetGatewayConnectionHealth.js";
 import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
 import { telemetryGetMcpNetworkTraffic } from "../funcs/telemetryGetMcpNetworkTraffic.js";
 import { telemetryGetMcpServerActivity } from "../funcs/telemetryGetMcpServerActivity.js";
@@ -29,6 +30,7 @@ import { telemetryGetUnproxiedMcpServerUserUsage } from "../funcs/telemetryGetUn
 import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
 import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.js";
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
+import { telemetryListGatewayConnectionHotspots } from "../funcs/telemetryListGatewayConnectionHotspots.js";
 import { telemetryListHooksTraces } from "../funcs/telemetryListHooksTraces.js";
 import { telemetryListSessions } from "../funcs/telemetryListSessions.js";
 import { telemetryListToolUsageTraces } from "../funcs/telemetryListToolUsageTraces.js";
@@ -41,6 +43,7 @@ import { telemetrySearchUsers } from "../funcs/telemetrySearchUsers.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { GetEmployeeDataFlowGraphResult } from "../models/components/getemployeedataflowgraphresult.js";
+import { GetGatewayConnectionHealthResult } from "../models/components/getgatewayconnectionhealthresult.js";
 import { GetHooksSummaryResult } from "../models/components/gethookssummaryresult.js";
 import { GetMcpNetworkTrafficResult } from "../models/components/getmcpnetworktrafficresult.js";
 import { GetMcpServerActivityResult } from "../models/components/getmcpserveractivityresult.js";
@@ -66,6 +69,7 @@ import { GetUnproxiedMcpServerUserUsageResult } from "../models/components/getun
 import { GetUserMetricsSummaryResult } from "../models/components/getusermetricssummaryresult.js";
 import { ListAttributeKeysResult } from "../models/components/listattributekeysresult.js";
 import { ListFilterOptionsResult } from "../models/components/listfilteroptionsresult.js";
+import { ListGatewayConnectionHotspotsResult } from "../models/components/listgatewayconnectionhotspotsresult.js";
 import { ListHooksTracesResult } from "../models/components/listhookstracesresult.js";
 import { ListSessionsResult } from "../models/components/listsessionsresult.js";
 import { ListToolUsageTracesResult } from "../models/components/listtoolusagetracesresult.js";
@@ -83,6 +87,10 @@ import {
   GetEmployeeDataFlowGraphRequest,
   GetEmployeeDataFlowGraphSecurity,
 } from "../models/operations/getemployeedataflowgraph.js";
+import {
+  GetGatewayConnectionHealthRequest,
+  GetGatewayConnectionHealthSecurity,
+} from "../models/operations/getgatewayconnectionhealth.js";
 import {
   GetHooksSummaryRequest,
   GetHooksSummarySecurity,
@@ -184,6 +192,10 @@ import {
   ListFilterOptionsSecurity,
 } from "../models/operations/listfilteroptions.js";
 import {
+  ListGatewayConnectionHotspotsRequest,
+  ListGatewayConnectionHotspotsSecurity,
+} from "../models/operations/listgatewayconnectionhotspots.js";
+import {
   ListHooksTracesRequest,
   ListHooksTracesSecurity,
 } from "../models/operations/listhookstraces.js";
@@ -250,6 +262,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetEmployeeDataFlowGraphResult> {
     return unwrapAsync(telemetryGetEmployeeDataFlowGraph(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getGatewayConnectionHealth telemetry
+   *
+   * @remarks
+   * Connection attempt outcomes for one gateway (meta MCP server) per recorded stage, with a timeline and the stages that are not recorded. Requires project:read and log:read on the project and mcp:read on the gateway.
+   */
+  async getGatewayConnectionHealth(
+    request: GetGatewayConnectionHealthRequest,
+    security?: GetGatewayConnectionHealthSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetGatewayConnectionHealthResult> {
+    return unwrapAsync(telemetryGetGatewayConnectionHealth(
       this,
       request,
       security,
@@ -725,6 +756,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListFilterOptionsResult> {
     return unwrapAsync(telemetryListFilterOptions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listGatewayConnectionHotspots telemetry
+   *
+   * @remarks
+   * The callers, providers, and clients with the most failed connection attempts, or the highest failure rate, within one recorded stage of one gateway. Requires project:read and log:read on the project and mcp:read on the gateway.
+   */
+  async listGatewayConnectionHotspots(
+    request: ListGatewayConnectionHotspotsRequest,
+    security?: ListGatewayConnectionHotspotsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListGatewayConnectionHotspotsResult> {
+    return unwrapAsync(telemetryListGatewayConnectionHotspots(
       this,
       request,
       security,

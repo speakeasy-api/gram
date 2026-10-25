@@ -212,6 +212,42 @@ type GetMetaMcpServerUsageRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
+// GetGatewayConnectionHealthRequestBody is the type of the "telemetry" service
+// "getGatewayConnectionHealth" endpoint HTTP request body.
+type GetGatewayConnectionHealthRequestBody struct {
+	// The gateway (meta MCP server) ID
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Start of the window in ISO 8601 format. Defaults to 7 days before to; the
+	// window may span at most 30 days.
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End of the window in ISO 8601 format, excluded. Defaults to now.
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Count only this hotspot's attempts, in its stage alone. Absent counts the
+	// whole gateway.
+	Key *GatewayConnectionKeyRequestBody `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsRequestBody is the type of the "telemetry"
+// service "listGatewayConnectionHotspots" endpoint HTTP request body.
+type ListGatewayConnectionHotspotsRequestBody struct {
+	// The gateway (meta MCP server) ID
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Start of the window in ISO 8601 format. Defaults to 7 days before to; the
+	// window may span at most 30 days.
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End of the window in ISO 8601 format, excluded. Defaults to now.
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// The recorded stage to rank within; units from different stages are never
+	// combined.
+	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// count ranks by failed attempts; rate by failed attempts over all attempts.
+	RankBy *string `form:"rank_by,omitempty" json:"rank_by,omitempty" xml:"rank_by,omitempty"`
+	// Leave out keys with fewer attempts in the window.
+	MinAttempts *int64 `form:"min_attempts,omitempty" json:"min_attempts,omitempty" xml:"min_attempts,omitempty"`
+	// Hotspots to return.
+	Limit *int64 `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
+
 // GetProjectOverviewRequestBody is the type of the "telemetry" service
 // "getProjectOverview" endpoint HTTP request body.
 type GetProjectOverviewRequestBody struct {
@@ -995,6 +1031,40 @@ type GetMetaMcpServerUsageResponseBody struct {
 	Members []*MetaMcpMemberUsageResponseBody `form:"members" json:"members" xml:"members"`
 	// Members left out of the gateway's tool listings over the window
 	DiscoveryFailures *MetaMcpDiscoveryFailuresResponseBody `form:"discovery_failures,omitempty" json:"discovery_failures,omitempty" xml:"discovery_failures,omitempty"`
+}
+
+// GetGatewayConnectionHealthResponseBody is the type of the "telemetry"
+// service "getGatewayConnectionHealth" endpoint HTTP response body.
+type GetGatewayConnectionHealthResponseBody struct {
+	// Window start
+	From string `form:"from" json:"from" xml:"from"`
+	// Window end, excluded
+	To string `form:"to" json:"to" xml:"to"`
+	// Timeline bucket width in seconds: a multiple of 30 minutes
+	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+	// The recorded stages
+	Stages []*GatewayConnectionStageResponseBody `form:"stages" json:"stages" xml:"stages"`
+	// Stages that are not recorded
+	NotRecorded []*GatewayConnectionCoverageResponseBody `form:"not_recorded" json:"not_recorded" xml:"not_recorded"`
+	// What the recorded stages observe
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+}
+
+// ListGatewayConnectionHotspotsResponseBody is the type of the "telemetry"
+// service "listGatewayConnectionHotspots" endpoint HTTP response body.
+type ListGatewayConnectionHotspotsResponseBody struct {
+	// Window start
+	From string `form:"from" json:"from" xml:"from"`
+	// Window end, excluded
+	To string `form:"to" json:"to" xml:"to"`
+	// The stage ranked within
+	Stage string `form:"stage" json:"stage" xml:"stage"`
+	// count or rate
+	RankBy string `form:"rank_by" json:"rank_by" xml:"rank_by"`
+	// The attempt floor applied
+	MinAttempts int64 `form:"min_attempts" json:"min_attempts" xml:"min_attempts"`
+	// Ranked hotspots; ties break by failed attempts, attempts, then key
+	Hotspots []*GatewayConnectionHotspotResponseBody `form:"hotspots" json:"hotspots" xml:"hotspots"`
 }
 
 // GetProjectOverviewResponseBody is the type of the "telemetry" service
@@ -3279,6 +3349,386 @@ type GetMetaMcpServerUsageUnexpectedResponseBody struct {
 // service "getMetaMcpServerUsage" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetMetaMcpServerUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConnectionHealthUnauthorizedResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetGatewayConnectionHealthUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConnectionHealthForbiddenResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "forbidden" error.
+type GetGatewayConnectionHealthForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConnectionHealthBadRequestResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "bad_request" error.
+type GetGatewayConnectionHealthBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConnectionHealthNotFoundResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "not_found" error.
+type GetGatewayConnectionHealthNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConnectionHealthConflictResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "conflict" error.
+type GetGatewayConnectionHealthConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConnectionHealthUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetGatewayConnectionHealthUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConnectionHealthInvalidResponseBody is the type of the "telemetry"
+// service "getGatewayConnectionHealth" endpoint HTTP response body for the
+// "invalid" error.
+type GetGatewayConnectionHealthInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConnectionHealthInvariantViolationResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetGatewayConnectionHealthInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConnectionHealthUnexpectedResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "unexpected" error.
+type GetGatewayConnectionHealthUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConnectionHealthGatewayErrorResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetGatewayConnectionHealthGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayConnectionHotspotsUnauthorizedResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "unauthorized" error.
+type ListGatewayConnectionHotspotsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayConnectionHotspotsForbiddenResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "forbidden" error.
+type ListGatewayConnectionHotspotsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayConnectionHotspotsBadRequestResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "bad_request" error.
+type ListGatewayConnectionHotspotsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayConnectionHotspotsNotFoundResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "not_found" error.
+type ListGatewayConnectionHotspotsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayConnectionHotspotsConflictResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "conflict" error.
+type ListGatewayConnectionHotspotsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayConnectionHotspotsUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ListGatewayConnectionHotspotsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayConnectionHotspotsInvalidResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "invalid" error.
+type ListGatewayConnectionHotspotsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayConnectionHotspotsInvariantViolationResponseBody is the type of
+// the "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListGatewayConnectionHotspotsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayConnectionHotspotsUnexpectedResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "unexpected" error.
+type ListGatewayConnectionHotspotsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListGatewayConnectionHotspotsGatewayErrorResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "gateway_error" error.
+type ListGatewayConnectionHotspotsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -8433,6 +8883,98 @@ type MetaMcpDiscoveryFailureBucketResponseBody struct {
 	Count int64 `form:"count" json:"count" xml:"count"`
 }
 
+// GatewayConnectionStageResponseBody is used to define fields on response body
+// types.
+type GatewayConnectionStageResponseBody struct {
+	// discovery_listing counts Direct tools/list calls; discovery_member counts
+	// the members each listing reached.
+	Stage string `form:"stage" json:"stage" xml:"stage"`
+	// All recorded attempts in this stage
+	Attempts int64 `form:"attempts" json:"attempts" xml:"attempts"`
+	// Nonzero outcomes, summing to attempts
+	Outcomes []*GatewayConnectionOutcomeCountResponseBody `form:"outcomes" json:"outcomes" xml:"outcomes"`
+	// Retries members needed within their listings
+	Retries int64 `form:"retries" json:"retries" xml:"retries"`
+	// Members listed only after at least one retry
+	Recovered int64 `form:"recovered" json:"recovered" xml:"recovered"`
+	// Time of the latest attempt, absent when there was none
+	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+	// The window in ascending UTC-aligned buckets of interval_seconds, gap-filled;
+	// the first and last may be partial
+	Buckets []*GatewayConnectionBucketResponseBody `form:"buckets" json:"buckets" xml:"buckets"`
+}
+
+// GatewayConnectionOutcomeCountResponseBody is used to define fields on
+// response body types.
+type GatewayConnectionOutcomeCountResponseBody struct {
+	// The attempt outcome within its stage, such as complete, partial, failed,
+	// listed, credential_blocked, or consent_blocked.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// Attempts with this outcome.
+	Count int64 `form:"count" json:"count" xml:"count"`
+}
+
+// GatewayConnectionBucketResponseBody is used to define fields on response
+// body types.
+type GatewayConnectionBucketResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
+	// Nonzero outcomes in this bucket
+	Outcomes []*GatewayConnectionOutcomeCountResponseBody `form:"outcomes" json:"outcomes" xml:"outcomes"`
+}
+
+// GatewayConnectionCoverageResponseBody is used to define fields on response
+// body types.
+type GatewayConnectionCoverageResponseBody struct {
+	// The stage
+	Stage string `form:"stage" json:"stage" xml:"stage"`
+	// What is not observed
+	Note string `form:"note" json:"note" xml:"note"`
+}
+
+// GatewayConnectionHotspotResponseBody is used to define fields on response
+// body types.
+type GatewayConnectionHotspotResponseBody struct {
+	Subject  *GatewayConnectionLabelResponseBody `form:"subject" json:"subject" xml:"subject"`
+	Provider *GatewayConnectionLabelResponseBody `form:"provider" json:"provider" xml:"provider"`
+	Client   *GatewayConnectionLabelResponseBody `form:"client" json:"client" xml:"client"`
+	// All attempts in the stage
+	Attempts int64 `form:"attempts" json:"attempts" xml:"attempts"`
+	// Attempts that failed
+	Failed int64 `form:"failed" json:"failed" xml:"failed"`
+	// Attempts blocked by a credential or consent the caller can fix; not failures
+	Blocked int64 `form:"blocked" json:"blocked" xml:"blocked"`
+	// Nonzero outcomes, summing to attempts
+	Outcomes []*GatewayConnectionOutcomeCountResponseBody `form:"outcomes" json:"outcomes" xml:"outcomes"`
+	// The most frequent sanitized reasons
+	Reasons []*GatewayConnectionReasonCountResponseBody `form:"reasons" json:"reasons" xml:"reasons"`
+	// Time of the latest attempt
+	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+}
+
+// GatewayConnectionLabelResponseBody is used to define fields on response body
+// types.
+type GatewayConnectionLabelResponseBody struct {
+	// What the key is, such as user, agent, provider, registered, or unknown
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// A display name, or a safe description such as Unknown person
+	Label string `form:"label" json:"label" xml:"label"`
+	// The identifier, present only when the named row is visible to the caller
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The value to pass in a key filter for this hotspot, possibly empty; absent
+	// when the caller may not see this caller, provider, or client
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+}
+
+// GatewayConnectionReasonCountResponseBody is used to define fields on
+// response body types.
+type GatewayConnectionReasonCountResponseBody struct {
+	// A sanitized reason code
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+	// Attempts with this reason
+	Count int64 `form:"count" json:"count" xml:"count"`
+}
+
 // ProjectOverviewSummaryResponseBody is used to define fields on response body
 // types.
 type ProjectOverviewSummaryResponseBody struct {
@@ -9263,6 +9805,19 @@ type SearchUsersFilterRequestBody struct {
 	ExternalOrgID *string `form:"external_org_id,omitempty" json:"external_org_id,omitempty" xml:"external_org_id,omitempty"`
 }
 
+// GatewayConnectionKeyRequestBody is used to define fields on request body
+// types.
+type GatewayConnectionKeyRequestBody struct {
+	// The stage the hotspot is in
+	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// The caller's URN, or empty for no signed-in caller
+	Subject *string `form:"subject,omitempty" json:"subject,omitempty" xml:"subject,omitempty"`
+	// The upstream provider's ID, or empty for none
+	ProviderID *string `form:"provider_id,omitempty" json:"provider_id,omitempty" xml:"provider_id,omitempty"`
+	// The registered client's ID or the recorded client kind, or empty
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+}
+
 // QueryFilterRequestBody is used to define fields on request body types.
 type QueryFilterRequestBody struct {
 	// Dimension to filter on
@@ -9534,6 +10089,69 @@ func NewGetMetaMcpServerUsageResponseBody(res *telemetry.GetMetaMcpServerUsageRe
 	}
 	if res.DiscoveryFailures != nil {
 		body.DiscoveryFailures = marshalTelemetryMetaMcpDiscoveryFailuresToMetaMcpDiscoveryFailuresResponseBody(res.DiscoveryFailures)
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthResponseBody builds the HTTP response body from
+// the result of the "getGatewayConnectionHealth" endpoint of the "telemetry"
+// service.
+func NewGetGatewayConnectionHealthResponseBody(res *telemetry.GetGatewayConnectionHealthResult) *GetGatewayConnectionHealthResponseBody {
+	body := &GetGatewayConnectionHealthResponseBody{
+		From:            res.From,
+		To:              res.To,
+		IntervalSeconds: res.IntervalSeconds,
+		Scope:           res.Scope,
+	}
+	if res.Stages != nil {
+		body.Stages = make([]*GatewayConnectionStageResponseBody, len(res.Stages))
+		for i, val := range res.Stages {
+			if val == nil {
+				body.Stages[i] = nil
+				continue
+			}
+			body.Stages[i] = marshalTelemetryGatewayConnectionStageToGatewayConnectionStageResponseBody(val)
+		}
+	} else {
+		body.Stages = []*GatewayConnectionStageResponseBody{}
+	}
+	if res.NotRecorded != nil {
+		body.NotRecorded = make([]*GatewayConnectionCoverageResponseBody, len(res.NotRecorded))
+		for i, val := range res.NotRecorded {
+			if val == nil {
+				body.NotRecorded[i] = nil
+				continue
+			}
+			body.NotRecorded[i] = marshalTelemetryGatewayConnectionCoverageToGatewayConnectionCoverageResponseBody(val)
+		}
+	} else {
+		body.NotRecorded = []*GatewayConnectionCoverageResponseBody{}
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsResponseBody builds the HTTP response body
+// from the result of the "listGatewayConnectionHotspots" endpoint of the
+// "telemetry" service.
+func NewListGatewayConnectionHotspotsResponseBody(res *telemetry.ListGatewayConnectionHotspotsResult) *ListGatewayConnectionHotspotsResponseBody {
+	body := &ListGatewayConnectionHotspotsResponseBody{
+		From:        res.From,
+		To:          res.To,
+		Stage:       res.Stage,
+		RankBy:      res.RankBy,
+		MinAttempts: res.MinAttempts,
+	}
+	if res.Hotspots != nil {
+		body.Hotspots = make([]*GatewayConnectionHotspotResponseBody, len(res.Hotspots))
+		for i, val := range res.Hotspots {
+			if val == nil {
+				body.Hotspots[i] = nil
+				continue
+			}
+			body.Hotspots[i] = marshalTelemetryGatewayConnectionHotspotToGatewayConnectionHotspotResponseBody(val)
+		}
+	} else {
+		body.Hotspots = []*GatewayConnectionHotspotResponseBody{}
 	}
 	return body
 }
@@ -11854,6 +12472,306 @@ func NewGetMetaMcpServerUsageUnexpectedResponseBody(res *goa.ServiceError) *GetM
 // "telemetry" service.
 func NewGetMetaMcpServerUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetMetaMcpServerUsageGatewayErrorResponseBody {
 	body := &GetMetaMcpServerUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getGatewayConnectionHealth" endpoint
+// of the "telemetry" service.
+func NewGetGatewayConnectionHealthUnauthorizedResponseBody(res *goa.ServiceError) *GetGatewayConnectionHealthUnauthorizedResponseBody {
+	body := &GetGatewayConnectionHealthUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthForbiddenResponseBody builds the HTTP response
+// body from the result of the "getGatewayConnectionHealth" endpoint of the
+// "telemetry" service.
+func NewGetGatewayConnectionHealthForbiddenResponseBody(res *goa.ServiceError) *GetGatewayConnectionHealthForbiddenResponseBody {
+	body := &GetGatewayConnectionHealthForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthBadRequestResponseBody builds the HTTP response
+// body from the result of the "getGatewayConnectionHealth" endpoint of the
+// "telemetry" service.
+func NewGetGatewayConnectionHealthBadRequestResponseBody(res *goa.ServiceError) *GetGatewayConnectionHealthBadRequestResponseBody {
+	body := &GetGatewayConnectionHealthBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthNotFoundResponseBody builds the HTTP response
+// body from the result of the "getGatewayConnectionHealth" endpoint of the
+// "telemetry" service.
+func NewGetGatewayConnectionHealthNotFoundResponseBody(res *goa.ServiceError) *GetGatewayConnectionHealthNotFoundResponseBody {
+	body := &GetGatewayConnectionHealthNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthConflictResponseBody builds the HTTP response
+// body from the result of the "getGatewayConnectionHealth" endpoint of the
+// "telemetry" service.
+func NewGetGatewayConnectionHealthConflictResponseBody(res *goa.ServiceError) *GetGatewayConnectionHealthConflictResponseBody {
+	body := &GetGatewayConnectionHealthConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getGatewayConnectionHealth" endpoint
+// of the "telemetry" service.
+func NewGetGatewayConnectionHealthUnsupportedMediaResponseBody(res *goa.ServiceError) *GetGatewayConnectionHealthUnsupportedMediaResponseBody {
+	body := &GetGatewayConnectionHealthUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthInvalidResponseBody builds the HTTP response
+// body from the result of the "getGatewayConnectionHealth" endpoint of the
+// "telemetry" service.
+func NewGetGatewayConnectionHealthInvalidResponseBody(res *goa.ServiceError) *GetGatewayConnectionHealthInvalidResponseBody {
+	body := &GetGatewayConnectionHealthInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getGatewayConnectionHealth" endpoint
+// of the "telemetry" service.
+func NewGetGatewayConnectionHealthInvariantViolationResponseBody(res *goa.ServiceError) *GetGatewayConnectionHealthInvariantViolationResponseBody {
+	body := &GetGatewayConnectionHealthInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getGatewayConnectionHealth" endpoint of the
+// "telemetry" service.
+func NewGetGatewayConnectionHealthUnexpectedResponseBody(res *goa.ServiceError) *GetGatewayConnectionHealthUnexpectedResponseBody {
+	body := &GetGatewayConnectionHealthUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getGatewayConnectionHealth" endpoint
+// of the "telemetry" service.
+func NewGetGatewayConnectionHealthGatewayErrorResponseBody(res *goa.ServiceError) *GetGatewayConnectionHealthGatewayErrorResponseBody {
+	body := &GetGatewayConnectionHealthGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listGatewayConnectionHotspots"
+// endpoint of the "telemetry" service.
+func NewListGatewayConnectionHotspotsUnauthorizedResponseBody(res *goa.ServiceError) *ListGatewayConnectionHotspotsUnauthorizedResponseBody {
+	body := &ListGatewayConnectionHotspotsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsForbiddenResponseBody builds the HTTP
+// response body from the result of the "listGatewayConnectionHotspots"
+// endpoint of the "telemetry" service.
+func NewListGatewayConnectionHotspotsForbiddenResponseBody(res *goa.ServiceError) *ListGatewayConnectionHotspotsForbiddenResponseBody {
+	body := &ListGatewayConnectionHotspotsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsBadRequestResponseBody builds the HTTP
+// response body from the result of the "listGatewayConnectionHotspots"
+// endpoint of the "telemetry" service.
+func NewListGatewayConnectionHotspotsBadRequestResponseBody(res *goa.ServiceError) *ListGatewayConnectionHotspotsBadRequestResponseBody {
+	body := &ListGatewayConnectionHotspotsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsNotFoundResponseBody builds the HTTP
+// response body from the result of the "listGatewayConnectionHotspots"
+// endpoint of the "telemetry" service.
+func NewListGatewayConnectionHotspotsNotFoundResponseBody(res *goa.ServiceError) *ListGatewayConnectionHotspotsNotFoundResponseBody {
+	body := &ListGatewayConnectionHotspotsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsConflictResponseBody builds the HTTP
+// response body from the result of the "listGatewayConnectionHotspots"
+// endpoint of the "telemetry" service.
+func NewListGatewayConnectionHotspotsConflictResponseBody(res *goa.ServiceError) *ListGatewayConnectionHotspotsConflictResponseBody {
+	body := &ListGatewayConnectionHotspotsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listGatewayConnectionHotspots"
+// endpoint of the "telemetry" service.
+func NewListGatewayConnectionHotspotsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListGatewayConnectionHotspotsUnsupportedMediaResponseBody {
+	body := &ListGatewayConnectionHotspotsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsInvalidResponseBody builds the HTTP response
+// body from the result of the "listGatewayConnectionHotspots" endpoint of the
+// "telemetry" service.
+func NewListGatewayConnectionHotspotsInvalidResponseBody(res *goa.ServiceError) *ListGatewayConnectionHotspotsInvalidResponseBody {
+	body := &ListGatewayConnectionHotspotsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "listGatewayConnectionHotspots"
+// endpoint of the "telemetry" service.
+func NewListGatewayConnectionHotspotsInvariantViolationResponseBody(res *goa.ServiceError) *ListGatewayConnectionHotspotsInvariantViolationResponseBody {
+	body := &ListGatewayConnectionHotspotsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listGatewayConnectionHotspots"
+// endpoint of the "telemetry" service.
+func NewListGatewayConnectionHotspotsUnexpectedResponseBody(res *goa.ServiceError) *ListGatewayConnectionHotspotsUnexpectedResponseBody {
+	body := &ListGatewayConnectionHotspotsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listGatewayConnectionHotspots"
+// endpoint of the "telemetry" service.
+func NewListGatewayConnectionHotspotsGatewayErrorResponseBody(res *goa.ServiceError) *ListGatewayConnectionHotspotsGatewayErrorResponseBody {
+	body := &ListGatewayConnectionHotspotsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -15821,6 +16739,58 @@ func NewGetMetaMcpServerUsagePayload(body *GetMetaMcpServerUsageRequestBody, api
 	return v
 }
 
+// NewGetGatewayConnectionHealthPayload builds a telemetry service
+// getGatewayConnectionHealth endpoint payload.
+func NewGetGatewayConnectionHealthPayload(body *GetGatewayConnectionHealthRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetGatewayConnectionHealthPayload {
+	v := &telemetry.GetGatewayConnectionHealthPayload{
+		MetaMcpServerID: *body.MetaMcpServerID,
+		From:            body.From,
+		To:              body.To,
+	}
+	if body.Key != nil {
+		v.Key = unmarshalGatewayConnectionKeyRequestBodyToTelemetryGatewayConnectionKey(body.Key)
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsPayload builds a telemetry service
+// listGatewayConnectionHotspots endpoint payload.
+func NewListGatewayConnectionHotspotsPayload(body *ListGatewayConnectionHotspotsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.ListGatewayConnectionHotspotsPayload {
+	v := &telemetry.ListGatewayConnectionHotspotsPayload{
+		MetaMcpServerID: *body.MetaMcpServerID,
+		From:            body.From,
+		To:              body.To,
+		Stage:           *body.Stage,
+	}
+	if body.RankBy != nil {
+		v.RankBy = *body.RankBy
+	}
+	if body.MinAttempts != nil {
+		v.MinAttempts = *body.MinAttempts
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
+	}
+	if body.RankBy == nil {
+		v.RankBy = "count"
+	}
+	if body.MinAttempts == nil {
+		v.MinAttempts = 5
+	}
+	if body.Limit == nil {
+		v.Limit = 25
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewGetProjectOverviewPayload builds a telemetry service getProjectOverview
 // endpoint payload.
 func NewGetProjectOverviewPayload(body *GetProjectOverviewRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetProjectOverviewPayload {
@@ -17435,6 +18405,80 @@ func ValidateGetMetaMcpServerUsageRequestBody(body *GetMetaMcpServerUsageRequest
 	return
 }
 
+// ValidateGetGatewayConnectionHealthRequestBody runs the validations defined
+// on GetGatewayConnectionHealthRequestBody
+func ValidateGetGatewayConnectionHealthRequestBody(body *GetGatewayConnectionHealthRequestBody) (err error) {
+	if body.MetaMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("meta_mcp_server_id", "body"))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.Key != nil {
+		if err2 := ValidateGatewayConnectionKeyRequestBody(body.Key); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsRequestBody runs the validations
+// defined on ListGatewayConnectionHotspotsRequestBody
+func ValidateListGatewayConnectionHotspotsRequestBody(body *ListGatewayConnectionHotspotsRequestBody) (err error) {
+	if body.MetaMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("meta_mcp_server_id", "body"))
+	}
+	if body.Stage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	if body.Stage != nil {
+		if !(*body.Stage == "discovery_listing" || *body.Stage == "discovery_member") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"discovery_listing", "discovery_member"}))
+		}
+	}
+	if body.RankBy != nil {
+		if !(*body.RankBy == "count" || *body.RankBy == "rate") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.rank_by", *body.RankBy, []any{"count", "rate"}))
+		}
+	}
+	if body.MinAttempts != nil {
+		if *body.MinAttempts < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_attempts", *body.MinAttempts, 1, true))
+		}
+	}
+	if body.MinAttempts != nil {
+		if *body.MinAttempts > 100000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_attempts", *body.MinAttempts, 100000, false))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit > 25 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 25, false))
+		}
+	}
+	return
+}
+
 // ValidateGetProjectOverviewRequestBody runs the validations defined on
 // GetProjectOverviewRequestBody
 func ValidateGetProjectOverviewRequestBody(body *GetProjectOverviewRequestBody) (err error) {
@@ -18491,6 +19535,44 @@ func ValidateSearchUsersFilterRequestBody(body *SearchUsersFilterRequestBody) (e
 	}
 	if body.DeploymentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.deployment_id", *body.DeploymentID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateGatewayConnectionKeyRequestBody runs the validations defined on
+// GatewayConnectionKeyRequestBody
+func ValidateGatewayConnectionKeyRequestBody(body *GatewayConnectionKeyRequestBody) (err error) {
+	if body.Stage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
+	}
+	if body.Subject == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject", "body"))
+	}
+	if body.ProviderID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider_id", "body"))
+	}
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.Stage != nil {
+		if !(*body.Stage == "discovery_listing" || *body.Stage == "discovery_member") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"discovery_listing", "discovery_member"}))
+		}
+	}
+	if body.Subject != nil {
+		if utf8.RuneCountInString(*body.Subject) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.subject", *body.Subject, utf8.RuneCountInString(*body.Subject), 512, false))
+		}
+	}
+	if body.ProviderID != nil {
+		if utf8.RuneCountInString(*body.ProviderID) > 36 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.provider_id", *body.ProviderID, utf8.RuneCountInString(*body.ProviderID), 36, false))
+		}
+	}
+	if body.Client != nil {
+		if utf8.RuneCountInString(*body.Client) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.client", *body.Client, utf8.RuneCountInString(*body.Client), 512, false))
+		}
 	}
 	return
 }

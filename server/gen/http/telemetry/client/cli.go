@@ -687,6 +687,156 @@ func BuildGetMetaMcpServerUsagePayload(telemetryGetMetaMcpServerUsageBody string
 	return v, nil
 }
 
+// BuildGetGatewayConnectionHealthPayload builds the payload for the telemetry
+// getGatewayConnectionHealth endpoint from CLI flags.
+func BuildGetGatewayConnectionHealthPayload(telemetryGetGatewayConnectionHealthBody string, telemetryGetGatewayConnectionHealthApikeyToken string, telemetryGetGatewayConnectionHealthSessionToken string, telemetryGetGatewayConnectionHealthProjectSlugInput string) (*telemetry.GetGatewayConnectionHealthPayload, error) {
+	var err error
+	var body GetGatewayConnectionHealthRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetGatewayConnectionHealthBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"key\": {\n         \"client\": \"aaa\",\n         \"provider_id\": \"aaa\",\n         \"stage\": \"discovery_member\",\n         \"subject\": \"aaa\"\n      },\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
+		if body.From != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+		}
+		if body.To != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+		}
+		if body.Key != nil {
+			if err2 := ValidateGatewayConnectionKeyRequestBody(body.Key); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetGatewayConnectionHealthApikeyToken != "" {
+			apikeyToken = &telemetryGetGatewayConnectionHealthApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetGatewayConnectionHealthSessionToken != "" {
+			sessionToken = &telemetryGetGatewayConnectionHealthSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetGatewayConnectionHealthProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetGatewayConnectionHealthProjectSlugInput
+		}
+	}
+	v := &telemetry.GetGatewayConnectionHealthPayload{
+		MetaMcpServerID: body.MetaMcpServerID,
+		From:            body.From,
+		To:              body.To,
+	}
+	if body.Key != nil {
+		v.Key = marshalGatewayConnectionKeyRequestBodyToTelemetryGatewayConnectionKey(body.Key)
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListGatewayConnectionHotspotsPayload builds the payload for the
+// telemetry listGatewayConnectionHotspots endpoint from CLI flags.
+func BuildListGatewayConnectionHotspotsPayload(telemetryListGatewayConnectionHotspotsBody string, telemetryListGatewayConnectionHotspotsApikeyToken string, telemetryListGatewayConnectionHotspotsSessionToken string, telemetryListGatewayConnectionHotspotsProjectSlugInput string) (*telemetry.ListGatewayConnectionHotspotsPayload, error) {
+	var err error
+	var body ListGatewayConnectionHotspotsRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryListGatewayConnectionHotspotsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"min_attempts\": 2,\n      \"rank_by\": \"rate\",\n      \"stage\": \"discovery_member\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
+		if body.From != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+		}
+		if body.To != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+		}
+		if !(body.Stage == "discovery_listing" || body.Stage == "discovery_member") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", body.Stage, []any{"discovery_listing", "discovery_member"}))
+		}
+		if !(body.RankBy == "count" || body.RankBy == "rate") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.rank_by", body.RankBy, []any{"count", "rate"}))
+		}
+		if body.MinAttempts < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_attempts", body.MinAttempts, 1, true))
+		}
+		if body.MinAttempts > 100000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_attempts", body.MinAttempts, 100000, false))
+		}
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
+		}
+		if body.Limit > 25 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 25, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryListGatewayConnectionHotspotsApikeyToken != "" {
+			apikeyToken = &telemetryListGatewayConnectionHotspotsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryListGatewayConnectionHotspotsSessionToken != "" {
+			sessionToken = &telemetryListGatewayConnectionHotspotsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryListGatewayConnectionHotspotsProjectSlugInput != "" {
+			projectSlugInput = &telemetryListGatewayConnectionHotspotsProjectSlugInput
+		}
+	}
+	v := &telemetry.ListGatewayConnectionHotspotsPayload{
+		MetaMcpServerID: body.MetaMcpServerID,
+		From:            body.From,
+		To:              body.To,
+		Stage:           body.Stage,
+		RankBy:          body.RankBy,
+		MinAttempts:     body.MinAttempts,
+		Limit:           body.Limit,
+	}
+	{
+		var zero string
+		if v.RankBy == zero {
+			v.RankBy = "count"
+		}
+	}
+	{
+		var zero int64
+		if v.MinAttempts == zero {
+			v.MinAttempts = 5
+		}
+	}
+	{
+		var zero int64
+		if v.Limit == zero {
+			v.Limit = 25
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetProjectOverviewPayload builds the payload for the telemetry
 // getProjectOverview endpoint from CLI flags.
 func BuildGetProjectOverviewPayload(telemetryGetProjectOverviewBody string, telemetryGetProjectOverviewApikeyToken string, telemetryGetProjectOverviewSessionToken string, telemetryGetProjectOverviewProjectSlugInput string) (*telemetry.GetProjectOverviewPayload, error) {

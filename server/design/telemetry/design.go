@@ -336,6 +336,64 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMetaMcpServerUsage", "type": "query"}`)
 	})
 
+	Method("getGatewayConnectionHealth", func() {
+		Description("Connection attempt outcomes for one gateway (meta MCP server) per recorded stage, with a timeline and the stages that are not recorded. Requires project:read and log:read on the project and mcp:read on the gateway.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetGatewayConnectionHealthPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetGatewayConnectionHealthResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getGatewayConnectionHealth")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getGatewayConnectionHealth")
+		Meta("openapi:extension:x-speakeasy-name-override", "getGatewayConnectionHealth")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GatewayConnectionHealth", "type": "query"}`)
+	})
+
+	Method("listGatewayConnectionHotspots", func() {
+		Description("The callers, providers, and clients with the most failed connection attempts, or the highest failure rate, within one recorded stage of one gateway. Requires project:read and log:read on the project and mcp:read on the gateway.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(ListGatewayConnectionHotspotsPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListGatewayConnectionHotspotsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.listGatewayConnectionHotspots")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listGatewayConnectionHotspots")
+		Meta("openapi:extension:x-speakeasy-name-override", "listGatewayConnectionHotspots")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GatewayConnectionHotspots", "type": "query"}`)
+	})
+
 	Method("getProjectOverview", func() {
 		Description("Get project-level overview including total chats, tool calls, active servers/users, and top lists")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -3268,4 +3326,147 @@ var HookTraceSummary = Type("HookTraceSummary", func() {
 		"log_count",
 		"gram_urn",
 	)
+})
+
+var gatewayConnectionWindow = func() {
+	Attribute("meta_mcp_server_id", String, "The gateway (meta MCP server) ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("from", String, "Start of the window in ISO 8601 format. Defaults to 7 days before to; the window may span at most 30 days.", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End of the window in ISO 8601 format, excluded. Defaults to now.", func() {
+		Format(FormatDateTime)
+		Example("2025-12-26T10:00:00Z")
+	})
+	Required("meta_mcp_server_id")
+}
+
+var GatewayConnectionKey = Type("GatewayConnectionKey", func() {
+	Description("One hotspot to count alone: a stage's caller, provider, and client, given as the key values the hotspot's labels return. An empty value matches attempts that recorded none, such as an anonymous caller or a member with no upstream provider.")
+	Attribute("stage", String, "The stage the hotspot is in", func() {
+		Enum("discovery_listing", "discovery_member")
+	})
+	Attribute("subject", String, "The caller's URN, or empty for no signed-in caller", func() {
+		MaxLength(512)
+	})
+	Attribute("provider_id", String, "The upstream provider's ID, or empty for none", func() {
+		MaxLength(36)
+	})
+	Attribute("client", String, "The registered client's ID or the recorded client kind, or empty", func() {
+		MaxLength(512)
+	})
+	Required("stage", "subject", "provider_id", "client")
+})
+
+var GetGatewayConnectionHealthPayload = Type("GetGatewayConnectionHealthPayload", func() {
+	gatewayConnectionWindow()
+	Attribute("key", GatewayConnectionKey, "Count only this hotspot's attempts, in its stage alone. Absent counts the whole gateway.")
+})
+
+var ListGatewayConnectionHotspotsPayload = Type("ListGatewayConnectionHotspotsPayload", func() {
+	gatewayConnectionWindow()
+	Attribute("stage", String, "The recorded stage to rank within; units from different stages are never combined.", func() {
+		Enum("discovery_listing", "discovery_member")
+	})
+	Attribute("rank_by", String, "count ranks by failed attempts; rate by failed attempts over all attempts.", func() {
+		Enum("count", "rate")
+		Default("count")
+	})
+	Attribute("min_attempts", Int64, "Leave out keys with fewer attempts in the window.", func() {
+		Minimum(1)
+		Maximum(100000)
+		Default(5)
+	})
+	Attribute("limit", Int64, "Hotspots to return.", func() {
+		Minimum(1)
+		Maximum(25)
+		Default(25)
+	})
+	Required("stage")
+})
+
+var GatewayConnectionOutcomeCount = Type("GatewayConnectionOutcomeCount", func() {
+	Attribute("outcome", String, "The attempt outcome within its stage, such as complete, partial, failed, listed, credential_blocked, or consent_blocked.")
+	Attribute("count", Int64, "Attempts with this outcome.")
+	Required("outcome", "count")
+})
+
+var GatewayConnectionBucket = Type("GatewayConnectionBucket", func() {
+	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+	Attribute("outcomes", ArrayOf(GatewayConnectionOutcomeCount), "Nonzero outcomes in this bucket")
+	Required("bucket_time_unix_nano", "outcomes")
+})
+
+var GatewayConnectionStage = Type("GatewayConnectionStage", func() {
+	Description("One recorded stage over the window. attempts is the denominator for every outcome of this stage.")
+	Attribute("stage", String, "discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.", func() {
+		Enum("discovery_listing", "discovery_member")
+	})
+	Attribute("attempts", Int64, "All recorded attempts in this stage")
+	Attribute("outcomes", ArrayOf(GatewayConnectionOutcomeCount), "Nonzero outcomes, summing to attempts")
+	Attribute("retries", Int64, "Retries members needed within their listings")
+	Attribute("recovered", Int64, "Members listed only after at least one retry")
+	Attribute("last_seen_at", String, "Time of the latest attempt, absent when there was none", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("buckets", ArrayOf(GatewayConnectionBucket), "The window in ascending UTC-aligned buckets of interval_seconds, gap-filled; the first and last may be partial")
+	Required("stage", "attempts", "outcomes", "retries", "recovered", "buckets")
+})
+
+var GatewayConnectionCoverage = Type("GatewayConnectionCoverage", func() {
+	Description("A connection stage that is not recorded, so its outcomes are unknown rather than zero.")
+	Attribute("stage", String, "The stage")
+	Attribute("note", String, "What is not observed")
+	Required("stage", "note")
+})
+
+var GetGatewayConnectionHealthResult = Type("GetGatewayConnectionHealthResult", func() {
+	Attribute("from", String, "Window start", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Window end, excluded", func() { Format(FormatDateTime) })
+	Attribute("interval_seconds", Int64, "Timeline bucket width in seconds: a multiple of 30 minutes")
+	Attribute("stages", ArrayOf(GatewayConnectionStage), "The recorded stages")
+	Attribute("not_recorded", ArrayOf(GatewayConnectionCoverage), "Stages that are not recorded")
+	Attribute("scope", String, "What the recorded stages observe")
+	Required("from", "to", "interval_seconds", "stages", "not_recorded", "scope")
+})
+
+var GatewayConnectionLabel = Type("GatewayConnectionLabel", func() {
+	Description("A caller, provider, or client, named only when the project can see it.")
+	Attribute("kind", String, "What the key is, such as user, agent, provider, registered, or unknown")
+	Attribute("label", String, "A display name, or a safe description such as Unknown person")
+	Attribute("id", String, "The identifier, present only when the named row is visible to the caller")
+	Attribute("key", String, "The value to pass in a key filter for this hotspot, possibly empty; absent when the caller may not see this caller, provider, or client")
+	Required("kind", "label")
+})
+
+var GatewayConnectionReasonCount = Type("GatewayConnectionReasonCount", func() {
+	Attribute("reason", String, "A sanitized reason code")
+	Attribute("count", Int64, "Attempts with this reason")
+	Required("reason", "count")
+})
+
+var GatewayConnectionHotspot = Type("GatewayConnectionHotspot", func() {
+	Description("One caller × provider × client within the stage. attempts is the denominator for failed and for blocked.")
+	Attribute("subject", GatewayConnectionLabel)
+	Attribute("provider", GatewayConnectionLabel)
+	Attribute("client", GatewayConnectionLabel)
+	Attribute("attempts", Int64, "All attempts in the stage")
+	Attribute("failed", Int64, "Attempts that failed")
+	Attribute("blocked", Int64, "Attempts blocked by a credential or consent the caller can fix; not failures")
+	Attribute("outcomes", ArrayOf(GatewayConnectionOutcomeCount), "Nonzero outcomes, summing to attempts")
+	Attribute("reasons", ArrayOf(GatewayConnectionReasonCount), "The most frequent sanitized reasons")
+	Attribute("last_seen_at", String, "Time of the latest attempt", func() { Format(FormatDateTime) })
+	Required("subject", "provider", "client", "attempts", "failed", "blocked", "outcomes", "reasons")
+})
+
+var ListGatewayConnectionHotspotsResult = Type("ListGatewayConnectionHotspotsResult", func() {
+	Attribute("from", String, "Window start", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Window end, excluded", func() { Format(FormatDateTime) })
+	Attribute("stage", String, "The stage ranked within")
+	Attribute("rank_by", String, "count or rate")
+	Attribute("min_attempts", Int64, "The attempt floor applied")
+	Attribute("hotspots", ArrayOf(GatewayConnectionHotspot), "Ranked hotspots; ties break by failed attempts, attempts, then key")
+	Required("from", "to", "stage", "rank_by", "min_attempts", "hotspots")
 })

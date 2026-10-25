@@ -74,3 +74,34 @@ func (a *Authorizer) ReadableAgentIDsNamed(ctx context.Context, dbtx repo.DBTX, 
 		cursorID = uuid.NullUUID{UUID: last.ID, Valid: true}
 	}
 }
+
+// ReadableAgentNames names the given agents the caller may read. Agents the
+// caller may not read, deleted agents, and agents of other organizations are
+// left out, as are all of them for credentials that cannot manage agents.
+func (a *Authorizer) ReadableAgentNames(ctx context.Context, dbtx repo.DBTX, ids []uuid.UUID) (map[uuid.UUID]string, error) {
+	names := map[uuid.UUID]string{}
+	if len(ids) == 0 {
+		return names, nil
+	}
+	human, err := a.RequireHuman(ctx, dbtx)
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeUnauthorized || shareable.Code == oops.CodeForbidden) {
+		return names, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	agents, err := repo.New(dbtx).ListAgentsByIDs(ctx, repo.ListAgentsByIDsParams{OrganizationID: human.Auth.ActiveOrganizationID, Ids: ids})
+	if err != nil {
+		return nil, fmt.Errorf("list agents by id: %w", err)
+	}
+	for _, agent := range agents {
+		permissions, err := a.Permissions(ctx, human, agent)
+		if err != nil {
+			return nil, err
+		}
+		if permissions.Read {
+			names[agent.ID] = agent.Name
+		}
+	}
+	return names, nil
+}

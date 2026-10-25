@@ -6172,3 +6172,16 @@ WHERE project_id = @project_id AND organization_id = @organization_id
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL;
+
+-- name: ListRemoteSessionIssuerLabelsByIDs :many
+-- Names the providers a project can see among the given issuer IDs: its own,
+-- its organization's, and the shared catalog's. Deleted issuers are left out.
+SELECT id, slug, name
+FROM remote_session_issuers
+WHERE id = ANY(@ids::uuid[])
+  AND (
+    project_id = @project_id
+    OR (project_id IS NULL AND organization_id = @organization_id)
+    OR (project_id IS NULL AND organization_id IS NULL)
+  )
+  AND deleted IS FALSE;
