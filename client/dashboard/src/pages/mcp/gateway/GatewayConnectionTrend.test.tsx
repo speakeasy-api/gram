@@ -382,9 +382,9 @@ it("labels UTC buckets in UTC west of UTC and in half-hour zones", () => {
   const kolkata = inZone("Asia/Kolkata", () =>
     trendChartData(hourly, hourly.from, hourly.to, "#123456"),
   );
-  expect(kolkata.events.labels).toEqual(["14:00", "15:00"]);
+  expect(kolkata.events.labels).toEqual([utcTime(fourteen), utcTime(fifteen)]);
   expect(kolkata.events.tooltipLabels[0]).toBe(
-    `${utcDay(fourteen)}, 14:00 – ${utcDay(fifteen)}, 15:00 UTC`,
+    `${utcDay(fourteen)}, ${utcTime(fourteen)} – ${utcDay(fifteen)}, ${utcTime(fifteen)} UTC`,
   );
 });
 
