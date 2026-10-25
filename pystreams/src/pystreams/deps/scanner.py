@@ -4,7 +4,7 @@ The ``multi`` command supports two scan strategies, selected by ``--scan-workers
 a pool of worker processes (the default) or an in-process thread scanner. This
 isolates that selection — and the analyzer/concurrency wiring each strategy needs
 — behind one async factory so the command body stays about lifecycle, not
-construction. ``GRAM_PII_BACKEND=clairic`` selects the hosted POC instead.
+construction. ``GRAM_PII_BACKEND=gliner`` selects the local model instead.
 """
 
 from __future__ import annotations
@@ -40,14 +40,16 @@ async def build_presidio_scanner(
     spaCy models, so the in-process analyzer is only built for the threaded path.
     """
     backend = os.environ.get("GRAM_PII_BACKEND", "presidio")
-    if backend == "clairic":
-        from pystreams.risk.clairic import ClairicScanner
+    if backend == "gliner":
+        from pystreams.risk.gliner import GlinerScanner
 
-        logger.info("starting clairic PII scanner")
-        # HTTP client setup reads the TLS trust store; keep it off the loop.
-        return await asyncify(ClairicScanner.from_env)()
+        logger.info("starting gliner PII scanner")
+        # Load the cached model once, off the event loop.
+        return await asyncify(GlinerScanner.from_env)(
+            timeout=scan_timeout, slot_timeout=scan_slot_timeout
+        )
     if backend != "presidio":
-        raise ValueError("GRAM_PII_BACKEND must be presidio or clairic")
+        raise ValueError("GRAM_PII_BACKEND must be presidio or gliner")
     if scan_workers > 0:
         logger.info(
             "starting presidio scan pool",

@@ -15,11 +15,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from pystreams.risk.clairic import ClairicResponseError, ClairicScanner
+from pystreams.risk.gliner import GlinerResponseError, GlinerScanner
 from pystreams.risk.scanner import ScanInputError
 
 
-def build_app(scanner: ClairicScanner) -> Starlette:
+def build_app(scanner: GlinerScanner) -> Starlette:
     @asynccontextmanager
     async def lifespan(_app: Starlette) -> AsyncGenerator[None]:
         async with scanner:
@@ -67,7 +67,7 @@ def build_app(scanner: ClairicScanner) -> Starlette:
             return JSONResponse(results)
         except ValueError, ScanInputError:
             return JSONResponse({"error": "invalid scan input"}, status_code=400)
-        except ClairicResponseError, TimeoutError:
+        except GlinerResponseError, TimeoutError:
             # Never expose upstream response bodies, credentials or scanned text.
             return JSONResponse({"error": "PII scan unavailable"}, status_code=502)
 
@@ -83,11 +83,11 @@ def build_app(scanner: ClairicScanner) -> Starlette:
     )
 
 
-@click.command("clairic-server")
+@click.command("gliner-server")
 @click.option("--host", default="127.0.0.1", show_default=True)
 @click.option("--port", default=8091, type=click.IntRange(1, 65535), show_default=True)
 def cli(host: str, port: int) -> None:
     """Serve the internal PII adapter; keep it on a private network."""
     uvicorn.run(
-        build_app(ClairicScanner.from_env()), host=host, port=port, access_log=False
+        build_app(GlinerScanner.from_env()), host=host, port=port, access_log=False
     )

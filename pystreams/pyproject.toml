@@ -25,6 +25,9 @@ dependencies = [
   "uvicorn>=0.51.0",
 ]
 
+[project.optional-dependencies]
+gliner = ["gliner2[local]==2.1.0", "torch==2.14.1"]
+
 [dependency-groups]
 dev = [
   "fakeredis>=2.26.0",
@@ -39,14 +42,20 @@ dev = [
 # Entrypoint stands up the scan pool's forkserver while the process is pristine
 # before handing off to multi:cli — see pystreams.cmd.bootstrap for the why.
 multi = "pystreams.cmd.bootstrap:main"
-clairic-server = "pystreams.cmd.clairic_server:cli"
+gliner-server = "pystreams.cmd.gliner_server:cli"
 presidio-load = "pystreams.cmd.presidio_load:cli"
 
 [build-system]
 requires = ["uv_build>=0.11.32,<0.12"]
 build-backend = "uv_build"
 
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'", extra = "gliner" }]
 gram-infra = { workspace = true }
 en-core-web-lg = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl" }
 
