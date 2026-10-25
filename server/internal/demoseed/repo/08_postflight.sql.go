@@ -263,6 +263,18 @@ func (q *Queries) PostflightCountForeignUserRows(ctx context.Context, arg Postfl
 	return count, err
 }
 
+const postflightCountGatewayCimdClients = `-- name: PostflightCountGatewayCimdClients :one
+SELECT count(*)
+FROM user_session_issuer_cimd_clients WHERE project_id = $1::uuid AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightCountGatewayCimdClients(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountGatewayCimdClients, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountGatewayEndpoints = `-- name: PostflightCountGatewayEndpoints :one
 SELECT count(*)
 FROM mcp_endpoints e

@@ -98,6 +98,9 @@ vi.mock("@/components/connections/ConnectionsList", () => ({
 // A listing hotspot's matching connections, as the health sheet offers them.
 const LUCAS = "user:user_lucas";
 const MATCHING_CLIENT = "0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0a";
+vi.mock("./GatewayClientAdmission", () => ({
+  GatewayClientAdmission: () => null,
+}));
 vi.mock("./GatewayConnectionHealth", async () => {
   const { matchingConnectionFilters: matching } =
     await import("./connectionHealth");
@@ -197,7 +200,7 @@ function renderAt(path = "/debug", before: string[] = []) {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[...before, path]}>
         <Boundary>
-          <GatewayDebugTab gatewayId="gateway-1" />
+          <GatewayDebugTab gatewayId="gateway-1" issuerId="issuer-1" />
         </Boundary>
         <Location />
       </MemoryRouter>

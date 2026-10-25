@@ -41,16 +41,16 @@ type clientAdmissionErrorResult struct {
 func modeGuidance(mode string) string {
 	switch admission.Mode(mode) {
 	case admission.ModePresets:
-		return "Known apps only: the reviewed list of apps, plus any custom client ID metadata URLs you add for this MCP server. Every other app is turned away when it tries to sign in, with no way through."
+		return "Verified clients: Speakeasy's reviewed list of apps, plus any custom client ID metadata URLs you add for this MCP server. Every other app is turned away when it tries to sign in, with no way through."
 	case admission.ModeOpen:
-		return "Open: any app with a valid client ID metadata document can sign in. The document is still checked."
+		return "Any client: any app with a valid client ID metadata document can sign in. The document is still checked."
 	case admission.ModeDisabled:
 		return "Off: client ID metadata documents are not accepted at all, and the server stops advertising them, so apps use dynamic client registration instead."
 	case admission.ModeReporting:
 		// Not writable, and no default resolves to it any more. Nothing in
 		// the application ever stored it either, so only a row carrying the
 		// legacy value from a direct database write still reads back as it.
-		return "Watching only: every app can sign in, while we record which ones \"known apps only\" would have turned away."
+		return "Any client (legacy reporting): every app can sign in, while we record which ones Verified clients would have turned away."
 	default:
 		return ""
 	}
@@ -104,7 +104,7 @@ func registerClientAdmissionTools(reg *Registrar, registrations *RegistrationSer
 	addTool(reg, &mcp.Tool{
 		Name:        "set_mcp_client_admission",
 		Title:       "Choose Which Apps Can Sign In",
-		Description: "Choose which MCP clients may sign in to one MCP server. Show the user the setting in force now, from get_mcp_client_admission, and what the new one would mean, ask them to confirm out loud, then call this with confirmed: true. Constraints: \"known apps only\" turns away every app that is not on the list, with no way through — make sure the user accepts that. This tool never accepts or returns credentials, OAuth codes, tokens, or client secrets.",
+		Description: "Choose which MCP clients may sign in to one MCP server. Show the user the setting in force now, from get_mcp_client_admission, and what the new one would mean, ask them to confirm out loud, then call this with confirmed: true. Constraints: Verified clients (presets) turns away every app that is not on the list, with no way through — make sure the user accepts that. This tool never accepts or returns credentials, OAuth codes, tokens, or client secrets.",
 		Annotations: setMCPClientAdmissionAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPClientAdmissionToolInput) (*mcp.CallToolResult, MCPClientAdmissionToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)

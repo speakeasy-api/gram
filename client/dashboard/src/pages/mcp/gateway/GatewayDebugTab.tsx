@@ -33,6 +33,7 @@ import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.j
 import { keepPreviousData, useQueries } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
+import { GatewayClientAdmission } from "./GatewayClientAdmission";
 import { GatewayConnectionHealth } from "./GatewayConnectionHealth";
 import {
   CLIENT_REGISTRATION_LABELS,
@@ -120,8 +121,10 @@ function writeFilters(next: URLSearchParams, filters: ActiveLogFilter[]) {
 
 export function GatewayDebugTab({
   gatewayId,
+  issuerId,
 }: {
   gatewayId: string;
+  issuerId: string | null | undefined;
 }): JSX.Element {
   const project = useProject();
   const { hasScope } = useRBAC();
@@ -480,6 +483,7 @@ export function GatewayDebugTab({
         gatewayId={gatewayId}
         onShowConnections={showMatching}
       />
+      <GatewayClientAdmission gatewayId={gatewayId} issuerId={issuerId} />
       <Text small muted>
         Sessions issued for this gateway, identified by their recorded origin or
         consent selection. Unattributed sessions are not shown.

@@ -149,6 +149,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMessage(func(n int64) bool { return n != 0 }, "network ingress rows remain"),
 		},
 		read("http tools", &toolCount, byProject(s.q.PostflightCountHTTPTools)),
+		{
+			what:  "gateway custom cimd clients",
+			count: byProject(s.q.PostflightCountGatewayCimdClients),
+			fail:  postflightMustEqual(1, "expected 1 gateway custom cimd client, found %d"),
+		},
 
 		// Killswitch aggregate counts are exact: six headers, two successor
 		// versions, eight complete selected snapshots, one expiry marker, and
