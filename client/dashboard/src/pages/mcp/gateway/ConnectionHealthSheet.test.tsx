@@ -486,7 +486,7 @@ it("shows the same person and client's token responses and each provider's sign-
   expect(
     screen.getByText(/These events match this person, client and time window/),
   ).toBeTruthy();
-  // The caller-specific gap the server reported, and none of the shared ones.
+  // The caller-specific gap the server reported.
   expect(screen.getByText(AUTHORIZE_GAP)).toBeTruthy();
 });
 
