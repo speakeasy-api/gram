@@ -95,40 +95,54 @@ func TestGatewayConnectionCaller_CountsOnlyThatCallerAcrossProviders(t *testing.
 	fx := newCallerFixture(t, ctx, ti)
 	gateway := fx.gateway.ID.String()
 	day := time.Now().UTC().Truncate(24 * time.Hour).Add(-24 * time.Hour)
-	from, to := day.Add(10*time.Hour+10*time.Minute), day.Add(11*time.Hour+50*time.Minute)
-	attempt := func(project, gatewayID, stage, outcome, subject, provider, client string, at time.Time) {
-		logConnectionAttempt(t, ctx, ti, connectionAttempt{project: project, gateway: gatewayID, stage: stage, outcome: outcome, reason: "", subject: subject, provider: provider, client: client, retries: 0, at: at})
+	at := func(hour, minute int) time.Time {
+		return day.Add(time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute)
 	}
-	mine := func(stage, outcome, provider string, at time.Time) {
-		attempt(ti.projectID, gateway, stage, outcome, fx.person, provider, fx.client, at)
+	// The rollup has 30-minute buckets: [10:10, 12:50) reads its whole
+	// buckets, 10:30 to 12:30, from the rollup, and only its partial edges,
+	// 10:10 to 10:30 and 12:30 to 12:50, from raw rows, so both paths must
+	// filter by caller.
+	from, to := at(10, 10), at(12, 50)
+	attempt := func(project, gatewayID, stage, outcome, subject, provider, client string, when time.Time) {
+		logConnectionAttempt(t, ctx, ti, connectionAttempt{project: project, gateway: gatewayID, stage: stage, outcome: outcome, reason: "", subject: subject, provider: provider, client: client, retries: 0, at: when})
+	}
+	mine := func(stage, outcome, provider string, when time.Time) {
+		attempt(ti.projectID, gateway, stage, outcome, fx.person, provider, fx.client, when)
 	}
 	callback, refresh := telemetry.ConnectionStageUpstreamCallback, telemetry.ConnectionStageUpstreamRefresh
 	hiddenProvider := uuid.NewString()
-	firstCode, lastCode := from.Add(5*time.Minute), from.Add(50*time.Minute)
+	firstCode, lastCode := at(10, 15), at(11, 45)
 
-	mine(callback, "stored", fx.providerA, from) // exactly at the start: counted
-	mine(callback, "stored", fx.providerA, from.Add(4*time.Minute))
-	mine(callback, "failed", fx.providerB, from.Add(30*time.Minute))
-	mine(callback, "stored", hiddenProvider, from.Add(31*time.Minute))
-	mine(callback, "stored", "", from.Add(32*time.Minute))
-	mine(callback, "stored", fx.providerA, to) // exactly at the end: not counted
-	mine(refresh, "refreshed", fx.providerA, from.Add(40*time.Minute))
+	// Raw edges: the start is counted, the end is not.
+	mine(callback, "stored", fx.providerA, from)
+	mine(callback, "stored", fx.providerA, to)
+	mine(refresh, "refreshed", fx.providerA, at(12, 40))
 	mine(telemetry.ConnectionStageInboundToken, "code_issued", "", firstCode)
+	// Rollup interior buckets.
+	mine(callback, "stored", fx.providerA, at(11, 5))
+	mine(callback, "failed", fx.providerB, at(11, 15))
+	mine(callback, "stored", hiddenProvider, at(11, 20))
+	mine(callback, "stored", "", at(11, 25))
+	mine(refresh, "refreshed", fx.providerA, at(11, 30))
 	mine(telemetry.ConnectionStageInboundToken, "code_issued", "", lastCode)
-	mine(telemetry.ConnectionStageInboundToken, "refreshed", "", lastCode.Add(10*time.Minute))
-	mine(telemetry.ConnectionStageDiscoveryListing, "failed", "", from.Add(20*time.Minute))
-	mine(telemetry.ConnectionStageDiscoveryListing, "complete", "", from.Add(60*time.Minute))
+	mine(telemetry.ConnectionStageInboundToken, "refreshed", "", at(11, 55))
+	mine(telemetry.ConnectionStageDiscoveryListing, "failed", "", at(11, 12))
+	mine(telemetry.ConnectionStageDiscoveryListing, "complete", "", at(12, 5))
 	// The same person with another client, another person with this client,
-	// and this caller on another gateway or project are not this caller.
-	attempt(ti.projectID, gateway, callback, "stored", fx.person, fx.providerA, fx.other, from.Add(time.Minute))
-	attempt(ti.projectID, gateway, callback, "stored", fx.second, fx.providerA, fx.client, from.Add(time.Minute))
-	attempt(ti.projectID, uuid.NewString(), callback, "stored", fx.person, fx.providerA, fx.client, from.Add(time.Minute))
-	attempt(uuid.NewString(), gateway, callback, "stored", fx.person, fx.providerA, fx.client, from.Add(time.Minute))
-	// 25 failing keys of someone else fill the gateway-wide ranking.
+	// and this caller on another gateway or project are not this caller, in
+	// both raw edges and in the rollup interior alike.
+	for _, when := range []time.Time{at(10, 11), at(11, 5), at(12, 45)} {
+		attempt(ti.projectID, gateway, callback, "stored", fx.person, fx.providerA, fx.other, when)
+		attempt(ti.projectID, gateway, callback, "stored", fx.second, fx.providerA, fx.client, when)
+		attempt(ti.projectID, uuid.NewString(), callback, "stored", fx.person, fx.providerA, fx.client, when)
+		attempt(uuid.NewString(), gateway, callback, "stored", fx.person, fx.providerA, fx.client, when)
+	}
+	// 25 failing keys of someone else fill the gateway-wide ranking from the
+	// rollup interior.
 	for range 25 {
 		noisy := uuid.NewString()
 		for range 5 {
-			attempt(ti.projectID, gateway, callback, "failed", fx.second, noisy, fx.other, from.Add(15*time.Minute))
+			attempt(ti.projectID, gateway, callback, "failed", fx.second, noisy, fx.other, at(11, 35))
 		}
 	}
 
@@ -151,7 +165,7 @@ func TestGatewayConnectionCaller_CountsOnlyThatCallerAcrossProviders(t *testing.
 	require.Equal(t, telemetry.ConnectionStageInboundAuthorize, summary.NotRecorded[0].Stage)
 	require.Equal(t, int64(5), stages[callback].Attempts, "the start is counted, the end is not, and only this caller")
 	require.Equal(t, map[string]int64{"stored": 4, "failed": 1}, outcomeMap(stages[callback].Outcomes))
-	require.Equal(t, map[string]int64{"refreshed": 1}, outcomeMap(stages[refresh].Outcomes))
+	require.Equal(t, map[string]int64{"refreshed": 2}, outcomeMap(stages[refresh].Outcomes), "one from the rollup, one from a raw edge")
 	require.Equal(t, map[string]int64{"code_issued": 2, "refreshed": 1}, outcomeMap(stages[telemetry.ConnectionStageInboundToken].Outcomes))
 	require.Equal(t, lastCode.Format(time.RFC3339Nano), *stages[telemetry.ConnectionStageInboundToken].LastCodeIssuedAt, "a later refresh does not move it")
 	require.Nil(t, stages[callback].LastCodeIssuedAt)
@@ -181,7 +195,7 @@ func TestGatewayConnectionCaller_CountsOnlyThatCallerAcrossProviders(t *testing.
 		byProvider[hotspot.Provider.Label] = hotspot
 	}
 	require.Len(t, byProvider, 4)
-	require.Equal(t, map[string]int64{"stored": 2}, outcomeMap(byProvider["Example Tracker"].Outcomes), "a success-only provider is listed")
+	require.Equal(t, map[string]int64{"stored": 2}, outcomeMap(byProvider["Example Tracker"].Outcomes), "a success-only provider is listed, from a raw edge and the rollup")
 	require.Equal(t, fx.providerA, *byProvider["Example Tracker"].Provider.ID)
 	require.Equal(t, map[string]int64{"failed": 1}, outcomeMap(byProvider["Example Wiki"].Outcomes))
 	hidden := byProvider["Unknown provider"]
