@@ -133,6 +133,8 @@ function ok(logs: unknown[], nextCursor?: string) {
 }
 
 const LAST_CODE = new Date("2026-01-07T22:00:00.000Z");
+const AUTHORIZE_GAP =
+  "Sign-in requests are recorded before the caller is known, so they are not counted for one person or agent.";
 
 function stageView(stage: string, outcomes: Record<string, number>) {
   const counts = Object.entries(outcomes).map(([outcome, count]) => ({
@@ -156,7 +158,7 @@ function callerSummary(payload: Payload) {
     from: payload.from,
     to: payload.to,
     intervalSeconds: 3600,
-    notRecorded: [],
+    notRecorded: [{ stage: "inbound_authorize", note: AUTHORIZE_GAP }],
     scope: "",
     caller: payload.caller,
     stages: [
@@ -484,6 +486,8 @@ it("shows the same person and client's token responses and each provider's sign-
   expect(
     screen.getByText(/These events match this person, client and time window/),
   ).toBeTruthy();
+  // The caller-specific gap the server reported, and none of the shared ones.
+  expect(screen.getByText(AUTHORIZE_GAP)).toBeTruthy();
 });
 
 it("says how many attempts the listed providers leave out", async () => {
@@ -524,6 +528,11 @@ it("says nothing is recorded, not that nothing happened, and reads no providers 
   ).toBeTruthy();
   expect(
     screen.getByText(
+      "No provider refresh caused by a request was recorded for this person and client in the last 7 days. That is no evidence either way.",
+    ),
+  ).toBeTruthy();
+  expect(
+    screen.getByText(
       /No sign-in token response is recorded for this person and client/,
     ),
   ).toBeTruthy();
@@ -546,6 +555,7 @@ it("reads no provider rows on reopening until a fresh caller read succeeds, and 
   await waitFor(() => expect(state.callerHealth).toHaveBeenCalledTimes(2));
   expect(screen.queryByText("Example Wiki")).toBeNull();
   expect(screen.queryByText(latestText)).toBeNull();
+  expect(screen.queryByText(AUTHORIZE_GAP)).toBeNull();
   expect(state.providers.mock.calls.length).toBe(providerReads);
 
   fresh.reject(Object.assign(new Error("refused"), { statusCode: 403 }));
@@ -553,6 +563,7 @@ it("reads no provider rows on reopening until a fresh caller read succeeds, and 
     await screen.findByText(/This person or client isn't visible to you now/),
   ).toBeTruthy();
   expect(screen.queryByText("Example Wiki")).toBeNull();
+  expect(screen.queryByText(AUTHORIZE_GAP)).toBeNull();
   expect(state.providers.mock.calls.length).toBe(providerReads);
 });
 
@@ -601,6 +612,7 @@ it("shows no caller facts from a server that answered for the whole gateway", as
     ),
   ).toBeTruthy();
   expect(screen.queryByText(/sign-in token responses/)).toBeNull();
+  expect(screen.queryByText(AUTHORIZE_GAP)).toBeNull();
   expect(state.providers).not.toHaveBeenCalled();
 });
 

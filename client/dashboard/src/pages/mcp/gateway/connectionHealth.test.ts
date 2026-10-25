@@ -235,7 +235,10 @@ describe("callerOf", () => {
         ...listing,
         subject: "agent:6c0d0000-0000-4000-a000-000000000009",
       }),
-    ).not.toBeNull();
+    ).toEqual({
+      subject: "agent:6c0d0000-0000-4000-a000-000000000009",
+      client: CLIENT,
+    });
     for (const other of [
       { ...listing, subject: "" },
       { ...listing, subject: "apikey:example" },

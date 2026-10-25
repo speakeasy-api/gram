@@ -364,6 +364,10 @@ function CallerFacts({
   } else {
     const tokens = stageOf("inbound_token");
     const issued = countOf(tokens?.outcomes ?? [], "code_issued");
+    // The one gap specific to counting a caller; the page lists the rest.
+    const authorizeGap = settled.notRecorded.find(
+      (gap) => gap.stage === "inbound_authorize",
+    );
     content = (
       <>
         <div className="space-y-1">
@@ -389,6 +393,11 @@ function CallerFacts({
             windowPhrase={windowPhrase}
           />
         ))}
+        {authorizeGap && (
+          <Text small muted className="block">
+            {authorizeGap.note}
+          </Text>
+        )}
         <Text small muted className="block">
           These events match this person, client and time window. They may come
           from different app instances. Saved provider credentials and written
@@ -416,7 +425,7 @@ const PROVIDER_FACTS: Record<
   },
   upstream_refresh: {
     title: "Provider refreshes",
-    none: "No provider refresh a request caused is recorded for this person and client",
+    none: "No provider refresh caused by a request was recorded for this person and client",
     latest: "latest refresh",
   },
 };
