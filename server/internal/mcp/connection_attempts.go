@@ -15,10 +15,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -300,7 +300,7 @@ func (s *Service) memberAvailable(ctx context.Context, logger *slog.Logger, gate
 	case member.remoteServerID.Valid:
 		_, err = remotemcp_repo.New(s.db).GetServerByID(ctx, remotemcp_repo.GetServerByIDParams{ID: member.remoteServerID.UUID, ProjectID: member.projectID})
 	case member.tunneledServerID.Valid:
-		_, err = mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: member.serverID, ProjectID: member.projectID})
+		_, err = tunneledmcprepo.New(s.db).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{ID: member.tunneledServerID.UUID, ProjectID: member.projectID})
 	default:
 		return notServable
 	}

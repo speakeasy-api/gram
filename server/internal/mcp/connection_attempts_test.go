@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
 // attemptWrites hears each connection attempt batch the telemetry logger
@@ -236,6 +237,51 @@ func TestGatewayDirectRecordsOnlyUsableUnapprovedMembers(t *testing.T) {
 	waiting := byMember[available.serverID.String()]
 	require.Equal(t, []string{"consent_blocked", "configuration", "consent_not_approved"}, []string{waiting.Outcome, waiting.FailureClass, waiting.Reason})
 	require.Len(t, byMember, 2, "deleted and denied members, approved or not, are not recorded")
+}
+
+func TestGatewayDirectRecordsOnlyLiveUnapprovedTunnels(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		deleted     bool
+		wantRows    int
+		wantOutcome string
+	}{
+		{name: "live", deleted: false, wantRows: 3, wantOutcome: "partial"},
+		{name: "deleted", deleted: true, wantRows: 2, wantOutcome: "complete"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			writes := watchConnectionAttempts(t, ti)
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			slug := "unapproved-tunnel-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+			source := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Source", 1, mcpservers.VisibilityPublic, "alpha")
+			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
+			tunnelID, _ := seedTunneledMetaMember(t, ctx, ti, *auth.ProjectID, gateway.ID, "Added tunnel", "added-tunnel", 2, "")
+			if tc.deleted {
+				_, err := tunneledmcprepo.New(ti.conn).DeleteServer(ctx, tunneledmcprepo.DeleteServerParams{ID: tunnelID, ProjectID: *auth.ProjectID})
+				require.NoError(t, err)
+			}
+
+			caller := authztest.WithExactGrants(t, t.Context(), authz.NewGrant(authz.ScopeMCPConnect, gateway.ID.String()))
+			w, err := servePublicHTTP(t, caller, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			rows := attemptsAfter(t, writes, *auth.ProjectID, gateway.ID, tc.wantRows)
+			require.Equal(t, tc.wantOutcome, rows[0].Outcome)
+			for _, row := range rows[1:] {
+				if row.MemberID == source.serverID.String() {
+					require.Equal(t, "listed", row.Outcome)
+				} else {
+					require.False(t, tc.deleted)
+					require.Equal(t, []string{"consent_blocked", "configuration", "consent_not_approved"}, []string{row.Outcome, row.FailureClass, row.Reason})
+				}
+			}
+		})
+	}
 }
 
 // A listing that fails after describing still records what each member

@@ -233,8 +233,8 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 		return nil, err
 	}
 	inventory, _, described, err := s.collectGatewayTools(ctx, logger, gate, members, false, nil)
-	// A canceled listing is recorded alone: its members' results are unknown,
-	// and stamping them as timed out would blame their upstreams.
+	// Cancellation during member description leaves their results unknown,
+	// so only the listing is recorded; completed results remain observations.
 	if err != nil && described == nil {
 		s.recordDirectListing(ctx, gate, start, inventoryFailure(ctx, err), nil)
 		return nil, err
