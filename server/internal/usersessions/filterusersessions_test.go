@@ -432,7 +432,7 @@ func TestQueryFacets_FieldSearchKeepsSelectedCounts(t *testing.T) {
 	byID, err := ti.service.QueryFacets(ctx, &gen.QueryFacetsPayload{
 		Clients:     []string{clientA.ID.String()},
 		Field:       new("client"),
-		FieldSearch: new(strings.ToUpper(clientB.ID.String()[:13])),
+		FieldSearch: new(strings.ToUpper(clientB.ID.String())),
 	})
 	require.NoError(t, err)
 	matched := map[string]bool{}
