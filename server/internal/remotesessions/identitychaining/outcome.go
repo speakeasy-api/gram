@@ -52,9 +52,10 @@ func (o Outcome) Applicable() bool {
 // failure after submission is ambiguous, and repeating it could mint a
 // duplicate grant against the provider's quota, so it, a shared failure
 // answered from the cache, stale configuration and every provider rejection
-// are never repeated.
+// are never repeated. Combined provider failures omit individual submission
+// details, so they cannot establish that repeating the whole chain is safe.
 func (o Outcome) SafeToRepeat() bool {
-	return o.Reason == ReasonTransientFailure && o.Retryable && !o.Cached && !o.Submitted
+	return o.Reason == ReasonTransientFailure && o.Retryable && !o.Cached && !o.Submitted && len(o.Failures) == 0
 }
 
 // Succeeded reports whether the attempt yielded a usable token.

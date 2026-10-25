@@ -369,7 +369,7 @@ No Stripe subscription, promotion, or local billing settings are seeded for it.
 
 ### Gateway discovery
 
-For members who can view tool logs (`log:read`), Gateway Activity charts omitted members over the selected time range; the chart is hidden without that permission. Hover a nonzero bar in **Discovery failures over time** to see the latest omitted member, failure reason, and event time. The four seeded omissions cover rate-limited, unavailable, and unlistable members; zero-filled intervals show the gaps.
+For members who can view tool logs (`log:read`), Gateway Activity charts omitted members over the selected time range; the chart is hidden without that permission. Hover a nonzero bar in **Discovery failures over time** to see the latest omitted member, failure reason, and event time. The four seeded omissions cover two rate-limited and two unavailable members; zero-filled intervals show the gaps.
 
 Browser verification: [~] — follow check 30 in `seed/demo/verify.md`.
 
