@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { GatewayConnectionHealth } from "./GatewayConnectionHealth";
@@ -21,6 +22,19 @@ const state = vi.hoisted(() => ({
   healthResult: (_payload: Payload): unknown => undefined,
   hotspotsResult: (_payload: Payload): unknown => undefined,
 }));
+// Mirrors the real builder's canonical identity path; its org:read gate is
+// IdentityLink's own concern.
+vi.mock("@/lib/useIdentityHref", async () => {
+  const { encodeIdentityUrn, identityUrnFor } =
+    await import("@/lib/identity-urn");
+  return {
+    useIdentityHrefBuilder:
+      () => (ref: Parameters<typeof identityUrnFor>[0] | null) =>
+        ref
+          ? `/default/identities/${encodeIdentityUrn(identityUrnFor(ref))}`
+          : null,
+  };
+});
 vi.mock("@/components/observe/observeDeepLink", () => ({
   useCanViewToolLogs: () => state.read,
 }));
@@ -153,14 +167,16 @@ function renderSection() {
   return {
     client,
     ...render(
-      <QueryClientProvider client={client}>
-        <TooltipProvider>
-          <GatewayConnectionHealth
-            gatewayId="gateway-1"
-            onShowConnections={vi.fn<() => void>()}
-          />
-        </TooltipProvider>
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <TooltipProvider>
+            <GatewayConnectionHealth
+              gatewayId="gateway-1"
+              onShowConnections={vi.fn<() => void>()}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
     ),
   };
 }
@@ -231,6 +247,69 @@ it("opens only visible hotspots, keys identical hidden rows apart and leaves out
     stage: "discovery_listing",
     hotspot: visible,
   });
+});
+
+it("links visible people and agents, marks known clients, and keeps hidden rows inert", async () => {
+  const agentId = "0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0b";
+  const person = {
+    ...visible,
+    subject: {
+      kind: "user",
+      label: "Amara Example",
+      id: "user:amara",
+      key: "user:amara",
+    },
+    client: {
+      kind: "registered",
+      label: "Claude Code",
+      id: "dcr-1",
+      key: "dcr-1",
+    },
+  };
+  const agent = {
+    ...visible,
+    subject: {
+      kind: "agent",
+      label: "Release Agent",
+      id: `agent:${agentId}`,
+      key: `agent:${agentId}`,
+    },
+    client: {
+      kind: "unregistered",
+      label: "Unregistered client",
+      key: "unregistered_client",
+    },
+  };
+  const unknown = {
+    ...visible,
+    subject: { kind: "user", label: "Unknown person" },
+    client: { kind: "unknown", label: "Unknown client" },
+  };
+  state.hotspotsResult = ranking([person, agent, unknown]);
+  renderSection();
+  const amara = await screen.findByRole("link", { name: "Amara Example" });
+  expect(amara.getAttribute("href")).toBe("/default/identities/user%3Aamara");
+  expect(
+    screen.getByRole("link", { name: "Release Agent" }).getAttribute("href"),
+  ).toBe(`/default/identities/agent%3A${agentId}`);
+  expect(screen.getAllByRole("link")).toHaveLength(2);
+  expect(screen.getByText("Unknown person").closest("a")).toBeNull();
+
+  const mark = (client: string) =>
+    screen.getByText(client).parentElement!.querySelector("svg")!;
+  expect(mark("Claude Code").classList.contains("lucide-globe")).toBe(false);
+  expect(mark("Unregistered client").classList.contains("lucide-globe")).toBe(
+    true,
+  );
+  expect(mark("Unknown client").classList.contains("lucide-globe")).toBe(true);
+
+  // A name link leaves the row's View action to open the sheet on its own.
+  fireEvent.click(amara);
+  expect(state.sheet).not.toHaveBeenCalled();
+  fireEvent.click(screen.getAllByRole("button", { name: "View" })[0]!);
+  expect(state.sheet.mock.lastCall![0]).toMatchObject({ hotspot: person });
+  expect(screen.getAllByRole("button", { name: "View" })).toHaveLength(2);
+  expect(screen.getAllByText("Not visible to you")).toHaveLength(1);
 });
 
 it("never shows results answered for other controls", async () => {
