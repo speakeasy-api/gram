@@ -498,3 +498,17 @@ it("does not look for sign-in tokens a key cannot be matched to", async () => {
     screen.queryByText(/No sign-in token response is recorded/),
   ).toBeNull();
 });
+
+it("retries a failed related sign-in summary without showing cached evidence", async () => {
+  state.tokenResult = refuse(500);
+  showRegistered();
+  await screen.findByText(
+    "Couldn't load sign-in token responses for this person and client.",
+  );
+  expect(state.latestSearch).not.toHaveBeenCalled();
+  state.tokenResult = tokens;
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(
+    await screen.findByText(/The gateway wrote 2 sign-in token responses/),
+  ).toBeTruthy();
+});

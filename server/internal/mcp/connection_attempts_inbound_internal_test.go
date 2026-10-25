@@ -15,8 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
@@ -227,4 +229,22 @@ func TestInboundWriteFailureLeavesTheResponse(t *testing.T) {
 	require.Equal(t, want.Code, got.Code)
 	require.Equal(t, want.Header(), got.Header())
 	require.JSONEq(t, want.Body.String(), got.Body.String())
+}
+
+type authorizeErrorWriter struct{ *httptest.ResponseRecorder }
+
+func (authorizeErrorWriter) Write([]byte) (int, error) { return 0, errors.New("response unavailable") }
+
+func TestInboundAuthorizeErrorMustBeRendered(t *testing.T) {
+	t.Parallel()
+	for _, redirect := range []string{"%", "https://client.example/callback"} {
+		t.Run(redirect, func(t *testing.T) {
+			t.Parallel()
+			r, obs := observeInbound(httptest.NewRequest(http.MethodGet, "/authorize", nil), gatewayEndpoint(), attemptStageInboundAuthorize)
+			err := writePreAuthenticationAuthorizeError(r.Context(), authorizeErrorWriter{httptest.NewRecorder()}, r, testenv.NewLogger(t), "https://issuer.example", redirect, "", "resource_mismatch", oauthui.AuthorizationError{}, errors.New("invalid request"))
+			require.Error(t, err)
+			require.Nil(t, obs.answered, "building or rendering failure must not claim a refusal was written")
+			require.Equal(t, inboundResult{outcome: outcomeFailed, class: classInternal, reason: reasonUnexpected}, obs.result(r.Context(), err))
+		})
+	}
 }

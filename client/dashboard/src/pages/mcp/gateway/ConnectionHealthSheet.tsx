@@ -44,6 +44,7 @@ import {
   outcomeLabel,
   reasonText,
   stageChartData,
+  stageTiles,
   toAttempt,
   type Attempt,
   type HealthStage,
@@ -395,9 +396,18 @@ function RelatedSignIn({
   let content: ReactNode;
   if (tokens.isError) {
     content = (
-      <Text small muted>
-        Couldn&apos;t load sign-in token responses for this person and client.
-      </Text>
+      <div className="flex items-center justify-between gap-3">
+        <Text small muted>
+          Couldn&apos;t load sign-in token responses for this person and client.
+        </Text>
+        <Button
+          variant="tertiary"
+          size="sm"
+          onClick={() => void tokens.refetch()}
+        >
+          Retry
+        </Button>
+      </div>
     );
   } else if (issued === undefined) {
     content = <Skeleton className="h-10 w-full" />;
@@ -481,31 +491,41 @@ function KeyedDetail({
     stage.attempts > 0
       ? `${((failed / stage.attempts) * 100).toFixed(0)}% of ${total}`
       : `of ${total}`;
+  const inbound =
+    stage.stage === "inbound_authorize" || stage.stage === "inbound_token";
 
   return (
     <div className="space-y-6 px-4">
       <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
-        <StatTile
-          title="Attempts"
-          value={stage.attempts}
-          format="number"
-          tone="information"
-        />
-        <StatTile
-          title="Failed"
-          value={failed}
-          format="number"
-          tone={failed > 0 ? "destructive" : "neutral"}
-          subtext={rate}
-        />
-        {stage.stage === "discovery_member" && (
-          <StatTile
-            title="Needs sign-in or consent"
-            value={blocked}
-            format="number"
-            tone={blocked > 0 ? "warning" : "neutral"}
-            subtext={`of ${total}`}
-          />
+        {inbound &&
+          stageTiles(stage).map((tile) => (
+            <StatTile key={tile.title} {...tile} format="number" />
+          ))}
+        {!inbound && (
+          <>
+            <StatTile
+              title="Attempts"
+              value={stage.attempts}
+              format="number"
+              tone="information"
+            />
+            <StatTile
+              title="Failed"
+              value={failed}
+              format="number"
+              tone={failed > 0 ? "destructive" : "neutral"}
+              subtext={rate}
+            />
+            {stage.stage === "discovery_member" && (
+              <StatTile
+                title="Needs sign-in or consent"
+                value={blocked}
+                format="number"
+                tone={blocked > 0 ? "warning" : "neutral"}
+                subtext={`of ${total}`}
+              />
+            )}
+          </>
         )}
       </StatTileGroup>
       <FirstAttempt first={first} />

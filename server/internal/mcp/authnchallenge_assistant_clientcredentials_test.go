@@ -103,3 +103,23 @@ func TestAssistantWorkloadScopeSyntax(t *testing.T) {
 	}
 	require.True(t, validAssistantWorkloadScopes("mcp:connect tools:read"))
 }
+
+func TestAssistantGatewayRefusalObservation(t *testing.T) {
+	t.Parallel()
+	s, endpoint, _ := newTokenDispatchTestService(t)
+	endpoint.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	s.assistantWorkloadTokens = assistantWorkloadIssuerFunc(func(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
+		return AssistantWorkloadToken{}, errAssistantResourceNotAgentAddressable
+	})
+	client := &usersessions_repo.UserSessionClient{ID: uuid.New(), ClientID: "test-client", UserSessionIssuerID: endpoint.UserSessionIssuerID, ClientSecretHash: pgtype.Text{String: "hashed", Valid: true}}
+	resource, err := endpoint.RootURL("https://gram.example")
+	require.NoError(t, err)
+	r := newTokenDispatchRequest(t, url.Values{"resource": {resource}, "scope": {"mcp:connect"}})
+	r, obs := observeInbound(r, endpoint, attemptStageInboundToken)
+	require.NotNil(t, obs)
+	w := httptest.NewRecorder()
+	err = s.handleAssistantClientCredentialsGrant(r.Context(), w, r, endpoint, client, "https://gram.example", "client_secret_post", s.logger)
+	require.NoError(t, err)
+	require.Equal(t, 503, w.Code, "observation preserves the existing wire response")
+	require.Equal(t, inboundResult{outcome: outcomeFailed, class: classConfiguration, reason: reasonResourceNotAgentAddressable}, obs.result(r.Context(), err))
+}

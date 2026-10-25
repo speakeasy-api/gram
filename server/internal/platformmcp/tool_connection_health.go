@@ -52,6 +52,9 @@ type GatewayConnectionStageSummary struct {
 	Retries    uint64                     `json:"retries" jsonschema:"extra describe calls members needed within their own listings"`
 	Recovered  uint64                     `json:"recovered" jsonschema:"members listed only after a retry within the same listing; not recovery after a later reconnect"`
 	LastSeenAt string                     `json:"last_seen_at,omitempty"`
+	// LastCodeIssuedAt is included for a keyed token stage and names the
+	// latest sign-in code request's start whose token response was written.
+	LastCodeIssuedAt string `json:"last_code_issued_at,omitempty" jsonschema:"latest authorization-code request start with a written token response; only for a keyed token stage; not delivery, token use, or provider sign-in completion"`
 
 	// Buckets is the stage's timeline, returned only for a key.
 	Buckets []GatewayConnectionBucketSummary `json:"buckets,omitempty"`
@@ -191,8 +194,9 @@ func (r *PostgresReader) GetGatewayConnectionHealth(ctx context.Context, princip
 		output.Ranking = &GatewayConnectionRanking{Stage: hotspots.Stage, Sort: sort, MinAttempts: hotspots.MinAttempts, Hotspots: make([]GatewayConnectionHotspotSummary, 0, len(hotspots.Hotspots))}
 	}
 	for _, stage := range summary.Stages {
-		view := GatewayConnectionStageSummary{Stage: stage.Stage, Attempts: stage.Attempts, Outcomes: connectionOutcomes(stage.Outcomes), Retries: stage.Retries, Recovered: stage.Recovered, LastSeenAt: connectionTime(stage.LastSeen), Buckets: nil}
+		view := GatewayConnectionStageSummary{Stage: stage.Stage, Attempts: stage.Attempts, Outcomes: connectionOutcomes(stage.Outcomes), Retries: stage.Retries, Recovered: stage.Recovered, LastSeenAt: connectionTime(stage.LastSeen), LastCodeIssuedAt: "", Buckets: nil}
 		if key != nil {
+			view.LastCodeIssuedAt = connectionTime(stage.LastCodeIssued)
 			for _, bucket := range stage.Buckets {
 				view.Buckets = append(view.Buckets, GatewayConnectionBucketSummary{Start: connectionTime(bucket.Start), Outcomes: connectionOutcomes(bucket.Outcomes)})
 			}
@@ -275,7 +279,7 @@ const gatewayConnectionHealthToolName = "get_gateway_connection_health"
 
 const gatewayConnectionHealthDescription = "Summarize one exact gateway's connection attempts over at most 30 days (default 7): per recorded stage, the attempts and their outcomes, and the callers, providers, and clients with the most failures. " +
 	"Each stage is counted on its own. inbound_authorize counts sign-in requests (accepted, policy_blocked, failed); accepted means a redirect to sign-in was attempted, not that it arrived or that sign-in finished. " +
-	"inbound_token counts token requests the gateway answered, by grant: code_issued (authorization code), refreshed, refresh_replayed (the same refresh answered again), assertion_issued (enterprise assertion), policy_blocked, failed. A written token response is not proof that a client used it or that a connection is new, and refreshes are never sign-ins. " +
+	"inbound_token counts token requests: successful outcomes distinguish code_issued (authorization code), refreshed, refresh_replayed (the same refresh answered again), and assertion_issued (enterprise assertion); policy_blocked and failed are not split by grant. A keyed token read also returns last_code_issued_at when present: the latest sign-in code request's start whose response was written, independent of later refreshes. A written token response is not proof that a client used it or that a connection is new, and refreshes are never sign-ins. " +
 	"discovery_listing counts Direct tools/list calls (complete, partial, failed) and discovery_member counts the members each listing reached (listed, failed, credential_blocked, consent_blocked). unknown is an attempt whose outcome was not recorded. " +
 	"A stage's attempts is the denominator for every outcome in it; blocked attempts (a credential or consent the caller fixes, or an administrator's client or workload policy) are reported apart from failures and never dropped from attempts. " +
 	"No observed attempts is no evidence about that stage, never proof that it is healthy. " +

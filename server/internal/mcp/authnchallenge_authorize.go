@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
@@ -294,7 +295,11 @@ func (s *Service) serveAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		if err != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
 			failureCode, cause := federatedFailure(err)
-			inboundObservationFrom(ctx).refuse(classInternal, reasonFederationUnavailable)
+			class := classInternal
+			if errors.Is(err, remotesessions.ErrFederatedConfiguration) {
+				class = classConfiguration
+			}
+			inboundObservationFrom(ctx).refuse(class, reasonFederationUnavailable)
 			return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
 		}
 		if federatedURL != nil {
@@ -367,7 +372,6 @@ func writePreAuthenticationAuthorizeError(ctx context.Context, w http.ResponseWr
 	}
 	obs := inboundObservationFrom(ctx)
 	obs.note(failureReason)
-	obs.answer(http.StatusBadRequest, code)
 	args := []any{
 		attr.SlogOAuthError(code),
 		attr.SlogOAuthErrorDescription(description),
@@ -392,9 +396,11 @@ func writePreAuthenticationAuthorizeError(ctx context.Context, w http.ResponseWr
 		if err := oauthui.WriteAuthorizationError(ctx, w, page); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "render authorization error page").LogError(ctx, logger)
 		}
+		obs.answer(http.StatusBadRequest, code)
 		return nil
 	}
 	http.Redirect(w, r, redirect, http.StatusFound)
+	obs.answer(http.StatusBadRequest, code)
 	return nil
 }
 

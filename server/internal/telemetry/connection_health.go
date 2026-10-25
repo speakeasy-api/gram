@@ -189,6 +189,9 @@ type ConnectionStageSummary struct {
 	Recovered uint64
 	LastSeen  time.Time
 	Buckets   []ConnectionStageBucket
+	// LastCodeIssued is the latest authorization-code request's start whose
+	// token response was written. Later refreshes do not change this time.
+	LastCodeIssued time.Time
 }
 
 // ConnectionHealthSummary is a gateway's recorded stages over a window, with
@@ -300,7 +303,7 @@ func (h *ConnectionHealth) Summary(ctx context.Context, target ConnectionHealthT
 	first := timeStart / intervalNanos * intervalNanos
 	stages := make([]ConnectionStageSummary, 0, len(stageNames))
 	for _, stage := range stageNames {
-		summary := ConnectionStageSummary{Stage: stage, Attempts: 0, Outcomes: []ConnectionOutcomeCount{}, Retries: 0, Recovered: 0, LastSeen: time.Time{}, Buckets: []ConnectionStageBucket{}}
+		summary := ConnectionStageSummary{Stage: stage, Attempts: 0, Outcomes: []ConnectionOutcomeCount{}, Retries: 0, Recovered: 0, LastSeen: time.Time{}, Buckets: []ConnectionStageBucket{}, LastCodeIssued: time.Time{}}
 		totals := map[string]uint64{}
 		perBucket := map[int64]map[string]uint64{}
 		for _, row := range rows {
@@ -312,6 +315,9 @@ func (h *ConnectionHealth) Summary(ctx context.Context, target ConnectionHealthT
 			summary.Recovered += row.Recovered
 			if seen := time.Unix(0, row.LastSeenUnixNano).UTC(); row.LastSeenUnixNano > 0 && seen.After(summary.LastSeen) {
 				summary.LastSeen = seen
+			}
+			if seen := time.Unix(0, row.LastSeenUnixNano).UTC(); stage == ConnectionStageInboundToken && row.Outcome == "code_issued" && row.LastSeenUnixNano > 0 && seen.After(summary.LastCodeIssued) {
+				summary.LastCodeIssued = seen
 			}
 			totals[row.Outcome] += row.Attempts
 			if perBucket[row.BucketTimeUnixNano] == nil {

@@ -130,6 +130,8 @@ func TestGatewayInboundTokensBesideStaleListings(t *testing.T) {
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
 	seedHostedMetaMember(t, ctx, ti, gateway.ID, "Source", 1, mcpservers.VisibilityPublic, "alpha")
 	caller := authztest.WithExactGrants(t, t.Context(), authz.NewGrant(authz.ScopeMCPConnect, gateway.ID.String()))
+	// An intentionally invalid synthetic cursor exercises the stale-cursor
+	// refusal; it is not a cursor returned by an earlier listing.
 	staleCursor := map[string]any{"cursor": "eyJvZmZzZXQiOjEwMH0"}
 
 	first := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
@@ -142,7 +144,7 @@ func TestGatewayInboundTokensBesideStaleListings(t *testing.T) {
 	second := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
 	require.Equal(t, 1, writes.written(t))
 	stale = listGatewayAs(t, caller, ti, slug, second.token, staleCursor)
-	require.NotNil(t, stale.Error, "a new token does not make an old cursor valid")
+	require.NotNil(t, stale.Error, "a new token does not make an invalid cursor valid")
 	require.Contains(t, stale.Error.Message, "restart tools/list")
 	require.Equal(t, 1, writes.written(t))
 

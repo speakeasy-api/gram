@@ -164,6 +164,13 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
     tooltip:
       "Refused by an administrator's client metadata, blocked-tool, or workload policy. Counted apart from failures.",
   };
+  const unknown = countOf(stage.outcomes, "unknown");
+  const unknownTile: StageTile = {
+    title: "Outcome not recorded",
+    value: unknown,
+    tone: of(unknown, "warning"),
+    subtext: `of ${total}`,
+  };
   if (stage.stage === "inbound_authorize") {
     const failed = countOf(stage.outcomes, "failed");
     return [
@@ -187,6 +194,7 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
         tone: of(failed, "destructive"),
         subtext: `of ${total}`,
       },
+      unknownTile,
     ];
   }
   if (stage.stage === "inbound_token") {
@@ -211,6 +219,14 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
         tooltip:
           "Refresh requests the gateway answered, including a repeated refresh answered again. A refresh is never a sign-in.",
       },
+      {
+        title: "Enterprise tokens written",
+        value: countOf(stage.outcomes, "assertion_issued"),
+        tone: "neutral",
+        subtext: `of ${total}`,
+        tooltip:
+          "Enterprise assertion requests the gateway answered with a token. It does not show that a client used the token.",
+      },
       policyTile,
       {
         title: "Failed",
@@ -218,6 +234,7 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
         tone: of(failed, "destructive"),
         subtext: `of ${total}`,
       },
+      unknownTile,
     ];
   }
   if (stage.stage === "discovery_listing") {
@@ -342,6 +359,105 @@ const REASONS: Record<string, string> = {
   reauthentication_required:
     "The person needs to sign in to the gateway again.",
   // Sign-in redirects and token requests.
+  access_denied:
+    "The sign-in request was denied. Review the requested access and try again.",
+  agent_admission_unavailable:
+    "The gateway could not check whether this agent is allowed. Try again shortly.",
+  agent_handoff_missing:
+    "The agent sign-in handoff is missing. Start sign-in again from the agent.",
+  agent_target_mismatch:
+    "The agent sign-in belongs to a different server. Start sign-in again here.",
+  assertion_audience_not_single:
+    "The workload named more than one recipient. Configure it for this server only.",
+  assertion_client_presented_secret:
+    "The client sent a secret with its signed proof. Ask its publisher to correct its sign-in setup.",
+  assertion_key_source_missing:
+    "The client has no verification key configured. Ask its publisher to configure one.",
+  assertion_subject_invalid:
+    "The workload identity is not valid. Check its identity configuration.",
+  assertion_verifier_unavailable:
+    "The gateway could not verify the client's signed proof. Try again shortly.",
+  client_method_unreadable:
+    "The client's sign-in method could not be read. Reconnect the client.",
+  code_endpoint_mismatch:
+    "The sign-in code belongs to a different server. Start sign-in again here.",
+  conflict:
+    "The connection changed during this request. Try again from the client.",
+  device_key_id_mismatch:
+    "The device used a different key than it registered. Register the device again.",
+  device_key_lookup_rate_limited:
+    "Device verification is temporarily rate limited. Try again later.",
+  device_key_not_registered:
+    "The device's verification key is not registered. Register the device again.",
+  device_key_unavailable:
+    "The device's verification key could not be loaded. Try again shortly.",
+  invalid_scope:
+    "The client requested access this gateway does not support. Check its requested permissions.",
+  invalid_target:
+    "The client requested a server it cannot access. Check its configured server address.",
+  issuer_changed_during_rotation:
+    "The sign-in provider changed while the token was refreshed. Sign in again.",
+  issuer_jwks_uri_invalid:
+    "The identity provider's verification key address is invalid. Contact your administrator.",
+  issuer_key_source_unknown:
+    "The identity provider's verification keys are not configured. Contact your administrator.",
+  issuer_keys_rate_limited:
+    "The identity provider's verification keys are temporarily rate limited. Try again later.",
+  issuer_lookup_rate_limited:
+    "Identity provider lookup is temporarily rate limited. Try again later.",
+  issuer_lookup_unavailable:
+    "The identity provider could not be looked up. Try again shortly.",
+  missing_client_id:
+    "The request did not identify its client. Check the client's sign-in configuration.",
+  missing_token:
+    "The request did not include a token. Sign in again from the client.",
+  public_client_presented_credentials:
+    "The client sent credentials its registration does not accept. Reconnect it or ask its publisher to correct its setup.",
+  refresh_token_replay_cache_error:
+    "The gateway could not load a repeated refresh response. Try again shortly.",
+  refresh_token_replay_context_cancelled:
+    "The repeated refresh request was canceled. Try again from the client.",
+  refresh_token_replay_decrypt_error:
+    "The gateway could not read a repeated refresh response. Sign in again.",
+  refresh_token_replay_key_mismatch:
+    "The repeated refresh did not match the original request. Sign in again.",
+  refresh_token_replay_payload_invalid:
+    "The stored refresh response could not be used. Sign in again.",
+  refresh_token_replay_resign_error:
+    "The gateway could not prepare the repeated refresh response. Try again shortly.",
+  refresh_token_replay_session_mismatch:
+    "The repeated refresh belongs to a different connection. Sign in again.",
+  refresh_token_replay_wait_timeout:
+    "The original refresh did not finish in time. Try again shortly.",
+  refresh_token_replay_write_error:
+    "The gateway could not save a repeated refresh response. Try again shortly.",
+  refresh_token_revoked: "The refresh token was revoked. Sign in again.",
+  secret_client_presented_assertion:
+    "The client sent signed proof instead of its registered secret. Check its sign-in configuration.",
+  server_error: "The gateway could not finish the request. Try again shortly.",
+  session_persist_unavailable:
+    "The gateway could not save the connection. Try again shortly.",
+  sign_in_changed_during_rotation:
+    "The connection changed while the token was refreshed. Sign in again.",
+  subject_admission_unavailable:
+    "The gateway could not check whether this identity is allowed. Try again shortly.",
+  subject_not_authorized:
+    "This identity is not allowed to connect. Contact your administrator.",
+  temporarily_unavailable:
+    "A service the gateway relies on is temporarily unavailable. Try again shortly.",
+  tool_selection_malformed:
+    "The client's tool selection could not be read. Select the tools again.",
+  tool_selection_resource_mismatch:
+    "The tool selection belongs to a different server. Select tools for this server again.",
+  unauthorized:
+    "The request could not be authenticated. Sign in again from the client.",
+  unsupported_response_type:
+    "The client requested a sign-in response this gateway does not support. Update the client.",
+  workload_assertion_refused:
+    "The workload's identity proof was refused. Check its identity configuration.",
+  workload_grant_unavailable:
+    "The gateway could not issue a workload token. Try again shortly.",
+
   unobserved_exit: "The request finished without a recorded outcome.",
   response_write_failed:
     "The gateway prepared a response but could not send it; the client may have disconnected.",
@@ -456,7 +572,7 @@ const REASONS: Record<string, string> = {
   encoding_failed:
     "The gateway could not send its tool list. Try again shortly.",
   canceled:
-    "The listing stopped before it finished. Restart tool discovery in the client.",
+    "The request stopped before it finished. Try again from the client.",
   member_check_failed:
     "A server's availability could not be checked, so the list may be missing its tools. Try again shortly.",
 };

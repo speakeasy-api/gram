@@ -109,7 +109,11 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 		if stage == telemetry.ConnectionStageDiscoveryMember {
 			attrs[attr.McpServerIDKey] = uuid.NewString()
 		}
-		return telemetry.LogParams{Timestamp: at, ToolInfo: telemetry.ToolInfo{ID: "", URN: "", Name: "", ProjectID: projectID.String(), DeploymentID: "", FunctionID: nil, OrganizationID: principal.OrganizationID}, UserInfo: telemetry.UserInfoByID(""), Attributes: attrs}
+		timestamp := at
+		if stage == telemetry.ConnectionStageInboundToken && outcome == "refreshed" {
+			timestamp = at.Add(time.Minute)
+		}
+		return telemetry.LogParams{Timestamp: timestamp, ToolInfo: telemetry.ToolInfo{ID: "", URN: "", Name: "", ProjectID: projectID.String(), DeploymentID: "", FunctionID: nil, OrganizationID: principal.OrganizationID}, UserInfo: telemetry.UserInfoByID(""), Attributes: attrs}
 	}
 	member5 := func(outcome string) telemetry.LogParams {
 		return attempt(project.ID, gatewayID, telemetry.ConnectionStageDiscoveryMember, outcome, member, "", registered)
@@ -217,6 +221,9 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 	require.NotContains(t, raw, `"ranking"`)
 	require.Len(t, output.Stages, 1)
 	require.Equal(t, telemetry.ConnectionStageInboundToken, output.Stages[0].Stage)
+	require.Equal(t, at.Format(time.RFC3339Nano), output.Stages[0].LastCodeIssuedAt)
+	require.Equal(t, at.Add(time.Minute).Format(time.RFC3339Nano), output.Stages[0].LastSeenAt, "a later refresh cannot mask the last sign-in code request")
+	require.Contains(t, raw, `"last_code_issued_at"`)
 	require.EqualValues(t, 3, output.Stages[0].Attempts)
 	outcomes := map[string]uint64{}
 	for _, outcome := range output.Stages[0].Outcomes {
