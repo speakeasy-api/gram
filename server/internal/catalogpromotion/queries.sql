@@ -2,9 +2,9 @@
 SELECT p.organization_id, m.project_id, m.id AS mcp_server_id, r.id AS remote_mcp_server_id, left(m.name,200)::text AS source_name,
   r.url, r.transport_type, m.visibility, left(COALESCE(r.name,''),200)::text AS remote_name, COALESCE(m.requires_upstream_auth,false)::boolean AS requires_upstream_auth, (m.requires_upstream_auth IS NOT NULL)::boolean AS upstream_auth_known, m.remote_session_issuer_id,
   left(COALESCE(pr.resource_name,''),200)::text AS resource_name, left(COALESCE(pr.resource_documentation,''),2049)::text AS resource_documentation,
-  md5(m.updated_at::text || r.updated_at::text || COALESCE(h.revision, ''))::text AS source_revision,
-  GREATEST(m.updated_at, r.updated_at, h.updated_at)::timestamptz AS changed_at,
-  COALESCE(h.header_count, 0)::bigint AS header_count
+  md5(m.updated_at::text || r.updated_at::text || COALESCE(h.revision, '') || COALESCE(a.revision, ''))::text AS source_revision,
+  GREATEST(m.updated_at, r.updated_at, h.updated_at, a.updated_at)::timestamptz AS changed_at,
+  (COALESCE(h.header_count, 0) + COALESCE(a.header_count, 0))::bigint AS header_count
 FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id
 JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id
@@ -14,10 +14,24 @@ LEFT JOIN LATERAL (
   ORDER BY updated_at DESC,id DESC LIMIT 1
 ) pr ON true
 LEFT JOIN LATERAL (
-  SELECT count(*) FILTER (WHERE deleted IS FALSE) AS header_count, max(updated_at) AS updated_at,
+  SELECT count(*) FILTER (WHERE deleted IS FALSE) AS header_count, max(GREATEST(updated_at,deleted_at)) AS updated_at,
     string_agg(id::text || updated_at::text || deleted::text, ',' ORDER BY id) AS revision
   FROM remote_mcp_server_headers WHERE remote_mcp_server_id = r.id
 ) h ON true
+LEFT JOIN LATERAL (
+  SELECT COALESCE(sum(ah.header_count) FILTER (WHERE l.deleted IS FALSE AND ac.deleted IS FALSE AND ac.enabled),0)::bigint AS header_count,
+    max(GREATEST(l.updated_at,l.deleted_at,ac.updated_at,ac.deleted_at,ah.updated_at)) AS updated_at,
+    string_agg(l.id::text || l.updated_at::text || l.deleted::text || ac.id::text || ac.updated_at::text || ac.deleted::text || ac.enabled::text || COALESCE(ah.revision,''), ',' ORDER BY l.id) AS revision
+  FROM mcp_server_auth_clients l
+  JOIN mcp_auth_clients ac ON ac.id=l.auth_client_id AND ac.organization_id=l.organization_id
+  LEFT JOIN LATERAL (
+    SELECT count(*) FILTER (WHERE deleted IS FALSE) AS header_count,
+      max(GREATEST(updated_at,deleted_at)) AS updated_at,
+      string_agg(id::text || updated_at::text || deleted::text, ',' ORDER BY id) AS revision
+    FROM mcp_auth_client_headers WHERE auth_client_id=ac.id AND organization_id=ac.organization_id
+  ) ah ON true
+  WHERE l.mcp_server_id=m.id AND l.project_id=m.project_id AND l.organization_id=p.organization_id
+) a ON true
 WHERE p.organization_id = @organization_id AND m.project_id = @project_id AND m.id = @mcp_server_id
   AND m.deleted IS FALSE AND r.deleted IS FALSE AND p.deleted IS FALSE
 FOR UPDATE OF m, r, p;
@@ -218,3 +232,40 @@ SELECT * FROM registry_promotion_candidates WHERE organization_id= @organization
 -- name: SoftDeletePromotionSourceFixture :exec
 UPDATE mcp_servers SET deleted_at=clock_timestamp()
 WHERE id= @id AND project_id= @project_id;
+
+-- name: LockSource :one
+SELECT m.id FROM mcp_servers m
+JOIN projects p ON p.id=m.project_id
+JOIN remote_mcp_servers r ON r.id=m.remote_mcp_server_id AND r.project_id=m.project_id
+WHERE p.organization_id= @organization_id AND m.project_id= @project_id AND m.id= @mcp_server_id
+ AND m.deleted IS FALSE AND r.deleted IS FALSE AND p.deleted IS FALSE
+FOR UPDATE OF m,r,p;
+
+-- name: LockSourceHeaders :exec
+-- The locked remote server fences insertions; deletion does not lock its parent.
+SELECT h.id FROM remote_mcp_server_headers h
+JOIN remote_mcp_servers r ON r.id=h.remote_mcp_server_id
+JOIN mcp_servers m ON m.remote_mcp_server_id=r.id AND m.project_id=r.project_id
+JOIN projects p ON p.id=m.project_id
+WHERE p.organization_id= @organization_id AND m.project_id= @project_id AND m.id= @mcp_server_id
+ORDER BY h.id FOR SHARE OF h NOWAIT;
+
+-- name: LockSourceAuthClients :exec
+-- The source server is already locked against new attachments. NOWAIT avoids
+-- reversing auth-client writers' client-before-server lock order.
+SELECT ac.id FROM mcp_server_auth_clients l
+JOIN mcp_auth_clients ac ON ac.id=l.auth_client_id AND ac.organization_id=l.organization_id
+WHERE l.project_id= @project_id AND l.mcp_server_id= @mcp_server_id AND l.organization_id= @organization_id
+ORDER BY ac.id,l.id FOR UPDATE OF ac,l NOWAIT;
+
+-- name: LockSourceAuthClientHeaders :exec
+-- Parent client locks prevent new headers; these locks fence existing edits.
+SELECT h.id FROM mcp_auth_client_headers h
+JOIN mcp_server_auth_clients l ON l.auth_client_id=h.auth_client_id AND l.organization_id=h.organization_id
+WHERE l.project_id= @project_id AND l.mcp_server_id= @mcp_server_id AND l.organization_id= @organization_id
+ORDER BY h.id FOR SHARE OF h NOWAIT;
+
+-- name: ChangePromotionAuthHeaderFixture :exec
+UPDATE mcp_auth_client_headers h SET is_required= @is_required,deleted_at=sqlc.narg(deleted_at)::timestamptz,updated_at=clock_timestamp()
+WHERE h.auth_client_id= @auth_client_id AND h.organization_id= @organization_id
+ AND EXISTS(SELECT 1 FROM mcp_server_auth_clients l WHERE l.auth_client_id=h.auth_client_id AND l.project_id= @project_id);

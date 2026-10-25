@@ -207,14 +207,14 @@ func TestPromotionQualificationNeedsRecentMultiDaySuccess(t *testing.T) {
 	now := time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
 	outcomes := &telemetry.MCPServerOutcomes{Success: 20, Watermark: now}
 	old := []telemetry.MCPServerSeriesPoint{{BucketStart: now.Add(-10 * 24 * time.Hour), Total: 10}, {BucketStart: now.Add(-9 * 24 * time.Hour), Total: 10}}
-	require.Equal(t, "insufficient_evidence", qualify(outcomes, old, now).reason, "a project watermark is not server freshness")
+	require.Equal(t, "insufficient_evidence", qualify(outcomes, old, &telemetry.MCPServerOutcomes{}).reason, "a project watermark is not server freshness")
 	recent := []telemetry.MCPServerSeriesPoint{{BucketStart: now.Add(-24 * time.Hour), Total: 10}, {BucketStart: now, Total: 10}}
-	require.Equal(t, "eligible", qualify(outcomes, recent, now).reason)
+	require.Equal(t, "eligible", qualify(outcomes, recent, outcomes).reason)
 	recent[0].Failed = 1
-	require.Equal(t, "errors_observed", qualify(outcomes, recent, now).reason, "direct evidence of failure wins over a lagging aggregate read")
+	require.Equal(t, "errors_observed", qualify(outcomes, recent, outcomes).reason, "direct evidence of failure wins over a lagging aggregate read")
 	recent[0].Failed = 0
 	outcomes.Unknown = 1
-	require.Equal(t, "errors_observed", qualify(outcomes, recent, now).reason)
+	require.Equal(t, "errors_observed", qualify(outcomes, recent, outcomes).reason)
 }
 
 func TestDiscoveryFailureAdvancesScheduleAndReportsHealth(t *testing.T) {

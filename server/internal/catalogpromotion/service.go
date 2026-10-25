@@ -104,7 +104,7 @@ func (s *Service) GetCandidate(ctx context.Context, target Target) (Candidate, e
 		defer cancel()
 		return tx.Rollback(cleanupCtx)
 	})
-	current, err := repo.New(tx).GetSource(ctx, repo.GetSourceParams{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.MCPServerID})
+	current, err := lockSource(ctx, tx, target)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Candidate{}, ErrNotFound
 	}
@@ -200,23 +200,34 @@ func (s *Service) observe(ctx context.Context, source repo.GetSourceRow, now tim
 		out.reason = "telemetry_unavailable"
 		return out
 	}
-	return qualify(outcomes, points, now)
-}
-
-func qualify(outcomes *telemetry.MCPServerOutcomes, points []telemetry.MCPServerSeriesPoint, now time.Time) observation {
-	out := observation{reason: "insufficient_evidence", success: outcomes.Success, failures: 0, days: 0}
-	if outcomes.Success < 0 {
-		out.reason = "telemetry_unavailable"
-		return out
-	}
-	for _, count := range []int64{outcomes.Unauthorized, outcomes.ClientError, outcomes.ServerError, outcomes.Blocked, outcomes.Failed, outcomes.Unknown} {
-		if count < 0 || count > int64(^uint64(0)>>1)-out.failures {
+	recent := outcomes
+	if cutoff := now.Add(-recentActivityWindow); from.Before(cutoff) {
+		recent, err = s.health.Outcomes(ctx, target, cutoff, now)
+		if err != nil || recent == nil {
 			out.reason = "telemetry_unavailable"
 			return out
 		}
-		out.failures += count
 	}
-	recent := false
+	return qualify(outcomes, points, recent)
+}
+
+func qualify(outcomes *telemetry.MCPServerOutcomes, points []telemetry.MCPServerSeriesPoint, recent *telemetry.MCPServerOutcomes) observation {
+	out := observation{reason: "insufficient_evidence", success: outcomes.Success, failures: 0, days: 0}
+	if outcomes.Success < 0 || recent.Success < 0 {
+		out.reason = "telemetry_unavailable"
+		return out
+	}
+	for _, counts := range []*telemetry.MCPServerOutcomes{outcomes, recent} {
+		var failures int64
+		for _, count := range []int64{counts.Unauthorized, counts.ClientError, counts.ServerError, counts.Blocked, counts.Failed, counts.Unknown} {
+			if count < 0 || count > int64(^uint64(0)>>1)-failures {
+				out.reason = "telemetry_unavailable"
+				return out
+			}
+			failures += count
+		}
+		out.failures = max(out.failures, failures)
+	}
 	var seriesFailures int64
 	days := map[string]bool{}
 	for _, point := range points {
@@ -231,9 +242,6 @@ func qualify(outcomes *telemetry.MCPServerOutcomes, points []telemetry.MCPServer
 		seriesFailures += point.Failed
 		if point.Total > point.Failed {
 			days[point.BucketStart.UTC().Format(time.DateOnly)] = true
-			if !point.BucketStart.Before(now.Add(-recentActivityWindow)) && !point.BucketStart.After(now) {
-				recent = true
-			}
 		}
 	}
 	out.days = len(days)
@@ -242,7 +250,7 @@ func qualify(outcomes *telemetry.MCPServerOutcomes, points []telemetry.MCPServer
 		out.reason = "errors_observed"
 		return out
 	}
-	if out.success >= minimumSuccesses && out.days >= minimumActiveDays && recent {
+	if out.success >= minimumSuccesses && out.days >= minimumActiveDays && recent.Success > 0 {
 		out.reason = "eligible"
 	}
 	return out
@@ -304,9 +312,32 @@ func (s *Service) ListCandidates(ctx context.Context, cursor string, limit int, 
 	return result, next, nil
 }
 
+// lockSource fences attachments and header edits before reading their revision.
+func lockSource(ctx context.Context, tx pgx.Tx, target Target) (repo.GetSourceRow, error) {
+	q := repo.New(tx)
+	params := repo.GetSourceParams{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.MCPServerID}
+	if _, err := q.LockSource(ctx, repo.LockSourceParams(params)); err != nil {
+		return repo.GetSourceRow{}, fmt.Errorf("lock source rows: %w", err)
+	}
+	if err := q.LockSourceHeaders(ctx, repo.LockSourceHeadersParams(params)); err != nil {
+		return repo.GetSourceRow{}, fmt.Errorf("lock source headers: %w", err)
+	}
+	if err := q.LockSourceAuthClients(ctx, repo.LockSourceAuthClientsParams{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.MCPServerID}); err != nil {
+		return repo.GetSourceRow{}, fmt.Errorf("lock source auth clients: %w", err)
+	}
+	if err := q.LockSourceAuthClientHeaders(ctx, repo.LockSourceAuthClientHeadersParams{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.MCPServerID}); err != nil {
+		return repo.GetSourceRow{}, fmt.Errorf("lock source auth headers: %w", err)
+	}
+	source, err := q.GetSource(ctx, params)
+	if err != nil {
+		return repo.GetSourceRow{}, fmt.Errorf("read locked source: %w", err)
+	}
+	return source, nil
+}
+
 // ValidateTx locks the source and candidate and rejects stale or insufficient evidence.
 func (s *Service) ValidateTx(ctx context.Context, tx pgx.Tx, target Target, revision, curationRevision string, public PublicMetadata) (Candidate, error) {
-	source, err := repo.New(tx).GetSource(ctx, repo.GetSourceParams{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.MCPServerID})
+	source, err := lockSource(ctx, tx, target)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Candidate{}, ErrNotFound
 	}
