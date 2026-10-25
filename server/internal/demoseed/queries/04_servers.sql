@@ -532,7 +532,8 @@ VALUES
 -- revoked or expired at fixed offsets from now(), for the gateway's
 -- connections over time. Every one is deleted by now, so the live sessions
 -- list is unchanged. A refreshed row continues credential_id; a legacy row
--- names the gateway only in its consent selection.
+-- names the gateway only in its consent selection; a dashboard token has no
+-- registered client.
 -- name: ServersInsertGatewaySessionHistory :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
@@ -540,7 +541,7 @@ INSERT INTO user_sessions
    refresh_token_hash, refresh_expires_at, expires_at, created_at, deleted_at)
 VALUES
   (@id::uuid, @project_id::uuid, @org_id::text,
-   @user_session_issuer_id::uuid, @user_session_client_id::uuid,
+   @user_session_issuer_id::uuid, sqlc.narg('user_session_client_id')::uuid,
    'user:' || @user_id::text, sqlc.narg('resource_identity')::text,
    sqlc.narg('tool_selection')::jsonb, sqlc.narg('credential_id')::uuid, @jti::text,
    @refresh_token_hash::text,

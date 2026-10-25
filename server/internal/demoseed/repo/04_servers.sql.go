@@ -734,7 +734,7 @@ type ServersInsertGatewaySessionHistoryParams struct {
 	ProjectID           uuid.UUID
 	OrgID               string
 	UserSessionIssuerID uuid.UUID
-	UserSessionClientID uuid.UUID
+	UserSessionClientID uuid.NullUUID
 	UserID              string
 	ResourceIdentity    pgtype.Text
 	ToolSelection       []byte
@@ -751,7 +751,8 @@ type ServersInsertGatewaySessionHistoryParams struct {
 // revoked or expired at fixed offsets from now(), for the gateway's
 // connections over time. Every one is deleted by now, so the live sessions
 // list is unchanged. A refreshed row continues credential_id; a legacy row
-// names the gateway only in its consent selection.
+// names the gateway only in its consent selection; a dashboard token has no
+// registered client.
 func (q *Queries) ServersInsertGatewaySessionHistory(ctx context.Context, arg ServersInsertGatewaySessionHistoryParams) error {
 	_, err := q.db.Exec(ctx, serversInsertGatewaySessionHistory,
 		arg.ID,

@@ -137,6 +137,28 @@ func (q *Queries) ClearUserSessionClientAuthMethod(ctx context.Context, id uuid.
 	return i, err
 }
 
+const clearUserSessionOrganizationFixture = `-- name: ClearUserSessionOrganizationFixture :execrows
+UPDATE user_sessions
+SET organization_id = NULL
+WHERE id = $1
+  AND user_session_issuer_id = $2
+`
+
+type ClearUserSessionOrganizationFixtureParams struct {
+	ID                  uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// Test-only fixture: makes a session one written before sessions recorded
+// their organization.
+func (q *Queries) ClearUserSessionOrganizationFixture(ctx context.Context, arg ClearUserSessionOrganizationFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearUserSessionOrganizationFixture, arg.ID, arg.UserSessionIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countActiveUserSessionsByClientIDs = `-- name: CountActiveUserSessionsByClientIDs :many
 SELECT s.user_session_client_id AS user_session_client_id, COUNT(*)::int AS active_count
 FROM user_sessions AS s
@@ -5766,25 +5788,34 @@ func (q *Queries) RetierUserSessions(ctx context.Context, arg RetierUserSessions
 }
 
 const revokeAccessOnlyUserSession = `-- name: RevokeAccessOnlyUserSession :execrows
-UPDATE user_sessions
+UPDATE user_sessions AS s
 SET deleted_at = clock_timestamp()
-WHERE id = $1
-  AND user_session_issuer_id = $2
-  AND deleted IS FALSE
-  AND NOT COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)
+WHERE s.id = $1
+  AND s.user_session_issuer_id = $2
+  AND (
+    s.organization_id = $3::text
+    OR (s.organization_id IS NULL AND s.project_id IN (
+      SELECT p.id FROM projects AS p WHERE p.organization_id = $3::text
+    ))
+  )
+  AND s.deleted IS FALSE
+  AND NOT COALESCE(s.refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)
 `
 
 type RevokeAccessOnlyUserSessionParams struct {
 	ID                  uuid.UUID
 	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
 }
 
 // Records an access-token revocation as the session's end when the session
 // cannot refresh, so the access token was all it had. A refreshable session
 // keeps its grant: revoking one access token does not end it. Called only
-// after the caller has proven it owns the session.
+// after the caller has proven it owns the session, and scoped to the
+// organization that owns the serving issuer: a row records it, or, written
+// before sessions recorded one, its project belongs to it.
 func (q *Queries) RevokeAccessOnlyUserSession(ctx context.Context, arg RevokeAccessOnlyUserSessionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeAccessOnlyUserSession, arg.ID, arg.UserSessionIssuerID)
+	result, err := q.db.Exec(ctx, revokeAccessOnlyUserSession, arg.ID, arg.UserSessionIssuerID, arg.OrganizationID)
 	if err != nil {
 		return 0, err
 	}

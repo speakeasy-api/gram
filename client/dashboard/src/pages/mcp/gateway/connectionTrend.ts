@@ -1,4 +1,3 @@
-import { formatChartLabel } from "@/components/chart/chartUtils";
 import { ACCENT_RED, GOOD_GREEN } from "@/components/chart/palette";
 import type { TimeSeriesDataset } from "@/components/observe/toolUsageTimeSeriesChartData";
 import type { UserSessionTrend } from "@gram/client/models/components/usersessiontrend.js";
@@ -7,6 +6,33 @@ const BUCKET_MS: Record<string, number> = {
   hour: 3_600_000,
   day: 24 * 3_600_000,
 };
+
+// Buckets are UTC intervals, so every label and tooltip reads in UTC whatever
+// the viewer's time zone: a local day label would name the wrong day west of
+// UTC, and an hourly one would land on :30 in half-hour zones.
+const UTC_DAY = new Intl.DateTimeFormat(undefined, {
+  timeZone: "UTC",
+  month: "short",
+  day: "numeric",
+});
+const UTC_TIME = new Intl.DateTimeFormat(undefined, {
+  timeZone: "UTC",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+function utcAt(date: Date): string {
+  return `${UTC_DAY.format(date)}, ${UTC_TIME.format(date)}`;
+}
+
+// A day bucket is named by its day; an hourly one by its time, with its day
+// once the window spans more than one.
+function utcLabel(date: Date, bucket: string, spanMs: number): string {
+  if (bucket === "day") return UTC_DAY.format(date);
+  if (spanMs <= BUCKET_MS.day!) return UTC_TIME.format(date);
+  return utcAt(date);
+}
 
 /** One chart's props over a trend's buckets. */
 type TrendChart = {
@@ -30,15 +56,8 @@ export function trendChartData(
   const span = to.getTime() - from.getTime();
   const timestamps = trend.buckets.map((bucket) => bucket.start.getTime());
   const labels = trend.buckets.map((bucket) =>
-    formatChartLabel(bucket.start, span),
+    utcLabel(bucket.start, trend.bucket, span),
   );
-  const at = (date: Date) =>
-    date.toLocaleString([], {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
   const bucketMs = BUCKET_MS[trend.bucket] ?? span;
   return {
     events: {
@@ -46,7 +65,7 @@ export function trendChartData(
       timestamps,
       labels,
       tooltipLabels: trend.buckets.map(
-        (bucket) => `${at(bucket.start)} – ${at(bucket.end)}`,
+        (bucket) => `${utcAt(bucket.start)} – ${utcAt(bucket.end)} UTC`,
       ),
       datasets: [
         {
@@ -70,7 +89,7 @@ export function trendChartData(
       timestamps,
       labels,
       tooltipLabels: trend.buckets.map(
-        (bucket) => `Just before ${at(bucket.end)}`,
+        (bucket) => `Just before ${utcAt(bucket.end)} UTC`,
       ),
       datasets: [
         {

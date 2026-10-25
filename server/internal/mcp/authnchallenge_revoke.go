@@ -66,14 +66,16 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build authorization server URLs").LogError(r.Context(), s.logger)
 	}
-	return s.serveRevoke(w, r, endpoint.LogWith(s.logger), endpoint.UserSessionIssuerID, urls)
+	return s.serveRevoke(w, r, endpoint.LogWith(s.logger), endpoint.UserSessionIssuerID, endpoint.OrganizationID, urls)
 }
 
 // serveRevoke revokes a token of the issuer's clients. Revocation is scoped to
 // the issuer, not to an MCP server, so per-endpoint and shared authorization
 // servers share it; urls are the addressed authorization server's, against
 // which client assertions are checked.
-func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID, urls AuthorizationServerURLs) error {
+// organizationID is the organization that owns the serving issuer, resolved
+// with it rather than taken from the request.
+func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID, organizationID string, urls AuthorizationServerURLs) error {
 	ctx := r.Context()
 
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
@@ -137,9 +139,9 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 		if s.tryRevokeRefreshToken(ctx, logger, issuerID, clientUUID, token) {
 			break
 		}
-		s.tryRevokeAccessToken(ctx, logger, issuerID, clientUUID, token)
+		s.tryRevokeAccessToken(ctx, logger, issuerID, organizationID, clientUUID, token)
 	case "access_token":
-		if s.tryRevokeAccessToken(ctx, logger, issuerID, clientUUID, token) {
+		if s.tryRevokeAccessToken(ctx, logger, issuerID, organizationID, clientUUID, token) {
 			break
 		}
 		s.tryRevokeRefreshToken(ctx, logger, issuerID, clientUUID, token)
@@ -147,7 +149,7 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 		// No hint: try access_token first (JWT shape is recognisable), then
 		// refresh_token. Either may match; per RFC 7009 we don't tell the
 		// client which.
-		if !s.tryRevokeAccessToken(ctx, logger, issuerID, clientUUID, token) {
+		if !s.tryRevokeAccessToken(ctx, logger, issuerID, organizationID, clientUUID, token) {
 			s.tryRevokeRefreshToken(ctx, logger, issuerID, clientUUID, token)
 		}
 	}
@@ -170,7 +172,7 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 // by the caller; ownership mismatches return false so the dispatch falls
 // through to the refresh-token attempt (and ultimately surfaces as the
 // success silent-no-op per RFC 7009 §2.2).
-func (s *Service) tryRevokeAccessToken(ctx context.Context, logger *slog.Logger, issuerID, clientID uuid.UUID, token string) bool {
+func (s *Service) tryRevokeAccessToken(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, organizationID string, clientID uuid.UUID, token string) bool {
 	jti, err := s.userSessionSigner.VerifiedJTI(token)
 	if err != nil || jti == "" {
 		return false
@@ -199,6 +201,7 @@ func (s *Service) tryRevokeAccessToken(ctx context.Context, logger *slog.Logger,
 	if _, err := usersessions_repo.New(s.db).RevokeAccessOnlyUserSession(ctx, usersessions_repo.RevokeAccessOnlyUserSessionParams{
 		ID:                  row.ID,
 		UserSessionIssuerID: issuerID,
+		OrganizationID:      organizationID,
 	}); err != nil {
 		logger.ErrorContext(ctx, "failed to record access-only session revocation", attr.SlogError(err))
 	}

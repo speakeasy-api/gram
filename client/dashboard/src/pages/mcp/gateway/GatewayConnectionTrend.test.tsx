@@ -97,7 +97,10 @@ function renderTrend(span: HealthWindow = "24h") {
 }
 
 const tile = (title: string) =>
-  screen.getByText(title).closest("[data-tone]")?.textContent ?? "";
+  screen
+    .getAllByText(title)
+    .map((node) => node.closest("[data-tone]"))
+    .find(Boolean)?.textContent ?? "";
 
 it("reads the gateway's trend for the shared window, hourly up to a week and daily beyond", () => {
   for (const [span, bucket] of [
@@ -126,9 +129,60 @@ it("reads nothing and shows nothing without project and gateway read", () => {
     expect(state.calls.at(-1)![2]).toMatchObject({ enabled: false });
     cleanup();
   }
+});
+
+it("shows no cached history, error or retry while grants are unresolved", () => {
+  state.scopes = ["project:read", "mcp:read"];
   state.rbacLoading = true;
+  for (const query of [
+    { data: trendOf() },
+    {
+      data: trendOf(),
+      error: new Error("boom"),
+      isError: true,
+      refetch: vi.fn<() => void>(),
+    },
+  ]) {
+    state.query = query;
+    state.charts = [];
+    renderTrend();
+    expect(state.calls.at(-1)![2]).toMatchObject({ enabled: false });
+    expect(screen.getByText("Connections over time")).toBeTruthy();
+    expect(screen.queryByText("Active at start")).toBeNull();
+    expect(screen.queryByText("Created")).toBeNull();
+    expect(state.charts).toHaveLength(0);
+    expect(screen.queryByText(/Couldn't load/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    cleanup();
+  }
+});
+
+it("labels both event series under the collapsed chart", () => {
   renderTrend();
-  expect(state.calls.at(-1)![2]).toMatchObject({ enabled: false });
+  const legend = screen.getByRole("list", { name: "Series" });
+  expect(legend.textContent).toContain("Created");
+  expect(legend.textContent).toContain("Revoked");
+});
+
+it("charts a window whose only connection expires in its first interval", () => {
+  state.query = {
+    data: trendOf({
+      buckets: trendOf().buckets.map((b) => ({
+        ...b,
+        created: 0,
+        revoked: 0,
+        active: 0,
+      })),
+      activeAtStart: 1,
+      created: 0,
+      revoked: 0,
+      activeAtEnd: 0,
+    }),
+  };
+  renderTrend();
+  expect(screen.queryByText(/No connections to this gateway/)).toBeNull();
+  expect(state.charts).toHaveLength(2);
+  expect(tile("Active at start")).toContain("1");
 });
 
 it("summarizes the window and keeps events apart from the active stock", () => {
@@ -243,6 +297,95 @@ it("never shows an answer for another window or one a failed refetch kept", () =
       "This gateway's connection history is not available to you.",
     ),
   ).toBeTruthy();
+});
+
+// Buckets are UTC; labels must not move with the viewer's zone.
+function inZone<T>(zone: string, run: () => T): T {
+  const previous = process.env.TZ;
+  process.env.TZ = zone;
+  try {
+    return run();
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+}
+
+it("labels UTC buckets in UTC west of UTC and in half-hour zones", () => {
+  // Expected text from the viewer's locale, but always in UTC; the local day
+  // west of UTC is a different one, which proves the zone is pinned.
+  const utcDay = (date: Date) =>
+    new Intl.DateTimeFormat(undefined, {
+      timeZone: "UTC",
+      month: "short",
+      day: "numeric",
+    }).format(date);
+  const utcTime = (date: Date) =>
+    new Intl.DateTimeFormat(undefined, {
+      timeZone: "UTC",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(date);
+  const midnight = new Date("2026-09-26T00:00:00.000Z");
+  const nextMidnight = new Date("2026-09-27T00:00:00.000Z");
+  const daily = trendOf({
+    bucket: "day",
+    from: midnight,
+    to: new Date("2026-09-28T00:00:00.000Z"),
+    buckets: [
+      { start: midnight, end: nextMidnight, created: 1, revoked: 0, active: 1 },
+      {
+        start: nextMidnight,
+        end: new Date("2026-09-28T00:00:00.000Z"),
+        created: 0,
+        revoked: 0,
+        active: 1,
+      },
+    ],
+  });
+  const losAngeles = inZone("America/Los_Angeles", () => ({
+    charts: trendChartData(daily, daily.from, daily.to, "#123456"),
+    localDay: new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+    }).format(midnight),
+  }));
+  expect(losAngeles.charts.events.labels).toEqual([
+    utcDay(midnight),
+    utcDay(nextMidnight),
+  ]);
+  expect(losAngeles.charts.events.labels[0]).not.toBe(losAngeles.localDay);
+  expect(losAngeles.charts.events.tooltipLabels[0]).toBe(
+    `${utcDay(midnight)}, ${utcTime(midnight)} – ${utcDay(nextMidnight)}, ${utcTime(nextMidnight)} UTC`,
+  );
+  expect(losAngeles.charts.active.tooltipLabels[0]).toBe(
+    `Just before ${utcDay(nextMidnight)}, ${utcTime(nextMidnight)} UTC`,
+  );
+
+  const fourteen = new Date("2026-09-26T14:00:00.000Z");
+  const fifteen = new Date("2026-09-26T15:00:00.000Z");
+  const hourly = trendOf({
+    from: fourteen,
+    to: new Date("2026-09-26T16:00:00.000Z"),
+    buckets: [
+      { start: fourteen, end: fifteen, created: 1, revoked: 0, active: 1 },
+      {
+        start: fifteen,
+        end: new Date("2026-09-26T16:00:00.000Z"),
+        created: 0,
+        revoked: 0,
+        active: 1,
+      },
+    ],
+  });
+  const kolkata = inZone("Asia/Kolkata", () =>
+    trendChartData(hourly, hourly.from, hourly.to, "#123456"),
+  );
+  expect(kolkata.events.labels).toEqual(["14:00", "15:00"]);
+  expect(kolkata.events.tooltipLabels[0]).toBe(
+    `${utcDay(fourteen)}, 14:00 – ${utcDay(fifteen)}, 15:00 UTC`,
+  );
 });
 
 it("charts created and revoked in separate stacks so they are never summed", () => {

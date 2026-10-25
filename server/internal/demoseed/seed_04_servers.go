@@ -343,8 +343,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	// refreshed twice and revoked two days ago, which is one creation and one
 	// revocation, not three; another revoked after three days; one whose
 	// expired refresh was tombstoned after its deadline, which is expiry; and a
-	// dashboard token ended by revoking its access token. One legacy record
-	// predates lineage, so it is left out of the counts and disclosed.
+	// dashboard token, which has no client, revoked from the dashboard. One
+	// legacy record predates lineage, so it is left out of the counts and
+	// disclosed.
 	catalog, err := json.Marshal(map[string]string{"resource": s.serversResourceIdentity("gateway")})
 	if err != nil {
 		return fmt.Errorf("encode demo legacy gateway selection: %w", err)
@@ -365,7 +366,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			ProjectID:           proj,
 			OrgID:               org,
 			UserSessionIssuerID: s.det("issuer-gateway"),
-			UserSessionClientID: s.det("usc-gateway"),
+			UserSessionClientID: uuid.NullUUID{UUID: s.det("usc-gateway"), Valid: true},
 			UserID:              user(h.user),
 			ResourceIdentity:    pgtype.Text{String: s.serversResourceIdentity("gateway"), Valid: !h.legacy},
 			ToolSelection:       nil,
@@ -384,8 +385,10 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			params.CredentialID = uuid.NullUUID{UUID: s.det("gateway-history-" + h.lineage), Valid: true}
 		}
 		if h.accessOnly {
-			// A dashboard token stores this marker and no refresh token.
+			// A dashboard token stores this marker and no refresh token, and
+			// holds no client registration.
 			params.RefreshTokenHash = "dashboard-mint:" + jti
+			params.UserSessionClientID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		}
 		if err := s.q.ServersInsertGatewaySessionHistory(ctx, params); err != nil {
 			return fmt.Errorf("insert demo gateway session history %s: %w", h.name, err)

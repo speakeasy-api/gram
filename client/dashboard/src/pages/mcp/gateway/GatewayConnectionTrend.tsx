@@ -76,7 +76,11 @@ export function GatewayConnectionTrend({
   }
 
   let body: JSX.Element;
-  if (isUnavailable(trend.error)) {
+  // Until grants resolve nothing is shown, cached answers and errors
+  // included: they may be for a reader who cannot see them.
+  if (isLoading) {
+    body = <Skeleton className="h-64 w-full" />;
+  } else if (isUnavailable(trend.error)) {
     body = (
       <WidgetEmptyState
         message="This gateway's connection history is not available to you."
@@ -147,6 +151,7 @@ function TrendBody({
   const activeColor = useSeriesColors()[0]!;
   const charts = trendChartData(trend, from, to, activeColor);
   const quiet =
+    trend.activeAtStart === 0 &&
     trend.created === 0 &&
     trend.revoked === 0 &&
     trend.buckets.every((bucket) => bucket.active === 0);
@@ -167,14 +172,14 @@ function TrendBody({
           title="Created"
           value={trend.created}
           format="number"
-          tone="information"
+          tone="neutral"
           tooltip="First issued in the window. Refreshes are not counted."
         />
         <StatTile
           title="Revoked"
           value={trend.revoked}
           format="number"
-          tone={trend.revoked > 0 ? "warning" : "neutral"}
+          tone="neutral"
           tooltip="Ended by a revocation before their deadline. Connections that reach their deadline are not counted."
         />
         <StatTile
@@ -208,6 +213,28 @@ function TrendBody({
               height={expandedChart === EVENTS_CHART ? 420 : 200}
               expanded={expandedChart === EVENTS_CHART}
             />
+            {/* The shared chart shows its legend only when expanded. */}
+            {expandedChart !== EVENTS_CHART && (
+              <ul className="mt-2 flex gap-4" aria-label="Series">
+                {charts.events.datasets.map((dataset) => (
+                  <li key={dataset.label} className="flex items-center gap-1.5">
+                    <span
+                      aria-hidden="true"
+                      className="size-2.5 rounded-sm"
+                      style={{
+                        backgroundColor:
+                          typeof dataset.backgroundColor === "string"
+                            ? dataset.backgroundColor
+                            : undefined,
+                      }}
+                    />
+                    <Text small muted>
+                      {dataset.label}
+                    </Text>
+                  </li>
+                ))}
+              </ul>
+            )}
           </ChartCard>
           <ChartCard
             title="Active at each interval's end"

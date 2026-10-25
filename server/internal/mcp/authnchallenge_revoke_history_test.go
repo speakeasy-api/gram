@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -165,4 +167,33 @@ func TestHandleRevoke_AccessTokenRecordsAccessOnlyEnd(t *testing.T) {
 	}
 	require.EqualValues(t, 3, revoked)
 	require.EqualValues(t, 3, ended3)
+}
+
+// The shared authorization server records an access-only end too, under the
+// organization that owns its issuer, and leaves a refreshable grant's row.
+func TestHandleSharedRevoke_AccessTokenRecordsAccessOnlyEnd(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := seedSharedIssuer(t, ctx, ti)
+	raw := make([]byte, 32)
+	_, err := rand.Read(raw)
+	require.NoError(t, err)
+	accessOnly := seedRevokeHistorySession(t, ctx, ti, f.issuer.ID, f.client.ID, pgtype.Text{String: "", Valid: false}, "")
+	grant := seedRevokeHistorySession(t, ctx, ti, f.issuer.ID, f.client.ID, conv.ToPGText(base64.RawURLEncoding.EncodeToString(raw)), "")
+
+	for _, session := range []revokeHistorySession{accessOnly, grant} {
+		form := url.Values{}
+		form.Set(oauthwire.ParamToken, session.token)
+		form.Set(oauthwire.ParamTokenTypeHint, "access_token")
+		form.Set("client_id", f.client.ClientID)
+		w := httptest.NewRecorder()
+		require.NoError(t, ti.service.HandleSharedRevoke(w, sharedRequest(ctx, http.MethodPost, "/oauth/usi/"+f.issuer.ID.String()+"/revoke", f.issuer.ID.String(), strings.NewReader(form.Encode()))))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		revoked, err := ti.chatSessionsManager.IsTokenRevoked(ctx, session.jti)
+		require.NoError(t, err)
+		require.True(t, revoked, "the access token is revoked either way")
+	}
+	require.True(t, sessionDeletedAt(t, ctx, ti, accessOnly).Valid, "the access-only session's end is recorded")
+	require.False(t, sessionDeletedAt(t, ctx, ti, grant).Valid, "the refreshable grant keeps its row")
 }

@@ -1780,13 +1780,21 @@ LIMIT 1;
 -- Records an access-token revocation as the session's end when the session
 -- cannot refresh, so the access token was all it had. A refreshable session
 -- keeps its grant: revoking one access token does not end it. Called only
--- after the caller has proven it owns the session.
-UPDATE user_sessions
+-- after the caller has proven it owns the session, and scoped to the
+-- organization that owns the serving issuer: a row records it, or, written
+-- before sessions recorded one, its project belongs to it.
+UPDATE user_sessions AS s
 SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND user_session_issuer_id = @user_session_issuer_id
-  AND deleted IS FALSE
-  AND NOT COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false);
+WHERE s.id = @id
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND (
+    s.organization_id = @organization_id::text
+    OR (s.organization_id IS NULL AND s.project_id IN (
+      SELECT p.id FROM projects AS p WHERE p.organization_id = @organization_id::text
+    ))
+  )
+  AND s.deleted IS FALSE
+  AND NOT COALESCE(s.refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false);
 
 -- name: GetUserSessionByJTI :one
 -- Looks up the session row by jti, scoped to the issuer. Used by the OAuth
@@ -3223,5 +3231,13 @@ WHERE id = @id
 -- Test-only fixture: when a session was deleted, if it was.
 SELECT deleted_at
 FROM user_sessions
+WHERE id = @id
+  AND user_session_issuer_id = @user_session_issuer_id;
+
+-- name: ClearUserSessionOrganizationFixture :execrows
+-- Test-only fixture: makes a session one written before sessions recorded
+-- their organization.
+UPDATE user_sessions
+SET organization_id = NULL
 WHERE id = @id
   AND user_session_issuer_id = @user_session_issuer_id;
