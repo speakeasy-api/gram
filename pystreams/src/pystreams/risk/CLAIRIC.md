@@ -80,3 +80,102 @@ the same product surface. No Temporal topology or actions are added.
 
 Sources: [model and REST examples](https://developers.cloudflare.com/workers-ai/models/clairic/),
 [extraction semantics](https://developers.cloudflare.com/workers-ai/concepts/extraction-models/).
+
+## Accuracy and cost benchmark plan
+
+The decision is whether Clairic can replace Presidio at equal or better detection
+quality and acceptable enforcement latency. Run the experiment offline before
+considering a shadow deployment. The numbers below are proposed acceptance gates,
+not measured results.
+
+### 1. Prove the live contract
+
+Use a dedicated Workers AI token with a small spend cap. Run 50 synthetic cases
+through the direct scanner and HTTP adapter: empty results, multiple entities,
+repeated values, Unicode (including emoji and combining characters), escaped JSON,
+long inputs, and malformed/over-limit responses. Confirm the actual REST envelope,
+list confidence, character-offset convention, truncation flag, and usage fields.
+Record model identifier, run date, adapter commit, and response schema. Stop on a
+contract mismatch; do not reinterpret invalid spans as clean results.
+
+### 2. Freeze an annotated evaluation set
+
+Start with 10,000 documents: 7,000 positive/mixed examples and 3,000 hard negatives,
+with at least 200 annotated occurrences per active entity. Cover chat text, tool
+arguments/results, source code, logs, prose, structured JSON, and common payload
+sizes. Include international identifiers, repeated PII, obfuscation, Unicode,
+reserved example data, UUIDs/version strings, contextual healthcare references,
+and instructions that tell the scanner to ignore PII. Separate all-entity policies
+from the entity subsets used by existing policies.
+
+Use generated fictional identities and licensed public evaluation data. Keep any
+later approved internal cohort private and outside Git; do not send existing
+customer content to a new provider as part of this initial benchmark. Two reviewers
+label a representative sample and resolve disagreements. Label entity type plus
+exact UTF-8 span and distinguish deliberate exclusions from detector misses.
+
+Split 20% calibration / 80% held-out evaluation by template family and source,
+not random near-duplicate rows. Freeze labels before model runs. The harness must
+save corpus/version hashes, field instructions, selected entities, thresholds,
+engine versions, outcomes, timing, and usage. A future harness can live under
+`pystreams/src/pystreams/cmd/`; its implementation is a follow-up to this POC.
+
+### 3. Compare quality at matched operating points
+
+Run the pinned Presidio baseline and Clairic on identical texts. Evaluate both raw
+extraction and final findings after the same exclusions and caller preprocessing.
+Measure per-entity and micro/macro precision, recall, and F1; exact-span accuracy;
+character coverage; document-level false blocks; and missed sensitive documents.
+Show unsupported classes and failures separately. Failed/truncated requests count
+against completion and coverage rather than disappearing from the denominator.
+
+Sweep thresholds on calibration data only, then freeze them. Compare the engines
+at matched recall and at matched false-block rate; their confidence scales are not
+interchangeable. Use paired document-level bootstrap intervals (95%) for differences.
+Report sparse classes as inconclusive instead of passing them on a high point score.
+Repeat 10% of the held-out set three times to measure model instability.
+
+### 4. Measure latency and fully loaded cost
+
+Replay the same size/entity mix at concurrency 1, 4, 8, 16, and 32. Measure cold and
+warm runs, p50/p95/p99 end-to-end latency, queue time, throughput, timeout rate,
+429s, retries, and successful scans. Exercise both direct Pub/Sub and HTTP routes;
+include existing broker/Redis work when measuring enforcement deadlines.
+
+Capture provider-reported `input_tokens`, `schema_tokens`, and `passes` per attempt,
+including retried or rejected results. Do not estimate cost from content length
+alone or multiply `input_tokens` by `passes` again unless billing semantics require
+it. Missing usage remains unknown and must reconcile with provider billing.
+As of 2026-10-25, the model page lists **$0.10 per million input tokens**; recheck
+that rate on the run date. At that rate, 2,000 billed input tokens per scan would
+cost $200 per million scans before retries and hosting. This is an illustration,
+not a workload estimate.
+
+Compare against measured Presidio CPU-seconds, memory, replicas, idle capacity,
+and hosting/network cost at the same throughput and availability target. Include
+the Python adapter's own hosting cost; this POC still ships Presidio dependencies.
+Report cost per 1,000 successful scans, per million input characters, and per true
+positive at matched recall. Show monthly estimates for the actual private traffic
+mix with low/base/high volume, not public customer spend figures. Keep existing
+product stoken billing separate from this provider-cost calculation.
+
+### 5. Make the rollout decision
+
+Proposed gates: no observed invalid accepted spans or silent truncation; completion
+at least 99.9%; critical-ID recall at least 99%; and no more than a one-percentage-
+point recall regression against Presidio (using the paired confidence interval).
+The clean-document false-block rate must be no worse than Presidio and below 0.5%.
+Expand the corpus when confidence intervals are too wide to establish a gate.
+
+Require p99 end-to-end time to fit the deployed enforcement deadline with 20%
+headroom. For a cost-led replacement, target at least 20% lower fully loaded cost
+at matched recall. A quality improvement with higher cost needs an explicit product
+tradeoff. Publish a per-entity scorecard, error samples with fictional values,
+latency curves, a reconciled cost table, and a go/no-go recommendation.
+
+Only after these gates pass, propose a bounded shadow rollout with independent
+provider attribution and a kill switch. Do not change the default or mix unlabelled
+Clairic results into the Presidio baseline during the experiment.
+
+Unresolved before execution: Cloudflare test credentials and spend cap; the target
+enforcement deadline/traffic mix; agreement on the proposed quality and cost gates.
