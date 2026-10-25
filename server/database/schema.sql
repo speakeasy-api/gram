@@ -9717,6 +9717,10 @@ CREATE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_idx
 ON remote_mcp_server_headers (remote_mcp_server_id)
 WHERE deleted IS FALSE;
 
+-- Promotion revisions include deleted headers to detect authentication changes.
+CREATE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_history_idx
+ON remote_mcp_server_headers (remote_mcp_server_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_name_key
 ON remote_mcp_server_headers (remote_mcp_server_id, name)
 WHERE deleted IS FALSE;
@@ -10129,6 +10133,10 @@ COMMENT ON COLUMN mcp_auth_client_headers.deleted IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_auth_client_headers_auth_client_id_name_key
 ON mcp_auth_client_headers (auth_client_id, name)
 WHERE deleted IS FALSE;
+
+-- Promotion revisions include deleted headers to detect authentication changes.
+CREATE INDEX IF NOT EXISTS mcp_auth_client_headers_auth_client_id_organization_id_idx
+ON mcp_auth_client_headers (auth_client_id, organization_id);
 
 -- Which auth clients each MCP server offers. Many-to-many: a shared client can
 -- serve several servers, and a server can offer several clients.
