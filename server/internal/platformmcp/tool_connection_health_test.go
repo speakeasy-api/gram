@@ -234,4 +234,7 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 	tooLong := base()
 	tooLong["from"], tooLong["to"] = "2026-01-01T00:00:00Z", "2026-01-31T00:00:00.000000001Z"
 	require.Contains(t, refusal(tooLong), "give both from and to")
+
+	reader.WithConnectionHealth(telemetry.NewConnectionHealth(conn, chConn, alwaysDisabledFeature, engine))
+	require.Contains(t, refusal(base()), "Enable observability for this organization", "logs disabled")
 }
