@@ -599,7 +599,7 @@ func newAdminCommand() *cli.Command {
 					return fmt.Errorf("configure staff Admin MCP write tools: %w", err)
 				}
 				mux.Handle(http.MethodPost, adminmcp.Path, staffRuntime.Handler().ServeHTTP)
-				mux.Handle(http.MethodGet, adminmcp.Path+"/tools", staffRuntime.ToolDirectoryHandler(staffOAuth.Authorization).ServeHTTP)
+				mux.Handle(http.MethodGet, adminmcp.Path+"/tools", staffRuntime.ToolDirectoryHandler(staffOAuth.Authorization, logger).ServeHTTP)
 			}
 
 			srv := &http.Server{

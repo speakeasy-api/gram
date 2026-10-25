@@ -3,7 +3,9 @@ package adminmcp
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -11,7 +13,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // toolDirectoryTimeout bounds local MCP discovery if a runtime stops responding.
@@ -53,7 +57,7 @@ type toolDirectory struct {
 // ToolDirectoryHandler lets a verified staff browser inspect the same tools a
 // connected MCP client discovers, before installing a client. It belongs only
 // on the private admin mux and never accepts or executes tool calls.
-func (r *Runtime) ToolDirectoryHandler(session *StaffOAuthAuthorization) http.Handler {
+func (r *Runtime) ToolDirectoryHandler(session *StaffOAuthAuthorization, logger *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Pragma", "no-cache")
@@ -67,13 +71,19 @@ func (r *Runtime) ToolDirectoryHandler(session *StaffOAuthAuthorization) http.Ha
 			return
 		}
 		if _, _, err := session.staffSession(req); err != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			var authErr *oops.ShareableError
+			if errors.Is(err, errMissingStaffCookie) || errors.Is(err, errStaffIdentityMismatch) || (errors.As(err, &authErr) && authErr.Code == oops.CodeUnauthorized) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			http.Error(w, "staff verification unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		ctx, cancel := context.WithTimeout(req.Context(), toolDirectoryTimeout)
 		defer cancel()
 		directory, err := r.toolDirectory(ctx)
 		if err != nil {
+			logger.ErrorContext(ctx, "list admin MCP tool directory", attr.SlogError(err))
 			http.Error(w, "tool directory unavailable", http.StatusServiceUnavailable)
 			return
 		}
