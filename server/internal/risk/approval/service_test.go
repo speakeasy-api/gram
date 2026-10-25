@@ -11,8 +11,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	endpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -24,8 +22,7 @@ func TestHoldCallReturnsSameTokenWhileOpen(t *testing.T) {
 	outcome, err := f.service.HoldCall(t.Context(), f.call(`{"title":"bug","labels":["a"]}`))
 	require.NoError(t, err)
 	require.False(t, outcome.Allowed)
-	require.Contains(t, outcome.UserMessage, outcome.Token)
-	require.Contains(t, outcome.UserMessage, "https://speakeasy.test/approvals-mcp")
+	require.Contains(t, outcome.UserMessage, "curl -sS -X POST 'https://speakeasy.test/approvals/request' -H 'Authorization: Bearer "+outcome.Token+"'")
 
 	// Same arguments in another key order and spacing: same request.
 	require.Equal(t, outcome.Token, f.hold(t, f.call(`{ "labels": ["a"], "title": "bug" }`)))
@@ -37,6 +34,7 @@ func TestHoldCallReturnsSameTokenWhileOpen(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, outcome.Token, again.Token)
 	require.Contains(t, again.UserMessage, "approval was already requested")
+	require.Contains(t, again.UserMessage, "-H 'Authorization: Bearer "+outcome.Token+"' 'https://speakeasy.test/approvals/watch?format=text'")
 }
 
 func TestApprovedCallIsReleasedExactlyOnce(t *testing.T) {
@@ -364,38 +362,4 @@ func TestHeldCallRecordsTheMCPServerOnlyWhenItIsInTheProject(t *testing.T) {
 	row, err = repo.New(f.db).GetApprovalByToken(t.Context(), f.hold(t, elsewhere))
 	require.NoError(t, err)
 	require.False(t, row.McpServerID.Valid)
-}
-
-func TestHeldCallNamesTheProjectsApprovalsServer(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	serverID := uuid.New()
-	_, err := repo.New(f.db).CreateBuiltinMCPServer(t.Context(), repo.CreateBuiltinMCPServerParams{
-		ID:                serverID,
-		ProjectID:         f.projectID,
-		Name:              conv.ToPGText("Speakeasy Approvals"),
-		Slug:              conv.ToPGText("speakeasy-approvals-abcd"),
-		BuiltinBackend:    conv.ToPGText(BuiltinBackend),
-		Visibility:        "private",
-		NetworkAccessMode: conv.ToPGText("public_only"),
-	})
-	require.NoError(t, err)
-
-	// Without an endpoint the shared route is the only address.
-	outcome, err := f.service.HoldCall(t.Context(), f.call(`{"title":"no endpoint yet"}`))
-	require.NoError(t, err)
-	require.Contains(t, outcome.UserMessage, "https://speakeasy.test/approvals-mcp")
-
-	_, err = endpointsrepo.New(f.db).CreateMCPEndpoint(t.Context(), endpointsrepo.CreateMCPEndpointParams{
-		ProjectID:       f.projectID,
-		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:     uuid.NullUUID{UUID: serverID, Valid: true},
-		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Slug:            "acme-default-approvals",
-	})
-	require.NoError(t, err)
-
-	outcome, err = f.service.HoldCall(t.Context(), f.call(`{"title":"with endpoint"}`))
-	require.NoError(t, err)
-	require.Contains(t, outcome.UserMessage, "Call request_approval on the speakeasy-approvals MCP server (https://speakeasy.test/mcp/acme-default-approvals)")
 }

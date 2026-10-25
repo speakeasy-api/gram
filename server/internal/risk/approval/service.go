@@ -2,10 +2,10 @@
 // require_approval risk policy holds until a listed approver approves them.
 //
 // The gateway holds a covered call and returns a request token. The agent
-// files the request with request_approval on the Approvals MCP server, waits
-// on a watcher that polls the watch endpoint with the token, and retries the
-// same call once it is approved. An exact-once approval is consumed by that
-// retry.
+// files the request by posting a reason to the request endpoint with curl,
+// waits on a curl loop that polls the watch endpoint with the token, and
+// retries the same call once it is approved. The token is the only credential
+// both endpoints need. An exact-once approval is consumed by that retry.
 package approval
 
 import (
@@ -129,7 +129,7 @@ var (
 	// approve it.
 	ErrSelfApproval = errors.New("the requester cannot decide their own request")
 
-	// ErrInvalidRequest is returned for a request_approval call with invalid
+	// ErrInvalidRequest is returned for an approval request with invalid
 	// arguments.
 	ErrInvalidRequest = errors.New("invalid approval request")
 )
@@ -160,25 +160,20 @@ func (s *Service) WatchURL() string {
 	return s.serverURL.JoinPath(WatchPath).String()
 }
 
-// MCPServerURL is the shared Approvals MCP server route agents call
-// request_approval on when their project has no approvals server.
-func (s *Service) MCPServerURL() string {
-	return s.serverURL.JoinPath(MCPPath).String()
+// RequestURL is the endpoint an agent posts its approval request to.
+func (s *Service) RequestURL() string {
+	return s.serverURL.JoinPath(RequestPath).String()
 }
 
-// MCPServerURLForProject is the approvals server agents in a project call
-// request_approval on: the project's own server when it has an endpoint,
-// which plugins already ship, else the shared route.
-func (s *Service) MCPServerURLForProject(ctx context.Context, projectID uuid.UUID) string {
-	server, err := repo.New(s.db).GetBuiltinMCPServer(ctx, repo.GetBuiltinMCPServerParams{ProjectID: projectID, BuiltinBackend: conv.ToPGText(BuiltinBackend)})
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && server.EndpointSlug == "") {
-		return s.MCPServerURL()
-	}
-	if err != nil {
-		s.logger.WarnContext(ctx, "look up the project's approvals server", attr.SlogProjectID(projectID.String()), attr.SlogError(err))
-		return s.MCPServerURL()
-	}
-	return s.serverURL.JoinPath("mcp", server.EndpointSlug).String()
+// waitCommand is the shell loop an agent runs to wait for a decision. It polls
+// the plain-text watch endpoint and prints a single line once the request is
+// decided, so a Monitor wakes the agent exactly once. Transient failures print
+// nothing and the loop keeps polling.
+func (s *Service) waitCommand(token string) string {
+	watchURL := s.serverURL.JoinPath(WatchPath)
+	watchURL.RawQuery = "format=text"
+	return fmt.Sprintf(`while :; do s=$(curl -s --max-time 10 -H 'Authorization: Bearer %s' '%s'); case "$s" in APPROVED*|DENIED*|EXPIRED*|BLOCKED*|INVALID*) echo "$s"; break;; esac; sleep %d; done`,
+		token, watchURL.String(), watchIntervalSeconds)
 }
 
 // HoldInput is one MCP tool call a require_approval policy covers.
@@ -226,8 +221,8 @@ type HoldOutcome struct {
 	// Allowed reports that an approval covered the call and was used.
 	Allowed bool
 
-	// Token is the request token the agent passes to request_approval and
-	// watches with. Empty when Allowed.
+	// Token is the request token the agent requests approval and watches
+	// with. Empty when Allowed.
 	Token string
 
 	// UserMessage tells the agent how to request approval and resume.
@@ -323,7 +318,7 @@ func (s *Service) HoldCall(ctx context.Context, call HoldInput) (HoldOutcome, er
 	return HoldOutcome{
 		Allowed:     false,
 		Token:       row.Token,
-		UserMessage: s.holdMessage(missing.Name, call.ToolName, row, s.MCPServerURLForProject(ctx, call.ProjectID)),
+		UserMessage: s.holdMessage(missing.Name, call.ToolName, row),
 		Policy:      missing,
 	}, nil
 }
@@ -366,16 +361,20 @@ func (s *Service) consumeAll(ctx context.Context, call HoldInput, fingerprint st
 	return nil, nil
 }
 
-// RequestInput is a request_approval call.
+// RequestInput is an agent's approval request for a held call.
 type RequestInput struct {
-	// Token is the request token from the block message.
+	// Token is the request token from the block message. It names one held
+	// call, and holding it is enough to request approval for that call.
 	Token string
 
-	// RequesterURN is the authenticated caller, which must match the principal
-	// that made the held call.
+	// RequesterURN, when set, is an authenticated caller that must match the
+	// principal that made the held call. Empty skips the check: approvers
+	// still decide, and only the original caller's retry of the same call can
+	// use the approval.
 	RequesterURN string
 
-	// OrganizationID is the caller's organization.
+	// OrganizationID, when set with RequesterURN, is the caller's
+	// organization.
 	OrganizationID string
 
 	// Reason is the agent's one-sentence reason, shown to approvers.
@@ -402,7 +401,7 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (repo.RiskPol
 	if err != nil {
 		return repo.RiskPolicyApproval{}, "", fmt.Errorf("get approval by token: %w", err)
 	}
-	if row.RequesterUrn != input.RequesterURN || row.OrganizationID != input.OrganizationID {
+	if input.RequesterURN != "" && (row.RequesterUrn != input.RequesterURN || row.OrganizationID != input.OrganizationID) {
 		return repo.RiskPolicyApproval{}, "", ErrNotFound
 	}
 	if Status(row.Status) != StatusBlocked {
@@ -450,7 +449,7 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (repo.RiskPol
 		ID:             row.ID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		// A concurrent request_approval won the race; report its result.
+		// A concurrent request won the race; report its result.
 		current, getErr := queries.GetApproval(ctx, repo.GetApprovalParams{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, ID: row.ID})
 		if getErr != nil {
 			return repo.RiskPolicyApproval{}, "", fmt.Errorf("reload approval: %w", getErr)
@@ -676,18 +675,20 @@ func (s *Service) EffectiveStatus(row repo.RiskPolicyApproval) Status {
 	return status
 }
 
-func (s *Service) holdMessage(policyName, toolName string, row repo.RiskPolicyApproval, serverURL string) string {
+func (s *Service) holdMessage(policyName, toolName string, row repo.RiskPolicyApproval) string {
 	if s.EffectiveStatus(row) == StatusPending {
 		return fmt.Sprintf(`Waiting: calling %s needs approval under risk policy %q, and approval was already requested.
-Request token: %s
-Run the watcher from your request_approval result if it is not running. When it prints APPROVED, retry this exact call with the same arguments.`,
-			toolName, policyName, row.Token)
+If you are not already waiting for the decision, wait with this command. It prints one line when the request is decided:
+  %s
+When it prints APPROVED, retry this exact call with the same arguments. On anything else, do not retry; tell the user.`,
+			toolName, policyName, s.waitCommand(row.Token))
 	}
 	return fmt.Sprintf(`Blocked: calling %s needs approval under risk policy %q.
-Request token: %s
-1. Call request_approval on the %s MCP server (%s) with this token and a one-sentence reason.
-2. Start the watcher exactly as its result says (in Claude Code, with the Monitor tool). When it prints APPROVED, retry this exact call with the same arguments.`,
-		toolName, policyName, row.Token, MCPServerName, serverURL)
+1. Request approval with this command. Replace the reason with one sentence telling the approver why the call is needed, without single quotes:
+   curl -sS -X POST '%s' -H 'Authorization: Bearer %s' -H 'Content-Type: application/json' -d '{"reason":"Why this call is needed."}'
+   To wait longer or shorter than 30 minutes, add "expires_in" in seconds (60 to 86400) to the JSON.
+2. Its response tells you how to wait for the decision. Do not retry this call before it is approved.`,
+		toolName, policyName, s.RequestURL(), row.Token)
 }
 
 // scopeDocument is the stored form of a requested or granted scope.

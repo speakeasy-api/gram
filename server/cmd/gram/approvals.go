@@ -15,8 +15,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 )
 
-// attachApprovals mounts the Approvals MCP server and the watch endpoint, and
-// serves each project's approvals server through the gateway. At MCPPath
+// attachApprovals mounts the request and watch endpoints, which take only the
+// request token from the block message, and the Approvals MCP server, which
+// also serves each project's approvals server through the gateway. At MCPPath
 // callers authenticate with a key. Through the gateway they can also sign in
 // with the approvals server's issuer.
 func attachApprovals(mux goahttp.Muxer, logger *slog.Logger, service *approval.Service, mcpService *mcp.Service, store ratelimit.Store) {
@@ -26,5 +27,6 @@ func attachApprovals(mux goahttp.Muxer, logger *slog.Logger, service *approval.S
 	o11y.AttachHandler(mux, http.MethodPost, approval.MCPPath, runtime.Handler().ServeHTTP)
 	// The same server answers at each project's approvals server endpoint.
 	mcpService.SetBuiltinBackend(approval.BuiltinBackend, mcp.BuiltinBackend{Handler: runtime.GatewayHandler(), Tools: runtime.Tools()})
+	o11y.AttachHandler(mux, http.MethodPost, approval.RequestPath, oops.ErrHandle(logger, runtime.HandleRequest).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodGet, approval.WatchPath, oops.ErrHandle(logger, runtime.HandleWatch).ServeHTTP)
 }
