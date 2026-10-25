@@ -20,7 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -36,10 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	"github.com/speakeasy-api/gram/server/internal/risk/approval"
-	"github.com/speakeasy-api/gram/server/internal/risk/approval/approvalserver"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -1553,42 +1549,6 @@ func TestPluginsService_PublishPlugins_UnproxiedBackedServerAppearsInBundle(t *t
 	require.Empty(t, server.Headers,
 		"unproxied server must never carry Speakeasy's API key (or any other Speakeasy-managed credential): "+
 			"MCPURL points straight at the vendor, so any header here leaks a Speakeasy credential to a third party")
-}
-
-func TestPluginsService_PublishPlugins_ApprovalsServerAppearsInDefaultPlugin(t *testing.T) {
-	t.Parallel()
-
-	mock := &mockGitHubPublisher{}
-	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	// The first approval policy sets the server up this way.
-	tx := testenv.BeginTx(t, ctx, ti.conn)
-	setup, err := approvalserver.Ensure(ctx, tx, audit.NewLogger(), authCtx)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
-	require.True(t, setup.AddedToDefaultPlugin)
-
-	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
-	require.NoError(t, err)
-
-	mcpConfig, ok := mock.lastPushedFiles["default/.mcp.json"]
-	require.True(t, ok, "Default plugin .mcp.json not found among published files")
-
-	var config struct {
-		MCPServers map[string]struct {
-			URL     string            `json:"url"`
-			Headers map[string]string `json:"headers"`
-		} `json:"mcpServers"`
-	}
-	require.NoError(t, json.Unmarshal(mcpConfig, &config))
-
-	server, ok := config.MCPServers[approval.MCPServerName]
-	require.True(t, ok, "approvals server missing from the Default plugin")
-	require.True(t, strings.HasSuffix(server.URL, "/mcp/"+setup.Server.EndpointSlug), "unexpected URL %q", server.URL)
-	require.Empty(t, server.Headers["Authorization"],
-		"the approvals server has its own issuer, so the plugin signs the user in instead of sending a key")
 }
 
 // Reproduces the plugin_github_connections_installation_repo_key conflict:

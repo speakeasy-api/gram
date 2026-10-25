@@ -538,10 +538,6 @@ type CreateRiskPolicyResponseBody struct {
 	// For require_approval policies: who may approve held calls. Null for every
 	// other action.
 	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
-	// Set only on the create or update response that turned on the project's first
-	// approval policy: the approvals server Speakeasy created and whether it
-	// joined the Default plugin.
-	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -660,10 +656,6 @@ type GetRiskPolicyResponseBody struct {
 	// For require_approval policies: who may approve held calls. Null for every
 	// other action.
 	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
-	// Set only on the create or update response that turned on the project's first
-	// approval policy: the approvals server Speakeasy created and whether it
-	// joined the Default plugin.
-	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -752,10 +744,6 @@ type UpdateRiskPolicyResponseBody struct {
 	// For require_approval policies: who may approve held calls. Null for every
 	// other action.
 	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
-	// Set only on the create or update response that turned on the project's first
-	// approval policy: the approvals server Speakeasy created and whether it
-	// joined the Default plugin.
-	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -12306,20 +12294,6 @@ type RiskPolicyApprovalConfigResponseBody struct {
 	Approvers []string `form:"approvers" json:"approvers" xml:"approvers"`
 }
 
-// RiskPolicyApprovalsServerSetupResponseBody is used to define fields on
-// response body types.
-type RiskPolicyApprovalsServerSetupResponseBody struct {
-	// The approvals server Speakeasy created in the project.
-	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	// The approvals server's slug.
-	McpServerSlug string `form:"mcp_server_slug" json:"mcp_server_slug" xml:"mcp_server_slug"`
-	// How plugins name the server, and how held calls refer to it.
-	PluginServerName string `form:"plugin_server_name" json:"plugin_server_name" xml:"plugin_server_name"`
-	// Whether the server joined the project's Default plugin, which republishes so
-	// agents that use the plugin get it.
-	AddedToDefaultPlugin bool `form:"added_to_default_plugin" json:"added_to_default_plugin" xml:"added_to_default_plugin"`
-}
-
 // RiskPolicyResponseBody is used to define fields on response body types.
 type RiskPolicyResponseBody struct {
 	// The risk policy ID.
@@ -12395,10 +12369,6 @@ type RiskPolicyResponseBody struct {
 	// For require_approval policies: who may approve held calls. Null for every
 	// other action.
 	ApprovalConfig *RiskPolicyApprovalConfigResponseBody `form:"approval_config,omitempty" json:"approval_config,omitempty" xml:"approval_config,omitempty"`
-	// Set only on the create or update response that turned on the project's first
-	// approval policy: the approvals server Speakeasy created and whether it
-	// joined the Default plugin.
-	ApprovalsServerSetup *RiskPolicyApprovalsServerSetupResponseBody `form:"approvals_server_setup,omitempty" json:"approvals_server_setup,omitempty" xml:"approvals_server_setup,omitempty"`
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.
@@ -13265,9 +13235,6 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 	if res.ApprovalConfig != nil {
 		body.ApprovalConfig = marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigResponseBody(res.ApprovalConfig)
 	}
-	if res.ApprovalsServerSetup != nil {
-		body.ApprovalsServerSetup = marshalTypesRiskPolicyApprovalsServerSetupToRiskPolicyApprovalsServerSetupResponseBody(res.ApprovalsServerSetup)
-	}
 	return body
 }
 
@@ -13436,9 +13403,6 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 	if res.ApprovalConfig != nil {
 		body.ApprovalConfig = marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigResponseBody(res.ApprovalConfig)
 	}
-	if res.ApprovalsServerSetup != nil {
-		body.ApprovalsServerSetup = marshalTypesRiskPolicyApprovalsServerSetupToRiskPolicyApprovalsServerSetupResponseBody(res.ApprovalsServerSetup)
-	}
 	return body
 }
 
@@ -13527,9 +13491,6 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 	}
 	if res.ApprovalConfig != nil {
 		body.ApprovalConfig = marshalTypesRiskPolicyApprovalConfigToRiskPolicyApprovalConfigResponseBody(res.ApprovalConfig)
-	}
-	if res.ApprovalsServerSetup != nil {
-		body.ApprovalsServerSetup = marshalTypesRiskPolicyApprovalsServerSetupToRiskPolicyApprovalsServerSetupResponseBody(res.ApprovalsServerSetup)
 	}
 	return body
 }

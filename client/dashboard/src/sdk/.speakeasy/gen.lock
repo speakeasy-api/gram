@@ -1761,7 +1761,6 @@ trackedFiles:
   src/models/components/riskpolicyapproval.ts: {}
   src/models/components/riskpolicyapprovalconfig.ts: {}
   src/models/components/riskpolicyapprovaldecisionrequestbody.ts: {}
-  src/models/components/riskpolicyapprovalsserversetup.ts: {}
   src/models/components/riskpolicybypassapprovalrequestbody.ts: {}
   src/models/components/riskpolicybypassrequest.ts: {}
   src/models/components/riskpolicyevalreview.ts: {}

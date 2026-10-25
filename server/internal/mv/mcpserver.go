@@ -26,7 +26,6 @@ func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 		ToolsetID:             conv.FromNullableUUID(server.ToolsetID),
 		UnproxiedMcpServerID:  conv.FromNullableUUID(server.UnproxiedMcpServerID),
 		ToolVariationsGroupID: conv.FromNullableUUID(server.ToolVariationsGroupID),
-		BuiltinBackend:        conv.FromPGText[string](server.BuiltinBackend),
 		Visibility:            types.McpServerVisibility(server.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
 		Toolset:               nil,

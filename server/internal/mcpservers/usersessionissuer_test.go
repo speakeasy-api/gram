@@ -1,4 +1,4 @@
-package serverissuer
+package mcpservers
 
 import (
 	"strings"

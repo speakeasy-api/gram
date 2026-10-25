@@ -113,11 +113,7 @@ export function PolicyMCPScopePicker({
     undefined,
     { throwOnError: false },
   );
-  // Built-in servers, such as the approvals server, are served before any
-  // policy runs, so no policy can scope them.
-  const concreteServers = (serversQuery.data?.mcpServers ?? []).filter(
-    (server) => !server.builtinBackend,
-  );
+  const concreteServers = serversQuery.data?.mcpServers ?? [];
   const remoteServers = concreteServers.filter(
     (server) => !server.toolsetId && !!server.remoteMcpServerId,
   );

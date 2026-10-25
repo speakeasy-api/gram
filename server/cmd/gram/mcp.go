@@ -435,7 +435,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	internalsessionissuers.AttachDiscovery(mux, db, logger)
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
 	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)
-	attachApprovals(mux, logger, approvalService, runtime.MCP, ratelimit.NewRedisStore(redisClient))
+	attachApprovals(mux, logger, approvalService, ratelimit.NewRedisStore(redisClient))
 	usersessions.AttachRetiredProxy(mux, logger)
 
 	srv := &http.Server{

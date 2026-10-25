@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 )
 
 // MCPServerTransactionInput contains the server-owned values needed to create
@@ -97,7 +96,7 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 			return repo.McpServer{}, fmt.Errorf("validate selected user session issuer: %w", err)
 		}
 	} else if input.RemoteMCPServerID.Valid || input.TunneledMCPServerID.Valid {
-		issuerID, err = serverissuer.Mint(ctx, tx, input.OrganizationID, input.ProjectID, slug)
+		issuerID, err = MintServerUserSessionIssuer(ctx, tx, input.OrganizationID, input.ProjectID, slug)
 		if err != nil {
 			return repo.McpServer{}, fmt.Errorf("mint MCP server issuer: %w", err)
 		}

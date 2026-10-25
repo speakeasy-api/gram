@@ -46,7 +46,7 @@ func pendingApproval(t *testing.T, ctx context.Context, ti *testInstance, policy
 		Arguments:       []byte(arguments),
 	})
 	require.NoError(t, err)
-	_, status, err := service.Request(ctx, approval.RequestInput{Token: outcome.Token, RequesterURN: agentURN, OrganizationID: authCtx.ActiveOrganizationID, Reason: "Tell the team the deploy finished.", Scope: "", ExpiresIn: 0})
+	_, status, err := service.Request(ctx, approval.RequestInput{Token: outcome.Token, Reason: "Tell the team the deploy finished.", Scope: "", ExpiresIn: 0})
 	require.NoError(t, err)
 	require.Equal(t, approval.StatusPending, status)
 	return outcome.Token
