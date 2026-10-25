@@ -27,9 +27,12 @@ import {
   RemoteOrganizationDefaultStep,
   RemoteSetupScriptStep,
 } from "./device-agent-cloud-setup";
-import { MANAGED_CONFIG_PATHS, RELEASES_BASE } from "./release-paths";
+import {
+  MANAGED_CONFIG_PATHS,
+  MANIFEST_URL,
+  RELEASES_BASE,
+} from "./release-paths";
 
-const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
 // The server's stable links to the current signed macOS pkg and Windows msi
 // (a 302 to the versioned file in the release bucket). They sit under /rpc,
 // which the Ingress routes to the server.

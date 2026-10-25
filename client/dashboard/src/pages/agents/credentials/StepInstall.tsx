@@ -450,8 +450,9 @@ export function StepInstall({
                   />
                   <Text muted small>
                     Replace <code className="text-xs">&lt;group&gt;</code> with
-                    the group of the account that runs the AI tools. That
-                    account can read the file; other accounts cannot.
+                    the private group of the account that runs the AI tools — on
+                    most distributions, the group named after that account. Only
+                    members of that group can read the file.
                   </Text>
                 </div>
                 <div className="space-y-2">

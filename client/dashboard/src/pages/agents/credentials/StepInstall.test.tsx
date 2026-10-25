@@ -21,7 +21,7 @@ function renderStep({
   gatewayURL?: string;
   onIssue?: () => void;
 } = {}) {
-  render(
+  const step = (stepSecret: string | null) => (
     <StepInstall
       command={null}
       commandError={null}
@@ -29,12 +29,14 @@ function renderStep({
       onRegenerate={vi.fn<() => void>()}
       onIssue={onIssue}
       issuing={false}
-      secret={secret}
+      secret={stepSecret}
       agentID={AGENT_ID}
       gatewayURL={gatewayURL}
       serverCount={2}
-    />,
+    />
   );
+  const { rerender } = render(step(secret));
+  return { removeKey: () => rerender(step(null)) };
 }
 
 function openDeviceAgentTab() {
@@ -100,7 +102,11 @@ describe("Device Agent tab", () => {
 
   it("offers to issue a key instead of a config when none is available", async () => {
     const onIssue = vi.fn<() => void>();
-    renderStep({ secret: null, onIssue });
+    const { removeKey } = renderStep({ onIssue });
+    openDeviceAgentTab();
+    removeKey();
+    const tab = screen.getByRole("tab", { name: "Device Agent", hidden: true });
+    expect(tab.getAttribute("aria-selected")).toBe("true");
     expect((await managedConfig()).agent_key).not.toBe(KEY);
     fireEvent.click(screen.getByRole("button", { name: "Issue a key" }));
     expect(onIssue).toHaveBeenCalledOnce();

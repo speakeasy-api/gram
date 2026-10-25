@@ -10,6 +10,8 @@
 export const RELEASES_BASE =
   "https://storage.googleapis.com/speakeasy-device-agent-releases-prod";
 
+export const MANIFEST_URL = `${RELEASES_BASE}/releases.json`;
+
 // The sandbox installer: resolves the latest release, verifies its checksum and
 // installs speakeasyd. For headless Linux machines only; laptops and fleets
 // install the signed .pkg / .msi.
