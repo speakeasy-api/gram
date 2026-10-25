@@ -494,7 +494,7 @@ function Hotspots({
       <WidgetEmptyState
         message={
           capped
-            ? `None of the top ${HOTSPOT_LIMIT} combinations ranked by ${ranking} had ${failing} ${phrase}.`
+            ? `None of the top ${HOTSPOT_LIMIT} combinations ranked by ${ranking} had ${failing} ${phrase}${minAttempts !== "1" ? `, with ${floor} ${stageLabel} each` : ""}.`
             : `Nothing failed ${phrase} for anyone with ${floor} ${stageLabel}.`
         }
         className="h-[120px]"

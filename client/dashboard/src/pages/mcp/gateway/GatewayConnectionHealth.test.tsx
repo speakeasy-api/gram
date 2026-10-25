@@ -322,12 +322,17 @@ it("asks for 25 combinations and says when the shown rows come from that cap", a
   expect(state.hotspots.mock.lastCall![0]).toMatchObject({ limit: 25 });
 });
 
-it("says the cap was reached when every capped combination is healthy", async () => {
+it.each([
+  ["Any", ""],
+  ["5+", ", with at least 5 listings each"],
+  ["20+", ", with at least 20 listings each"],
+])("keeps the %s floor in the capped empty state", async (floor, suffix) => {
   state.hotspotsResult = ranking(Array(25).fill(healthy));
   renderSection();
+  fireEvent.click(screen.getByRole("button", { name: floor }));
   expect(
     await screen.findByText(
-      "None of the top 25 combinations ranked by failures had failures in the last 7 days.",
+      `None of the top 25 combinations ranked by failures had failures in the last 7 days${suffix}.`,
     ),
   ).toBeTruthy();
   expect(screen.queryByText(/Nothing failed/)).toBeNull();
