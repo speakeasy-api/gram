@@ -993,6 +993,8 @@ type GetMetaMcpServerUsageResponseBody struct {
 	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel,omitempty" json:"funnel,omitempty" xml:"funnel,omitempty"`
 	// Per-member execution breakdown, most active first
 	Members []*MetaMcpMemberUsageResponseBody `form:"members,omitempty" json:"members,omitempty" xml:"members,omitempty"`
+	// Members left out of the gateway's tool listings over the window
+	DiscoveryFailures *MetaMcpDiscoveryFailuresResponseBody `form:"discovery_failures,omitempty" json:"discovery_failures,omitempty" xml:"discovery_failures,omitempty"`
 }
 
 // GetProjectOverviewResponseBody is the type of the "telemetry" service
@@ -8513,6 +8515,28 @@ type MetaMcpMemberUsageResponseBody struct {
 	LastCalledAt *string `form:"last_called_at,omitempty" json:"last_called_at,omitempty" xml:"last_called_at,omitempty"`
 }
 
+// MetaMcpDiscoveryFailuresResponseBody is used to define fields on response
+// body types.
+type MetaMcpDiscoveryFailuresResponseBody struct {
+	// Bucket width in seconds, chosen from the length of the requested window
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
+	// Buckets covering the requested window in ascending time order, gap-filled
+	// with zeros. The first bucket starts at the window start, and failures are
+	// counted up to but excluding the window end, so the last bucket may be
+	// partial.
+	Buckets []*MetaMcpDiscoveryFailureBucketResponseBody `form:"buckets,omitempty" json:"buckets,omitempty" xml:"buckets,omitempty"`
+}
+
+// MetaMcpDiscoveryFailureBucketResponseBody is used to define fields on
+// response body types.
+type MetaMcpDiscoveryFailureBucketResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
+	// Members left out of a tool listing in this bucket. A listing that left out
+	// several members counts each of them.
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+}
+
 // ProjectOverviewSummaryResponseBody is used to define fields on response body
 // types.
 type ProjectOverviewSummaryResponseBody struct {
@@ -12466,6 +12490,9 @@ func NewGetMetaMcpServerUsageResultOK(body *GetMetaMcpServerUsageResponseBody) *
 			continue
 		}
 		v.Members[i] = unmarshalMetaMcpMemberUsageResponseBodyToTelemetryMetaMcpMemberUsage(val)
+	}
+	if body.DiscoveryFailures != nil {
+		v.DiscoveryFailures = unmarshalMetaMcpDiscoveryFailuresResponseBodyToTelemetryMetaMcpDiscoveryFailures(body.DiscoveryFailures)
 	}
 
 	return v
@@ -17171,6 +17198,11 @@ func ValidateGetMetaMcpServerUsageResponseBody(body *GetMetaMcpServerUsageRespon
 			if err2 := ValidateMetaMcpMemberUsageResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.DiscoveryFailures != nil {
+		if err2 := ValidateMetaMcpDiscoveryFailuresResponseBody(body.DiscoveryFailures); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -27204,6 +27236,37 @@ func ValidateMetaMcpMemberUsageResponseBody(body *MetaMcpMemberUsageResponseBody
 	}
 	if body.LastCalledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_called_at", *body.LastCalledAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateMetaMcpDiscoveryFailuresResponseBody runs the validations defined on
+// MetaMcpDiscoveryFailuresResponseBody
+func ValidateMetaMcpDiscoveryFailuresResponseBody(body *MetaMcpDiscoveryFailuresResponseBody) (err error) {
+	if body.IntervalSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
+	}
+	if body.Buckets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("buckets", "body"))
+	}
+	for _, e := range body.Buckets {
+		if e != nil {
+			if err2 := ValidateMetaMcpDiscoveryFailureBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateMetaMcpDiscoveryFailureBucketResponseBody runs the validations
+// defined on MetaMcpDiscoveryFailureBucketResponseBody
+func ValidateMetaMcpDiscoveryFailureBucketResponseBody(body *MetaMcpDiscoveryFailureBucketResponseBody) (err error) {
+	if body.BucketTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
 	}
 	return
 }

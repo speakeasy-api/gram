@@ -30,6 +30,7 @@ import {
 } from "./gatewayActivity";
 import type { MemberRow } from "./memberRows";
 import { MetaToolUsageChart } from "./MetaToolUsageChart";
+import { GatewayDiscoveryFailures } from "./GatewayDiscoveryFailures";
 
 function errorRate(summary: ObservabilitySummary): number {
   return summary.totalToolCalls > 0
@@ -329,6 +330,20 @@ export function GatewayActivitySection({
                 />
               </>
             )}
+
+            <GatewayDiscoveryFailures
+              metaMcpServerId={metaMcpServerId}
+              from={from}
+              to={to}
+              failures={usage.data?.discoveryFailures}
+              loading={usage.isLoading || usage.isPlaceholderData}
+              error={usageFailed}
+              expandedChart={expandedChart}
+              onExpand={setExpandedChart}
+              onRangeSelect={handleRangeSelect}
+              isZoomed={customRange !== null}
+              onResetZoom={() => clearCustomRange()}
+            />
 
             {usageFailed ? (
               <LoadError what="the discovery funnel and member breakdown" />

@@ -3,9 +3,14 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  MetaMcpDiscoveryFailures,
+  MetaMcpDiscoveryFailures$inboundSchema,
+} from "./metamcpdiscoveryfailures.js";
 import {
   MetaMcpDiscoveryFunnel,
   MetaMcpDiscoveryFunnel$inboundSchema,
@@ -20,6 +25,10 @@ import {
  */
 export type GetMetaMcpServerUsageResult = {
   /**
+   * Time series of members the gateway left out of its tool listings because they could not be listed.
+   */
+  discoveryFailures?: MetaMcpDiscoveryFailures | undefined;
+  /**
    * Counts of each gateway drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls.
    */
   funnel: MetaMcpDiscoveryFunnel;
@@ -33,10 +42,18 @@ export type GetMetaMcpServerUsageResult = {
 export const GetMetaMcpServerUsageResult$inboundSchema: z.ZodMiniType<
   GetMetaMcpServerUsageResult,
   unknown
-> = z.object({
-  funnel: MetaMcpDiscoveryFunnel$inboundSchema,
-  members: z.array(MetaMcpMemberUsage$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    discovery_failures: z.optional(MetaMcpDiscoveryFailures$inboundSchema),
+    funnel: MetaMcpDiscoveryFunnel$inboundSchema,
+    members: z.array(MetaMcpMemberUsage$inboundSchema),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "discovery_failures": "discoveryFailures",
+    });
+  }),
+);
 
 export function getMetaMcpServerUsageResultFromJSON(
   jsonString: string,

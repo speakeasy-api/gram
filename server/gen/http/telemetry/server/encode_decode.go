@@ -9022,6 +9022,44 @@ func marshalTelemetryMetaMcpMemberUsageToMetaMcpMemberUsageResponseBody(v *telem
 	return res
 }
 
+// marshalTelemetryMetaMcpDiscoveryFailuresToMetaMcpDiscoveryFailuresResponseBody
+// builds a value of type *MetaMcpDiscoveryFailuresResponseBody from a value of
+// type *telemetry.MetaMcpDiscoveryFailures.
+func marshalTelemetryMetaMcpDiscoveryFailuresToMetaMcpDiscoveryFailuresResponseBody(v *telemetry.MetaMcpDiscoveryFailures) *MetaMcpDiscoveryFailuresResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &MetaMcpDiscoveryFailuresResponseBody{
+		IntervalSeconds: v.IntervalSeconds,
+	}
+	if v.Buckets != nil {
+		res.Buckets = make([]*MetaMcpDiscoveryFailureBucketResponseBody, len(v.Buckets))
+		for i, val := range v.Buckets {
+			if val == nil {
+				res.Buckets[i] = nil
+				continue
+			}
+			res.Buckets[i] = marshalTelemetryMetaMcpDiscoveryFailureBucketToMetaMcpDiscoveryFailureBucketResponseBody(val)
+		}
+	} else {
+		res.Buckets = []*MetaMcpDiscoveryFailureBucketResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTelemetryMetaMcpDiscoveryFailureBucketToMetaMcpDiscoveryFailureBucketResponseBody
+// builds a value of type *MetaMcpDiscoveryFailureBucketResponseBody from a
+// value of type *telemetry.MetaMcpDiscoveryFailureBucket.
+func marshalTelemetryMetaMcpDiscoveryFailureBucketToMetaMcpDiscoveryFailureBucketResponseBody(v *telemetry.MetaMcpDiscoveryFailureBucket) *MetaMcpDiscoveryFailureBucketResponseBody {
+	res := &MetaMcpDiscoveryFailureBucketResponseBody{
+		BucketTimeUnixNano: v.BucketTimeUnixNano,
+		Count:              v.Count,
+	}
+
+	return res
+}
+
 // marshalTelemetryProjectOverviewSummaryToProjectOverviewSummaryResponseBody
 // builds a value of type *ProjectOverviewSummaryResponseBody from a value of
 // type *telemetry.ProjectOverviewSummary.

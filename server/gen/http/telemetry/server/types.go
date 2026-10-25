@@ -993,6 +993,8 @@ type GetMetaMcpServerUsageResponseBody struct {
 	Funnel *MetaMcpDiscoveryFunnelResponseBody `form:"funnel" json:"funnel" xml:"funnel"`
 	// Per-member execution breakdown, most active first
 	Members []*MetaMcpMemberUsageResponseBody `form:"members" json:"members" xml:"members"`
+	// Members left out of the gateway's tool listings over the window
+	DiscoveryFailures *MetaMcpDiscoveryFailuresResponseBody `form:"discovery_failures,omitempty" json:"discovery_failures,omitempty" xml:"discovery_failures,omitempty"`
 }
 
 // GetProjectOverviewResponseBody is the type of the "telemetry" service
@@ -8408,6 +8410,28 @@ type MetaMcpMemberUsageResponseBody struct {
 	LastCalledAt *string `form:"last_called_at,omitempty" json:"last_called_at,omitempty" xml:"last_called_at,omitempty"`
 }
 
+// MetaMcpDiscoveryFailuresResponseBody is used to define fields on response
+// body types.
+type MetaMcpDiscoveryFailuresResponseBody struct {
+	// Bucket width in seconds, chosen from the length of the requested window
+	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+	// Buckets covering the requested window in ascending time order, gap-filled
+	// with zeros. The first bucket starts at the window start, and failures are
+	// counted up to but excluding the window end, so the last bucket may be
+	// partial.
+	Buckets []*MetaMcpDiscoveryFailureBucketResponseBody `form:"buckets" json:"buckets" xml:"buckets"`
+}
+
+// MetaMcpDiscoveryFailureBucketResponseBody is used to define fields on
+// response body types.
+type MetaMcpDiscoveryFailureBucketResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
+	// Members left out of a tool listing in this bucket. A listing that left out
+	// several members counts each of them.
+	Count int64 `form:"count" json:"count" xml:"count"`
+}
+
 // ProjectOverviewSummaryResponseBody is used to define fields on response body
 // types.
 type ProjectOverviewSummaryResponseBody struct {
@@ -9506,6 +9530,9 @@ func NewGetMetaMcpServerUsageResponseBody(res *telemetry.GetMetaMcpServerUsageRe
 		}
 	} else {
 		body.Members = []*MetaMcpMemberUsageResponseBody{}
+	}
+	if res.DiscoveryFailures != nil {
+		body.DiscoveryFailures = marshalTelemetryMetaMcpDiscoveryFailuresToMetaMcpDiscoveryFailuresResponseBody(res.DiscoveryFailures)
 	}
 	return body
 }

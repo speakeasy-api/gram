@@ -1551,6 +1551,8 @@ trackedFiles:
   src/models/components/mcpservertoolsetsummary.ts: {}
   src/models/components/mcpsetupguide.ts: {}
   src/models/components/mcpsetupguideremote.ts: {}
+  src/models/components/metamcpdiscoveryfailurebucket.ts: {}
+  src/models/components/metamcpdiscoveryfailures.ts: {}
   src/models/components/metamcpdiscoveryfunnel.ts: {}
   src/models/components/metamcpmember.ts: {}
   src/models/components/metamcpmemberusage.ts: {}

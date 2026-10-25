@@ -378,6 +378,8 @@ type GetMetaMcpServerUsageResult struct {
 	Funnel *MetaMcpDiscoveryFunnel
 	// Per-member execution breakdown, most active first
 	Members []*MetaMcpMemberUsage
+	// Members left out of the gateway's tool listings over the window
+	DiscoveryFailures *MetaMcpDiscoveryFailures
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -1499,6 +1501,27 @@ type McpServerActivity struct {
 // MCP server activity target type. Only the server-backed kinds this endpoint
 // reports are valid, unlike the broader tool-usage target types.
 type McpServerActivityTargetType string
+
+// Members left out of the gateway's tool listings during one time bucket.
+type MetaMcpDiscoveryFailureBucket struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string
+	// Members left out of a tool listing in this bucket. A listing that left out
+	// several members counts each of them.
+	Count int64
+}
+
+// Time series of members the gateway left out of its tool listings because
+// they could not be listed.
+type MetaMcpDiscoveryFailures struct {
+	// Bucket width in seconds, chosen from the length of the requested window
+	IntervalSeconds int64
+	// Buckets covering the requested window in ascending time order, gap-filled
+	// with zeros. The first bucket starts at the window start, and failures are
+	// counted up to but excluding the window end, so the last bucket may be
+	// partial.
+	Buckets []*MetaMcpDiscoveryFailureBucket
+}
 
 // Counts of each gateway drill-down stage in the window. Discovery stages come
 // from meta_discovery events; executions from gateway-attributed tool calls.
