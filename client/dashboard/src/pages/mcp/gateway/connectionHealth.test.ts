@@ -7,6 +7,7 @@ import {
   attemptFilters,
   beforeWindowEnd,
   callerOf,
+  failureRate,
   healthWindow,
   hotspotKey,
   matchingConnectionFilters,
@@ -103,7 +104,7 @@ describe("stageTiles", () => {
       ["Listings", 10, undefined],
       ["Complete", 7, "of 10"],
       ["Partial", 2, "of 10"],
-      ["Failed", 1, "of 10"],
+      ["Failed", 1, "10% of 10"],
     ]);
   });
 
@@ -117,10 +118,106 @@ describe("stageTiles", () => {
     );
     expect(tiles.map((t) => [t.title, t.value, t.subtext])).toEqual([
       ["Member checks", 10, undefined],
-      ["Failed", 2, "of 10"],
+      ["Failed", 2, "20% of 10"],
       ["Needs sign-in or consent", 3, "of 10"],
       ["Listed after an internal retry", 1, "of 10"],
     ]);
+  });
+});
+
+describe("stage failure rate", () => {
+  const failedOf = (tiles: ReturnType<typeof stageTiles>) => {
+    const failed = tiles.filter((tile) => tile.title === "Failed");
+    expect(failed).toHaveLength(1);
+    return [failed[0]!.value, failed[0]!.subtext, failed[0]!.tone];
+  };
+
+  it("divides failures by every attempt, keeping blocked and unrecorded ones out of the numerator", () => {
+    for (const [name, outcomes, subtext] of [
+      [
+        "inbound_authorize",
+        { accepted: 2, policy_blocked: 3, failed: 1, unknown: 2 },
+        "13% of 8",
+      ],
+      [
+        "inbound_token",
+        { code_issued: 3, policy_blocked: 2, failed: 1, unknown: 1 },
+        "14% of 7",
+      ],
+      ["upstream_callback", { stored: 5, retried: 1, failed: 1 }, "14% of 7"],
+      [
+        "upstream_refresh",
+        { refreshed: 4, no_grant: 1, failed: 1, unknown: 2 },
+        "13% of 8",
+      ],
+      ["discovery_listing", { complete: 4, partial: 1, failed: 1 }, "17% of 6"],
+      [
+        "discovery_member",
+        { listed: 3, credential_blocked: 2, consent_blocked: 1, failed: 1 },
+        "14% of 7",
+      ],
+    ] as const) {
+      expect(failedOf(stageTiles(stage(name, outcomes))), name).toEqual([
+        1,
+        subtext,
+        "destructive",
+      ]);
+    }
+  });
+
+  it("reads zero failures over real attempts as a measured 0%", () => {
+    expect(
+      failedOf(stageTiles(stage("discovery_member", { listed: 4 }))),
+    ).toEqual([0, "0% of 4", "neutral"]);
+  });
+
+  it("shows no rate for a stage with no attempts", () => {
+    for (const name of [
+      "inbound_authorize",
+      "inbound_token",
+      "upstream_callback",
+      "upstream_refresh",
+      "discovery_listing",
+      "discovery_member",
+    ] as const) {
+      expect(failedOf(stageTiles(stage(name, {}))), name).toEqual([
+        0,
+        "of 0",
+        "neutral",
+      ]);
+    }
+  });
+
+  it("matches a hotspot's failure rate for the same counts", () => {
+    const tiles = stageTiles(
+      stage("discovery_listing", { complete: 2, failed: 1 }),
+    );
+    expect(failedOf(tiles)[1]).toBe(
+      `${failureRate({ attempts: 3, failed: 1 })} of 3`,
+    );
+  });
+
+  it("never rounds a rare failure to 0% or a rare success to 100%", () => {
+    expect(
+      failedOf(
+        stageTiles(stage("discovery_listing", { complete: 249, failed: 1 })),
+      )[1],
+    ).toBe("<1% of 250");
+    expect(
+      failedOf(
+        stageTiles(stage("discovery_listing", { complete: 1, failed: 249 })),
+      )[1],
+    ).toBe(">99% of 250");
+    expect(failureRate({ attempts: 201, failed: 1 })).toBe("<1%");
+    expect(failureRate({ attempts: 2, failed: 2 })).toBe("100%");
+    expect(failureRate({ attempts: 2, failed: 0 })).toBe("0%");
+  });
+
+  it("keeps the refresh failure note about still-usable credentials", () => {
+    const failed = stageTiles(
+      stage("upstream_refresh", { refreshed: 1, failed: 1 }),
+    ).find((tile) => tile.title === "Failed");
+    expect(failed?.tooltip).toContain("not yet expired");
   });
 });
 
@@ -133,7 +230,7 @@ describe("provider stages", () => {
       ["Provider sign-ins", 6, undefined],
       ["Credentials saved", 3, "of 6"],
       ["Sent back to the provider", 1, "of 6"],
-      ["Failed", 2, "of 6"],
+      ["Failed", 2, "33% of 6"],
     ]);
   });
 
