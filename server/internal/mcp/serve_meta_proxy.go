@@ -85,7 +85,7 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	case 0:
 		if member.remoteSessionIssuerID.Valid {
 			if entry, ok := tokens[member.remoteSessionIssuerID.UUID]; ok && entry.CredentialOwner == remotesessions.CredentialOwnerSelf {
-				return none, &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential issued for a different resource; contact the MCP server administrator", member.slug)}
+				return none, &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential issued for a different resource; contact the MCP server administrator", member.slug), reason: reasonCredentialMisconfigured}
 			}
 		}
 		return none, nil
@@ -97,7 +97,7 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	default:
 		// Several credentials claim the same upstream, so forwarding any one
 		// would be a guess. Name the duplication rather than the symptom.
-		return none, fmt.Errorf("%w: %w", errAmbiguousMemberCredential, &metaMemberError{message: fmt.Sprintf("server %q has %d upstream credentials recorded for the same upstream, so none can be chosen; disconnect the duplicates from this gateway's sign-in and reconnect once", member.slug, found)})
+		return none, fmt.Errorf("%w: %w", errAmbiguousMemberCredential, &metaMemberError{message: fmt.Sprintf("server %q has %d upstream credentials recorded for the same upstream, so none can be chosen; disconnect the duplicates from this gateway's sign-in and reconnect once", member.slug, found), reason: reasonCredentialAmbiguous})
 	}
 }
 
@@ -132,15 +132,15 @@ type memberDial struct {
 func memberAuthFailure(member metaMember, dial memberDial) error {
 	switch {
 	case dial.anonymous && dial.connectURL != "":
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q is not connected for this user. Ask the user to open %s to connect it, then retry", member.slug, dial.connectURL)}}
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q is not connected for this user. Ask the user to open %s to connect it, then retry", member.slug, dial.connectURL), reason: reasonNeedsSignIn}}
 	case dial.anonymous:
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q requires authentication and this gateway holds no credential that routes to it; connect it from this gateway's sign-in page", member.slug)}}
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q requires authentication and this gateway holds no credential that routes to it; connect it from this gateway's sign-in page", member.slug), reason: reasonNeedsSignIn}}
 	case dial.clientCredential:
 		return metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialMisconfigured)
 	case dial.connectURL != "":
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the user's credential. Ask the user to open %s to reconnect it, then retry", member.slug, dial.connectURL)}}
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the user's credential. Ask the user to open %s to reconnect it, then retry", member.slug, dial.connectURL), reason: reasonCredentialRejected}}
 	}
-	return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential; reconnect it from this gateway's sign-in page", member.slug)}}
+	return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential; reconnect it from this gateway's sign-in page", member.slug), reason: reasonCredentialRejected}}
 }
 
 // memberCredentialError is a member failure the caller fixes by connecting or
@@ -203,7 +203,7 @@ func (s *Service) routeMetaMember(
 			// The snapshot query does not join the backend source tables, so a
 			// soft-deleted upstream still yields a member. Isolate it rather
 			// than failing every member of the gateway.
-			return memberDial{}, "remote", &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+			return memberDial{}, "remote", &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug), reason: reasonNotServable}
 		}
 		if rerr != nil {
 			return memberDial{}, "remote", fmt.Errorf("load meta MCP member upstream: %w", rerr)
@@ -269,7 +269,7 @@ func (s *Service) routeMetaMember(
 		}}, "tunneled", nil
 
 	default:
-		return memberDial{}, "", &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+		return memberDial{}, "", &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug), reason: reasonNotServable}
 	}
 }
 
@@ -510,7 +510,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 			NextCursor string           `json:"nextCursor"`
 		}
 		if uerr := json.Unmarshal(upstreamResult, &listing); uerr != nil {
-			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q returned a tool listing the meta MCP could not read", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q returned a tool listing the meta MCP could not read", member.slug), reason: reasonInvalidListing}, status: 0, retryable: false, retryAfter: 0}
 		}
 		for _, entry := range listing.Tools {
 			if entry == nil || entry.Name == "" {
@@ -534,7 +534,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 			break
 		}
 		if listing.NextCursor == cursor || seenCursors[listing.NextCursor] {
-			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug), reason: reasonInvalidListing}, status: 0, retryable: false, retryAfter: 0}
 		}
 		seenCursors[listing.NextCursor] = true
 		cursor = listing.NextCursor

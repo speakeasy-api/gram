@@ -202,8 +202,10 @@ open their effective assignments; the dropdown always offers compact member sear
     table listing Acme Support Tools, Acme Ops, Linear, and Slack with Acme Ops
     carrying most of the errors — and no GitHub row, even though GitHub's
     dispatches from before it left the gateway still count in the totals.
-    **Discovery failures over time** shows four omissions; hover a nonzero bar
-    to see the latest omitted member, reason, and event time.
+    **Discovery failures over time** shows 9 omissions over the default 7
+    days (all 11 over 15 or 30 days), including two in the current
+    half-hour; hover a nonzero bar to see the latest omitted member,
+    reason, and event time.
     The "Dispatched calls over time" title opens Tool Logs and the "Gateway
     tool usage" title opens MCP & Tools, both with the Acme Agent Gateway
     server filter applied; on Tool Logs the hook-observed rows are tagged

@@ -127,6 +127,35 @@ it.each([{ "error.message": message }, { error: { message } }])(
     );
   },
 );
+it("starts an aligned first interval's details at the selected range", async () => {
+  state.search.mockResolvedValue(result({ "error.message": message }));
+  const rangeFrom = new Date("2026-01-01T00:20:00Z");
+  const rangeTo = new Date("2026-01-01T01:40:00Z");
+  setup({ from: rangeFrom, to: rangeTo });
+  fireEvent.mouseEnter(screen.getByText("First interval"));
+  await screen.findByText(new RegExp(message));
+  expect(state.search).toHaveBeenLastCalledWith(
+    {},
+    expect.objectContaining({
+      searchLogsPayload: expect.objectContaining({
+        from: rangeFrom,
+        to: new Date("2026-01-01T00:59:59.999Z"),
+      }),
+    }),
+  );
+  fireEvent.mouseEnter(screen.getByText("Second interval"));
+  await waitFor(() =>
+    expect(state.search).toHaveBeenLastCalledWith(
+      {},
+      expect.objectContaining({
+        searchLogsPayload: expect.objectContaining({
+          from: new Date("2026-01-01T01:00:00Z"),
+          to: new Date("2026-01-01T01:39:59.999Z"),
+        }),
+      }),
+    ),
+  );
+});
 it("does not fetch or expose diagnostics without log permission", () => {
   state.read = false;
   setup();

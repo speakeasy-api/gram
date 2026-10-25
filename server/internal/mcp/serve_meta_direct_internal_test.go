@@ -22,21 +22,22 @@ func TestExpiredListingResultKeepsAccessDenialsAndClassifiesTimeouts(t *testing.
 	catalog := &memberCatalog{}
 	notFound := oops.E(oops.CodeNotFound, nil, "server not found")
 	forbidden := oops.E(oops.CodeForbidden, nil, "server forbidden")
-	memberFailure := &metaMemberError{message: "server \"linear\" is not connected"}
+	memberFailure := &metaMemberError{message: "server \"linear\" is not connected", reason: reasonNeedsSignIn}
 
 	for name, tc := range map[string]struct {
 		result memberDescribeResult
 		kept   bool
+		reason attemptReason
 	}{
-		"catalog":               {result: memberDescribeResult{catalog: catalog, err: nil}, kept: true},
-		"not found":             {result: memberDescribeResult{catalog: nil, err: notFound}, kept: true},
-		"forbidden":             {result: memberDescribeResult{catalog: nil, err: forbidden}, kept: true},
-		"wrapped not found":     {result: memberDescribeResult{catalog: nil, err: fmt.Errorf("describe member: %w", notFound)}, kept: true},
-		"wrapped forbidden":     {result: memberDescribeResult{catalog: nil, err: fmt.Errorf("describe member: %w", forbidden)}, kept: true},
-		"member failure":        {result: memberDescribeResult{catalog: nil, err: memberFailure}, kept: true},
-		"never started":         {result: memberDescribeResult{catalog: nil, err: nil}, kept: false},
-		"deadline exceeded":     {result: memberDescribeResult{catalog: nil, err: fmt.Errorf("list tools: %w", context.DeadlineExceeded)}, kept: false},
-		"other shareable error": {result: memberDescribeResult{catalog: nil, err: oops.E(oops.CodeUnexpected, nil, "unexpected")}, kept: false},
+		"catalog":               {result: memberDescribeResult{catalog: catalog, err: nil, calls: 1}, kept: true},
+		"not found":             {result: memberDescribeResult{catalog: nil, err: notFound, calls: 1}, kept: true},
+		"forbidden":             {result: memberDescribeResult{catalog: nil, err: forbidden, calls: 1}, kept: true},
+		"wrapped not found":     {result: memberDescribeResult{catalog: nil, err: fmt.Errorf("describe member: %w", notFound), calls: 1}, kept: true},
+		"wrapped forbidden":     {result: memberDescribeResult{catalog: nil, err: fmt.Errorf("describe member: %w", forbidden), calls: 1}, kept: true},
+		"member failure":        {result: memberDescribeResult{catalog: nil, err: memberFailure, calls: 1}, kept: true},
+		"never started":         {result: memberDescribeResult{catalog: nil, err: nil, calls: 0}, kept: false, reason: reasonListingBudgetExhausted},
+		"deadline exceeded":     {result: memberDescribeResult{catalog: nil, err: fmt.Errorf("list tools: %w", context.DeadlineExceeded), calls: 1}, kept: false, reason: reasonListingTimeout},
+		"other shareable error": {result: memberDescribeResult{catalog: nil, err: oops.E(oops.CodeUnexpected, nil, "unexpected"), calls: 2}, kept: false, reason: reasonListingTimeout},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -51,6 +52,8 @@ func TestExpiredListingResultKeepsAccessDenialsAndClassifiesTimeouts(t *testing.
 			require.Equal(t, "server \"linear\" did not answer within the gateway listing time", timeout.message)
 			require.False(t, timeout.retryable)
 			require.False(t, memberAccessDenied(got.err))
+			require.Equal(t, tc.reason, timeout.reason)
+			require.Equal(t, tc.result.calls, got.calls)
 		})
 	}
 }

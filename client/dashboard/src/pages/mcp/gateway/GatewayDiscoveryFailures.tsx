@@ -55,7 +55,8 @@ export function GatewayDiscoveryFailures({
   const index = hovered?.range === range ? hovered.index : null;
   const timestamp = index === null ? undefined : data.timestamps[index];
   const count = index === null ? 0 : (data.counts[index] ?? 0);
-  const bucketFrom = timestamp ?? from.getTime();
+  // Buckets align to UTC, so the first can start before the selected range.
+  const bucketFrom = Math.max(timestamp ?? from.getTime(), from.getTime());
   // searchLogs uses an inclusive end and Date has millisecond precision.
   // Stop before the next bucket; sub-millisecond tail events are not sampled.
   const bucketTo = Math.min(
@@ -148,8 +149,9 @@ export function GatewayDiscoveryFailures({
           tooltipAfterBody={eventLines}
         />
         <Text muted small>
-          Hover or tap an interval to see its latest omission. Reconnect your
-          client after recovery to refresh its tools.
+          Counts omitted members from Direct tool listings, in UTC intervals of
+          at least 30 minutes. Hover or tap an interval to see its latest
+          omission. Reconnect your client after recovery to refresh its tools.
         </Text>
       </>
     );

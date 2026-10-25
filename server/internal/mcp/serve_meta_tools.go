@@ -37,6 +37,10 @@ import (
 // affected member.
 type metaMemberError struct {
 	message string
+
+	// reason is the sanitized code a connection attempt records for this
+	// failure, set where the failure is built.
+	reason attemptReason
 }
 
 func (e *metaMemberError) Error() string { return e.message }
@@ -395,7 +399,7 @@ func (s *Service) describeMemberToolset(
 	if gate.authenticated && !toolset.McpIsPublic {
 		allowed, err := filterToolsByMCPConnect(ctx, logger, s.authz, toolset.ID.String(), toolset.ProjectID.String(), slices.Collect(maps.Values(catalog.byName)))
 		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug), reason: reasonConnectionCheckFailed}, status: 0, retryable: false, retryAfter: 0}
 		}
 		if err != nil {
 			return nil, err
@@ -559,7 +563,7 @@ func (s *Service) loadMemberToolset(
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug), reason: reasonNotServable}
 	case err != nil:
 		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
 	}
@@ -571,7 +575,7 @@ func (s *Service) loadMemberToolset(
 	// toolset's hosting state. Independently configured servers use their own
 	// visibility, already checked during member admission.
 	if member.serverID == toolset.ID && !toolset.McpEnabled {
-		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug), reason: reasonNotServable}
 	}
 	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset)
 	if err != nil {

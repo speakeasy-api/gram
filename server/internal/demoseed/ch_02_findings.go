@@ -10,6 +10,8 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // chDetectionsAndFindings: Shadow MCP inventory, AI detections and scans, authz challenges, risk findings, skill versions and efficacy, billing meter readings.
@@ -838,44 +840,153 @@ func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error 
 			chatID:  nil,
 		})
 	}
-	// A few Direct tools/list calls left a remote member out. The runtime
-	// records one row per omitted member with the upstream's status and fixed
-	// text naming the member, which the gateway's Activity section charts.
-	omitted := []struct {
-		member string
-		status int
-		reason string
-		hours  int
-	}{
-		{member: "linear", status: 429, reason: "was rate limited", hours: 2},
-		{member: "linear", status: 429, reason: "was rate limited", hours: 7},
-		{member: "slack", status: 503, reason: "was unavailable", hours: 20},
-		{member: "slack", status: 502, reason: "was unavailable", hours: 46},
+	return s.chfInsertTelemetry(ctx, ch, "gateway discovery telemetry", append(rows, s.chfGatewayListingAttempts()...))
+}
+
+// chfClassRank orders failure classes the way a failed listing picks one.
+var chfClassRank = map[string]int{"endpoint": 0, "internal": 1, "configuration": 2}
+
+// chfGatewayMemberAttempt is one member's result in a seeded Direct listing.
+type chfGatewayMemberAttempt struct {
+	member, outcome, class, reason string
+	calls, status                  int
+}
+
+// chfGatewayListingAttempts is Direct tools/list traffic recorded as
+// connection attempts: one discovery_listing row per call and one
+// discovery_member row per visible member, the shape the gateway writes. A
+// failed member's row also carries the gateway discovery labels and fixed
+// text the Activity drill-in searches, so one row is both facts. Attempt rows
+// carry no trace, so they never form traces. The last two listings fall inside
+// the current UTC half-hour, which the chart reads from raw rows, and one
+// listing listed no member at all.
+func (s *seeder) chfGatewayListingAttempts() []chfTelemetryRow {
+	gateway := s.det("metamcp-1").String()
+	providers := map[string]string{"linear": s.det("remote-identity-provider-linear").String()}
+	omission := map[string]string{
+		"rate_limited":             "was rate limited",
+		"upstream_unavailable":     "was unavailable",
+		"listing_timeout":          "did not answer in time",
+		"listing_budget_exhausted": "was not reached within the gateway listing time",
 	}
-	for n, o := range omitted {
-		email := s.email(demoUsers[hash64("gwomit", n)%6].handle)
-		attrs := `{"gram.event.source":"meta_discovery"` +
+	listed := func(member string, calls int) chfGatewayMemberAttempt {
+		return chfGatewayMemberAttempt{member: member, outcome: "listed", class: "", reason: "", calls: calls, status: 0}
+	}
+	failed := func(member, class, reason string, calls, status int) chfGatewayMemberAttempt {
+		return chfGatewayMemberAttempt{member: member, outcome: "failed", class: class, reason: reason, calls: calls, status: status}
+	}
+	blocked := func(member, outcome, reason string) chfGatewayMemberAttempt {
+		return chfGatewayMemberAttempt{member: member, outcome: outcome, class: "configuration", reason: reason, calls: 1, status: 0}
+	}
+	special := map[int][]chfGatewayMemberAttempt{
+		3:  {listed("support", 1), listed("ops", 1), failed("linear", "endpoint", "rate_limited", 3, 429), listed("slack", 1)},
+		7:  {listed("support", 1), listed("ops", 1), listed("linear", 2), listed("slack", 1)},
+		11: {listed("support", 1), listed("ops", 1), listed("linear", 1), failed("slack", "endpoint", "upstream_unavailable", 3, 503)},
+		16: {listed("support", 1), listed("ops", 1), blocked("linear", "credential_blocked", "needs_sign_in"), listed("slack", 1)},
+		20: {listed("support", 1), failed("ops", "internal", "listing_budget_exhausted", 0, 0), listed("linear", 1), failed("slack", "endpoint", "listing_timeout", 1, 0)},
+		24: {listed("support", 1), listed("ops", 1), listed("linear", 1), blocked("slack", "consent_blocked", "consent_not_approved")},
+		29: {listed("support", 1), listed("ops", 1), listed("linear", 3), listed("slack", 2)},
+		31: {failed("support", "internal", "listing_budget_exhausted", 0, 0), failed("ops", "internal", "listing_budget_exhausted", 0, 0), failed("linear", "endpoint", "listing_timeout", 1, 0), failed("slack", "endpoint", "upstream_unavailable", 3, 503)},
+		33: {listed("support", 1), listed("ops", 1), failed("linear", "endpoint", "rate_limited", 2, 429), listed("slack", 1)},
+		38: {listed("support", 1), listed("ops", 1), listed("linear", 1), failed("slack", "endpoint", "upstream_unavailable", 3, 503)},
+		39: {listed("support", 1), listed("ops", 1), failed("linear", "endpoint", "rate_limited", 3, 429), listed("slack", 1)},
+	}
+	resource := `,"gram.project.id":"` + s.projectID().String() + `"`
+	// Strictly past times inside the current half-hour, or just before now
+	// when the half-hour has only just begun.
+	currentBucket := s.now.UTC().Truncate(30 * time.Minute)
+	sinceBucket := s.now.Sub(currentBucket)
+	rows := make([]chfTelemetryRow, 0, 200)
+	for n := range 40 {
+		ts := s.chfNoFuture(s.now.Add(-time.Duration(40-n)*6*time.Hour - time.Duration(hash64("gwlist", n)%300)*time.Minute))
+		if n >= 38 {
+			ts = s.now.Add(-time.Duration(40-n) * time.Second)
+			if sinceBucket > 3*time.Second {
+				ts = currentBucket.Add(sinceBucket * time.Duration(n-37) / 3)
+			}
+		}
+		handle := demoUsers[hash64("gwlistu", n)%6].handle
+		subject := urn.NewUserSubject(s.userID(handle)).String()
+		clientKey := s.det("usc-gateway").String()
+		if n%5 == 4 {
+			clientKey = "credential:agent"
+			subject = urn.NewAgentSubject(s.det("managed-agent-1")).String()
+		}
+		members, ok := special[n]
+		if !ok {
+			members = []chfGatewayMemberAttempt{listed("support", 1), listed("ops", 1), listed("linear", 1), listed("slack", 1)}
+		}
+		// The gateway's rule: partial when some member listed, failed when
+		// none did, taking the endpoint's class before the gateway's.
+		outcome, class, reason, listedCount := "complete", "", "", 0
+		for _, m := range members {
+			switch {
+			case m.outcome == "listed":
+				listedCount++
+			case class == "" || chfClassRank[m.class] < chfClassRank[class]:
+				class = m.class
+			}
+		}
+		switch {
+		case listedCount == len(members):
+			class = ""
+		case listedCount > 0:
+			outcome, class = "partial", ""
+		default:
+			outcome, reason = "failed", "no_member_listed"
+		}
+		listingID := s.det("gwlist-" + strconv.Itoa(n)).String()
+		common := `"gram.event.urn":"urn:telemetry:gram_service:log:mcp_connection_attempt"` +
 			`,"gram.meta_mcp_server.id":"` + gateway + `"` +
-			`,"gram.tool.name":"tools/list"` +
-			`,"gram.tool.urn":"metamcp:` + gateway + `:tools/list"` +
-			`,"http.response.status_code":` + strconv.Itoa(o.status) +
-			`,"error.message":"server \"` + o.member + `\" ` + o.reason + ` and was left out of the tool listing"` +
-			`,"http.server.request.duration":` + chfRound3(0.8+float64(hash64("gwomitd", n)%20)/10) +
-			`,"gram.project.id":"` + s.projectID().String() + `"` +
-			`,"user.email":"` + email + `"` +
-			`,"gram.external_user.id":"` + email + `"` +
-			chfEmailClient(email) + `}`
+			`,"gram.connection_attempt.subject":"` + subject + `"` +
+			`,"gram.connection_attempt.client_key":"` + clientKey + `"` + resource
 		rows = append(rows, chfTelemetryRow{
-			ts:      s.chfNoFuture(s.now.Add(-time.Duration(o.hours) * time.Hour)),
-			body:    "Gateway discovery: tools/list",
-			traceID: md5Hex(s.name("gwomit-" + strconv.Itoa(n))),
-			attrs:   attrs,
-			urn:     "metamcp:" + gateway + ":tools/list",
+			ts:   ts,
+			body: "",
+			attrs: `{` + common +
+				`,"gram.connection_attempt.id":"` + listingID + `"` +
+				`,"gram.connection_attempt.stage":"discovery_listing"` +
+				`,"gram.connection_attempt.outcome":"` + outcome + `"` +
+				`,"gram.connection_attempt.failure_class":"` + class + `"` +
+				`,"gram.connection_attempt.reason":"` + reason + `"}`,
+			traceID: "",
+			urn:     "",
 			service: "gram-mcp-gateway",
 			chatID:  nil,
 		})
+		for _, m := range members {
+			attrs := `{` + common +
+				`,"gram.connection_attempt.id":"` + s.det("gwlistm-"+strconv.Itoa(n)+"-"+m.member).String() + `"` +
+				`,"gram.connection_attempt.listing_id":"` + listingID + `"` +
+				`,"gram.mcp_server.id":"` + s.det("mcpserver-"+m.member).String() + `"` +
+				`,"gram.connection_attempt.stage":"discovery_member"` +
+				`,"gram.connection_attempt.outcome":"` + m.outcome + `"` +
+				`,"gram.connection_attempt.failure_class":"` + m.class + `"` +
+				`,"gram.connection_attempt.reason":"` + m.reason + `"` +
+				`,"gram.connection_attempt.calls":` + strconv.Itoa(m.calls) +
+				`,"gram.connection_attempt.retries":` + strconv.Itoa(max(m.calls-1, 0))
+			if provider, ok := providers[m.member]; ok {
+				attrs += `,"gram.connection_attempt.provider_id":"` + provider + `"`
+			}
+			row := chfTelemetryRow{ts: ts, body: "", traceID: "", urn: "", service: "gram-mcp-gateway", chatID: nil, attrs: ""}
+			if m.outcome == "failed" {
+				status := m.status
+				if status == 0 {
+					status = 502
+				}
+				attrs += `,"gram.event.source":"meta_discovery"` +
+					`,"gram.tool.id":"` + gateway + `"` +
+					`,"gram.tool.name":"tools/list"` +
+					`,"gram.tool.urn":"metamcp:` + gateway + `:tools/list"` +
+					`,"http.response.status_code":` + strconv.Itoa(status) +
+					`,"error.message":"server \"` + m.member + `\" ` + omission[m.reason] + ` and was left out of the tool listing"`
+				row.urn = "metamcp:" + gateway + ":tools/list"
+			}
+			row.attrs = attrs + `}`
+			rows = append(rows, row)
+		}
 	}
-	return s.chfInsertTelemetry(ctx, ch, "gateway discovery telemetry", rows)
+	return rows
 }
 
 var (
