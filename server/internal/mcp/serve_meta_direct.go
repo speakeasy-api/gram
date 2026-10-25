@@ -96,17 +96,34 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 				}
 				timer.Stop()
 			}
-			// Past the budget, a member that never finished, or failed outside
-			// its own classification, is the budget's failure, so it is skipped
-			// like a slow member.
-			_, memberFailure := errors.AsType[*metaMemberError](results[i].err)
-			if ctx.Err() != nil && results[i].catalog == nil && !memberFailure {
-				results[i] = memberDescribeResult{catalog: nil, err: memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}, status: 0, retryable: false, retryAfter: 0}}
+			if ctx.Err() != nil {
+				results[i] = expiredListingResult(member, results[i])
 			}
 		})
 	}
 	group.Wait()
 	return results
+}
+
+// expiredListingResult classifies a member's result once the listing time ran
+// out. A member that never finished, or failed outside its own classification,
+// is the budget's failure, so it is skipped like a slow member. A catalog, a
+// member failure, and an access denial keep their own meaning.
+func expiredListingResult(member metaMember, result memberDescribeResult) memberDescribeResult {
+	if result.catalog != nil || memberAccessDenied(result.err) {
+		return result
+	}
+	if _, memberFailure := errors.AsType[*metaMemberError](result.err); memberFailure {
+		return result
+	}
+	return memberDescribeResult{catalog: nil, err: memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer within the gateway listing time", member.slug)}, status: 0, retryable: false, retryAfter: 0}}
+}
+
+// memberAccessDenied reports a member the caller may not describe, which a
+// listing leaves out as an access exclusion rather than a failure.
+func memberAccessDenied(err error) bool {
+	denied, ok := errors.AsType[*oops.ShareableError](err)
+	return ok && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden)
 }
 
 // unavailableMember is a member collectGatewayTools could not list; err is
@@ -138,8 +155,7 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 	for i, member := range members {
 		catalog, err := described[i].catalog, described[i].err
 		if err != nil {
-			var denied *oops.ShareableError
-			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
+			if memberAccessDenied(err) {
 				unavailable = append(unavailable, unavailableMember{member: member, err: err})
 				continue
 			}
