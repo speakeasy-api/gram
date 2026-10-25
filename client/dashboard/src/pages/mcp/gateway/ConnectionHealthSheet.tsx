@@ -544,7 +544,7 @@ function KeyedDetail({
                 <Text small className="w-10 shrink-0 tabular-nums">
                   {reason.count.toLocaleString()}
                 </Text>
-                <Text small>{reasonText(reason.reason)}</Text>
+                <Text small>{reasonText(reason.reason, stage.stage)}</Text>
               </li>
             ))}
           </ul>
@@ -642,7 +642,7 @@ function RecentAttempts({
                 </Text>
                 {attempt.reason && (
                   <Text small muted className="block">
-                    {reasonText(attempt.reason)}
+                    {reasonText(attempt.reason, stage)}
                   </Text>
                 )}
               </div>

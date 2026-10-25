@@ -14,10 +14,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -86,6 +88,15 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 	require.NoError(t, err)
 	elsewhere := gateway(other.ID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
+	providerIssuer, err := remotesessionsrepo.New(conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID: conv.ToNullUUID(project.ID), OrganizationID: conv.ToPGText(principal.OrganizationID),
+		Slug: "health-provider-" + uuid.NewString()[:8], Issuer: "https://provider.example.test",
+		ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{},
+		TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	provider := providerIssuer.ID.String()
+
 	logger := testenv.NewLogger(t)
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
 	writer := telemetry.NewLogger(ctx, logger, nil, nil, chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(logger))
@@ -130,6 +141,11 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 		attempt(project.ID, gatewayID, telemetry.ConnectionStageInboundToken, "code_issued", member, "", registered),
 		attempt(project.ID, gatewayID, telemetry.ConnectionStageInboundToken, "refreshed", member, "", registered),
 		attempt(project.ID, gatewayID, telemetry.ConnectionStageInboundToken, "policy_blocked", member, "", registered),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageUpstreamCallback, "stored", member, provider, registered),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageUpstreamCallback, "failed", member, provider, registered),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageUpstreamRefresh, "refreshed", member, provider, registered),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageUpstreamRefresh, "adopted", member, provider, registered),
+		attempt(project.ID, gatewayID, telemetry.ConnectionStageUpstreamRefresh, "failed", member, provider, registered),
 	}))
 
 	engine := authz.NewEngine(logger, conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
@@ -191,12 +207,18 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 	require.Equal(t, at.Add(time.Hour).Format(time.RFC3339Nano), output.To)
 	require.EqualValues(t, 1800, output.IntervalSeconds)
 	require.Contains(t, raw, `"interval_seconds":1800`)
-	require.Len(t, output.Stages, 4)
-	require.Equal(t, []string{"inbound_authorize", "inbound_token"}, []string{output.Stages[0].Stage, output.Stages[1].Stage})
+	require.Len(t, output.Stages, 6)
+	stageNames := make([]string, 0, len(output.Stages))
+	for _, stage := range output.Stages {
+		stageNames = append(stageNames, stage.Stage)
+	}
+	require.Equal(t, []string{"inbound_authorize", "inbound_token", "upstream_callback", "upstream_refresh", "discovery_listing", "discovery_member"}, stageNames)
 	require.Zero(t, output.Stages[0].Attempts, "a stage without attempts is listed, empty")
 	require.EqualValues(t, 3, output.Stages[1].Attempts, "a policy block stays in the token stage's denominator")
-	require.EqualValues(t, 1, output.Stages[2].Attempts)
-	require.EqualValues(t, 10, output.Stages[3].Attempts, "only the named project's attempts count")
+	require.EqualValues(t, 2, output.Stages[2].Attempts)
+	require.EqualValues(t, 3, output.Stages[3].Attempts)
+	require.EqualValues(t, 1, output.Stages[4].Attempts)
+	require.EqualValues(t, 10, output.Stages[5].Attempts, "only the named project's attempts count")
 	require.NotNil(t, output.Ranking)
 	require.Equal(t, []any{telemetry.ConnectionStageDiscoveryMember, "count", 2}, []any{output.Ranking.Stage, output.Ranking.Sort, output.Ranking.MinAttempts})
 	require.Len(t, output.Ranking.Hotspots, 2, "single-attempt keys stay under the floor")
@@ -238,6 +260,22 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 	}
 	require.EqualValues(t, 3, bucketed, "the timeline sums to the stage's attempts")
 
+	// Each provider stage of the same person, provider, and client, through
+	// the nested key: only that stage's own outcomes.
+	for stage, want := range map[string]map[string]uint64{
+		telemetry.ConnectionStageUpstreamCallback: {"stored": 1, "failed": 1},
+		telemetry.ConnectionStageUpstreamRefresh:  {"refreshed": 1, "adopted": 1, "failed": 1},
+	} {
+		_, output, raw = call(keyed(stage, member, provider, registered))
+		require.NotContains(t, raw, `"ranking"`, stage)
+		require.Len(t, output.Stages, 1, stage)
+		require.Equal(t, stage, output.Stages[0].Stage)
+		got := map[string]uint64{}
+		for _, outcome := range output.Stages[0].Outcomes {
+			got[outcome.Outcome] = outcome.Count
+		}
+		require.Equal(t, want, got, stage)
+	}
 	_, output, _ = call(keyed(telemetry.ConnectionStageDiscoveryMember, "", "", "anonymous"))
 	require.EqualValues(t, 2, output.Stages[0].Attempts, "empty key values are selectable")
 

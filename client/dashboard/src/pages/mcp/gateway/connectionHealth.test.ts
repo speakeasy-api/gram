@@ -122,6 +122,61 @@ describe("stageTiles", () => {
   });
 });
 
+describe("provider stages", () => {
+  it("accounts for every callback outcome against its sign-ins", () => {
+    const tiles = stageTiles(
+      stage("upstream_callback", { stored: 3, retried: 1, failed: 2 }),
+    );
+    expect(tiles.map((t) => [t.title, t.value, t.subtext])).toEqual([
+      ["Provider sign-ins", 6, undefined],
+      ["Credentials saved", 3, "of 6"],
+      ["Sent back to the provider", 1, "of 6"],
+      ["Failed", 2, "of 6"],
+    ]);
+  });
+
+  it("keeps adopted, empty, and unfinished refreshes apart from refreshed", () => {
+    const tiles = stageTiles(
+      stage("upstream_refresh", {
+        refreshed: 4,
+        adopted: 2,
+        no_grant: 1,
+        failed: 2,
+        unknown: 1,
+      }),
+    );
+    expect(tiles.slice(1).reduce((sum, tile) => sum + tile.value, 0)).toBe(
+      tiles[0]!.value,
+    );
+    expect(tiles.map((t) => [t.title, t.value])).toEqual([
+      ["Provider refreshes", 10],
+      ["Refreshed", 4],
+      ["Reused another refresh", 2],
+      ["Nothing to refresh", 1],
+      ["Failed", 2],
+      ["Outcome not recorded", 1],
+    ]);
+  });
+
+  it("reads a shared code as the provider's on provider stages", () => {
+    expect(reasonText("invalid_grant", "upstream_refresh")).toContain(
+      "provider",
+    );
+    expect(reasonText("invalid_grant", "inbound_token")).not.toContain(
+      "provider",
+    );
+    expect(reasonText("server_error", "upstream_callback")).toContain(
+      "provider",
+    );
+    expect(reasonText("interaction_required", "upstream_callback")).toBe(
+      "The provider refused the request.",
+    );
+    expect(reasonText("canceled", "upstream_refresh")).toBe(
+      reasonText("canceled"),
+    );
+  });
+});
+
 describe("hotspotKey", () => {
   const hotspot = (keys: [string?, string?, string?]) =>
     ({

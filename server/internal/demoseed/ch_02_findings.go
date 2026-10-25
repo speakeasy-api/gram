@@ -1015,27 +1015,40 @@ func (s *seeder) chfGatewayListingTime(n int) time.Time {
 // They are redirected to sign-in and the gateway writes an authorization-code
 // token before listing 21; they sign in again and get a second token, and the
 // old cursor still fails a few minutes later; listing 22, without a cursor, is
-// complete. A later refresh is counted apart from sign-ins, and one client the
-// metadata admission policy does not list is blocked before it is verified.
-// The rows record what the gateway answered, not that a client used a token or
+// complete. Before each token, their Linear sign-in returns to the gateway and
+// the provider credential is stored; requests to the gateway later refresh it
+// once and then fail to with invalid_grant. A later gateway refresh is counted
+// apart from sign-ins, and one client the metadata admission policy does not
+// list is blocked before it is verified. Another person declines the provider
+// sign-in, and one callback names no person or verified client. These are
+// synthetic rows in the shape the gateway writes, not output of its handlers;
+// they record what the gateway observed, not that a client used a token or
 // that any step caused the next.
 func (s *seeder) chfGatewayInboundAttempts() []chfTelemetryRow {
 	gateway := s.det("metamcp-1").String()
 	person := urn.NewUserSubject(s.userID(demoUsers[5].handle)).String()
 	client := s.det("usc-gateway").String()
+	provider := s.det("remote-identity-provider-linear").String()
+	declined := urn.NewUserSubject(s.userID(demoUsers[2].handle)).String()
 	stale := s.chfGatewayListingTime(21)
 	complete := s.chfGatewayListingTime(22)
 	type attempt struct {
-		name, stage, outcome, class, reason, grant, subject, client string
-		at                                                          time.Time
+		name, stage, outcome, class, reason, grant, subject, client, provider string
+		at                                                                    time.Time
 	}
 	attempts := []attempt{
-		{"authorize-1", "inbound_authorize", "accepted", "", "", "", "", client, stale.Add(-45 * time.Minute)},
-		{"token-1", "inbound_token", "code_issued", "", "", "authorization_code", person, client, stale.Add(-40 * time.Minute)},
-		{"authorize-2", "inbound_authorize", "accepted", "", "", "", "", client, stale.Add(10 * time.Minute)},
-		{"token-2", "inbound_token", "code_issued", "", "", "authorization_code", person, client, stale.Add(15 * time.Minute)},
-		{"refresh-1", "inbound_token", "refreshed", "", "", "refresh_token", person, client, complete.Add(time.Hour)},
-		{"authorize-blocked", "inbound_authorize", "policy_blocked", "configuration", "cimd_denied_not_listed", "", "", "unverified_client", s.now.Add(-50 * time.Hour)},
+		{"authorize-1", "inbound_authorize", "accepted", "", "", "", "", client, "", stale.Add(-45 * time.Minute)},
+		{"callback-1", "upstream_callback", "stored", "", "", "", person, client, provider, stale.Add(-42 * time.Minute)},
+		{"token-1", "inbound_token", "code_issued", "", "", "authorization_code", person, client, "", stale.Add(-40 * time.Minute)},
+		{"authorize-2", "inbound_authorize", "accepted", "", "", "", "", client, "", stale.Add(10 * time.Minute)},
+		{"callback-2", "upstream_callback", "stored", "", "", "", person, client, provider, stale.Add(12 * time.Minute)},
+		{"token-2", "inbound_token", "code_issued", "", "", "authorization_code", person, client, "", stale.Add(15 * time.Minute)},
+		{"provider-refresh-1", "upstream_refresh", "refreshed", "", "", "", person, client, provider, complete.Add(30 * time.Minute)},
+		{"refresh-1", "inbound_token", "refreshed", "", "", "refresh_token", person, client, "", complete.Add(time.Hour)},
+		{"provider-refresh-2", "upstream_refresh", "failed", "configuration", "invalid_grant", "", person, client, provider, complete.Add(3 * time.Hour)},
+		{"callback-declined", "upstream_callback", "failed", "configuration", "access_denied", "", declined, client, provider, s.now.Add(-30 * time.Hour)},
+		{"callback-unknown", "upstream_callback", "failed", "configuration", "unauthorized", "", "", "unverified_client", provider, s.now.Add(-20 * time.Hour)},
+		{"authorize-blocked", "inbound_authorize", "policy_blocked", "configuration", "cimd_denied_not_listed", "", "", "unverified_client", "", s.now.Add(-50 * time.Hour)},
 	}
 	resource := `,"gram.project.id":"` + s.projectID().String() + `"`
 	row := func(id, attrs string, at time.Time) chfTelemetryRow {
@@ -1063,6 +1076,9 @@ func (s *seeder) chfGatewayInboundAttempts() []chfTelemetryRow {
 		}
 		if a.grant != "" {
 			attrs += `,"gram.connection_attempt.grant_type":"` + a.grant + `"`
+		}
+		if a.provider != "" {
+			attrs += `,"gram.connection_attempt.provider_id":"` + a.provider + `"`
 		}
 		rows = append(rows, row(s.det("gwinbound-"+a.name).String(), attrs, a.at))
 	}

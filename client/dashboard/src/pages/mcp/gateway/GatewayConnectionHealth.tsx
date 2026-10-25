@@ -5,6 +5,11 @@ import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { Icon } from "@/components/ui/Icon";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import {
@@ -27,6 +32,7 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildGatewayConnectionHealthQuery } from "@gram/client/react-query/gatewayConnectionHealth.core.js";
 import { buildGatewayConnectionHotspotsQuery } from "@gram/client/react-query/gatewayConnectionHotspots.core.js";
 import { useQuery } from "@tanstack/react-query";
+import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ConnectionHealthSheet } from "./ConnectionHealthSheet";
 import {
@@ -63,6 +69,8 @@ const CHART_ID = "gateway-connection-health";
 const FAILING: Record<HealthStage, string> = {
   inbound_authorize: "failed or blocked requests",
   inbound_token: "failed or blocked requests",
+  upstream_callback: "failed sign-ins",
+  upstream_refresh: "failed refreshes",
   discovery_listing: "failures",
   discovery_member: "failed or blocked checks",
 };
@@ -173,12 +181,36 @@ export function GatewayConnectionHealth({
       <div className="space-y-1">
         <h2 className="text-heading-sm">Connection health</h2>
         <Text small muted>
-          How clients fared signing in to this gateway and listing its tools{" "}
-          {phrase}. Sign-in and token requests count what the gateway answered,
-          not whether a redirect arrived, sign-in finished, or a token was used.
-          Not recorded yet: client metadata fetches, provider sign-ins, and
-          provider token refreshes. Only Direct tool listings are recorded.
+          How clients fared signing in to this gateway, connecting providers,
+          and listing its tools {phrase}. Each count is what the gateway
+          observed, not whether a redirect arrived, sign-in finished, or a token
+          was used.
         </Text>
+        <Collapsible>
+          <CollapsibleTrigger className="group text-muted-foreground flex items-center gap-1 text-sm underline underline-offset-4">
+            <ChevronDown
+              aria-hidden="true"
+              className="size-3.5 transition-transform group-data-[state=open]:rotate-180"
+            />
+            What isn&apos;t counted
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>
+                <Text small muted>
+                  Only Direct tool listings are recorded.
+                </Text>
+              </li>
+              {summary?.notRecorded.map((gap) => (
+                <li key={gap.stage}>
+                  <Text small muted>
+                    {gap.note}
+                  </Text>
+                </li>
+              ))}
+            </ul>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
       <Page.Toolbar>
         <Page.Toolbar.Leading>
@@ -495,7 +527,7 @@ function Hotspots({
       width: "2fr",
       render: (row) => (
         <Text muted small className="line-clamp-2">
-          {row.reasons[0] ? reasonText(row.reasons[0].reason) : "—"}
+          {row.reasons[0] ? reasonText(row.reasons[0].reason, stage) : "—"}
         </Text>
       ),
     },

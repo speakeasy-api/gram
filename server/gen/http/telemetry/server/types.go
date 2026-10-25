@@ -8889,9 +8889,13 @@ type GatewayConnectionStageResponseBody struct {
 	// inbound_authorize counts sign-in requests (accepted means a redirect to
 	// sign-in was attempted; delivery and completion are not observed);
 	// inbound_token counts token requests it answered, by grant (an answered
-	// request is not proof a client used the token); discovery_listing counts
-	// Direct tools/list calls; discovery_member counts the members each listing
-	// reached.
+	// request is not proof a client used the token); upstream_callback counts
+	// provider sign-in callbacks whose state named this gateway (stored means the
+	// credential was saved, not that the person returned to their client);
+	// upstream_refresh counts provider refreshes a request to this gateway caused
+	// (one logical refresh each; adopted reused another request's refresh, and
+	// neither proves the provider was contacted); discovery_listing counts Direct
+	// tools/list calls; discovery_member counts the members each listing reached.
 	Stage string `form:"stage" json:"stage" xml:"stage"`
 	// All recorded attempts in this stage
 	Attempts int64 `form:"attempts" json:"attempts" xml:"attempts"`
@@ -8912,8 +8916,9 @@ type GatewayConnectionStageResponseBody struct {
 // response body types.
 type GatewayConnectionOutcomeCountResponseBody struct {
 	// The attempt outcome within its stage, such as accepted, code_issued,
-	// refreshed, refresh_replayed, assertion_issued, complete, partial, listed,
-	// failed, credential_blocked, consent_blocked, policy_blocked, or unknown.
+	// refreshed, refresh_replayed, assertion_issued, stored, retried, adopted,
+	// no_grant, complete, partial, listed, failed, credential_blocked,
+	// consent_blocked, policy_blocked, or unknown.
 	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
 	// Attempts with this outcome.
 	Count int64 `form:"count" json:"count" xml:"count"`
@@ -18453,8 +18458,8 @@ func ValidateListGatewayConnectionHotspotsRequestBody(body *ListGatewayConnectio
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	if body.Stage != nil {
-		if !(*body.Stage == "inbound_authorize" || *body.Stage == "inbound_token" || *body.Stage == "discovery_listing" || *body.Stage == "discovery_member") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"inbound_authorize", "inbound_token", "discovery_listing", "discovery_member"}))
+		if !(*body.Stage == "inbound_authorize" || *body.Stage == "inbound_token" || *body.Stage == "upstream_callback" || *body.Stage == "upstream_refresh" || *body.Stage == "discovery_listing" || *body.Stage == "discovery_member") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"inbound_authorize", "inbound_token", "upstream_callback", "upstream_refresh", "discovery_listing", "discovery_member"}))
 		}
 	}
 	if body.RankBy != nil {
@@ -19561,8 +19566,8 @@ func ValidateGatewayConnectionKeyRequestBody(body *GatewayConnectionKeyRequestBo
 		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
 	}
 	if body.Stage != nil {
-		if !(*body.Stage == "inbound_authorize" || *body.Stage == "inbound_token" || *body.Stage == "discovery_listing" || *body.Stage == "discovery_member") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"inbound_authorize", "inbound_token", "discovery_listing", "discovery_member"}))
+		if !(*body.Stage == "inbound_authorize" || *body.Stage == "inbound_token" || *body.Stage == "upstream_callback" || *body.Stage == "upstream_refresh" || *body.Stage == "discovery_listing" || *body.Stage == "discovery_member") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"inbound_authorize", "inbound_token", "upstream_callback", "upstream_refresh", "discovery_listing", "discovery_member"}))
 		}
 	}
 	if body.Subject != nil {

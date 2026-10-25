@@ -24,6 +24,8 @@ export type RankBy = ClosedEnum<typeof RankBy>;
 export const ListGatewayConnectionHotspotsPayloadStage = {
   InboundAuthorize: "inbound_authorize",
   InboundToken: "inbound_token",
+  UpstreamCallback: "upstream_callback",
+  UpstreamRefresh: "upstream_refresh",
   DiscoveryListing: "discovery_listing",
   DiscoveryMember: "discovery_member",
 } as const;

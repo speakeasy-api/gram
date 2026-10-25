@@ -257,6 +257,30 @@ it("treats no attempts as unknown, not healthy", async () => {
   expect(screen.queryByText("Listings over time")).toBeNull();
 });
 
+it("names provider stages as recorded and lists what is not counted apart", async () => {
+  state.healthResult = (payload: Payload) => ({
+    ...summary()(payload),
+    notRecorded: [
+      {
+        stage: "upstream_refresh_background",
+        note: "Scheduled and manual provider refreshes are not attributed to a gateway.",
+      },
+    ],
+  });
+  renderSection();
+  expect(await screen.findByText(/connecting providers/)).toBeTruthy();
+  expect(screen.queryByText(/provider sign-ins, and/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /What isn.t counted/ }));
+  expect(
+    await screen.findByText(
+      "Scheduled and manual provider refreshes are not attributed to a gateway.",
+    ),
+  ).toBeTruthy();
+  expect(
+    screen.getByText("Only Direct tool listings are recorded."),
+  ).toBeTruthy();
+});
+
 it("says when a stage is not recorded", async () => {
   state.healthResult = summary([]);
   renderSection();
@@ -386,6 +410,8 @@ it("offers every recorded stage in one compact control, listings first by defaul
   ).toEqual([
     "Sign-in requests",
     "Token requests",
+    "Provider sign-ins",
+    "Provider refreshes",
     "Listings",
     "Member checks",
   ]);

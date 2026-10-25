@@ -118,6 +118,14 @@ func (s *seeder) chTelemetryChecks() []chCheck {
 			msg:      "demo seed postflight: gateway listing attempts missing",
 		},
 		{
+			cond: `(SELECT sum(attempts) FROM mcp_connection_attempt_summaries
+   WHERE gram_project_id = toUUID(@proj)
+     AND server_kind = 'meta'
+     AND stage IN ('upstream_callback', 'upstream_refresh')) < 6`,
+			settings: "",
+			msg:      "demo seed postflight: gateway provider attempts missing",
+		},
+		{
 			cond: `(SELECT uniqExact(mcp_server_id) FROM telemetry_logs
    WHERE gram_project_id = toUUID(@proj)
      AND meta_mcp_server_id != ''

@@ -261,6 +261,7 @@ func (s *Service) serveAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		AgentAuthorizationTarget: agentTarget,
 		Endpoint:                 endpointRef,
 		ClientID:                 req.ClientID,
+		RegisteredClientID:       uuid.NullUUID{UUID: client.ID, Valid: true},
 		RedirectURI:              req.RedirectURI,
 		State:                    req.State,
 		CodeChallenge:            req.CodeChallenge,

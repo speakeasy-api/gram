@@ -12,6 +12,8 @@ import { ClosedEnum } from "../../types/enums.js";
 export const GatewayConnectionKeyStage = {
   InboundAuthorize: "inbound_authorize",
   InboundToken: "inbound_token",
+  UpstreamCallback: "upstream_callback",
+  UpstreamRefresh: "upstream_refresh",
   DiscoveryListing: "discovery_listing",
   DiscoveryMember: "discovery_member",
 } as const;

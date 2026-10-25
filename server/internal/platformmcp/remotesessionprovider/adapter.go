@@ -186,6 +186,8 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		ConsentServer:       "",
 		Resource:            descriptor.Resource,
 		AutoRefresh:         nil,
+		// Provider setup starts from no gateway sign-in.
+		InboundUserSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Authority: networkingress.Authority{
 			Surface:          "",
 			BaseURL:          "",
