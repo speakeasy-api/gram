@@ -247,8 +247,10 @@ type ListGatewayConnectionHotspotsRequestBody struct {
 	Stage string `form:"stage" json:"stage" xml:"stage"`
 	// count ranks by failed attempts; rate by failed attempts over all attempts.
 	RankBy string `form:"rank_by" json:"rank_by" xml:"rank_by"`
-	// Leave out keys with fewer attempts in the window.
-	MinAttempts int64 `form:"min_attempts" json:"min_attempts" xml:"min_attempts"`
+	// Leave out keys with fewer attempts in the window. Omitted, it is 5 for the
+	// whole gateway and 1 with caller, so a caller's single attempt with a
+	// provider is listed.
+	MinAttempts *int64 `form:"min_attempts,omitempty" json:"min_attempts,omitempty" xml:"min_attempts,omitempty"`
 	// Hotspots to return.
 	Limit int64 `form:"limit" json:"limit" xml:"limit"`
 	// Rank only this caller and client's keys, one per provider or for no recorded
@@ -1077,7 +1079,8 @@ type ListGatewayConnectionHotspotsResponseBody struct {
 	MinAttempts *int64 `form:"min_attempts,omitempty" json:"min_attempts,omitempty" xml:"min_attempts,omitempty"`
 	// Ranked hotspots; ties break by failed attempts, attempts, then key
 	Hotspots []*GatewayConnectionHotspotResponseBody `form:"hotspots,omitempty" json:"hotspots,omitempty" xml:"hotspots,omitempty"`
-	// More keys met min_attempts than limit returned
+	// More keys met min_attempts than limit returned. A server that does not
+	// report it leaves it out, which means unknown, not complete.
 	Truncated *bool `form:"truncated,omitempty" json:"truncated,omitempty" xml:"truncated,omitempty"`
 	// The caller these keys are scoped to, present only when caller was given and
 	// answered
@@ -10174,12 +10177,6 @@ func NewListGatewayConnectionHotspotsRequestBody(p *telemetry.ListGatewayConnect
 	}
 	{
 		var zero int64
-		if body.MinAttempts == zero {
-			body.MinAttempts = 5
-		}
-	}
-	{
-		var zero int64
 		if body.Limit == zero {
 			body.Limit = 25
 		}
@@ -13500,7 +13497,7 @@ func NewListGatewayConnectionHotspotsResultOK(body *ListGatewayConnectionHotspot
 		Stage:       *body.Stage,
 		RankBy:      *body.RankBy,
 		MinAttempts: *body.MinAttempts,
-		Truncated:   *body.Truncated,
+		Truncated:   body.Truncated,
 	}
 	v.Hotspots = make([]*telemetry.GatewayConnectionHotspot, len(body.Hotspots))
 	for i, val := range body.Hotspots {
@@ -18296,9 +18293,6 @@ func ValidateListGatewayConnectionHotspotsResponseBody(body *ListGatewayConnecti
 	}
 	if body.Hotspots == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hotspots", "body"))
-	}
-	if body.Truncated == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("truncated", "body"))
 	}
 	if body.From != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))

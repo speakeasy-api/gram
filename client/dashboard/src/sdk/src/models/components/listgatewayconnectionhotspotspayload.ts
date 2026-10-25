@@ -59,7 +59,7 @@ export type ListGatewayConnectionHotspotsPayload = {
    */
   metaMcpServerId: string;
   /**
-   * Leave out keys with fewer attempts in the window.
+   * Leave out keys with fewer attempts in the window. Omitted, it is 5 for the whole gateway and 1 with caller, so a caller's single attempt with a provider is listed.
    */
   minAttempts?: number | undefined;
   /**
@@ -93,7 +93,7 @@ export type ListGatewayConnectionHotspotsPayload$Outbound = {
   from?: string | undefined;
   limit: number;
   meta_mcp_server_id: string;
-  min_attempts: number;
+  min_attempts?: number | undefined;
   rank_by: string;
   stage: string;
   to?: string | undefined;
@@ -109,7 +109,7 @@ export const ListGatewayConnectionHotspotsPayload$outboundSchema: z.ZodMiniType<
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     limit: z._default(z.int(), 25),
     metaMcpServerId: z.string(),
-    minAttempts: z._default(z.int(), 5),
+    minAttempts: z.optional(z.int()),
     rankBy: z._default(RankBy$outboundSchema, "count"),
     stage: ListGatewayConnectionHotspotsPayloadStage$outboundSchema,
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),

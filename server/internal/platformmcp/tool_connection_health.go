@@ -118,6 +118,9 @@ type GatewayConnectionHealthOutput struct {
 	Ranking     *GatewayConnectionRanking      `json:"ranking,omitempty"`
 	NotRecorded []GatewayConnectionNotRecorded `json:"not_recorded"`
 	Scope       string                         `json:"scope"`
+	// Caller is the caller the counts and ranking are scoped to, set only when
+	// caller was given and answered.
+	Caller *GatewayConnectionCallerInput `json:"caller,omitempty" jsonschema:"the caller these counts and ranking are scoped to; absent for the whole gateway or a key"`
 }
 
 // GatewayConnectionRanking is the hotspots of one stage over the window.
@@ -211,6 +214,7 @@ func (r *PostgresReader) GetGatewayConnectionHealth(ctx context.Context, princip
 		Ranking:         nil,
 		NotRecorded:     make([]GatewayConnectionNotRecorded, 0, len(summary.NotRecorded)),
 		Scope:           summary.Scope,
+		Caller:          nil,
 	}
 	if key == nil {
 		output.Ranking = &GatewayConnectionRanking{Stage: hotspots.Stage, Sort: sort, MinAttempts: hotspots.MinAttempts, Hotspots: make([]GatewayConnectionHotspotSummary, 0, len(hotspots.Hotspots)), Truncated: hotspots.Truncated}
@@ -246,6 +250,9 @@ func (r *PostgresReader) GetGatewayConnectionHealth(ctx context.Context, princip
 	}
 	for _, coverage := range summary.NotRecorded {
 		output.NotRecorded = append(output.NotRecorded, GatewayConnectionNotRecorded{Stage: coverage.Stage, Note: coverage.Note})
+	}
+	if scope.Caller != nil {
+		output.Caller = &GatewayConnectionCallerInput{Subject: scope.Caller.Subject, Client: scope.Caller.ClientKey}
 	}
 	return output, nil
 }
@@ -315,7 +322,7 @@ const gatewayConnectionHealthDescription = "Summarize one exact gateway's connec
 	"Reasons are sanitized codes; provider OAuth reasons use provider_oauth_ followed by the registered code, distinguishing them from gateway validation failures. stale_cursor means the client should restart tool discovery (if signing in again leaves the error, remove and add the connection in the client), and consent_not_approved that reconnecting lets the person approve the new server. Later outcomes are what was observed, not proof that an action caused them. " +
 	"Names are given only for people in the organization, agents you may read, and providers and clients the project can see; others are labeled by kind without an ID. " +
 	"To see one hotspot's own outcomes and timeline, pass key with its stage and the key values of its subject, provider, and client; a value without a key is not visible to you and cannot be selected. " +
-	"To diagnose one person or agent, pass caller with a hotspot's subject key and registered client key instead of key: each stage is counted for them alone, with every provider and with attempts that recorded none (sign-in requests are recorded before the caller is known, so not_recorded lists that stage), the token stage returns last_code_issued_at, and the ranking lists their keys in hotspot_stage, one per provider, with no attempt floor so a single successful provider callback is included; ranking.truncated says more keys exist. Call once with hotspot_stage upstream_callback and once with upstream_refresh to see each provider's sign-ins and refreshes. These are observations beside each other, not causes. Requires project:read and log:read on the project and mcp:read on the gateway."
+	"To diagnose one person or agent, pass caller with a hotspot's subject key and registered client key instead of key: each stage is counted for them alone, with every provider and with attempts that recorded none (sign-in requests are recorded before the caller is known, so not_recorded lists that stage), the token stage returns last_code_issued_at, and the ranking lists their keys in hotspot_stage, one per provider, with no attempt floor so a single successful provider callback is included; ranking.truncated says more keys exist, and caller echoes whom the answer counted. A caller ranking cannot use hotspot_stage inbound_authorize, which is recorded before the caller is known. Call once with hotspot_stage upstream_callback and once with upstream_refresh to see each provider's sign-ins and refreshes. These are observations beside each other, not causes. Requires project:read and log:read on the project and mcp:read on the gateway."
 
 func registerGatewayConnectionHealthTool(reg *Registrar, reader *PostgresReader) {
 	addTool(reg, &mcp.Tool{

@@ -500,8 +500,13 @@ func (h *ConnectionHealth) Hotspots(ctx context.Context, target ConnectionHealth
 	if !validConnectionStage(query.Stage) {
 		return none, fmt.Errorf("%w: stage must be one of %s", ErrConnectionHealthInvalid, strings.Join(connectionStages, ", "))
 	}
+	// An omitted floor hides one-off keys gateway-wide, but never one
+	// caller's: their single successful attempt with a provider is listed.
 	if query.MinAttempts == 0 {
 		query.MinAttempts = ConnectionHotspotDefaultMinAttempts
+		if query.Caller != nil {
+			query.MinAttempts = 1
+		}
 	}
 	if query.Limit == 0 {
 		query.Limit = ConnectionHotspotMaxLimit
@@ -511,6 +516,11 @@ func (h *ConnectionHealth) Hotspots(ctx context.Context, target ConnectionHealth
 	}
 	var repoCaller *repo.GatewayConnectionCaller
 	if query.Caller != nil {
+		if query.Stage == ConnectionStageInboundAuthorize {
+			// No sign-in request could match: it is recorded before the caller
+			// is known, so an empty ranking would read as none observed.
+			return none, fmt.Errorf("%w: a caller ranking cannot use inbound_authorize, which is recorded before the caller is known", ErrConnectionHealthInvalid)
+		}
 		if err := query.Caller.validate(); err != nil {
 			return none, err
 		}

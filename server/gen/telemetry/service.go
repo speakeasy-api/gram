@@ -1529,8 +1529,10 @@ type ListGatewayConnectionHotspotsPayload struct {
 	Stage string
 	// count ranks by failed attempts; rate by failed attempts over all attempts.
 	RankBy string
-	// Leave out keys with fewer attempts in the window.
-	MinAttempts int64
+	// Leave out keys with fewer attempts in the window. Omitted, it is 5 for the
+	// whole gateway and 1 with caller, so a caller's single attempt with a
+	// provider is listed.
+	MinAttempts *int64
 	// Hotspots to return.
 	Limit int64
 	// Rank only this caller and client's keys, one per provider or for no recorded
@@ -1554,8 +1556,9 @@ type ListGatewayConnectionHotspotsResult struct {
 	MinAttempts int64
 	// Ranked hotspots; ties break by failed attempts, attempts, then key
 	Hotspots []*GatewayConnectionHotspot
-	// More keys met min_attempts than limit returned
-	Truncated bool
+	// More keys met min_attempts than limit returned. A server that does not
+	// report it leaves it out, which means unknown, not complete.
+	Truncated *bool
 	// The caller these keys are scoped to, present only when caller was given and
 	// answered
 	Caller *GatewayConnectionCaller

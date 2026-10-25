@@ -3,13 +3,18 @@ package telemetry_test
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
+	telemetryserver "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -174,19 +179,19 @@ func TestGatewayConnectionCaller_CountsOnlyThatCallerAcrossProviders(t *testing.
 	rank := func(callerScope *gen.GatewayConnectionCaller, limit int64) *gen.ListGatewayConnectionHotspotsResult {
 		t.Helper()
 		f, e := window()
-		result, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: f, To: e, Stage: callback, RankBy: "count", MinAttempts: 1, Limit: limit, Caller: callerScope})
+		result, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: f, To: e, Stage: callback, RankBy: "count", MinAttempts: new(int64(1)), Limit: limit, Caller: callerScope})
 		require.NoError(t, err)
 		return result
 	}
 	global := rank(nil, 25)
-	require.True(t, global.Truncated)
+	require.True(t, *global.Truncated)
 	require.Nil(t, global.Caller)
 	for _, hotspot := range global.Hotspots {
 		require.NotEqual(t, fx.person, hotspot.Subject.ID, "the gateway-wide top keys are all someone else's")
 	}
 
 	ranked := rank(caller, 25)
-	require.False(t, ranked.Truncated)
+	require.False(t, *ranked.Truncated)
 	require.Equal(t, caller, ranked.Caller)
 	byProvider := map[string]*gen.GatewayConnectionHotspot{}
 	for _, hotspot := range ranked.Hotspots {
@@ -209,12 +214,12 @@ func TestGatewayConnectionCaller_CountsOnlyThatCallerAcrossProviders(t *testing.
 
 	capped := rank(caller, 2)
 	require.Len(t, capped.Hotspots, 2)
-	require.True(t, capped.Truncated)
+	require.True(t, *capped.Truncated)
 
 	// A listing records no provider: its empty key is labeled for the whole
 	// gateway, not as having no provider.
 	f, e = window()
-	listings, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: f, To: e, Stage: telemetry.ConnectionStageDiscoveryListing, RankBy: "count", MinAttempts: 1, Limit: 25, Caller: caller})
+	listings, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: f, To: e, Stage: telemetry.ConnectionStageDiscoveryListing, RankBy: "count", MinAttempts: new(int64(1)), Limit: 25, Caller: caller})
 	require.NoError(t, err)
 	require.Len(t, listings.Hotspots, 1)
 	require.Equal(t, "gateway_wide", listings.Hotspots[0].Provider.Kind)
@@ -239,6 +244,11 @@ func TestGatewayConnectionCaller_RefusesBeforeReadingAttempts(t *testing.T) {
 		_, err := ti.service.GetGatewayConnectionHealth(ctx, &gen.GetGatewayConnectionHealthPayload{MetaMcpServerID: gateway, From: nil, To: nil, Key: key, Caller: caller})
 		return err //nolint:wrapcheck // the test reads the handler's own error
 	}
+	// Sign-in requests are recorded before the caller is known, so a caller
+	// ranking of them would always be empty; it is refused, not answered.
+	_, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: nil, To: nil, Stage: telemetry.ConnectionStageInboundAuthorize, RankBy: "count", MinAttempts: new(int64(1)), Limit: 25, Caller: &gen.GatewayConnectionCaller{Subject: fx.person, Client: fx.client}})
+	require.Equal(t, oops.CodeBadRequest, status(err))
+	require.Contains(t, err.Error(), "recorded before the caller is known")
 	require.Equal(t, oops.CodeBadRequest, status(summary(&gen.GatewayConnectionKey{Stage: telemetry.ConnectionStageDiscoveryListing, Subject: fx.person, ProviderID: "", Client: fx.client}, &gen.GatewayConnectionCaller{Subject: fx.person, Client: fx.client})))
 	for name, caller := range map[string]gen.GatewayConnectionCaller{
 		"an API key":          {Subject: "apikey:" + uuid.NewString(), Client: fx.client},
@@ -257,6 +267,9 @@ func TestGatewayConnectionCaller_RefusesBeforeReadingAttempts(t *testing.T) {
 	target := telemetry.ConnectionHealthTarget{ProjectID: uuid.MustParse(ti.projectID), OrganizationID: ti.orgID, GatewayID: fx.gateway.ID}
 	window, err := telemetry.ParseConnectionHealthWindow("", "", time.Now())
 	require.NoError(t, err)
+	visible := telemetry.ConnectionCaller{Subject: fx.person, ClientKey: fx.client}
+	_, err = reader.Hotspots(ctx, target, window, telemetry.ConnectionHotspotQuery{Stage: telemetry.ConnectionStageInboundAuthorize, ByRate: false, MinAttempts: 1, Limit: 25, Caller: &visible})
+	require.ErrorIs(t, err, telemetry.ErrConnectionHealthInvalid, "refused before any attempt is read")
 	for name, caller := range map[string]telemetry.ConnectionCaller{
 		"person outside the organization":  {Subject: urn.NewUserSubject("user_" + uuid.NewString()).String(), ClientKey: fx.client},
 		"client of another sign-in server": {Subject: fx.person, ClientKey: fx.foreignClient},
@@ -268,4 +281,44 @@ func TestGatewayConnectionCaller_RefusesBeforeReadingAttempts(t *testing.T) {
 		require.ErrorIs(t, err, telemetry.ErrConnectionHealthCallerNotFound, name)
 		require.Equal(t, oops.CodeNotFound, status(summary(nil, &gen.GatewayConnectionCaller{Subject: caller.Subject, Client: caller.ClientKey})), name)
 	}
+}
+
+// A hotspot request that omits min_attempts, decoded as the HTTP server
+// decodes it, keeps one-off keys out of the gateway-wide ranking but lists a
+// caller's single successful provider sign-in.
+func TestGatewayConnectionCaller_OmittedFloorDependsOnScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	fx := newCallerFixture(t, ctx, ti)
+	gateway := fx.gateway.ID.String()
+	logConnectionAttempt(t, ctx, ti, connectionAttempt{project: ti.projectID, gateway: gateway, stage: telemetry.ConnectionStageUpstreamCallback, outcome: "stored", reason: "", subject: fx.person, provider: fx.providerA, client: fx.client, retries: 0, at: time.Now().UTC().Add(-time.Hour)})
+
+	decode := func(body string) *gen.ListGatewayConnectionHotspotsPayload {
+		t.Helper()
+		request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/rpc/telemetry.listGatewayConnectionHotspots", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		payload, err := telemetryserver.DecodeListGatewayConnectionHotspotsRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(request)
+		require.NoError(t, err)
+		require.Nil(t, payload.MinAttempts, "an omitted floor is not filled in by the decoder")
+		return payload
+	}
+	gatewayWide := `{"meta_mcp_server_id":"` + gateway + `","stage":"upstream_callback"}`
+	global, err := ti.service.ListGatewayConnectionHotspots(ctx, decode(gatewayWide))
+	require.NoError(t, err)
+	require.Equal(t, int64(telemetry.ConnectionHotspotDefaultMinAttempts), global.MinAttempts)
+	require.Empty(t, global.Hotspots, "a single attempt is below the gateway-wide floor")
+
+	scoped, err := ti.service.ListGatewayConnectionHotspots(ctx, decode(`{"meta_mcp_server_id":"`+gateway+`","stage":"upstream_callback","caller":{"subject":"`+fx.person+`","client":"`+fx.client+`"}}`))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), scoped.MinAttempts)
+	require.Len(t, scoped.Hotspots, 1)
+	require.Equal(t, fx.providerA, *scoped.Hotspots[0].Provider.ID)
+	require.Equal(t, map[string]int64{"stored": 1}, outcomeMap(scoped.Hotspots[0].Outcomes))
+
+	// An explicit caller floor is still applied.
+	explicit, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: nil, To: nil, Stage: telemetry.ConnectionStageUpstreamCallback, RankBy: "count", MinAttempts: new(int64(2)), Limit: 25, Caller: &gen.GatewayConnectionCaller{Subject: fx.person, Client: fx.client}})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), explicit.MinAttempts)
+	require.Empty(t, explicit.Hotspots)
 }

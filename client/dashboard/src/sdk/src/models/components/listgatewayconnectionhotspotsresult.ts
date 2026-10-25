@@ -46,9 +46,9 @@ export type ListGatewayConnectionHotspotsResult = {
    */
   to: Date;
   /**
-   * More keys met min_attempts than limit returned
+   * More keys met min_attempts than limit returned. A server that does not report it leaves it out, which means unknown, not complete.
    */
-  truncated: boolean;
+  truncated?: boolean | undefined;
 };
 
 /** @internal */
@@ -67,7 +67,7 @@ export const ListGatewayConnectionHotspotsResult$inboundSchema: z.ZodMiniType<
     rank_by: z.string(),
     stage: z.string(),
     to: z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    truncated: z.boolean(),
+    truncated: z.optional(z.boolean()),
   }),
   z.transform((v) => {
     return remap$(v, {

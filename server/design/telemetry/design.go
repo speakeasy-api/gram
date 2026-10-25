@@ -3387,10 +3387,9 @@ var ListGatewayConnectionHotspotsPayload = Type("ListGatewayConnectionHotspotsPa
 		Enum("count", "rate")
 		Default("count")
 	})
-	Attribute("min_attempts", Int64, "Leave out keys with fewer attempts in the window.", func() {
+	Attribute("min_attempts", Int64, "Leave out keys with fewer attempts in the window. Omitted, it is 5 for the whole gateway and 1 with caller, so a caller's single attempt with a provider is listed.", func() {
 		Minimum(1)
 		Maximum(100000)
-		Default(5)
 	})
 	Attribute("limit", Int64, "Hotspots to return.", func() {
 		Minimum(1)
@@ -3486,7 +3485,7 @@ var ListGatewayConnectionHotspotsResult = Type("ListGatewayConnectionHotspotsRes
 	Attribute("rank_by", String, "count or rate")
 	Attribute("min_attempts", Int64, "The attempt floor applied")
 	Attribute("hotspots", ArrayOf(GatewayConnectionHotspot), "Ranked hotspots; ties break by failed attempts, attempts, then key")
-	Attribute("truncated", Boolean, "More keys met min_attempts than limit returned")
+	Attribute("truncated", Boolean, "More keys met min_attempts than limit returned. A server that does not report it leaves it out, which means unknown, not complete.")
 	Attribute("caller", GatewayConnectionCaller, "The caller these keys are scoped to, present only when caller was given and answered")
-	Required("from", "to", "stage", "rank_by", "min_attempts", "hotspots", "truncated")
+	Required("from", "to", "stage", "rank_by", "min_attempts", "hotspots")
 })

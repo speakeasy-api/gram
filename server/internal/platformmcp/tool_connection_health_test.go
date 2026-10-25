@@ -206,6 +206,8 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 	}
 
 	_, output, raw := call(base())
+	require.Nil(t, output.Caller, "the whole gateway is not scoped to a caller")
+	require.NotContains(t, raw, `"caller"`)
 	require.Equal(t, project.ID.String(), output.ProjectID)
 	require.Equal(t, at.Add(-time.Hour).Format(time.RFC3339Nano), output.From)
 	require.Equal(t, at.Add(time.Hour).Format(time.RFC3339Nano), output.To)
@@ -236,6 +238,7 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 	// One visible hotspot alone, through the nested key: its own attempts and
 	// timeline, and no ranking.
 	_, output, raw = call(keyed(telemetry.ConnectionStageDiscoveryMember, member, "", registered))
+	require.Nil(t, output.Caller, "a key is not a caller scope")
 	require.NotContains(t, raw, `"ranking"`)
 	require.Len(t, output.Stages, 1)
 	require.EqualValues(t, 5, output.Stages[0].Attempts)
@@ -291,6 +294,12 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 		return arguments
 	}
 	_, output, raw = call(callerArgs(nil))
+	require.Equal(t, &GatewayConnectionCallerInput{Subject: member, Client: registered}, output.Caller, "the answer says whom it counted")
+	var echoed struct {
+		Caller map[string]string `json:"caller"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(raw), &echoed))
+	require.Equal(t, map[string]string{"subject": member, "client": registered}, echoed.Caller, "the tool's own JSON names exactly that caller")
 	require.Contains(t, raw, `"truncated":false`)
 	callerStages := map[string]GatewayConnectionStageSummary{}
 	for _, stage := range output.Stages {
@@ -318,6 +327,7 @@ func TestGatewayConnectionHealthOverCallTool(t *testing.T) {
 		"a negative floor":  {callerArgs(map[string]any{"hotspot_min_attempts": -1}), "hotspot_min_attempts must be 1"},
 		"key and caller":    {callerArgs(map[string]any{"key": map[string]any{"stage": telemetry.ConnectionStageInboundToken, "subject": member, "provider_id": "", "client": registered}}), "give key or caller, not both"},
 		"a recorded kind":   {callerArgs(map[string]any{"caller": map[string]any{"subject": member, "client": "anonymous"}}), "caller client must be a registered client ID"},
+		"sign-in requests":  {callerArgs(map[string]any{"hotspot_stage": telemetry.ConnectionStageInboundAuthorize}), "recorded before the caller is known"},
 	} {
 		require.Contains(t, refusal(refused.arguments), refused.message, name)
 	}

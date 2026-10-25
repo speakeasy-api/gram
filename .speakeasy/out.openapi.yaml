@@ -98557,8 +98557,7 @@ components:
           format: uuid
         min_attempts:
           type: integer
-          description: Leave out keys with fewer attempts in the window.
-          default: 5
+          description: Leave out keys with fewer attempts in the window. Omitted, it is 5 for the whole gateway and 1 with caller, so a caller's single attempt with a provider is listed.
           format: int64
           minimum: 1
           maximum: 100000
@@ -98617,7 +98616,7 @@ components:
           format: date-time
         truncated:
           type: boolean
-          description: More keys met min_attempts than limit returned
+          description: More keys met min_attempts than limit returned. A server that does not report it leaves it out, which means unknown, not complete.
       required:
         - from
         - to
@@ -98625,7 +98624,6 @@ components:
         - rank_by
         - min_attempts
         - hotspots
-        - truncated
     ListGlobalRemoteSessionIssuersResult:
       type: object
       properties:

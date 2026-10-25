@@ -777,11 +777,15 @@ func BuildListGatewayConnectionHotspotsPayload(telemetryListGatewayConnectionHot
 		if !(body.RankBy == "count" || body.RankBy == "rate") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.rank_by", body.RankBy, []any{"count", "rate"}))
 		}
-		if body.MinAttempts < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_attempts", body.MinAttempts, 1, true))
+		if body.MinAttempts != nil {
+			if *body.MinAttempts < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_attempts", *body.MinAttempts, 1, true))
+			}
 		}
-		if body.MinAttempts > 100000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_attempts", body.MinAttempts, 100000, false))
+		if body.MinAttempts != nil {
+			if *body.MinAttempts > 100000 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.min_attempts", *body.MinAttempts, 100000, false))
+			}
 		}
 		if body.Limit < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
@@ -829,12 +833,6 @@ func BuildListGatewayConnectionHotspotsPayload(telemetryListGatewayConnectionHot
 		var zero string
 		if v.RankBy == zero {
 			v.RankBy = "count"
-		}
-	}
-	{
-		var zero int64
-		if v.MinAttempts == zero {
-			v.MinAttempts = 5
 		}
 	}
 	{

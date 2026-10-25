@@ -247,7 +247,9 @@ type ListGatewayConnectionHotspotsRequestBody struct {
 	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
 	// count ranks by failed attempts; rate by failed attempts over all attempts.
 	RankBy *string `form:"rank_by,omitempty" json:"rank_by,omitempty" xml:"rank_by,omitempty"`
-	// Leave out keys with fewer attempts in the window.
+	// Leave out keys with fewer attempts in the window. Omitted, it is 5 for the
+	// whole gateway and 1 with caller, so a caller's single attempt with a
+	// provider is listed.
 	MinAttempts *int64 `form:"min_attempts,omitempty" json:"min_attempts,omitempty" xml:"min_attempts,omitempty"`
 	// Hotspots to return.
 	Limit *int64 `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
@@ -1077,8 +1079,9 @@ type ListGatewayConnectionHotspotsResponseBody struct {
 	MinAttempts int64 `form:"min_attempts" json:"min_attempts" xml:"min_attempts"`
 	// Ranked hotspots; ties break by failed attempts, attempts, then key
 	Hotspots []*GatewayConnectionHotspotResponseBody `form:"hotspots" json:"hotspots" xml:"hotspots"`
-	// More keys met min_attempts than limit returned
-	Truncated bool `form:"truncated" json:"truncated" xml:"truncated"`
+	// More keys met min_attempts than limit returned. A server that does not
+	// report it leaves it out, which means unknown, not complete.
+	Truncated *bool `form:"truncated,omitempty" json:"truncated,omitempty" xml:"truncated,omitempty"`
 	// The caller these keys are scoped to, present only when caller was given and
 	// answered
 	Caller *GatewayConnectionCallerResponseBody `form:"caller,omitempty" json:"caller,omitempty" xml:"caller,omitempty"`
@@ -16825,21 +16828,16 @@ func NewListGatewayConnectionHotspotsPayload(body *ListGatewayConnectionHotspots
 		From:            body.From,
 		To:              body.To,
 		Stage:           *body.Stage,
+		MinAttempts:     body.MinAttempts,
 	}
 	if body.RankBy != nil {
 		v.RankBy = *body.RankBy
-	}
-	if body.MinAttempts != nil {
-		v.MinAttempts = *body.MinAttempts
 	}
 	if body.Limit != nil {
 		v.Limit = *body.Limit
 	}
 	if body.RankBy == nil {
 		v.RankBy = "count"
-	}
-	if body.MinAttempts == nil {
-		v.MinAttempts = 5
 	}
 	if body.Limit == nil {
 		v.Limit = 25

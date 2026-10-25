@@ -79,7 +79,7 @@ func (s *Service) ListGatewayConnectionHotspots(ctx context.Context, payload *te
 	hotspots, err := NewConnectionHealth(s.db, s.chConn, s.logsEnabled, s.authz).Hotspots(ctx, target, window, ConnectionHotspotQuery{
 		Stage:       payload.Stage,
 		ByRate:      payload.RankBy == "rate",
-		MinAttempts: int(payload.MinAttempts),
+		MinAttempts: int(conv.PtrValOr(payload.MinAttempts, 0)),
 		Limit:       int(payload.Limit),
 		Caller:      callerScope(payload.Caller),
 	})
@@ -115,7 +115,7 @@ func (s *Service) ListGatewayConnectionHotspots(ctx context.Context, payload *te
 		RankBy:      rankBy,
 		MinAttempts: int64(hotspots.MinAttempts),
 		Hotspots:    views,
-		Truncated:   hotspots.Truncated,
+		Truncated:   &hotspots.Truncated,
 		Caller:      payload.Caller,
 	}, nil
 }
