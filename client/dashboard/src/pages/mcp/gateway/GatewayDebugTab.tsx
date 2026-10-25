@@ -112,6 +112,12 @@ function fieldLabel(field: SessionFacetField): string {
   return SESSION_FILTER_FIELDS.find((option) => option.key === field)!.label;
 }
 
+function writeFilters(next: URLSearchParams, filters: ActiveLogFilter[]) {
+  const serialized = serializeFilters(filters);
+  if (serialized) next.set(SESSION_FILTER_PARAM, serialized);
+  else next.delete(SESSION_FILTER_PARAM);
+}
+
 export function GatewayDebugTab({
   gatewayId,
 }: {
@@ -162,11 +168,7 @@ export function GatewayDebugTab({
   );
   const setChips = useCallback(
     (filters: ActiveLogFilter[], replace = false) =>
-      updateParams((next) => {
-        const serialized = serializeFilters(filters);
-        if (serialized) next.set(SESSION_FILTER_PARAM, serialized);
-        else next.delete(SESSION_FILTER_PARAM);
-      }, replace),
+      updateParams((next) => writeFilters(next, filters), replace),
     [updateParams],
   );
   // Filters from a link that cannot apply are named once and taken out of it.
@@ -185,6 +187,20 @@ export function GatewayDebugTab({
       setChips(filters);
     },
     [setChips],
+  );
+  // Showing a hotspot's connections replaces the filters and drops the text
+  // search in one history entry, since a search for someone else would hide
+  // every one of them. Editing filters by hand keeps the search.
+  const showMatching = useCallback(
+    (filters: ActiveLogFilter[]) => {
+      setIgnoredChips([]);
+      setSelectionProblem(null);
+      updateParams((next) => {
+        next.delete("q");
+        writeFilters(next, filters);
+      });
+    },
+    [updateParams],
   );
 
   const term = search.trim();
@@ -462,7 +478,7 @@ export function GatewayDebugTab({
     <Stack gap={4}>
       <GatewayConnectionHealth
         gatewayId={gatewayId}
-        onShowConnections={editChips}
+        onShowConnections={showMatching}
       />
       <Text small muted>
         Sessions issued for this gateway, identified by their recorded origin or
