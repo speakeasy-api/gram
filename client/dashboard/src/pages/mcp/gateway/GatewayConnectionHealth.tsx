@@ -1,7 +1,9 @@
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
+import { IdentityLink } from "@/components/identity-link";
 import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +26,7 @@ import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useProject } from "@/contexts/Auth";
+import type { IdentityRef } from "@/lib/identity-urn";
 import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import type { GatewayConnectionHotspot } from "@gram/client/models/components/gatewayconnectionhotspot.js";
 import type { GatewayConnectionStage } from "@gram/client/models/components/gatewayconnectionstage.js";
@@ -455,11 +458,21 @@ function Hotspots({
       key: "subject",
       header: "Person or agent",
       width: "1.5fr",
-      render: (row) => (
-        <Text className="truncate" title={row.subject.label}>
-          {row.subject.label}
-        </Text>
-      ),
+      render: (row) => {
+        // Only a person or agent the reader may see carries an id.
+        let identifier: IdentityRef | null = null;
+        const { id, kind } = row.subject;
+        if (id && (kind === "user" || kind === "agent")) {
+          identifier = { urn: id };
+        }
+        return (
+          <Text className="truncate" title={row.subject.label}>
+            <IdentityLink identifier={identifier}>
+              {row.subject.label}
+            </IdentityLink>
+          </Text>
+        );
+      },
     },
     {
       key: "provider",
@@ -476,9 +489,17 @@ function Hotspots({
       header: "Client",
       width: "1.5fr",
       render: (row) => (
-        <Text muted className="truncate" title={row.client.label}>
-          {row.client.label}
-        </Text>
+        <span className="flex min-w-0 items-center gap-2">
+          {/* Only a registered client's name can name its vendor; every other
+              kind is a description and takes the generic mark. */}
+          <AgentProviderIcon
+            source={row.client.kind === "registered" ? row.client.label : ""}
+            className="text-muted-foreground size-4 shrink-0"
+          />
+          <Text muted className="truncate" title={row.client.label}>
+            {row.client.label}
+          </Text>
+        </span>
       ),
     },
     {
