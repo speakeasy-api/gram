@@ -16188,6 +16188,80 @@ COMMENT ON COLUMN assistant_kit_interrupt_requests.outcome IS '@access: confiden
 COMMENT ON COLUMN assistant_kit_interrupt_requests.created_at IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_interrupt_requests.acknowledged_at IS '@access: confidential';
 
+-- The upstream grants each (subject, sign-in server) pair in a caller's
+-- project is admitted to, with the provider each one signs in to. People and
+-- other direct subjects hold their own grants on a client bound to the sign-in
+-- server, or minted through it. Agents hold only the exact live attachment
+-- that GetPrincipalRemoteSessionBinding serves at runtime; keep that arm's
+-- predicates aligned with it. Expiry is not filtered. Direct grants are split
+-- into a provenance arm and a linked-client arm so each joins on equalities,
+-- and every arm projects the same column types so the planner can flatten the
+-- union into its callers.
+CREATE OR REPLACE FUNCTION session_upstreams(caller_project_id uuid, caller_organization_id text)
+RETURNS TABLE (subject_urn text, user_session_issuer_id uuid, remote_session_id uuid, remote_session_issuer_id uuid, provider_slug text)
+LANGUAGE sql STABLE PARALLEL SAFE
+AS $$
+SELECT rs.subject_urn, usi.id, rs.id, ri.id, ri.slug
+FROM remote_sessions AS rs
+JOIN remote_session_client_user_session_issuers AS blink ON blink.remote_session_client_id = rs.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = blink.user_session_issuer_id
+  AND blink.user_session_issuer_id <> rs.user_session_issuer_id
+JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+WHERE rs.subject_urn NOT LIKE 'agent:%'
+  AND (usi.project_id = caller_project_id OR (usi.project_id IS NULL AND usi.organization_id = caller_organization_id))
+  AND (rc.project_id = caller_project_id OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = caller_organization_id)))
+  AND rs.deleted IS FALSE
+  AND rc.deleted IS FALSE
+  AND ri.deleted IS FALSE
+UNION ALL
+-- Minted through the sign-in server itself, whether or not its client is
+-- still linked; the arm above skips that pair so neither arm repeats it.
+SELECT rs.subject_urn, usi.id, rs.id, ri.id, ri.slug
+FROM remote_sessions AS rs
+JOIN user_session_issuers AS usi ON usi.id = rs.user_session_issuer_id
+JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+WHERE rs.subject_urn NOT LIKE 'agent:%'
+  AND (usi.project_id = caller_project_id OR (usi.project_id IS NULL AND usi.organization_id = caller_organization_id))
+  AND (rc.project_id = caller_project_id OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = caller_organization_id)))
+  AND rs.deleted IS FALSE
+  AND rc.deleted IS FALSE
+  AND ri.deleted IS FALSE
+UNION ALL
+SELECT 'agent:' || b.principal_id::text, b.user_session_issuer_id, s.id, issuer.id, issuer.slug
+FROM principal_remote_session_bindings AS b
+JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+  AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+  AND a.owner_reassignment_required_at IS NULL
+JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+  AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
+JOIN remote_sessions AS s ON s.id = b.remote_session_id
+  AND s.subject_urn = 'user:' || a.owner_user_id
+  AND b.attached_by_subject_id = s.subject_urn
+  AND s.grant_generation = b.grant_generation
+  AND s.remote_session_client_id = b.remote_session_client_id
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
+JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id
+JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
+JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
+WHERE b.project_id = caller_project_id
+  AND b.organization_id = caller_organization_id
+  AND b.revoked_at IS NULL
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND target.deleted IS FALSE
+  AND provenance.deleted IS FALSE
+  AND issuer.deleted IS FALSE
+  AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+  AND (provenance.project_id = caller_project_id OR (provenance.project_id IS NULL AND provenance.organization_id = caller_organization_id))
+  AND (target.project_id = caller_project_id OR (target.project_id IS NULL AND target.organization_id = caller_organization_id))
+  AND (c.project_id = caller_project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = caller_organization_id)))
+$$;
+
 -- The user sessions a caller's project can see, narrowed to those whose shown
 -- labels match search_pattern (an ILIKE pattern; NULL matches every session).
 -- agent_subject_urns names the agents whose names the caller may read.
@@ -16253,87 +16327,25 @@ WHERE (iss.project_id = caller_project_id OR (iss.project_id IS NULL AND iss.org
       )
     )
     OR (
-      s.subject_urn::text NOT LIKE 'agent:%'
-      AND EXISTS (
+      -- Skips the per-session admission joins when no provider the caller's
+      -- clients reach has a matching name. Every admitted upstream goes
+      -- through such a client, so this never drops a match, and another
+      -- tenant's provider names cannot trigger the joins.
+      EXISTS (
         SELECT 1
-        FROM remote_sessions AS rs
-        JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+        FROM remote_session_clients AS rc
         JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
         WHERE ri.slug ILIKE search_pattern
-          AND rs.subject_urn = s.subject_urn::text
           AND (rc.project_id = caller_project_id OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = caller_organization_id)))
-          AND (
-            EXISTS (
-              SELECT 1
-              FROM remote_session_client_user_session_issuers AS blink
-              WHERE blink.remote_session_client_id = rs.remote_session_client_id
-                AND blink.user_session_issuer_id = s.user_session_issuer_id
-            )
-            OR rs.user_session_issuer_id = s.user_session_issuer_id
-          )
-          AND rs.deleted IS FALSE
           AND rc.deleted IS FALSE
           AND ri.deleted IS FALSE
       )
-    )
-    OR (
-      s.subject_urn::text LIKE 'agent:%'
       AND EXISTS (
         SELECT 1
-        FROM remote_sessions AS rs
-        JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
-        JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-        WHERE ri.slug ILIKE search_pattern
-          AND EXISTS (
-            SELECT 1
-            FROM principal_remote_session_bindings AS b
-            JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
-              AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
-              AND a.owner_reassignment_required_at IS NULL
-            JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
-            JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
-              AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
-            JOIN remote_sessions AS bs ON bs.id = b.remote_session_id
-              AND bs.subject_urn = 'user:' || a.owner_user_id
-              AND b.attached_by_subject_id = bs.subject_urn
-              AND bs.grant_generation = b.grant_generation
-              AND bs.remote_session_client_id = b.remote_session_client_id
-            JOIN remote_session_clients AS bc ON bc.id = bs.remote_session_client_id
-            JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
-            JOIN user_session_issuers AS provenance ON provenance.id = bs.user_session_issuer_id
-            JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
-            JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = bc.id AND link.user_session_issuer_id = target.id
-            JOIN remote_session_issuers AS issuer ON issuer.id = bc.remote_session_issuer_id
-            WHERE b.project_id = caller_project_id
-              AND b.organization_id = caller_organization_id
-              AND 'agent:' || b.principal_id::text = s.subject_urn::text
-              AND b.user_session_issuer_id = s.user_session_issuer_id
-              AND b.remote_session_client_id = rs.remote_session_client_id
-              AND b.revoked_at IS NULL
-              AND bs.deleted IS FALSE
-              AND bc.deleted IS FALSE
-              AND target.deleted IS FALSE
-              AND provenance.deleted IS FALSE
-              AND issuer.deleted IS FALSE
-              AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
-              AND (provenance.project_id = caller_project_id OR (provenance.project_id IS NULL AND provenance.organization_id = caller_organization_id))
-              AND (target.project_id = caller_project_id OR (target.project_id IS NULL AND target.organization_id = caller_organization_id))
-              AND (bc.project_id = caller_project_id OR (bc.project_id IS NULL AND (bc.organization_id IS NULL OR bc.organization_id = caller_organization_id)))
-              AND bs.id = rs.id
-          )
-          AND (rc.project_id = caller_project_id OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = caller_organization_id)))
-          AND (
-            EXISTS (
-              SELECT 1
-              FROM remote_session_client_user_session_issuers AS blink
-              WHERE blink.remote_session_client_id = rs.remote_session_client_id
-                AND blink.user_session_issuer_id = s.user_session_issuer_id
-            )
-            OR rs.user_session_issuer_id = s.user_session_issuer_id
-          )
-          AND rs.deleted IS FALSE
-          AND rc.deleted IS FALSE
-          AND ri.deleted IS FALSE
+        FROM session_upstreams(caller_project_id, caller_organization_id) AS up
+        WHERE up.subject_urn = s.subject_urn::text
+          AND up.user_session_issuer_id = s.user_session_issuer_id
+          AND up.provider_slug ILIKE search_pattern
       )
     )
   )

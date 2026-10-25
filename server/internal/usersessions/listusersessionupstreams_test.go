@@ -712,3 +712,74 @@ type attachmentFixtureArgs struct {
 	Project, Agent, Requesting, Provenance, Client, Source, OtherClient, ForeignProject, OtherIssuer uuid.UUID
 	Organization, AgentSubject, Owner                                                                string
 }
+
+// Provider search follows the caller's clients, not the provider's own scope:
+// a name only another project's clients reach never matches, while one
+// reached through an organization-level client does, and so does a provider
+// an organization admin later moved into another project.
+func TestListUserSessions_ProviderSearchFollowsTheCallersClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, auth.ProjectID)
+
+	sibling := seedSiblingProject(t, ctx, ti, "provider-search-sibling")
+	seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(sibling.projectID), sibling.issuerID, urn.NewUserSubject("provider-search-sibling-subject"), "foreign-only-provider.example.com")
+
+	issuerID := seedIssuer(t, ctx, ti, "provider-search-own")
+	subject := urn.NewUserSubject("provider-search-own-subject")
+	own, err := seedUserSession(t, ctx, ti.conn, issuerID, subject)
+	require.NoError(t, err)
+
+	q := remotesessions_repo.New(ti.conn)
+	provider, err := q.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
+		ProjectID: conv.ToNullUUID(*auth.ProjectID), Slug: "project-provider.example.com", Issuer: "https://project-provider.example.com",
+		ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{}, TokenEndpointAuthMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+		OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), RemoteSessionIssuerID: provider.ID, ClientID: "organization-client",
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID, UserSessionIssuerID: issuerID,
+	}))
+	_, err = q.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: client.ID, AccessTokenEncrypted: "encrypted-access", Scopes: []string{},
+	})
+	require.NoError(t, err)
+
+	movedSubject := urn.NewUserSubject("provider-search-moved-subject")
+	moved, err := seedUserSession(t, ctx, ti.conn, issuerID, movedSubject)
+	require.NoError(t, err)
+	orgProvider, err := q.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
+		OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), Slug: "moved-provider.example.com", Issuer: "https://moved-provider.example.com",
+		ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{}, TokenEndpointAuthMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	projectClient, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+		ProjectID: conv.ToNullUUID(*auth.ProjectID), RemoteSessionIssuerID: orgProvider.ID, ClientID: "project-client",
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: projectClient.ID, UserSessionIssuerID: issuerID,
+	}))
+	_, err = q.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: movedSubject, UserSessionIssuerID: issuerID, RemoteSessionClientID: projectClient.ID, AccessTokenEncrypted: "encrypted-access", Scopes: []string{},
+	})
+	require.NoError(t, err)
+	_, err = q.SetOrganizationRemoteSessionIssuerProject(ctx, remotesessions_repo.SetOrganizationRemoteSessionIssuerProjectParams{
+		ProjectID: conv.ToNullUUID(sibling.projectID), ID: orgProvider.ID, OrganizationID: conv.ToPGText(auth.ActiveOrganizationID),
+	})
+	require.NoError(t, err)
+
+	for search, want := range map[string][]string{
+		"foreign-only-provider": {},
+		"project-provider":      {own.ID.String()},
+		"moved-provider":        {moved.ID.String()},
+	} {
+		require.ElementsMatch(t, want, searchSessionIDs(t, ctx, ti, &gen.ListUserSessionsPayload{Search: &search}), "search %q", search)
+	}
+}
