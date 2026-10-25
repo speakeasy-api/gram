@@ -100,6 +100,7 @@ var chPurgeProjectTables = []string{
 	"attribute_keys",
 	"shadow_mcp_inventory_urls",
 	"mcp_network_traffic_hourly_summaries",
+	"mcp_connection_attempt_summaries",
 	"tunnel_metric_snapshots",
 }
 
