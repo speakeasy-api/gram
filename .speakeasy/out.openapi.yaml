@@ -68281,6 +68281,112 @@ paths:
       x-speakeasy-react-hook:
         name: GetEmployeeDataFlowGraph
         type: query
+  /rpc/telemetry.getGatewayConnectionHealth:
+    post:
+      description: Connection attempt outcomes for one gateway (meta MCP server) per recorded stage, with a timeline and the stages that are not recorded. Requires project:read and log:read on the project and mcp:read on the gateway.
+      operationId: getGatewayConnectionHealth
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetGatewayConnectionHealthPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetGatewayConnectionHealthResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getGatewayConnectionHealth telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getGatewayConnectionHealth
+      x-speakeasy-react-hook:
+        name: GatewayConnectionHealth
+        type: query
   /rpc/telemetry.getHooksSummary:
     post:
       description: Get aggregated hooks metrics grouped by server
@@ -70930,6 +71036,112 @@ paths:
       x-speakeasy-name-override: listFilterOptions
       x-speakeasy-react-hook:
         name: ListFilterOptions
+        type: query
+  /rpc/telemetry.listGatewayConnectionHotspots:
+    post:
+      description: The callers, providers, and clients with the most failed connection attempts, or the highest failure rate, within one recorded stage of one gateway. Requires project:read and log:read on the project and mcp:read on the gateway.
+      operationId: listGatewayConnectionHotspots
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListGatewayConnectionHotspotsPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListGatewayConnectionHotspotsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listGatewayConnectionHotspots telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: listGatewayConnectionHotspots
+      x-speakeasy-react-hook:
+        name: GatewayConnectionHotspots
         type: query
   /rpc/telemetry.listHooksTraces:
     post:
@@ -93808,6 +94020,193 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    GatewayConnectionBucket:
+      type: object
+      properties:
+        bucket_time_unix_nano:
+          type: string
+          description: Bucket start time in Unix nanoseconds (string for JS precision)
+        outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayConnectionOutcomeCount'
+          description: Nonzero outcomes in this bucket
+      required:
+        - bucket_time_unix_nano
+        - outcomes
+    GatewayConnectionCoverage:
+      type: object
+      properties:
+        note:
+          type: string
+          description: What is not observed
+        stage:
+          type: string
+          description: The stage
+      description: A connection stage that is not recorded, so its outcomes are unknown rather than zero.
+      required:
+        - stage
+        - note
+    GatewayConnectionHotspot:
+      type: object
+      properties:
+        attempts:
+          type: integer
+          description: All attempts in the stage
+          format: int64
+        blocked:
+          type: integer
+          description: Attempts blocked by a credential or consent the caller can fix; not failures
+          format: int64
+        client:
+          $ref: '#/components/schemas/GatewayConnectionLabel'
+        failed:
+          type: integer
+          description: Attempts that failed
+          format: int64
+        last_seen_at:
+          type: string
+          description: Time of the latest attempt
+          format: date-time
+        outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayConnectionOutcomeCount'
+          description: Nonzero outcomes, summing to attempts
+        provider:
+          $ref: '#/components/schemas/GatewayConnectionLabel'
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayConnectionReasonCount'
+          description: The most frequent sanitized reasons
+        subject:
+          $ref: '#/components/schemas/GatewayConnectionLabel'
+      description: One caller × provider × client within the stage. attempts is the denominator for failed and for blocked.
+      required:
+        - subject
+        - provider
+        - client
+        - attempts
+        - failed
+        - blocked
+        - outcomes
+        - reasons
+    GatewayConnectionKey:
+      type: object
+      properties:
+        client:
+          type: string
+          description: The registered client's ID or the recorded client kind, or empty
+          maxLength: 512
+        provider_id:
+          type: string
+          description: The upstream provider's ID, or empty for none
+          maxLength: 36
+        stage:
+          type: string
+          description: The stage the hotspot is in
+          enum:
+            - discovery_listing
+            - discovery_member
+        subject:
+          type: string
+          description: The caller's URN, or empty for no signed-in caller
+          maxLength: 512
+      description: 'One hotspot to count alone: a stage''s caller, provider, and client, given as the key values the hotspot''s labels return. An empty value matches attempts that recorded none, such as an anonymous caller or a member with no upstream provider.'
+      required:
+        - stage
+        - subject
+        - provider_id
+        - client
+    GatewayConnectionLabel:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The identifier, present only when the named row is visible to the caller
+        key:
+          type: string
+          description: The value to pass in a key filter for this hotspot, possibly empty; absent when the caller may not see this caller, provider, or client
+        kind:
+          type: string
+          description: What the key is, such as user, agent, provider, registered, or unknown
+        label:
+          type: string
+          description: A display name, or a safe description such as Unknown person
+      description: A caller, provider, or client, named only when the project can see it.
+      required:
+        - kind
+        - label
+    GatewayConnectionOutcomeCount:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Attempts with this outcome.
+          format: int64
+        outcome:
+          type: string
+          description: The attempt outcome within its stage, such as complete, partial, failed, listed, credential_blocked, or consent_blocked.
+      required:
+        - outcome
+        - count
+    GatewayConnectionReasonCount:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Attempts with this reason
+          format: int64
+        reason:
+          type: string
+          description: A sanitized reason code
+      required:
+        - reason
+        - count
+    GatewayConnectionStage:
+      type: object
+      properties:
+        attempts:
+          type: integer
+          description: All recorded attempts in this stage
+          format: int64
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayConnectionBucket'
+          description: The window in ascending UTC-aligned buckets of interval_seconds, gap-filled; the first and last may be partial
+        last_seen_at:
+          type: string
+          description: Time of the latest attempt, absent when there was none
+          format: date-time
+        outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayConnectionOutcomeCount'
+          description: Nonzero outcomes, summing to attempts
+        recovered:
+          type: integer
+          description: Members listed only after at least one retry
+          format: int64
+        retries:
+          type: integer
+          description: Retries members needed within their listings
+          format: int64
+        stage:
+          type: string
+          description: discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.
+          enum:
+            - discovery_listing
+            - discovery_member
+      description: One recorded stage over the window. attempts is the denominator for every outcome of this stage.
+      required:
+        - stage
+        - attempts
+        - outcomes
+        - retries
+        - recovered
+        - buckets
     GcpIamCredential:
       type: object
       properties:
@@ -94253,6 +94652,62 @@ components:
       required:
         - interval_seconds
         - buckets
+    GetGatewayConnectionHealthPayload:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start of the window in ISO 8601 format. Defaults to 7 days before to; the window may span at most 30 days.
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        key:
+          $ref: '#/components/schemas/GatewayConnectionKey'
+        meta_mcp_server_id:
+          type: string
+          description: The gateway (meta MCP server) ID
+          format: uuid
+        to:
+          type: string
+          description: End of the window in ISO 8601 format, excluded. Defaults to now.
+          example: "2025-12-26T10:00:00Z"
+          format: date-time
+      required:
+        - meta_mcp_server_id
+    GetGatewayConnectionHealthResult:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Window start
+          format: date-time
+        interval_seconds:
+          type: integer
+          description: 'Timeline bucket width in seconds: a multiple of 30 minutes'
+          format: int64
+        not_recorded:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayConnectionCoverage'
+          description: Stages that are not recorded
+        scope:
+          type: string
+          description: What the recorded stages observe
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayConnectionStage'
+          description: The recorded stages
+        to:
+          type: string
+          description: Window end, excluded
+          format: date-time
+      required:
+        - from
+        - to
+        - interval_seconds
+        - stages
+        - not_recorded
+        - scope
     GetHooksSummaryPayload:
       type: object
       properties:
@@ -98047,6 +98502,86 @@ components:
       description: Result of listing filter options
       required:
         - options
+    ListGatewayConnectionHotspotsPayload:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start of the window in ISO 8601 format. Defaults to 7 days before to; the window may span at most 30 days.
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        limit:
+          type: integer
+          description: Hotspots to return.
+          default: 25
+          format: int64
+          minimum: 1
+          maximum: 25
+        meta_mcp_server_id:
+          type: string
+          description: The gateway (meta MCP server) ID
+          format: uuid
+        min_attempts:
+          type: integer
+          description: Leave out keys with fewer attempts in the window.
+          default: 5
+          format: int64
+          minimum: 1
+          maximum: 100000
+        rank_by:
+          type: string
+          description: count ranks by failed attempts; rate by failed attempts over all attempts.
+          default: count
+          enum:
+            - count
+            - rate
+        stage:
+          type: string
+          description: The recorded stage to rank within; units from different stages are never combined.
+          enum:
+            - discovery_listing
+            - discovery_member
+        to:
+          type: string
+          description: End of the window in ISO 8601 format, excluded. Defaults to now.
+          example: "2025-12-26T10:00:00Z"
+          format: date-time
+      required:
+        - meta_mcp_server_id
+        - stage
+    ListGatewayConnectionHotspotsResult:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Window start
+          format: date-time
+        hotspots:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayConnectionHotspot'
+          description: Ranked hotspots; ties break by failed attempts, attempts, then key
+        min_attempts:
+          type: integer
+          description: The attempt floor applied
+          format: int64
+        rank_by:
+          type: string
+          description: count or rate
+        stage:
+          type: string
+          description: The stage ranked within
+        to:
+          type: string
+          description: Window end, excluded
+          format: date-time
+      required:
+        - from
+        - to
+        - stage
+        - rank_by
+        - min_attempts
+        - hotspots
     ListGlobalRemoteSessionIssuersResult:
       type: object
       properties:

@@ -26,6 +26,8 @@ type Client struct {
 	GetObservabilityOverviewEndpoint         goa.Endpoint
 	GetMcpNetworkTrafficEndpoint             goa.Endpoint
 	GetMetaMcpServerUsageEndpoint            goa.Endpoint
+	GetGatewayConnectionHealthEndpoint       goa.Endpoint
+	ListGatewayConnectionHotspotsEndpoint    goa.Endpoint
 	GetProjectOverviewEndpoint               goa.Endpoint
 	GetUnproxiedMcpServerUsageEndpoint       goa.Endpoint
 	GetUnproxiedMcpServerToolUsageEndpoint   goa.Endpoint
@@ -54,7 +56,7 @@ type Client struct {
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getMcpNetworkTraffic, getMetaMcpServerUsage, getProjectOverview, getUnproxiedMcpServerUsage, getUnproxiedMcpServerToolUsage, getUnproxiedMcpServerUserUsage, getUnproxiedMcpServerClientUsage, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageClients, getToolUsageClientToolBreakdown, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getMcpNetworkTraffic, getMetaMcpServerUsage, getGatewayConnectionHealth, listGatewayConnectionHotspots, getProjectOverview, getUnproxiedMcpServerUsage, getUnproxiedMcpServerToolUsage, getUnproxiedMcpServerUserUsage, getUnproxiedMcpServerClientUsage, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageClients, getToolUsageClientToolBreakdown, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
 	return &Client{
 		SearchLogsEndpoint:                       searchLogs,
 		SearchToolCallsEndpoint:                  searchToolCalls,
@@ -67,6 +69,8 @@ func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEve
 		GetObservabilityOverviewEndpoint:         getObservabilityOverview,
 		GetMcpNetworkTrafficEndpoint:             getMcpNetworkTraffic,
 		GetMetaMcpServerUsageEndpoint:            getMetaMcpServerUsage,
+		GetGatewayConnectionHealthEndpoint:       getGatewayConnectionHealth,
+		ListGatewayConnectionHotspotsEndpoint:    listGatewayConnectionHotspots,
 		GetProjectOverviewEndpoint:               getProjectOverview,
 		GetUnproxiedMcpServerUsageEndpoint:       getUnproxiedMcpServerUsage,
 		GetUnproxiedMcpServerToolUsageEndpoint:   getUnproxiedMcpServerToolUsage,
@@ -342,6 +346,52 @@ func (c *Client) GetMetaMcpServerUsage(ctx context.Context, p *GetMetaMcpServerU
 		return
 	}
 	return ires.(*GetMetaMcpServerUsageResult), nil
+}
+
+// GetGatewayConnectionHealth calls the "getGatewayConnectionHealth" endpoint
+// of the "telemetry" service.
+// GetGatewayConnectionHealth may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetGatewayConnectionHealth(ctx context.Context, p *GetGatewayConnectionHealthPayload) (res *GetGatewayConnectionHealthResult, err error) {
+	var ires any
+	ires, err = c.GetGatewayConnectionHealthEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetGatewayConnectionHealthResult), nil
+}
+
+// ListGatewayConnectionHotspots calls the "listGatewayConnectionHotspots"
+// endpoint of the "telemetry" service.
+// ListGatewayConnectionHotspots may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListGatewayConnectionHotspots(ctx context.Context, p *ListGatewayConnectionHotspotsPayload) (res *ListGatewayConnectionHotspotsResult, err error) {
+	var ires any
+	ires, err = c.ListGatewayConnectionHotspotsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListGatewayConnectionHotspotsResult), nil
 }
 
 // GetProjectOverview calls the "getProjectOverview" endpoint of the

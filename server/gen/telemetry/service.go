@@ -42,6 +42,15 @@ type Service interface {
 	// Discovery funnel and per-member execution breakdown for one gateway (meta
 	// MCP server), from gateway-attributed telemetry.
 	GetMetaMcpServerUsage(context.Context, *GetMetaMcpServerUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
+	// Connection attempt outcomes for one gateway (meta MCP server) per recorded
+	// stage, with a timeline and the stages that are not recorded. Requires
+	// project:read and log:read on the project and mcp:read on the gateway.
+	GetGatewayConnectionHealth(context.Context, *GetGatewayConnectionHealthPayload) (res *GetGatewayConnectionHealthResult, err error)
+	// The callers, providers, and clients with the most failed connection
+	// attempts, or the highest failure rate, within one recorded stage of one
+	// gateway. Requires project:read and log:read on the project and mcp:read on
+	// the gateway.
+	ListGatewayConnectionHotspots(context.Context, *ListGatewayConnectionHotspotsPayload) (res *ListGatewayConnectionHotspotsResult, err error)
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
 	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
@@ -140,7 +149,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [36]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
+var MethodNames = [38]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getGatewayConnectionHealth", "listGatewayConnectionHotspots", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -236,6 +245,106 @@ type FilterOption struct {
 	Count int64
 }
 
+type GatewayConnectionBucket struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string
+	// Nonzero outcomes in this bucket
+	Outcomes []*GatewayConnectionOutcomeCount
+}
+
+// A connection stage that is not recorded, so its outcomes are unknown rather
+// than zero.
+type GatewayConnectionCoverage struct {
+	// The stage
+	Stage string
+	// What is not observed
+	Note string
+}
+
+// One caller × provider × client within the stage. attempts is the denominator
+// for failed and for blocked.
+type GatewayConnectionHotspot struct {
+	Subject  *GatewayConnectionLabel
+	Provider *GatewayConnectionLabel
+	Client   *GatewayConnectionLabel
+	// All attempts in the stage
+	Attempts int64
+	// Attempts that failed
+	Failed int64
+	// Attempts blocked by a credential or consent the caller can fix; not failures
+	Blocked int64
+	// Nonzero outcomes, summing to attempts
+	Outcomes []*GatewayConnectionOutcomeCount
+	// The most frequent sanitized reasons
+	Reasons []*GatewayConnectionReasonCount
+	// Time of the latest attempt
+	LastSeenAt *string
+}
+
+// One hotspot to count alone: a stage's caller, provider, and client, given as
+// the key values the hotspot's labels return. An empty value matches attempts
+// that recorded none, such as an anonymous caller or a member with no upstream
+// provider.
+type GatewayConnectionKey struct {
+	// The stage the hotspot is in
+	Stage string
+	// The caller's URN, or empty for no signed-in caller
+	Subject string
+	// The upstream provider's ID, or empty for none
+	ProviderID string
+	// The registered client's ID or the recorded client kind, or empty
+	Client string
+}
+
+// A caller, provider, or client, named only when the project can see it.
+type GatewayConnectionLabel struct {
+	// What the key is, such as user, agent, provider, registered, or unknown
+	Kind string
+	// A display name, or a safe description such as Unknown person
+	Label string
+	// The identifier, present only when the named row is visible to the caller
+	ID *string
+	// The value to pass in a key filter for this hotspot, possibly empty; absent
+	// when the caller may not see this caller, provider, or client
+	Key *string
+}
+
+type GatewayConnectionOutcomeCount struct {
+	// The attempt outcome within its stage, such as complete, partial, failed,
+	// listed, credential_blocked, or consent_blocked.
+	Outcome string
+	// Attempts with this outcome.
+	Count int64
+}
+
+type GatewayConnectionReasonCount struct {
+	// A sanitized reason code
+	Reason string
+	// Attempts with this reason
+	Count int64
+}
+
+// One recorded stage over the window. attempts is the denominator for every
+// outcome of this stage.
+type GatewayConnectionStage struct {
+	// discovery_listing counts Direct tools/list calls; discovery_member counts
+	// the members each listing reached.
+	Stage string
+	// All recorded attempts in this stage
+	Attempts int64
+	// Nonzero outcomes, summing to attempts
+	Outcomes []*GatewayConnectionOutcomeCount
+	// Retries members needed within their listings
+	Retries int64
+	// Members listed only after at least one retry
+	Recovered int64
+	// Time of the latest attempt, absent when there was none
+	LastSeenAt *string
+	// The window in ascending UTC-aligned buckets of interval_seconds, gap-filled;
+	// the first and last may be partial
+	Buckets []*GatewayConnectionBucket
+}
+
 // GetEmployeeDataFlowGraphPayload is the payload type of the telemetry service
 // getEmployeeDataFlowGraph method.
 type GetEmployeeDataFlowGraphPayload struct {
@@ -264,6 +373,41 @@ type GetEmployeeDataFlowGraphResult struct {
 	Nodes []*EmployeeDataFlowNode
 	// Weighted graph edges between adjacent populated tiers
 	Edges []*EmployeeDataFlowEdge
+}
+
+// GetGatewayConnectionHealthPayload is the payload type of the telemetry
+// service getGatewayConnectionHealth method.
+type GetGatewayConnectionHealthPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The gateway (meta MCP server) ID
+	MetaMcpServerID string
+	// Start of the window in ISO 8601 format. Defaults to 7 days before to; the
+	// window may span at most 30 days.
+	From *string
+	// End of the window in ISO 8601 format, excluded. Defaults to now.
+	To *string
+	// Count only this hotspot's attempts, in its stage alone. Absent counts the
+	// whole gateway.
+	Key *GatewayConnectionKey
+}
+
+// GetGatewayConnectionHealthResult is the result type of the telemetry service
+// getGatewayConnectionHealth method.
+type GetGatewayConnectionHealthResult struct {
+	// Window start
+	From string
+	// Window end, excluded
+	To string
+	// Timeline bucket width in seconds: a multiple of 30 minutes
+	IntervalSeconds int64
+	// The recorded stages
+	Stages []*GatewayConnectionStage
+	// Stages that are not recorded
+	NotRecorded []*GatewayConnectionCoverage
+	// What the recorded stages observe
+	Scope string
 }
 
 // GetHooksSummaryPayload is the payload type of the telemetry service
@@ -1332,6 +1476,47 @@ type ListFilterOptionsPayload struct {
 type ListFilterOptionsResult struct {
 	// List of filter options
 	Options []*FilterOption
+}
+
+// ListGatewayConnectionHotspotsPayload is the payload type of the telemetry
+// service listGatewayConnectionHotspots method.
+type ListGatewayConnectionHotspotsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The gateway (meta MCP server) ID
+	MetaMcpServerID string
+	// Start of the window in ISO 8601 format. Defaults to 7 days before to; the
+	// window may span at most 30 days.
+	From *string
+	// End of the window in ISO 8601 format, excluded. Defaults to now.
+	To *string
+	// The recorded stage to rank within; units from different stages are never
+	// combined.
+	Stage string
+	// count ranks by failed attempts; rate by failed attempts over all attempts.
+	RankBy string
+	// Leave out keys with fewer attempts in the window.
+	MinAttempts int64
+	// Hotspots to return.
+	Limit int64
+}
+
+// ListGatewayConnectionHotspotsResult is the result type of the telemetry
+// service listGatewayConnectionHotspots method.
+type ListGatewayConnectionHotspotsResult struct {
+	// Window start
+	From string
+	// Window end, excluded
+	To string
+	// The stage ranked within
+	Stage string
+	// count or rate
+	RankBy string
+	// The attempt floor applied
+	MinAttempts int64
+	// Ranked hotspots; ties break by failed attempts, attempts, then key
+	Hotspots []*GatewayConnectionHotspot
 }
 
 // ListHooksTracesPayload is the payload type of the telemetry service

@@ -23,6 +23,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -374,6 +375,7 @@ type PostgresReader struct {
 	recentToolCalls           *RecentToolCallReadService
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
+	connectionHealth          *telemetry.ConnectionHealth
 	eventFeed                 *EventFeedReadService
 	networkIngress            *NetworkIngressStatusService
 	authz                     *authz.Engine
@@ -433,6 +435,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		widgets:                   nil,
 		dashboards:                nil,
 		gatewayConnections:        nil,
+		connectionHealth:          nil,
 	}
 }
 

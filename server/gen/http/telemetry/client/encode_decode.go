@@ -2690,6 +2690,493 @@ func DecodeGetMetaMcpServerUsageResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetGatewayConnectionHealthRequest instantiates a HTTP request object
+// with method and path set to call the "telemetry" service
+// "getGatewayConnectionHealth" endpoint
+func (c *Client) BuildGetGatewayConnectionHealthRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetGatewayConnectionHealthTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getGatewayConnectionHealth", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetGatewayConnectionHealthRequest returns an encoder for requests sent
+// to the telemetry getGatewayConnectionHealth server.
+func EncodeGetGatewayConnectionHealthRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetGatewayConnectionHealthPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getGatewayConnectionHealth", "*telemetry.GetGatewayConnectionHealthPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGetGatewayConnectionHealthRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getGatewayConnectionHealth", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetGatewayConnectionHealthResponse returns a decoder for responses
+// returned by the telemetry getGatewayConnectionHealth endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetGatewayConnectionHealthResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetGatewayConnectionHealthResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetGatewayConnectionHealthResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			err = ValidateGetGatewayConnectionHealthResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			res := NewGetGatewayConnectionHealthResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetGatewayConnectionHealthUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			err = ValidateGetGatewayConnectionHealthUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			return nil, NewGetGatewayConnectionHealthUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetGatewayConnectionHealthForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			err = ValidateGetGatewayConnectionHealthForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			return nil, NewGetGatewayConnectionHealthForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetGatewayConnectionHealthBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			err = ValidateGetGatewayConnectionHealthBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			return nil, NewGetGatewayConnectionHealthBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetGatewayConnectionHealthNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			err = ValidateGetGatewayConnectionHealthNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			return nil, NewGetGatewayConnectionHealthNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetGatewayConnectionHealthConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			err = ValidateGetGatewayConnectionHealthConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			return nil, NewGetGatewayConnectionHealthConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetGatewayConnectionHealthUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			err = ValidateGetGatewayConnectionHealthUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			return nil, NewGetGatewayConnectionHealthUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetGatewayConnectionHealthInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			err = ValidateGetGatewayConnectionHealthInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			return nil, NewGetGatewayConnectionHealthInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetGatewayConnectionHealthInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getGatewayConnectionHealth", err)
+				}
+				err = ValidateGetGatewayConnectionHealthInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getGatewayConnectionHealth", err)
+				}
+				return nil, NewGetGatewayConnectionHealthInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetGatewayConnectionHealthUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getGatewayConnectionHealth", err)
+				}
+				err = ValidateGetGatewayConnectionHealthUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getGatewayConnectionHealth", err)
+				}
+				return nil, NewGetGatewayConnectionHealthUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getGatewayConnectionHealth", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetGatewayConnectionHealthGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			err = ValidateGetGatewayConnectionHealthGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getGatewayConnectionHealth", err)
+			}
+			return nil, NewGetGatewayConnectionHealthGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getGatewayConnectionHealth", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListGatewayConnectionHotspotsRequest instantiates a HTTP request object
+// with method and path set to call the "telemetry" service
+// "listGatewayConnectionHotspots" endpoint
+func (c *Client) BuildListGatewayConnectionHotspotsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListGatewayConnectionHotspotsTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "listGatewayConnectionHotspots", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListGatewayConnectionHotspotsRequest returns an encoder for requests
+// sent to the telemetry listGatewayConnectionHotspots server.
+func EncodeListGatewayConnectionHotspotsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.ListGatewayConnectionHotspotsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "listGatewayConnectionHotspots", "*telemetry.ListGatewayConnectionHotspotsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewListGatewayConnectionHotspotsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "listGatewayConnectionHotspots", err)
+		}
+		return nil
+	}
+}
+
+// DecodeListGatewayConnectionHotspotsResponse returns a decoder for responses
+// returned by the telemetry listGatewayConnectionHotspots endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeListGatewayConnectionHotspotsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListGatewayConnectionHotspotsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListGatewayConnectionHotspotsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			err = ValidateListGatewayConnectionHotspotsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			res := NewListGatewayConnectionHotspotsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListGatewayConnectionHotspotsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			err = ValidateListGatewayConnectionHotspotsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			return nil, NewListGatewayConnectionHotspotsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListGatewayConnectionHotspotsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			err = ValidateListGatewayConnectionHotspotsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			return nil, NewListGatewayConnectionHotspotsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListGatewayConnectionHotspotsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			err = ValidateListGatewayConnectionHotspotsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			return nil, NewListGatewayConnectionHotspotsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListGatewayConnectionHotspotsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			err = ValidateListGatewayConnectionHotspotsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			return nil, NewListGatewayConnectionHotspotsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListGatewayConnectionHotspotsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			err = ValidateListGatewayConnectionHotspotsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			return nil, NewListGatewayConnectionHotspotsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListGatewayConnectionHotspotsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			err = ValidateListGatewayConnectionHotspotsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			return nil, NewListGatewayConnectionHotspotsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListGatewayConnectionHotspotsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			err = ValidateListGatewayConnectionHotspotsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			return nil, NewListGatewayConnectionHotspotsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListGatewayConnectionHotspotsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "listGatewayConnectionHotspots", err)
+				}
+				err = ValidateListGatewayConnectionHotspotsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "listGatewayConnectionHotspots", err)
+				}
+				return nil, NewListGatewayConnectionHotspotsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListGatewayConnectionHotspotsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "listGatewayConnectionHotspots", err)
+				}
+				err = ValidateListGatewayConnectionHotspotsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "listGatewayConnectionHotspots", err)
+				}
+				return nil, NewListGatewayConnectionHotspotsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "listGatewayConnectionHotspots", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListGatewayConnectionHotspotsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			err = ValidateListGatewayConnectionHotspotsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listGatewayConnectionHotspots", err)
+			}
+			return nil, NewListGatewayConnectionHotspotsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "listGatewayConnectionHotspots", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetProjectOverviewRequest instantiates a HTTP request object with
 // method and path set to call the "telemetry" service "getProjectOverview"
 // endpoint
@@ -9404,6 +9891,173 @@ func unmarshalMetaMcpDiscoveryFailureBucketResponseBodyToTelemetryMetaMcpDiscove
 	res := &telemetry.MetaMcpDiscoveryFailureBucket{
 		BucketTimeUnixNano: *v.BucketTimeUnixNano,
 		Count:              *v.Count,
+	}
+
+	return res
+}
+
+// marshalTelemetryGatewayConnectionKeyToGatewayConnectionKeyRequestBody builds
+// a value of type *GatewayConnectionKeyRequestBody from a value of type
+// *telemetry.GatewayConnectionKey.
+func marshalTelemetryGatewayConnectionKeyToGatewayConnectionKeyRequestBody(v *telemetry.GatewayConnectionKey) *GatewayConnectionKeyRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &GatewayConnectionKeyRequestBody{
+		Stage:      v.Stage,
+		Subject:    v.Subject,
+		ProviderID: v.ProviderID,
+		Client:     v.Client,
+	}
+
+	return res
+}
+
+// marshalGatewayConnectionKeyRequestBodyToTelemetryGatewayConnectionKey builds
+// a value of type *telemetry.GatewayConnectionKey from a value of type
+// *GatewayConnectionKeyRequestBody.
+func marshalGatewayConnectionKeyRequestBodyToTelemetryGatewayConnectionKey(v *GatewayConnectionKeyRequestBody) *telemetry.GatewayConnectionKey {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.GatewayConnectionKey{
+		Stage:      v.Stage,
+		Subject:    v.Subject,
+		ProviderID: v.ProviderID,
+		Client:     v.Client,
+	}
+
+	return res
+}
+
+// unmarshalGatewayConnectionStageResponseBodyToTelemetryGatewayConnectionStage
+// builds a value of type *telemetry.GatewayConnectionStage from a value of
+// type *GatewayConnectionStageResponseBody.
+func unmarshalGatewayConnectionStageResponseBodyToTelemetryGatewayConnectionStage(v *GatewayConnectionStageResponseBody) *telemetry.GatewayConnectionStage {
+	res := &telemetry.GatewayConnectionStage{
+		Stage:      *v.Stage,
+		Attempts:   *v.Attempts,
+		Retries:    *v.Retries,
+		Recovered:  *v.Recovered,
+		LastSeenAt: v.LastSeenAt,
+	}
+	res.Outcomes = make([]*telemetry.GatewayConnectionOutcomeCount, len(v.Outcomes))
+	for i, val := range v.Outcomes {
+		if val == nil {
+			res.Outcomes[i] = nil
+			continue
+		}
+		res.Outcomes[i] = unmarshalGatewayConnectionOutcomeCountResponseBodyToTelemetryGatewayConnectionOutcomeCount(val)
+	}
+	res.Buckets = make([]*telemetry.GatewayConnectionBucket, len(v.Buckets))
+	for i, val := range v.Buckets {
+		if val == nil {
+			res.Buckets[i] = nil
+			continue
+		}
+		res.Buckets[i] = unmarshalGatewayConnectionBucketResponseBodyToTelemetryGatewayConnectionBucket(val)
+	}
+
+	return res
+}
+
+// unmarshalGatewayConnectionOutcomeCountResponseBodyToTelemetryGatewayConnectionOutcomeCount
+// builds a value of type *telemetry.GatewayConnectionOutcomeCount from a value
+// of type *GatewayConnectionOutcomeCountResponseBody.
+func unmarshalGatewayConnectionOutcomeCountResponseBodyToTelemetryGatewayConnectionOutcomeCount(v *GatewayConnectionOutcomeCountResponseBody) *telemetry.GatewayConnectionOutcomeCount {
+	res := &telemetry.GatewayConnectionOutcomeCount{
+		Outcome: *v.Outcome,
+		Count:   *v.Count,
+	}
+
+	return res
+}
+
+// unmarshalGatewayConnectionBucketResponseBodyToTelemetryGatewayConnectionBucket
+// builds a value of type *telemetry.GatewayConnectionBucket from a value of
+// type *GatewayConnectionBucketResponseBody.
+func unmarshalGatewayConnectionBucketResponseBodyToTelemetryGatewayConnectionBucket(v *GatewayConnectionBucketResponseBody) *telemetry.GatewayConnectionBucket {
+	res := &telemetry.GatewayConnectionBucket{
+		BucketTimeUnixNano: *v.BucketTimeUnixNano,
+	}
+	res.Outcomes = make([]*telemetry.GatewayConnectionOutcomeCount, len(v.Outcomes))
+	for i, val := range v.Outcomes {
+		if val == nil {
+			res.Outcomes[i] = nil
+			continue
+		}
+		res.Outcomes[i] = unmarshalGatewayConnectionOutcomeCountResponseBodyToTelemetryGatewayConnectionOutcomeCount(val)
+	}
+
+	return res
+}
+
+// unmarshalGatewayConnectionCoverageResponseBodyToTelemetryGatewayConnectionCoverage
+// builds a value of type *telemetry.GatewayConnectionCoverage from a value of
+// type *GatewayConnectionCoverageResponseBody.
+func unmarshalGatewayConnectionCoverageResponseBodyToTelemetryGatewayConnectionCoverage(v *GatewayConnectionCoverageResponseBody) *telemetry.GatewayConnectionCoverage {
+	res := &telemetry.GatewayConnectionCoverage{
+		Stage: *v.Stage,
+		Note:  *v.Note,
+	}
+
+	return res
+}
+
+// unmarshalGatewayConnectionHotspotResponseBodyToTelemetryGatewayConnectionHotspot
+// builds a value of type *telemetry.GatewayConnectionHotspot from a value of
+// type *GatewayConnectionHotspotResponseBody.
+func unmarshalGatewayConnectionHotspotResponseBodyToTelemetryGatewayConnectionHotspot(v *GatewayConnectionHotspotResponseBody) *telemetry.GatewayConnectionHotspot {
+	res := &telemetry.GatewayConnectionHotspot{
+		Attempts:   *v.Attempts,
+		Failed:     *v.Failed,
+		Blocked:    *v.Blocked,
+		LastSeenAt: v.LastSeenAt,
+	}
+	res.Subject = unmarshalGatewayConnectionLabelResponseBodyToTelemetryGatewayConnectionLabel(v.Subject)
+	res.Provider = unmarshalGatewayConnectionLabelResponseBodyToTelemetryGatewayConnectionLabel(v.Provider)
+	res.Client = unmarshalGatewayConnectionLabelResponseBodyToTelemetryGatewayConnectionLabel(v.Client)
+	res.Outcomes = make([]*telemetry.GatewayConnectionOutcomeCount, len(v.Outcomes))
+	for i, val := range v.Outcomes {
+		if val == nil {
+			res.Outcomes[i] = nil
+			continue
+		}
+		res.Outcomes[i] = unmarshalGatewayConnectionOutcomeCountResponseBodyToTelemetryGatewayConnectionOutcomeCount(val)
+	}
+	res.Reasons = make([]*telemetry.GatewayConnectionReasonCount, len(v.Reasons))
+	for i, val := range v.Reasons {
+		if val == nil {
+			res.Reasons[i] = nil
+			continue
+		}
+		res.Reasons[i] = unmarshalGatewayConnectionReasonCountResponseBodyToTelemetryGatewayConnectionReasonCount(val)
+	}
+
+	return res
+}
+
+// unmarshalGatewayConnectionLabelResponseBodyToTelemetryGatewayConnectionLabel
+// builds a value of type *telemetry.GatewayConnectionLabel from a value of
+// type *GatewayConnectionLabelResponseBody.
+func unmarshalGatewayConnectionLabelResponseBodyToTelemetryGatewayConnectionLabel(v *GatewayConnectionLabelResponseBody) *telemetry.GatewayConnectionLabel {
+	res := &telemetry.GatewayConnectionLabel{
+		Kind:  *v.Kind,
+		Label: *v.Label,
+		ID:    v.ID,
+		Key:   v.Key,
+	}
+
+	return res
+}
+
+// unmarshalGatewayConnectionReasonCountResponseBodyToTelemetryGatewayConnectionReasonCount
+// builds a value of type *telemetry.GatewayConnectionReasonCount from a value
+// of type *GatewayConnectionReasonCountResponseBody.
+func unmarshalGatewayConnectionReasonCountResponseBodyToTelemetryGatewayConnectionReasonCount(v *GatewayConnectionReasonCountResponseBody) *telemetry.GatewayConnectionReasonCount {
+	res := &telemetry.GatewayConnectionReasonCount{
+		Reason: *v.Reason,
+		Count:  *v.Count,
 	}
 
 	return res

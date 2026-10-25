@@ -884,13 +884,19 @@ func (s *seeder) chfGatewayListingAttempts() []chfTelemetryRow {
 		11: {listed("support", 1), listed("ops", 1), listed("linear", 1), failed("slack", "endpoint", "upstream_unavailable", 3, 503)},
 		16: {listed("support", 1), listed("ops", 1), blocked("linear", "credential_blocked", "needs_sign_in"), listed("slack", 1)},
 		20: {listed("support", 1), failed("ops", "internal", "listing_budget_exhausted", 0, 0), listed("linear", 1), failed("slack", "endpoint", "listing_timeout", 1, 0)},
-		24: {listed("support", 1), listed("ops", 1), listed("linear", 1), blocked("slack", "consent_blocked", "consent_not_approved")},
+		23: {listed("support", 1), listed("ops", 1), listed("linear", 1), blocked("slack", "consent_blocked", "consent_not_approved")},
 		29: {listed("support", 1), listed("ops", 1), listed("linear", 3), listed("slack", 2)},
 		31: {failed("support", "internal", "listing_budget_exhausted", 0, 0), failed("ops", "internal", "listing_budget_exhausted", 0, 0), failed("linear", "endpoint", "listing_timeout", 1, 0), failed("slack", "endpoint", "upstream_unavailable", 3, 503)},
 		33: {listed("support", 1), listed("ops", 1), failed("linear", "endpoint", "rate_limited", 2, 429), listed("slack", 1)},
 		38: {listed("support", 1), listed("ops", 1), listed("linear", 1), failed("slack", "endpoint", "upstream_unavailable", 3, 503)},
 		39: {listed("support", 1), listed("ops", 1), failed("linear", "endpoint", "rate_limited", 3, 429), listed("slack", 1)},
 	}
+	// Listings that failed before their members were known record no member
+	// rows. Listing 21's client kept a cursor from an earlier paginated
+	// listing; its next listing, 22, is complete. Listing 23 waits on consent
+	// for Slack; the same person's listing 25 lists it.
+	listingOnly := map[int][3]string{21: {"failed", "configuration", "stale_cursor"}}
+	callers := map[int]string{21: demoUsers[0].handle, 22: demoUsers[0].handle, 23: demoUsers[1].handle, 25: demoUsers[1].handle}
 	resource := `,"gram.project.id":"` + s.projectID().String() + `"`
 	// Strictly past times inside the current half-hour, or just before now
 	// when the half-hour has only just begun.
@@ -906,6 +912,9 @@ func (s *seeder) chfGatewayListingAttempts() []chfTelemetryRow {
 			}
 		}
 		handle := demoUsers[hash64("gwlistu", n)%6].handle
+		if fixed, ok := callers[n]; ok {
+			handle = fixed
+		}
 		subject := urn.NewUserSubject(s.userID(handle)).String()
 		clientKey := s.det("usc-gateway").String()
 		if n%5 == 4 {
@@ -915,6 +924,10 @@ func (s *seeder) chfGatewayListingAttempts() []chfTelemetryRow {
 		members, ok := special[n]
 		if !ok {
 			members = []chfGatewayMemberAttempt{listed("support", 1), listed("ops", 1), listed("linear", 1), listed("slack", 1)}
+		}
+		failure, early := listingOnly[n]
+		if early {
+			members = nil
 		}
 		// The gateway's rule: partial when some member listed, failed when
 		// none did, taking the endpoint's class before the gateway's.
@@ -928,6 +941,8 @@ func (s *seeder) chfGatewayListingAttempts() []chfTelemetryRow {
 			}
 		}
 		switch {
+		case early:
+			outcome, class, reason = failure[0], failure[1], failure[2]
 		case listedCount == len(members):
 			class = ""
 		case listedCount > 0:

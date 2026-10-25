@@ -195,7 +195,7 @@ func UsageCommands() []string {
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"slack-directory-connections (list|sync|list-members|list-person-accounts|get-member|set-mapping|begin|disconnect)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-mcp-network-traffic|get-meta-mcp-server-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-mcp-network-traffic|get-meta-mcp-server-usage|get-gateway-connection-health|list-gateway-connection-hotspots|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
@@ -3999,6 +3999,18 @@ func ParseEndpoint(
 		telemetryGetMetaMcpServerUsageSessionTokenFlag     = telemetryGetMetaMcpServerUsageFlags.String("session-token", "", "")
 		telemetryGetMetaMcpServerUsageProjectSlugInputFlag = telemetryGetMetaMcpServerUsageFlags.String("project-slug-input", "", "")
 
+		telemetryGetGatewayConnectionHealthFlags                = flag.NewFlagSet("get-gateway-connection-health", flag.ExitOnError)
+		telemetryGetGatewayConnectionHealthBodyFlag             = telemetryGetGatewayConnectionHealthFlags.String("body", "REQUIRED", "")
+		telemetryGetGatewayConnectionHealthApikeyTokenFlag      = telemetryGetGatewayConnectionHealthFlags.String("apikey-token", "", "")
+		telemetryGetGatewayConnectionHealthSessionTokenFlag     = telemetryGetGatewayConnectionHealthFlags.String("session-token", "", "")
+		telemetryGetGatewayConnectionHealthProjectSlugInputFlag = telemetryGetGatewayConnectionHealthFlags.String("project-slug-input", "", "")
+
+		telemetryListGatewayConnectionHotspotsFlags                = flag.NewFlagSet("list-gateway-connection-hotspots", flag.ExitOnError)
+		telemetryListGatewayConnectionHotspotsBodyFlag             = telemetryListGatewayConnectionHotspotsFlags.String("body", "REQUIRED", "")
+		telemetryListGatewayConnectionHotspotsApikeyTokenFlag      = telemetryListGatewayConnectionHotspotsFlags.String("apikey-token", "", "")
+		telemetryListGatewayConnectionHotspotsSessionTokenFlag     = telemetryListGatewayConnectionHotspotsFlags.String("session-token", "", "")
+		telemetryListGatewayConnectionHotspotsProjectSlugInputFlag = telemetryListGatewayConnectionHotspotsFlags.String("project-slug-input", "", "")
+
 		telemetryGetProjectOverviewFlags                = flag.NewFlagSet("get-project-overview", flag.ExitOnError)
 		telemetryGetProjectOverviewBodyFlag             = telemetryGetProjectOverviewFlags.String("body", "REQUIRED", "")
 		telemetryGetProjectOverviewApikeyTokenFlag      = telemetryGetProjectOverviewFlags.String("apikey-token", "", "")
@@ -6150,6 +6162,8 @@ func ParseEndpoint(
 	telemetryGetObservabilityOverviewFlags.Usage = telemetryGetObservabilityOverviewUsage
 	telemetryGetMcpNetworkTrafficFlags.Usage = telemetryGetMcpNetworkTrafficUsage
 	telemetryGetMetaMcpServerUsageFlags.Usage = telemetryGetMetaMcpServerUsageUsage
+	telemetryGetGatewayConnectionHealthFlags.Usage = telemetryGetGatewayConnectionHealthUsage
+	telemetryListGatewayConnectionHotspotsFlags.Usage = telemetryListGatewayConnectionHotspotsUsage
 	telemetryGetProjectOverviewFlags.Usage = telemetryGetProjectOverviewUsage
 	telemetryGetUnproxiedMcpServerUsageFlags.Usage = telemetryGetUnproxiedMcpServerUsageUsage
 	telemetryGetUnproxiedMcpServerToolUsageFlags.Usage = telemetryGetUnproxiedMcpServerToolUsageUsage
@@ -9000,6 +9014,12 @@ func ParseEndpoint(
 
 			case "get-meta-mcp-server-usage":
 				epf = telemetryGetMetaMcpServerUsageFlags
+
+			case "get-gateway-connection-health":
+				epf = telemetryGetGatewayConnectionHealthFlags
+
+			case "list-gateway-connection-hotspots":
+				epf = telemetryListGatewayConnectionHotspotsFlags
 
 			case "get-project-overview":
 				epf = telemetryGetProjectOverviewFlags
@@ -12213,6 +12233,12 @@ func ParseEndpoint(
 			case "get-meta-mcp-server-usage":
 				endpoint = c.GetMetaMcpServerUsage()
 				data, err = telemetryc.BuildGetMetaMcpServerUsagePayload(*telemetryGetMetaMcpServerUsageBodyFlag, *telemetryGetMetaMcpServerUsageApikeyTokenFlag, *telemetryGetMetaMcpServerUsageSessionTokenFlag, *telemetryGetMetaMcpServerUsageProjectSlugInputFlag)
+			case "get-gateway-connection-health":
+				endpoint = c.GetGatewayConnectionHealth()
+				data, err = telemetryc.BuildGetGatewayConnectionHealthPayload(*telemetryGetGatewayConnectionHealthBodyFlag, *telemetryGetGatewayConnectionHealthApikeyTokenFlag, *telemetryGetGatewayConnectionHealthSessionTokenFlag, *telemetryGetGatewayConnectionHealthProjectSlugInputFlag)
+			case "list-gateway-connection-hotspots":
+				endpoint = c.ListGatewayConnectionHotspots()
+				data, err = telemetryc.BuildListGatewayConnectionHotspotsPayload(*telemetryListGatewayConnectionHotspotsBodyFlag, *telemetryListGatewayConnectionHotspotsApikeyTokenFlag, *telemetryListGatewayConnectionHotspotsSessionTokenFlag, *telemetryListGatewayConnectionHotspotsProjectSlugInputFlag)
 			case "get-project-overview":
 				endpoint = c.GetProjectOverview()
 				data, err = telemetryc.BuildGetProjectOverviewPayload(*telemetryGetProjectOverviewBodyFlag, *telemetryGetProjectOverviewApikeyTokenFlag, *telemetryGetProjectOverviewSessionTokenFlag, *telemetryGetProjectOverviewProjectSlugInputFlag)
@@ -29589,6 +29615,8 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    get-observability-overview: Get observability overview metrics including time series, tool breakdowns, and summary stats`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-network-traffic: Observed inbound public and private MCP request counts for a server or gateway over a recent window`)
 	fmt.Fprintln(os.Stderr, `    get-meta-mcp-server-usage: Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.`)
+	fmt.Fprintln(os.Stderr, `    get-gateway-connection-health: Connection attempt outcomes for one gateway (meta MCP server) per recorded stage, with a timeline and the stages that are not recorded. Requires project:read and log:read on the project and mcp:read on the gateway.`)
+	fmt.Fprintln(os.Stderr, `    list-gateway-connection-hotspots: The callers, providers, and clients with the most failed connection attempts, or the highest failure rate, within one recorded stage of one gateway. Requires project:read and log:read on the project and mcp:read on the gateway.`)
 	fmt.Fprintln(os.Stderr, `    get-project-overview: Get project-level overview including total chats, tool calls, active servers/users, and top lists`)
 	fmt.Fprintln(os.Stderr, `    get-unproxied-mcp-server-usage: Best-effort tool-call activity for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Coverage is opportunistic: only calls made from hook-instrumented sessions in this project are visible, so a freshly added or rarely used server may show no data.`)
 	fmt.Fprintln(os.Stderr, `    get-unproxied-mcp-server-tool-usage: Best-effort per-tool call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.`)
@@ -29882,6 +29910,54 @@ func telemetryGetMetaMcpServerUsageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-meta-mcp-server-usage --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetGatewayConnectionHealthUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-gateway-connection-health", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Connection attempt outcomes for one gateway (meta MCP server) per recorded stage, with a timeline and the stages that are not recorded. Requires project:read and log:read on the project and mcp:read on the gateway.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-gateway-connection-health --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"key\": {\n         \"client\": \"aaa\",\n         \"provider_id\": \"aaa\",\n         \"stage\": \"discovery_member\",\n         \"subject\": \"aaa\"\n      },\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryListGatewayConnectionHotspotsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry list-gateway-connection-hotspots", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `The callers, providers, and clients with the most failed connection attempts, or the highest failure rate, within one recorded stage of one gateway. Requires project:read and log:read on the project and mcp:read on the gateway.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry list-gateway-connection-hotspots --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"min_attempts\": 2,\n      \"rank_by\": \"rate\",\n      \"stage\": \"discovery_member\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryGetProjectOverviewUsage() {

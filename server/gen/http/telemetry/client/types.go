@@ -212,6 +212,42 @@ type GetMetaMcpServerUsageRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 }
 
+// GetGatewayConnectionHealthRequestBody is the type of the "telemetry" service
+// "getGatewayConnectionHealth" endpoint HTTP request body.
+type GetGatewayConnectionHealthRequestBody struct {
+	// The gateway (meta MCP server) ID
+	MetaMcpServerID string `form:"meta_mcp_server_id" json:"meta_mcp_server_id" xml:"meta_mcp_server_id"`
+	// Start of the window in ISO 8601 format. Defaults to 7 days before to; the
+	// window may span at most 30 days.
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End of the window in ISO 8601 format, excluded. Defaults to now.
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Count only this hotspot's attempts, in its stage alone. Absent counts the
+	// whole gateway.
+	Key *GatewayConnectionKeyRequestBody `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsRequestBody is the type of the "telemetry"
+// service "listGatewayConnectionHotspots" endpoint HTTP request body.
+type ListGatewayConnectionHotspotsRequestBody struct {
+	// The gateway (meta MCP server) ID
+	MetaMcpServerID string `form:"meta_mcp_server_id" json:"meta_mcp_server_id" xml:"meta_mcp_server_id"`
+	// Start of the window in ISO 8601 format. Defaults to 7 days before to; the
+	// window may span at most 30 days.
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End of the window in ISO 8601 format, excluded. Defaults to now.
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// The recorded stage to rank within; units from different stages are never
+	// combined.
+	Stage string `form:"stage" json:"stage" xml:"stage"`
+	// count ranks by failed attempts; rate by failed attempts over all attempts.
+	RankBy string `form:"rank_by" json:"rank_by" xml:"rank_by"`
+	// Leave out keys with fewer attempts in the window.
+	MinAttempts int64 `form:"min_attempts" json:"min_attempts" xml:"min_attempts"`
+	// Hotspots to return.
+	Limit int64 `form:"limit" json:"limit" xml:"limit"`
+}
+
 // GetProjectOverviewRequestBody is the type of the "telemetry" service
 // "getProjectOverview" endpoint HTTP request body.
 type GetProjectOverviewRequestBody struct {
@@ -995,6 +1031,40 @@ type GetMetaMcpServerUsageResponseBody struct {
 	Members []*MetaMcpMemberUsageResponseBody `form:"members,omitempty" json:"members,omitempty" xml:"members,omitempty"`
 	// Members left out of the gateway's tool listings over the window
 	DiscoveryFailures *MetaMcpDiscoveryFailuresResponseBody `form:"discovery_failures,omitempty" json:"discovery_failures,omitempty" xml:"discovery_failures,omitempty"`
+}
+
+// GetGatewayConnectionHealthResponseBody is the type of the "telemetry"
+// service "getGatewayConnectionHealth" endpoint HTTP response body.
+type GetGatewayConnectionHealthResponseBody struct {
+	// Window start
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// Window end, excluded
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Timeline bucket width in seconds: a multiple of 30 minutes
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
+	// The recorded stages
+	Stages []*GatewayConnectionStageResponseBody `form:"stages,omitempty" json:"stages,omitempty" xml:"stages,omitempty"`
+	// Stages that are not recorded
+	NotRecorded []*GatewayConnectionCoverageResponseBody `form:"not_recorded,omitempty" json:"not_recorded,omitempty" xml:"not_recorded,omitempty"`
+	// What the recorded stages observe
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsResponseBody is the type of the "telemetry"
+// service "listGatewayConnectionHotspots" endpoint HTTP response body.
+type ListGatewayConnectionHotspotsResponseBody struct {
+	// Window start
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// Window end, excluded
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// The stage ranked within
+	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// count or rate
+	RankBy *string `form:"rank_by,omitempty" json:"rank_by,omitempty" xml:"rank_by,omitempty"`
+	// The attempt floor applied
+	MinAttempts *int64 `form:"min_attempts,omitempty" json:"min_attempts,omitempty" xml:"min_attempts,omitempty"`
+	// Ranked hotspots; ties break by failed attempts, attempts, then key
+	Hotspots []*GatewayConnectionHotspotResponseBody `form:"hotspots,omitempty" json:"hotspots,omitempty" xml:"hotspots,omitempty"`
 }
 
 // GetProjectOverviewResponseBody is the type of the "telemetry" service
@@ -3279,6 +3349,386 @@ type GetMetaMcpServerUsageUnexpectedResponseBody struct {
 // service "getMetaMcpServerUsage" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetMetaMcpServerUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGatewayConnectionHealthUnauthorizedResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetGatewayConnectionHealthUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGatewayConnectionHealthForbiddenResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "forbidden" error.
+type GetGatewayConnectionHealthForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGatewayConnectionHealthBadRequestResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "bad_request" error.
+type GetGatewayConnectionHealthBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGatewayConnectionHealthNotFoundResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "not_found" error.
+type GetGatewayConnectionHealthNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGatewayConnectionHealthConflictResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "conflict" error.
+type GetGatewayConnectionHealthConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGatewayConnectionHealthUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetGatewayConnectionHealthUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGatewayConnectionHealthInvalidResponseBody is the type of the "telemetry"
+// service "getGatewayConnectionHealth" endpoint HTTP response body for the
+// "invalid" error.
+type GetGatewayConnectionHealthInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGatewayConnectionHealthInvariantViolationResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetGatewayConnectionHealthInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGatewayConnectionHealthUnexpectedResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "unexpected" error.
+type GetGatewayConnectionHealthUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetGatewayConnectionHealthGatewayErrorResponseBody is the type of the
+// "telemetry" service "getGatewayConnectionHealth" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetGatewayConnectionHealthGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsUnauthorizedResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "unauthorized" error.
+type ListGatewayConnectionHotspotsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsForbiddenResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "forbidden" error.
+type ListGatewayConnectionHotspotsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsBadRequestResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "bad_request" error.
+type ListGatewayConnectionHotspotsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsNotFoundResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "not_found" error.
+type ListGatewayConnectionHotspotsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsConflictResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "conflict" error.
+type ListGatewayConnectionHotspotsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ListGatewayConnectionHotspotsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsInvalidResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "invalid" error.
+type ListGatewayConnectionHotspotsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsInvariantViolationResponseBody is the type of
+// the "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListGatewayConnectionHotspotsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsUnexpectedResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "unexpected" error.
+type ListGatewayConnectionHotspotsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListGatewayConnectionHotspotsGatewayErrorResponseBody is the type of the
+// "telemetry" service "listGatewayConnectionHotspots" endpoint HTTP response
+// body for the "gateway_error" error.
+type ListGatewayConnectionHotspotsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -8538,6 +8988,111 @@ type MetaMcpDiscoveryFailureBucketResponseBody struct {
 	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
 }
 
+// GatewayConnectionKeyRequestBody is used to define fields on request body
+// types.
+type GatewayConnectionKeyRequestBody struct {
+	// The stage the hotspot is in
+	Stage string `form:"stage" json:"stage" xml:"stage"`
+	// The caller's URN, or empty for no signed-in caller
+	Subject string `form:"subject" json:"subject" xml:"subject"`
+	// The upstream provider's ID, or empty for none
+	ProviderID string `form:"provider_id" json:"provider_id" xml:"provider_id"`
+	// The registered client's ID or the recorded client kind, or empty
+	Client string `form:"client" json:"client" xml:"client"`
+}
+
+// GatewayConnectionStageResponseBody is used to define fields on response body
+// types.
+type GatewayConnectionStageResponseBody struct {
+	// discovery_listing counts Direct tools/list calls; discovery_member counts
+	// the members each listing reached.
+	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// All recorded attempts in this stage
+	Attempts *int64 `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
+	// Nonzero outcomes, summing to attempts
+	Outcomes []*GatewayConnectionOutcomeCountResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
+	// Retries members needed within their listings
+	Retries *int64 `form:"retries,omitempty" json:"retries,omitempty" xml:"retries,omitempty"`
+	// Members listed only after at least one retry
+	Recovered *int64 `form:"recovered,omitempty" json:"recovered,omitempty" xml:"recovered,omitempty"`
+	// Time of the latest attempt, absent when there was none
+	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+	// The window in ascending UTC-aligned buckets of interval_seconds, gap-filled;
+	// the first and last may be partial
+	Buckets []*GatewayConnectionBucketResponseBody `form:"buckets,omitempty" json:"buckets,omitempty" xml:"buckets,omitempty"`
+}
+
+// GatewayConnectionOutcomeCountResponseBody is used to define fields on
+// response body types.
+type GatewayConnectionOutcomeCountResponseBody struct {
+	// The attempt outcome within its stage, such as complete, partial, failed,
+	// listed, credential_blocked, or consent_blocked.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// Attempts with this outcome.
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+}
+
+// GatewayConnectionBucketResponseBody is used to define fields on response
+// body types.
+type GatewayConnectionBucketResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
+	// Nonzero outcomes in this bucket
+	Outcomes []*GatewayConnectionOutcomeCountResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
+}
+
+// GatewayConnectionCoverageResponseBody is used to define fields on response
+// body types.
+type GatewayConnectionCoverageResponseBody struct {
+	// The stage
+	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// What is not observed
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
+}
+
+// GatewayConnectionHotspotResponseBody is used to define fields on response
+// body types.
+type GatewayConnectionHotspotResponseBody struct {
+	Subject  *GatewayConnectionLabelResponseBody `form:"subject,omitempty" json:"subject,omitempty" xml:"subject,omitempty"`
+	Provider *GatewayConnectionLabelResponseBody `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	Client   *GatewayConnectionLabelResponseBody `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// All attempts in the stage
+	Attempts *int64 `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
+	// Attempts that failed
+	Failed *int64 `form:"failed,omitempty" json:"failed,omitempty" xml:"failed,omitempty"`
+	// Attempts blocked by a credential or consent the caller can fix; not failures
+	Blocked *int64 `form:"blocked,omitempty" json:"blocked,omitempty" xml:"blocked,omitempty"`
+	// Nonzero outcomes, summing to attempts
+	Outcomes []*GatewayConnectionOutcomeCountResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
+	// The most frequent sanitized reasons
+	Reasons []*GatewayConnectionReasonCountResponseBody `form:"reasons,omitempty" json:"reasons,omitempty" xml:"reasons,omitempty"`
+	// Time of the latest attempt
+	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+}
+
+// GatewayConnectionLabelResponseBody is used to define fields on response body
+// types.
+type GatewayConnectionLabelResponseBody struct {
+	// What the key is, such as user, agent, provider, registered, or unknown
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// A display name, or a safe description such as Unknown person
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// The identifier, present only when the named row is visible to the caller
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The value to pass in a key filter for this hotspot, possibly empty; absent
+	// when the caller may not see this caller, provider, or client
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+}
+
+// GatewayConnectionReasonCountResponseBody is used to define fields on
+// response body types.
+type GatewayConnectionReasonCountResponseBody struct {
+	// A sanitized reason code
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Attempts with this reason
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+}
+
 // ProjectOverviewSummaryResponseBody is used to define fields on response body
 // types.
 type ProjectOverviewSummaryResponseBody struct {
@@ -9526,6 +10081,55 @@ func NewGetMetaMcpServerUsageRequestBody(p *telemetry.GetMetaMcpServerUsagePaylo
 		MetaMcpServerID: p.MetaMcpServerID,
 		From:            p.From,
 		To:              p.To,
+	}
+	return body
+}
+
+// NewGetGatewayConnectionHealthRequestBody builds the HTTP request body from
+// the payload of the "getGatewayConnectionHealth" endpoint of the "telemetry"
+// service.
+func NewGetGatewayConnectionHealthRequestBody(p *telemetry.GetGatewayConnectionHealthPayload) *GetGatewayConnectionHealthRequestBody {
+	body := &GetGatewayConnectionHealthRequestBody{
+		MetaMcpServerID: p.MetaMcpServerID,
+		From:            p.From,
+		To:              p.To,
+	}
+	if p.Key != nil {
+		body.Key = marshalTelemetryGatewayConnectionKeyToGatewayConnectionKeyRequestBody(p.Key)
+	}
+	return body
+}
+
+// NewListGatewayConnectionHotspotsRequestBody builds the HTTP request body
+// from the payload of the "listGatewayConnectionHotspots" endpoint of the
+// "telemetry" service.
+func NewListGatewayConnectionHotspotsRequestBody(p *telemetry.ListGatewayConnectionHotspotsPayload) *ListGatewayConnectionHotspotsRequestBody {
+	body := &ListGatewayConnectionHotspotsRequestBody{
+		MetaMcpServerID: p.MetaMcpServerID,
+		From:            p.From,
+		To:              p.To,
+		Stage:           p.Stage,
+		RankBy:          p.RankBy,
+		MinAttempts:     p.MinAttempts,
+		Limit:           p.Limit,
+	}
+	{
+		var zero string
+		if body.RankBy == zero {
+			body.RankBy = "count"
+		}
+	}
+	{
+		var zero int64
+		if body.MinAttempts == zero {
+			body.MinAttempts = 5
+		}
+	}
+	{
+		var zero int64
+		if body.Limit == zero {
+			body.Limit = 25
+		}
 	}
 	return body
 }
@@ -12637,6 +13241,357 @@ func NewGetMetaMcpServerUsageUnexpected(body *GetMetaMcpServerUsageUnexpectedRes
 // NewGetMetaMcpServerUsageGatewayError builds a telemetry service
 // getMetaMcpServerUsage endpoint gateway_error error.
 func NewGetMetaMcpServerUsageGatewayError(body *GetMetaMcpServerUsageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGatewayConnectionHealthResultOK builds a "telemetry" service
+// "getGatewayConnectionHealth" endpoint result from a HTTP "OK" response.
+func NewGetGatewayConnectionHealthResultOK(body *GetGatewayConnectionHealthResponseBody) *telemetry.GetGatewayConnectionHealthResult {
+	v := &telemetry.GetGatewayConnectionHealthResult{
+		From:            *body.From,
+		To:              *body.To,
+		IntervalSeconds: *body.IntervalSeconds,
+		Scope:           *body.Scope,
+	}
+	v.Stages = make([]*telemetry.GatewayConnectionStage, len(body.Stages))
+	for i, val := range body.Stages {
+		if val == nil {
+			v.Stages[i] = nil
+			continue
+		}
+		v.Stages[i] = unmarshalGatewayConnectionStageResponseBodyToTelemetryGatewayConnectionStage(val)
+	}
+	v.NotRecorded = make([]*telemetry.GatewayConnectionCoverage, len(body.NotRecorded))
+	for i, val := range body.NotRecorded {
+		if val == nil {
+			v.NotRecorded[i] = nil
+			continue
+		}
+		v.NotRecorded[i] = unmarshalGatewayConnectionCoverageResponseBodyToTelemetryGatewayConnectionCoverage(val)
+	}
+
+	return v
+}
+
+// NewGetGatewayConnectionHealthUnauthorized builds a telemetry service
+// getGatewayConnectionHealth endpoint unauthorized error.
+func NewGetGatewayConnectionHealthUnauthorized(body *GetGatewayConnectionHealthUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGatewayConnectionHealthForbidden builds a telemetry service
+// getGatewayConnectionHealth endpoint forbidden error.
+func NewGetGatewayConnectionHealthForbidden(body *GetGatewayConnectionHealthForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGatewayConnectionHealthBadRequest builds a telemetry service
+// getGatewayConnectionHealth endpoint bad_request error.
+func NewGetGatewayConnectionHealthBadRequest(body *GetGatewayConnectionHealthBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGatewayConnectionHealthNotFound builds a telemetry service
+// getGatewayConnectionHealth endpoint not_found error.
+func NewGetGatewayConnectionHealthNotFound(body *GetGatewayConnectionHealthNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGatewayConnectionHealthConflict builds a telemetry service
+// getGatewayConnectionHealth endpoint conflict error.
+func NewGetGatewayConnectionHealthConflict(body *GetGatewayConnectionHealthConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGatewayConnectionHealthUnsupportedMedia builds a telemetry service
+// getGatewayConnectionHealth endpoint unsupported_media error.
+func NewGetGatewayConnectionHealthUnsupportedMedia(body *GetGatewayConnectionHealthUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGatewayConnectionHealthInvalid builds a telemetry service
+// getGatewayConnectionHealth endpoint invalid error.
+func NewGetGatewayConnectionHealthInvalid(body *GetGatewayConnectionHealthInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGatewayConnectionHealthInvariantViolation builds a telemetry service
+// getGatewayConnectionHealth endpoint invariant_violation error.
+func NewGetGatewayConnectionHealthInvariantViolation(body *GetGatewayConnectionHealthInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGatewayConnectionHealthUnexpected builds a telemetry service
+// getGatewayConnectionHealth endpoint unexpected error.
+func NewGetGatewayConnectionHealthUnexpected(body *GetGatewayConnectionHealthUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetGatewayConnectionHealthGatewayError builds a telemetry service
+// getGatewayConnectionHealth endpoint gateway_error error.
+func NewGetGatewayConnectionHealthGatewayError(body *GetGatewayConnectionHealthGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsResultOK builds a "telemetry" service
+// "listGatewayConnectionHotspots" endpoint result from a HTTP "OK" response.
+func NewListGatewayConnectionHotspotsResultOK(body *ListGatewayConnectionHotspotsResponseBody) *telemetry.ListGatewayConnectionHotspotsResult {
+	v := &telemetry.ListGatewayConnectionHotspotsResult{
+		From:        *body.From,
+		To:          *body.To,
+		Stage:       *body.Stage,
+		RankBy:      *body.RankBy,
+		MinAttempts: *body.MinAttempts,
+	}
+	v.Hotspots = make([]*telemetry.GatewayConnectionHotspot, len(body.Hotspots))
+	for i, val := range body.Hotspots {
+		if val == nil {
+			v.Hotspots[i] = nil
+			continue
+		}
+		v.Hotspots[i] = unmarshalGatewayConnectionHotspotResponseBodyToTelemetryGatewayConnectionHotspot(val)
+	}
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsUnauthorized builds a telemetry service
+// listGatewayConnectionHotspots endpoint unauthorized error.
+func NewListGatewayConnectionHotspotsUnauthorized(body *ListGatewayConnectionHotspotsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsForbidden builds a telemetry service
+// listGatewayConnectionHotspots endpoint forbidden error.
+func NewListGatewayConnectionHotspotsForbidden(body *ListGatewayConnectionHotspotsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsBadRequest builds a telemetry service
+// listGatewayConnectionHotspots endpoint bad_request error.
+func NewListGatewayConnectionHotspotsBadRequest(body *ListGatewayConnectionHotspotsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsNotFound builds a telemetry service
+// listGatewayConnectionHotspots endpoint not_found error.
+func NewListGatewayConnectionHotspotsNotFound(body *ListGatewayConnectionHotspotsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsConflict builds a telemetry service
+// listGatewayConnectionHotspots endpoint conflict error.
+func NewListGatewayConnectionHotspotsConflict(body *ListGatewayConnectionHotspotsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsUnsupportedMedia builds a telemetry service
+// listGatewayConnectionHotspots endpoint unsupported_media error.
+func NewListGatewayConnectionHotspotsUnsupportedMedia(body *ListGatewayConnectionHotspotsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsInvalid builds a telemetry service
+// listGatewayConnectionHotspots endpoint invalid error.
+func NewListGatewayConnectionHotspotsInvalid(body *ListGatewayConnectionHotspotsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsInvariantViolation builds a telemetry
+// service listGatewayConnectionHotspots endpoint invariant_violation error.
+func NewListGatewayConnectionHotspotsInvariantViolation(body *ListGatewayConnectionHotspotsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsUnexpected builds a telemetry service
+// listGatewayConnectionHotspots endpoint unexpected error.
+func NewListGatewayConnectionHotspotsUnexpected(body *ListGatewayConnectionHotspotsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListGatewayConnectionHotspotsGatewayError builds a telemetry service
+// listGatewayConnectionHotspots endpoint gateway_error error.
+func NewListGatewayConnectionHotspotsGatewayError(body *ListGatewayConnectionHotspotsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -17209,6 +18164,87 @@ func ValidateGetMetaMcpServerUsageResponseBody(body *GetMetaMcpServerUsageRespon
 	return
 }
 
+// ValidateGetGatewayConnectionHealthResponseBody runs the validations defined
+// on GetGatewayConnectionHealthResponseBody
+func ValidateGetGatewayConnectionHealthResponseBody(body *GetGatewayConnectionHealthResponseBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.IntervalSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
+	}
+	if body.Stages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stages", "body"))
+	}
+	if body.NotRecorded == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("not_recorded", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	for _, e := range body.Stages {
+		if e != nil {
+			if err2 := ValidateGatewayConnectionStageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.NotRecorded {
+		if e != nil {
+			if err2 := ValidateGatewayConnectionCoverageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsResponseBody runs the validations
+// defined on ListGatewayConnectionHotspotsResponseBody
+func ValidateListGatewayConnectionHotspotsResponseBody(body *ListGatewayConnectionHotspotsResponseBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.Stage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
+	}
+	if body.RankBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rank_by", "body"))
+	}
+	if body.MinAttempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("min_attempts", "body"))
+	}
+	if body.Hotspots == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hotspots", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	for _, e := range body.Hotspots {
+		if e != nil {
+			if err2 := ValidateGatewayConnectionHotspotResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateGetProjectOverviewResponseBody runs the validations defined on
 // GetProjectOverviewResponseBody
 func ValidateGetProjectOverviewResponseBody(body *GetProjectOverviewResponseBody) (err error) {
@@ -20467,6 +21503,493 @@ func ValidateGetMetaMcpServerUsageUnexpectedResponseBody(body *GetMetaMcpServerU
 // ValidateGetMetaMcpServerUsageGatewayErrorResponseBody runs the validations
 // defined on getMetaMcpServerUsage_gateway_error_response_body
 func ValidateGetMetaMcpServerUsageGatewayErrorResponseBody(body *GetMetaMcpServerUsageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGatewayConnectionHealthUnauthorizedResponseBody runs the
+// validations defined on getGatewayConnectionHealth_unauthorized_response_body
+func ValidateGetGatewayConnectionHealthUnauthorizedResponseBody(body *GetGatewayConnectionHealthUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGatewayConnectionHealthForbiddenResponseBody runs the validations
+// defined on getGatewayConnectionHealth_forbidden_response_body
+func ValidateGetGatewayConnectionHealthForbiddenResponseBody(body *GetGatewayConnectionHealthForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGatewayConnectionHealthBadRequestResponseBody runs the
+// validations defined on getGatewayConnectionHealth_bad_request_response_body
+func ValidateGetGatewayConnectionHealthBadRequestResponseBody(body *GetGatewayConnectionHealthBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGatewayConnectionHealthNotFoundResponseBody runs the validations
+// defined on getGatewayConnectionHealth_not_found_response_body
+func ValidateGetGatewayConnectionHealthNotFoundResponseBody(body *GetGatewayConnectionHealthNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGatewayConnectionHealthConflictResponseBody runs the validations
+// defined on getGatewayConnectionHealth_conflict_response_body
+func ValidateGetGatewayConnectionHealthConflictResponseBody(body *GetGatewayConnectionHealthConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGatewayConnectionHealthUnsupportedMediaResponseBody runs the
+// validations defined on
+// getGatewayConnectionHealth_unsupported_media_response_body
+func ValidateGetGatewayConnectionHealthUnsupportedMediaResponseBody(body *GetGatewayConnectionHealthUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGatewayConnectionHealthInvalidResponseBody runs the validations
+// defined on getGatewayConnectionHealth_invalid_response_body
+func ValidateGetGatewayConnectionHealthInvalidResponseBody(body *GetGatewayConnectionHealthInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGatewayConnectionHealthInvariantViolationResponseBody runs the
+// validations defined on
+// getGatewayConnectionHealth_invariant_violation_response_body
+func ValidateGetGatewayConnectionHealthInvariantViolationResponseBody(body *GetGatewayConnectionHealthInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGatewayConnectionHealthUnexpectedResponseBody runs the
+// validations defined on getGatewayConnectionHealth_unexpected_response_body
+func ValidateGetGatewayConnectionHealthUnexpectedResponseBody(body *GetGatewayConnectionHealthUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetGatewayConnectionHealthGatewayErrorResponseBody runs the
+// validations defined on getGatewayConnectionHealth_gateway_error_response_body
+func ValidateGetGatewayConnectionHealthGatewayErrorResponseBody(body *GetGatewayConnectionHealthGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsUnauthorizedResponseBody runs the
+// validations defined on
+// listGatewayConnectionHotspots_unauthorized_response_body
+func ValidateListGatewayConnectionHotspotsUnauthorizedResponseBody(body *ListGatewayConnectionHotspotsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsForbiddenResponseBody runs the
+// validations defined on listGatewayConnectionHotspots_forbidden_response_body
+func ValidateListGatewayConnectionHotspotsForbiddenResponseBody(body *ListGatewayConnectionHotspotsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsBadRequestResponseBody runs the
+// validations defined on
+// listGatewayConnectionHotspots_bad_request_response_body
+func ValidateListGatewayConnectionHotspotsBadRequestResponseBody(body *ListGatewayConnectionHotspotsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsNotFoundResponseBody runs the
+// validations defined on listGatewayConnectionHotspots_not_found_response_body
+func ValidateListGatewayConnectionHotspotsNotFoundResponseBody(body *ListGatewayConnectionHotspotsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsConflictResponseBody runs the
+// validations defined on listGatewayConnectionHotspots_conflict_response_body
+func ValidateListGatewayConnectionHotspotsConflictResponseBody(body *ListGatewayConnectionHotspotsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsUnsupportedMediaResponseBody runs the
+// validations defined on
+// listGatewayConnectionHotspots_unsupported_media_response_body
+func ValidateListGatewayConnectionHotspotsUnsupportedMediaResponseBody(body *ListGatewayConnectionHotspotsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsInvalidResponseBody runs the
+// validations defined on listGatewayConnectionHotspots_invalid_response_body
+func ValidateListGatewayConnectionHotspotsInvalidResponseBody(body *ListGatewayConnectionHotspotsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsInvariantViolationResponseBody runs the
+// validations defined on
+// listGatewayConnectionHotspots_invariant_violation_response_body
+func ValidateListGatewayConnectionHotspotsInvariantViolationResponseBody(body *ListGatewayConnectionHotspotsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsUnexpectedResponseBody runs the
+// validations defined on listGatewayConnectionHotspots_unexpected_response_body
+func ValidateListGatewayConnectionHotspotsUnexpectedResponseBody(body *ListGatewayConnectionHotspotsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListGatewayConnectionHotspotsGatewayErrorResponseBody runs the
+// validations defined on
+// listGatewayConnectionHotspots_gateway_error_response_body
+func ValidateListGatewayConnectionHotspotsGatewayErrorResponseBody(body *ListGatewayConnectionHotspotsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -27265,6 +28788,199 @@ func ValidateMetaMcpDiscoveryFailuresResponseBody(body *MetaMcpDiscoveryFailures
 func ValidateMetaMcpDiscoveryFailureBucketResponseBody(body *MetaMcpDiscoveryFailureBucketResponseBody) (err error) {
 	if body.BucketTimeUnixNano == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	return
+}
+
+// ValidateGatewayConnectionKeyRequestBody runs the validations defined on
+// GatewayConnectionKeyRequestBody
+func ValidateGatewayConnectionKeyRequestBody(body *GatewayConnectionKeyRequestBody) (err error) {
+	if !(body.Stage == "discovery_listing" || body.Stage == "discovery_member") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", body.Stage, []any{"discovery_listing", "discovery_member"}))
+	}
+	if utf8.RuneCountInString(body.Subject) > 512 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.subject", body.Subject, utf8.RuneCountInString(body.Subject), 512, false))
+	}
+	if utf8.RuneCountInString(body.ProviderID) > 36 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.provider_id", body.ProviderID, utf8.RuneCountInString(body.ProviderID), 36, false))
+	}
+	if utf8.RuneCountInString(body.Client) > 512 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.client", body.Client, utf8.RuneCountInString(body.Client), 512, false))
+	}
+	return
+}
+
+// ValidateGatewayConnectionStageResponseBody runs the validations defined on
+// GatewayConnectionStageResponseBody
+func ValidateGatewayConnectionStageResponseBody(body *GatewayConnectionStageResponseBody) (err error) {
+	if body.Stage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
+	}
+	if body.Attempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attempts", "body"))
+	}
+	if body.Outcomes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcomes", "body"))
+	}
+	if body.Retries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("retries", "body"))
+	}
+	if body.Recovered == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recovered", "body"))
+	}
+	if body.Buckets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("buckets", "body"))
+	}
+	if body.Stage != nil {
+		if !(*body.Stage == "discovery_listing" || *body.Stage == "discovery_member") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"discovery_listing", "discovery_member"}))
+		}
+	}
+	for _, e := range body.Outcomes {
+		if e != nil {
+			if err2 := ValidateGatewayConnectionOutcomeCountResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.LastSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
+	}
+	for _, e := range body.Buckets {
+		if e != nil {
+			if err2 := ValidateGatewayConnectionBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGatewayConnectionOutcomeCountResponseBody runs the validations
+// defined on GatewayConnectionOutcomeCountResponseBody
+func ValidateGatewayConnectionOutcomeCountResponseBody(body *GatewayConnectionOutcomeCountResponseBody) (err error) {
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	return
+}
+
+// ValidateGatewayConnectionBucketResponseBody runs the validations defined on
+// GatewayConnectionBucketResponseBody
+func ValidateGatewayConnectionBucketResponseBody(body *GatewayConnectionBucketResponseBody) (err error) {
+	if body.BucketTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
+	}
+	if body.Outcomes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcomes", "body"))
+	}
+	for _, e := range body.Outcomes {
+		if e != nil {
+			if err2 := ValidateGatewayConnectionOutcomeCountResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGatewayConnectionCoverageResponseBody runs the validations defined
+// on GatewayConnectionCoverageResponseBody
+func ValidateGatewayConnectionCoverageResponseBody(body *GatewayConnectionCoverageResponseBody) (err error) {
+	if body.Stage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
+	}
+	if body.Note == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("note", "body"))
+	}
+	return
+}
+
+// ValidateGatewayConnectionHotspotResponseBody runs the validations defined on
+// GatewayConnectionHotspotResponseBody
+func ValidateGatewayConnectionHotspotResponseBody(body *GatewayConnectionHotspotResponseBody) (err error) {
+	if body.Subject == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject", "body"))
+	}
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.Attempts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attempts", "body"))
+	}
+	if body.Failed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failed", "body"))
+	}
+	if body.Blocked == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blocked", "body"))
+	}
+	if body.Outcomes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcomes", "body"))
+	}
+	if body.Reasons == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reasons", "body"))
+	}
+	if body.Subject != nil {
+		if err2 := ValidateGatewayConnectionLabelResponseBody(body.Subject); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Provider != nil {
+		if err2 := ValidateGatewayConnectionLabelResponseBody(body.Provider); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Client != nil {
+		if err2 := ValidateGatewayConnectionLabelResponseBody(body.Client); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Outcomes {
+		if e != nil {
+			if err2 := ValidateGatewayConnectionOutcomeCountResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Reasons {
+		if e != nil {
+			if err2 := ValidateGatewayConnectionReasonCountResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.LastSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGatewayConnectionLabelResponseBody runs the validations defined on
+// GatewayConnectionLabelResponseBody
+func ValidateGatewayConnectionLabelResponseBody(body *GatewayConnectionLabelResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
+	return
+}
+
+// ValidateGatewayConnectionReasonCountResponseBody runs the validations
+// defined on GatewayConnectionReasonCountResponseBody
+func ValidateGatewayConnectionReasonCountResponseBody(body *GatewayConnectionReasonCountResponseBody) (err error) {
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
 	if body.Count == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))

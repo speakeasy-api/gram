@@ -3083,3 +3083,12 @@ WHERE issuer.id = @id AND issuer.deleted IS FALSE
 UPDATE user_session_clients
 SET assistant_runtime_id = NULL, assistant_trigger_workload_binding_id = NULL
 WHERE id = @client_id AND organization_id = @organization_id;
+
+-- name: ListUserSessionClientLabelsByIDs :many
+-- Names the clients registered with one sign-in server among the given IDs.
+-- Deleted clients are left out.
+SELECT id, client_name
+FROM user_session_clients
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND id = ANY(@ids::uuid[])
+  AND deleted IS FALSE;

@@ -156,13 +156,11 @@ func (q *Queries) GetMetaMCPServerUsage(ctx context.Context, arg GetMetaMCPServe
 func (q *Queries) discoveryFailures(ctx context.Context, arg GetMetaMCPServerUsageParams) ([]MetaMCPDiscoveryFailureBucket, error) {
 	intervalNanos := arg.IntervalSeconds * int64(time.Second)
 	firstBucket := floorDiv(arg.TimeStart, intervalNanos) * intervalNanos
-	interiorStart := -floorDiv(-arg.TimeStart, connectionAttemptBucketNanos) * connectionAttemptBucketNanos
-	interiorEnd := floorDiv(arg.TimeEnd, connectionAttemptBucketNanos) * connectionAttemptBucketNanos
+	slices := connectionAttemptSlicesFor(arg.TimeStart, arg.TimeEnd)
+	interiorStart, interiorEnd, edges := slices.interiorStart, slices.interiorEnd, slices.edges
 	counts := map[int64]uint64{}
 
-	edges := [][2]int64{{arg.TimeStart, arg.TimeEnd}, {0, 0}}
-	if interiorStart < interiorEnd {
-		edges = [][2]int64{{arg.TimeStart, interiorStart}, {interiorEnd, arg.TimeEnd}}
+	if slices.hasInterior() {
 		rows, err := q.conn.Query(ctx,
 			`SELECT toInt64(intDiv(toUnixTimestamp(bucket), ?) * ?) AS interval_start, sum(attempts) AS failed
 			 FROM mcp_connection_attempt_summaries
@@ -226,6 +224,27 @@ func (q *Queries) discoveryFailures(ctx context.Context, arg GetMetaMCPServerUsa
 	}
 	return buckets, nil
 }
+
+// connectionAttemptSlices splits [start, end) into the whole rollup buckets
+// inside it and at most two raw edge slices, or one raw slice when no whole
+// bucket fits. All slices are half-open and never overlap; an unused edge is
+// the empty slice [0, 0).
+type connectionAttemptSlices struct {
+	interiorStart int64
+	interiorEnd   int64
+	edges         [2][2]int64
+}
+
+func connectionAttemptSlicesFor(start, end int64) connectionAttemptSlices {
+	interiorStart := -floorDiv(-start, connectionAttemptBucketNanos) * connectionAttemptBucketNanos
+	interiorEnd := floorDiv(end, connectionAttemptBucketNanos) * connectionAttemptBucketNanos
+	if interiorStart < interiorEnd {
+		return connectionAttemptSlices{interiorStart: interiorStart, interiorEnd: interiorEnd, edges: [2][2]int64{{start, interiorStart}, {interiorEnd, end}}}
+	}
+	return connectionAttemptSlices{interiorStart: interiorStart, interiorEnd: interiorStart, edges: [2][2]int64{{start, end}, {0, 0}}}
+}
+
+func (c connectionAttemptSlices) hasInterior() bool { return c.interiorStart < c.interiorEnd }
 
 // floorDiv divides rounding toward negative infinity.
 func floorDiv(a, b int64) int64 {

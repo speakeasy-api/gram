@@ -61,6 +61,14 @@ type Client struct {
 	// getMetaMcpServerUsage endpoint.
 	GetMetaMcpServerUsageDoer goahttp.Doer
 
+	// GetGatewayConnectionHealth Doer is the HTTP client used to make requests to
+	// the getGatewayConnectionHealth endpoint.
+	GetGatewayConnectionHealthDoer goahttp.Doer
+
+	// ListGatewayConnectionHotspots Doer is the HTTP client used to make requests
+	// to the listGatewayConnectionHotspots endpoint.
+	ListGatewayConnectionHotspotsDoer goahttp.Doer
+
 	// GetProjectOverview Doer is the HTTP client used to make requests to the
 	// getProjectOverview endpoint.
 	GetProjectOverviewDoer goahttp.Doer
@@ -191,6 +199,8 @@ func NewClient(
 		GetObservabilityOverviewDoer:         doer,
 		GetMcpNetworkTrafficDoer:             doer,
 		GetMetaMcpServerUsageDoer:            doer,
+		GetGatewayConnectionHealthDoer:       doer,
+		ListGatewayConnectionHotspotsDoer:    doer,
 		GetProjectOverviewDoer:               doer,
 		GetUnproxiedMcpServerUsageDoer:       doer,
 		GetUnproxiedMcpServerToolUsageDoer:   doer,
@@ -483,6 +493,54 @@ func (c *Client) GetMetaMcpServerUsage() goa.Endpoint {
 		resp, err := c.GetMetaMcpServerUsageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getMetaMcpServerUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetGatewayConnectionHealth returns an endpoint that makes HTTP requests to
+// the telemetry service getGatewayConnectionHealth server.
+func (c *Client) GetGatewayConnectionHealth() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetGatewayConnectionHealthRequest(c.encoder)
+		decodeResponse = DecodeGetGatewayConnectionHealthResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetGatewayConnectionHealthRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetGatewayConnectionHealthDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getGatewayConnectionHealth", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListGatewayConnectionHotspots returns an endpoint that makes HTTP requests
+// to the telemetry service listGatewayConnectionHotspots server.
+func (c *Client) ListGatewayConnectionHotspots() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListGatewayConnectionHotspotsRequest(c.encoder)
+		decodeResponse = DecodeListGatewayConnectionHotspotsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListGatewayConnectionHotspotsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListGatewayConnectionHotspotsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "listGatewayConnectionHotspots", err)
 		}
 		return decodeResponse(resp)
 	}
