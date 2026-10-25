@@ -652,6 +652,7 @@ func (s *Service) writeWorkloadGrantRefusal(ctx context.Context, w http.Response
 	if !ok {
 		return oops.E(oops.CodeUnexpected, err, "workload assertion grant failed").LogError(ctx, logger)
 	}
+	inboundObservationFrom(ctx).refuseWorkload(refusal)
 
 	issuerID := "unresolved"
 	if presented.issuerID != uuid.Nil {

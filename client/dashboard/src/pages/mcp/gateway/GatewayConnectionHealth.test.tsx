@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { GatewayConnectionHealth } from "./GatewayConnectionHealth";
@@ -186,7 +187,7 @@ it("defaults to listings over 7 days, sharing one window", async () => {
     to: health.to,
   });
   expect(screen.getAllByText("of 4")).toHaveLength(3);
-  expect(screen.getByText(/a successful sign-in is not shown/)).toBeTruthy();
+  expect(screen.getByText(/not whether a redirect arrived/)).toBeTruthy();
 });
 
 it("refetches for every control change", async () => {
@@ -205,7 +206,7 @@ it("refetches for every control change", async () => {
     const health = state.health.mock.lastCall![0] as Payload;
     expect(health.to.getTime() - health.from.getTime()).toBe(24 * 3_600_000);
   });
-  fireEvent.click(screen.getByRole("button", { name: "Member checks" }));
+  await chooseStage("Member checks");
   await waitFor(() =>
     expect(state.hotspots.mock.lastCall![0]).toMatchObject({
       stage: "discovery_member",
@@ -349,7 +350,7 @@ it("does not mention a cap below it", async () => {
 it("heads the member blocked column briefly and explains it in a tooltip", async () => {
   renderSection();
   await screen.findByText("Listings over time");
-  fireEvent.click(screen.getByRole("button", { name: "Member checks" }));
+  await chooseStage("Member checks");
   expect(
     await screen.findByRole("button", { name: "About Blocked" }),
   ).toBeTruthy();
@@ -366,4 +367,60 @@ it("holds skeletons while loading", () => {
   expect(screen.queryByText("Not visible to you")).toBeNull();
   expect(screen.queryByText(/No listings were recorded/)).toBeNull();
   expect(screen.queryByText("Couldn't load connection health.")).toBeNull();
+});
+
+async function chooseStage(label: string) {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("combobox", { name: "Connection stage" }));
+  await user.click(screen.getByRole("option", { name: label }));
+}
+
+it("offers every recorded stage in one compact control, listings first by default", async () => {
+  renderSection();
+  await screen.findByText("Listings over time");
+  const trigger = screen.getByRole("combobox", { name: "Connection stage" });
+  expect(trigger.textContent).toContain("Listings");
+  await userEvent.setup().click(trigger);
+  expect(
+    screen.getAllByRole("option").map((option) => option.textContent),
+  ).toEqual([
+    "Sign-in requests",
+    "Token requests",
+    "Listings",
+    "Member checks",
+  ]);
+});
+
+it("counts token requests by grant, apart from policy blocks", async () => {
+  state.healthResult = summary([
+    listing,
+    {
+      stage: "inbound_token",
+      attempts: 5,
+      outcomes: [
+        { outcome: "code_issued", count: 2 },
+        { outcome: "refreshed", count: 1 },
+        { outcome: "refresh_replayed", count: 1 },
+        { outcome: "policy_blocked", count: 1 },
+      ],
+      retries: 0,
+      recovered: 0,
+      buckets: [],
+    },
+  ]);
+  renderSection();
+  await screen.findByText("Listings over time");
+  await chooseStage("Token requests");
+  await waitFor(() =>
+    expect(state.hotspots.mock.lastCall![0]).toMatchObject({
+      stage: "inbound_token",
+    }),
+  );
+  const tile = (title: string) =>
+    screen.getByText(title).closest("[data-tone]")?.textContent ?? "";
+  expect(screen.getByText("Sign-in tokens written")).toBeTruthy();
+  expect(tile("Sign-in tokens written")).toContain("2");
+  expect(tile("Refreshes answered")).toContain("2");
+  expect(tile("Blocked by policy")).toContain("1");
+  expect(screen.getAllByText("of 5").length).toBeGreaterThanOrEqual(4);
 });

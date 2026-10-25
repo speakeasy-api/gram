@@ -62,10 +62,18 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 // ServeAuthorize is the post-resolution entry point for the OAuth 2.1
 // authorize endpoint, called by HandleAuthorize after slug resolution.
-func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (err error) {
+	// A bounce to the shared authorization server is served again there, and
+	// observed once there.
 	if s.redirectToAuthorizationServer(w, r, endpoint) {
 		return nil
 	}
+	r, obs := observeInbound(r, endpoint, attemptStageInboundAuthorize)
+	defer func() { s.finishInbound(r.Context(), obs, err) }()
+	return s.serveAuthorize(w, r, endpoint)
+}
+
+func (s *Service) serveAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 
@@ -107,6 +115,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	}
 	if namesEndpoint {
 		logger.InfoContext(ctx, "oauth authorize rejected client_id naming this endpoint", attr.SlogOAuthFailureReason(clientIDNamesEndpointReason))
+		inboundObservationFrom(ctx).refuse(classConfiguration, clientIDNamesEndpointReason)
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidClient, clientIDNamesEndpointDescription)
 	}
 
@@ -123,6 +132,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			// admission denial is policy rather than a spec violation and
 			// carries its own actionable description. Already logged with
 			// the presented client_id inside admitCIMDClient.
+			inboundObservationFrom(ctx).refuse(classConfiguration, cimdDenialReason(admissionErr.Reason))
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidClient, admissionErr.Description())
 		}
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
@@ -141,16 +151,20 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			// rather than a permanent invalid_client that would make SDKs
 			// stop retrying.
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
+			inboundObservationFrom(ctx).refuse(classEndpoint, reasonCIMDFetchFailed)
 			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
+			inboundObservationFrom(ctx).refuse(classConfiguration, reasonUnknownClientID)
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id")
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 	if !redirectURIMatches(client, req.RedirectURI) {
+		inboundObservationFrom(ctx).refuse(classConfiguration, reasonRedirectURINotRegistered)
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "redirect_uri is not registered for this client")
 	}
+	inboundObservationFrom(ctx).setClient(client.ID)
 
 	// Shadow AI blocking, refused inline for the same reason an admission
 	// denial is: it is policy about the client itself, so forwarding it to
@@ -160,6 +174,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// verified.
 	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, req.ClientID); err != nil {
 		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
+			inboundObservationFrom(ctx).refuse(classConfiguration, reasonClientBlocked)
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidClient, blockedErr.Description())
 		}
 		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
@@ -279,12 +294,14 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		if err != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
 			failureCode, cause := federatedFailure(err)
+			inboundObservationFrom(ctx).refuse(classInternal, reasonFederationUnavailable)
 			return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
 		}
 		if federatedURL != nil {
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("Referrer-Policy", "no-referrer")
 			http.Redirect(w, r, federatedURL.String(), http.StatusFound)
+			inboundObservationFrom(ctx).accept()
 			return nil
 		}
 		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
@@ -308,6 +325,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 		}
 		http.Redirect(w, r, idpURL.String(), http.StatusFound)
+		inboundObservationFrom(ctx).accept()
 		return nil
 	}
 
@@ -319,6 +337,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
 	}
 	http.Redirect(w, r, consentURL, http.StatusFound)
+	inboundObservationFrom(ctx).accept()
 	return nil
 }
 
@@ -346,6 +365,9 @@ func writePreAuthenticationAuthorizeError(ctx context.Context, w http.ResponseWr
 		code = oauthErr.Code
 		description = oauthErr.Description
 	}
+	obs := inboundObservationFrom(ctx)
+	obs.note(failureReason)
+	obs.answer(http.StatusBadRequest, code)
 	args := []any{
 		attr.SlogOAuthError(code),
 		attr.SlogOAuthErrorDescription(description),
@@ -409,6 +431,7 @@ func writeAuthorizeError(ctx context.Context, w http.ResponseWriter, logger *slo
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to marshal authorize error").LogError(ctx, logger)
 	}
+	inboundObservationFrom(ctx).answer(status, code)
 
 	logger.InfoContext(ctx, "authorize request rejected",
 		attr.SlogOAuthError(code),

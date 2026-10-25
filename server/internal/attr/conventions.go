@@ -436,8 +436,9 @@ const (
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
 	NetworkSurfaceKey              = attribute.Key("gram.network.surface")
-	// mcp_connection_attempt rows: the rollup reads stage through retries;
-	// the id, listing id, calls and trace id stay on raw rows only.
+	// mcp_connection_attempt rows: the rollup reads stage through retries and
+	// the grant type; the id, listing id, calls and trace id stay on raw rows
+	// only.
 	ConnectionAttemptIDKey              = attribute.Key("gram.connection_attempt.id")
 	ConnectionAttemptListingIDKey       = attribute.Key("gram.connection_attempt.listing_id")
 	ConnectionAttemptStageKey           = attribute.Key("gram.connection_attempt.stage")
@@ -450,6 +451,7 @@ const (
 	ConnectionAttemptRetriesKey         = attribute.Key("gram.connection_attempt.retries")
 	ConnectionAttemptCallsKey           = attribute.Key("gram.connection_attempt.calls")
 	ConnectionAttemptTraceIDKey         = attribute.Key("gram.connection_attempt.trace_id")
+	ConnectionAttemptGrantTypeKey       = attribute.Key("gram.connection_attempt.grant_type")
 	NetworkIngressIDKey                 = attribute.Key("gram.network_ingress.id")
 	NetworkIngressOperationKey          = attribute.Key("gram.network_ingress.operation")
 	InternalSessionIssuerOperationKey   = attribute.Key("gram.internal_session_issuer.operation")

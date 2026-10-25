@@ -113,6 +113,8 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 			}
 		} else if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, assistantidentity.ErrInvalidIdentity) {
 			return reject("unauthorized_client")
+		} else if errors.Is(err, errAssistantResourceNotAgentAddressable) {
+			inboundObservationFrom(ctx).refuse(classConfiguration, reasonResourceNotAgentAddressable)
 		}
 		return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "workload token issuance unavailable")
 	}

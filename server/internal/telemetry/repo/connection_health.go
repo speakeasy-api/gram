@@ -164,7 +164,7 @@ func (q *Queries) GatewayConnectionHotspots(ctx context.Context, arg GatewayConn
 		`SELECT subject, provider_id, client_key,
 		        sum(n) AS attempts,
 		        sumIf(n, outcome = 'failed') AS failed,
-		        sumIf(n, outcome IN ('credential_blocked', 'consent_blocked')) AS blocked,
+		        sumIf(n, outcome IN ('credential_blocked', 'consent_blocked', 'policy_blocked')) AS blocked,
 		        groupArray(outcome) AS outcomes, groupArray(reason) AS reasons, groupArray(n) AS counts,
 		        max(last_seen) AS last_seen
 		 FROM (

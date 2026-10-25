@@ -695,7 +695,7 @@ func BuildGetGatewayConnectionHealthPayload(telemetryGetGatewayConnectionHealthB
 	{
 		err = json.Unmarshal([]byte(telemetryGetGatewayConnectionHealthBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"key\": {\n         \"client\": \"aaa\",\n         \"provider_id\": \"aaa\",\n         \"stage\": \"discovery_member\",\n         \"subject\": \"aaa\"\n      },\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"key\": {\n         \"client\": \"aaa\",\n         \"provider_id\": \"aaa\",\n         \"stage\": \"inbound_token\",\n         \"subject\": \"aaa\"\n      },\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
 		if body.From != nil {
@@ -754,7 +754,7 @@ func BuildListGatewayConnectionHotspotsPayload(telemetryListGatewayConnectionHot
 	{
 		err = json.Unmarshal([]byte(telemetryListGatewayConnectionHotspotsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"min_attempts\": 2,\n      \"rank_by\": \"rate\",\n      \"stage\": \"discovery_member\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"min_attempts\": 2,\n      \"rank_by\": \"rate\",\n      \"stage\": \"inbound_token\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
 		if body.From != nil {
@@ -763,8 +763,8 @@ func BuildListGatewayConnectionHotspotsPayload(telemetryListGatewayConnectionHot
 		if body.To != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 		}
-		if !(body.Stage == "discovery_listing" || body.Stage == "discovery_member") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", body.Stage, []any{"discovery_listing", "discovery_member"}))
+		if !(body.Stage == "inbound_authorize" || body.Stage == "inbound_token" || body.Stage == "discovery_listing" || body.Stage == "discovery_member") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", body.Stage, []any{"inbound_authorize", "inbound_token", "discovery_listing", "discovery_member"}))
 		}
 		if !(body.RankBy == "count" || body.RankBy == "rate") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.rank_by", body.RankBy, []any{"count", "rate"}))

@@ -255,6 +255,56 @@ describe("reasonText", () => {
     "member_check_failed",
   ];
 
+  // Sign-in and token reasons the gateway records as typed refusals or by its
+  // outcome classification (server/internal/mcp/connection_attempts_inbound.go).
+  const INBOUND = [
+    "unobserved_exit",
+    "response_write_failed",
+    "unavailable",
+    "unexpected",
+    "oauth_error",
+    "cimd_fetch_failed",
+    "cimd_admission_denied",
+    "cimd_admission_disabled",
+    "cimd_denied_disabled",
+    "cimd_denied_not_listed",
+    "cimd_denied_oversized",
+    "cimd_denied_unknown_mode",
+    "ai_tool_blocked",
+    "agent_admission_denied",
+    "issuer_untrusted",
+    "subject_not_admitted",
+    "unknown_client_id",
+    "client_id_names_endpoint",
+    "redirect_uri_not_registered",
+    "federation_unavailable",
+    "endpoint_not_agent_addressable",
+    "resource_not_agent_addressable",
+    "pkce_mismatch",
+    "code_not_found_or_expired",
+    "authorization_expired",
+    "sign_in_revoked",
+    "refresh_token_expired",
+    "refresh_token_unknown_or_already_used",
+    "refresh_token_client_mismatch",
+    "upstream_reconnect_required",
+    "invalid_client",
+    "invalid_grant",
+    "unauthorized_client",
+    "not_found",
+    "forbidden",
+  ];
+
+  it("has plain copy for every typed sign-in and token reason", () => {
+    for (const reason of INBOUND) {
+      const text = reasonText(reason);
+      expect(text, reason).not.toBe("Another failure was recorded.");
+      // A one-word code may be a plain word too; a snake_case code never is.
+      if (reason.includes("_")) expect(text, reason).not.toContain(reason);
+    }
+    expect(reasonText("cimd_denied_oversized")).toContain("address");
+  });
+
   it("has plain copy for every recorded reason", () => {
     for (const reason of RECORDED) {
       const text = reasonText(reason);

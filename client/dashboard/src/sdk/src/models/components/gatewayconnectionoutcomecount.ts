@@ -13,7 +13,7 @@ export type GatewayConnectionOutcomeCount = {
    */
   count: number;
   /**
-   * The attempt outcome within its stage, such as complete, partial, failed, listed, credential_blocked, or consent_blocked.
+   * The attempt outcome within its stage, such as accepted, code_issued, refreshed, refresh_replayed, assertion_issued, complete, partial, listed, failed, credential_blocked, consent_blocked, policy_blocked, or unknown.
    */
   outcome: string;
 };

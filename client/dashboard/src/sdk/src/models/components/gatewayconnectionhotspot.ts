@@ -29,7 +29,7 @@ export type GatewayConnectionHotspot = {
    */
   attempts: number;
   /**
-   * Attempts blocked by a credential or consent the caller can fix; not failures
+   * Attempts blocked by a credential or consent the caller can fix, or by an administrator's client or workload policy; not failures
    */
   blocked: number;
   /**

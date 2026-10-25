@@ -90,6 +90,10 @@ func TestGetGatewayConnectionHealth_CountsEachStageExactly(t *testing.T) {
 	attempt(member, "listed", 2, at(10, 45))
 	attempt(member, "failed", 2, at(11, 0))
 	attempt(member, "consent_blocked", 0, at(11, 35))
+	token := telemetry.ConnectionStageInboundToken
+	attempt(token, "code_issued", 0, at(10, 20))
+	attempt(token, "refreshed", 0, at(10, 50))
+	attempt(token, "policy_blocked", 0, at(11, 10))
 	// Outside the window, another gateway, and another project: none count.
 	attempt(member, "failed", 0, at(9, 0))
 	logConnectionAttempt(t, ctx, ti, connectionAttempt{project: ti.projectID, gateway: uuid.NewString(), stage: member, outcome: "failed", client: "anonymous", at: at(10, 45)})
@@ -101,9 +105,16 @@ func TestGetGatewayConnectionHealth_CountsEachStageExactly(t *testing.T) {
 	require.Equal(t, from.Format(time.RFC3339Nano), result.From)
 	require.Equal(t, to.Format(time.RFC3339Nano), result.To)
 	require.Equal(t, int64(1800), result.IntervalSeconds)
-	require.Len(t, result.Stages, 2)
+	require.Len(t, result.Stages, 4)
 
-	listings, members := result.Stages[0], result.Stages[1]
+	authorizes, tokens, listings, members := result.Stages[0], result.Stages[1], result.Stages[2], result.Stages[3]
+	require.Equal(t, telemetry.ConnectionStageInboundAuthorize, authorizes.Stage)
+	require.Zero(t, authorizes.Attempts, "a stage with no attempts is listed, empty")
+	require.Empty(t, authorizes.Outcomes)
+	require.Equal(t, token, tokens.Stage)
+	require.Equal(t, int64(3), tokens.Attempts, "a policy block stays in its stage's denominator")
+	require.Equal(t, map[string]int64{"code_issued": 1, "refreshed": 1, "policy_blocked": 1}, outcomeMap(tokens.Outcomes))
+	require.Zero(t, tokens.Recovered)
 	require.Equal(t, listing, listings.Stage)
 	require.Equal(t, int64(3), listings.Attempts, "listings are counted on their own")
 	require.Equal(t, map[string]int64{"complete": 1, "partial": 1, "failed": 1}, outcomeMap(listings.Outcomes))
@@ -127,8 +138,13 @@ func TestGetGatewayConnectionHealth_CountsEachStageExactly(t *testing.T) {
 	for _, coverage := range result.NotRecorded {
 		notRecorded[coverage.Stage] = true
 	}
-	require.True(t, notRecorded["inbound_token"], "sign-in is unknown, not healthy")
+	require.Equal(t, map[string]bool{"cimd_fetch": true, "upstream_callback": true, "upstream_refresh": true}, notRecorded, "client metadata fetches and provider sign-in stay unknown")
 	require.NotEmpty(t, result.Scope)
+
+	hotspots, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)), Stage: token, RankBy: "count", MinAttempts: 1, Limit: 25})
+	require.NoError(t, err)
+	require.Len(t, hotspots.Hotspots, 1)
+	require.Equal(t, []int64{3, 0, 1}, []int64{hotspots.Hotspots[0].Attempts, hotspots.Hotspots[0].Failed, hotspots.Hotspots[0].Blocked}, "policy blocks are blocked, not failed")
 }
 
 func TestGetGatewayConnectionHealth_RequiresProjectLogAndGatewayRead(t *testing.T) {

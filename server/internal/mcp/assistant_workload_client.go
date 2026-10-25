@@ -176,6 +176,10 @@ func assistantWorkloadClientAuthentication(p ProvisionAssistantWorkloadClientPar
 	}
 }
 
+// errAssistantResourceNotAgentAddressable refuses an assistant workload token
+// for a resource that cannot carry an agent session policy, such as a gateway.
+var errAssistantResourceNotAgentAddressable = errors.New("resource cannot admit assistant workloads")
+
 type registeredAssistantWorkloadIssuer struct{ service *Service }
 
 func (i *registeredAssistantWorkloadIssuer) IssueAssistantWorkloadToken(ctx context.Context, r AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
@@ -190,7 +194,7 @@ func (i *registeredAssistantWorkloadIssuer) IssueAssistantWorkloadToken(ctx cont
 	}
 	target, ok := agentAuthorizationTarget(r.endpoint)
 	if !ok {
-		return zero, errors.New("resource cannot admit assistant workloads")
+		return zero, errAssistantResourceNotAgentAddressable
 	}
 	version := runtimepolicy.AssistantIssuedPolicyVersion
 	policy, err := encodeAgentSessionPolicy(*target, version)

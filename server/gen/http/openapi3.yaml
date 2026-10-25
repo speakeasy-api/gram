@@ -104708,7 +104708,7 @@ components:
                     format: int64
                 blocked:
                     type: integer
-                    description: Attempts blocked by a credential or consent the caller can fix; not failures
+                    description: Attempts blocked by a credential or consent the caller can fix, or by an administrator's client or workload policy; not failures
                     format: int64
                 client:
                     $ref: '#/components/schemas/GatewayConnectionLabel'
@@ -104759,6 +104759,8 @@ components:
                     type: string
                     description: The stage the hotspot is in
                     enum:
+                        - inbound_authorize
+                        - inbound_token
                         - discovery_listing
                         - discovery_member
                 subject:
@@ -104799,7 +104801,7 @@ components:
                     format: int64
                 outcome:
                     type: string
-                    description: The attempt outcome within its stage, such as complete, partial, failed, listed, credential_blocked, or consent_blocked.
+                    description: The attempt outcome within its stage, such as accepted, code_issued, refreshed, refresh_replayed, assertion_issued, complete, partial, listed, failed, credential_blocked, consent_blocked, policy_blocked, or unknown.
             required:
                 - outcome
                 - count
@@ -104847,8 +104849,10 @@ components:
                     format: int64
                 stage:
                     type: string
-                    description: discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.
+                    description: inbound_authorize counts sign-in requests (accepted means a redirect to sign-in was attempted; delivery and completion are not observed); inbound_token counts token requests it answered, by grant (an answered request is not proof a client used the token); discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.
                     enum:
+                        - inbound_authorize
+                        - inbound_token
                         - discovery_listing
                         - discovery_member
             description: One recorded stage over the window. attempts is the denominator for every outcome of this stage.
@@ -109445,6 +109449,8 @@ components:
                     type: string
                     description: The recorded stage to rank within; units from different stages are never combined.
                     enum:
+                        - inbound_authorize
+                        - inbound_token
                         - discovery_listing
                         - discovery_member
                 to:

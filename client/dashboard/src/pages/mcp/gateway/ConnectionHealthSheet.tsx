@@ -20,6 +20,7 @@ import { useOrganization, useProject } from "@/contexts/Auth";
 import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import type { GatewayConnectionHotspot } from "@gram/client/models/components/gatewayconnectionhotspot.js";
+import type { GatewayConnectionKey } from "@gram/client/models/components/gatewayconnectionkey.js";
 import type { GatewayConnectionStage } from "@gram/client/models/components/gatewayconnectionstage.js";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -31,9 +32,11 @@ import { useMemo, type ReactNode } from "react";
 import {
   STAGE_OPTIONS,
   attemptFilters,
+  canMatchSignIn,
   beforeWindowEnd,
   countOf,
   formatTime,
+  grantLabel,
   hotspotKey,
   isUnavailable,
   matchesWindow,
@@ -217,6 +220,27 @@ export function ConnectionHealthSheet({
         to={to}
         first={first}
         recent={recent}
+        related={
+          stage === "discovery_listing" &&
+          (canMatchSignIn(key) ? (
+            <RelatedSignIn
+              gatewayId={gatewayId}
+              listingKey={key}
+              from={from}
+              to={to}
+              windowPhrase={windowPhrase}
+              ready={rawReady}
+            />
+          ) : (
+            <section className="space-y-2">
+              <h3 className="text-eyebrow">Sign-in tokens</h3>
+              <Text small muted>
+                Sign-in token responses can be matched only to a signed-in
+                person using a registered client, so none are shown here.
+              </Text>
+            </section>
+          ))
+        }
       />
     );
   }
@@ -255,6 +279,175 @@ export function ConnectionHealthSheet({
   );
 }
 
+// RelatedSignIn shows, beside a listing hotspot, the sign-in tokens the gateway
+// wrote for the same person and client in the same window. It is an
+// observation next to the listings, never their cause, and the person and
+// client may be several app instances.
+function RelatedSignIn({
+  gatewayId,
+  listingKey,
+  from,
+  to,
+  windowPhrase,
+  ready,
+}: {
+  gatewayId: string;
+  listingKey: GatewayConnectionKey;
+  from: Date;
+  to: Date;
+  windowPhrase: string;
+  ready: boolean;
+}): JSX.Element {
+  const organization = useOrganization();
+  const project = useProject();
+  const client = useGramContext();
+  const tokenKey: GatewayConnectionKey = {
+    ...listingKey,
+    stage: "inbound_token",
+  };
+  const payload = { metaMcpServerId: gatewayId, from, to, key: tokenKey };
+  const built = buildGatewayConnectionHealthQuery(client, {
+    gramProject: project.slug,
+    getGatewayConnectionHealthPayload: payload,
+  });
+  const tokens = useQuery({
+    ...built,
+    queryKey: [...built.queryKey, payload],
+    enabled: ready,
+    // Enabled only after this opening's key check, so cached data must still
+    // be asked for again then, whatever the default stale time.
+    staleTime: 0,
+    refetchOnMount: "always",
+    throwOnError: false,
+    retry: false,
+  });
+  // Counted only from a settled read made since this opening.
+  const issued =
+    !tokens.isError &&
+    tokens.isFetchedAfterMount &&
+    !tokens.isFetching &&
+    matchesWindow(tokens.data, from, to)
+      ? countOf(
+          tokens.data?.stages.find((s) => s.stage === "inbound_token")
+            ?.outcomes ?? [],
+          "code_issued",
+        )
+      : undefined;
+  const filters = [
+    ...attemptFilters(gatewayId, tokenKey),
+    {
+      path: "gram.connection_attempt.outcome",
+      operator: "eq" as const,
+      values: ["code_issued"],
+    },
+    {
+      path: "gram.connection_attempt.grant_type",
+      operator: "eq" as const,
+      values: ["authorization_code"],
+    },
+  ];
+  // The latest one only, with the same exclusive end as the attempts list.
+  const latest = useQuery({
+    queryKey: [
+      "gateway-connection-latest-sign-in",
+      organization.id,
+      project.id,
+      gatewayId,
+      filters,
+      from.getTime(),
+      to.getTime(),
+    ],
+    queryFn: async () => {
+      let cursor: string | undefined;
+      for (let page = 0; page < 2; page++) {
+        const result = await unwrapAsync(
+          telemetrySearchLogs(client, {
+            gramProject: project.slug,
+            searchLogsPayload: {
+              from,
+              to,
+              filters,
+              sort: "desc",
+              limit: 1,
+              cursor,
+            },
+          }),
+        );
+        const kept = beforeWindowEnd(result.logs, to)[0];
+        if (kept) return toAttempt(kept).at;
+        cursor = result.nextCursor;
+        if (!cursor) break;
+      }
+      return null;
+    },
+    enabled: ready && issued !== undefined && issued > 0,
+    staleTime: 0,
+    refetchOnMount: "always",
+    throwOnError: false,
+    retry: false,
+  });
+  // A failed refetch keeps the earlier time, which is then not this answer.
+  const latestStarted =
+    !latest.isError && latest.isFetchedAfterMount && !latest.isFetching
+      ? latest.data
+      : undefined;
+
+  let content: ReactNode;
+  if (tokens.isError) {
+    content = (
+      <Text small muted>
+        Couldn&apos;t load sign-in token responses for this person and client.
+      </Text>
+    );
+  } else if (issued === undefined) {
+    content = <Skeleton className="h-10 w-full" />;
+  } else if (issued === 0) {
+    content = (
+      <Text small muted>
+        No sign-in token response is recorded for this person and client{" "}
+        {windowPhrase}.
+      </Text>
+    );
+  } else {
+    content = (
+      <>
+        <Text small className="block">
+          {issued === 1
+            ? `The gateway wrote 1 sign-in token response for this person and client ${windowPhrase}.`
+            : `The gateway wrote ${issued.toLocaleString()} sign-in token responses for this person and client ${windowPhrase}.`}
+          {latestStarted &&
+            ` The latest sign-in code request started ${formatTime(latestStarted)}.`}
+        </Text>
+        {latest.isError && (
+          <div className="flex items-center justify-between gap-3">
+            <Text small muted>
+              The latest request time couldn&apos;t be loaded.
+            </Text>
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => void latest.refetch()}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+        <Text small muted className="block">
+          Whether the app received or used a token is not observed. This person
+          and client may be several app instances, and a token response is not
+          shown as causing any listing.
+        </Text>
+      </>
+    );
+  }
+  return (
+    <section className="space-y-2">
+      <h3 className="text-eyebrow">Sign-in tokens</h3>
+      {content}
+    </section>
+  );
+}
+
 function KeyedDetail({
   stage,
   intervalSeconds,
@@ -263,6 +456,7 @@ function KeyedDetail({
   to,
   first,
   recent,
+  related,
 }: {
   stage: GatewayConnectionStage;
   intervalSeconds: number;
@@ -275,6 +469,7 @@ function KeyedDetail({
     isError: boolean;
     refetch: () => unknown;
   };
+  related: ReactNode;
 }): JSX.Element {
   const chart = stageChartData(stage, intervalSeconds, from, to);
   const failed = countOf(stage.outcomes, "failed");
@@ -350,6 +545,8 @@ function KeyedDetail({
         </section>
       )}
 
+      {related}
+
       <RecentAttempts stage={stage.stage} recent={recent} />
     </div>
   );
@@ -420,6 +617,8 @@ function RecentAttempts({
               <div className="min-w-0">
                 <Text small className="block">
                   {outcomeLabel(stage, attempt.outcome)}
+                  {grantLabel(attempt.grantType) &&
+                    ` · ${grantLabel(attempt.grantType)}`}
                 </Text>
                 {attempt.reason && (
                   <Text small muted className="block">

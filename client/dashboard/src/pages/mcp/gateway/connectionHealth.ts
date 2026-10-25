@@ -1,5 +1,11 @@
 import { formatChartLabel, unixNanoToMs } from "@/components/chart/chartUtils";
-import { ACCENT_RED, GOOD_GREEN, SEVERITY } from "@/components/chart/palette";
+import {
+  ACCENT_RED,
+  GOOD_GREEN,
+  OTHER_SERIES,
+  SERIES,
+  SEVERITY,
+} from "@/components/chart/palette";
 import type { TimeSeriesDataset } from "@/components/observe/toolUsageTimeSeriesChartData";
 import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import type { LogFilter } from "@gram/client/models/components/logfilter.js";
@@ -32,7 +38,10 @@ const WINDOW_MS: Record<HealthWindow, number> = {
   "30d": 30 * 24 * 3_600_000,
 };
 
+// In the order a connection meets them; Listings is the default.
 export const STAGE_OPTIONS: { value: HealthStage; label: string }[] = [
+  { value: "inbound_authorize", label: "Sign-in requests" },
+  { value: "inbound_token", label: "Token requests" },
   { value: "discovery_listing", label: "Listings" },
   { value: "discovery_member", label: "Member checks" },
 ];
@@ -54,7 +63,50 @@ export function healthWindow(
 
 type OutcomeStyle = { outcome: string; label: string; color: string };
 
+const POLICY_BLOCKED: OutcomeStyle = {
+  outcome: "policy_blocked",
+  label: "Blocked by policy",
+  color: SEVERITY.medium,
+};
+const FAILED: OutcomeStyle = {
+  outcome: "failed",
+  label: "Failed",
+  color: ACCENT_RED,
+};
+const UNKNOWN: OutcomeStyle = {
+  outcome: "unknown",
+  label: "Outcome not recorded",
+  color: OTHER_SERIES,
+};
+
 const OUTCOMES: Record<HealthStage, OutcomeStyle[]> = {
+  inbound_authorize: [
+    { outcome: "accepted", label: "Sent to sign-in", color: GOOD_GREEN },
+    POLICY_BLOCKED,
+    FAILED,
+    UNKNOWN,
+  ],
+  inbound_token: [
+    {
+      outcome: "code_issued",
+      label: "Sign-in token written",
+      color: GOOD_GREEN,
+    },
+    { outcome: "refreshed", label: "Refresh answered", color: SERIES[0]! },
+    {
+      outcome: "refresh_replayed",
+      label: "Refresh answered again",
+      color: SERIES[3]!,
+    },
+    {
+      outcome: "assertion_issued",
+      label: "Enterprise assertion answered",
+      color: SERIES[5]!,
+    },
+    POLICY_BLOCKED,
+    FAILED,
+    UNKNOWN,
+  ],
   discovery_listing: [
     { outcome: "complete", label: "Complete", color: GOOD_GREEN },
     { outcome: "partial", label: "Partial", color: SEVERITY.medium },
@@ -103,6 +155,71 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
   const total = stage.attempts.toLocaleString();
   const of = (count: number, tone: StageTile["tone"]): StageTile["tone"] =>
     count > 0 ? tone : "neutral";
+  const blockedByPolicy = countOf(stage.outcomes, "policy_blocked");
+  const policyTile: StageTile = {
+    title: "Blocked by policy",
+    value: blockedByPolicy,
+    tone: of(blockedByPolicy, "warning"),
+    subtext: `of ${total}`,
+    tooltip:
+      "Refused by an administrator's client metadata, blocked-tool, or workload policy. Counted apart from failures.",
+  };
+  if (stage.stage === "inbound_authorize") {
+    const failed = countOf(stage.outcomes, "failed");
+    return [
+      {
+        title: "Sign-in requests",
+        value: stage.attempts,
+        tone: "information",
+      },
+      {
+        title: "Sent to sign-in",
+        value: countOf(stage.outcomes, "accepted"),
+        tone: "neutral",
+        subtext: `of ${total}`,
+        tooltip:
+          "The gateway attempted a redirect to sign in. Whether it arrived and whether sign-in finished are not observed.",
+      },
+      policyTile,
+      {
+        title: "Failed",
+        value: failed,
+        tone: of(failed, "destructive"),
+        subtext: `of ${total}`,
+      },
+    ];
+  }
+  if (stage.stage === "inbound_token") {
+    const failed = countOf(stage.outcomes, "failed");
+    return [
+      { title: "Token requests", value: stage.attempts, tone: "information" },
+      {
+        title: "Sign-in tokens written",
+        value: countOf(stage.outcomes, "code_issued"),
+        tone: "neutral",
+        subtext: `of ${total}`,
+        tooltip:
+          "Authorization-code requests the gateway answered with a token. It does not show that a client used the token.",
+      },
+      {
+        title: "Refreshes answered",
+        value:
+          countOf(stage.outcomes, "refreshed") +
+          countOf(stage.outcomes, "refresh_replayed"),
+        tone: "neutral",
+        subtext: `of ${total}`,
+        tooltip:
+          "Refresh requests the gateway answered, including a repeated refresh answered again. A refresh is never a sign-in.",
+      },
+      policyTile,
+      {
+        title: "Failed",
+        value: failed,
+        tone: of(failed, "destructive"),
+        subtext: `of ${total}`,
+      },
+    ];
+  }
   if (stage.stage === "discovery_listing") {
     const complete = countOf(stage.outcomes, "complete");
     const partial = countOf(stage.outcomes, "partial");
@@ -224,6 +341,85 @@ const REASONS: Record<string, string> = {
   credential_rejected: "The server rejected the stored credential.",
   reauthentication_required:
     "The person needs to sign in to the gateway again.",
+  // Sign-in redirects and token requests.
+  unobserved_exit: "The request finished without a recorded outcome.",
+  response_write_failed:
+    "The gateway prepared a response but could not send it; the client may have disconnected.",
+  unavailable:
+    "A service the gateway relies on was unavailable. Try again shortly.",
+  unexpected: "The gateway hit an unexpected error. Try again shortly.",
+  oauth_error: "The request was refused.",
+  cimd_fetch_failed:
+    "The client's metadata document could not be fetched. Check that its address is reachable.",
+  cimd_metadata_invalid:
+    "The client's metadata document is not valid. Ask the client's publisher to fix it.",
+  cimd_admission_denied:
+    "This server does not accept the client's metadata document. An administrator can change which clients are allowed.",
+  cimd_admission_disabled:
+    "This server does not accept client metadata documents. An administrator can turn them on.",
+  cimd_denied_disabled:
+    "This server does not accept client metadata documents. An administrator can turn them on.",
+  cimd_denied_not_listed:
+    "The client is not on this server's allowed list. An administrator can add it.",
+  cimd_denied_oversized:
+    "The client's metadata address is too long to accept. Ask the client's publisher for a shorter one.",
+  cimd_denied_unknown_mode:
+    "The server's client policy is not readable, so the client was refused. An administrator can reset the policy.",
+  ai_tool_blocked:
+    "An administrator blocked this app. They can allow it in the blocked tools settings.",
+  agent_admission_denied:
+    "The agent is no longer allowed to connect. Authorize it again.",
+  issuer_untrusted:
+    "The workload's identity issuer is not trusted. An administrator can add it.",
+  subject_not_admitted:
+    "The workload is not allowed to connect. An administrator can admit it.",
+  unknown_client_id:
+    "The client is not registered with this gateway's sign-in.",
+  client_id_names_endpoint:
+    "The client's ID is this server's own address. Configure the client with its own ID.",
+  redirect_uri_not_registered:
+    "The client asked to return to an address it did not register. Reconnect the client.",
+  redirect_uri_mismatch:
+    "The client returned a different address than it started with. Reconnect the client.",
+  redirect_validation_failed:
+    "The client's return address could not be used. Reconnect the client.",
+  resource_mismatch:
+    "The client asked for a different server than this one. Check its configured address.",
+  federation_unavailable:
+    "Sign-in through the organization's identity provider is unavailable. Contact your administrator.",
+  pkce_mismatch:
+    "The client's sign-in proof did not match. Sign in again from the client.",
+  code_not_found_or_expired:
+    "The sign-in code was unknown, used, or expired. Sign in again from the client.",
+  code_client_mismatch:
+    "The sign-in code belongs to a different client. Sign in again from the client.",
+  authorization_expired: "The sign-in has expired. Sign in again.",
+  sign_in_revoked: "The sign-in was revoked. Sign in again.",
+  refresh_token_expired: "The refresh token has expired. Sign in again.",
+  refresh_token_unknown_or_already_used:
+    "The refresh token was unknown or already used. Sign in again from the client.",
+  refresh_token_client_mismatch:
+    "The refresh token belongs to a different client. Sign in again from the client.",
+  refresh_token_resource_mismatch:
+    "The refresh token was issued for a different server. Sign in again here.",
+  upstream_reconnect_required:
+    "A connected provider needs to be signed in again before refreshing. Reconnect it.",
+  client_secret_mismatch:
+    "The client's secret was wrong. Update the client's credentials.",
+  invalid_client:
+    "The client could not be authenticated. Check its credentials.",
+  invalid_grant:
+    "The sign-in grant was not valid. Sign in again from the client.",
+  unauthorized_client:
+    "This client is not allowed to use this kind of request.",
+  unsupported_grant_type:
+    "The client used a kind of request this gateway does not support.",
+  endpoint_not_agent_addressable:
+    "Workloads cannot connect to a gateway directly. Connect them to an MCP server.",
+  resource_not_agent_addressable:
+    "Assistants cannot get tokens for a gateway directly. Connect them to an MCP server.",
+  not_found: "Something the request needed was not found.",
+  forbidden: "The request was not allowed.",
   response_too_large:
     "The server returned a tool list larger than the gateway accepts. Ask the server's owner to reduce its size.",
   invalid_listing:
@@ -248,7 +444,7 @@ const REASONS: Record<string, string> = {
   enterprise_authorization_failed:
     "Your organization's sign-in for this server failed. Contact your administrator.",
   invalid_request:
-    "The client sent tool list parameters the gateway could not read. Update the client or reconnect it.",
+    "The client sent a request the gateway could not read. Update the client or reconnect it.",
   member_snapshot_failed:
     "The gateway could not load its servers. Try again shortly.",
   ambiguous_tool_name:
@@ -295,6 +491,14 @@ export function hotspotKey(
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Whether a key can be matched to sign-in token responses: only a signed-in
+ * caller using a registered client can have redeemed an authorization code.
+ */
+export function canMatchSignIn(key: GatewayConnectionKey): boolean {
+  return key.subject !== "" && UUID.test(key.client);
+}
 
 /**
  * Connection filters for a hotspot key. Only exact equivalents are used: the
@@ -374,9 +578,11 @@ export function attemptFilters(
 
 export type Attempt = {
   id: string;
+  // When the request started: outcomes are recorded once it finishes.
   at: Date;
   outcome: string;
   reason: string;
+  grantType: string;
 };
 
 function attemptField(attributes: unknown, field: string): string {
@@ -398,7 +604,21 @@ export function toAttempt(log: TelemetryLogRecord): Attempt {
     at: new Date(unixNanoToMs(log.timeUnixNano)),
     outcome: attemptField(log.attributes, "outcome"),
     reason: attemptField(log.attributes, "reason"),
+    grantType: attemptField(log.attributes, "grant_type"),
   };
+}
+
+const GRANTS: Record<string, string> = {
+  authorization_code: "Sign-in code",
+  refresh_token: "Refresh",
+  "urn:ietf:params:oauth:grant-type:jwt-bearer": "Enterprise assertion",
+  client_credentials: "Assistant credential",
+};
+
+/** Plain words for a token request's grant; empty when there is none. */
+export function grantLabel(grantType: string): string {
+  if (grantType === "") return "";
+  return GRANTS[grantType] ?? "Other grant";
 }
 
 export function outcomeLabel(stage: string, outcome: string): string {

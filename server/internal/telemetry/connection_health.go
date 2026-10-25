@@ -59,9 +59,19 @@ var (
 
 // Connection attempt stages a gateway records today.
 const (
+	ConnectionStageInboundAuthorize = "inbound_authorize"
+	ConnectionStageInboundToken     = "inbound_token"
 	ConnectionStageDiscoveryListing = "discovery_listing"
 	ConnectionStageDiscoveryMember  = "discovery_member"
 )
+
+// connectionStages are the recorded stages, in the order a connection meets
+// them. Each counts its own attempts.
+var connectionStages = []string{ConnectionStageInboundAuthorize, ConnectionStageInboundToken, ConnectionStageDiscoveryListing, ConnectionStageDiscoveryMember}
+
+func validConnectionStage(stage string) bool {
+	return slices.Contains(connectionStages, stage)
+}
 
 var (
 	// ErrConnectionHealthGatewayNotFound means the gateway is not in the
@@ -86,15 +96,13 @@ type ConnectionHealthCoverage struct {
 // connectionHealthNotRecorded lists the connection stages no producer writes
 // yet. Their counts are unknown, never zero.
 var connectionHealthNotRecorded = []ConnectionHealthCoverage{
-	{Stage: "inbound_authorize", Note: "Sign-in authorization requests are not recorded yet."},
-	{Stage: "inbound_token", Note: "Sign-in token exchanges are not recorded yet, so a successful sign-in is not shown."},
 	{Stage: "cimd_fetch", Note: "Client metadata document fetches are not recorded yet."},
 	{Stage: "upstream_callback", Note: "Upstream provider sign-in callbacks are not recorded yet."},
 	{Stage: "upstream_refresh", Note: "Upstream provider token refreshes are not recorded yet."},
 }
 
 // connectionHealthScope says what the recorded stages observe.
-const connectionHealthScope = "Only Direct tools/list listings are recorded: Progressive discovery and organization gateways are not observed."
+const connectionHealthScope = "Sign-in and token requests this gateway answered are recorded, not whether a redirect arrived, sign-in finished, or a token was used. Only Direct tools/list listings are recorded: Progressive discovery and organization gateways are not observed."
 
 // ConnectionHealth reads one gateway's connection attempts and names their
 // callers, providers, and clients only from rows the caller may see. The
@@ -209,8 +217,8 @@ const maxConnectionKeyLength = 512
 // validate accepts only values an attempt can record: a session subject URN,
 // a provider ID, and a registered client ID or recorded client kind.
 func (k ConnectionHealthKey) validate() error {
-	if k.Stage != ConnectionStageDiscoveryListing && k.Stage != ConnectionStageDiscoveryMember {
-		return fmt.Errorf("%w: key stage must be %s or %s", ErrConnectionHealthInvalid, ConnectionStageDiscoveryListing, ConnectionStageDiscoveryMember)
+	if !validConnectionStage(k.Stage) {
+		return fmt.Errorf("%w: key stage must be one of %s", ErrConnectionHealthInvalid, strings.Join(connectionStages, ", "))
 	}
 	if len(k.Subject) > maxConnectionKeyLength || len(k.ClientKey) > maxConnectionKeyLength {
 		return fmt.Errorf("%w: key values are too long", ErrConnectionHealthInvalid)
@@ -235,7 +243,7 @@ func (k ConnectionHealthKey) validate() error {
 // registered client is known.
 func recordedClientKind(raw string) bool {
 	switch raw {
-	case "", "anonymous", "unregistered_client", "unknown":
+	case "", "anonymous", "unregistered_client", "unverified_client", "unknown":
 		return true
 	}
 	kind, ok := strings.CutPrefix(raw, "credential:")
@@ -268,7 +276,7 @@ func (h *ConnectionHealth) Summary(ctx context.Context, target ConnectionHealthT
 			return none, ErrConnectionHealthKeyNotFound
 		}
 	}
-	stageNames := []string{ConnectionStageDiscoveryListing, ConnectionStageDiscoveryMember}
+	stageNames := connectionStages
 	var repoKey *repo.GatewayConnectionKey
 	if key != nil {
 		stageNames = []string{key.Stage}
@@ -290,7 +298,7 @@ func (h *ConnectionHealth) Summary(ctx context.Context, target ConnectionHealthT
 
 	intervalNanos := interval * int64(time.Second)
 	first := timeStart / intervalNanos * intervalNanos
-	stages := make([]ConnectionStageSummary, 0, 2)
+	stages := make([]ConnectionStageSummary, 0, len(stageNames))
 	for _, stage := range stageNames {
 		summary := ConnectionStageSummary{Stage: stage, Attempts: 0, Outcomes: []ConnectionOutcomeCount{}, Retries: 0, Recovered: 0, LastSeen: time.Time{}, Buckets: []ConnectionStageBucket{}}
 		totals := map[string]uint64{}
@@ -386,8 +394,8 @@ type ConnectionHotspots struct {
 // or by failure rate, among keys with at least MinAttempts attempts.
 func (h *ConnectionHealth) Hotspots(ctx context.Context, target ConnectionHealthTarget, window ConnectionHealthWindow, query ConnectionHotspotQuery) (ConnectionHotspots, error) {
 	var none ConnectionHotspots
-	if query.Stage != ConnectionStageDiscoveryListing && query.Stage != ConnectionStageDiscoveryMember {
-		return none, fmt.Errorf("%w: stage must be %s or %s", ErrConnectionHealthInvalid, ConnectionStageDiscoveryListing, ConnectionStageDiscoveryMember)
+	if !validConnectionStage(query.Stage) {
+		return none, fmt.Errorf("%w: stage must be one of %s", ErrConnectionHealthInvalid, strings.Join(connectionStages, ", "))
 	}
 	if query.MinAttempts == 0 {
 		query.MinAttempts = ConnectionHotspotDefaultMinAttempts
@@ -619,6 +627,8 @@ func (l connectionLabels) client(raw string) ConnectionLabel {
 		return keyedLabel("anonymous", "No sign-in", raw)
 	case raw == "unregistered_client":
 		return keyedLabel("unregistered", "Unregistered client", raw)
+	case raw == "unverified_client":
+		return keyedLabel("unverified", "Client not verified", raw)
 	case strings.HasPrefix(raw, "credential:") && recordedClientKind(raw):
 		return keyedLabel("credential", credentialLabel(strings.TrimPrefix(raw, "credential:")), raw)
 	case raw == "unknown" || raw == "":

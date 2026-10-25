@@ -19,14 +19,16 @@ import {
 } from "./gatewayconnectionoutcomecount.js";
 
 /**
- * discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.
+ * inbound_authorize counts sign-in requests (accepted means a redirect to sign-in was attempted; delivery and completion are not observed); inbound_token counts token requests it answered, by grant (an answered request is not proof a client used the token); discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.
  */
 export const GatewayConnectionStageStage = {
+  InboundAuthorize: "inbound_authorize",
+  InboundToken: "inbound_token",
   DiscoveryListing: "discovery_listing",
   DiscoveryMember: "discovery_member",
 } as const;
 /**
- * discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.
+ * inbound_authorize counts sign-in requests (accepted means a redirect to sign-in was attempted; delivery and completion are not observed); inbound_token counts token requests it answered, by grant (an answered request is not proof a client used the token); discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.
  */
 export type GatewayConnectionStageStage = OpenEnum<
   typeof GatewayConnectionStageStage
@@ -61,7 +63,7 @@ export type GatewayConnectionStage = {
    */
   retries: number;
   /**
-   * discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.
+   * inbound_authorize counts sign-in requests (accepted means a redirect to sign-in was attempted; delivery and completion are not observed); inbound_token counts token requests it answered, by grant (an answered request is not proof a client used the token); discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.
    */
   stage: GatewayConnectionStageStage;
 };

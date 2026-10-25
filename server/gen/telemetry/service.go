@@ -271,7 +271,8 @@ type GatewayConnectionHotspot struct {
 	Attempts int64
 	// Attempts that failed
 	Failed int64
-	// Attempts blocked by a credential or consent the caller can fix; not failures
+	// Attempts blocked by a credential or consent the caller can fix, or by an
+	// administrator's client or workload policy; not failures
 	Blocked int64
 	// Nonzero outcomes, summing to attempts
 	Outcomes []*GatewayConnectionOutcomeCount
@@ -310,8 +311,9 @@ type GatewayConnectionLabel struct {
 }
 
 type GatewayConnectionOutcomeCount struct {
-	// The attempt outcome within its stage, such as complete, partial, failed,
-	// listed, credential_blocked, or consent_blocked.
+	// The attempt outcome within its stage, such as accepted, code_issued,
+	// refreshed, refresh_replayed, assertion_issued, complete, partial, listed,
+	// failed, credential_blocked, consent_blocked, policy_blocked, or unknown.
 	Outcome string
 	// Attempts with this outcome.
 	Count int64
@@ -327,8 +329,12 @@ type GatewayConnectionReasonCount struct {
 // One recorded stage over the window. attempts is the denominator for every
 // outcome of this stage.
 type GatewayConnectionStage struct {
-	// discovery_listing counts Direct tools/list calls; discovery_member counts
-	// the members each listing reached.
+	// inbound_authorize counts sign-in requests (accepted means a redirect to
+	// sign-in was attempted; delivery and completion are not observed);
+	// inbound_token counts token requests it answered, by grant (an answered
+	// request is not proof a client used the token); discovery_listing counts
+	// Direct tools/list calls; discovery_member counts the members each listing
+	// reached.
 	Stage string
 	// All recorded attempts in this stage
 	Attempts int64

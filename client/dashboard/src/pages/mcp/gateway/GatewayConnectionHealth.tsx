@@ -7,6 +7,13 @@ import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -51,6 +58,14 @@ const MIN_ATTEMPT_OPTIONS = [
 ];
 
 const CHART_ID = "gateway-connection-health";
+
+// What a hotspot row counts toward, in the stage's own units.
+const FAILING: Record<HealthStage, string> = {
+  inbound_authorize: "failed or blocked requests",
+  inbound_token: "failed or blocked requests",
+  discovery_listing: "failures",
+  discovery_member: "failed or blocked checks",
+};
 
 // The most ranked combinations asked for; the server allows no more.
 const HOTSPOT_LIMIT = 25;
@@ -158,19 +173,30 @@ export function GatewayConnectionHealth({
       <div className="space-y-1">
         <h2 className="text-heading-sm">Connection health</h2>
         <Text small muted>
-          How clients fared listing this gateway&apos;s tools {phrase}. Sign-in
-          and token refresh are not recorded yet, so a successful sign-in is not
-          shown. Only Direct tool listings are recorded.
+          How clients fared signing in to this gateway and listing its tools{" "}
+          {phrase}. Sign-in and token requests count what the gateway answered,
+          not whether a redirect arrived, sign-in finished, or a token was used.
+          Not recorded yet: client metadata fetches, provider sign-ins, and
+          provider token refreshes. Only Direct tool listings are recorded.
         </Text>
       </div>
       <Page.Toolbar>
         <Page.Toolbar.Leading>
-          <SegmentedControl
+          <Select
             value={stageName}
-            onChange={setStageName}
-            options={STAGE_OPTIONS}
-            ariaLabel="Connection stage"
-          />
+            onValueChange={(value) => setStageName(value as HealthStage)}
+          >
+            <SelectTrigger aria-label="Connection stage" className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STAGE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Page.Toolbar.Leading>
         <Page.Toolbar.Actions>
           <SegmentedControl
@@ -426,14 +452,20 @@ function Hotspots({
         </Text>
       ),
     },
-    ...(stage === "discovery_member"
+    ...(stage !== "discovery_listing"
       ? [
           {
             key: "blocked",
             header: (
               <span className="inline-flex items-center gap-1.5">
                 Blocked
-                <SimpleTooltip tooltip="Needs sign-in, updated connection settings, or consent. View the row for the reason.">
+                <SimpleTooltip
+                  tooltip={
+                    stage === "discovery_member"
+                      ? "Needs sign-in, updated connection settings, or consent. View the row for the reason."
+                      : "Refused by an administrator's client or workload policy. View the row for the reason."
+                  }
+                >
                   <button
                     type="button"
                     aria-label="About Blocked"
@@ -487,8 +519,7 @@ function Hotspots({
   ];
 
   const ranking = rankBy === "count" ? "failures" : "failure rate";
-  const failing =
-    stage === "discovery_member" ? "failed or blocked checks" : "failures";
+  const failing = FAILING[stage];
   if (rows.length === 0) {
     return (
       <WidgetEmptyState

@@ -76,7 +76,8 @@ type connectionAttemptRow struct {
 	ChatID       string `ch:"chat_id"`
 }
 
-// connectionAttempts reads a gateway's committed attempt rows, listing first.
+// connectionAttempts reads a gateway's committed discovery rows, listing
+// first.
 func connectionAttempts(t *testing.T, projectID, gatewayID uuid.UUID) []connectionAttemptRow {
 	t.Helper()
 	chConn, err := infra.NewClickhouseClient(t)
@@ -100,6 +101,7 @@ func connectionAttempts(t *testing.T, projectID, gatewayID uuid.UUID) []connecti
 			        ifNull(gram_chat_id, '') AS chat_id
 			 FROM telemetry_logs
 			 WHERE gram_project_id = ? AND event_urn = ? AND meta_mcp_server_id = ?
+			   AND startsWith(toString(attributes.gram.connection_attempt.stage), 'discovery_')
 			 ORDER BY stage = 'discovery_listing' DESC, time_unix_nano, id`,
 		projectID.String(), mcp.MCPConnectionAttemptEventURN, gatewayID.String()))
 	return rows
@@ -209,6 +211,7 @@ func TestGatewayDirectRecordsOnlyUsableUnapprovedMembers(t *testing.T) {
 	source := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Source", 1, mcpservers.VisibilityPublic, "alpha")
 	approvedGone := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Approved then deleted", 2, mcpservers.VisibilityPublic, "beta")
 	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
+	require.Equal(t, 1, writes.written(t), "the connection's token request")
 
 	available := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Added", 3, mcpservers.VisibilityPublic, "gamma")
 	deleted := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Added then deleted", 4, mcpservers.VisibilityPublic, "delta")
@@ -260,6 +263,7 @@ func TestGatewayDirectRecordsOnlyLiveUnapprovedTunnels(t *testing.T) {
 			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
 			source := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Source", 1, mcpservers.VisibilityPublic, "alpha")
 			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
+			require.Equal(t, 1, writes.written(t), "the connection's token request")
 			tunnelID, _ := seedTunneledMetaMember(t, ctx, ti, *auth.ProjectID, gateway.ID, "Added tunnel", "added-tunnel", 2, "")
 			if tc.deleted {
 				_, err := tunneledmcprepo.New(ti.conn).DeleteServer(ctx, tunneledmcprepo.DeleteServerParams{ID: tunnelID, ProjectID: *auth.ProjectID})

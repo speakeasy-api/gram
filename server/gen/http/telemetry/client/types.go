@@ -9004,8 +9004,12 @@ type GatewayConnectionKeyRequestBody struct {
 // GatewayConnectionStageResponseBody is used to define fields on response body
 // types.
 type GatewayConnectionStageResponseBody struct {
-	// discovery_listing counts Direct tools/list calls; discovery_member counts
-	// the members each listing reached.
+	// inbound_authorize counts sign-in requests (accepted means a redirect to
+	// sign-in was attempted; delivery and completion are not observed);
+	// inbound_token counts token requests it answered, by grant (an answered
+	// request is not proof a client used the token); discovery_listing counts
+	// Direct tools/list calls; discovery_member counts the members each listing
+	// reached.
 	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
 	// All recorded attempts in this stage
 	Attempts *int64 `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
@@ -9025,8 +9029,9 @@ type GatewayConnectionStageResponseBody struct {
 // GatewayConnectionOutcomeCountResponseBody is used to define fields on
 // response body types.
 type GatewayConnectionOutcomeCountResponseBody struct {
-	// The attempt outcome within its stage, such as complete, partial, failed,
-	// listed, credential_blocked, or consent_blocked.
+	// The attempt outcome within its stage, such as accepted, code_issued,
+	// refreshed, refresh_replayed, assertion_issued, complete, partial, listed,
+	// failed, credential_blocked, consent_blocked, policy_blocked, or unknown.
 	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
 	// Attempts with this outcome.
 	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
@@ -9060,7 +9065,8 @@ type GatewayConnectionHotspotResponseBody struct {
 	Attempts *int64 `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
 	// Attempts that failed
 	Failed *int64 `form:"failed,omitempty" json:"failed,omitempty" xml:"failed,omitempty"`
-	// Attempts blocked by a credential or consent the caller can fix; not failures
+	// Attempts blocked by a credential or consent the caller can fix, or by an
+	// administrator's client or workload policy; not failures
 	Blocked *int64 `form:"blocked,omitempty" json:"blocked,omitempty" xml:"blocked,omitempty"`
 	// Nonzero outcomes, summing to attempts
 	Outcomes []*GatewayConnectionOutcomeCountResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
@@ -28798,8 +28804,8 @@ func ValidateMetaMcpDiscoveryFailureBucketResponseBody(body *MetaMcpDiscoveryFai
 // ValidateGatewayConnectionKeyRequestBody runs the validations defined on
 // GatewayConnectionKeyRequestBody
 func ValidateGatewayConnectionKeyRequestBody(body *GatewayConnectionKeyRequestBody) (err error) {
-	if !(body.Stage == "discovery_listing" || body.Stage == "discovery_member") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", body.Stage, []any{"discovery_listing", "discovery_member"}))
+	if !(body.Stage == "inbound_authorize" || body.Stage == "inbound_token" || body.Stage == "discovery_listing" || body.Stage == "discovery_member") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", body.Stage, []any{"inbound_authorize", "inbound_token", "discovery_listing", "discovery_member"}))
 	}
 	if utf8.RuneCountInString(body.Subject) > 512 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.subject", body.Subject, utf8.RuneCountInString(body.Subject), 512, false))
@@ -28835,8 +28841,8 @@ func ValidateGatewayConnectionStageResponseBody(body *GatewayConnectionStageResp
 		err = goa.MergeErrors(err, goa.MissingFieldError("buckets", "body"))
 	}
 	if body.Stage != nil {
-		if !(*body.Stage == "discovery_listing" || *body.Stage == "discovery_member") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"discovery_listing", "discovery_member"}))
+		if !(*body.Stage == "inbound_authorize" || *body.Stage == "inbound_token" || *body.Stage == "discovery_listing" || *body.Stage == "discovery_member") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"inbound_authorize", "inbound_token", "discovery_listing", "discovery_member"}))
 		}
 	}
 	for _, e := range body.Outcomes {
