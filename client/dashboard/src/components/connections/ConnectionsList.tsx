@@ -810,6 +810,7 @@ export function ConnectionsList({
   project,
   bordered = true,
   killswitchContext,
+  groupingLabels = CONNECTION_GROUPING_LABELS,
 }: {
   sessions: UserSession[];
   grouping: ConnectionGrouping;
@@ -836,6 +837,7 @@ export function ConnectionsList({
   bordered?: boolean;
   /** Enables user-only Killswitch status/actions on this sessions surface. */
   killswitchContext?: ConnectionKillswitchContext;
+  groupingLabels?: Record<ConnectionGrouping, string>;
 }): JSX.Element {
   const sessions = useSessionAgents(unresolvedSessions);
   const now = useNow();
@@ -926,7 +928,7 @@ export function ConnectionsList({
                 name. */}
             <span />
             <span />
-            <span>{CONNECTION_GROUPING_LABELS[grouping]}</span>
+            <span>{groupingLabels[grouping]}</span>
             <span className="hidden sm:block">Last used</span>
             <span className="hidden sm:block">Connections</span>
             <span className="hidden sm:block">Status</span>

@@ -24,6 +24,11 @@ type Service interface {
 	// List available user session facet values (clients, users, servers) in the
 	// caller's project.
 	ListFacets(context.Context, *ListFacetsPayload) (res *ListUserSessionFacetsResult, err error)
+	// Count the values of each session filter field over the sessions
+	// userSessions.list would return for the same filters. Each field ignores its
+	// own selection and applies every other filter. Returns the top values per
+	// field plus any selected value.
+	QueryFacets(context.Context, *QueryFacetsPayload) (res *UserSessionFilterFacets, err error)
 	// Mint a user_session on behalf of the authenticated dashboard user, bound to
 	// an issuer-gated audience: an MCP server, a meta MCP server, or a legacy
 	// toolset without an mcp_servers wrapper. Exactly one of toolset_id,
@@ -56,7 +61,7 @@ const ServiceName = "userSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"listUserSessions", "listFacets", "mintUserSession", "revokeUserSession"}
+var MethodNames = [5]string{"listUserSessions", "listFacets", "queryFacets", "mintUserSession", "revokeUserSession"}
 
 // ListFacetsPayload is the payload type of the userSessions service listFacets
 // method.
@@ -95,6 +100,37 @@ type ListUserSessionsPayload struct {
 	// sessions that recorded none, the gateway their consent selection names.
 	// Sessions with neither are left out.
 	MetaMcpServerID *string
+	// Only sessions whose subject URN is one of these.
+	Identities []string
+	// Leave out sessions whose subject URN is one of these.
+	ExcludeIdentities []string
+	// Only sessions whose subject is one of these kinds.
+	IdentityTypes []string
+	// Leave out sessions whose subject is one of these kinds.
+	ExcludeIdentityTypes []string
+	// Only sessions from one of these sign-in servers (user_session_issuer ids).
+	Servers []string
+	// Leave out sessions from these sign-in servers (user_session_issuer ids).
+	ExcludeServers []string
+	// Only sessions from one of these clients: a client id, "dashboard" for
+	// dashboard sessions, or "none" for sessions with no client.
+	Clients []string
+	// Leave out sessions from these clients, using the same values as clients.
+	ExcludeClients []string
+	// Only sessions whose client registered this way: cimd (metadata document),
+	// dcr (dynamic registration), assistant (an assistant workload client), or
+	// none (no client).
+	ClientRegistrations []string
+	// Leave out sessions whose client registered this way.
+	ExcludeClientRegistrations []string
+	// Only sessions used within this many seconds, inclusive. Sessions with no
+	// recorded use never match.
+	LastUsedWithin *int
+	// Only sessions last used more than this many seconds ago. Sessions with no
+	// recorded use never match.
+	LastUsedOlderThan *int
+	// Only sessions with no recorded use.
+	LastUsedNever *bool
 	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).
@@ -147,6 +183,64 @@ type MintUserSessionResult struct {
 	ExpiresIn int
 }
 
+// QueryFacetsPayload is the payload type of the userSessions service
+// queryFacets method.
+type QueryFacetsPayload struct {
+	// Exact-match filter on subject URN.
+	SubjectUrn *string
+	// Filter by user_session_issuer id.
+	UserSessionIssuerID *string
+	// Filter by session status.
+	Status *string
+	// Filter by the connecting client id.
+	ClientID *string
+	// Case-insensitive substring match on the person, agent, API key, workload,
+	// client, MCP server, or upstream provider shown for a session.
+	Search *string
+	// Only sessions issued for this gateway, by the gateway they recorded or, for
+	// sessions that recorded none, the gateway their consent selection names.
+	// Sessions with neither are left out.
+	MetaMcpServerID *string
+	// Only sessions whose subject URN is one of these.
+	Identities []string
+	// Leave out sessions whose subject URN is one of these.
+	ExcludeIdentities []string
+	// Only sessions whose subject is one of these kinds.
+	IdentityTypes []string
+	// Leave out sessions whose subject is one of these kinds.
+	ExcludeIdentityTypes []string
+	// Only sessions from one of these sign-in servers (user_session_issuer ids).
+	Servers []string
+	// Leave out sessions from these sign-in servers (user_session_issuer ids).
+	ExcludeServers []string
+	// Only sessions from one of these clients: a client id, "dashboard" for
+	// dashboard sessions, or "none" for sessions with no client.
+	Clients []string
+	// Leave out sessions from these clients, using the same values as clients.
+	ExcludeClients []string
+	// Only sessions whose client registered this way: cimd (metadata document),
+	// dcr (dynamic registration), assistant (an assistant workload client), or
+	// none (no client).
+	ClientRegistrations []string
+	// Leave out sessions whose client registered this way.
+	ExcludeClientRegistrations []string
+	// Only sessions used within this many seconds, inclusive. Sessions with no
+	// recorded use never match.
+	LastUsedWithin *int
+	// Only sessions last used more than this many seconds ago. Sessions with no
+	// recorded use never match.
+	LastUsedOlderThan *int
+	// Only sessions with no recorded use.
+	LastUsedNever *bool
+	// Narrow this field's values with field_search.
+	Field *string
+	// Case-insensitive substring match on the values and labels of field.
+	FieldSearch      *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // RevokeUserSessionPayload is the payload type of the userSessions service
 // revokeUserSession method.
 type RevokeUserSessionPayload struct {
@@ -164,6 +258,44 @@ type UserSessionFacetOption struct {
 	DisplayName string
 	// Number of sessions for this facet value.
 	Count int64
+}
+
+type UserSessionFilterFacet struct {
+	// The most common values, then any selected value outside them.
+	Values []*UserSessionFilterFacetValue
+	// How many distinct values match the field search.
+	DistinctCount int64
+}
+
+type UserSessionFilterFacetValue struct {
+	// The value to filter by.
+	Value string
+	// The label for the value, when one is visible to the caller.
+	DisplayName *string
+	// Sessions with this value under the other filters.
+	Count int64
+	// Whether the value is one of the distinct_count values matching the field
+	// search. False for a selected value returned only so it stays removable.
+	MatchesSearch bool
+}
+
+// UserSessionFilterFacets is the result type of the userSessions service
+// queryFacets method.
+type UserSessionFilterFacets struct {
+	// Session subjects.
+	Identity *UserSessionFilterFacet
+	// Session subject kinds.
+	IdentityType *UserSessionFilterFacet
+	// Sign-in servers (user_session_issuer ids) the sessions came from.
+	McpServer *UserSessionFilterFacet
+	// Connecting clients.
+	Client *UserSessionFilterFacet
+	// How each client registered.
+	ClientRegistration *UserSessionFilterFacet
+	// With meta_mcp_server_id: sessions on the gateway's current sign-in server
+	// that match the other filters but recorded no origin and have no consent
+	// selection naming a resource. 0 for a gateway without a sign-in server.
+	UnattributedCount *int64
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

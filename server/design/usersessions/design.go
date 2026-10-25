@@ -19,22 +19,7 @@ var _ = Service("userSessions", func() {
 		Description("List issued user_sessions in the caller's project. refresh_token_hash is never returned.")
 
 		Payload(func() {
-			Attribute("subject_urn", String, "Exact-match filter on subject URN.")
-			Attribute("user_session_issuer_id", String, "Filter by user_session_issuer id.", func() {
-				Format(FormatUUID)
-			})
-			Attribute("status", String, "Filter by session status.", func() {
-				Enum("active", "expired", "revoked", "all")
-			})
-			Attribute("client_id", String, "Filter by the connecting client id.", func() {
-				Format(FormatUUID)
-			})
-			Attribute("search", String, "Case-insensitive substring match on the person, agent, API key, workload, client, MCP server, or upstream provider shown for a session.", func() {
-				MaxLength(200)
-			})
-			Attribute("meta_mcp_server_id", String, "Only sessions issued for this gateway, by the gateway they recorded or, for sessions that recorded none, the gateway their consent selection names. Sessions with neither are left out.", func() {
-				Format(FormatUUID)
-			})
+			sessionFilterAttributes()
 			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() {
 				Format(FormatUUID)
 			})
@@ -48,12 +33,7 @@ var _ = Service("userSessions", func() {
 
 		HTTP(func() {
 			GET("/rpc/userSessions.list")
-			Param("subject_urn")
-			Param("user_session_issuer_id")
-			Param("status")
-			Param("client_id")
-			Param("search")
-			Param("meta_mcp_server_id")
+			sessionFilterParams()
 			Param("cursor")
 			Param("limit")
 			security.SessionHeader()
@@ -86,6 +66,36 @@ var _ = Service("userSessions", func() {
 		Meta("openapi:operationId", "listUserSessionFacets")
 		Meta("openapi:extension:x-speakeasy-name-override", "listFacets")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessionFacets"}`)
+	})
+
+	Method("queryFacets", func() {
+		Description("Count the values of each session filter field over the sessions userSessions.list would return for the same filters. Each field ignores its own selection and applies every other filter. Returns the top values per field plus any selected value.")
+		Payload(func() {
+			sessionFilterAttributes()
+			Attribute("field", String, "Narrow this field's values with field_search.", func() {
+				Enum("identity", "identity_type", "mcp_server", "client", "client_registration")
+			})
+			Attribute("field_search", String, "Case-insensitive substring match on the values and labels of field.", func() {
+				MaxLength(200)
+			})
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+		Result(UserSessionFilterFacets)
+		HTTP(func() {
+			GET("/rpc/userSessions.queryFacets")
+			sessionFilterParams()
+			Param("field")
+			Param("field_search")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "queryUserSessionFacets")
+		Meta("openapi:extension:x-speakeasy-name-override", "queryFacets")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessionFilterFacets"}`)
 	})
 
 	Method("mintUserSession", func() {
@@ -296,6 +306,121 @@ var ListUserSessionsResult = Type("ListUserSessionsResult", func() {
 	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
 
 	Required("items")
+})
+
+// maxFilterValues bounds each list filter so a URL cannot make one request
+// match against an unbounded set of values.
+const maxFilterValues = 50
+
+// maxLastUsedSeconds bounds the last-used comparisons at ten years.
+const maxLastUsedSeconds = 10 * 365 * 24 * 60 * 60
+
+func sessionFilterAttributes() {
+	Attribute("subject_urn", String, "Exact-match filter on subject URN.")
+	Attribute("user_session_issuer_id", String, "Filter by user_session_issuer id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("status", String, "Filter by session status.", func() {
+		Enum("active", "expired", "revoked", "all")
+	})
+	Attribute("client_id", String, "Filter by the connecting client id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("search", String, "Case-insensitive substring match on the person, agent, API key, workload, client, MCP server, or upstream provider shown for a session.", func() {
+		MaxLength(200)
+	})
+	Attribute("meta_mcp_server_id", String, "Only sessions issued for this gateway, by the gateway they recorded or, for sessions that recorded none, the gateway their consent selection names. Sessions with neither are left out.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("identities", ArrayOf(String), "Only sessions whose subject URN is one of these.", func() {
+		MaxLength(maxFilterValues)
+	})
+	Attribute("exclude_identities", ArrayOf(String), "Leave out sessions whose subject URN is one of these.", func() {
+		MaxLength(maxFilterValues)
+	})
+	Attribute("identity_types", ArrayOf(String, func() { Enum(identityTypes...) }), "Only sessions whose subject is one of these kinds.", func() {
+		MaxLength(maxFilterValues)
+	})
+	Attribute("exclude_identity_types", ArrayOf(String, func() { Enum(identityTypes...) }), "Leave out sessions whose subject is one of these kinds.", func() {
+		MaxLength(maxFilterValues)
+	})
+	Attribute("servers", ArrayOf(String, func() { Format(FormatUUID) }), "Only sessions from one of these sign-in servers (user_session_issuer ids).", func() {
+		MaxLength(maxFilterValues)
+	})
+	Attribute("exclude_servers", ArrayOf(String, func() { Format(FormatUUID) }), "Leave out sessions from these sign-in servers (user_session_issuer ids).", func() {
+		MaxLength(maxFilterValues)
+	})
+	Attribute("clients", ArrayOf(String), "Only sessions from one of these clients: a client id, \"dashboard\" for dashboard sessions, or \"none\" for sessions with no client.", func() {
+		MaxLength(maxFilterValues)
+	})
+	Attribute("exclude_clients", ArrayOf(String), "Leave out sessions from these clients, using the same values as clients.", func() {
+		MaxLength(maxFilterValues)
+	})
+	Attribute("client_registrations", ArrayOf(String, func() { Enum(clientRegistrations...) }), "Only sessions whose client registered this way: cimd (metadata document), dcr (dynamic registration), assistant (an assistant workload client), or none (no client).", func() {
+		MaxLength(maxFilterValues)
+	})
+	Attribute("exclude_client_registrations", ArrayOf(String, func() { Enum(clientRegistrations...) }), "Leave out sessions whose client registered this way.", func() {
+		MaxLength(maxFilterValues)
+	})
+	Attribute("last_used_within", Int, "Only sessions used within this many seconds, inclusive. Sessions with no recorded use never match.", func() {
+		Minimum(1)
+		Maximum(maxLastUsedSeconds)
+	})
+	Attribute("last_used_older_than", Int, "Only sessions last used more than this many seconds ago. Sessions with no recorded use never match.", func() {
+		Minimum(1)
+		Maximum(maxLastUsedSeconds)
+	})
+	Attribute("last_used_never", Boolean, "Only sessions with no recorded use.")
+}
+
+func sessionFilterParams() {
+	Param("subject_urn")
+	Param("user_session_issuer_id")
+	Param("status")
+	Param("client_id")
+	Param("search")
+	Param("meta_mcp_server_id")
+	Param("identities")
+	Param("exclude_identities")
+	Param("identity_types")
+	Param("exclude_identity_types")
+	Param("servers")
+	Param("exclude_servers")
+	Param("clients")
+	Param("exclude_clients")
+	Param("client_registrations")
+	Param("exclude_client_registrations")
+	Param("last_used_within")
+	Param("last_used_older_than")
+	Param("last_used_never")
+}
+
+var identityTypes = []any{"user", "agent", "workload", "apikey", "anonymous"}
+
+var clientRegistrations = []any{"cimd", "dcr", "assistant", "none"}
+
+var UserSessionFilterFacetValue = Type("UserSessionFilterFacetValue", func() {
+	Attribute("value", String, "The value to filter by.")
+	Attribute("display_name", String, "The label for the value, when one is visible to the caller.")
+	Attribute("count", Int64, "Sessions with this value under the other filters.")
+	Attribute("matches_search", Boolean, "Whether the value is one of the distinct_count values matching the field search. False for a selected value returned only so it stays removable.")
+	Required("value", "count", "matches_search")
+})
+
+var UserSessionFilterFacet = Type("UserSessionFilterFacet", func() {
+	Attribute("values", ArrayOf(UserSessionFilterFacetValue), "The most common values, then any selected value outside them.")
+	Attribute("distinct_count", Int64, "How many distinct values match the field search.")
+	Required("values", "distinct_count")
+})
+
+var UserSessionFilterFacets = Type("UserSessionFilterFacets", func() {
+	Attribute("identity", UserSessionFilterFacet, "Session subjects.")
+	Attribute("identity_type", UserSessionFilterFacet, "Session subject kinds.")
+	Attribute("mcp_server", UserSessionFilterFacet, "Sign-in servers (user_session_issuer ids) the sessions came from.")
+	Attribute("client", UserSessionFilterFacet, "Connecting clients.")
+	Attribute("client_registration", UserSessionFilterFacet, "How each client registered.")
+	Attribute("unattributed_count", Int64, "With meta_mcp_server_id: sessions on the gateway's current sign-in server that match the other filters but recorded no origin and have no consent selection naming a resource. 0 for a gateway without a sign-in server.")
+	Required("identity", "identity_type", "mcp_server", "client", "client_registration")
 })
 
 var UserSessionFacetOption = Type("UserSessionFacetOption", func() {

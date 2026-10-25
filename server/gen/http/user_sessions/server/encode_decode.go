@@ -40,18 +40,31 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 	return func(r *http.Request) (*usersessions.ListUserSessionsPayload, error) {
 		var payload *usersessions.ListUserSessionsPayload
 		var (
-			subjectUrn          *string
-			userSessionIssuerID *string
-			status              *string
-			clientID            *string
-			search              *string
-			metaMcpServerID     *string
-			cursor              *string
-			limit               *int
-			sessionToken        *string
-			apikeyToken         *string
-			projectSlugInput    *string
-			err                 error
+			subjectUrn                 *string
+			userSessionIssuerID        *string
+			status                     *string
+			clientID                   *string
+			search                     *string
+			metaMcpServerID            *string
+			identities                 []string
+			excludeIdentities          []string
+			identityTypes              []string
+			excludeIdentityTypes       []string
+			servers                    []string
+			excludeServers             []string
+			clients                    []string
+			excludeClients             []string
+			clientRegistrations        []string
+			excludeClientRegistrations []string
+			lastUsedWithin             *int
+			lastUsedOlderThan          *int
+			lastUsedNever              *bool
+			cursor                     *string
+			limit                      *int
+			sessionToken               *string
+			apikeyToken                *string
+			projectSlugInput           *string
+			err                        error
 		)
 		qp := r.URL.Query()
 		subjectUrnRaw := qp.Get("subject_urn")
@@ -97,6 +110,124 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if metaMcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
 		}
+		identities = qp["identities"]
+		if len(identities) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("identities", identities, len(identities), 50, false))
+		}
+		excludeIdentities = qp["exclude_identities"]
+		if len(excludeIdentities) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_identities", excludeIdentities, len(excludeIdentities), 50, false))
+		}
+		identityTypes = qp["identity_types"]
+		if len(identityTypes) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("identity_types", identityTypes, len(identityTypes), 50, false))
+		}
+		for _, e := range identityTypes {
+			if !(e == "user" || e == "agent" || e == "workload" || e == "apikey" || e == "anonymous") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("identity_types[*]", e, []any{"user", "agent", "workload", "apikey", "anonymous"}))
+			}
+		}
+		excludeIdentityTypes = qp["exclude_identity_types"]
+		if len(excludeIdentityTypes) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_identity_types", excludeIdentityTypes, len(excludeIdentityTypes), 50, false))
+		}
+		for _, e := range excludeIdentityTypes {
+			if !(e == "user" || e == "agent" || e == "workload" || e == "apikey" || e == "anonymous") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("exclude_identity_types[*]", e, []any{"user", "agent", "workload", "apikey", "anonymous"}))
+			}
+		}
+		servers = qp["servers"]
+		if len(servers) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("servers", servers, len(servers), 50, false))
+		}
+		for _, e := range servers {
+			err = goa.MergeErrors(err, goa.ValidateFormat("servers[*]", e, goa.FormatUUID))
+		}
+		excludeServers = qp["exclude_servers"]
+		if len(excludeServers) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_servers", excludeServers, len(excludeServers), 50, false))
+		}
+		for _, e := range excludeServers {
+			err = goa.MergeErrors(err, goa.ValidateFormat("exclude_servers[*]", e, goa.FormatUUID))
+		}
+		clients = qp["clients"]
+		if len(clients) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("clients", clients, len(clients), 50, false))
+		}
+		excludeClients = qp["exclude_clients"]
+		if len(excludeClients) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_clients", excludeClients, len(excludeClients), 50, false))
+		}
+		clientRegistrations = qp["client_registrations"]
+		if len(clientRegistrations) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("client_registrations", clientRegistrations, len(clientRegistrations), 50, false))
+		}
+		for _, e := range clientRegistrations {
+			if !(e == "cimd" || e == "dcr" || e == "assistant" || e == "none") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("client_registrations[*]", e, []any{"cimd", "dcr", "assistant", "none"}))
+			}
+		}
+		excludeClientRegistrations = qp["exclude_client_registrations"]
+		if len(excludeClientRegistrations) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_client_registrations", excludeClientRegistrations, len(excludeClientRegistrations), 50, false))
+		}
+		for _, e := range excludeClientRegistrations {
+			if !(e == "cimd" || e == "dcr" || e == "assistant" || e == "none") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("exclude_client_registrations[*]", e, []any{"cimd", "dcr", "assistant", "none"}))
+			}
+		}
+		{
+			lastUsedWithinRaw := qp.Get("last_used_within")
+			if lastUsedWithinRaw != "" {
+				v, err2 := strconv.ParseInt(lastUsedWithinRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("last_used_within", lastUsedWithinRaw, "integer"))
+				}
+				pv := int(v)
+				lastUsedWithin = &pv
+			}
+		}
+		if lastUsedWithin != nil {
+			if *lastUsedWithin < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_within", *lastUsedWithin, 1, true))
+			}
+		}
+		if lastUsedWithin != nil {
+			if *lastUsedWithin > 3.1536e+08 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_within", *lastUsedWithin, 3.1536e+08, false))
+			}
+		}
+		{
+			lastUsedOlderThanRaw := qp.Get("last_used_older_than")
+			if lastUsedOlderThanRaw != "" {
+				v, err2 := strconv.ParseInt(lastUsedOlderThanRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("last_used_older_than", lastUsedOlderThanRaw, "integer"))
+				}
+				pv := int(v)
+				lastUsedOlderThan = &pv
+			}
+		}
+		if lastUsedOlderThan != nil {
+			if *lastUsedOlderThan < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_older_than", *lastUsedOlderThan, 1, true))
+			}
+		}
+		if lastUsedOlderThan != nil {
+			if *lastUsedOlderThan > 3.1536e+08 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_older_than", *lastUsedOlderThan, 3.1536e+08, false))
+			}
+		}
+		{
+			lastUsedNeverRaw := qp.Get("last_used_never")
+			if lastUsedNeverRaw != "" {
+				v, err2 := strconv.ParseBool(lastUsedNeverRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("last_used_never", lastUsedNeverRaw, "boolean"))
+				}
+				lastUsedNever = &v
+			}
+		}
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
@@ -130,7 +261,7 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListUserSessionsPayload(subjectUrn, userSessionIssuerID, status, clientID, search, metaMcpServerID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListUserSessionsPayload(subjectUrn, userSessionIssuerID, status, clientID, search, metaMcpServerID, identities, excludeIdentities, identityTypes, excludeIdentityTypes, servers, excludeServers, clients, excludeClients, clientRegistrations, excludeClientRegistrations, lastUsedWithin, lastUsedOlderThan, lastUsedNever, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -520,6 +651,428 @@ func EncodeListFacetsError(encoder func(context.Context, http.ResponseWriter) go
 				body = formatter(ctx, res)
 			} else {
 				body = NewListFacetsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeQueryFacetsResponse returns an encoder for responses returned by the
+// userSessions queryFacets endpoint.
+func EncodeQueryFacetsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*usersessions.UserSessionFilterFacets)
+		enc := encoder(ctx, w)
+		body := NewQueryFacetsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeQueryFacetsRequest returns a decoder for requests sent to the
+// userSessions queryFacets endpoint.
+func DecodeQueryFacetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*usersessions.QueryFacetsPayload, error) {
+	return func(r *http.Request) (*usersessions.QueryFacetsPayload, error) {
+		var payload *usersessions.QueryFacetsPayload
+		var (
+			subjectUrn                 *string
+			userSessionIssuerID        *string
+			status                     *string
+			clientID                   *string
+			search                     *string
+			metaMcpServerID            *string
+			identities                 []string
+			excludeIdentities          []string
+			identityTypes              []string
+			excludeIdentityTypes       []string
+			servers                    []string
+			excludeServers             []string
+			clients                    []string
+			excludeClients             []string
+			clientRegistrations        []string
+			excludeClientRegistrations []string
+			lastUsedWithin             *int
+			lastUsedOlderThan          *int
+			lastUsedNever              *bool
+			field                      *string
+			fieldSearch                *string
+			sessionToken               *string
+			apikeyToken                *string
+			projectSlugInput           *string
+			err                        error
+		)
+		qp := r.URL.Query()
+		subjectUrnRaw := qp.Get("subject_urn")
+		if subjectUrnRaw != "" {
+			subjectUrn = &subjectUrnRaw
+		}
+		userSessionIssuerIDRaw := qp.Get("user_session_issuer_id")
+		if userSessionIssuerIDRaw != "" {
+			userSessionIssuerID = &userSessionIssuerIDRaw
+		}
+		if userSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", *userSessionIssuerID, goa.FormatUUID))
+		}
+		statusRaw := qp.Get("status")
+		if statusRaw != "" {
+			status = &statusRaw
+		}
+		if status != nil {
+			if !(*status == "active" || *status == "expired" || *status == "revoked" || *status == "all") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"active", "expired", "revoked", "all"}))
+			}
+		}
+		clientIDRaw := qp.Get("client_id")
+		if clientIDRaw != "" {
+			clientID = &clientIDRaw
+		}
+		if clientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
+		}
+		searchRaw := qp.Get("search")
+		if searchRaw != "" {
+			search = &searchRaw
+		}
+		if search != nil {
+			if utf8.RuneCountInString(*search) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 200, false))
+			}
+		}
+		metaMcpServerIDRaw := qp.Get("meta_mcp_server_id")
+		if metaMcpServerIDRaw != "" {
+			metaMcpServerID = &metaMcpServerIDRaw
+		}
+		if metaMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", *metaMcpServerID, goa.FormatUUID))
+		}
+		identities = qp["identities"]
+		if len(identities) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("identities", identities, len(identities), 50, false))
+		}
+		excludeIdentities = qp["exclude_identities"]
+		if len(excludeIdentities) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_identities", excludeIdentities, len(excludeIdentities), 50, false))
+		}
+		identityTypes = qp["identity_types"]
+		if len(identityTypes) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("identity_types", identityTypes, len(identityTypes), 50, false))
+		}
+		for _, e := range identityTypes {
+			if !(e == "user" || e == "agent" || e == "workload" || e == "apikey" || e == "anonymous") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("identity_types[*]", e, []any{"user", "agent", "workload", "apikey", "anonymous"}))
+			}
+		}
+		excludeIdentityTypes = qp["exclude_identity_types"]
+		if len(excludeIdentityTypes) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_identity_types", excludeIdentityTypes, len(excludeIdentityTypes), 50, false))
+		}
+		for _, e := range excludeIdentityTypes {
+			if !(e == "user" || e == "agent" || e == "workload" || e == "apikey" || e == "anonymous") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("exclude_identity_types[*]", e, []any{"user", "agent", "workload", "apikey", "anonymous"}))
+			}
+		}
+		servers = qp["servers"]
+		if len(servers) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("servers", servers, len(servers), 50, false))
+		}
+		for _, e := range servers {
+			err = goa.MergeErrors(err, goa.ValidateFormat("servers[*]", e, goa.FormatUUID))
+		}
+		excludeServers = qp["exclude_servers"]
+		if len(excludeServers) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_servers", excludeServers, len(excludeServers), 50, false))
+		}
+		for _, e := range excludeServers {
+			err = goa.MergeErrors(err, goa.ValidateFormat("exclude_servers[*]", e, goa.FormatUUID))
+		}
+		clients = qp["clients"]
+		if len(clients) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("clients", clients, len(clients), 50, false))
+		}
+		excludeClients = qp["exclude_clients"]
+		if len(excludeClients) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_clients", excludeClients, len(excludeClients), 50, false))
+		}
+		clientRegistrations = qp["client_registrations"]
+		if len(clientRegistrations) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("client_registrations", clientRegistrations, len(clientRegistrations), 50, false))
+		}
+		for _, e := range clientRegistrations {
+			if !(e == "cimd" || e == "dcr" || e == "assistant" || e == "none") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("client_registrations[*]", e, []any{"cimd", "dcr", "assistant", "none"}))
+			}
+		}
+		excludeClientRegistrations = qp["exclude_client_registrations"]
+		if len(excludeClientRegistrations) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_client_registrations", excludeClientRegistrations, len(excludeClientRegistrations), 50, false))
+		}
+		for _, e := range excludeClientRegistrations {
+			if !(e == "cimd" || e == "dcr" || e == "assistant" || e == "none") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("exclude_client_registrations[*]", e, []any{"cimd", "dcr", "assistant", "none"}))
+			}
+		}
+		{
+			lastUsedWithinRaw := qp.Get("last_used_within")
+			if lastUsedWithinRaw != "" {
+				v, err2 := strconv.ParseInt(lastUsedWithinRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("last_used_within", lastUsedWithinRaw, "integer"))
+				}
+				pv := int(v)
+				lastUsedWithin = &pv
+			}
+		}
+		if lastUsedWithin != nil {
+			if *lastUsedWithin < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_within", *lastUsedWithin, 1, true))
+			}
+		}
+		if lastUsedWithin != nil {
+			if *lastUsedWithin > 3.1536e+08 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_within", *lastUsedWithin, 3.1536e+08, false))
+			}
+		}
+		{
+			lastUsedOlderThanRaw := qp.Get("last_used_older_than")
+			if lastUsedOlderThanRaw != "" {
+				v, err2 := strconv.ParseInt(lastUsedOlderThanRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("last_used_older_than", lastUsedOlderThanRaw, "integer"))
+				}
+				pv := int(v)
+				lastUsedOlderThan = &pv
+			}
+		}
+		if lastUsedOlderThan != nil {
+			if *lastUsedOlderThan < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_older_than", *lastUsedOlderThan, 1, true))
+			}
+		}
+		if lastUsedOlderThan != nil {
+			if *lastUsedOlderThan > 3.1536e+08 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("last_used_older_than", *lastUsedOlderThan, 3.1536e+08, false))
+			}
+		}
+		{
+			lastUsedNeverRaw := qp.Get("last_used_never")
+			if lastUsedNeverRaw != "" {
+				v, err2 := strconv.ParseBool(lastUsedNeverRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("last_used_never", lastUsedNeverRaw, "boolean"))
+				}
+				lastUsedNever = &v
+			}
+		}
+		fieldRaw := qp.Get("field")
+		if fieldRaw != "" {
+			field = &fieldRaw
+		}
+		if field != nil {
+			if !(*field == "identity" || *field == "identity_type" || *field == "mcp_server" || *field == "client" || *field == "client_registration") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("field", *field, []any{"identity", "identity_type", "mcp_server", "client", "client_registration"}))
+			}
+		}
+		fieldSearchRaw := qp.Get("field_search")
+		if fieldSearchRaw != "" {
+			fieldSearch = &fieldSearchRaw
+		}
+		if fieldSearch != nil {
+			if utf8.RuneCountInString(*fieldSearch) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("field_search", *fieldSearch, utf8.RuneCountInString(*fieldSearch), 200, false))
+			}
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewQueryFacetsPayload(subjectUrn, userSessionIssuerID, status, clientID, search, metaMcpServerID, identities, excludeIdentities, identityTypes, excludeIdentityTypes, servers, excludeServers, clients, excludeClients, clientRegistrations, excludeClientRegistrations, lastUsedWithin, lastUsedOlderThan, lastUsedNever, field, fieldSearch, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeQueryFacetsError returns an encoder for errors returned by the
+// queryFacets userSessions endpoint.
+func EncodeQueryFacetsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryFacetsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryFacetsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryFacetsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryFacetsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryFacetsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryFacetsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryFacetsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryFacetsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryFacetsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryFacetsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -1103,6 +1656,43 @@ func marshalUsersessionsUserSessionFacetOptionToUserSessionFacetOptionResponseBo
 		Value:       v.Value,
 		DisplayName: v.DisplayName,
 		Count:       v.Count,
+	}
+
+	return res
+}
+
+// marshalUsersessionsUserSessionFilterFacetToUserSessionFilterFacetResponseBody
+// builds a value of type *UserSessionFilterFacetResponseBody from a value of
+// type *usersessions.UserSessionFilterFacet.
+func marshalUsersessionsUserSessionFilterFacetToUserSessionFilterFacetResponseBody(v *usersessions.UserSessionFilterFacet) *UserSessionFilterFacetResponseBody {
+	res := &UserSessionFilterFacetResponseBody{
+		DistinctCount: v.DistinctCount,
+	}
+	if v.Values != nil {
+		res.Values = make([]*UserSessionFilterFacetValueResponseBody, len(v.Values))
+		for i, val := range v.Values {
+			if val == nil {
+				res.Values[i] = nil
+				continue
+			}
+			res.Values[i] = marshalUsersessionsUserSessionFilterFacetValueToUserSessionFilterFacetValueResponseBody(val)
+		}
+	} else {
+		res.Values = []*UserSessionFilterFacetValueResponseBody{}
+	}
+
+	return res
+}
+
+// marshalUsersessionsUserSessionFilterFacetValueToUserSessionFilterFacetValueResponseBody
+// builds a value of type *UserSessionFilterFacetValueResponseBody from a value
+// of type *usersessions.UserSessionFilterFacetValue.
+func marshalUsersessionsUserSessionFilterFacetValueToUserSessionFilterFacetValueResponseBody(v *usersessions.UserSessionFilterFacetValue) *UserSessionFilterFacetValueResponseBody {
+	res := &UserSessionFilterFacetValueResponseBody{
+		Value:         v.Value,
+		DisplayName:   v.DisplayName,
+		Count:         v.Count,
+		MatchesSearch: v.MatchesSearch,
 	}
 
 	return res

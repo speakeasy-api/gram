@@ -383,6 +383,8 @@ Debug is behind the `gateway-debug` PostHog flag (org or project targeted; every
 
 Open **Acme Agent Gateway → Debug**. It lists the gateway's two seeded sessions, which record the gateway as their origin. The Linear, Slack and partner sessions record their own MCP servers, so they never appear here even where they share a sign-in server. Searching narrows the list and is kept in the URL; a search with no match shows "No connections match your search".
 
+The same bar builds filter chips (Identity, Identity type, Sign-in server, Client, Client registration, Last used), kept in the `sf` URL parameter beside `q`. The rail offers Identity type, Sign-in server, Client and Client registration with per-field search and counts scoped to this gateway. Both seeded sessions are people signed in through the gateway's own server and client. Every seeded session on the gateway's sign-in server records its origin, so the "no recorded origin" notice stays hidden.
+
 ### Gateway tool picker
 
 Browser verification: [~] — follow check 32 in `seed/demo/verify.md`.

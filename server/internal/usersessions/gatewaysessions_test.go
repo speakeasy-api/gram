@@ -206,3 +206,75 @@ func TestPlatformListUserSessions_GatewayScope(t *testing.T) {
 		requireOopsCode(t, err, code)
 	}
 }
+
+func TestQueryFacets_GatewayScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	shared := seedIssuer(t, ctx, ti, "facet-scope-shared")
+	former := seedIssuer(t, ctx, ti, "facet-scope-former")
+	g1 := seedGateway(t, ctx, ti, "Facet gateway one", uuid.NullUUID{UUID: shared, Valid: true})
+	g3 := seedGateway(t, ctx, ti, "Facet gateway three", uuid.NullUUID{UUID: shared, Valid: true})
+	noIssuer := seedGateway(t, ctx, ti, "Facet gateway without issuer", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+
+	consentG3, err := json.Marshal(map[string]string{"resource": gatewayIdentity(g3)})
+	require.NoError(t, err)
+	otherConsent, err := json.Marshal(map[string]string{"resource": "mcp_server:" + uuid.NewString()})
+	require.NoError(t, err)
+
+	seedRecordedSession(t, ctx, ti, shared, "facet-recorded-g1", gatewayIdentity(g1), nil)
+	seedRecordedSession(t, ctx, ti, shared, "facet-recorded-g1-consent-g3", gatewayIdentity(g1), consentG3)
+	seedRecordedSession(t, ctx, ti, shared, "facet-consent-g3", "", consentG3)
+	seedRecordedSession(t, ctx, ti, former, "facet-former-g1", gatewayIdentity(g1), nil)
+	seedRecordedSession(t, ctx, ti, shared, "facet-unattributed-a", "", nil)
+	seedRecordedSession(t, ctx, ti, shared, "facet-unattributed-b", "", nil)
+	seedRecordedSession(t, ctx, ti, shared, "facet-other-consent", "", otherConsent)
+	seedRecordedSession(t, ctx, ti, former, "facet-unattributed-former", "", nil)
+	revoked := seedRecordedSession(t, ctx, ti, shared, "facet-unattributed-revoked", "", nil)
+	_, err = repo.New(ti.conn).RevokeUserSession(ctx, repo.RevokeUserSessionParams{ID: uuid.MustParse(revoked), ProjectID: *mustAuth(t, ctx).ProjectID, OrganizationID: mustAuth(t, ctx).ActiveOrganizationID})
+	require.NoError(t, err)
+
+	facets := func(payload gen.QueryFacetsPayload) *gen.UserSessionFilterFacets {
+		t.Helper()
+		out, err := ti.service.QueryFacets(ctx, &payload)
+		require.NoError(t, err)
+		return out
+	}
+	subjects := func(names ...string) map[string]int64 {
+		out := map[string]int64{}
+		for _, name := range names {
+			out[urn.NewUserSubject(name).String()] = 1
+		}
+		return out
+	}
+	g1ID, g3ID, noIssuerID := g1.ID.String(), g3.ID.String(), noIssuer.ID.String()
+
+	scoped := facets(gen.QueryFacetsPayload{MetaMcpServerID: &g1ID})
+	require.Equal(t, subjects("facet-recorded-g1", "facet-recorded-g1-consent-g3", "facet-former-g1"), facetValues(scoped.Identity),
+		"a recorded identity outranks consent, and unattributed sessions are not counted as the gateway's")
+	require.Equal(t, map[string]int64{shared.String(): 2, former.String(): 1}, facetValues(scoped.McpServer), "former sign-in servers stay listed")
+	require.Equal(t, new(int64(2)), scoped.UnattributedCount, "live sessions on the current sign-in server with no origin or consent resource")
+
+	g3Scoped := facets(gen.QueryFacetsPayload{MetaMcpServerID: &g3ID})
+	require.Equal(t, subjects("facet-consent-g3"), facetValues(g3Scoped.Identity), "consent counts only without a recorded identity")
+	require.Equal(t, new(int64(2)), g3Scoped.UnattributedCount, "gateways sharing a sign-in server see the same unattributed sessions")
+
+	require.Equal(t, new(int64(1)), facets(gen.QueryFacetsPayload{MetaMcpServerID: &g1ID, Search: new("unattributed-a")}).UnattributedCount, "search applies")
+	require.Equal(t, new(int64(0)), facets(gen.QueryFacetsPayload{MetaMcpServerID: &g1ID, ExcludeServers: []string{shared.String()}}).UnattributedCount, "filters apply")
+	require.Equal(t, new(int64(3)), facets(gen.QueryFacetsPayload{MetaMcpServerID: &g1ID, Status: new("all")}).UnattributedCount, "status applies")
+
+	withoutIssuer := facets(gen.QueryFacetsPayload{MetaMcpServerID: &noIssuerID})
+	require.Equal(t, new(int64(0)), withoutIssuer.UnattributedCount)
+	require.Empty(t, facetValues(withoutIssuer.Identity))
+	require.Nil(t, facets(gen.QueryFacetsPayload{}).UnattributedCount, "only a gateway scope reports unattributed sessions")
+
+	for _, v := range scoped.Identity.Values {
+		ids := searchSessionIDs(t, ctx, ti, &gen.ListUserSessionsPayload{MetaMcpServerID: &g1ID, Identities: []string{v.Value}})
+		require.Len(t, ids, int(v.Count), "facet counts match the gateway's list for %s", v.Value)
+	}
+
+	_, err = ti.service.QueryFacets(ctx, &gen.QueryFacetsPayload{MetaMcpServerID: new("not-a-uuid")})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = ti.service.QueryFacets(ctx, &gen.QueryFacetsPayload{MetaMcpServerID: new(uuid.NewString())})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
