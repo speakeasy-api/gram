@@ -201,6 +201,8 @@ export function stageChartData(
   };
 }
 
+// Every reason the gateway records, in plain words with the next step where
+// there is one. A code added later falls back to generic copy.
 const REASONS: Record<string, string> = {
   stale_cursor:
     "The client asked for a later page of an earlier listing. Restart tool discovery in the client. If signing in again leaves this error, remove and add the connection in the client.",
@@ -222,6 +224,45 @@ const REASONS: Record<string, string> = {
   credential_rejected: "The server rejected the stored credential.",
   reauthentication_required:
     "The person needs to sign in to the gateway again.",
+  response_too_large:
+    "The server returned a tool list larger than the gateway accepts. Ask the server's owner to reduce its size.",
+  invalid_listing:
+    "The server returned tool definitions the gateway could not list. Ask the server's owner to check its tool definitions.",
+  incomplete_catalog:
+    "The server returned tool definitions the gateway could not list. Ask the server's owner to check its tool definitions.",
+  invalid_response:
+    "The server returned a response the gateway could not read. Ask the server's owner to check it.",
+  authorization_server_unavailable:
+    "The server's sign-in provider could not be reached. Try again later.",
+  enterprise_authorization_unavailable:
+    "Your organization's sign-in for this server could not be reached. Try again later.",
+  credential_load_failed:
+    "The gateway could not load this server's connection details. Try again shortly.",
+  connection_check_failed:
+    "The gateway could not check this server's connection. Try again later.",
+  unclassified: "The server could not be listed. Try again later.",
+  credential_misconfigured:
+    "The server's upstream credential is misconfigured or was issued for a different resource. Contact the server's administrator.",
+  credential_ambiguous:
+    "More than one upstream credential matches this server, so none could be selected. Ask an administrator to review the connection.",
+  enterprise_authorization_failed:
+    "Your organization's sign-in for this server failed. Contact your administrator.",
+  invalid_request:
+    "The client sent tool list parameters the gateway could not read. Update the client or reconnect it.",
+  member_snapshot_failed:
+    "The gateway could not load its servers. Try again shortly.",
+  ambiguous_tool_name:
+    "Two tools in the gateway resolve to the same name, so the gateway could not list them. Rename one of the tools or servers.",
+  inventory_too_large:
+    "The gateway's combined tool list is too large to send. Remove servers or tools from the gateway.",
+  inventory_error:
+    "The gateway could not build its tool list. Try again shortly.",
+  encoding_failed:
+    "The gateway could not send its tool list. Try again shortly.",
+  canceled:
+    "The listing stopped before it finished. Restart tool discovery in the client.",
+  member_check_failed:
+    "A server's availability could not be checked, so the list may be missing its tools. Try again shortly.",
 };
 
 /** Plain copy for a reason code; the code itself stays technical detail. */

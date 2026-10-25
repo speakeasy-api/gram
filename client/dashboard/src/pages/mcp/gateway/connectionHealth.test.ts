@@ -217,6 +217,52 @@ describe("toAttempt", () => {
 });
 
 describe("reasonText", () => {
+  // Every reason the gateway records today (server/internal/mcp).
+  const RECORDED = [
+    "rate_limited",
+    "upstream_unavailable",
+    "upstream_rejected",
+    "listing_timeout",
+    "response_too_large",
+    "unreachable",
+    "invalid_listing",
+    "invalid_response",
+    "incomplete_catalog",
+    "authorization_server_unavailable",
+    "enterprise_authorization_unavailable",
+    "listing_budget_exhausted",
+    "credential_load_failed",
+    "connection_check_failed",
+    "unclassified",
+    "needs_sign_in",
+    "credential_rejected",
+    "credential_misconfigured",
+    "credential_ambiguous",
+    "reauthentication_required",
+    "enterprise_authorization_failed",
+    "consent_not_approved",
+    "consent_auth_changed",
+    "consent_config_changed",
+    "invalid_request",
+    "stale_cursor",
+    "member_snapshot_failed",
+    "ambiguous_tool_name",
+    "inventory_too_large",
+    "inventory_error",
+    "encoding_failed",
+    "canceled",
+    "no_member_listed",
+    "member_check_failed",
+  ];
+
+  it("has plain copy for every recorded reason", () => {
+    for (const reason of RECORDED) {
+      const text = reasonText(reason);
+      expect(text, reason).not.toBe("Another failure was recorded.");
+      expect(text, reason).not.toContain(reason);
+    }
+  });
+
   it("never shows an unknown code as the main message", () => {
     expect(reasonText("something_new")).toBe("Another failure was recorded.");
   });

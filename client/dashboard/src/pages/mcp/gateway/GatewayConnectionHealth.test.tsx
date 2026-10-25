@@ -144,20 +144,24 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 function renderSection() {
   const client = new QueryClient();
-  return render(
-    <QueryClientProvider client={client}>
-      <TooltipProvider>
-        <GatewayConnectionHealth
-          gatewayId="gateway-1"
-          onShowConnections={vi.fn<() => void>()}
-        />
-      </TooltipProvider>
-    </QueryClientProvider>,
-  );
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <GatewayConnectionHealth
+            gatewayId="gateway-1"
+            onShowConnections={vi.fn<() => void>()}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 it("renders nothing without log access", () => {
@@ -219,7 +223,6 @@ it("opens only visible hotspots, keys identical hidden rows apart and leaves out
   expect(
     errors.mock.calls.some((call) => String(call[0]).includes("same key")),
   ).toBe(false);
-  errors.mockRestore();
   fireEvent.click(screen.getByRole("button", { name: "View" }));
   expect(state.sheet.mock.lastCall![0]).toMatchObject({
     gatewayId: "gateway-1",
@@ -286,10 +289,34 @@ it("offers a retry when the summary or hotspots fail", async () => {
   expect(await screen.findByText("Amara Example")).toBeTruthy();
 });
 
+it("replaces earlier results with the retry state when a refetch fails", async () => {
+  const { client } = renderSection();
+  await screen.findByText("Listings over time");
+  await screen.findByText("Amara Example");
+  state.healthResult = fail();
+  state.hotspotsResult = fail();
+  await client.refetchQueries();
+  expect(
+    await screen.findByText("Couldn't load connection health."),
+  ).toBeTruthy();
+  expect(
+    await screen.findByText("Couldn't load where connections fail."),
+  ).toBeTruthy();
+  // The cache still holds the earlier results; none of them is shown.
+  expect(
+    client.getQueriesData({ queryKey: ["health"] }).some(([, data]) => data),
+  ).toBe(true);
+  expect(screen.queryByText("Listings over time")).toBeNull();
+  expect(screen.queryAllByText("of 4")).toHaveLength(0);
+  expect(screen.queryByText("Amara Example")).toBeNull();
+});
+
 it("holds skeletons while loading", () => {
   state.healthResult = () => new Promise(() => {});
   state.hotspotsResult = () => new Promise(() => {});
-  renderSection();
+  const { container } = renderSection();
+  // Four summary tiles plus the hotspot table.
+  expect(container.querySelectorAll(".skeleton").length).toBeGreaterThan(4);
   expect(screen.queryByText("Not visible to you")).toBeNull();
   expect(screen.queryByText(/No listings were recorded/)).toBeNull();
   expect(screen.queryByText("Couldn't load connection health.")).toBeNull();

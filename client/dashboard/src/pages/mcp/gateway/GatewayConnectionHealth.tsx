@@ -110,10 +110,13 @@ export function GatewayConnectionHealth({
     ...options,
   });
 
-  const summary = matchesWindow(health.data, from, to)
-    ? health.data
-    : undefined;
+  // A failed refetch keeps its earlier data; show the retry state instead.
+  const summary =
+    !health.isError && matchesWindow(health.data, from, to)
+      ? health.data
+      : undefined;
   const ranked =
+    !hotspots.isError &&
     matchesWindow(hotspots.data, from, to) &&
     hotspots.data?.stage === stageName &&
     hotspots.data.rankBy === rankBy &&
