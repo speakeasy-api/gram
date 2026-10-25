@@ -13,7 +13,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => mocks.rollout,
+  useFeatureFlag: (flag: string) =>
+    flag === "gateway-debug" ? mocks.rollout : { status: "missing" },
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) =>

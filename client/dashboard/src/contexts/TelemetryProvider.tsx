@@ -1,4 +1,5 @@
 import { getServerURL, isProdHost } from "@/lib/utils";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import posthog from "posthog-js";
 import { type ReactNode, useEffect } from "react";
 import { datadogRum } from "@datadog/browser-rum";
@@ -24,7 +25,7 @@ const isPublicSharePath = (): boolean =>
 
 // Localhost skips PostHog flag evaluation so every flag is on. Preview
 // hosts keep talking to the real project so configured flags can be
-// toggled; only missing keys fail open (see failOpenMissingFlags).
+// toggled; most missing keys fail open (see failOpenMissingFlags).
 export const shouldUseDevTelemetry = (serverURL: string): boolean =>
   serverURL.includes("localhost");
 
@@ -37,7 +38,10 @@ export function failOpenMissingFlags(telemetry: Telemetry): Telemetry {
   return {
     isFeatureEnabled: ((flag, options) => {
       const result = telemetry.isFeatureEnabled(flag, options);
-      return result === undefined ? true : result;
+      // Debug's rollout requires a configured evaluation even on previews.
+      return result === undefined && flag !== FEATURE_FLAGS.gatewayDebug
+        ? true
+        : result;
     }) as Telemetry["isFeatureEnabled"],
     // Variants pass through untouched: a missing multivariate key stays
     // undefined so callers fall back to the boolean read above rather than

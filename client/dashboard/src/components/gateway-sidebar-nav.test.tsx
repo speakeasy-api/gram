@@ -14,11 +14,14 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => mocks.rollout,
+  useFeatureFlag: (flag: string) =>
+    flag === "gateway-debug" ? mocks.rollout : { status: "missing" },
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (scope: string) => mocks.scopes.includes(scope),
+    hasScope: (scope: string, resourceId?: string) =>
+      mocks.scopes.includes(scope) &&
+      (scope !== "project:read" || resourceId === "p1"),
   }),
 }));
 vi.mock("@/pages/mcp/gateway/useGatewayDebugAction", () => ({

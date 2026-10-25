@@ -36,7 +36,8 @@ function assertNever(value: never): never {
  * Local development uses a deterministic provider where every flag is
  * immediately enabled. PR preview hosts (`*.dev.getgram.ai`) still read the
  * real PostHog project so configured flags can be toggled, but a missing key
- * fails open (treated as enabled). Shared staging and production treat a
+ * fails open (treated as enabled), except the Debug rollout, which requires
+ * a configured evaluation. Shared staging and production treat a
  * missing key as unavailable. PostHog flags are rollout controls only; never
  * use them as authorization checks or entitlement enforcement.
  */
