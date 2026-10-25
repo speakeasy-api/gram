@@ -582,9 +582,9 @@ const REASONS: Record<string, string> = {
   agent_admission_denied:
     "The agent is no longer allowed to connect. Authorize it again.",
   issuer_untrusted:
-    "The workload's identity issuer is not trusted. An administrator can add it.",
+    "The workload's identity issuer is not trusted, and workloads cannot connect to a gateway directly. Connect it to an MCP server.",
   subject_not_admitted:
-    "The workload is not allowed to connect. An administrator can admit it.",
+    "The workload is not admitted, and workloads cannot connect to a gateway directly. Connect it to an MCP server.",
   unknown_client_id:
     "The client is not registered with this gateway's sign-in.",
   client_id_names_endpoint:
@@ -938,7 +938,7 @@ export function toAttempt(log: TelemetryLogRecord): Attempt {
 const GRANTS: Record<string, string> = {
   authorization_code: "Sign-in code",
   refresh_token: "Refresh",
-  "urn:ietf:params:oauth:grant-type:jwt-bearer": "Enterprise assertion",
+  "urn:ietf:params:oauth:grant-type:jwt-bearer": "Signed assertion",
   client_credentials: "Assistant credential",
 };
 

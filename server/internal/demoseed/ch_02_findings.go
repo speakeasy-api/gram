@@ -1019,7 +1019,9 @@ func (s *seeder) chfGatewayListingTime(n int) time.Time {
 // the provider credential is stored; requests to the gateway later refresh it
 // once and then fail to with invalid_grant. A later gateway refresh is counted
 // apart from sign-ins, and one client the metadata admission policy does not
-// list is blocked before it is verified. Another person declines the provider
+// list is blocked before it is verified, and one workload assertion whose
+// subject the organization never admitted is blocked at the token endpoint,
+// naming no caller or client. Another person declines the provider
 // sign-in, and one callback names no person or verified client. These are
 // synthetic rows in the shape the gateway writes, not output of its handlers;
 // they record what the gateway observed, not that a client used a token or
@@ -1049,6 +1051,7 @@ func (s *seeder) chfGatewayInboundAttempts() []chfTelemetryRow {
 		{"callback-declined", "upstream_callback", "failed", "configuration", "provider_oauth_access_denied", "", declined, client, provider, s.now.Add(-30 * time.Hour)},
 		{"callback-unknown", "upstream_callback", "failed", "configuration", "unauthorized", "", "", "unverified_client", provider, s.now.Add(-20 * time.Hour)},
 		{"authorize-blocked", "inbound_authorize", "policy_blocked", "configuration", "cimd_denied_not_listed", "", "", "unverified_client", "", s.now.Add(-50 * time.Hour)},
+		{"token-workload-blocked", "inbound_token", "policy_blocked", "configuration", "subject_not_admitted", "urn:ietf:params:oauth:grant-type:jwt-bearer", "", "unverified_client", "", s.now.Add(-26 * time.Hour)},
 	}
 	resource := `,"gram.project.id":"` + s.projectID().String() + `"`
 	row := func(id, attrs string, at time.Time) chfTelemetryRow {
