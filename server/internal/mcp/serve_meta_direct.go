@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -48,6 +49,14 @@ const (
 	// memberRetryJitterDivisor adds up to a fifth of each delay, so members
 	// rate-limited together do not retry in lockstep.
 	memberRetryJitterDivisor = 5
+
+	// maxDirectGatewayCatalogBytes bounds the encoded tool definitions of one
+	// Direct listing.
+	maxDirectGatewayCatalogBytes = 16 << 20
+
+	// omittedMemberLogTimeout bounds recording the members a listing left out,
+	// so a slow telemetry store cannot hold the listing's answer.
+	omittedMemberLogTimeout = 500 * time.Millisecond
 )
 
 type memberDescribeResult struct {
@@ -250,7 +259,10 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 		omittedLogs = append(omittedLogs, row)
 	}
 	if len(omittedLogs) > 0 {
-		if err := s.telemLogger.LogBulk(ctx, omittedLogs); err != nil {
+		logCtx, cancel := context.WithTimeout(ctx, omittedMemberLogTimeout)
+		err := s.telemLogger.LogBulkBounded(logCtx, omittedLogs)
+		cancel()
+		if err != nil {
 			logger.ErrorContext(ctx, "record gateway members left out of tools/list", attr.SlogError(err))
 		}
 	}
@@ -259,20 +271,31 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 		tools = append(tools, tool.entry)
 	}
 	slices.SortFunc(tools, func(a, b *toolListEntry) int { return strings.Compare(a.Name, b.Name) })
+	return encodeDirectGatewayToolList(req.ID, tools)
+}
+
+// encodeDirectGatewayToolList encodes a whole Direct listing. The size bound
+// applies to the tool definitions, as it did when listings were paged, so the
+// response envelope never rejects an inventory whose definitions fit.
+func encodeDirectGatewayToolList(id mcpjsonrpc.ID, tools []*toolListEntry) (json.RawMessage, error) {
+	catalog, err := json.Marshal(tools)
+	if err != nil {
+		return nil, fmt.Errorf("encode Direct gateway catalog: %w", err)
+	}
+	if len(catalog) > maxDirectGatewayCatalogBytes {
+		return nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 16 MiB")
+	}
 	type page struct {
-		Tools []*toolListEntry `json:"tools"`
+		Tools json.RawMessage `json:"tools"`
 	}
 	encoded, err := json.Marshal(&result[page]{
-		ID:             req.ID,
-		Result:         page{Tools: tools},
+		ID:             id,
+		Result:         page{Tools: catalog},
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     cacheHintsCallerVarying,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("encode Direct gateway catalog: %w", err)
-	}
-	if len(encoded) > 16<<20 {
-		return nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 16 MiB")
+		return nil, fmt.Errorf("encode Direct gateway tools/list: %w", err)
 	}
 	return encoded, nil
 }

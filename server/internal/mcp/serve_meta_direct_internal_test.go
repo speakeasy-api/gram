@@ -2,13 +2,17 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 func TestExpiredListingResultKeepsAccessDenialsAndClassifiesTimeouts(t *testing.T) {
@@ -49,4 +53,53 @@ func TestExpiredListingResultKeepsAccessDenialsAndClassifiesTimeouts(t *testing.
 			require.False(t, memberAccessDenied(got.err))
 		})
 	}
+}
+
+// A credential outage is retried within the listing unless the attempt's own
+// time ran out; a misconfigured credential stays a member failure.
+func TestMetaMemberClientCredentialErrorRetriesOutages(t *testing.T) {
+	t.Parallel()
+
+	member := metaMember{slug: "linear"}
+	outage, ok := errors.AsType[memberDiscoveryError](metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialUnavailable))
+	require.True(t, ok)
+	require.True(t, outage.retryable)
+
+	timedOut, ok := errors.AsType[memberDiscoveryError](metaMemberClientCredentialError(member, fmt.Errorf("%w: %w", remotesessions.ErrRemoteSessionUnavailable, context.DeadlineExceeded)))
+	require.True(t, ok)
+	require.False(t, timedOut.retryable)
+
+	misconfigured := metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialMisconfigured)
+	_, discovery := errors.AsType[memberDiscoveryError](misconfigured)
+	require.False(t, discovery)
+	_, memberFailure := errors.AsType[*metaMemberError](misconfigured)
+	require.True(t, memberFailure)
+}
+
+// The size bound applies to the tool definitions, not the response envelope.
+func TestEncodeDirectGatewayToolListBoundsTheCatalog(t *testing.T) {
+	t.Parallel()
+
+	catalogOf := func(size int) []*toolListEntry {
+		empty, err := json.Marshal([]*toolListEntry{{Name: "a"}})
+		require.NoError(t, err)
+		return []*toolListEntry{{Name: "a", Description: strings.Repeat("x", size-len(empty))}}
+	}
+	id := mcpjsonrpc.NumberID(1)
+
+	encoded, err := encodeDirectGatewayToolList(id, catalogOf(maxDirectGatewayCatalogBytes))
+	require.NoError(t, err)
+	require.Greater(t, len(encoded), maxDirectGatewayCatalogBytes)
+	var listing struct {
+		Result struct {
+			Tools []toolListEntry `json:"tools"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(encoded, &listing))
+	require.Len(t, listing.Result.Tools, 1)
+
+	_, err = encodeDirectGatewayToolList(id, catalogOf(maxDirectGatewayCatalogBytes+1))
+	tooLarge, ok := errors.AsType[*oops.ShareableError](err)
+	require.True(t, ok)
+	require.Equal(t, oops.CodeRequestTooLarge, tooLarge.Code)
 }
