@@ -519,6 +519,7 @@ it("shows the same person and client's member checks by provider, with blocked, 
               credential_blocked: 1,
               consent_blocked: 1,
             }),
+            retries: 3,
             recovered: 1,
           }
         : stage,
@@ -549,7 +550,7 @@ it("shows the same person and client's member checks by provider, with blocked, 
   showRegistered();
   expect(
     await screen.findByText(
-      /Listed: 3, Failed: 1, Needs sign-in: 1, Needs consent: 1 · 1 listed after an internal retry/,
+      /Listed: 3, Failed: 1, Needs sign-in: 1, Needs consent: 1 · 3 internal retries, 1 listed after a retry/,
     ),
   ).toBeTruthy();
   expect(await screen.findByText("No upstream provider")).toBeTruthy();
@@ -575,6 +576,29 @@ it("shows the same person and client's member checks by provider, with blocked, 
   expect(screen.getByText(/^Member checks by provider/)).toBeTruthy();
   expect(
     screen.getByText(/Servers without a provider share one row\./),
+  ).toBeTruthy();
+  expect(screen.getByText(/not on a later reconnect/)).toBeTruthy();
+  // A listing sheet counts partial listings beside failed ones.
+  expect(screen.getByText("Partial")).toBeTruthy();
+});
+
+it("says when the caller's retried member checks never ended listed", async () => {
+  state.callerResult = (payload) => ({
+    ...callerSummary(payload),
+    stages: callerSummary(payload).stages.map((stage) =>
+      stage.stage === "discovery_member"
+        ? {
+            ...stageView("discovery_member", { listed: 4, failed: 1 }),
+            retries: 2,
+          }
+        : stage,
+    ),
+  });
+  showRegistered();
+  expect(
+    await screen.findByText(
+      /Listed: 4, Failed: 1 · 2 internal retries, none recorded as listed after a retry/,
+    ),
   ).toBeTruthy();
 });
 

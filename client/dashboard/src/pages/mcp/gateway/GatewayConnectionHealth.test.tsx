@@ -249,6 +249,59 @@ it("opens only visible hotspots, keys identical hidden rows apart and leaves out
   });
 });
 
+it("keeps a caller whose listings were only partial, without counting them as failed", async () => {
+  const partialOnly = {
+    ...visible,
+    subject: label("Partial Example", "user:partial"),
+    attempts: 6,
+    failed: 0,
+    outcomes: [
+      { outcome: "complete", count: 4 },
+      { outcome: "partial", count: 2 },
+    ],
+    reasons: [],
+  };
+  const complete = {
+    ...healthy,
+    outcomes: [{ outcome: "complete", count: 5 }],
+  };
+  state.hotspotsResult = ranking([partialOnly, complete]);
+  renderSection();
+  expect(await screen.findByText("Partial Example")).toBeTruthy();
+  expect(screen.queryByText("Quiet Example")).toBeNull();
+  // The stage's Partial tile and the column header each explain it.
+  expect(screen.getAllByRole("button", { name: "About Partial" })).toHaveLength(
+    2,
+  );
+  expect(screen.getByText("0 of 6")).toBeTruthy();
+  expect(screen.getByText("2")).toBeTruthy();
+  expect(screen.getByText("0%")).toBeTruthy();
+  expect(
+    screen.getByText(/^1 with failed or partial listings, ranked by failures/),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "View" }));
+  expect(state.sheet.mock.lastCall![0]).toMatchObject({
+    stage: "discovery_listing",
+    hotspot: partialOnly,
+  });
+});
+
+it("leaves partial-looking rows out on a stage that has no partial outcome", async () => {
+  const member = {
+    ...healthy,
+    outcomes: [{ outcome: "partial", count: 1 }],
+  };
+  state.hotspotsResult = ranking([member]);
+  renderSection();
+  await screen.findByText("Listings over time");
+  await chooseStage("Member checks");
+  expect(
+    await screen.findByText(/Nothing failed in the last 7 days/),
+  ).toBeTruthy();
+  expect(screen.queryByText("Quiet Example")).toBeNull();
+  expect(screen.queryByRole("button", { name: "About Partial" })).toBeNull();
+});
+
 it("links visible people and agents, marks known clients, and keeps hidden rows inert", async () => {
   const agentId = "0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0b";
   const person = {
@@ -421,7 +474,7 @@ it("asks for 25 combinations and says when the shown rows come from that cap", a
   renderSection();
   expect(
     await screen.findByText(
-      /1 with failures among the top 25 combinations ranked by failures/,
+      /1 with failed or partial listings among the top 25 combinations ranked by failures/,
     ),
   ).toBeTruthy();
   expect(state.hotspots.mock.lastCall![0]).toMatchObject({ limit: 25 });
@@ -437,7 +490,7 @@ it.each([
   fireEvent.click(screen.getByRole("button", { name: floor }));
   expect(
     await screen.findByText(
-      `None of the top 25 combinations ranked by failures had failures in the last 7 days${suffix}.`,
+      `None of the top 25 combinations ranked by failures had failed or partial listings in the last 7 days${suffix}.`,
     ),
   ).toBeTruthy();
   expect(screen.queryByText(/Nothing failed/)).toBeNull();
@@ -446,7 +499,9 @@ it.each([
 it("does not mention a cap below it", async () => {
   renderSection();
   expect(
-    await screen.findByText(/^3 with failures, ranked by failures/),
+    await screen.findByText(
+      /^3 with failed or partial listings, ranked by failures/,
+    ),
   ).toBeTruthy();
   expect(screen.queryByText(/top 25/)).toBeNull();
 });

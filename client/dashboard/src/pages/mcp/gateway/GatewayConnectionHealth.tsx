@@ -42,6 +42,7 @@ import {
   HEALTH_WINDOWS,
   STAGE_OPTIONS,
   WINDOW_PHRASE,
+  countOf,
   failureRate,
   formatTime,
   healthWindow,
@@ -74,7 +75,7 @@ const FAILING: Record<HealthStage, string> = {
   inbound_token: "failed or blocked requests",
   upstream_callback: "failed sign-ins",
   upstream_refresh: "failed refreshes",
-  discovery_listing: "failures",
+  discovery_listing: "failed or partial listings",
   discovery_member: "failed or blocked checks",
 };
 
@@ -165,11 +166,18 @@ export function GatewayConnectionHealth({
   const rows = useMemo<HotspotRow[]>(
     () =>
       // The ranking can include callers with nothing failing or blocked;
-      // they are not where connections fail.
+      // they are not where connections fail. A partial listing left servers
+      // out, so it stays, though it is not counted as failed.
       (ranked?.hotspots ?? [])
         .map((hotspot, position) => ({ ...hotspot, position }))
-        .filter((row) => row.failed > 0 || row.blocked > 0),
-    [ranked],
+        .filter(
+          (row) =>
+            row.failed > 0 ||
+            row.blocked > 0 ||
+            (stageName === "discovery_listing" &&
+              countOf(row.outcomes, "partial") > 0),
+        ),
+    [ranked, stageName],
   );
 
   if (!canRead) return null;
@@ -453,6 +461,32 @@ function Hotspots({
   if (!rows) return <SkeletonTable />;
 
   const floor = minAttempts === "1" ? "any" : `at least ${minAttempts}`;
+  // Partial listings left servers out but are not failures, so they get
+  // their own count beside Failed.
+  const partialColumns: Column<HotspotRow>[] = [];
+  if (stage === "discovery_listing") {
+    partialColumns.push({
+      key: "partial",
+      header: (
+        <span className="inline-flex items-center gap-1.5">
+          Partial
+          <SimpleTooltip tooltip="Listings that left some servers out of the client's tool list. They are not counted as failed. View the row for its member checks.">
+            <button
+              type="button"
+              aria-label="About Partial"
+              className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
+            >
+              <Icon name="info" className="size-3" />
+            </button>
+          </SimpleTooltip>
+        </span>
+      ),
+      width: "120px",
+      render: (row) => (
+        <Text>{countOf(row.outcomes, "partial").toLocaleString()}</Text>
+      ),
+    });
+  }
   const columns: Column<HotspotRow>[] = [
     {
       key: "subject",
@@ -512,6 +546,7 @@ function Hotspots({
         </Text>
       ),
     },
+    ...partialColumns,
     ...(["discovery_member", "inbound_authorize", "inbound_token"].includes(
       stage,
     )
@@ -583,16 +618,13 @@ function Hotspots({
   const ranking = rankBy === "count" ? "failures" : "failure rate";
   const failing = FAILING[stage];
   if (rows.length === 0) {
-    return (
-      <WidgetEmptyState
-        message={
-          capped
-            ? `None of the top ${HOTSPOT_LIMIT} combinations ranked by ${ranking} had ${failing} ${phrase}${minAttempts !== "1" ? `, with ${floor} ${stageLabel} each` : ""}.`
-            : `Nothing failed ${phrase} for anyone with ${floor} ${stageLabel}.`
-        }
-        className="h-[120px]"
-      />
-    );
+    let emptyMessage = `Nothing failed ${phrase} for anyone with ${floor} ${stageLabel}.`;
+    if (capped) {
+      emptyMessage = `None of the top ${HOTSPOT_LIMIT} combinations ranked by ${ranking} had ${failing} ${phrase}${minAttempts !== "1" ? `, with ${floor} ${stageLabel} each` : ""}.`;
+    } else if (stage === "discovery_listing") {
+      emptyMessage = `No listing failed or left servers out ${phrase} for anyone with ${floor} ${stageLabel}.`;
+    }
+    return <WidgetEmptyState message={emptyMessage} className="h-[120px]" />;
   }
 
   return (

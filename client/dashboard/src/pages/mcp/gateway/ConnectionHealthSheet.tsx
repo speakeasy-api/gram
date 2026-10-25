@@ -471,8 +471,20 @@ function ProviderFacts({
   const copy = PROVIDER_FACTS[stage];
   const attempts = summary?.attempts ?? 0;
   const member = stage === "discovery_member";
-  // Listed members that needed a retry inside the same listing.
+  // Extra calls during recorded member checks. Recovered counts only checks
+  // recorded as listed after a retry, a subset of listed.
+  const retries = member ? (summary?.retries ?? 0) : 0;
   const recovered = member ? (summary?.recovered ?? 0) : 0;
+  let listedAfter = "none recorded as listed after a retry";
+  if (recovered > 0) {
+    listedAfter = `${recovered.toLocaleString()} listed after a retry`;
+  }
+  let retryNote = "";
+  if (retries > 0) {
+    retryNote = ` · ${retries.toLocaleString()} internal ${retries === 1 ? "retry" : "retries"}, ${listedAfter}`;
+  } else if (recovered > 0) {
+    retryNote = ` · ${listedAfter}`;
+  }
   const payload = {
     metaMcpServerId: gatewayId,
     from,
@@ -577,7 +589,8 @@ function ProviderFacts({
         {member && (
           <Text small muted className="block">
             Each row counts every member server using that provider. Servers
-            without a provider share one row.
+            without a provider share one row. Internal retries happen inside one
+            listing, not on a later reconnect.
           </Text>
         )}
         {(ranked.truncated || unlisted > 0) && (
@@ -598,8 +611,7 @@ function ProviderFacts({
           <span className="text-muted-foreground font-normal">
             {" "}
             · {outcomeSummary(stage, summary?.outcomes ?? [])}
-            {recovered > 0 &&
-              ` · ${recovered.toLocaleString()} listed after an internal retry`}
+            {retryNote}
           </span>
         )}
       </h4>
@@ -670,6 +682,7 @@ function KeyedDetail({
   const blocked =
     countOf(stage.outcomes, "credential_blocked") +
     countOf(stage.outcomes, "consent_blocked");
+  const partial = countOf(stage.outcomes, "partial");
   const total = stage.attempts.toLocaleString();
   const rate =
     stage.attempts > 0
@@ -700,6 +713,15 @@ function KeyedDetail({
               tone={failed > 0 ? "destructive" : "neutral"}
               subtext={rate}
             />
+            {stage.stage === "discovery_listing" && (
+              <StatTile
+                title="Partial"
+                value={partial}
+                format="number"
+                tone={partial > 0 ? "warning" : "neutral"}
+                subtext={`of ${total}`}
+              />
+            )}
             {stage.stage === "discovery_member" && (
               <StatTile
                 title="Needs sign-in or consent"
