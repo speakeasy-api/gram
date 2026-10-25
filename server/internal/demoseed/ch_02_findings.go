@@ -896,7 +896,7 @@ func (s *seeder) chfGatewayListingAttempts() []chfTelemetryRow {
 	// listing; its next listing, 22, is complete. Listing 23 waits on consent
 	// for Slack; the same person's listing 25 lists it.
 	listingOnly := map[int][3]string{21: {"failed", "configuration", "stale_cursor"}}
-	callers := map[int]string{21: demoUsers[0].handle, 22: demoUsers[0].handle, 23: demoUsers[1].handle, 25: demoUsers[1].handle}
+	callers := map[int]string{21: demoUsers[5].handle, 22: demoUsers[5].handle, 23: demoUsers[3].handle, 25: demoUsers[3].handle}
 	resource := `,"gram.project.id":"` + s.projectID().String() + `"`
 	// Strictly past times inside the current half-hour, or just before now
 	// when the half-hour has only just begun.
@@ -919,7 +919,7 @@ func (s *seeder) chfGatewayListingAttempts() []chfTelemetryRow {
 		clientKey := s.det("usc-gateway").String()
 		if n%5 == 4 {
 			clientKey = "credential:agent"
-			subject = urn.NewAgentSubject(s.det("managed-agent-1")).String()
+			subject = urn.NewAgentSubject(s.det("managed-agent-4")).String()
 		}
 		members, ok := special[n]
 		if !ok {
