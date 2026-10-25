@@ -125,18 +125,17 @@ export function GatewayDebugTab({
   const [grouping, setGrouping] = useState<ConnectionGrouping>("subject");
 
   // A committed search or filter change is a history entry, so Back restores
-  // the previous view. Only correcting a link's own URL replaces it.
+  // the previous view. Only correcting a link's own URL replaces it, and a
+  // change that leaves the URL as it is does not navigate at all.
+  // setSearchParams builds from these same render-time params either way.
   const updateParams = useCallback(
-    (update: (next: URLSearchParams) => void, replace = false) =>
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          update(next);
-          return next;
-        },
-        { replace },
-      ),
-    [setSearchParams],
+    (update: (next: URLSearchParams) => void, replace = false) => {
+      const next = new URLSearchParams(searchParams);
+      update(next);
+      if (next.toString() === searchParams.toString()) return;
+      setSearchParams(next, { replace });
+    },
+    [searchParams, setSearchParams],
   );
   const setSearch = useCallback(
     (value: string) =>

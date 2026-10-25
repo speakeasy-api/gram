@@ -787,6 +787,46 @@ it("restores provider selections with Back and Forward", async () => {
   );
 });
 
+it("adds a Back stop only for changes that move the URL", async () => {
+  server.list.mockResolvedValue(page(["s1"]));
+  server.facets.mockResolvedValue(
+    facets({ provider: facet([value("none", 1)]) }),
+  );
+  renderAt("/debug", ["/elsewhere"]);
+  await screen.findByText("s1");
+  const back = async (check: () => void) => {
+    fireEvent.click(screen.getByText("history back"));
+    await waitFor(check);
+  };
+
+  // With nothing applied, escaping or emptying a draft leaves the URL as is.
+  fireEvent.change(bar(), { target: { value: "da" } });
+  fireEvent.keyDown(bar(), { key: "Escape" });
+  fireEvent.change(bar(), { target: { value: "da" } });
+  fireEvent.change(bar(), { target: { value: "" } });
+  expect(location()).toBe("");
+
+  openGroup("Provider");
+  fireEvent.click(await screen.findByText("Speakeasy only"));
+  await waitFor(() => expect(params().get("sf")).toBe("provider:eq:none"));
+  submitSearch("dana");
+  await waitFor(() => expect(params().get("q")).toBe("dana"));
+  // Committing the same search again is not a new stop.
+  submitSearch("dana");
+
+  await back(() => {
+    expect(params().get("q")).toBeNull();
+    expect(params().get("sf")).toBe("provider:eq:none");
+  });
+  await back(() => {
+    expect(params().get("sf")).toBeNull();
+    expect(screen.getByTestId("pathname").textContent).toBe("/debug");
+  });
+  await back(() =>
+    expect(screen.getByTestId("pathname").textContent).toBe("/elsewhere"),
+  );
+});
+
 it("replaces a link's unusable filters so Back leaves rather than loops", async () => {
   server.list.mockResolvedValue(page(["s1"]));
   server.facets.mockResolvedValue(facets());
