@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -9,8 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // attemptWrites hears each connection attempt batch the telemetry logger
@@ -184,4 +192,75 @@ func attemptsAfter(t *testing.T, writes attemptWrites, projectID, gatewayID uuid
 	rows := connectionAttempts(t, projectID, gatewayID)
 	require.Len(t, rows, want)
 	return rows
+}
+
+// Members added after consent are recorded as waiting on consent only when
+// the caller could use them once approved. A deleted or denied one is left
+// out, as an approved one would be.
+func TestGatewayDirectRecordsOnlyUsableUnapprovedMembers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	writes := watchConnectionAttempts(t, ti)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "unapproved-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	source := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Source", 1, mcpservers.VisibilityPublic, "alpha")
+	approvedGone := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Approved then deleted", 2, mcpservers.VisibilityPublic, "beta")
+	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
+
+	available := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Added", 3, mcpservers.VisibilityPublic, "gamma")
+	deleted := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Added then deleted", 4, mcpservers.VisibilityPublic, "delta")
+	denied := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Added private", 5, mcpservers.VisibilityPublic, "epsilon")
+	setToolsetMcpPrivate(t, ctx, ti, denied.toolsetID, *auth.ProjectID)
+	toolsets := toolsets_repo.New(ti.conn)
+	for _, gone := range []uuid.UUID{approvedGone.toolsetID, deleted.toolsetID} {
+		toolset, err := toolsets.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: gone, ProjectID: *auth.ProjectID})
+		require.NoError(t, err)
+		_, err = toolsets.DeleteToolset(ctx, toolsets_repo.DeleteToolsetParams{Slug: toolset.Slug, ProjectID: *auth.ProjectID})
+		require.NoError(t, err)
+	}
+
+	caller := authztest.WithExactGrants(t, t.Context(), authz.NewGrant(authz.ScopeMCPConnect, gateway.ID.String()))
+	w, err := servePublicHTTP(t, caller, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	rows := attemptsAfter(t, writes, *auth.ProjectID, gateway.ID, 3)
+	require.Equal(t, []string{"partial", "", ""}, []string{rows[0].Outcome, rows[0].FailureClass, rows[0].Reason})
+	byMember := map[string]connectionAttemptRow{}
+	for _, row := range rows[1:] {
+		byMember[row.MemberID] = row
+	}
+	require.Equal(t, "listed", byMember[source.serverID.String()].Outcome)
+	waiting := byMember[available.serverID.String()]
+	require.Equal(t, []string{"consent_blocked", "configuration", "consent_not_approved"}, []string{waiting.Outcome, waiting.FailureClass, waiting.Reason})
+	require.Len(t, byMember, 2, "deleted and denied members, approved or not, are not recorded")
+}
+
+// A listing that fails after describing still records what each member
+// returned.
+func TestGatewayDirectRecordsMembersOfAFailedInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	writes := watchConnectionAttempts(t, ti)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	// Both qualify to x--y--z, so the inventory is ambiguous.
+	tool := func(name string) []any {
+		return []any{map[string]any{"name": name, "inputSchema": map[string]any{"type": "object"}}}
+	}
+	first := newScriptedUpstream(t, tool("y--z"), 100)
+	second := newScriptedUpstream(t, tool("z"), 100)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "First", "x", 1, first.url)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Second", "x--y", 2, second.url)
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	listing := listDirectGateway(t, ti, slug, map[string]any{})
+	require.NotNil(t, listing.Error)
+	require.Contains(t, listing.Error.Message, "ambiguous tool name")
+
+	rows := attemptsAfter(t, writes, *authCtx.ProjectID, gateway.ID, 3)
+	require.Equal(t, []string{"failed", "configuration", "ambiguous_tool_name"}, []string{rows[0].Outcome, rows[0].FailureClass, rows[0].Reason})
+	require.Equal(t, []string{"listed", "listed"}, []string{rows[1].Outcome, rows[2].Outcome})
 }

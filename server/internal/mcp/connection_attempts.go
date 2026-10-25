@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,7 +15,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -31,6 +35,10 @@ const connectionAttemptWriteTimeout = 2 * time.Second
 // attemptClientLookupTimeout is the part of the write's time the optional
 // client lookup may use, so a slow lookup still leaves time to record.
 const attemptClientLookupTimeout = 500 * time.Millisecond
+
+// unapprovedMemberCheckTimeout bounds the local checks of every member added
+// since consent, so they never hold a listing for long.
+const unapprovedMemberCheckTimeout = 500 * time.Millisecond
 
 const (
 	attemptStageListing = "discovery_listing"
@@ -110,6 +118,7 @@ const (
 	reasonEncodingFailed       attemptReason = "encoding_failed"
 	reasonCanceled             attemptReason = "canceled"
 	reasonNoMemberListed       attemptReason = "no_member_listed"
+	reasonMemberCheckFailed    attemptReason = "member_check_failed"
 )
 
 // memberReasonClass is what a member reason means: its outcome, its failure
@@ -186,6 +195,10 @@ type listingAttempt struct {
 	reason  attemptReason
 }
 
+// listingFromMembers stands for a listing that answered: its result follows
+// from its members once the writer has checked those added since consent.
+var listingFromMembers = listingAttempt{outcome: "", class: classNone, reason: reasonNone}
+
 // memberAttemptFor classifies a member's describe result. Failed members are
 // those the listing left its tools unknown for: a discovery error or an
 // incomplete catalog. Blocked members are those whose credential or consent
@@ -229,6 +242,75 @@ func memberAttemptFor(member metaMember, result memberDescribeResult) (memberAtt
 // did not approve, which a listing never describes.
 func unapprovedMemberAttempt(member metaMember) memberAttempt {
 	return memberAttempt{member: member, outcome: outcomeConsentBlocked, class: classConfiguration, reason: reasonConsentNotApproved, calls: 0, status: 0}
+}
+
+// unapprovedMemberAttempts records the members added since consent that the
+// caller could use after approving them. A listing never describes them, so
+// each first passes the local checks a described member does: its backend
+// still exists and the caller may connect to it. No upstream is contacted and
+// no credential is used. A member that fails them stays unrecorded, as it
+// would if approved. A member whose check could not finish is not recorded
+// either, and unverified reports that the listing's result is uncertain.
+func (s *Service) unapprovedMemberAttempts(ctx context.Context, logger *slog.Logger, gate *metaGateContext, unapproved []metaMember) (attempts []memberAttempt, unverified bool) {
+	if len(unapproved) == 0 {
+		return nil, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, unapprovedMemberCheckTimeout)
+	defer cancel()
+	attempts = make([]memberAttempt, 0, len(unapproved))
+	for _, member := range unapproved {
+		if ctx.Err() != nil {
+			logger.WarnContext(ctx, "checking unapproved gateway members ran out of time")
+			return attempts, true
+		}
+		err := s.memberAvailable(ctx, logger, gate, member)
+		failure, typed := errors.AsType[*metaMemberError](err)
+		switch {
+		case err == nil:
+			attempts = append(attempts, unapprovedMemberAttempt(member))
+		case memberAccessDenied(err), typed && failure.reason == reasonNotServable:
+		default:
+			unverified = true
+			logger.WarnContext(ctx, "check unapproved gateway member", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+		}
+	}
+	return attempts, unverified
+}
+
+// uncertainListing marks a listing that left a member unchecked: it cannot be
+// complete, since that member's result is unknown. A failed listing keeps its
+// own reason.
+func uncertainListing(listing listingAttempt) listingAttempt {
+	if listing.outcome == outcomeFailed {
+		return listing
+	}
+	return listingAttempt{outcome: outcomePartial, class: classInternal, reason: reasonMemberCheckFailed}
+}
+
+// memberAvailable reports why a member could not be served to this caller,
+// from local state alone: a hosted member's toolset and its connect gate, or
+// a proxied member's backend row.
+func (s *Service) memberAvailable(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) error {
+	notServable := &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug), reason: reasonNotServable}
+	var err error
+	switch {
+	case member.backend == metaMemberBackendHosted:
+		_, _, err = s.loadMemberToolset(ctx, logger, gate, member)
+		return err
+	case member.remoteServerID.Valid:
+		_, err = remotemcp_repo.New(s.db).GetServerByID(ctx, remotemcp_repo.GetServerByIDParams{ID: member.remoteServerID.UUID, ProjectID: member.projectID})
+	case member.tunneledServerID.Valid:
+		_, err = mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: member.serverID, ProjectID: member.projectID})
+	default:
+		return notServable
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return notServable
+	}
+	if err != nil {
+		return fmt.Errorf("load gateway member backend: %w", err)
+	}
+	return nil
 }
 
 // listingResult summarizes a listing that answered: complete when every
@@ -315,14 +397,21 @@ type attemptCaller struct {
 }
 
 // recordDirectListing writes a Direct tools/list call's listing row and one
-// row per recorded member. Best effort and off the request path: failures
-// are logged and never fail the listing.
+// row per recorded member. members is nil when the listing failed before its
+// members were known, and then only the listing is written. Best effort and
+// independent of the response: failures are logged and never fail the
+// listing, and checking members added since consent never delays it.
 func (s *Service) recordDirectListing(ctx context.Context, gate *metaGateContext, observedAt time.Time, listing listingAttempt, members []memberAttempt) {
 	caller, ok := attemptCallerFor(ctx, gate)
 	if !ok {
 		return
 	}
-	go s.writeDirectListing(context.WithoutCancel(ctx), caller, observedAt, listing, members)
+	check := *gate
+	var unapproved []metaMember
+	if members != nil {
+		unapproved = slices.Clone(gate.unapprovedMembers)
+	}
+	go s.writeDirectListing(context.WithoutCancel(ctx), caller, &check, observedAt, listing, members, unapproved)
 }
 
 // attemptCallerFor captures who made a listing, or reports false when the
@@ -349,9 +438,19 @@ func attemptCallerFor(ctx context.Context, gate *metaGateContext) (attemptCaller
 	}, true
 }
 
-func (s *Service) writeDirectListing(ctx context.Context, caller attemptCaller, observedAt time.Time, listing listingAttempt, members []memberAttempt) {
+func (s *Service) writeDirectListing(ctx context.Context, caller attemptCaller, gate *metaGateContext, observedAt time.Time, listing listingAttempt, members []memberAttempt, unapproved []metaMember) {
 	ctx, cancel := context.WithTimeout(ctx, connectionAttemptWriteTimeout)
 	defer cancel()
+	if members != nil {
+		added, unverified := s.unapprovedMemberAttempts(ctx, s.logger, gate, unapproved)
+		members = append(members, added...)
+		if listing == listingFromMembers {
+			listing = listingResult(members)
+			if unverified {
+				listing = uncertainListing(listing)
+			}
+		}
+	}
 	clientKey := s.attemptClientKey(ctx, caller)
 	listingID, err := uuid.NewV7()
 	if err != nil {

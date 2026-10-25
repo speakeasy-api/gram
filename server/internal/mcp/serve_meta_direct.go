@@ -155,9 +155,11 @@ type gatewayTool struct {
 // collectGatewayTools describes members' permission-filtered catalogs under
 // gateway-qualified names and returns the members it skipped with why: those
 // the caller cannot see, member failures, and malformed catalogs. It also
-// returns every member's describe result, in member order. A failure outside
-// a member's classification fails the whole inventory unless
-// tolerateAnyFailure is set, and a canceled request always does.
+// returns every member's describe result, in member order, including when
+// the inventory fails after describing. A failure outside a member's
+// classification fails the whole inventory unless tolerateAnyFailure is set,
+// and a canceled request always does, with no describe results: what a
+// canceled listing's members would have returned is unknown.
 func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, tolerateAnyFailure bool, captured map[string]*memberCatalog) ([]gatewayTool, []unavailableMember, []memberDescribeResult, error) {
 	tools := make([]gatewayTool, 0)
 	unavailable := []unavailableMember{}
@@ -178,7 +180,7 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 				unavailable = append(unavailable, unavailableMember{member: member, err: err})
 				continue
 			}
-			return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
+			return nil, nil, described, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
 		}
 		if catalog.incomplete {
 			unavailable = append(unavailable, unavailableMember{member: member, err: nil})
@@ -191,12 +193,12 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 			qualified := *entry
 			qualified.Name = metamcp.QualifyName(member.slug, entry.Name)
 			if names[qualified.Name] {
-				return nil, nil, nil, oops.E(oops.CodeConflict, nil, "gateway contains an ambiguous tool name")
+				return nil, nil, described, oops.E(oops.CodeConflict, nil, "gateway contains an ambiguous tool name")
 			}
 			names[qualified.Name] = true
 			tools = append(tools, gatewayTool{entry: &qualified, member: member})
 			if len(tools) > 10000 {
-				return nil, nil, nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
+				return nil, nil, described, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
 			}
 		}
 	}
@@ -231,7 +233,9 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 		return nil, err
 	}
 	inventory, _, described, err := s.collectGatewayTools(ctx, logger, gate, members, false, nil)
-	if err != nil {
+	// A canceled listing is recorded alone: its members' results are unknown,
+	// and stamping them as timed out would blame their upstreams.
+	if err != nil && described == nil {
 		s.recordDirectListing(ctx, gate, start, inventoryFailure(ctx, err), nil)
 		return nil, err
 	}
@@ -241,8 +245,9 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 			attempts = append(attempts, attempt)
 		}
 	}
-	for _, member := range gate.unapprovedMembers {
-		attempts = append(attempts, unapprovedMemberAttempt(member))
+	if err != nil {
+		s.recordDirectListing(ctx, gate, start, inventoryFailure(ctx, err), attempts)
+		return nil, err
 	}
 	tools := make([]*toolListEntry, 0, len(inventory))
 	for _, tool := range inventory {
@@ -254,7 +259,7 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 		s.recordDirectListing(ctx, gate, start, encodingFailure(ctx, err), attempts)
 		return nil, err
 	}
-	s.recordDirectListing(ctx, gate, start, listingResult(attempts), attempts)
+	s.recordDirectListing(ctx, gate, start, listingFromMembers, attempts)
 	return encoded, nil
 }
 

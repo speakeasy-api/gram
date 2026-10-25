@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -193,7 +194,7 @@ func TestWriteDirectListingCommitsOneFactPerAttempt(t *testing.T) {
 		{member: slack, outcome: outcomeCredentialBlocked, class: classConfiguration, reason: reasonNeedsSignIn, calls: 1, status: 0},
 	}
 	observedAt := time.Now()
-	s.writeDirectListing(ctx, caller, observedAt, listingResult(attempts), attempts)
+	s.writeDirectListing(ctx, caller, &metaGateContext{}, observedAt, listingFromMembers, attempts, nil)
 
 	type row struct {
 		Stage     string `ch:"stage"`
@@ -294,9 +295,9 @@ func (h heldInsert) Exec(ctx context.Context, _ string, _ ...any) error {
 }
 
 // insertsDone hears each batch the logger committed.
-type insertsDone chan struct{}
+type insertsDone chan []tm.LogParams
 
-func (d insertsDone) OnTelemetryLogsWritten(context.Context, []tm.LogParams) { d <- struct{}{} }
+func (d insertsDone) OnTelemetryLogsWritten(_ context.Context, params []tm.LogParams) { d <- params }
 
 // Recording returns while the insert is still held, and the write outlives the
 // request that made it, within its own bound.
@@ -311,15 +312,51 @@ func TestRecordDirectListingWritesAfterTheRequestWithinItsBound(t *testing.T) {
 	s := &Service{logger: logger, telemLogger: telemLogger}
 	request, cancel := context.WithCancel(t.Context())
 	cancel()
-	gate := &metaGateContext{projectID: uuid.New(), organizationID: "org_" + uuid.NewString(), metaServerID: uuid.New()}
+	// A member added since consent is checked by the writer, not the
+	// listing; this one has no backend, so it is left out without a query.
+	gate := &metaGateContext{projectID: uuid.New(), organizationID: "org_" + uuid.NewString(), metaServerID: uuid.New(), unapprovedMembers: []metaMember{{serverID: uuid.New(), slug: "added", backend: metaMemberBackendProxied}}}
+	listed := memberAttempt{member: metaMember{serverID: uuid.New(), slug: "listed"}, outcome: outcomeListed, class: classNone, reason: reasonNone, calls: 1, status: 0}
 
 	begun := time.Now()
-	s.recordDirectListing(request, gate, begun, listingFailure(request, classInternal, reasonInventoryError), nil)
+	s.recordDirectListing(request, gate, begun, listingFromMembers, []memberAttempt{listed})
 	write := <-conn.started
 	require.NoError(t, write.Err(), "the request's cancellation does not cancel the write")
 	deadline, ok := write.Deadline()
 	require.True(t, ok)
 	require.WithinDuration(t, begun.Add(connectionAttemptWriteTimeout), deadline, time.Second)
 	close(conn.release)
-	<-done
+	rows := <-done
+	require.Len(t, rows, 2)
+	require.Equal(t, string(outcomeComplete), rows[0].Attributes[attr.ConnectionAttemptOutcomeKey], "the writer derives the listing from its members")
+}
+
+// An unchecked member means the listing cannot be complete; a failed listing
+// keeps its own reason.
+func TestUncertainListingIsNeverComplete(t *testing.T) {
+	t.Parallel()
+
+	uncertain := listingAttempt{outcome: outcomePartial, class: classInternal, reason: reasonMemberCheckFailed}
+	require.Equal(t, uncertain, uncertainListing(listingAttempt{outcome: outcomeComplete, class: classNone, reason: reasonNone}))
+	require.Equal(t, uncertain, uncertainListing(listingAttempt{outcome: outcomePartial, class: classNone, reason: reasonNone}))
+	failed := listingAttempt{outcome: outcomeFailed, class: classEndpoint, reason: reasonNoMemberListed}
+	require.Equal(t, failed, uncertainListing(failed))
+}
+
+// Once the checks' time is gone, the remaining members are not checked one by
+// one: the listing is reported uncertain. The service has no database, so a
+// query would panic.
+func TestUnapprovedMemberChecksStopWhenTimeRunsOut(t *testing.T) {
+	t.Parallel()
+
+	s := &Service{logger: testenv.NewLogger(t)}
+	gate := &metaGateContext{unapprovedMembers: []metaMember{{slug: "first"}, {slug: "second"}}}
+	expired, cancel := context.WithCancel(t.Context())
+	cancel()
+	attempts, unverified := s.unapprovedMemberAttempts(expired, s.logger, gate, gate.unapprovedMembers)
+	require.Empty(t, attempts)
+	require.True(t, unverified)
+
+	none, unverified := s.unapprovedMemberAttempts(t.Context(), s.logger, &metaGateContext{}, nil)
+	require.Empty(t, none)
+	require.False(t, unverified)
 }
