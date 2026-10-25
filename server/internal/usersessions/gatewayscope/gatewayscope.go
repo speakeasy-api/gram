@@ -18,6 +18,9 @@ import (
 
 // Gateway is the session scope of one gateway.
 type Gateway struct {
+	// ID is the gateway's id in canonical form.
+	ID uuid.UUID
+
 	// ResourceIdentity is the identity the gateway's sessions are recorded
 	// under.
 	ResourceIdentity pgtype.Text
@@ -44,6 +47,7 @@ func Resolve(ctx context.Context, db metamcprepo.DBTX, projectID uuid.UUID, gate
 		return Gateway{}, fmt.Errorf("load gateway: %w", err)
 	}
 	return Gateway{
+		ID:               gateway.ID,
 		ResourceIdentity: pgtype.Text{String: "meta_mcp_server:" + gateway.ID.String(), Valid: true},
 		IssuerID:         gateway.UserSessionIssuerID,
 	}, nil

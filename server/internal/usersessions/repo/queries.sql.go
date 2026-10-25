@@ -137,6 +137,28 @@ func (q *Queries) ClearUserSessionClientAuthMethod(ctx context.Context, id uuid.
 	return i, err
 }
 
+const clearUserSessionOrganizationFixture = `-- name: ClearUserSessionOrganizationFixture :execrows
+UPDATE user_sessions
+SET organization_id = NULL
+WHERE id = $1
+  AND user_session_issuer_id = $2
+`
+
+type ClearUserSessionOrganizationFixtureParams struct {
+	ID                  uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// Test-only fixture: makes a session one written before sessions recorded
+// their organization.
+func (q *Queries) ClearUserSessionOrganizationFixture(ctx context.Context, arg ClearUserSessionOrganizationFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearUserSessionOrganizationFixture, arg.ID, arg.UserSessionIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countActiveUserSessionsByClientIDs = `-- name: CountActiveUserSessionsByClientIDs :many
 SELECT s.user_session_client_id AS user_session_client_id, COUNT(*)::int AS active_count
 FROM user_sessions AS s
@@ -183,6 +205,80 @@ func (q *Queries) CountActiveUserSessionsByClientIDs(ctx context.Context, userSe
 		return nil, err
 	}
 	return items, nil
+}
+
+const countGatewaySessionTrendExcluded = `-- name: CountGatewaySessionTrendExcluded :one
+WITH candidates AS (
+  SELECT s.user_session_issuer_id, s.tool_selection, s.created_at, s.deleted_at,
+         s.refresh_token_hash, s.refresh_expires_at, s.expires_at
+  FROM user_sessions AS s
+  WHERE s.organization_id = $4::text
+    AND (s.project_id = $5::uuid OR s.project_id IS NULL)
+    AND s.resource_identity IS NULL
+    AND s.created_at < $6::timestamptz
+  UNION ALL
+  SELECT s.user_session_issuer_id, s.tool_selection, s.created_at, s.deleted_at,
+         s.refresh_token_hash, s.refresh_expires_at, s.expires_at
+  FROM user_session_issuers AS iss
+  JOIN user_sessions AS s ON s.user_session_issuer_id = iss.id
+  WHERE iss.project_id = $5::uuid
+    AND s.organization_id IS NULL
+    AND s.project_id = $5::uuid
+    AND s.resource_identity IS NULL
+    AND s.created_at < $6::timestamptz
+),
+usable AS (
+  SELECT user_session_issuer_id, tool_selection, deleted_at,
+         CASE
+           WHEN COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false) THEN refresh_expires_at
+           ELSE expires_at
+         END AS deadline
+  FROM candidates
+)
+SELECT
+  (count(*) FILTER (WHERE tool_selection->>'resource' = $1::text))::bigint AS legacy_rows,
+  (count(*) FILTER (WHERE tool_selection->>'resource' IS NULL AND user_session_issuer_id = $2::uuid))::bigint AS unattributed_rows
+FROM usable
+WHERE LEAST(COALESCE(deleted_at, deadline), deadline) >= $3::timestamptz
+`
+
+type CountGatewaySessionTrendExcludedParams struct {
+	ResourceIdentity string
+	IssuerID         uuid.NullUUID
+	FromTime         pgtype.Timestamptz
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	ToTime           pgtype.Timestamptz
+}
+
+type CountGatewaySessionTrendExcludedRow struct {
+	LegacyRows       int64
+	UnattributedRows int64
+}
+
+// Session rows in a gateway's window that the trend leaves out: legacy rows
+// that name the gateway only through their consent selection, written before
+// lineage was kept, and rows on the gateway's current sign-in server that
+// record no gateway at all. These are rows, not credentials. A row is in the
+// window when it was created before to_time and neither deleted nor past the
+// deadline it is usable until before from_time.
+//
+// Rows with an organization are read through its index. Rows from before
+// sessions recorded one have none; they were never moved between issuers
+// (a move records the organization), so they are found through the
+// project's own issuers.
+func (q *Queries) CountGatewaySessionTrendExcluded(ctx context.Context, arg CountGatewaySessionTrendExcludedParams) (CountGatewaySessionTrendExcludedRow, error) {
+	row := q.db.QueryRow(ctx, countGatewaySessionTrendExcluded,
+		arg.ResourceIdentity,
+		arg.IssuerID,
+		arg.FromTime,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ToTime,
+	)
+	var i CountGatewaySessionTrendExcludedRow
+	err := row.Scan(&i.LegacyRows, &i.UnattributedRows)
+	return i, err
 }
 
 const countLiveUserSessionConsentResourcesFixture = `-- name: CountLiveUserSessionConsentResourcesFixture :one
@@ -1697,6 +1793,109 @@ func (q *Queries) GetAssistantWorkloadRuntime(ctx context.Context, runtimeID uui
 	return i, err
 }
 
+const getGatewaySessionTrendEvents = `-- name: GetGatewaySessionTrendEvents :many
+WITH scoped AS (
+  SELECT s.id, s.credential_id, s.created_at, s.deleted_at,
+         -- An actual refresh token hash, as GetUserSessionPolicyByJTI reads it.
+         CASE
+           WHEN COALESCE(s.refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false) THEN s.refresh_expires_at
+           ELSE s.expires_at
+         END AS deadline
+  FROM user_sessions AS s
+  -- Every row that records a resource_identity has an organization_id: the
+  -- writer stamps it from the issuer, so the organization index bounds the
+  -- read to this tenant before the gateway and project are matched.
+  WHERE s.organization_id = $1::text
+    AND (s.project_id = $2::uuid OR s.project_id IS NULL)
+    AND s.resource_identity = $3::text
+),
+lived AS (
+  SELECT created_at, COALESCE(credential_id, id) = id AS root, deleted_at, deadline,
+         lead(created_at) OVER (PARTITION BY COALESCE(credential_id, id) ORDER BY created_at, id) AS successor_at
+  FROM scoped
+),
+spans AS (
+  SELECT created_at, root,
+         COALESCE(successor_at, LEAST(COALESCE(deleted_at, deadline), deadline)) AS ended_at,
+         (successor_at IS NULL AND deleted_at IS NOT NULL AND deleted_at < deadline) AS revoked
+  FROM lived
+  WHERE created_at < $4::timestamptz
+)
+SELECT 'baseline'::text AS kind, $5::timestamptz AS bucket, count(*)::bigint AS total, 0::bigint AS flagged
+FROM spans
+WHERE created_at < $5::timestamptz AND ended_at >= $5::timestamptz
+UNION ALL
+SELECT 'start'::text, date_bin($6::interval, created_at, 'epoch'::timestamptz), count(*)::bigint, (count(*) FILTER (WHERE root))::bigint
+FROM spans
+WHERE created_at >= $5::timestamptz
+GROUP BY 2
+UNION ALL
+SELECT 'end'::text, date_bin($6::interval, ended_at, 'epoch'::timestamptz), count(*)::bigint, (count(*) FILTER (WHERE revoked))::bigint
+FROM spans
+WHERE ended_at >= $5::timestamptz AND ended_at < $4::timestamptz
+GROUP BY 2
+`
+
+type GetGatewaySessionTrendEventsParams struct {
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	ResourceIdentity string
+	ToTime           pgtype.Timestamptz
+	FromTime         pgtype.Timestamptz
+	Stride           pgtype.Interval
+}
+
+type GetGatewaySessionTrendEventsRow struct {
+	Kind    string
+	Bucket  pgtype.Timestamptz
+	Total   int64
+	Flagged int64
+}
+
+// A gateway's credential history over [from_time, to_time), from rows that
+// record the gateway as their resource_identity: those rows were written by
+// the lineage-keeping writer, so COALESCE(credential_id, id) names each
+// credential across its refreshes. A rotated row ends when its successor
+// starts; any other row ends at its deletion or at the deadline it is usable
+// until (the authorization deadline when it can refresh, its token's expiry
+// otherwise), whichever is first. A deletion before that deadline with no
+// successor is a revocation.
+//
+// Returns one baseline row (credentials active immediately before from_time), then
+// per bucket the credentials starting (root: first issued) and ending
+// (flagged: revoked) in it. Buckets are date_bin of stride from the UTC epoch.
+func (q *Queries) GetGatewaySessionTrendEvents(ctx context.Context, arg GetGatewaySessionTrendEventsParams) ([]GetGatewaySessionTrendEventsRow, error) {
+	rows, err := q.db.Query(ctx, getGatewaySessionTrendEvents,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ResourceIdentity,
+		arg.ToTime,
+		arg.FromTime,
+		arg.Stride,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGatewaySessionTrendEventsRow
+	for rows.Next() {
+		var i GetGatewaySessionTrendEventsRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.Bucket,
+			&i.Total,
+			&i.Flagged,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getKitUserSessionIssuerByID = `-- name: GetKitUserSessionIssuerByID :one
 SELECT issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 FROM user_session_issuers issuer
@@ -2510,6 +2709,26 @@ func (q *Queries) GetUserSessionConsentResource(ctx context.Context, arg GetUser
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getUserSessionDeletedAtFixture = `-- name: GetUserSessionDeletedAtFixture :one
+SELECT deleted_at
+FROM user_sessions
+WHERE id = $1
+  AND user_session_issuer_id = $2
+`
+
+type GetUserSessionDeletedAtFixtureParams struct {
+	ID                  uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// Test-only fixture: when a session was deleted, if it was.
+func (q *Queries) GetUserSessionDeletedAtFixture(ctx context.Context, arg GetUserSessionDeletedAtFixtureParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getUserSessionDeletedAtFixture, arg.ID, arg.UserSessionIssuerID)
+	var deleted_at pgtype.Timestamptz
+	err := row.Scan(&deleted_at)
+	return deleted_at, err
 }
 
 const getUserSessionIssuerByID = `-- name: GetUserSessionIssuerByID :one
@@ -5568,6 +5787,41 @@ func (q *Queries) RetierUserSessions(ctx context.Context, arg RetierUserSessions
 	return result.RowsAffected(), nil
 }
 
+const revokeAccessOnlyUserSession = `-- name: RevokeAccessOnlyUserSession :execrows
+UPDATE user_sessions AS s
+SET deleted_at = clock_timestamp()
+WHERE s.id = $1
+  AND s.user_session_issuer_id = $2
+  AND (
+    s.organization_id = $3::text
+    OR (s.organization_id IS NULL AND s.project_id IN (
+      SELECT p.id FROM projects AS p WHERE p.organization_id = $3::text
+    ))
+  )
+  AND s.deleted IS FALSE
+  AND NOT COALESCE(s.refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)
+`
+
+type RevokeAccessOnlyUserSessionParams struct {
+	ID                  uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+// Records an access-token revocation as the session's end when the session
+// cannot refresh, so the access token was all it had. A refreshable session
+// keeps its grant: revoking one access token does not end it. Called only
+// after the caller has proven it owns the session, and scoped to the
+// organization that owns the serving issuer: a row records it, or, written
+// before sessions recorded one, its project belongs to it.
+func (q *Queries) RevokeAccessOnlyUserSession(ctx context.Context, arg RevokeAccessOnlyUserSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeAccessOnlyUserSession, arg.ID, arg.UserSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeAssistantRuntimeWorkloadClients = `-- name: RevokeAssistantRuntimeWorkloadClients :many
 UPDATE user_session_clients c
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
@@ -6045,6 +6299,45 @@ func (q *Queries) SetUserSessionClientCIMDFetchedAt(ctx context.Context, arg Set
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const setUserSessionLifetimeFixture = `-- name: SetUserSessionLifetimeFixture :execrows
+UPDATE user_sessions
+SET created_at = $1,
+    deleted_at = $2::timestamptz,
+    refresh_expires_at = $3,
+    expires_at = $4,
+    credential_id = $5::uuid
+WHERE id = $6
+  AND user_session_issuer_id = $7
+`
+
+type SetUserSessionLifetimeFixtureParams struct {
+	CreatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	RefreshExpiresAt    pgtype.Timestamptz
+	ExpiresAt           pgtype.Timestamptz
+	CredentialID        uuid.NullUUID
+	ID                  uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// Test-only fixture: places a session's issue, deletion and deadlines at
+// fixed times, for history read at bucket edges, and sets its credential.
+func (q *Queries) SetUserSessionLifetimeFixture(ctx context.Context, arg SetUserSessionLifetimeFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserSessionLifetimeFixture,
+		arg.CreatedAt,
+		arg.DeletedAt,
+		arg.RefreshExpiresAt,
+		arg.ExpiresAt,
+		arg.CredentialID,
+		arg.ID,
+		arg.UserSessionIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const softDeleteMigratedUserSessionIssuer = `-- name: SoftDeleteMigratedUserSessionIssuer :one

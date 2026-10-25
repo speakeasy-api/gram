@@ -87857,6 +87857,142 @@ paths:
             x-speakeasy-name-override: verifyURL
             x-speakeasy-react-hook:
                 name: VerifyUserSessionIssuerCimdClientURL
+    /rpc/userSessions.getTrend:
+        get:
+            description: 'Count one gateway''s connections over a window: credentials created and revoked during each bucket, and those active (unexpired, with no recorded revocation) immediately before each bucket''s end. Active is a recorded credential lifetime, not proof the connection works, was permitted or was used. A refresh continues a credential, so it is neither a creation nor a revocation. Session records written before lineage was kept are left out and their rows counted in excluded_legacy_rows; rows on the gateway''s current sign-in server that record no gateway are counted in unattributed_rows. Requires project:read on the project and mcp:read on the gateway; a gateway the caller may not read is not found.'
+            operationId: getUserSessionTrend
+            parameters:
+                - allowEmptyValue: true
+                  description: The gateway, live in the caller's project.
+                  in: query
+                  name: meta_mcp_server_id
+                  required: true
+                  schema:
+                    description: The gateway, live in the caller's project.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Window start, inclusive.
+                  in: query
+                  name: from
+                  required: true
+                  schema:
+                    description: Window start, inclusive.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Window end, exclusive. At most 31 days after from.
+                  in: query
+                  name: to
+                  required: true
+                  schema:
+                    description: Window end, exclusive. At most 31 days after from.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Bucket width, aligned to UTC hours or days.
+                  in: query
+                  name: bucket
+                  required: true
+                  schema:
+                    description: Bucket width, aligned to UTC hours or days.
+                    enum:
+                        - hour
+                        - day
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionTrend'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getTrend userSessions
+            tags:
+                - userSessions
+            x-speakeasy-name-override: getTrend
+            x-speakeasy-react-hook:
+                name: UserSessionTrend
     /rpc/userSessions.list:
         get:
             description: List issued user_sessions in the caller's project. refresh_token_hash is never returned.
@@ -130859,6 +130995,88 @@ components:
                 - name
                 - project_id
                 - project_name
+        UserSessionTrend:
+            type: object
+            properties:
+                active_at_end:
+                    type: integer
+                    description: Credentials unexpired, with no recorded revocation, immediately before the window end, equal to the last bucket's active.
+                    format: int64
+                active_at_start:
+                    type: integer
+                    description: Credentials unexpired, with no recorded revocation, immediately before the window start.
+                    format: int64
+                bucket:
+                    type: string
+                    description: Bucket width.
+                buckets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionTrendBucket'
+                    description: Every bucket in the window, empty ones included.
+                created:
+                    type: integer
+                    description: Credentials first issued in the window.
+                    format: int64
+                excluded_legacy_rows:
+                    type: integer
+                    description: 'Session records in the window that name the gateway only through their consent selection, written before lineage was kept. Left out of every count: a refresh among them cannot be told from a new sign-in, so this counts records, not connections.'
+                    format: int64
+                from:
+                    type: string
+                    description: Window start.
+                    format: date-time
+                revoked:
+                    type: integer
+                    description: Credentials revoked in the window.
+                    format: int64
+                to:
+                    type: string
+                    description: Window end, excluded.
+                    format: date-time
+                unattributed_rows:
+                    type: integer
+                    description: Session records in the window on the gateway's current sign-in server that record no gateway, left out of every count. Records, not connections. Absent when the gateway has no sign-in server.
+                    format: int64
+            required:
+                - from
+                - to
+                - bucket
+                - buckets
+                - active_at_start
+                - created
+                - revoked
+                - active_at_end
+                - excluded_legacy_rows
+        UserSessionTrendBucket:
+            type: object
+            properties:
+                active:
+                    type: integer
+                    description: 'Credentials unexpired, with no recorded revocation, immediately before the bucket''s end: refreshable ones until their authorization deadline, others until their token expires. A recorded lifetime, not request activity, permission or tool discovery.'
+                    format: int64
+                created:
+                    type: integer
+                    description: Credentials first issued during the bucket.
+                    format: int64
+                end:
+                    type: string
+                    description: Bucket end, exclusive; the window end for the last bucket.
+                    format: date-time
+                revoked:
+                    type: integer
+                    description: Credentials ended by an explicit revocation before their deadline during the bucket.
+                    format: int64
+                start:
+                    type: string
+                    description: Bucket start, inclusive; the window start for the first bucket.
+                    format: date-time
+            required:
+                - start
+                - end
+                - created
+                - revoked
+                - active
         UserSessionUpstream:
             type: object
             properties:

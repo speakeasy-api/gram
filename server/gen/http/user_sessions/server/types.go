@@ -77,6 +77,38 @@ type QueryFacetsResponseBody struct {
 	UnattributedCount *int64 `form:"unattributed_count,omitempty" json:"unattributed_count,omitempty" xml:"unattributed_count,omitempty"`
 }
 
+// GetTrendResponseBody is the type of the "userSessions" service "getTrend"
+// endpoint HTTP response body.
+type GetTrendResponseBody struct {
+	// Window start.
+	From string `form:"from" json:"from" xml:"from"`
+	// Window end, excluded.
+	To string `form:"to" json:"to" xml:"to"`
+	// Bucket width.
+	Bucket string `form:"bucket" json:"bucket" xml:"bucket"`
+	// Every bucket in the window, empty ones included.
+	Buckets []*UserSessionTrendBucketResponseBody `form:"buckets" json:"buckets" xml:"buckets"`
+	// Credentials unexpired, with no recorded revocation, immediately before the
+	// window start.
+	ActiveAtStart int64 `form:"active_at_start" json:"active_at_start" xml:"active_at_start"`
+	// Credentials first issued in the window.
+	Created int64 `form:"created" json:"created" xml:"created"`
+	// Credentials revoked in the window.
+	Revoked int64 `form:"revoked" json:"revoked" xml:"revoked"`
+	// Credentials unexpired, with no recorded revocation, immediately before the
+	// window end, equal to the last bucket's active.
+	ActiveAtEnd int64 `form:"active_at_end" json:"active_at_end" xml:"active_at_end"`
+	// Session records in the window that name the gateway only through their
+	// consent selection, written before lineage was kept. Left out of every count:
+	// a refresh among them cannot be told from a new sign-in, so this counts
+	// records, not connections.
+	ExcludedLegacyRows int64 `form:"excluded_legacy_rows" json:"excluded_legacy_rows" xml:"excluded_legacy_rows"`
+	// Session records in the window on the gateway's current sign-in server that
+	// record no gateway, left out of every count. Records, not connections. Absent
+	// when the gateway has no sign-in server.
+	UnattributedRows *int64 `form:"unattributed_rows,omitempty" json:"unattributed_rows,omitempty" xml:"unattributed_rows,omitempty"`
+}
+
 // MintUserSessionResponseBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP response body.
 type MintUserSessionResponseBody struct {
@@ -643,6 +675,188 @@ type QueryFacetsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetTrendUnauthorizedResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "unauthorized" error.
+type GetTrendUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTrendForbiddenResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "forbidden" error.
+type GetTrendForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTrendBadRequestResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "bad_request" error.
+type GetTrendBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTrendNotFoundResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "not_found" error.
+type GetTrendNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTrendConflictResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "conflict" error.
+type GetTrendConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTrendUnsupportedMediaResponseBody is the type of the "userSessions"
+// service "getTrend" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetTrendUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTrendInvalidResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "invalid" error.
+type GetTrendInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTrendInvariantViolationResponseBody is the type of the "userSessions"
+// service "getTrend" endpoint HTTP response body for the "invariant_violation"
+// error.
+type GetTrendInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTrendUnexpectedResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "unexpected" error.
+type GetTrendUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTrendGatewayErrorResponseBody is the type of the "userSessions" service
+// "getTrend" endpoint HTTP response body for the "gateway_error" error.
+type GetTrendGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // MintUserSessionUnauthorizedResponseBody is the type of the "userSessions"
 // service "mintUserSession" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1193,6 +1407,25 @@ type UserSessionFilterFacetValueResponseBody struct {
 	MatchesSearch bool `form:"matches_search" json:"matches_search" xml:"matches_search"`
 }
 
+// UserSessionTrendBucketResponseBody is used to define fields on response body
+// types.
+type UserSessionTrendBucketResponseBody struct {
+	// Bucket start, inclusive; the window start for the first bucket.
+	Start string `form:"start" json:"start" xml:"start"`
+	// Bucket end, exclusive; the window end for the last bucket.
+	End string `form:"end" json:"end" xml:"end"`
+	// Credentials first issued during the bucket.
+	Created int64 `form:"created" json:"created" xml:"created"`
+	// Credentials ended by an explicit revocation before their deadline during the
+	// bucket.
+	Revoked int64 `form:"revoked" json:"revoked" xml:"revoked"`
+	// Credentials unexpired, with no recorded revocation, immediately before the
+	// bucket's end: refreshable ones until their authorization deadline, others
+	// until their token expires. A recorded lifetime, not request activity,
+	// permission or tool discovery.
+	Active int64 `form:"active" json:"active" xml:"active"`
+}
+
 // NewListUserSessionsResponseBody builds the HTTP response body from the
 // result of the "listUserSessions" endpoint of the "userSessions" service.
 func NewListUserSessionsResponseBody(res *usersessions.ListUserSessionsResult) *ListUserSessionsResponseBody {
@@ -1280,6 +1513,35 @@ func NewQueryFacetsResponseBody(res *usersessions.UserSessionFilterFacets) *Quer
 	}
 	if res.Provider != nil {
 		body.Provider = marshalUsersessionsUserSessionFilterFacetToUserSessionFilterFacetResponseBody(res.Provider)
+	}
+	return body
+}
+
+// NewGetTrendResponseBody builds the HTTP response body from the result of the
+// "getTrend" endpoint of the "userSessions" service.
+func NewGetTrendResponseBody(res *usersessions.UserSessionTrend) *GetTrendResponseBody {
+	body := &GetTrendResponseBody{
+		From:               res.From,
+		To:                 res.To,
+		Bucket:             res.Bucket,
+		ActiveAtStart:      res.ActiveAtStart,
+		Created:            res.Created,
+		Revoked:            res.Revoked,
+		ActiveAtEnd:        res.ActiveAtEnd,
+		ExcludedLegacyRows: res.ExcludedLegacyRows,
+		UnattributedRows:   res.UnattributedRows,
+	}
+	if res.Buckets != nil {
+		body.Buckets = make([]*UserSessionTrendBucketResponseBody, len(res.Buckets))
+		for i, val := range res.Buckets {
+			if val == nil {
+				body.Buckets[i] = nil
+				continue
+			}
+			body.Buckets[i] = marshalUsersessionsUserSessionTrendBucketToUserSessionTrendBucketResponseBody(val)
+		}
+	} else {
+		body.Buckets = []*UserSessionTrendBucketResponseBody{}
 	}
 	return body
 }
@@ -1718,6 +1980,146 @@ func NewQueryFacetsGatewayErrorResponseBody(res *goa.ServiceError) *QueryFacetsG
 	return body
 }
 
+// NewGetTrendUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "getTrend" endpoint of the "userSessions" service.
+func NewGetTrendUnauthorizedResponseBody(res *goa.ServiceError) *GetTrendUnauthorizedResponseBody {
+	body := &GetTrendUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTrendForbiddenResponseBody builds the HTTP response body from the
+// result of the "getTrend" endpoint of the "userSessions" service.
+func NewGetTrendForbiddenResponseBody(res *goa.ServiceError) *GetTrendForbiddenResponseBody {
+	body := &GetTrendForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTrendBadRequestResponseBody builds the HTTP response body from the
+// result of the "getTrend" endpoint of the "userSessions" service.
+func NewGetTrendBadRequestResponseBody(res *goa.ServiceError) *GetTrendBadRequestResponseBody {
+	body := &GetTrendBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTrendNotFoundResponseBody builds the HTTP response body from the
+// result of the "getTrend" endpoint of the "userSessions" service.
+func NewGetTrendNotFoundResponseBody(res *goa.ServiceError) *GetTrendNotFoundResponseBody {
+	body := &GetTrendNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTrendConflictResponseBody builds the HTTP response body from the
+// result of the "getTrend" endpoint of the "userSessions" service.
+func NewGetTrendConflictResponseBody(res *goa.ServiceError) *GetTrendConflictResponseBody {
+	body := &GetTrendConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTrendUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "getTrend" endpoint of the "userSessions" service.
+func NewGetTrendUnsupportedMediaResponseBody(res *goa.ServiceError) *GetTrendUnsupportedMediaResponseBody {
+	body := &GetTrendUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTrendInvalidResponseBody builds the HTTP response body from the result
+// of the "getTrend" endpoint of the "userSessions" service.
+func NewGetTrendInvalidResponseBody(res *goa.ServiceError) *GetTrendInvalidResponseBody {
+	body := &GetTrendInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTrendInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "getTrend" endpoint of the "userSessions" service.
+func NewGetTrendInvariantViolationResponseBody(res *goa.ServiceError) *GetTrendInvariantViolationResponseBody {
+	body := &GetTrendInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTrendUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getTrend" endpoint of the "userSessions" service.
+func NewGetTrendUnexpectedResponseBody(res *goa.ServiceError) *GetTrendUnexpectedResponseBody {
+	body := &GetTrendUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTrendGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "getTrend" endpoint of the "userSessions" service.
+func NewGetTrendGatewayErrorResponseBody(res *goa.ServiceError) *GetTrendGatewayErrorResponseBody {
+	body := &GetTrendGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewMintUserSessionUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "mintUserSession" endpoint of the "userSessions"
 // service.
@@ -2080,6 +2482,20 @@ func NewQueryFacetsPayload(subjectUrn *string, userSessionIssuerID *string, stat
 	v.LastUsedNever = lastUsedNever
 	v.Field = field
 	v.FieldSearch = fieldSearch
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetTrendPayload builds a userSessions service getTrend endpoint payload.
+func NewGetTrendPayload(metaMcpServerID string, from string, to string, bucket string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.GetTrendPayload {
+	v := &usersessions.GetTrendPayload{}
+	v.MetaMcpServerID = metaMcpServerID
+	v.From = from
+	v.To = to
+	v.Bucket = bucket
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

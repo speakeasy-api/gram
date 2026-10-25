@@ -98,6 +98,39 @@ var _ = Service("userSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessionFilterFacets"}`)
 	})
 
+	Method("getTrend", func() {
+		Description("Count one gateway's connections over a window: credentials created and revoked during each bucket, and those active (unexpired, with no recorded revocation) immediately before each bucket's end. Active is a recorded credential lifetime, not proof the connection works, was permitted or was used. A refresh continues a credential, so it is neither a creation nor a revocation. Session records written before lineage was kept are left out and their rows counted in excluded_legacy_rows; rows on the gateway's current sign-in server that record no gateway are counted in unattributed_rows. Requires project:read on the project and mcp:read on the gateway; a gateway the caller may not read is not found.")
+		Payload(func() {
+			Attribute("meta_mcp_server_id", String, "The gateway, live in the caller's project.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("from", String, "Window start, inclusive.", func() { Format(FormatDateTime) })
+			Attribute("to", String, "Window end, exclusive. At most 31 days after from.", func() { Format(FormatDateTime) })
+			Attribute("bucket", String, "Bucket width, aligned to UTC hours or days.", func() {
+				Enum("hour", "day")
+			})
+			Required("meta_mcp_server_id", "from", "to", "bucket")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+		Result(UserSessionTrend)
+		HTTP(func() {
+			GET("/rpc/userSessions.getTrend")
+			Param("meta_mcp_server_id")
+			Param("from")
+			Param("to")
+			Param("bucket")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getUserSessionTrend")
+		Meta("openapi:extension:x-speakeasy-name-override", "getTrend")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessionTrend"}`)
+	})
+
 	Method("mintUserSession", func() {
 		Description("Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: an MCP server, a meta MCP server, or a legacy toolset without an mcp_servers wrapper. Exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.")
 
@@ -402,6 +435,29 @@ func sessionFilterParams() {
 	Param("last_used_older_than")
 	Param("last_used_never")
 }
+
+var UserSessionTrendBucket = Type("UserSessionTrendBucket", func() {
+	Attribute("start", String, "Bucket start, inclusive; the window start for the first bucket.", func() { Format(FormatDateTime) })
+	Attribute("end", String, "Bucket end, exclusive; the window end for the last bucket.", func() { Format(FormatDateTime) })
+	Attribute("created", Int64, "Credentials first issued during the bucket.")
+	Attribute("revoked", Int64, "Credentials ended by an explicit revocation before their deadline during the bucket.")
+	Attribute("active", Int64, "Credentials unexpired, with no recorded revocation, immediately before the bucket's end: refreshable ones until their authorization deadline, others until their token expires. A recorded lifetime, not request activity, permission or tool discovery.")
+	Required("start", "end", "created", "revoked", "active")
+})
+
+var UserSessionTrend = Type("UserSessionTrend", func() {
+	Attribute("from", String, "Window start.", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Window end, excluded.", func() { Format(FormatDateTime) })
+	Attribute("bucket", String, "Bucket width.")
+	Attribute("buckets", ArrayOf(UserSessionTrendBucket), "Every bucket in the window, empty ones included.")
+	Attribute("active_at_start", Int64, "Credentials unexpired, with no recorded revocation, immediately before the window start.")
+	Attribute("created", Int64, "Credentials first issued in the window.")
+	Attribute("revoked", Int64, "Credentials revoked in the window.")
+	Attribute("active_at_end", Int64, "Credentials unexpired, with no recorded revocation, immediately before the window end, equal to the last bucket's active.")
+	Attribute("excluded_legacy_rows", Int64, "Session records in the window that name the gateway only through their consent selection, written before lineage was kept. Left out of every count: a refresh among them cannot be told from a new sign-in, so this counts records, not connections.")
+	Attribute("unattributed_rows", Int64, "Session records in the window on the gateway's current sign-in server that record no gateway, left out of every count. Records, not connections. Absent when the gateway has no sign-in server.")
+	Required("from", "to", "bucket", "buckets", "active_at_start", "created", "revoked", "active_at_end", "excluded_legacy_rows")
+})
 
 var identityTypes = []any{"user", "agent", "workload", "apikey", "anonymous"}
 

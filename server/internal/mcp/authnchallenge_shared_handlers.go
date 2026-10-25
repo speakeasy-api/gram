@@ -141,7 +141,7 @@ func (s *Service) HandleSharedRevoke(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, issuer.logger)
 	}
-	return s.serveRevoke(w, r, issuer.logger, issuer.authorizationServer.issuerID, urls)
+	return s.serveRevoke(w, r, issuer.logger, issuer.authorizationServer.issuerID, issuer.organizationID, urls)
 }
 
 // HandleSharedAuthorize serves the authorization endpoint of a shared

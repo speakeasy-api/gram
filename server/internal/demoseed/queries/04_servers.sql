@@ -528,11 +528,32 @@ VALUES
    now() + (@refresh_expires_in::text)::interval, now() + (@expires_in::text)::interval,
    now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);
 
+-- One row of a gateway connection's history: a credential issued, refreshed,
+-- revoked or expired at fixed offsets from now(), for the gateway's
+-- connections over time. Every one is deleted by now, so the live sessions
+-- list is unchanged. A refreshed row continues credential_id; a legacy row
+-- names the gateway only in its consent selection; a dashboard token has no
+-- registered client.
+-- name: ServersInsertGatewaySessionHistory :exec
+INSERT INTO user_sessions
+  (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
+   subject_urn, resource_identity, tool_selection, credential_id, jti,
+   refresh_token_hash, refresh_expires_at, expires_at, created_at, deleted_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   @user_session_issuer_id::uuid, sqlc.narg('user_session_client_id')::uuid,
+   'user:' || @user_id::text, sqlc.narg('resource_identity')::text,
+   sqlc.narg('tool_selection')::jsonb, sqlc.narg('credential_id')::uuid, @jti::text,
+   @refresh_token_hash::text,
+   now() + (@refresh_expires_in::text)::interval, now() + (@expires_in::text)::interval,
+   now() - (@created_ago::text)::interval, now() - (@deleted_ago::text)::interval);
+
 -- One managed-agent session through the gateway. The agent's upstream
 -- attachments are on the Linear sign-in server only, so on the gateway it is
 -- admitted to no provider and reads as Speakeasy only. Inert like the
--- deployment's managed-agent session: an empty delegation, an invalid refresh
--- hash and a jti no token carries.
+-- deployment's managed-agent session: an empty delegation, a refresh hash no
+-- token matches and a jti no token carries. Its access token has expired while
+-- its refresh grant is still live, as an idle agent's does.
 -- name: ServersInsertGatewayAgentSession :exec
 INSERT INTO user_sessions
   (id, project_id, organization_id, user_session_issuer_id,

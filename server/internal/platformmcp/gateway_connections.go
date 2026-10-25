@@ -166,6 +166,7 @@ type GatewayConnection struct {
 type gatewaySessions interface {
 	ListUserSessions(ctx context.Context, payload *usersessionsgen.ListUserSessionsPayload) (*usersessionsgen.ListUserSessionsResult, error)
 	QueryFacets(ctx context.Context, payload *usersessionsgen.QueryFacetsPayload) (*usersessionsgen.UserSessionFilterFacets, error)
+	GetTrend(ctx context.Context, payload *usersessionsgen.GetTrendPayload) (*usersessionsgen.UserSessionTrend, error)
 }
 
 // GatewayConnectionsService lists a gateway's sessions through the session
@@ -206,20 +207,10 @@ func (s *GatewayConnectionsService) List(ctx context.Context, principal Principa
 		return zero, errGatewayConnectionsInvalid
 	}
 
-	auth, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || auth == nil || principal.UserID == "" || auth.UserID != principal.UserID || auth.ActiveOrganizationID != principal.OrganizationID {
-		return zero, ErrForbidden
-	}
-	project, err := s.resolveProject(ctx, principal, FindMCPInput{ProjectID: projectID.String(), ProjectSlug: "", Query: "", Cursor: "", Limit: 0, Readiness: ""})
+	ctx, project, err := s.inProject(ctx, principal, projectID)
 	if err != nil {
 		return zero, err
 	}
-	if project.ID != projectID {
-		return zero, ErrForbidden
-	}
-	scoped := *auth
-	scoped.ProjectID, scoped.ProjectSlug = &project.ID, &project.Slug
-	ctx = contextvalues.SetAuthContext(ctx, &scoped)
 
 	gateway := gatewayID.String()
 	list, err := s.sessions.ListUserSessions(ctx, &usersessionsgen.ListUserSessionsPayload{
@@ -265,6 +256,26 @@ func (s *GatewayConnectionsService) List(ctx context.Context, principal Principa
 		out.Connections = append(out.Connections, gatewayConnection(session))
 	}
 	return out, nil
+}
+
+// inProject resolves the exact project the caller names and returns a context
+// whose auth names it, so the session service authorizes and scopes against
+// that project rather than whichever one the connection last used.
+func (s *GatewayConnectionsService) inProject(ctx context.Context, principal Principal, projectID uuid.UUID) (context.Context, ResolvedProject, error) {
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || auth == nil || principal.UserID == "" || auth.UserID != principal.UserID || auth.ActiveOrganizationID != principal.OrganizationID {
+		return ctx, ResolvedProject{}, ErrForbidden
+	}
+	project, err := s.resolveProject(ctx, principal, FindMCPInput{ProjectID: projectID.String(), ProjectSlug: "", Query: "", Cursor: "", Limit: 0, Readiness: ""})
+	if err != nil {
+		return ctx, ResolvedProject{}, err
+	}
+	if project.ID != projectID {
+		return ctx, ResolvedProject{}, ErrForbidden
+	}
+	scoped := *auth
+	scoped.ProjectID, scoped.ProjectSlug = &project.ID, &project.Slug
+	return contextvalues.SetAuthContext(ctx, &scoped), project, nil
 }
 
 func gatewayConnection(session *types.UserSession) GatewayConnection {

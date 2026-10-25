@@ -48,6 +48,19 @@ WHERE organization_id = @org_id::text;
 SELECT count(*)
 FROM user_session_issuer_cimd_clients WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
+-- The gateway's credentials, each counted once however often it refreshed.
+-- name: PostflightCountGatewayCredentials :one
+SELECT count(DISTINCT COALESCE(credential_id, id))
+FROM user_sessions
+WHERE project_id = @project_id::uuid AND resource_identity = @resource_identity::text;
+
+-- Records naming the gateway only through their consent selection.
+-- name: PostflightCountGatewayLegacySessions :one
+SELECT count(*)
+FROM user_sessions
+WHERE project_id = @project_id::uuid AND resource_identity IS NULL
+  AND tool_selection->>'resource' = @resource_identity::text;
+
 -- name: PostflightCountHTTPTools :one
 SELECT count(*)
 FROM http_tool_definitions WHERE project_id = @project_id::uuid AND deleted IS FALSE;

@@ -836,6 +836,74 @@ func BuildQueryFacetsPayload(userSessionsQueryFacetsSubjectUrn string, userSessi
 	return v, nil
 }
 
+// BuildGetTrendPayload builds the payload for the userSessions getTrend
+// endpoint from CLI flags.
+func BuildGetTrendPayload(userSessionsGetTrendMetaMcpServerID string, userSessionsGetTrendFrom string, userSessionsGetTrendTo string, userSessionsGetTrendBucket string, userSessionsGetTrendSessionToken string, userSessionsGetTrendApikeyToken string, userSessionsGetTrendProjectSlugInput string) (*usersessions.GetTrendPayload, error) {
+	var err error
+	var metaMcpServerID string
+	{
+		metaMcpServerID = userSessionsGetTrendMetaMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", metaMcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var from string
+	{
+		from = userSessionsGetTrendFrom
+		err = goa.MergeErrors(err, goa.ValidateFormat("from", from, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var to string
+	{
+		to = userSessionsGetTrendTo
+		err = goa.MergeErrors(err, goa.ValidateFormat("to", to, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var bucket string
+	{
+		bucket = userSessionsGetTrendBucket
+		if !(bucket == "hour" || bucket == "day") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("bucket", bucket, []any{"hour", "day"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionsGetTrendSessionToken != "" {
+			sessionToken = &userSessionsGetTrendSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if userSessionsGetTrendApikeyToken != "" {
+			apikeyToken = &userSessionsGetTrendApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionsGetTrendProjectSlugInput != "" {
+			projectSlugInput = &userSessionsGetTrendProjectSlugInput
+		}
+	}
+	v := &usersessions.GetTrendPayload{}
+	v.MetaMcpServerID = metaMcpServerID
+	v.From = from
+	v.To = to
+	v.Bucket = bucket
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildMintUserSessionPayload builds the payload for the userSessions
 // mintUserSession endpoint from CLI flags.
 func BuildMintUserSessionPayload(userSessionsMintUserSessionBody string, userSessionsMintUserSessionSessionToken string, userSessionsMintUserSessionProjectSlugInput string) (*usersessions.MintUserSessionPayload, error) {

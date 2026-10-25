@@ -30,11 +30,22 @@ import type { Field as FacetFieldParam } from "@gram/client/models/operations/qu
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildUserSessionFilterFacetsQuery } from "@gram/client/react-query/userSessionFilterFacets.core.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
-import { keepPreviousData, useQueries } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useIsFetching,
+  useQueries,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { GatewayClientAdmission } from "./GatewayClientAdmission";
 import { GatewayConnectionHealth } from "./GatewayConnectionHealth";
+import { GatewayConnectionTrend } from "./GatewayConnectionTrend";
+import {
+  HEALTH_WINDOWS,
+  WINDOW_PHRASE,
+  healthWindow,
+  type HealthWindow,
+} from "./connectionHealth";
 import {
   CLIENT_REGISTRATION_LABELS,
   CLIENT_VALUE_LABELS,
@@ -129,6 +140,30 @@ export function GatewayDebugTab({
   const project = useProject();
   const { hasScope } = useRBAC();
   const canRevoke = hasScope("project:write", project.id);
+  // One window for the trend and health sections, and the from/to snapshot
+  // both read, retaken on refresh.
+  const [span, setSpan] = useState<HealthWindow>("7d");
+  const [now, setNow] = useState(() => new Date());
+  const debugWindow = useMemo(() => healthWindow(span, now), [span, now]);
+  // The SDK reads this tab makes for the gateway: their keys name this
+  // project and this gateway. Health keys carry the project in the request's
+  // parameters and the gateway in the body appended after them.
+  const gatewayReads = useIsFetching({
+    predicate: ({ queryKey }) => {
+      const names = (field: string, value: string) =>
+        queryKey.some(
+          (part) =>
+            typeof part === "object" &&
+            part !== null &&
+            (part as Record<string, unknown>)[field] === value,
+        );
+      return (
+        queryKey[0] === "@gram/client" &&
+        names("gramProject", project.slug) &&
+        names("metaMcpServerId", gatewayId)
+      );
+    },
+  });
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("q") ?? "";
   const [searchInput, setSearchInput] = useState("");
@@ -421,7 +456,11 @@ export function GatewayDebugTab({
   );
   const sessions = useSessionAgents(unresolved);
   const actionable = !searchTooLong && sessions.length > 0;
+  // One refresh for the tab: a new snapshot for the trend and health
+  // sections, and the connections when a search can be sent.
   const refresh = () => {
+    setNow(new Date());
+    if (searchTooLong) return;
     void refetch();
     facetQueries.forEach((query) => void query.refetch());
   };
@@ -479,8 +518,37 @@ export function GatewayDebugTab({
 
   return (
     <Stack gap={4}>
+      <Page.Toolbar>
+        <Page.Toolbar.Leading>
+          <Text small muted>
+            Connections and connection health {WINDOW_PHRASE[span]}
+          </Text>
+        </Page.Toolbar.Leading>
+        <Page.Toolbar.Actions>
+          <SegmentedControl
+            value={span}
+            onChange={setSpan}
+            options={HEALTH_WINDOWS}
+            ariaLabel="Time window"
+          />
+        </Page.Toolbar.Actions>
+        <Page.Toolbar.Refresh
+          onRefresh={refresh}
+          isRefreshing={gatewayReads > 0}
+        />
+      </Page.Toolbar>
+      <GatewayConnectionTrend
+        gatewayId={gatewayId}
+        span={span}
+        from={debugWindow.from}
+        to={debugWindow.to}
+        phrase={WINDOW_PHRASE[span]}
+      />
       <GatewayConnectionHealth
         gatewayId={gatewayId}
+        span={span}
+        from={debugWindow.from}
+        to={debugWindow.to}
         onShowConnections={showMatching}
       />
       <GatewayClientAdmission gatewayId={gatewayId} issuerId={issuerId} />
@@ -533,9 +601,6 @@ export function GatewayDebugTab({
             />
           </div>
         </Page.Toolbar.Leading>
-        {!searchTooLong && (
-          <Page.Toolbar.Refresh onRefresh={refresh} isRefreshing={isFetching} />
-        )}
       </Page.Toolbar>
       {ignoredChips.length > 0 && (
         <p className="text-muted-foreground text-sm break-all">

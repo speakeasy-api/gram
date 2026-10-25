@@ -23,6 +23,8 @@ type gatewaySessionsFake struct {
 	facetErr   error
 	list       *usersessionsgen.ListUserSessionsPayload
 	facets     *usersessionsgen.QueryFacetsPayload
+	trend      *usersessionsgen.GetTrendPayload
+	trendErr   error
 	projectIDs []string
 }
 
@@ -42,6 +44,19 @@ func (f *gatewaySessionsFake) QueryFacets(ctx context.Context, payload *usersess
 		return nil, f.facetErr
 	}
 	return &usersessionsgen.UserSessionFilterFacets{UnattributedCount: new(int64(3))}, nil
+}
+
+func (f *gatewaySessionsFake) GetTrend(ctx context.Context, payload *usersessionsgen.GetTrendPayload) (*usersessionsgen.UserSessionTrend, error) {
+	f.trend = payload
+	f.recordProject(ctx)
+	if f.trendErr != nil {
+		return nil, f.trendErr
+	}
+	return &usersessionsgen.UserSessionTrend{
+		From: payload.From, To: payload.To, Bucket: payload.Bucket,
+		Buckets:       []*usersessionsgen.UserSessionTrendBucket{{Start: payload.From, End: payload.To, Created: 2, Revoked: 1, Active: 4}},
+		ActiveAtStart: 3, Created: 2, Revoked: 1, ActiveAtEnd: 4, ExcludedLegacyRows: 5, UnattributedRows: new(int64(6)),
+	}, nil
 }
 
 func (f *gatewaySessionsFake) recordProject(ctx context.Context) {
@@ -248,4 +263,79 @@ func TestListGatewayConnectionsRefusals(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGatewayConnectionTrendToolKeepsOneContract(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	for name, service := range map[string]*GatewayConnectionsService{
+		"unavailable": nil,
+		"live":        gatewayConnectionsTestService(&gatewaySessionsFake{}, project, nil),
+	} {
+		reg := newRegistrar(newTestMCPServer())
+		registerGatewayConnectionsTool(reg, service)
+		descriptor := descriptorByName(t, reg, getGatewayConnectionTrendToolName)
+		require.Equal(t, bothAudiences, descriptor.Meta.Audiences, name)
+		require.Equal(t, externalOnly, descriptorByName(t, reg, listGatewayConnectionsToolName).Meta.Audiences, name, "the session list stays external only")
+		require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization, name)
+		require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope, name)
+		require.Equal(t, discoveryProjectRead, descriptor.Meta.DiscoveryScopes, name, "no log:read")
+		require.True(t, descriptor.Annotations.ReadOnlyHint, name)
+		require.Contains(t, string(descriptor.InputSchema), `"gateway_id"`, name)
+	}
+
+	reg := newRegistrar(newTestMCPServer())
+	registerGatewayConnectionsTool(reg, nil)
+	_, err := descriptorByName(t, reg, getGatewayConnectionTrendToolName).Invoke(gatewayConnectionsContext(t), json.RawMessage(`{"project_id":"`+project.String()+`","gateway_id":"`+uuid.NewString()+`"}`))
+	refusal, ok := errors.AsType[*ToolRefusalError](err)
+	require.True(t, ok, err)
+	require.Contains(t, refusal.Payload, unavailableCode)
+}
+
+func TestGatewayConnectionTrendReadsThroughTheScopedSessionService(t *testing.T) {
+	t.Parallel()
+
+	project, gateway := uuid.New(), uuid.New()
+	fake := &gatewaySessionsFake{}
+	service := gatewayConnectionsTestService(fake, project, nil)
+
+	out, err := service.Trend(gatewayConnectionsContext(t), testPrincipal(), GatewayConnectionTrendInput{ProjectID: project.String(), GatewayID: gateway.String(), From: "", To: "2026-01-08T00:00:00Z", Bucket: ""})
+	require.NoError(t, err)
+	require.Equal(t, []string{project.String()}, fake.projectIDs, "the read runs in the named project")
+	require.Equal(t, []string{gateway.String(), "2026-01-01T00:00:00Z", "2026-01-08T00:00:00Z", "hour"}, []string{fake.trend.MetaMcpServerID, fake.trend.From, fake.trend.To, fake.trend.Bucket}, "seven days before to, hourly")
+	require.Equal(t, []int64{3, 2, 1, 4, 5, 6}, []int64{out.ActiveAtStart, out.Created, out.Revoked, out.ActiveAtEnd, out.ExcludedLegacyRows, *out.UnattributedRows})
+	require.Equal(t, []GatewayConnectionTrendBucket{{Start: "2026-01-01T00:00:00Z", End: "2026-01-08T00:00:00Z", Created: 2, Revoked: 1, Active: 4}}, out.Buckets)
+	require.Equal(t, project.String(), out.ProjectID)
+
+	_, err = service.Trend(gatewayConnectionsContext(t), testPrincipal(), GatewayConnectionTrendInput{ProjectID: project.String(), GatewayID: gateway.String(), From: "2026-01-01T00:00:00Z", To: "2026-01-31T00:00:00Z", Bucket: ""})
+	require.NoError(t, err)
+	require.Equal(t, "day", fake.trend.Bucket, "a window over seven days defaults to days")
+}
+
+func TestGatewayConnectionTrendRefusals(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	invalid := []GatewayConnectionTrendInput{
+		{ProjectID: "", GatewayID: uuid.NewString(), From: "", To: "", Bucket: ""},
+		{ProjectID: project.String(), GatewayID: "nope", From: "", To: "", Bucket: ""},
+		{ProjectID: project.String(), GatewayID: uuid.NewString(), From: "yesterday", To: "", Bucket: ""},
+	}
+	for _, input := range invalid {
+		_, err := gatewayConnectionsTestService(&gatewaySessionsFake{}, project, nil).Trend(gatewayConnectionsContext(t), testPrincipal(), input)
+		require.ErrorIs(t, err, errGatewayConnectionTrendInvalid)
+	}
+
+	hidden := &gatewaySessionsFake{trendErr: oops.E(oops.CodeNotFound, nil, "gateway not found")}
+	_, err := gatewayConnectionsTestService(hidden, project, nil).Trend(gatewayConnectionsContext(t), testPrincipal(), GatewayConnectionTrendInput{ProjectID: project.String(), GatewayID: uuid.NewString(), From: "", To: "", Bucket: ""})
+	result, ok := gatewayConnectionsToolResult(err)
+	require.True(t, ok)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, text.Text, "not_found", "a gateway the caller may not read is not found")
+
+	denied := &gatewaySessionsFake{trendErr: oops.C(oops.CodeForbidden)}
+	_, err = gatewayConnectionsTestService(denied, project, nil).Trend(gatewayConnectionsContext(t), testPrincipal(), GatewayConnectionTrendInput{ProjectID: project.String(), GatewayID: uuid.NewString(), From: "", To: "", Bucket: ""})
+	require.ErrorIs(t, err, ErrForbidden)
 }

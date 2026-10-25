@@ -11,6 +11,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { GatewayConnectionHealth } from "./GatewayConnectionHealth";
+import { healthWindow, type HealthWindow } from "./connectionHealth";
 
 type Payload = Record<string, unknown> & { from: Date; to: Date };
 
@@ -162,23 +163,30 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// The Debug tab owns the window; the section reads the span and the from/to
+// snapshot it is given.
+function section(client: QueryClient, span: HealthWindow) {
+  const { from, to } = healthWindow(span, new Date());
+  return (
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <GatewayConnectionHealth
+            gatewayId="gateway-1"
+            span={span}
+            from={from}
+            to={to}
+            onShowConnections={vi.fn<() => void>()}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>
+  );
+}
+
 function renderSection() {
   const client = new QueryClient();
-  return {
-    client,
-    ...render(
-      <MemoryRouter>
-        <QueryClientProvider client={client}>
-          <TooltipProvider>
-            <GatewayConnectionHealth
-              gatewayId="gateway-1"
-              onShowConnections={vi.fn<() => void>()}
-            />
-          </TooltipProvider>
-        </QueryClientProvider>
-      </MemoryRouter>,
-    ),
-  };
+  return { client, ...render(section(client, "7d")) };
 }
 
 it("renders nothing without log access", () => {
@@ -207,8 +215,8 @@ it("defaults to listings over 7 days, sharing one window", async () => {
   expect(screen.getByText(/not whether a redirect arrived/)).toBeTruthy();
 });
 
-it("refetches for every control change", async () => {
-  renderSection();
+it("refetches for every control change and for the window it is given", async () => {
+  const { client, rerender } = renderSection();
   await screen.findByText("Listings over time");
   fireEvent.click(screen.getByRole("button", { name: "Highest failure rate" }));
   await waitFor(() =>
@@ -218,7 +226,7 @@ it("refetches for every control change", async () => {
   await waitFor(() =>
     expect(state.hotspots.mock.lastCall![0]).toMatchObject({ minAttempts: 20 }),
   );
-  fireEvent.click(screen.getByRole("button", { name: "24h" }));
+  rerender(section(client, "24h"));
   await waitFor(() => {
     const health = state.health.mock.lastCall![0] as Payload;
     expect(health.to.getTime() - health.from.getTime()).toBe(24 * 3_600_000);

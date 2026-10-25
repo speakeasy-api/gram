@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	listGatewayConnectionsToolName = "list_gateway_connections"
-	gatewayConnectionsFeature      = "gateway_connections"
+	listGatewayConnectionsToolName    = "list_gateway_connections"
+	getGatewayConnectionTrendToolName = "get_gateway_connection_trend"
+	gatewayConnectionsFeature         = "gateway_connections"
 )
 
 // registerGatewayConnectionsTool serves one manifest whether or not the
@@ -46,12 +47,41 @@ func registerGatewayConnectionsTool(reg *Registrar, service *GatewayConnectionsS
 			"Read-only: it never revokes. Never returns tokens, token hashes or credentials. Agents are listed by identity without a name.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, handler)
+
+	trendHandler := func(_ context.Context, _ *mcp.CallToolRequest, _ GatewayConnectionTrendInput) (*mcp.CallToolResult, GatewayConnectionTrendOutput, error) {
+		payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: gatewayConnectionsFeature, Message: "Gateway connections are unavailable on this server."})
+		if err != nil {
+			return nil, GatewayConnectionTrendOutput{}, fmt.Errorf("encode unavailable gateway connection trend: %w", err)
+		}
+		return nil, GatewayConnectionTrendOutput{}, &ToolRefusalError{Code: unavailableCode, Payload: string(payload)}
+	}
+	if service.valid() {
+		trendHandler = func(ctx context.Context, _ *mcp.CallToolRequest, input GatewayConnectionTrendInput) (*mcp.CallToolResult, GatewayConnectionTrendOutput, error) {
+			return principalToolCall(ctx, gatewayConnectionsToolResult, func(principal Principal) (GatewayConnectionTrendOutput, error) {
+				return service.Trend(ctx, principal, input)
+			})
+		}
+	}
+	// Both audiences: unlike the list, it returns bounded counts, read in the
+	// exact project the caller names under its own grants.
+	addTool(reg, &mcp.Tool{
+		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
+		Name:  getGatewayConnectionTrendToolName,
+		Title: "Count a Gateway's Connections Over Time",
+		Description: "Count one gateway's connections over a window of at most 31 days (default the last 7) in an explicit project, as the gateway's Debug tab charts them: per hour or day bucket, the credentials first issued and those revoked before their deadline during it, and those active (unexpired, with no recorded revocation) immediately before its end. " +
+			"A refresh continues a credential, so it is neither a creation nor a revocation; a credential that reaches its deadline is not counted as revoked. Active is a recorded lifetime: a refreshable credential before its authorization deadline or another before its token expires, with no revocation recorded; it is not request activity, effective permission, or proof that tool discovery works, and access-token revocations from before such revocations were recorded are not reflected. " +
+			"active_at_start and active_at_end are the stock immediately before from and to, and active_at_end equals the last bucket's active. excluded_legacy_rows counts session records, not connections, left out because they were written before lineage was kept; unattributed_rows counts records on the gateway's current sign-in server that record no gateway. " +
+			"Requires project:read on the project and mcp:read on the gateway; a gateway that is missing or not readable is not found. Never returns people, tokens or credentials.",
+		Annotations: readOnlyAnnotations(),
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, trendHandler)
 }
 
 func gatewayConnectionsToolResult(err error) (*mcp.CallToolResult, bool) {
 	result := featureUnavailableResult{Code: "", Feature: gatewayConnectionsFeature, Message: ""}
 	shareable, isShareable := errors.AsType[*oops.ShareableError](err)
 	switch {
+	case errors.Is(err, errGatewayConnectionTrendInvalid):
+		result.Code, result.Message = "invalid_request", "Provide an exact project_id and gateway_id, RFC 3339 from and to at most 31 days apart, and a bucket of hour or day."
 	case errors.Is(err, errGatewayConnectionsInvalid):
 		result.Code, result.Message = "invalid_request", fmt.Sprintf("Provide an exact project_id and gateway_id, a search of at most %d characters, and a limit from 1 to %d.", maxGatewayConnectionsSearchLength, maxGatewayConnectionsLimit)
 	case isShareable && shareable.Code == oops.CodeBadRequest:
