@@ -186,7 +186,8 @@ it("defaults to listings over 7 days, sharing one window", async () => {
     from: health.from,
     to: health.to,
   });
-  expect(screen.getAllByText("of 4")).toHaveLength(3);
+  expect(screen.getAllByText("of 4")).toHaveLength(2);
+  expect(screen.getByText("25% of 4")).toBeTruthy();
   expect(screen.getByText(/not whether a redirect arrived/)).toBeTruthy();
 });
 

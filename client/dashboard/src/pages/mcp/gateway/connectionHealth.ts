@@ -171,6 +171,30 @@ export type StageTile = {
 };
 
 /**
+ * Failures and their rate over all of the stage's attempts, so blocked and
+ * unrecorded attempts lower the rate rather than counting as failures. A stage
+ * with no attempts shows no rate.
+ */
+function failedTile(
+  stage: GatewayConnectionStage,
+  tooltip?: string,
+): StageTile {
+  const failed = countOf(stage.outcomes, "failed");
+  const total = stage.attempts.toLocaleString();
+  let subtext = `of ${total}`;
+  if (stage.attempts > 0) {
+    subtext = `${failureRate({ attempts: stage.attempts, failed })} ${subtext}`;
+  }
+  return {
+    title: "Failed",
+    value: failed,
+    tone: failed > 0 ? "destructive" : "neutral",
+    subtext,
+    tooltip,
+  };
+}
+
+/**
  * Tiles for one stage. Every count names the stage's attempts as its
  * denominator, and blocked members stay in it rather than reading as failed.
  */
@@ -195,7 +219,6 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
     subtext: `of ${total}`,
   };
   if (stage.stage === "inbound_authorize") {
-    const failed = countOf(stage.outcomes, "failed");
     return [
       {
         title: "Sign-in requests",
@@ -211,17 +234,11 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
           "The gateway attempted a redirect to sign in. Whether it arrived and whether sign-in finished are not observed.",
       },
       policyTile,
-      {
-        title: "Failed",
-        value: failed,
-        tone: of(failed, "destructive"),
-        subtext: `of ${total}`,
-      },
+      failedTile(stage),
       unknownTile,
     ];
   }
   if (stage.stage === "inbound_token") {
-    const failed = countOf(stage.outcomes, "failed");
     return [
       { title: "Token requests", value: stage.attempts, tone: "information" },
       {
@@ -251,17 +268,11 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
           "Enterprise assertion requests the gateway answered with a token. It does not show that a client used the token.",
       },
       policyTile,
-      {
-        title: "Failed",
-        value: failed,
-        tone: of(failed, "destructive"),
-        subtext: `of ${total}`,
-      },
+      failedTile(stage),
       unknownTile,
     ];
   }
   if (stage.stage === "upstream_callback") {
-    const failed = countOf(stage.outcomes, "failed");
     return [
       {
         title: "Provider sign-ins",
@@ -286,16 +297,10 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
         tooltip:
           "The provider refused the requested server address, so the gateway asked it again without one.",
       },
-      {
-        title: "Failed",
-        value: failed,
-        tone: of(failed, "destructive"),
-        subtext: `of ${total}`,
-      },
+      failedTile(stage),
     ];
   }
   if (stage.stage === "upstream_refresh") {
-    const failed = countOf(stage.outcomes, "failed");
     const unrecorded = countOf(stage.outcomes, "unknown");
     return [
       {
@@ -326,14 +331,10 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
         subtext: `of ${total}`,
         tooltip: "The connection had no refresh grant or was no longer active.",
       },
-      {
-        title: "Failed",
-        value: failed,
-        tone: of(failed, "destructive"),
-        subtext: `of ${total}`,
-        tooltip:
-          "A failed refresh may still have served a credential that had not yet expired.",
-      },
+      failedTile(
+        stage,
+        "A failed refresh may still have served a credential that had not yet expired.",
+      ),
       {
         title: "Outcome not recorded",
         value: unrecorded,
@@ -347,7 +348,6 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
   if (stage.stage === "discovery_listing") {
     const complete = countOf(stage.outcomes, "complete");
     const partial = countOf(stage.outcomes, "partial");
-    const failed = countOf(stage.outcomes, "failed");
     return [
       { title: "Listings", value: stage.attempts, tone: "information" },
       {
@@ -363,26 +363,15 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
         subtext: `of ${total}`,
         tooltip: "Some servers were left out of the client's tool list.",
       },
-      {
-        title: "Failed",
-        value: failed,
-        tone: of(failed, "destructive"),
-        subtext: `of ${total}`,
-      },
+      failedTile(stage),
     ];
   }
-  const failed = countOf(stage.outcomes, "failed");
   const blocked =
     countOf(stage.outcomes, "credential_blocked") +
     countOf(stage.outcomes, "consent_blocked");
   return [
     { title: "Member checks", value: stage.attempts, tone: "information" },
-    {
-      title: "Failed",
-      value: failed,
-      tone: of(failed, "destructive"),
-      subtext: `of ${total}`,
-    },
+    failedTile(stage),
     {
       title: "Needs sign-in or consent",
       value: blocked,
@@ -873,7 +862,9 @@ export function beforeWindowEnd<T extends { timeUnixNano: string }>(
   return events.filter((event) => BigInt(event.timeUnixNano) < end);
 }
 
-export function failureRate(hotspot: GatewayConnectionHotspot): string {
+export function failureRate(
+  hotspot: Pick<GatewayConnectionHotspot, "attempts" | "failed">,
+): string {
   if (hotspot.attempts === 0) return "—";
   return `${((hotspot.failed / hotspot.attempts) * 100).toFixed(0)}%`;
 }
