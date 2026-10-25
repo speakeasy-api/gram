@@ -47,6 +47,16 @@ func (o Outcome) Applicable() bool {
 	return o.Reason != ReasonNotApplicable && o.Reason != ReasonBindingNotReady && o.Reason != ReasonProviderUnavailable
 }
 
+// SafeToRepeat reports a transient failure that is safe to repeat: one that
+// happened before any token request could have reached the provider. A
+// failure after submission is ambiguous, and repeating it could mint a
+// duplicate grant against the provider's quota, so it, a shared failure
+// answered from the cache, stale configuration and every provider rejection
+// are never repeated.
+func (o Outcome) SafeToRepeat() bool {
+	return o.Reason == ReasonTransientFailure && o.Retryable && !o.Cached && !o.Submitted
+}
+
 // Succeeded reports whether the attempt yielded a usable token.
 func (o Outcome) Succeeded() bool { return o.Reason == ReasonSuccess }
 

@@ -664,6 +664,8 @@ func TestGatewayDirectBoundsTheWholeInventory(t *testing.T) {
 	// Members past the budget are skipped, not a failed listing.
 	require.NotContains(t, w.Body.String(), `"error"`)
 	require.Contains(t, w.Body.String(), `"tools":[]`)
+	// The listing's own deadline has ended, but each skipped member is recorded.
+	omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 25)
 }
 
 func TestGatewayDirectGivesQueuedMembersTheirOwnDeadline(t *testing.T) {

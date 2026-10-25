@@ -140,10 +140,12 @@ func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
 }
 
 // metaMemberClientCredentialError is the member-scoped answer for a gateway
-// member whose self client credential could not be obtained.
+// member whose self client credential could not be obtained. An outage may
+// clear within a listing, unless the attempt's own time ran out.
 func metaMemberClientCredentialError(member metaMember, err error) error {
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-		return memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q cannot reach its upstream authorization server right now; retry shortly", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+		retryable := !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled)
+		return memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q cannot reach its upstream authorization server right now; retry shortly", member.slug)}, status: 0, retryable: retryable, retryAfter: 0}
 	}
 
 	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator", member.slug)}

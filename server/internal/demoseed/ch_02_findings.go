@@ -850,7 +850,7 @@ func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error 
 		{member: "linear", status: 429, reason: "was rate limited", hours: 2},
 		{member: "linear", status: 429, reason: "was rate limited", hours: 7},
 		{member: "slack", status: 503, reason: "was unavailable", hours: 20},
-		{member: "slack", status: 502, reason: "could not be listed", hours: 46},
+		{member: "slack", status: 502, reason: "was unavailable", hours: 46},
 	}
 	for n, o := range omitted {
 		email := s.email(demoUsers[hash64("gwomit", n)%6].handle)
