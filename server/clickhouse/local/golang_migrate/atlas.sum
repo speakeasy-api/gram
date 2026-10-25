@@ -1,4 +1,4 @@
-h1:++tJvwPoObmcuHuegxMbZX9cQ4JksslMAde3DESCp10=
+h1:pNH8NP5O8rSUYFhwmlC4oduXbh60ip87kR/SHfAsrEY=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -129,3 +129,4 @@ h1:++tJvwPoObmcuHuegxMbZX9cQ4JksslMAde3DESCp10=
 20261023121917_sigint-conversation-lineage.up.sql h1:q3SIrxEAe8zYBCITgEC74o1LGiFrpu0xFZTutPBa214=
 20261023122048_sigint-source-time-pruning.up.sql h1:CseGwcsROJF7hoTTMSx8Wu9VyEmX1RJABVmSgY5yD/c=
 20261023160532_trace-summaries-mcp-server-id.up.sql h1:Tg+NdAa/XxEx0vxgZ+BfujKmJeR7synV78IiSU73HRg=
+20261025010735_mcp_connection_attempt_summaries.up.sql h1:pRcd71nrD5wTs/rIG2okuukuVwdqlRxjeGPO108T714=
