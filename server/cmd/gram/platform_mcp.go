@@ -66,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
 
@@ -185,6 +186,9 @@ type platformMCPConfig struct {
 	// Dashboards is the dashboards service behind the dashboard tools, shared
 	// with the dashboards RPC. Nil keeps them visible as unavailable.
 	Dashboards *dashboards.Service
+	// UserSessions is the session service behind list_gateway_connections,
+	// shared with the sessions RPC. Nil keeps it visible as unavailable.
+	UserSessions *usersessions.Service
 
 	// WorkflowRun delivers shipped-workflow run reports to Speakeasy's own
 	// analytics. Nil registers record_workflow_run as a stub, so the tool
@@ -539,6 +543,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
 	platformReader.WithDashboards(platformmcp.NewDashboardsService(config.Logger, config.Dashboards, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
+	platformReader.WithGatewayConnections(platformmcp.NewGatewayConnectionsService(config.UserSessions, platformReader))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
@@ -1232,6 +1237,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
 	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
 	platformReader.WithDashboards(platformmcp.NewDashboardsService(config.Logger, config.Dashboards, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
+	platformReader.WithGatewayConnections(platformmcp.NewGatewayConnectionsService(config.UserSessions, platformReader))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))

@@ -345,6 +345,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerAnalyticsTools(reg, postgresReader.analytics)
 		registerWidgetTools(reg, postgresReader.widgets)
 		registerDashboardTools(reg, postgresReader.dashboards)
+		registerGatewayConnectionsTool(reg, postgresReader.gatewayConnections)
 	} else {
 		registerUnavailableMCPConnectionSettingsTool(reg)
 		registerMCPConnectionMutationTools(reg, nil)
@@ -371,6 +372,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerAnalyticsTools(reg, nil)
 		registerWidgetTools(reg, nil)
 		registerDashboardTools(reg, nil)
+		registerGatewayConnectionsTool(reg, nil)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {

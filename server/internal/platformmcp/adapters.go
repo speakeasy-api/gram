@@ -390,6 +390,7 @@ type PostgresReader struct {
 	analytics                 *AnalyticsService
 	widgets                   *WidgetService
 	dashboards                *DashboardsService
+	gatewayConnections        *GatewayConnectionsService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -431,6 +432,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		analytics:                 nil,
 		widgets:                   nil,
 		dashboards:                nil,
+		gatewayConnections:        nil,
 	}
 }
 
@@ -601,6 +603,15 @@ func (r *PostgresReader) WithAnalytics(service *AnalyticsService) *PostgresReade
 func (r *PostgresReader) WithDashboards(service *DashboardsService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.dashboards = service
+	}
+	return r
+}
+
+// WithGatewayConnections attaches the gateway session list. A nil service
+// leaves the tool listed with the same contract, answering unavailable.
+func (r *PostgresReader) WithGatewayConnections(service *GatewayConnectionsService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.gatewayConnections = service
 	}
 	return r
 }
