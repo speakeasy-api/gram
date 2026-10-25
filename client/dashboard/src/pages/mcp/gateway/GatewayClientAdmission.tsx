@@ -17,21 +17,22 @@ const CUSTOM_URL_LIMIT = 10;
 type ModeCopy = { label: string; meaning: string; restricted: boolean };
 
 const OPEN: ModeCopy = {
-  label: "Open",
+  label: "Any client",
   meaning:
     "Any app with a valid client ID metadata document can sign in. The document is still checked.",
   restricted: false,
 };
 
-// The effective modes the issuer read reports; reporting admits what open
-// does. A Map, so no other value, inherited keys included, reads as known.
+// The effective modes the issuer read reports, labeled as gateway settings
+// labels them; reporting admits what open does. A Map, so no other value,
+// inherited keys included, reads as known.
 const MODES = new Map<string, ModeCopy>([
   ["open", OPEN],
   ["reporting", OPEN],
   [
     "presets",
     {
-      label: "Known apps only",
+      label: "Verified clients",
       meaning:
         "Only Speakeasy's reviewed list of apps, plus the custom document URLs below, can sign in with a client ID metadata document. Other apps are turned away.",
       restricted: true,

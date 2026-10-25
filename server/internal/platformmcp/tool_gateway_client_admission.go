@@ -51,11 +51,12 @@ type GatewayClientAdmissionOutput struct {
 	Meaning string `json:"meaning,omitempty"`
 
 	// CustomClientURLs are the first page of custom document URLs allowed on
-	// top of the reviewed list; they apply only in presets.
-	CustomClientURLs []string `json:"custom_client_urls" jsonschema:"custom client ID metadata URLs allowed on top of the reviewed list, at most 10 in a stable order; they apply only in presets"`
+	// top of the reviewed list. They apply only in presets, so other modes
+	// list none.
+	CustomClientURLs []string `json:"custom_client_urls" jsonschema:"custom client ID metadata URLs allowed on top of the reviewed list, at most 10 in a stable order; listed only in presets, where they apply"`
 
-	// MoreCustomURLs reports that more custom URLs exist than are listed.
-	MoreCustomURLs bool `json:"more_custom_client_urls" jsonschema:"more custom URLs are configured than are listed"`
+	// MoreCustomURLs reports whether the active presets URL list was truncated.
+	MoreCustomURLs bool `json:"more_custom_client_urls" jsonschema:"true when presets has more custom URLs than this page; false in other modes"`
 }
 
 // GetGatewayClientAdmission reads one gateway's current client ID metadata
@@ -110,7 +111,22 @@ func (r *PostgresReader) GetGatewayClientAdmission(ctx context.Context, principa
 	if err != nil {
 		return none, fmt.Errorf("load gateway sign-in server: %w", err)
 	}
-	// One row past the limit says whether more are configured.
+	mode, recognized := admission.ResolveMode(issuer.ClientIDMetadataAdmissionMode.String, issuer.ClientIDMetadataAdmissionMode.Valid)
+	if !recognized {
+		// Enforcement fails closed on an unknown stored value, so it reads as
+		// the disabled it enforces.
+		r.logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on gateway sign-in server, reading as disabled",
+			attr.SlogUserSessionIssuerID(issuer.ID.String()),
+			attr.SlogCIMDAdmissionMode(mode),
+		)
+	}
+	out.SignIn, out.Mode, out.Meaning = true, string(mode), modeGuidance(string(mode))
+
+	// Custom URLs admit apps only in presets, so other modes list none. One
+	// row past the limit says whether more are configured.
+	if mode != admission.ModePresets {
+		return out, nil
+	}
 	rows, err := q.ListUserSessionIssuerCimdClientsByIssuerID(ctx, usersessionsrepo.ListUserSessionIssuerCimdClientsByIssuerIDParams{
 		ProjectID:           project.ID,
 		OrganizationID:      principal.OrganizationID,
@@ -125,23 +141,13 @@ func (r *PostgresReader) GetGatewayClientAdmission(ctx context.Context, principa
 	for _, row := range rows {
 		out.CustomClientURLs = append(out.CustomClientURLs, row.ClientIDMetadataUri)
 	}
-	mode, recognized := admission.ResolveMode(issuer.ClientIDMetadataAdmissionMode.String, issuer.ClientIDMetadataAdmissionMode.Valid)
-	if !recognized {
-		// Enforcement fails closed on an unknown stored value, so it reads as
-		// the disabled it enforces.
-		r.logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on gateway sign-in server, reading as disabled",
-			attr.SlogUserSessionIssuerID(issuer.ID.String()),
-			attr.SlogCIMDAdmissionMode(mode),
-		)
-	}
-	out.SignIn, out.Mode, out.Meaning = true, string(mode), modeGuidance(string(mode))
 	return out, nil
 }
 
 const gatewayClientAdmissionDescription = "Show which apps one exact gateway admits when they identify themselves with a client ID metadata document: the setting its sign-in server enforces now, and the custom document URLs it allows on top of Speakeasy's reviewed list. " +
 	"presets admits only the reviewed list plus those URLs; open admits any valid document; disabled accepts none and stops advertising them, so apps register dynamically instead; reporting admits exactly what open admits. " +
 	"The setting applies to new client metadata admission only: it does not revoke existing connections or govern dynamic client registration, and existing connections may have been admitted under an earlier setting. " +
-	"custom_client_urls lists a first page of at most 10 in a stable order, not by date; more_custom_client_urls says more are configured. sign_in false means the gateway has no sign-in server. " +
+	"custom_client_urls lists, in presets only, a first page of at most 10 in a stable order, not by date; more_custom_client_urls says more are configured. sign_in false means the gateway has no sign-in server. " +
 	"Read-only; it reports no counts of refused sign-ins (use get_gateway_connection_health for observed attempts). Requires project:read on the project and mcp:read on the gateway."
 
 func registerGatewayClientAdmissionTool(reg *Registrar, reader *PostgresReader) {

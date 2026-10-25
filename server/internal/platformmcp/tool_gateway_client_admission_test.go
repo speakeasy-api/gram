@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -50,8 +51,17 @@ func TestGatewayClientAdmissionStaysInEveryCatalog(t *testing.T) {
 		descriptor := descriptorByName(t, registrar, gatewayClientAdmissionToolName)
 		require.Equal(t, want.Meta, descriptor.Meta, name)
 		require.JSONEq(t, string(want.InputSchema), string(descriptor.InputSchema), name)
-		_, err := descriptor.invoke(t.Context(), json.RawMessage(`{"project_id":"p","gateway_id":"g"}`))
-		require.Error(t, err, name)
+		arguments := fmt.Sprintf(`{"project_id":%q,"gateway_id":%q}`, uuid.NewString(), uuid.NewString())
+		_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testPrincipal()), json.RawMessage(arguments))
+		// With a real principal the call reaches the reader; what comes back is
+		// already safe to show: the stub's refusal or the bare sentinel.
+		safe, ok := recognisedToolError(err)
+		require.True(t, ok, "%s: %v", name, err)
+		if refusal, isRefusal := errors.AsType[*ToolRefusalError](safe); isRefusal {
+			require.Equal(t, unavailableCode, refusal.Code, name)
+		} else {
+			require.Equal(t, ErrUnavailable, safe, name)
+		}
 	}
 }
 
@@ -86,20 +96,27 @@ func TestGatewayClientAdmissionOverCallTool(t *testing.T) {
 	}
 	restricted := gatewayIn(project.ID, uuid.NullUUID{UUID: presets, Valid: true})
 	unset := gatewayIn(project.ID, uuid.NullUUID{UUID: issuerIn(project.ID, ""), Valid: true})
-	reporting := gatewayIn(project.ID, uuid.NullUUID{UUID: issuerIn(project.ID, "reporting"), Valid: true})
-	disabled := gatewayIn(project.ID, uuid.NullUUID{UUID: issuerIn(project.ID, "disabled"), Valid: true})
+	// Stored custom URLs that do not apply in reporting or disabled.
+	withStoredURL := func(issuerID uuid.UUID) uuid.UUID {
+		_, err := sessions.CreateUserSessionIssuerCimdClient(ctx, usersessionsrepo.CreateUserSessionIssuerCimdClientParams{ClientIDMetadataUri: "https://stored-" + uuid.NewString()[:8] + ".example.test/metadata.json", UserSessionIssuerID: issuerID, ProjectID: project.ID})
+		require.NoError(t, err)
+		return issuerID
+	}
+	reporting := gatewayIn(project.ID, uuid.NullUUID{UUID: withStoredURL(issuerIn(project.ID, "reporting")), Valid: true})
+	disabled := gatewayIn(project.ID, uuid.NullUUID{UUID: withStoredURL(issuerIn(project.ID, "disabled")), Valid: true})
 	unrecognized := gatewayIn(project.ID, uuid.NullUUID{UUID: issuerIn(project.ID, "not-a-mode"), Valid: true})
 	anonymous := gatewayIn(project.ID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	other, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Other", Slug: "other-" + uuid.NewString()[:8], OrganizationID: principal.OrganizationID})
 	require.NoError(t, err)
 	elsewhere := gatewayIn(other.ID, uuid.NullUUID{UUID: issuerIn(other.ID, "disabled"), Valid: true})
+	foreignIssuer := gatewayIn(project.ID, uuid.NullUUID{UUID: issuerIn(other.ID, "presets"), Valid: true})
 
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(logger, conn).WithAuthorization(engine)
 	projectRead := authz.NewGrant(authz.ScopeProjectRead, project.ID.String())
 	gatewaysRead := []authz.Grant{projectRead}
-	for _, id := range []uuid.UUID{restricted, unset, reporting, disabled, unrecognized, anonymous} {
+	for _, id := range []uuid.UUID{restricted, unset, reporting, disabled, unrecognized, anonymous, foreignIssuer} {
 		gatewaysRead = append(gatewaysRead, authz.NewGrant(authz.ScopeMCPRead, id.String()))
 	}
 	grants := gatewaysRead
@@ -158,10 +175,12 @@ func TestGatewayClientAdmissionOverCallTool(t *testing.T) {
 	require.Empty(t, output.CustomClientURLs)
 	_, output = call(exact, reporting)
 	require.Equal(t, "reporting", output.Mode)
+	require.Equal(t, []any{[]string{}, false}, []any{output.CustomClientURLs, output.MoreCustomURLs}, "stored URLs apply only in presets")
 	require.Contains(t, output.Meaning, "every app can sign in")
 	_, output = call(exact, disabled)
 	require.Equal(t, []any{true, "disabled"}, []any{output.SignIn, output.Mode})
 	require.Contains(t, output.Meaning, "dynamic client registration")
+	require.Equal(t, []any{[]string{}, false}, []any{output.CustomClientURLs, output.MoreCustomURLs}, "stored URLs apply only in presets")
 	_, output = call(exact, unrecognized)
 	require.Equal(t, "disabled", output.Mode, "an unknown stored value reads as the disabled enforcement fails closed to")
 	_, output = call(exact, anonymous)
@@ -175,6 +194,7 @@ func TestGatewayClientAdmissionOverCallTool(t *testing.T) {
 	require.Contains(t, refusal(other.ID.String(), elsewhere), ErrForbidden.Error(), "a project without project:read")
 	require.Contains(t, refusal(uuid.NewString(), restricted), ErrForbidden.Error(), "a project outside the organization")
 	require.Contains(t, refusal(exact, uuid.New()), "not_found", "no such gateway")
+	require.Contains(t, refusal(exact, foreignIssuer), "admission setting is unknown", "a sign-in server out of scope is unknown, never none")
 
 	grants = []authz.Grant{projectRead}
 	require.Contains(t, refusal(exact, restricted), "not_found", "a gateway the caller may not read is hidden")

@@ -57,6 +57,7 @@ const issuerWith = (mode: string): Query => ({
     clientIdMetadataAdmissionMode: mode,
   },
 });
+// The section asks for 11; the API sets a cursor only on a full page.
 const urlsOf = (count: number): Query => ({
   data: {
     result: {
@@ -64,7 +65,7 @@ const urlsOf = (count: number): Query => ({
         id: `cimd-${i}`,
         clientIdMetadataUri: `https://client-${i}.example.test/metadata.json`,
       })),
-      nextCursor: count > 0 ? `cimd-${count - 1}` : undefined,
+      nextCursor: count === 11 ? `cimd-${count - 1}` : undefined,
     },
   },
 });
@@ -153,7 +154,7 @@ it("reads open and the older reporting setting alike, unrestricted", () => {
   for (const mode of ["open", "reporting"]) {
     state.issuer = issuerWith(mode);
     renderSection();
-    expect(screen.getByText("Open.")).toBeTruthy();
+    expect(screen.getByText("Any client.")).toBeTruthy();
     expect(
       screen.getByText(/Any app with a valid client ID metadata document/),
     ).toBeTruthy();
@@ -177,7 +178,7 @@ it("lists at most 10 custom URLs for presets and says when more are configured",
   state.issuer = issuerWith("presets");
   state.urls = urlsOf(11);
   renderSection();
-  expect(screen.getByText("Known apps only.")).toBeTruthy();
+  expect(screen.getByText("Verified clients.")).toBeTruthy();
   expect(screen.getAllByText("Restricted")).toHaveLength(1);
   expect(state.urlCalls[0]![0]).toEqual({
     userSessionIssuerId: "issuer-1",
@@ -217,7 +218,7 @@ it("says when presets has no custom URLs, and retries a failed URL read", () => 
   renderSection();
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   expect(refetch).toHaveBeenCalled();
-  expect(screen.getByText("Known apps only.")).toBeTruthy();
+  expect(screen.getByText("Verified clients.")).toBeTruthy();
 });
 
 it("never keeps an earlier restricted answer once a refetch fails", () => {
@@ -232,7 +233,7 @@ it("never keeps an earlier restricted answer once a refetch fails", () => {
     screen.getByText(/Couldn't load the setting, so it is unknown/),
   ).toBeTruthy();
   expect(screen.queryByText("Restricted")).toBeNull();
-  expect(screen.queryByText("Known apps only.")).toBeNull();
+  expect(screen.queryByText("Verified clients.")).toBeNull();
   expect(screen.queryByText(CURRENT_ONLY)).toBeNull();
   expect(state.urlCalls).toHaveLength(0);
 });
