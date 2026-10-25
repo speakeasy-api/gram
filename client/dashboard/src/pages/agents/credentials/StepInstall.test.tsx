@@ -82,7 +82,7 @@ describe("Device Agent tab", () => {
     openDeviceAgentTab();
     expect(await managedConfig()).toEqual({
       v: 1,
-      agent_key: KEY,
+      mcp_credential: KEY,
       agent_id: AGENT_ID,
     });
   });
@@ -94,7 +94,7 @@ describe("Device Agent tab", () => {
     openDeviceAgentTab();
     expect(await managedConfig()).toEqual({
       v: 1,
-      agent_key: KEY,
+      mcp_credential: KEY,
       agent_id: AGENT_ID,
       _control_plane_url: "https://speakeasy.example.test",
     });
@@ -107,7 +107,7 @@ describe("Device Agent tab", () => {
     removeKey();
     const tab = screen.getByRole("tab", { name: "Device Agent", hidden: true });
     expect(tab.getAttribute("aria-selected")).toBe("true");
-    expect((await managedConfig()).agent_key).not.toBe(KEY);
+    expect((await managedConfig()).mcp_credential).not.toBe(KEY);
     fireEvent.click(screen.getByRole("button", { name: "Issue a key" }));
     expect(onIssue).toHaveBeenCalledOnce();
   });

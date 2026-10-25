@@ -1,28 +1,29 @@
 /**
  * The managed config that points a headless machine's device agent at one
- * agent identity. The device agent reads it, then writes an MCP entry for
- * each AI tool that fetches the key from the device agent at run time, so the
- * key lives here and nowhere in the tools' own config files.
+ * agent identity. The key goes in as `mcp_credential`: the device agent uses
+ * it for MCP only (no plugin sync, hooks or telemetry) and writes an MCP entry
+ * for each AI tool that fetches the key from the device agent at run time, so
+ * the key lives here and nowhere in the tools' own config files.
  */
 
 // The control plane the device agent dials when the config names none.
 const DEFAULT_CONTROL_PLANE = "https://app.getgram.ai";
 
-// The only place the managed.json field names for an agent identity key are
-// spelled; they match the device agent's docs/MANAGED_CONFIG.md.
+// The only place the managed.json field names for an agent identity's MCP-only
+// key are spelled; they match the device agent's docs/MANAGED_CONFIG.md.
 export function deviceAgentManagedConfig({
-  agentKey,
+  mcpCredential,
   agentID,
   serverOrigin,
 }: {
-  agentKey: string;
+  mcpCredential: string;
   agentID: string;
   /** Origin of the server this dashboard talks to. */
   serverOrigin: string;
 }): string {
   const config: Record<string, string | number> = {
     v: 1,
-    agent_key: agentKey,
+    mcp_credential: mcpCredential,
     agent_id: agentID,
   };
   // Only a deployment other than the default one (local development, a

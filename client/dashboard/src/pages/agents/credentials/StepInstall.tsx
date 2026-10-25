@@ -157,7 +157,7 @@ export function StepInstall({
   // The gateway is served by the same server the device agent must reach, so
   // its origin is the control plane, wherever this dashboard is deployed.
   const managedConfig = deviceAgentManagedConfig({
-    agentKey: key,
+    mcpCredential: key,
     agentID,
     serverOrigin: originOf(gatewayURL),
   });
