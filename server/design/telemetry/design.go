@@ -3346,7 +3346,7 @@ var gatewayConnectionWindow = func() {
 var GatewayConnectionKey = Type("GatewayConnectionKey", func() {
 	Description("One hotspot to count alone: a stage's caller, provider, and client, given as the key values the hotspot's labels return. An empty value matches attempts that recorded none, such as an anonymous caller or a member with no upstream provider.")
 	Attribute("stage", String, "The stage the hotspot is in", func() {
-		Enum("inbound_authorize", "inbound_token", "discovery_listing", "discovery_member")
+		Enum("inbound_authorize", "inbound_token", "upstream_callback", "upstream_refresh", "discovery_listing", "discovery_member")
 	})
 	Attribute("subject", String, "The caller's URN, or empty for no signed-in caller", func() {
 		MaxLength(512)
@@ -3368,7 +3368,7 @@ var GetGatewayConnectionHealthPayload = Type("GetGatewayConnectionHealthPayload"
 var ListGatewayConnectionHotspotsPayload = Type("ListGatewayConnectionHotspotsPayload", func() {
 	gatewayConnectionWindow()
 	Attribute("stage", String, "The recorded stage to rank within; units from different stages are never combined.", func() {
-		Enum("inbound_authorize", "inbound_token", "discovery_listing", "discovery_member")
+		Enum("inbound_authorize", "inbound_token", "upstream_callback", "upstream_refresh", "discovery_listing", "discovery_member")
 	})
 	Attribute("rank_by", String, "count ranks by failed attempts; rate by failed attempts over all attempts.", func() {
 		Enum("count", "rate")
@@ -3388,7 +3388,7 @@ var ListGatewayConnectionHotspotsPayload = Type("ListGatewayConnectionHotspotsPa
 })
 
 var GatewayConnectionOutcomeCount = Type("GatewayConnectionOutcomeCount", func() {
-	Attribute("outcome", String, "The attempt outcome within its stage, such as accepted, code_issued, refreshed, refresh_replayed, assertion_issued, complete, partial, listed, failed, credential_blocked, consent_blocked, policy_blocked, or unknown.")
+	Attribute("outcome", String, "The attempt outcome within its stage, such as accepted, code_issued, refreshed, refresh_replayed, assertion_issued, stored, retried, adopted, no_grant, complete, partial, listed, failed, credential_blocked, consent_blocked, policy_blocked, or unknown.")
 	Attribute("count", Int64, "Attempts with this outcome.")
 	Required("outcome", "count")
 })
@@ -3401,8 +3401,8 @@ var GatewayConnectionBucket = Type("GatewayConnectionBucket", func() {
 
 var GatewayConnectionStage = Type("GatewayConnectionStage", func() {
 	Description("One recorded stage over the window. attempts is the denominator for every outcome of this stage.")
-	Attribute("stage", String, "inbound_authorize counts sign-in requests (accepted means a redirect to sign-in was attempted; delivery and completion are not observed); inbound_token counts token requests it answered, by grant (an answered request is not proof a client used the token); discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.", func() {
-		Enum("inbound_authorize", "inbound_token", "discovery_listing", "discovery_member")
+	Attribute("stage", String, "inbound_authorize counts sign-in requests (accepted means a redirect to sign-in was attempted; delivery and completion are not observed); inbound_token counts token requests it answered, by grant (an answered request is not proof a client used the token); upstream_callback counts provider sign-in callbacks whose state named this gateway (stored means the credential was saved, not that the person returned to their client); upstream_refresh counts provider refreshes a request to this gateway caused (one logical refresh each; adopted reused another request's refresh, and neither proves the provider was contacted); discovery_listing counts Direct tools/list calls; discovery_member counts the members each listing reached.", func() {
+		Enum("inbound_authorize", "inbound_token", "upstream_callback", "upstream_refresh", "discovery_listing", "discovery_member")
 	})
 	Attribute("attempts", Int64, "All recorded attempts in this stage")
 	Attribute("outcomes", ArrayOf(GatewayConnectionOutcomeCount), "Nonzero outcomes, summing to attempts")

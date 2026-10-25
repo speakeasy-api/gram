@@ -28,6 +28,10 @@ import (
 )
 
 const (
+	// ConnectionAttemptMaxRefreshesPerRequest bounds gateway refresh capture;
+	// the producer and coverage disclosure share this limit.
+	ConnectionAttemptMaxRefreshesPerRequest = 64
+
 	// ConnectionHealthDefaultWindow is the window a health read covers when
 	// the caller names none.
 	ConnectionHealthDefaultWindow = 7 * 24 * time.Hour
@@ -63,11 +67,16 @@ const (
 	ConnectionStageInboundToken     = "inbound_token"
 	ConnectionStageDiscoveryListing = "discovery_listing"
 	ConnectionStageDiscoveryMember  = "discovery_member"
+	ConnectionStageUpstreamCallback = "upstream_callback"
+	ConnectionStageUpstreamRefresh  = "upstream_refresh"
 )
 
-// connectionStages are the recorded stages, in the order a connection meets
-// them. Each counts its own attempts.
-var connectionStages = []string{ConnectionStageInboundAuthorize, ConnectionStageInboundToken, ConnectionStageDiscoveryListing, ConnectionStageDiscoveryMember}
+// connectionStages are the recorded stages in display order. Each counts its
+// own attempts; their order does not imply a causal sequence.
+var connectionStages = []string{
+	ConnectionStageInboundAuthorize, ConnectionStageInboundToken, ConnectionStageUpstreamCallback,
+	ConnectionStageUpstreamRefresh, ConnectionStageDiscoveryListing, ConnectionStageDiscoveryMember,
+}
 
 func validConnectionStage(stage string) bool {
 	return slices.Contains(connectionStages, stage)
@@ -93,16 +102,17 @@ type ConnectionHealthCoverage struct {
 	Note  string
 }
 
-// connectionHealthNotRecorded lists the connection stages no producer writes
-// yet. Their counts are unknown, never zero.
+// connectionHealthNotRecorded lists what no producer writes yet. Its counts
+// are unknown, never zero.
 var connectionHealthNotRecorded = []ConnectionHealthCoverage{
 	{Stage: "cimd_fetch", Note: "Client metadata document fetches are not recorded yet."},
-	{Stage: "upstream_callback", Note: "Upstream provider sign-in callbacks are not recorded yet."},
-	{Stage: "upstream_refresh", Note: "Upstream provider token refreshes are not recorded yet."},
+	{Stage: "upstream_refresh_background", Note: "Scheduled and manual provider refreshes are not attributed to a gateway."},
+	{Stage: "upstream_refresh_capture_limit", Note: fmt.Sprintf("At most %d provider refreshes are recorded per gateway request; any beyond that are not counted.", ConnectionAttemptMaxRefreshesPerRequest)},
+	{Stage: "upstream_endpoint_contact", Note: "Requests to provider endpoints are not counted: a callback or refresh is one logical attempt, whether or not the provider was contacted."},
 }
 
 // connectionHealthScope says what the recorded stages observe.
-const connectionHealthScope = "Sign-in and token requests this gateway answered are recorded, not whether a redirect arrived, sign-in finished, or a token was used. Only Direct tools/list listings are recorded: Progressive discovery and organization gateways are not observed."
+const connectionHealthScope = "Sign-in and token requests this gateway answered are recorded, not whether a redirect arrived, sign-in finished, or a token was used. Provider sign-in callbacks are recorded when the state names this gateway; a stored credential is not proof the person returned to their client. Provider refreshes are recorded only when a request to this gateway caused them. Only Direct tools/list listings are recorded: Progressive discovery and organization gateways are not observed."
 
 // ConnectionHealth reads one gateway's connection attempts and names their
 // callers, providers, and clients only from rows the caller may see. The
@@ -452,6 +462,11 @@ func (h *ConnectionHealth) Hotspots(ctx context.Context, target ConnectionHealth
 			Outcomes: outcomeCounts(totals),
 			Reasons:  topReasons(reasons),
 			LastSeen: time.Time{},
+		}
+		if row.ProviderID == "" && (query.Stage == ConnectionStageUpstreamCallback || query.Stage == ConnectionStageUpstreamRefresh) {
+			// Provider work happened, but its identity was not resolved. An
+			// absent dimension is not evidence that no provider was involved.
+			hotspot.Provider = keyedLabel("unrecorded", "Provider not recorded", "")
 		}
 		if row.LastSeenUnixNano > 0 {
 			hotspot.LastSeen = time.Unix(0, row.LastSeenUnixNano).UTC()

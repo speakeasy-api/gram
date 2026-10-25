@@ -312,8 +312,9 @@ type GatewayConnectionLabel struct {
 
 type GatewayConnectionOutcomeCount struct {
 	// The attempt outcome within its stage, such as accepted, code_issued,
-	// refreshed, refresh_replayed, assertion_issued, complete, partial, listed,
-	// failed, credential_blocked, consent_blocked, policy_blocked, or unknown.
+	// refreshed, refresh_replayed, assertion_issued, stored, retried, adopted,
+	// no_grant, complete, partial, listed, failed, credential_blocked,
+	// consent_blocked, policy_blocked, or unknown.
 	Outcome string
 	// Attempts with this outcome.
 	Count int64
@@ -332,9 +333,13 @@ type GatewayConnectionStage struct {
 	// inbound_authorize counts sign-in requests (accepted means a redirect to
 	// sign-in was attempted; delivery and completion are not observed);
 	// inbound_token counts token requests it answered, by grant (an answered
-	// request is not proof a client used the token); discovery_listing counts
-	// Direct tools/list calls; discovery_member counts the members each listing
-	// reached.
+	// request is not proof a client used the token); upstream_callback counts
+	// provider sign-in callbacks whose state named this gateway (stored means the
+	// credential was saved, not that the person returned to their client);
+	// upstream_refresh counts provider refreshes a request to this gateway caused
+	// (one logical refresh each; adopted reused another request's refresh, and
+	// neither proves the provider was contacted); discovery_listing counts Direct
+	// tools/list calls; discovery_member counts the members each listing reached.
 	Stage string
 	// All recorded attempts in this stage
 	Attempts int64

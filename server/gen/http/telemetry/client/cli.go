@@ -763,8 +763,8 @@ func BuildListGatewayConnectionHotspotsPayload(telemetryListGatewayConnectionHot
 		if body.To != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 		}
-		if !(body.Stage == "inbound_authorize" || body.Stage == "inbound_token" || body.Stage == "discovery_listing" || body.Stage == "discovery_member") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", body.Stage, []any{"inbound_authorize", "inbound_token", "discovery_listing", "discovery_member"}))
+		if !(body.Stage == "inbound_authorize" || body.Stage == "inbound_token" || body.Stage == "upstream_callback" || body.Stage == "upstream_refresh" || body.Stage == "discovery_listing" || body.Stage == "discovery_member") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", body.Stage, []any{"inbound_authorize", "inbound_token", "upstream_callback", "upstream_refresh", "discovery_listing", "discovery_member"}))
 		}
 		if !(body.RankBy == "count" || body.RankBy == "rate") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.rank_by", body.RankBy, []any{"count", "rate"}))

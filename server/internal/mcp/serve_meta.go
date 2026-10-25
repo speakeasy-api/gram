@@ -232,6 +232,12 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
 		ctx = newCtx
+		if !membership.derived() {
+			caller := gatewayRefreshCaller(ctx, mcpEndpoint.ProjectID, metaServer.OrganizationID, metaServer.ID, metaServer.UserSessionIssuerID.UUID, authentication)
+			var finishRefreshes func()
+			ctx, finishRefreshes = s.observeGatewayRefreshes(ctx, caller)
+			defer finishRefreshes()
+		}
 		r = r.WithContext(ctx)
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {

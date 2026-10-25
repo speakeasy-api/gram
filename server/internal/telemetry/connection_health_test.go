@@ -94,6 +94,14 @@ func TestGetGatewayConnectionHealth_CountsEachStageExactly(t *testing.T) {
 	attempt(token, "code_issued", 0, at(10, 20))
 	attempt(token, "refreshed", 0, at(10, 50))
 	attempt(token, "policy_blocked", 0, at(11, 10))
+	// Provider stages count their own logical callbacks and refreshes; a
+	// refresh is never folded into the token stage's refreshed outcome.
+	callback, refresh := telemetry.ConnectionStageUpstreamCallback, telemetry.ConnectionStageUpstreamRefresh
+	attempt(callback, "stored", 0, at(10, 18))
+	attempt(callback, "failed", 0, at(11, 5))
+	attempt(refresh, "refreshed", 0, at(10, 55))
+	attempt(refresh, "adopted", 0, at(10, 56))
+	attempt(refresh, "unknown", 0, at(11, 20))
 	// Outside the window, another gateway, and another project: none count.
 	attempt(member, "failed", 0, at(9, 0))
 	logConnectionAttempt(t, ctx, ti, connectionAttempt{project: ti.projectID, gateway: uuid.NewString(), stage: member, outcome: "failed", client: "anonymous", at: at(10, 45)})
@@ -105,9 +113,9 @@ func TestGetGatewayConnectionHealth_CountsEachStageExactly(t *testing.T) {
 	require.Equal(t, from.Format(time.RFC3339Nano), result.From)
 	require.Equal(t, to.Format(time.RFC3339Nano), result.To)
 	require.Equal(t, int64(1800), result.IntervalSeconds)
-	require.Len(t, result.Stages, 4)
+	require.Len(t, result.Stages, 6)
 
-	authorizes, tokens, listings, members := result.Stages[0], result.Stages[1], result.Stages[2], result.Stages[3]
+	authorizes, tokens, callbacks, refreshes, listings, members := result.Stages[0], result.Stages[1], result.Stages[2], result.Stages[3], result.Stages[4], result.Stages[5]
 	require.Equal(t, telemetry.ConnectionStageInboundAuthorize, authorizes.Stage)
 	require.Zero(t, authorizes.Attempts, "a stage with no attempts is listed, empty")
 	require.Empty(t, authorizes.Outcomes)
@@ -115,6 +123,12 @@ func TestGetGatewayConnectionHealth_CountsEachStageExactly(t *testing.T) {
 	require.Equal(t, int64(3), tokens.Attempts, "a policy block stays in its stage's denominator")
 	require.Equal(t, map[string]int64{"code_issued": 1, "refreshed": 1, "policy_blocked": 1}, outcomeMap(tokens.Outcomes))
 	require.Zero(t, tokens.Recovered)
+	require.Equal(t, callback, callbacks.Stage)
+	require.Equal(t, int64(2), callbacks.Attempts)
+	require.Equal(t, map[string]int64{"stored": 1, "failed": 1}, outcomeMap(callbacks.Outcomes))
+	require.Equal(t, refresh, refreshes.Stage)
+	require.Equal(t, int64(3), refreshes.Attempts, "an unfinished refresh stays in its stage's denominator")
+	require.Equal(t, map[string]int64{"refreshed": 1, "adopted": 1, "unknown": 1}, outcomeMap(refreshes.Outcomes))
 	require.Equal(t, listing, listings.Stage)
 	require.Equal(t, int64(3), listings.Attempts, "listings are counted on their own")
 	require.Equal(t, map[string]int64{"complete": 1, "partial": 1, "failed": 1}, outcomeMap(listings.Outcomes))
@@ -138,13 +152,22 @@ func TestGetGatewayConnectionHealth_CountsEachStageExactly(t *testing.T) {
 	for _, coverage := range result.NotRecorded {
 		notRecorded[coverage.Stage] = true
 	}
-	require.Equal(t, map[string]bool{"cimd_fetch": true, "upstream_callback": true, "upstream_refresh": true}, notRecorded, "client metadata fetches and provider sign-in stay unknown")
+	require.Equal(t, map[string]bool{"cimd_fetch": true, "upstream_refresh_background": true, "upstream_refresh_capture_limit": true, "upstream_endpoint_contact": true}, notRecorded, "metadata fetches, unattributed refreshes, refreshes beyond the per-request limit, and provider contacts stay unknown")
 	require.NotEmpty(t, result.Scope)
 
 	hotspots, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)), Stage: token, RankBy: "count", MinAttempts: 1, Limit: 25})
 	require.NoError(t, err)
 	require.Len(t, hotspots.Hotspots, 1)
 	require.Equal(t, []int64{3, 0, 1}, []int64{hotspots.Hotspots[0].Attempts, hotspots.Hotspots[0].Failed, hotspots.Hotspots[0].Blocked}, "policy blocks are blocked, not failed")
+	for _, stage := range []string{callback, refresh} {
+		providerRows, err := ti.service.ListGatewayConnectionHotspots(ctx, &gen.ListGatewayConnectionHotspotsPayload{MetaMcpServerID: gateway, From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)), Stage: stage, RankBy: "count", MinAttempts: 1, Limit: 25})
+		require.NoError(t, err)
+		require.Len(t, providerRows.Hotspots, 1)
+		require.Equal(t, "Provider not recorded", providerRows.Hotspots[0].Provider.Label)
+		require.Equal(t, "unrecorded", providerRows.Hotspots[0].Provider.Kind)
+		require.NotNil(t, providerRows.Hotspots[0].Provider.Key)
+		require.Empty(t, *providerRows.Hotspots[0].Provider.Key, "empty still matches exact-none, never every provider")
+	}
 }
 
 func TestGetGatewayConnectionHealth_RequiresProjectLogAndGatewayRead(t *testing.T) {

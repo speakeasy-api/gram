@@ -42,6 +42,8 @@ const WINDOW_MS: Record<HealthWindow, number> = {
 export const STAGE_OPTIONS: { value: HealthStage; label: string }[] = [
   { value: "inbound_authorize", label: "Sign-in requests" },
   { value: "inbound_token", label: "Token requests" },
+  { value: "upstream_callback", label: "Provider sign-ins" },
+  { value: "upstream_refresh", label: "Provider refreshes" },
   { value: "discovery_listing", label: "Listings" },
   { value: "discovery_member", label: "Member checks" },
 ];
@@ -104,6 +106,26 @@ const OUTCOMES: Record<HealthStage, OutcomeStyle[]> = {
       color: SERIES[5]!,
     },
     POLICY_BLOCKED,
+    FAILED,
+    UNKNOWN,
+  ],
+  upstream_callback: [
+    { outcome: "stored", label: "Credentials saved", color: GOOD_GREEN },
+    {
+      outcome: "retried",
+      label: "Sent back to the provider",
+      color: SERIES[0]!,
+    },
+    FAILED,
+  ],
+  upstream_refresh: [
+    { outcome: "refreshed", label: "Refreshed", color: GOOD_GREEN },
+    {
+      outcome: "adopted",
+      label: "Reused another refresh",
+      color: SERIES[0]!,
+    },
+    { outcome: "no_grant", label: "Nothing to refresh", color: SERIES[3]! },
     FAILED,
     UNKNOWN,
   ],
@@ -235,6 +257,90 @@ export function stageTiles(stage: GatewayConnectionStage): StageTile[] {
         subtext: `of ${total}`,
       },
       unknownTile,
+    ];
+  }
+  if (stage.stage === "upstream_callback") {
+    const failed = countOf(stage.outcomes, "failed");
+    return [
+      {
+        title: "Provider sign-ins",
+        value: stage.attempts,
+        tone: "information",
+        tooltip:
+          "Sign-ins with a connected provider that returned to this gateway. Each is one sign-in, not a count of requests to the provider.",
+      },
+      {
+        title: "Credentials saved",
+        value: countOf(stage.outcomes, "stored"),
+        tone: "neutral",
+        subtext: `of ${total}`,
+        tooltip:
+          "The provider's credential was saved. Whether the person got back to their client is not observed.",
+      },
+      {
+        title: "Sent back to the provider",
+        value: countOf(stage.outcomes, "retried"),
+        tone: "neutral",
+        subtext: `of ${total}`,
+        tooltip:
+          "The provider refused the requested server address, so the gateway asked it again without one.",
+      },
+      {
+        title: "Failed",
+        value: failed,
+        tone: of(failed, "destructive"),
+        subtext: `of ${total}`,
+      },
+    ];
+  }
+  if (stage.stage === "upstream_refresh") {
+    const failed = countOf(stage.outcomes, "failed");
+    const unrecorded = countOf(stage.outcomes, "unknown");
+    return [
+      {
+        title: "Provider refreshes",
+        value: stage.attempts,
+        tone: "information",
+        tooltip:
+          "Refreshes of a provider's credential that a request to this gateway needed. Each is one refresh, not a count of requests to the provider. Scheduled and manual refreshes are not included.",
+      },
+      {
+        title: "Refreshed",
+        value: countOf(stage.outcomes, "refreshed"),
+        tone: "neutral",
+        subtext: `of ${total}`,
+      },
+      {
+        title: "Reused another refresh",
+        value: countOf(stage.outcomes, "adopted"),
+        tone: "neutral",
+        subtext: `of ${total}`,
+        tooltip:
+          "Another request refreshed the credential first and this one used its result. It does not show whether the provider was contacted.",
+      },
+      {
+        title: "Nothing to refresh",
+        value: countOf(stage.outcomes, "no_grant"),
+        tone: "neutral",
+        subtext: `of ${total}`,
+        tooltip: "The connection had no refresh grant or was no longer active.",
+      },
+      {
+        title: "Failed",
+        value: failed,
+        tone: of(failed, "destructive"),
+        subtext: `of ${total}`,
+        tooltip:
+          "A failed refresh may still have served a credential that had not yet expired.",
+      },
+      {
+        title: "Outcome not recorded",
+        value: unrecorded,
+        tone: of(unrecorded, "warning"),
+        subtext: `of ${total}`,
+        tooltip:
+          "The gateway request ended before the refresh finished, so its later outcome was not observed.",
+      },
     ];
   }
   if (stage.stage === "discovery_listing") {
@@ -577,8 +683,101 @@ const REASONS: Record<string, string> = {
     "A server's availability could not be checked, so the list may be missing its tools. Try again shortly.",
 };
 
+// Reasons on the provider stages, where a shared code is the provider's.
+const PROVIDER_REASONS: Record<string, string> = {
+  access_denied:
+    "The person declined, or the provider refused, the sign-in. Connect the provider again.",
+  provider_denied:
+    "The provider refused the sign-in. Connect the provider again.",
+  server_error: "The provider failed to finish the sign-in. Try again later.",
+  temporarily_unavailable:
+    "The provider was temporarily unavailable. Try again later.",
+  resource_rejected:
+    "The provider refused the requested server address again. Check the provider's configuration.",
+  provider_unreachable: "The provider could not be reached. Try again later.",
+  provider_or_tunnel:
+    "The provider or MCP tunnel returned an error. Check the tunnel and try again.",
+  provider_rate_limited:
+    "The provider rate-limited the sign-in. Try again later.",
+  tunnel_unreachable:
+    "The MCP tunnel could not reach the provider. Check that the tunnel is connected.",
+  provider_unavailable:
+    "The provider was temporarily unavailable. Try again later.",
+  provider_server_error: "The provider failed to answer. Try again later.",
+  invalid_response:
+    "The provider answered with a response the gateway could not use.",
+  provider_rejected:
+    "The provider refused the sign-in code. Connect the provider again.",
+  assertion_signing:
+    "The gateway could not sign its request to the provider. Try again shortly.",
+  assertion_key_unconfigured:
+    "The provider connection's signing key is not configured. Ask an administrator to review the connection.",
+  connection_changed:
+    "The provider connection was removed during sign-in. Ask an administrator to check it, then connect again.",
+  unrenewable_token:
+    "The provider issued a credential that was already expiring and could not be renewed. Ask an administrator to check the provider's token lifetime.",
+  login_expired: "The sign-in expired before it finished. Start it again.",
+  store_refused:
+    "The gateway could not save the provider's credential. Connect the provider again.",
+  store_failed:
+    "The gateway could not save the provider's credential. Try again shortly.",
+  invalid_grant:
+    "The provider no longer accepts this connection's grant. Connect the provider again.",
+  invalid_client:
+    "The provider did not accept the gateway's client. Ask an administrator to review the connection.",
+  rejected: "The provider refused the refresh. Connect the provider again.",
+  rejected_unparsed:
+    "The provider refused the refresh. Connect the provider again.",
+  upstream_error: "The provider failed to answer. Try again later.",
+  rate_limited: "The provider rate-limited the refresh. Try again later.",
+  unreachable: "The provider could not be reached. Try again later.",
+  internal_error:
+    "The gateway could not refresh the credential. Try again shortly.",
+  no_grant: "The connection has no refresh grant.",
+  session_inactive: "The connection is no longer active.",
+  in_progress:
+    "The gateway request ended before the refresh finished, so its later outcome was not observed.",
+};
+
+const PROVIDER_STAGES = new Set(["upstream_callback", "upstream_refresh"]);
+
+// The gateway's own failures, which read the same on every stage.
+const GATEWAY_REASONS = new Set([
+  "canceled",
+  "conflict",
+  "forbidden",
+  "invalid_request",
+  "not_found",
+  "unauthorized",
+  "unavailable",
+  "unexpected",
+]);
+
 /** Plain copy for a reason code; the code itself stays technical detail. */
-export function reasonText(reason: string): string {
+export function reasonText(reason: string, stage?: string): string {
+  if (stage === "upstream_callback") {
+    const oauth = reason.startsWith("provider_oauth_")
+      ? reason.slice("provider_oauth_".length)
+      : undefined;
+    if (oauth === "invalid_grant")
+      return "The provider refused the sign-in code. Start provider sign-in again.";
+    if (oauth === "invalid_request")
+      return "The provider could not accept the sign-in request. Ask an administrator to review the provider connection.";
+    if (oauth !== undefined)
+      return (
+        PROVIDER_REASONS[oauth] ?? "The provider refused the sign-in request."
+      );
+    if (reason === "unauthorized")
+      return "The gateway could not validate the provider sign-in. Start provider sign-in again.";
+    if (reason === "invalid_request")
+      return "The gateway could not read the provider callback. Start provider sign-in again.";
+  }
+  if (stage && PROVIDER_STAGES.has(stage)) {
+    const provider = PROVIDER_REASONS[reason];
+    if (provider) return provider;
+    if (!GATEWAY_REASONS.has(reason))
+      return "The provider refused the request.";
+  }
   return REASONS[reason] ?? "Another failure was recorded.";
 }
 

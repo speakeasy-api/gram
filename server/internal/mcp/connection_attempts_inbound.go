@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -437,10 +436,6 @@ func (s *Service) finishInbound(ctx context.Context, obs *inboundObservation, er
 		return
 	}
 	result := obs.result(ctx, err)
-	traceID := ""
-	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
-		traceID = spanCtx.TraceID().String()
-	}
 	caller := attemptCaller{
 		projectID:           obs.endpoint.ProjectID,
 		organizationID:      obs.endpoint.OrganizationID,
@@ -448,7 +443,7 @@ func (s *Service) finishInbound(ctx context.Context, obs *inboundObservation, er
 		userSessionIssuerID: obs.endpoint.UserSessionIssuerID,
 		subject:             obs.subject,
 		oauthClientID:       "",
-		traceID:             traceID,
+		traceID:             traceIDOf(ctx),
 	}
 	clientKey := inboundUnverifiedClient
 	if obs.clientID != uuid.Nil {

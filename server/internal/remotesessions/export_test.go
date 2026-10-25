@@ -123,3 +123,10 @@ func ClientRotationLeaseKey(clientID uuid.UUID) string { return clientRotationLe
 func StoreRemoteSessionGrant(ctx context.Context, q *repo.Queries, organizationID string, params repo.UpsertRemoteSessionParams) (repo.RemoteSession, error) {
 	return storeRemoteSessionGrant(ctx, q, organizationID, params)
 }
+
+// Reserved is how many refreshes have started reporting to o.
+func (o *RefreshObservations) Reserved() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return len(o.items)
+}

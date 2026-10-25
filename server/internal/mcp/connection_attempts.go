@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -423,10 +422,6 @@ func attemptCallerFor(ctx context.Context, gate *metaGateContext) (attemptCaller
 		return none, false
 	}
 	oauthClientID, _ := contextvalues.GetOAuthClientID(ctx)
-	traceID := ""
-	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
-		traceID = spanCtx.TraceID().String()
-	}
 	return attemptCaller{
 		projectID:           gate.projectID,
 		organizationID:      gate.organizationID,
@@ -434,7 +429,7 @@ func attemptCallerFor(ctx context.Context, gate *metaGateContext) (attemptCaller
 		userSessionIssuerID: gate.userSessionIssuerID,
 		subject:             gate.subject,
 		oauthClientID:       oauthClientID,
-		traceID:             traceID,
+		traceID:             traceIDOf(ctx),
 	}, true
 }
 

@@ -182,11 +182,15 @@ type AuthnChallengeState struct {
 	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`
 	Endpoint                 EndpointRef               `json:"endpoint"`
 	ClientID                 string                    `json:"client_id"`
-	RedirectURI              string                    `json:"redirect_uri"`
-	State                    string                    `json:"state,omitempty"`
-	CodeChallenge            string                    `json:"code_challenge"`
-	CodeChallengeMethod      string                    `json:"code_challenge_method"`
-	CSRFToken                string                    `json:"csrf_token"`
+	// RegisteredClientID is the registered client /authorize validated
+	// ClientID as. Unset for challenges without one, such as first-party
+	// ones, and for states minted before it was recorded.
+	RegisteredClientID  uuid.NullUUID `json:"registered_client_id,omitzero"`
+	RedirectURI         string        `json:"redirect_uri"`
+	State               string        `json:"state,omitempty"`
+	CodeChallenge       string        `json:"code_challenge"`
+	CodeChallengeMethod string        `json:"code_challenge_method"`
+	CSRFToken           string        `json:"csrf_token"`
 	// Subject is stamped exactly once before consent is rendered:
 	// HandleAuthorize stamps `anonymous:<uuid>` for public toolsets, and
 	// HandleIDPCallback stamps `user:<id>` for private toolsets. Pointer so

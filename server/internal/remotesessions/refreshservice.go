@@ -335,9 +335,17 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 // A definitive invalid_grant clears only the refresh grant: the existing
 // access token remains usable until its own known expiry. This keeps
 // proactive refresh failure from forcing a reconnect.
-func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger) (RefreshResult, error) {
+func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger) (result RefreshResult, err error) {
 	var zero RefreshResult
 	q := remotesessions_repo.New(s.db)
+
+	// A gateway request that installed a sink hears every exit of a refresh
+	// it caused; scheduled and manual refreshes are never attributed to one.
+	sink, slot := refreshObservationsFrom(ctx), -1
+	if sink != nil && trigger == remotesessionmetrics.RefreshTriggerRequest {
+		slot = sink.start(time.Now())
+		defer func() { sink.finish(slot, refreshOutcomeOf(result, err)) }()
+	}
 
 	// Loaded ahead of the lock so the returns that never reach the POST, the
 	// concurrent-loser and inactive early exits below, still carry an issuer
@@ -354,11 +362,17 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
 	}
 	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
+	if sink != nil {
+		sink.setProvider(slot, client.RemoteSessionIssuerID)
+	}
 
 	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource)
 	issuerURL := client.IssuerUrl
 	if postLockClient != nil {
 		issuerURL = postLockClient.IssuerUrl
+		if sink != nil {
+			sink.setProvider(slot, postLockClient.RemoteSessionIssuerID)
+		}
 	}
 	if err != nil {
 		outcome := refreshOutcomeForError(ctx, err)

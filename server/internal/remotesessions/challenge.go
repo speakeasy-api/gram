@@ -119,6 +119,10 @@ type ParentChallenge struct {
 	// from the host holding the parent challenge's callback cookie.
 	BrowserCookieID string
 	BrowserHash     string
+	// InboundUserSessionClientID is the registered client the person signed
+	// in to the gateway with, resolved when the login started. Unset when it
+	// is not known; never the provider's client.
+	InboundUserSessionClientID uuid.NullUUID
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -186,6 +190,9 @@ type RemoteLoginState struct {
 	BrowserCookieID string    `json:"browser_cookie_id,omitempty"`
 	BrowserHash     string    `json:"browser_hash,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
+	// InboundUserSessionClientID is the parent's registered gateway client.
+	// Unset for logins without one and states minted before it existed.
+	InboundUserSessionClientID uuid.NullUUID `json:"inbound_user_session_client_id,omitzero"`
 }
 
 // parent rebuilds the ParentChallenge this state was minted from, so the
@@ -211,6 +218,8 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		Authority:           s.Authority,
 		BrowserCookieID:     s.BrowserCookieID,
 		BrowserHash:         s.BrowserHash,
+
+		InboundUserSessionClientID: s.InboundUserSessionClientID,
 	}
 }
 
@@ -311,6 +320,9 @@ type RemoteLoginResult struct {
 	RedirectURL string
 	// Grant is the committed grant, nil while the login is being retried upstream.
 	Grant *RemoteGrant
+	// Observation is what the callback did once its state was consumed, set
+	// on errors too; nil when the state was missing or expired.
+	Observation *RemoteLoginObservation
 }
 
 // PrivateAuthorityValidator revalidates a private endpoint without introducing
@@ -1408,7 +1420,9 @@ func (m *ChallengeManager) mintAuthorization(
 		Nonce:                 nonce,
 		BrowserCookieID:       parent.BrowserCookieID,
 		BrowserHash:           parent.BrowserHash,
-		CreatedAt:             time.Now(),
+
+		InboundUserSessionClientID: parent.InboundUserSessionClientID,
+		CreatedAt:                  time.Now(),
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
 		return "", fmt.Errorf("store remote login state: %w", err)
@@ -1494,7 +1508,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 // /{route}/{slug}/connect?state={parent_challenge_id}, or the upstream
 // authorize URL again when the login is retried without a resource. It writes
 // nothing itself.
-func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResult, error) {
+func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (result RemoteLoginResult, err error) {
 	var none RemoteLoginResult
 	ctx := r.Context()
 	routeMcpSlug := chi.URLParam(r, "mcpSlug")
@@ -1527,6 +1541,34 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 		return none, oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogError(ctx, logger)
 	}
+	obs := &RemoteLoginObservation{
+		ProjectID:                  state.ProjectID,
+		OrganizationID:             state.OrganizationID,
+		MetaMcpServerID:            state.MetaMcpServerID,
+		RouteBase:                  state.RouteBase,
+		Subject:                    nil,
+		InboundUserSessionClientID: state.InboundUserSessionClientID,
+		RemoteSessionClientID:      state.RemoteSessionClientID,
+		ProviderIssuerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Phase:                      RemoteLoginPhaseValidating,
+		Failure:                    RemoteLoginFailureNone,
+		ProviderErrorCode:          "",
+	}
+	// The subject was stamped by this server when the login started, so it
+	// names the caller even when the provider denies the login. The check
+	// that rejects a missing one stays where it was.
+	if state.Subject != nil && !state.Subject.IsZero() {
+		obs.Subject = state.Subject
+	}
+	defer func() {
+		if err == nil {
+			obs.Phase = RemoteLoginPhaseRetried
+			if result.Grant != nil {
+				obs.Phase = RemoteLoginPhaseStored
+			}
+		}
+		result.Observation = obs
+	}()
 	mcpSlug := state.McpSlug
 	if mcpSlug == "" {
 		mcpSlug = routeMcpSlug
@@ -1559,14 +1601,17 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	if errCode != "" {
 		if errCode == oautherr.CodeInvalidTarget {
+			obs.Phase = RemoteLoginPhaseRetrying
 			cause := oautherr.RFC6749Error{
 				Code:        errCode,
 				Description: truncateForMessage(q.Get("error_description")),
 				URI:         truncateForMessage(q.Get("error_uri")),
 			}
-			return m.retryWithoutResource(ctx, logger, state, cause)
+			return m.retryWithoutResource(ctx, logger, state, cause, obs)
 		}
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
+		obs.Phase = RemoteLoginPhaseDenied
+		obs.ProviderErrorCode = registeredErrorCode(errCode)
 		return none, denied(ctx, logger, q)
 	}
 
@@ -1610,6 +1655,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
 	}
 	client := clientRow.RemoteSessionClient
+	obs.ProviderIssuerID = uuid.NullUUID{UUID: client.RemoteSessionIssuerID, Valid: true}
 
 	var clientSecret string
 	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
@@ -1650,6 +1696,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client's assertion audience is misconfigured").LogError(ctx, logger)
 	}
+	obs.Phase = RemoteLoginPhaseExchanging
 	tok, err := m.exchangeCode(ctx, doer, state, TokenEndpointClientAuth{
 		Method:                authMethod,
 		RemoteSessionClientID: client.ID,
@@ -1662,11 +1709,14 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}, audience, code)
 	if err != nil {
 		if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok && oauthErr.Code == oautherr.CodeInvalidTarget {
-			return m.retryWithoutResource(ctx, logger, state, err)
+			obs.Phase = RemoteLoginPhaseRetrying
+			return m.retryWithoutResource(ctx, logger, state, err, obs)
 		}
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
+		obs.Failure, obs.ProviderErrorCode = exchangeFailureKind(err, clientRow.TunneledMcpServerID.Valid)
 		return none, exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
 	}
+	obs.Phase = RemoteLoginPhaseStoring
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
 	// the reach of every revoke path since no row points at it. So arm the
@@ -1725,6 +1775,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// is the one the request path refreshes at, and the armed revocation
 	// above returns the pair to the provider.
 	if tok.RefreshToken == "" && accessExpires != nil && !accessExpires.After(now.Add(AccessTokenExpirySkew)) {
+		obs.Failure = RemoteLoginFailureUnrenewableToken
 		return none, oops.E(oops.CodeUnauthorized, nil, "the identity provider issued an access token that is expired or about to expire, and no refresh token to renew it").LogWarn(ctx, logger,
 			attr.SlogRemoteSessionAccessExpiresAt(*accessExpires),
 		)
@@ -1778,6 +1829,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		ID: state.UserSessionIssuerID, ProjectID: state.ProjectID, OrganizationID: state.OrganizationID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			obs.Failure = RemoteLoginFailureConnectionGone
 			return none, oops.E(oops.CodeUnauthorized, nil, "the identity provider this login was started from no longer exists").LogWarn(ctx, logger)
 		}
 		return none, oops.E(oops.CodeUnexpected, err, "lock user session issuer for remote session write").LogError(ctx, logger)
@@ -1804,6 +1856,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "recheck remote session client binding").LogError(ctx, logger)
 	}
 	if !bound {
+		obs.Failure = RemoteLoginFailureConnectionGone
 		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 
@@ -1829,6 +1882,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	})
 	if err != nil {
 		if errors.Is(err, errRemoteLoginWithoutOrganization) {
+			obs.Failure = RemoteLoginFailureLoginExpired
 			return none, oops.E(oops.CodeUnauthorized, err, "this login expired, start it again").LogWarn(ctx, logger)
 		}
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
@@ -1876,6 +1930,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			RemoteSessionID:        storedSession.ID,
 			RemoteSessionUpdatedAt: storedSession.UpdatedAt.Time,
 		},
+		Observation: nil,
 	}, nil
 }
 
@@ -1921,7 +1976,7 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 // invalid_target. Refused when the leg already omitted the resource or is the
 // retry itself, so an issuer cannot loop the user. Persists nothing: the
 // rejection may be of this resource alone, so it stays scoped to this login.
-func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slog.Logger, state RemoteLoginState, cause error) (RemoteLoginResult, error) {
+func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slog.Logger, state RemoteLoginState, cause error, obs *RemoteLoginObservation) (RemoteLoginResult, error) {
 	var none RemoteLoginResult
 	logger = logger.With(attr.SlogOAuthError(oautherr.CodeInvalidTarget))
 	if state.Resource == "" || state.OmitResource || state.ResourceRetried {
@@ -1938,6 +1993,7 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 	}
 	idx := slices.IndexFunc(clients, func(c Client) bool { return c.ID == state.RemoteSessionClientID })
 	if idx < 0 {
+		obs.Failure = RemoteLoginFailureConnectionGone
 		return none, oops.E(oops.CodeUnauthorized, cause, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 	client := clients[idx]
@@ -1954,7 +2010,7 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "build authorization url for retry").LogError(ctx, logger)
 	}
-	return RemoteLoginResult{RedirectURL: authURL, Grant: nil}, nil
+	return RemoteLoginResult{RedirectURL: authURL, Grant: nil, Observation: nil}, nil
 }
 
 // canonicalCallbackRouteBase is the route base the outbound remote-login

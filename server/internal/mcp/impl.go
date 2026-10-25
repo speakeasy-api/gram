@@ -869,7 +869,9 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 	if err := s.validateRemoteLoginBrowser(r); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding")
 	}
+	started := time.Now()
 	result, err := s.remoteChallengeMgr.CompleteRemoteLogin(r)
+	s.recordRemoteLoginCallback(r.Context(), started, result.Observation, err)
 	if err != nil {
 		return err //nolint:wrapcheck // the manager's errors already carry the response
 	}
