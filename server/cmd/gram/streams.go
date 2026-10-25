@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	mcpeventsv1 "github.com/speakeasy-api/gram/infra/gen/gram/mcpevents/v1"
+	"github.com/speakeasy-api/gram/server/internal/mcpevents"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"log/slog"
 	"net/url"
 	"os"
@@ -844,6 +847,14 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
+				eventAuthorizer := platformmcp.NewEventAuthorizer(db, featureFlags)
+				eventService, err := mcpevents.NewService(logger, db, encryptionClient, eventAuthorizer, mcpevents.NewWebhook(guardianPolicy))
+				if err != nil {
+					return fmt.Errorf("create Platform MCP event consumers: %w", err)
+				}
+				eventSettings := gcp.BatchReceiveSettings{MaxMessages: 20, MaxBytes: constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 100, MaxBufferedBytes: 5 * constants.MiB}
+				mustReceiveBatchWithResult(rg, &mcpeventsv1.ReviewChanged{}, &mcpeventsv1.ReviewRouter{}, streams.BatchResultHandlerFunc[*mcpeventsv1.ReviewChanged](eventService.RouteBatch), eventSettings)
+				mustReceiveBatchWithResult(rg, &mcpeventsv1.Delivery{}, &mcpeventsv1.WebhookSender{}, streams.BatchResultHandlerFunc[*mcpeventsv1.Delivery](eventService.DeliverBatch), eventSettings)
 
 				if c.Bool("sigint-ack-only") || c.String("sigint-openrouter-api-key") != "" {
 					var handler streams.BatchResultHandler[*conversationv1.MessageEvent] = evaluation.NewConversationHandler(sensorEvaluator, assetStorage, evaluation.NewRepository(db))

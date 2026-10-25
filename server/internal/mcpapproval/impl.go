@@ -40,11 +40,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	"github.com/speakeasy-api/gram/server/internal/mcpevents"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -367,6 +369,24 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 
 	queries := repo.New(s.db).WithTx(dbtx)
 
+	// Admission and decisions share a lock so event demand transitions and the
+	// decision's frozen requester set cannot race each other.
+	if err := shadowadmission.LockProject(ctx, dbtx, projectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error locking review demand").LogError(ctx, s.logger)
+	}
+	previous, err := queries.GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{OrganizationID: organizationID, ProjectID: projectID, TargetKind: adm.targetKind, TargetKey: adm.targetKey})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading review demand").LogError(ctx, s.logger)
+	}
+	newRequester := false
+	if err == nil && adm.requesterID != "" {
+		_, requesterErr := queries.GetPlatformRequesterApprovalRequest(ctx, repo.GetPlatformRequesterApprovalRequestParams{ID: previous.ID, ProjectID: projectID, OrganizationID: organizationID, UserID: adm.requesterID})
+		if requesterErr != nil && !errors.Is(requesterErr, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, requesterErr, "error reading existing requester").LogError(ctx, s.logger)
+		}
+		newRequester = errors.Is(requesterErr, pgx.ErrNoRows)
+	}
+
 	request, err := queries.UpsertApprovalRequest(ctx, repo.UpsertApprovalRequestParams{
 		OrganizationID:            organizationID,
 		ProjectID:                 projectID,
@@ -422,6 +442,15 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 			TargetRaw:        adm.targetRaw,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error auditing approval request").LogError(ctx, s.logger)
+		}
+	}
+
+	if adm.status == statusRequested && request.Status == statusRequested && (request.Inserted || previous.Status != statusRequested || newRequester) {
+		if err := mcpevents.PublishReview(ctx, dbtx, organizationID, mcpevents.Event{
+			EventID: uuid.New(), Name: mcpevents.ReviewRequested, Timestamp: request.UpdatedAt.Time,
+			Data: mcpevents.ReviewData{ProjectID: projectID, RequestID: request.ID, DecisionID: ""}, Cursor: nil,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error publishing review demand").LogError(ctx, s.logger)
 		}
 	}
 
@@ -516,7 +545,7 @@ func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureSer
 	// unreachable registry or a failed traffic lookup land in Gaps with
 	// evidence_collected_at still set — re-gathers in place, so an
 	// outage-time dossier does not keep its gaps forever.
-	existing, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{
+	existing, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{OrganizationID: organizationID,
 		ProjectID:  projectID,
 		TargetKind: targetKindServerURL,
 		TargetKey:  key,

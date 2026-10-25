@@ -1,0 +1,12 @@
+edition = "2024";
+package gram.mcpevents.v1;
+import "gcp/pubsub/v1/options.proto";
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/mcpevents/v1;mcpeventsv1";
+
+
+message Delivery {
+  string id = 1;
+  string organization_id = 2;
+  string project_id = 3;
+  option (gcp.pubsub.v1.topic) = {retention_hint: {seconds: 604800}};
+}

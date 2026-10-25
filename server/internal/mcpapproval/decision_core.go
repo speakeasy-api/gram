@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpevents"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -54,7 +55,7 @@ func (s *Service) ResolveDecisionTarget(ctx context.Context, organizationID stri
 	if s == nil || s.db == nil || organizationID == "" || projectID == uuid.Nil || strings.TrimSpace(targetKey) == "" || (targetKind != targetKindServerURL && targetKind != targetKindStdioCommand) {
 		return uuid.Nil, oops.E(oops.CodeBadRequest, nil, "invalid approval target")
 	}
-	request, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{ProjectID: projectID, TargetKind: targetKind, TargetKey: targetKey})
+	request, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{OrganizationID: organizationID, ProjectID: projectID, TargetKind: targetKind, TargetKey: targetKey})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && request.OrganizationID != organizationID) {
 		return uuid.Nil, oops.E(oops.CodeNotFound, nil, "approval request not found")
 	}
@@ -200,6 +201,12 @@ func (s *Service) DecideInTransaction(ctx context.Context, tx pgx.Tx, input Deci
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "error enforcing decision").LogError(ctx, s.logger)
 		}
+	}
+	if err := mcpevents.PublishReview(ctx, tx, input.OrganizationID, mcpevents.Event{
+		EventID: decision.ID, Name: mcpevents.ReviewDecided, Timestamp: decision.DecidedAt.Time,
+		Data: mcpevents.ReviewData{ProjectID: input.ProjectID, RequestID: input.RequestID, DecisionID: decision.ID.String()}, Cursor: nil,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error publishing review decision").LogError(ctx, s.logger)
 	}
 	return decisionView(decision), nil
 }

@@ -94,22 +94,27 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 // an error so callers can distinguish an incomplete live security check from a
 // durable disabled result.
 func (c *Client) IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature Feature) (bool, error) {
+	enabled, err := IsFeatureEnabledUncached(ctx, c.db, organizationID, feature)
+	if err == nil || errors.Is(err, context.Canceled) {
+		return enabled, err
+	}
+	return false, oops.E(oops.CodeUnexpected, err, "failed to get uncached organization feature flag %q", string(feature)).LogError(ctx, c.logger, attr.SlogOrganizationID(organizationID))
+}
+
+// IsFeatureEnabledUncached checks durable capability state using the caller's
+// connection or transaction, without acquiring another pooled connection.
+func IsFeatureEnabledUncached(ctx context.Context, db repo.DBTX, organizationID string, feature Feature) (bool, error) {
 	if feature == FeatureSkills {
 		return true, nil
 	}
-	res, err := c.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(feature)})
+	res, err := repo.New(db).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(feature)})
 	switch {
 	case errors.Is(err, context.Canceled):
 		return false, fmt.Errorf("check uncached organization feature: %w", err)
 	case errors.Is(err, pgx.ErrNoRows):
 		return false, nil
 	case err != nil:
-		return false, oops.E(
-			oops.CodeUnexpected,
-			err,
-			"failed to get uncached organization feature flag %q",
-			string(feature),
-		).LogError(ctx, c.logger, attr.SlogOrganizationID(organizationID))
+		return false, fmt.Errorf("check uncached organization feature %q: %w", feature, err)
 	default:
 		return res, nil
 	}

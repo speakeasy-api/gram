@@ -1165,3 +1165,13 @@ sql:
         out: "../internal/slackdirectoryconnections/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/mcpevents/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/mcpevents/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true

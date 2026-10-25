@@ -74,7 +74,7 @@ func (s *Service) ReadPlatformReview(ctx context.Context, input PlatformReviewRe
 	}
 
 	queries := repo.New(s.db)
-	request, err := queries.GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{ProjectID: input.ProjectID, TargetKind: input.TargetKind, TargetKey: input.TargetKey})
+	request, err := queries.GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{OrganizationID: input.OrganizationID, ProjectID: input.ProjectID, TargetKind: input.TargetKind, TargetKey: input.TargetKey})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PlatformReviewSummary{}, oops.E(oops.CodeNotFound, err, "approval request not found")

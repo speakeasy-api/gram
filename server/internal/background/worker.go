@@ -639,6 +639,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
 	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
 	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
+	temporalWorker.RegisterActivity(activities.CleanupMCPEvents)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
@@ -789,6 +790,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
+	temporalWorker.RegisterWorkflow(MCPEventsCleanupWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
@@ -877,6 +879,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	// data too. A run per seed version, not per start.
 	if err := KickStartupSeeds(ctx, env, opts.StartupSeeds); err != nil {
 		logger.ErrorContext(ctx, "failed to kick startup seeds", attr.SlogError(err))
+	}
+
+	if err := AddMCPEventsCleanupSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add MCP events cleanup schedule", attr.SlogError(err))
 	}
 
 	// Everything below is registered under a fixed ID and belongs to the
