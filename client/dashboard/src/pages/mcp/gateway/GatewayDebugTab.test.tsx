@@ -12,6 +12,7 @@ import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { Operator as Op } from "@gram/client/models/components/logfilter";
 import { serializeFilters } from "@/pages/logs/log-filter-url";
+import { matchingConnectionFilters } from "./connectionHealth";
 import { encodeValues } from "./sessionFilters";
 import { GatewayDebugTab } from "./GatewayDebugTab";
 
@@ -94,6 +95,36 @@ vi.mock("@/components/connections/ConnectionsList", () => ({
     </div>
   ),
 }));
+// A listing hotspot's matching connections, as the health sheet offers them.
+const LUCAS = "user:user_lucas";
+const MATCHING_CLIENT = "0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0a";
+vi.mock("./GatewayConnectionHealth", async () => {
+  const { matchingConnectionFilters: matching } =
+    await import("./connectionHealth");
+  return {
+    GatewayConnectionHealth: ({
+      onShowConnections,
+    }: {
+      onShowConnections: (filters: unknown[]) => void;
+    }) => (
+      <button
+        type="button"
+        onClick={() =>
+          onShowConnections(
+            matching({
+              stage: "discovery_listing",
+              subject: "user:user_lucas",
+              providerId: "",
+              client: "0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0a",
+            }).filters,
+          )
+        }
+      >
+        Show matching connections
+      </button>
+    ),
+  };
+});
 vi.mock("@/components/page-layout", () => ({
   Page: {
     Toolbar: Object.assign(
@@ -1074,4 +1105,67 @@ it("drops a builder search when the builder resets and refreshes each search onc
     null,
     "zed",
   ]);
+});
+
+it("shows a hotspot's matching connections without an earlier search, in one Back stop", async () => {
+  server.list.mockResolvedValue(page(["s1"]));
+  server.facets.mockResolvedValue(facets());
+  const before = `/debug?tab=debug&q=Mateo&sf=${encodeURIComponent("identity_type:eq:agent")}`;
+  renderAt(before, ["/elsewhere"]);
+  await screen.findByText("s1");
+  await waitFor(() =>
+    expect(lastList()).toMatchObject({
+      search: "Mateo",
+      identityTypes: ["agent"],
+    }),
+  );
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Show matching connections" }),
+  );
+  const matching = serializeFilters(
+    matchingConnectionFilters({
+      stage: "discovery_listing",
+      subject: LUCAS,
+      providerId: "",
+      client: MATCHING_CLIENT,
+    }).filters,
+  );
+  await waitFor(() => expect(params().get("sf")).toBe(matching));
+  expect(params().get("q")).toBeNull();
+  expect(params().get("tab")).toBe("debug");
+  expect(screen.getByTestId("pathname").textContent).toBe("/debug");
+  await waitFor(() =>
+    expect(lastList()).toMatchObject({
+      metaMcpServerId: "gateway-1",
+      identities: [LUCAS],
+      clients: [MATCHING_CLIENT],
+    }),
+  );
+  expect(lastList().search).toBeUndefined();
+  expect(lastList().identityTypes).toBeUndefined();
+  expect(screen.queryByText("search: Mateo")).toBeNull();
+
+  // One Back restores the earlier search and filters; Forward the matching view.
+  fireEvent.click(screen.getByText("history back"));
+  await waitFor(() => expect(params().get("q")).toBe("Mateo"));
+  expect(params().get("sf")).toBe("identity_type:eq:agent");
+  await waitFor(() =>
+    expect(lastList()).toMatchObject({
+      search: "Mateo",
+      identityTypes: ["agent"],
+    }),
+  );
+  fireEvent.click(screen.getByText("history forward"));
+  await waitFor(() => expect(params().get("sf")).toBe(matching));
+  expect(params().get("q")).toBeNull();
+  await waitFor(() => expect(lastList().search).toBeUndefined());
+
+  // The matching view is a single entry: two Backs leave the page.
+  fireEvent.click(screen.getByText("history back"));
+  await waitFor(() => expect(params().get("q")).toBe("Mateo"));
+  fireEvent.click(screen.getByText("history back"));
+  await waitFor(() =>
+    expect(screen.getByTestId("pathname").textContent).toBe("/elsewhere"),
+  );
 });
