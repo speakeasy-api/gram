@@ -2,8 +2,7 @@
  * The managed config that points a headless machine's device agent at one
  * agent identity. The key goes in as `mcp_credential`: the device agent uses
  * it for MCP only (no plugin sync, hooks or telemetry) and writes an MCP entry
- * for each AI tool that fetches the key from the device agent at run time, so
- * the key lives here and nowhere in the tools' own config files.
+ * for each AI tool that sends the key as a static bearer header.
  */
 
 // The control plane the device agent dials when the config names none.

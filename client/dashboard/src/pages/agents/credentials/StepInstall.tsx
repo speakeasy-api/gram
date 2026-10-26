@@ -426,10 +426,10 @@ export function StepInstall({
             >
               <div className="space-y-4 p-4">
                 <Text muted small>
-                  For a machine with no person at it — a VPS, CI runner or
+                  For a machine with no person at it, like a VPS, CI runner or
                   sandbox. The Speakeasy device agent sets up MCP for Claude
-                  Code, Codex and Cursor on that machine, and keeps this agent
-                  identity&apos;s key out of their config files.
+                  Code, Codex and Cursor on that machine, using this agent
+                  identity&apos;s key.
                 </Text>
                 <CodeBlock
                   value={`curl -fsSL ${SANDBOX_INSTALL_SCRIPT_URL} | sudo sh`}
@@ -473,6 +473,11 @@ export function StepInstall({
                     MCP access only, to {reachPhrase} through this agent
                     identity&apos;s permissions. Plugin sync and hooks are not
                     included yet.
+                  </Text>
+                  <Text muted small className="block">
+                    The key is written into those tools&apos; MCP settings for
+                    that account. If the machine is compromised, revoke or
+                    rotate the key from this agent&apos;s page.
                   </Text>
                 </div>
               </div>

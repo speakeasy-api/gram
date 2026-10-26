@@ -75,6 +75,9 @@ describe("Device Agent tab", () => {
       ),
     ).toContain("speakeasyd sync --once");
     expect(screen.getByText(/Plugin sync and hooks are not/)).toBeTruthy();
+    expect(
+      screen.getByText(/written into those tools' MCP settings/),
+    ).toBeTruthy();
   });
 
   it("carries the key and agent id, and no control plane on the default deployment", async () => {
