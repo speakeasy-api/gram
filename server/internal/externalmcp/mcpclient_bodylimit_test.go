@@ -29,13 +29,13 @@ const (
 	// endlessBodyCap stops a runaway endless response if a limit fails to
 	// reject it, so a regression fails on the assertions instead of exhausting
 	// the test host.
-	endlessBodyCap = 1 << 30 // 1 GiB
+	endlessBodyCap = 32 << 20 // 32 MiB
 
 	// maxBufferedEndlessBytes bounds how much of an endless body the server may
 	// have written by the time the client rejects it. Loopback socket buffers
 	// absorb a few MiB beyond what the client read; anything near this means
 	// the client kept consuming past the limit.
-	maxBufferedEndlessBytes = 64 << 20 // 64 MiB
+	maxBufferedEndlessBytes = 24 << 20 // 24 MiB
 )
 
 // limitServer is a minimal Streamable HTTP MCP server. respond may take over
