@@ -19,7 +19,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -283,13 +285,19 @@ func TestUpdateMcpServerHostedWrapperFlipsVisibilityWithRetiredOAuthProxyLink(t 
 	require.Equal(t, "public", server.Visibility)
 	require.Equal(t, issuer.ID, toolset.UserSessionIssuerID.UUID)
 
-	_, err = f.toolsets.UpdateToolset(ctx, &toolsetsgen.UpdateToolsetPayload{Slug: types.Slug(f.toolset.Slug), McpIsPublic: new(false)})
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), nil))
 	require.NoError(t, err)
 	toolset, server = f.requireProjected(t, ctx)
 	require.False(t, toolset.McpIsPublic)
 	require.Equal(t, "private", server.Visibility)
 	require.Equal(t, issuer.ID, toolset.UserSessionIssuerID.UUID)
 	require.True(t, f.resolve(t, ctx).Allowed)
+
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("disabled"), nil))
+	require.NoError(t, err)
+	toolset, server = f.requireProjected(t, ctx)
+	require.Equal(t, "private", hostingstate.ReEnableVisibility(toolset), "the retired proxy link alone re-enables private")
+	require.False(t, hostedmcp.WithServerState(toolset, &server).McpIsPublic)
 }
 
 func TestUpdateMcpServerHostedWrapperRejectsNameOverToolsetLimit(t *testing.T) {
