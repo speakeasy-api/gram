@@ -313,6 +313,40 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateWorkloadDeviceJoinToken"}`)
 	})
 
+	Method("createDeviceInstallCommand", func() {
+		Description("Create a one-command install for a headless Linux device. Issues a device join token exactly as createDeviceJoinToken does, with the same authorization, agent checks and audit event, but never returns it: the token is held behind a single-use install code that expires after 15 minutes or with the token, whichever is sooner. The returned command fetches a script that installs the device agent, writes its managed config with the token, and starts it. Poll listDeviceJoinTokens for join_token_id to see the device enroll. Gated by the device-bootstrap-install rollout flag; an organization without it gets 404.")
+
+		Payload(func() {
+			Attribute("agent_id", String, "The agent the enrolled device inherits its policy from.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("hooks_project_slug", shared.Slug, "The project the device's hooks and telemetry are sent to. Must be a project in the caller's organization.")
+			Attribute("expires_in_seconds", Int, "How long the join token behind the command stays redeemable. Defaults to one hour.", func() {
+				Minimum(60)
+				Maximum(86400)
+				Default(3600)
+			})
+			Required("agent_id", "hooks_project_slug")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadDeviceInstallCommand)
+
+		HTTP(func() {
+			POST("/rpc/workloadIdentities.createDeviceInstallCommand")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createWorkloadDeviceInstallCommand")
+		Meta("openapi:extension:x-speakeasy-name-override", "createDeviceInstallCommand")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateWorkloadDeviceInstallCommand"}`)
+	})
+
 	Method("listDeviceJoinTokens", func() {
 		Description("List the organization's device join tokens, newest first, optionally for one agent. Revoked tokens are included. Each carries its status but never the token or its hash, which cannot be shown again. Requires workload:read.")
 
@@ -424,6 +458,23 @@ var WorkloadDeviceJoinToken = Type("WorkloadDeviceJoinToken", func() {
 		Format(FormatDateTime)
 	})
 	Required("id", "token", "expires_at")
+})
+
+var WorkloadDeviceInstallCommand = Type("WorkloadDeviceInstallCommand", func() {
+	Description("A one-command install for a headless device. The join token it carries is never included; the install code in the commands is single use.")
+
+	Attribute("command", String, "Run on the device as the account that runs its AI tools: fetches the install script and runs it with sudo.")
+	Attribute("download_command", String, "The same install, saving the script first so it can be read before it runs.")
+	Attribute("code_expires_at", String, "When the install code in the commands stops working.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("join_token_id", String, "The join token behind the command. Its status in listDeviceJoinTokens becomes redeemed once the device enrolls.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("token_expires_at", String, "When the join token stops being redeemable.", func() {
+		Format(FormatDateTime)
+	})
+	Required("command", "download_command", "code_expires_at", "join_token_id", "token_expires_at")
 })
 
 var WorkloadDeviceJoinTokenSummary = Type("WorkloadDeviceJoinTokenSummary", func() {

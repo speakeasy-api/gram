@@ -16,7 +16,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -221,7 +223,7 @@ func TestWorkloadAssertionReuseAPIAndMCPRequireSameReadScope(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil)
+	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil, cache.NoopCache, &feature.InMemory{})
 	ctx, p, project, issuer := assertionReuseTestContext(t)
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	service := &WorkloadAssertionReuseService{management: management, resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
@@ -255,7 +257,7 @@ func TestWorkloadAssertionReuseAPIAndMCPRequireSameWriteScope(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil)
+	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil, cache.NoopCache, &feature.InMemory{})
 	ctx, p, project, issuer := assertionReuseTestContext(t)
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	service := &WorkloadAssertionReuseService{

@@ -3,6 +3,7 @@
  */
 
 import { workloadIdentitiesAdmitSubject } from "../funcs/workloadIdentitiesAdmitSubject.js";
+import { workloadIdentitiesCreateDeviceInstallCommand } from "../funcs/workloadIdentitiesCreateDeviceInstallCommand.js";
 import { workloadIdentitiesCreateDeviceJoinToken } from "../funcs/workloadIdentitiesCreateDeviceJoinToken.js";
 import { workloadIdentitiesGetCustomFlows } from "../funcs/workloadIdentitiesGetCustomFlows.js";
 import { workloadIdentitiesList } from "../funcs/workloadIdentitiesList.js";
@@ -19,6 +20,7 @@ import { workloadIdentitiesWithdrawSubject } from "../funcs/workloadIdentitiesWi
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { RegisterDeviceRequestBody } from "../models/components/registerdevicerequestbody.js";
 import { WorkloadCustomFlows } from "../models/components/workloadcustomflows.js";
+import { WorkloadDeviceInstallCommand } from "../models/components/workloaddeviceinstallcommand.js";
 import { WorkloadDeviceJoinToken } from "../models/components/workloaddevicejointoken.js";
 import { WorkloadDeviceJoinTokenSummary } from "../models/components/workloaddevicejointokensummary.js";
 import { WorkloadDeviceRegistration } from "../models/components/workloaddeviceregistration.js";
@@ -29,6 +31,10 @@ import {
   AdmitWorkloadSubjectRequest,
   AdmitWorkloadSubjectSecurity,
 } from "../models/operations/admitworkloadsubject.js";
+import {
+  CreateWorkloadDeviceInstallCommandRequest,
+  CreateWorkloadDeviceInstallCommandSecurity,
+} from "../models/operations/createworkloaddeviceinstallcommand.js";
 import {
   CreateWorkloadDeviceJoinTokenRequest,
   CreateWorkloadDeviceJoinTokenSecurity,
@@ -94,6 +100,25 @@ export class WorkloadIdentities extends ClientSDK {
     options?: RequestOptions,
   ): Promise<WorkloadIdentityPolicy> {
     return unwrapAsync(workloadIdentitiesAdmitSubject(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createDeviceInstallCommand workloadIdentities
+   *
+   * @remarks
+   * Create a one-command install for a headless Linux device. Issues a device join token exactly as createDeviceJoinToken does, with the same authorization, agent checks and audit event, but never returns it: the token is held behind a single-use install code that expires after 15 minutes or with the token, whichever is sooner. The returned command fetches a script that installs the device agent, writes its managed config with the token, and starts it. Poll listDeviceJoinTokens for join_token_id to see the device enroll. Gated by the device-bootstrap-install rollout flag; an organization without it gets 404.
+   */
+  async createDeviceInstallCommand(
+    request: CreateWorkloadDeviceInstallCommandRequest,
+    security?: CreateWorkloadDeviceInstallCommandSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadDeviceInstallCommand> {
+    return unwrapAsync(workloadIdentitiesCreateDeviceInstallCommand(
       this,
       request,
       security,

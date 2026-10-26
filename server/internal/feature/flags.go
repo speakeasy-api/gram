@@ -44,6 +44,15 @@ const (
 	// Removed once device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
 
+	// FlagDeviceBootstrapInstall gates workloadIdentities.createDeviceInstallCommand,
+	// the one-command install of a headless device enrolled with a bootstrap
+	// (device join) token. Evaluated server-side. Targeted by PostHog organization
+	// group (org slug),
+	// like FlagBudgets. Fails closed: the RPC returns 404. Held closed until a
+	// device agent that reads workload_identity from managed config is
+	// released, since the script it serves needs one. Removed once GA.
+	FlagDeviceBootstrapInstall Flag = "device-bootstrap-install"
+
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
 	// at invocation time and fails closed when absent, disabled, or indeterminate.

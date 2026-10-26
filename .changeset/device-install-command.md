@@ -1,0 +1,5 @@
+---
+"server": minor
+---
+
+Administrators can now enroll a headless Linux device with one command. `workloadIdentities.createDeviceInstallCommand` issues a bootstrap token (device join token) for an agent, with the same authorization, agent checks and audit event as `createDeviceJoinToken`, and returns a command that downloads to a private temporary file and invokes `sudo sh` only after a successful download instead of the token. The command carries a single-use install code that expires after 15 minutes, or with the token if that is sooner. Fetching `GET /v1/install/device/{code}` spends the code and returns a script that installs the device agent, writes `/etc/speakeasy/managed.json` with the token and the hooks project, and starts the agent as a user service of the account that runs the AI tools. The token is never returned by the API or shown on screen, and `join_token_id` lets the dashboard watch for the device to enroll through `listDeviceJoinTokens`. The command is behind the `device-bootstrap-install` rollout flag.
