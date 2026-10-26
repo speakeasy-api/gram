@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 )
@@ -140,24 +141,26 @@ func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 // organizationMetadata keeps distribution requests inside the publication boundary.
 func organizationMetadata(result UpsertOrganizationMetadataWithRequestsRow) OrganizationMetadatum {
 	return OrganizationMetadatum{
-		ID:                   result.ID,
-		Name:                 result.Name,
-		Slug:                 result.Slug,
-		GramAccountType:      result.GramAccountType,
-		WorkosID:             result.WorkosID,
-		WorkosUpdatedAt:      result.WorkosUpdatedAt,
-		WorkosLastEventID:    result.WorkosLastEventID,
-		SvixAppID:            result.SvixAppID,
-		WebhooksEnabled:      result.WebhooksEnabled,
-		Whitelisted:          result.Whitelisted,
-		FreeTrialStartedAt:   result.FreeTrialStartedAt,
-		FreeTrialEndsAt:      result.FreeTrialEndsAt,
-		ScimEnabled:          result.ScimEnabled,
-		SsoEnabled:           result.SsoEnabled,
-		VerifiedDomains:      result.VerifiedDomains,
-		CreationSource:       result.CreationSource,
-		DefaultHost:          result.DefaultHost,
-		GatewayDiscoveryMode: result.GatewayDiscoveryMode,
+		ID:                 result.ID,
+		Name:               result.Name,
+		Slug:               result.Slug,
+		GramAccountType:    result.GramAccountType,
+		WorkosID:           result.WorkosID,
+		WorkosUpdatedAt:    result.WorkosUpdatedAt,
+		WorkosLastEventID:  result.WorkosLastEventID,
+		SvixAppID:          result.SvixAppID,
+		WebhooksEnabled:    result.WebhooksEnabled,
+		Whitelisted:        result.Whitelisted,
+		FreeTrialStartedAt: result.FreeTrialStartedAt,
+		FreeTrialEndsAt:    result.FreeTrialEndsAt,
+		ScimEnabled:        result.ScimEnabled,
+		SsoEnabled:         result.SsoEnabled,
+		VerifiedDomains:    result.VerifiedDomains,
+		CreationSource:     result.CreationSource,
+		DefaultHost:        result.DefaultHost,
+		// Distribution results do not return the gateway discovery mode;
+		// nothing that reads them uses it.
+		GatewayDiscoveryMode: pgtype.Text{String: "", Valid: false},
 		CreatedAt:            result.CreatedAt,
 		UpdatedAt:            result.UpdatedAt,
 		DisabledAt:           result.DisabledAt,
