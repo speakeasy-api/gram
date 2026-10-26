@@ -55,6 +55,12 @@ const (
 	// while set, every gateway route answers 404. Unconfigured organizations
 	// also default off; a soft-deleted flag records explicit opt-in.
 	FeatureOrganizationGatewayDisabled Feature = "organization_gateway_disabled"
+	// FeatureCodeMode is the staff-managed entitlement for gateway Code Mode.
+	// Code Mode runs customer Python on Speakeasy-operated runners, so it is
+	// enabled per organization rather than for every organization on a
+	// deployment with the runtime configured. Without it, Code Mode gateways
+	// serve Progressive discovery.
+	FeatureCodeMode Feature = "code_mode"
 	// FeatureUpstreamAuthEnforced serves the organization's direct proxied
 	// servers through the typed auth client resolver and requires mcp:auth on
 	// the chosen auth client. Staff turn it on through the admin enforcement

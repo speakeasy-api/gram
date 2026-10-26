@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -408,4 +409,16 @@ func TestRunDeletesToolsetsLeftWithNothingToMigrate(t *testing.T) {
 			require.Empty(t, endpoints)
 		})
 	}
+}
+
+func TestRunIgnoresRetiredOAuthProxyLink(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMigrator(t)
+	server := seedServer(t, ctx, ti, serverOptions{slug: "proxy-link", remoteURL: "https://mcp.example.com/mcp"})
+	testenv.LinkRetiredOAuthProxy(t, ctx, ti.conn, ti.projectID, server.toolset.ID)
+
+	outcomes := migrate(t, ctx, ti, false, server)
+	require.Equal(t, migration.StatusMigrated, outcomes[0].Status, outcomes[0].Reason)
+	require.False(t, containsSubstring(outcomes[0].Warnings, "dropped"), "warnings %q", outcomes[0].Warnings)
 }

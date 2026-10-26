@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
@@ -92,7 +93,7 @@ func inventoryDistributions(rows []platformrepo.ListPlatformMCPInventoryPluginMe
 func mcpFromInventoryRow(row platformrepo.ListPlatformMCPInventoryRow, distributions map[uuid.UUID][]MCPDistribution) MCP {
 	return mcpFromInventory(
 		row.McpServerID, row.ProjectID, row.ProjectName, row.ProjectSlug, row.McpName.String, row.McpSlug.String, row.Visibility,
-		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
+		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID, row.BuiltinBackend), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
 		row.RegistrationRemoteMcpServerID, row.RegistrationUserSessionIssuerID, row.RegistrationMcpServerID, row.RegistrationMcpEndpointID,
 		row.ReadinessState, timestampString(row.ReadinessCheckedAt.Time, row.ReadinessCheckedAt.Valid), timestampString(row.ReadinessExpiresAt.Time, row.ReadinessExpiresAt.Valid), distributions,
 	)
@@ -101,7 +102,7 @@ func mcpFromInventoryRow(row platformrepo.ListPlatformMCPInventoryRow, distribut
 func mcpFromInventoryItem(row platformrepo.GetPlatformMCPInventoryItemRow, distributions map[uuid.UUID][]MCPDistribution) MCP {
 	return mcpFromInventory(
 		row.McpServerID, row.ProjectID, row.ProjectName, row.ProjectSlug, row.McpName.String, row.McpSlug.String, row.Visibility,
-		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
+		inventoryModel(row.RemoteMcpServerID, row.TunneledMcpServerID, row.UnproxiedMcpServerID), inventoryBackendKind(row.RemoteMcpServerID, row.TunneledMcpServerID, row.ToolsetID, row.UnproxiedMcpServerID, row.BuiltinBackend), row.UpstreamUrl, row.RegistrationID, row.SourceKind, row.CatalogProvider, row.CatalogReference, row.RegistrationStatus,
 		row.RegistrationRemoteMcpServerID, row.RegistrationUserSessionIssuerID, row.RegistrationMcpServerID, row.RegistrationMcpEndpointID,
 		row.ReadinessState, timestampString(row.ReadinessCheckedAt.Time, row.ReadinessCheckedAt.Valid), timestampString(row.ReadinessExpiresAt.Time, row.ReadinessExpiresAt.Valid), distributions,
 	)
@@ -207,8 +208,10 @@ func validInventoryBackend(backend uuid.NullUUID) bool {
 	return backend.Valid && backend.UUID != uuid.Nil
 }
 
-func inventoryBackendKind(remote, tunneled, toolset, unproxied uuid.NullUUID) MCPBackendKind {
+func inventoryBackendKind(remote, tunneled, toolset, unproxied uuid.NullUUID, builtin pgtype.Text) MCPBackendKind {
 	switch {
+	case builtin.Valid:
+		return MCPBackendBuiltin
 	case validInventoryBackend(remote):
 		return MCPBackendRemote
 	case validInventoryBackend(tunneled):

@@ -71,6 +71,9 @@ VALUES
 -- name: OrgDeleteKillswitchOperations :exec
 DELETE FROM killswitch_operations WHERE organization_id = @org_id::text;
 
+-- name: OrgDeleteRegistryPromotionCandidates :exec
+DELETE FROM registry_promotion_candidates WHERE organization_id = @org_id::text;
+
 -- name: OrgDeleteKillswitchPrescriptions :exec
 DELETE FROM killswitch_prescriptions WHERE organization_id = @org_id::text;
 

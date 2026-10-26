@@ -19,6 +19,10 @@ import {
   RiskPolicyApprovalConfig$inboundSchema,
 } from "./riskpolicyapprovalconfig.js";
 import {
+  RiskPolicyApprovalsServerSetup,
+  RiskPolicyApprovalsServerSetup$inboundSchema,
+} from "./riskpolicyapprovalsserversetup.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$inboundSchema,
 } from "./riskpolicymodelconfig.js";
@@ -82,6 +86,7 @@ export type RiskPolicy = {
    */
   action: RiskPolicyAction;
   approvalConfig?: RiskPolicyApprovalConfig | undefined;
+  approvalsServerSetup?: RiskPolicyApprovalsServerSetup | undefined;
   /**
    * For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty means the domain rule is inert.
    */
@@ -208,6 +213,9 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
     z.object({
       action: z._default(RiskPolicyAction$inboundSchema, "flag"),
       approval_config: z.optional(RiskPolicyApprovalConfig$inboundSchema),
+      approvals_server_setup: z.optional(
+        RiskPolicyApprovalsServerSetup$inboundSchema,
+      ),
       approved_email_domains: z.optional(z.array(z.string())),
       audience_principal_urns: z.array(z.string()),
       audience_type: z._default(
@@ -248,6 +256,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
     z.transform((v) => {
       return remap$(v, {
         "approval_config": "approvalConfig",
+        "approvals_server_setup": "approvalsServerSetup",
         "approved_email_domains": "approvedEmailDomains",
         "audience_principal_urns": "audiencePrincipalUrns",
         "audience_type": "audienceType",

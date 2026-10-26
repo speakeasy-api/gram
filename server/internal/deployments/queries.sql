@@ -830,7 +830,7 @@ SELECT
       LIMIT 1
     ), t.mcp_slug) AS mcp_slug
   , (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' ELSE t.mcp_enabled END)::BOOLEAN AS mcp_enabled
-  , (t.external_oauth_server_id IS NOT NULL OR t.oauth_proxy_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
+  , (t.external_oauth_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
   , ARRAY(
       SELECT u FROM unnest(tv.tool_urns) AS u
       WHERE starts_with(u, @tool_urn_prefix::TEXT)

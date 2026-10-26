@@ -43,10 +43,11 @@ type Service interface {
 	// Returns the whole policy, so a caller replaces its view rather than merging
 	// into it.
 	RegisterIssuer(context.Context, *RegisterIssuerPayload) (res *WorkloadIdentityPolicy, err error)
-	// Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields
-	// are left unchanged. The issuer URL and the wildcard admission setting are
-	// fixed at registration. Requires workload:write. Returns the whole policy, so
-	// a caller replaces its view rather than merging into it.
+	// Edit a trusted issuer's name, description, tags, JWKS URI, or assertion
+	// reuse setting. Omitted fields are left unchanged. The issuer URL and the
+	// wildcard admission setting are fixed at registration. Requires
+	// workload:write. Returns the whole policy, so a caller replaces its view
+	// rather than merging into it.
 	UpdateIssuer(context.Context, *UpdateIssuerPayload) (res *WorkloadIdentityPolicy, err error)
 	// Stop trusting an issuer. Every subject admitted under it is withdrawn in the
 	// same transaction, so no admission can outlive the issuer it names. Requires
@@ -212,6 +213,10 @@ type RegisterIssuerPayload struct {
 	// Where the issuer publishes the keys its assertions are signed with. Must be
 	// an https URL on a fully qualified domain name.
 	JwksURI string
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse *bool
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Checked when a wildcard rule is admitted and again on
 	// every lookup, so clearing it makes wildcard rules already written inert
@@ -251,6 +256,11 @@ type UpdateIssuerPayload struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Omit to preserve the current setting; false
+	// disables this opt-in. Tokens without replay identifiers retain existing
+	// exact-token compatibility.
+	AllowAssertionReuse *bool
 }
 
 // UpdateSubjectPayload is the payload type of the workloadIdentities service

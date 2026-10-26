@@ -5,12 +5,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // Kit's native roots honor SSL_CERT_FILE as a replacement, not an addition.
@@ -34,6 +38,15 @@ exec "$@"
 // These extensions leave the legacy Run path unchanged. Kit must be created
 // stopped so credentials can be copied before its gateway process ever starts.
 func (d *dockerCLIEngine) CreateKit(ctx context.Context, spec kitLocalContainerSpec) (string, error) {
+	if err := validateKitLocalAssertionFile(spec.WorkloadAssertionFile); err != nil {
+		return "", err
+	}
+	if err := validateKitLocalProjectionDirectory(spec.WorkloadAssertionFile); err != nil {
+		return "", err
+	}
+	if err := checkKitLocalProjectionAccess(ctx, spec, d.exec); err != nil {
+		return "", err
+	}
 	args := kitLocalCreateArgs(d.guestPort, spec)
 	id, err := d.exec(ctx, args...)
 	if err != nil {
@@ -41,8 +54,32 @@ func (d *dockerCLIEngine) CreateKit(ctx context.Context, spec kitLocalContainerS
 	}
 	return id, nil
 }
+
+// Probe through the actual daemon mapping instead of assuming host UID 1000
+// means guest UID 1000 (rootless engines usually map the host owner to root).
+// No assertion bytes are read, copied, printed, or stored in a runtime volume.
+func checkKitLocalProjectionAccess(ctx context.Context, spec kitLocalContainerSpec, run func(context.Context, ...string) (string, error)) error {
+	args := []string{"run", "--rm", "--network", "none", "--read-only", "--user", "1000:1000", "--workdir", "/", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+		"--mount", "type=bind,src=" + filepath.Dir(spec.WorkloadAssertionFile) + ",dst=" + filepath.Dir(KitWorkloadAssertionPath) + ",readonly",
+		"--entrypoint", "/bin/sh", spec.Image, "-c", `test -f "$1" && test -r "$1" && : < "$1"`, "kit-projection-check", KitWorkloadAssertionPath}
+	if _, err := run(ctx, args...); err != nil {
+		exit, hasExit := errors.AsType[interface {
+			error
+			ExitCode() int
+		}](err)
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || !hasExit || (exit.ExitCode() != 1 && exit.ExitCode() != 2) {
+			return fmt.Errorf("run kit assertion projection access probe: %w", err)
+		}
+		return fmt.Errorf("kit assertion projection must be readable by guest UID 1000 through the configured container daemon: provision the directory and each rotated assertion with ownership mapped to guest UID 1000, retaining 0700/0600 permissions; rootless host-owner-to-root mapping alone is unsupported (do not run Kit as root or widen permissions): %w", err)
+	}
+	return nil
+}
+
 func kitLocalCreateArgs(port int, spec kitLocalContainerSpec) []string {
 	args := []string{"create", "--name", spec.Name, "--user", "1000:1000", "--workdir", "/home/kit", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--publish", "127.0.0.1::" + strconv.Itoa(port), "--add-host", LocalRuntimeHostGatewayAlias + ":host-gateway", "--volume", spec.VolumeName + ":/home/kit", "--env", "HOME=/home/kit"}
+	// Bind the directory, not the assertion inode, so atomic file replacement
+	// remains visible. The mounted projection is outside persistent HOME.
+	args = append(args, "--mount", "type=bind,src="+filepath.Dir(spec.WorkloadAssertionFile)+",dst="+filepath.Dir(KitWorkloadAssertionPath)+",readonly")
 	if spec.Network != "" {
 		args = append(args, "--network", spec.Network)
 	}
@@ -93,6 +130,8 @@ func decodeKitLocalInspect(raw []byte, port int) (kitLocalContainerInfo, error) 
 		Mounts []struct {
 			Type        string `json:"Type"`
 			Name        string `json:"Name"`
+			Source      string `json:"Source"`
+			RW          bool   `json:"RW"`
 			Destination string `json:"Destination"`
 		} `json:"Mounts"`
 		NetworkSettings struct {
@@ -105,8 +144,14 @@ func decodeKitLocalInspect(raw []byte, port int) (kitLocalContainerInfo, error) 
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return kitLocalContainerInfo{}, fmt.Errorf("decode kit inspect: %w", err)
 	}
-	info := kitLocalContainerInfo{ID: obj.ID, ImageID: obj.Image, User: obj.Config.User, HomeVolume: "", Running: obj.State.Running, HostPort: 0, Labels: obj.Config.Labels}
+	info := kitLocalContainerInfo{AssertionDirectory: "", AssertionReadOnly: false, ID: obj.ID, ImageID: obj.Image, User: obj.Config.User, HomeVolume: "", Running: obj.State.Running, HostPort: 0, Labels: obj.Config.Labels}
 	for _, mount := range obj.Mounts {
+		if mount.Destination == filepath.Dir(KitWorkloadAssertionPath) {
+			if mount.Type != "bind" || mount.RW || info.AssertionDirectory != "" {
+				return kitLocalContainerInfo{}, fmt.Errorf("kit assertion mount must be one read-only bind directory")
+			}
+			info.AssertionDirectory, info.AssertionReadOnly = mount.Source, true
+		}
 		if mount.Destination == "/home/kit" && mount.Type == "volume" {
 			info.HomeVolume = mount.Name
 		}
@@ -221,13 +266,8 @@ func kitLocalBootstrapArchive(b KitLocalBootstrap) ([]byte, error) {
 	files := []struct {
 		name string
 		data []byte
-	}{{".kit/AGENTS.md", b.AgentsMD}, {".kit/config.toml", []byte(kitBootstrapConfig(b))}, {".kit/credentials/" + KitInferenceCredentialFilename, b.InferenceJSON}, {".kit/credentials/mcp.json", b.MCPJSON}, {".kit/credentials/gateway-token", b.GatewayToken}}
-	for _, name := range slices.Sorted(maps.Keys(b.MCPFiles)) {
-		files = append(files, struct {
-			name string
-			data []byte
-		}{".kit/credentials/" + name, b.MCPFiles[name]})
-	}
+	}{{".kit/AGENTS.md", b.AgentsMD}, {".kit/config.toml", []byte(kitBootstrapConfig(b))}, {".kit/credentials/mcp.json", b.MCPJSON}, {".kit/credentials/gateway-token", b.GatewayToken}}
+
 	for _, file := range files {
 		header := new(tar.Header)
 		header.Name = file.name
@@ -247,4 +287,47 @@ func kitLocalBootstrapArchive(b KitLocalBootstrap) ([]byte, error) {
 		return nil, fmt.Errorf("close kit bootstrap archive: %w", err)
 	}
 	return buffer.Bytes(), nil
+}
+
+// Local operators project a file named assertion in a dedicated directory.
+// Mounting its parent preserves atomic rotation without copying token bytes.
+func validateKitLocalAssertionFile(path string) error {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Base(path) != "assertion" || filepath.Dir(path) == "/" || strings.ContainsAny(path, ",\r\n\x00") || strings.HasPrefix(path, "/home/kit/") {
+		return fmt.Errorf("kit local requires an absolute clean projection path named assertion in a dedicated directory outside persistent HOME")
+	}
+	return nil
+}
+
+// A directory mount must not grant access to unrelated host files. Operators
+// must keep this directory dedicated to assertion projection for its lifetime.
+func validateKitLocalProjectionDirectory(assertion string) error {
+	directory := filepath.Dir(assertion)
+	parent, err := os.Lstat(directory)
+	if err != nil {
+		return fmt.Errorf("inspect kit assertion projection directory: %w", err)
+	}
+	if !parent.IsDir() {
+		return fmt.Errorf("kit assertion projection parent must be a directory, not a file or symlink")
+	}
+	if parent.Mode().Perm() != 0o700 {
+		return fmt.Errorf("kit assertion projection directory must have permissions 0700")
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return fmt.Errorf("read kit assertion projection directory: %w", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "assertion" {
+		return fmt.Errorf("kit assertion projection requires a dedicated directory containing only assertion")
+	}
+	entry, err := entries[0].Info()
+	if err != nil {
+		return fmt.Errorf("inspect projected kit assertion: %w", err)
+	}
+	if !entry.Mode().IsRegular() {
+		return fmt.Errorf("projected kit assertion must be a regular file")
+	}
+	if entry.Mode().Perm() != 0o600 {
+		return fmt.Errorf("projected kit assertion must have permissions 0600")
+	}
+	return nil
 }

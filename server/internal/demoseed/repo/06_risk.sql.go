@@ -131,6 +131,58 @@ func (q *Queries) RiskInsertApproval(ctx context.Context, arg RiskInsertApproval
 	return err
 }
 
+const riskInsertApprovalsServer = `-- name: RiskInsertApprovalsServer :exec
+WITH issuer AS (
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                    authn_challenge_mode, session_duration)
+  VALUES ($3::uuid, $2::uuid, $1::text, 'speakeasy-approvals',
+          'interactive', make_interval(secs => 14 * 24 * 60 * 60))
+  RETURNING id
+), server AS (
+  INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility,
+                           user_session_issuer_id)
+  SELECT $4::uuid, $2::uuid, 'Speakeasy Approvals',
+         'speakeasy-approvals', 'approvals', 'private', issuer.id
+  FROM issuer
+  RETURNING id
+), endpoint AS (
+  INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
+  SELECT $5::uuid, $2::uuid, server.id, $6::text
+  FROM server
+)
+INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
+SELECT p.id, server.id, 'speakeasy-approvals'
+FROM server, plugins p
+WHERE p.organization_id = $1::text AND p.project_id = $2::uuid
+  AND p.is_default IS TRUE AND p.deleted IS FALSE
+`
+
+type RiskInsertApprovalsServerParams struct {
+	OrgID        string
+	ProjectID    uuid.UUID
+	IssuerID     uuid.UUID
+	ServerID     uuid.UUID
+	EndpointID   uuid.UUID
+	EndpointSlug string
+}
+
+// The project's approvals server, the first-party server agents call
+// request_approval on. Speakeasy creates it with a project's first approval
+// policy (internal/risk/approval/approvalserver): its own sign-in issuer, an
+// endpoint at <org>-<project>-approvals and a place in the Default plugin as
+// speakeasy-approvals. The project delete cascades every row.
+func (q *Queries) RiskInsertApprovalsServer(ctx context.Context, arg RiskInsertApprovalsServerParams) error {
+	_, err := q.db.Exec(ctx, riskInsertApprovalsServer,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.IssuerID,
+		arg.ServerID,
+		arg.EndpointID,
+		arg.EndpointSlug,
+	)
+	return err
+}
+
 const riskInsertBypassGrant = `-- name: RiskInsertBypassGrant :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2::text, 'risk_policy:bypass',

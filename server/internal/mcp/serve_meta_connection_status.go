@@ -37,7 +37,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 	// A cached connection reports members its consent did not approve,
 	// whether unavailable at consent or added since, so the person knows
 	// renewed consent would add them.
-	if gate.catalog != nil && gate.catalogMode == toolfilter.CatalogModeCached {
+	if gate.catalog != nil && gate.catalogRef != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		for _, member := range gate.unapprovedMembers {
 			servers = append(servers, metamcp.ConnectionStatusServer{
 				Slug:   member.slug,
@@ -86,7 +86,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 // a grant routed by its upstream resource without a derived issuer, so
 // routing runs before that shortcut.
 func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, string) {
-	if gate.catalog != nil && gate.catalogMode == toolfilter.CatalogModeCached {
+	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
 			return metamcp.SignInNeedsConsent, memberErrorMessage(err)
 		}
