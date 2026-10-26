@@ -140,12 +140,14 @@ func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
 }
 
 // metaMemberClientCredentialError is the member-scoped answer for a gateway
-// member whose self client credential could not be obtained. An outage may
-// clear within a listing, unless the attempt's own time ran out.
+// member whose self client credential could not be obtained. An outage is a
+// discovery failure that is not retryable: a request resolves its token map
+// once, so an outage read from that map is the same on every describe attempt.
+// Only an outage recorded by an exchange the attempt itself made can clear on
+// a retry, and the caller that observed that exchange marks it retryable.
 func metaMemberClientCredentialError(member metaMember, err error) error {
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-		retryable := !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled)
-		return memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q cannot reach its upstream authorization server right now; retry shortly", member.slug)}, status: 0, retryable: retryable, retryAfter: 0}
+		return memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q cannot reach its upstream authorization server right now; retry shortly", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 	}
 
 	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator", member.slug)}

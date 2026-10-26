@@ -50,6 +50,12 @@ const (
 	// rate-limited together do not retry in lockstep.
 	memberRetryJitterDivisor = 5
 
+	// minMemberRetryBudget is the least listing time a retry needs left to be
+	// worth starting: a fresh dial, initialize and tools/list. A retry started
+	// with less would likely time out and replace the upstream's own failure,
+	// such as a rate limit, with a timeout.
+	minMemberRetryBudget = 500 * time.Millisecond
+
 	// maxDirectGatewayCatalogBytes bounds the encoded tool definitions of one
 	// Direct listing.
 	maxDirectGatewayCatalogBytes = 16 << 20
@@ -87,8 +93,9 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 
 // describeMetaMemberWithRetry describes a member, and describes it again after
 // a retryable failure once its Retry-After, or a jittered backoff, has passed,
-// up to maxMemberDescribeAttempts in all. A retry that could not start before
-// ctx's deadline is not attempted, so the last failure is returned instead.
+// up to maxMemberDescribeAttempts in all. A retry that would start with less
+// than minMemberRetryBudget before ctx's deadline is not attempted, so the
+// last failure is returned instead.
 // Each attempt holds one of slots and is bounded by the member call timeout;
 // a member waiting to retry holds no slot. The result is empty when ctx ended
 // before the first attempt got a slot.
@@ -111,7 +118,7 @@ func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.
 			delay = memberRetryBaseDelay << (attempt - 1)
 		}
 		delay += randomDuration(delay / memberRetryJitterDivisor)
-		if deadline, bounded := ctx.Deadline(); bounded && time.Now().Add(delay).After(deadline) {
+		if deadline, bounded := ctx.Deadline(); bounded && time.Now().Add(delay+minMemberRetryBudget).After(deadline) {
 			return result
 		}
 		logger.InfoContext(ctx, "retrying gateway member tool listing", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(failure))

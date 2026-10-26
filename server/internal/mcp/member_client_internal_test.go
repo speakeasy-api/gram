@@ -373,7 +373,8 @@ func TestMemberToolResultIgnoresUncorrelatedRequests(t *testing.T) {
 }
 
 // Failures must name the exchange that failed, not an earlier leg: a legacy
-// member answers server/discover with 404 before the SDK falls back.
+// member answers server/discover with 404 before the SDK falls back. Only a
+// failure a retry can change is retryable.
 func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 	t.Parallel()
 	member := metaMember{slug: "fixture"}
@@ -393,14 +394,22 @@ func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 	}
 	for name, tc := range map[string]struct {
 		unroutable bool
+		untrusted  bool
 		want       string
+		retryable  bool
 	}{
-		"no route":      {unroutable: true, want: `server "fixture" is not reachable right now`},
-		"dropped reply": {unroutable: false, want: `server "fixture" did not answer: upstream unreachable or timed out`},
+		"no route":              {unroutable: true, untrusted: false, want: `server "fixture" is not reachable right now`, retryable: false},
+		"dropped reply":         {unroutable: false, untrusted: false, want: `server "fixture" did not answer: upstream unreachable or timed out`, retryable: true},
+		"untrusted certificate": {unroutable: false, untrusted: true, want: `server "fixture" did not answer: upstream unreachable or timed out`, retryable: false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			upstream := httptest.NewServer(http.HandlerFunc(legacyThenDrop))
+			upstream := httptest.NewUnstartedServer(http.HandlerFunc(legacyThenDrop))
+			if tc.untrusted {
+				upstream.StartTLS()
+			} else {
+				upstream.Start()
+			}
 			t.Cleanup(upstream.Close)
 			service, build := memberClientFixture(t, upstream.URL)
 			if tc.unroutable {
@@ -412,20 +421,30 @@ func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 			require.Error(t, err)
 			got := memberClientFailure(ctx, testenv.NewLogger(t), rt, memberDial{build: build, anonymous: false}, member, err)
 			require.EqualError(t, got, tc.want)
+			failure, ok := errors.AsType[memberDiscoveryError](got)
+			require.True(t, ok, "%v", got)
+			require.Equal(t, tc.retryable, failure.retryable)
 		})
 	}
 }
 
+// An outage the attempt's own renewal hit is retryable unless the attempt's
+// time ran out or the token endpoint rate limited the client; a misconfigured
+// credential stays a member failure.
 func TestMemberClientFailurePreservesClientCredentialRenewalRemedy(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name string
-		err  error
-		want string
+		name      string
+		err       error
+		want      string
+		discovery bool
+		retryable bool
 	}{
-		{name: "outage", err: remotesessions.ErrClientCredentialUnavailable, want: "retry shortly"},
-		{name: "misconfigured", err: remotesessions.ErrClientCredentialMisconfigured, want: "contact the MCP server administrator"},
+		{name: "outage", err: remotesessions.ErrClientCredentialUnavailable, want: "retry shortly", discovery: true, retryable: true},
+		{name: "timed out outage", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, context.DeadlineExceeded), want: "retry shortly", discovery: true, retryable: false},
+		{name: "rate limited outage", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, &remotesessions.TokenEndpointError{StatusCode: http.StatusTooManyRequests}), want: "retry shortly", discovery: true, retryable: false},
+		{name: "misconfigured", err: remotesessions.ErrClientCredentialMisconfigured, want: "contact the MCP server administrator", discovery: false, retryable: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -456,6 +475,9 @@ func TestMemberClientFailurePreservesClientCredentialRenewalRemedy(t *testing.T)
 			got := memberClientFailure(ctx, testenv.NewLogger(t), rt, memberDial{build: buildWithRenewal, clientCredential: true}, metaMember{slug: "fixture"}, err)
 			require.Contains(t, got.Error(), tc.want)
 			require.NotContains(t, got.Error(), "reconnect")
+			failure, discovery := errors.AsType[memberDiscoveryError](got)
+			require.Equal(t, tc.discovery, discovery)
+			require.Equal(t, tc.retryable, failure.retryable)
 		})
 	}
 }

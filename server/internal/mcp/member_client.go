@@ -4,6 +4,7 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -362,7 +364,19 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 	// exchange before reducing a credential failure to an upstream status.
 	exchangeErr := rt.failure()
 	if errors.Is(exchangeErr, remotesessions.ErrClientCredentialUnavailable) || errors.Is(exchangeErr, remotesessions.ErrClientCredentialMisconfigured) {
-		return metaMemberClientCredentialError(member, exchangeErr)
+		failure := metaMemberClientCredentialError(member, exchangeErr)
+		// This attempt's own exchange failed to renew the credential, and the
+		// next attempt renews it again, so an outage is retryable unless the
+		// attempt's time ran out or the token endpoint rate limited the
+		// client, which the credential source remembers longer than a
+		// listing lasts.
+		if outage, ok := errors.AsType[memberDiscoveryError](failure); ok {
+			tokenEndpoint, answered := errors.AsType[*remotesessions.TokenEndpointError](exchangeErr)
+			rateLimited := answered && tokenEndpoint.StatusCode == http.StatusTooManyRequests
+			outage.retryable = ctx.Err() == nil && !rateLimited && !errors.Is(exchangeErr, context.DeadlineExceeded) && !errors.Is(exchangeErr, context.Canceled)
+			return outage
+		}
+		return failure
 	}
 	if _, rejected := rt.rejection(); rejected {
 		return memberAuthFailure(member, dial)
@@ -385,7 +399,13 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		// A tunnel with no live route is a member outage, not a meta MCP bug.
 		return upstreamFailure(fmt.Sprintf("server %q is not reachable right now", member.slug), false)
 	case exchangeErr != nil:
-		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), true)
+		// A transport failure may clear on a retry, unless it timed out, which
+		// already spent the attempt's time, or no retry can change it: egress
+		// policy refused the address, or the certificate failed verification.
+		_, untrusted := errors.AsType[*tls.CertificateVerificationError](exchangeErr)
+		retryable := !untrusted && !errors.Is(exchangeErr, guardian.ErrBlockedIP) && !errors.Is(exchangeErr, guardian.ErrBadHost) &&
+			!errors.Is(exchangeErr, context.DeadlineExceeded) && !errors.Is(exchangeErr, context.Canceled)
+		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), retryable)
 	}
 	if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok {
 		return upstreamFailure(fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message), retryableStatus)
