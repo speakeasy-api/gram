@@ -261,7 +261,8 @@ func TestCodeRunnerReplyBudgetReportsCallbackLimit(t *testing.T) {
 for _ in range(2):
     await asyncio.gather(*[tools.call("remote--read", {}) for _ in range(8)])`, factory)
 	require.NotNil(t, result.Error)
-	require.Equal(t, "callback_limit", result.Error.Code, result.Error.Message)
+	require.Equal(t, "callback_limit", result.Error.Code)
+	require.Equal(t, callbackBudgetMessage, result.Error.Message)
 	require.GreaterOrEqual(t, len(result.ToolCalls), 9)
 	for _, call := range result.ToolCalls {
 		require.Equal(t, "completed", call.Outcome, "the host returned every dispatched call")

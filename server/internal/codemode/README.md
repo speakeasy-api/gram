@@ -154,9 +154,10 @@ Callback replies are limited to 1 MiB each and 8 MiB per execution. Speakeasy
 and the runner count the same bytes, the encoded reply frames and not the
 callback arguments, and Speakeasy checks before sending each reply, so the
 runner's own check is only a backstop. A reply over either limit ends the
-execution with `callback_limit`, whichever side detects it. Calls that
-returned stay `completed`; calls still in flight are cancelled and stay
-`unknown`. The runner connection stays open for later executions.
+execution with `callback_limit`, whichever side detects it. A call that
+returned keeps the outcome its result recorded. A call still in flight is
+cancelled: it is `not_dispatched` if it had not reached the member yet, and
+`unknown` otherwise. The runner connection stays open for later executions.
 
 ## Validation and product surfaces
 

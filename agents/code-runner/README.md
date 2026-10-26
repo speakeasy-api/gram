@@ -102,7 +102,8 @@ be at least 35 seconds to cover execution, terminal-frame and connection drainin
 - 64 helper attempts and at most eight unresolved callbacks per execution.
 - 1 MiB per helper result; 8 MiB of callback result frames in total, the
   same bytes Speakeasy counts before sending each result. Arguments do not
-  count. A result over either limit ends the execution with `callback_limit`.
+  count toward this total; each argument stays capped at 1 MiB. A result
+  over either limit ends the execution with `callback_limit`.
 - 256 KiB final JSON; 16 KiB captured print output, truncated at a UTF-8 boundary.
 - Twelve executions by default (`GRAM_CODE_RUNNER_CAPACITY`), configurable
   from 1 to 16. The upgrade response reports it in `Gram-Code-Capacity`, and

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -34,9 +35,13 @@ const (
 	callbackBudgetMessage = "callback result budget exceeded; dispatched tool outcomes are recorded separately"
 )
 
-// errCallbackBudget is the cause of a run ended by its reply budget. Its text
-// is also the message of a runner that reports its overrun as execution_failed.
+// errCallbackBudget is the cause of a run ended by its reply budget.
 var errCallbackBudget = errors.New("callback result budget exceeded")
+
+// runnerBudgetFailures are the execution_failed messages of a runner that
+// counts callback arguments toward the reply budget: it trips either on a
+// reply or on the arguments of a new callback.
+var runnerBudgetFailures = []string{"callback result budget exceeded", "callback budget exceeded"}
 var errRunnerTransport = errors.New("runner transport disconnected")
 
 // errRunnerFull reports that every stream the runner admits stayed busy for
@@ -342,7 +347,7 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 			// reports its overrun as execution_failed, and can still serve from
 			// the previous image pool during a rollout. Report the same code as
 			// the client's own budget check.
-			if message.Code == "execution_failed" && message.Message == errCallbackBudget.Error() {
+			if message.Code == "execution_failed" && slices.Contains(runnerBudgetFailures, message.Message) {
 				fail("callback_limit", callbackBudgetMessage)
 				return result
 			}

@@ -85,16 +85,21 @@ func TestRunnerCallbackProtocolViolations(t *testing.T) {
 // code of its own budget check.
 func TestRunnerReplyBudgetFailureReportsCallbackLimit(t *testing.T) {
 	t.Parallel()
-	budget := func(string) []runnerMessage {
-		return []runnerMessage{{Type: "error", Code: "execution_failed", Message: "callback result budget exceeded"}}
+	for _, message := range runnerBudgetFailures {
+		t.Run(message, func(t *testing.T) {
+			t.Parallel()
+			budget := func(string) []runnerMessage {
+				return []runnerMessage{{Type: "error", Code: "execution_failed", Message: message}}
+			}
+			client, err := NewRunnerClient(startedRunner(t, true, budget, func(runnerMessage) bool { return false }), strings.Repeat("t", 32), &net.Dialer{})
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = client.Close() })
+			result := client.Run(t.Context(), uuid.New(), "1", func(context.Context) (Host, error) { return idleHost{}, nil })
+			require.NotNil(t, result.Error)
+			require.Equal(t, "callback_limit", result.Error.Code)
+			require.Equal(t, callbackBudgetMessage, result.Error.Message)
+		})
 	}
-	client, err := NewRunnerClient(startedRunner(t, true, budget, func(runnerMessage) bool { return false }), strings.Repeat("t", 32), &net.Dialer{})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = client.Close() })
-	result := client.Run(t.Context(), uuid.New(), "1", func(context.Context) (Host, error) { return idleHost{}, nil })
-	require.NotNil(t, result.Error)
-	require.Equal(t, "callback_limit", result.Error.Code)
-	require.Equal(t, "callback result budget exceeded; dispatched tool outcomes are recorded separately", result.Error.Message)
 }
 
 // TestCancellationAfterHandshakeKeepsSession cancels each connection attempt
