@@ -85,7 +85,7 @@ func TestRunnerCallbackProtocolViolations(t *testing.T) {
 // code of its own budget check.
 func TestRunnerReplyBudgetFailureReportsCallbackLimit(t *testing.T) {
 	t.Parallel()
-	for _, message := range runnerBudgetFailures {
+	for _, message := range []string{"callback result budget exceeded", "callback budget exceeded"} {
 		t.Run(message, func(t *testing.T) {
 			t.Parallel()
 			budget := func(string) []runnerMessage {
