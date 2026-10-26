@@ -67,6 +67,11 @@ func RemoveOAuthServerToolsetsPath() string {
 	return "/rpc/toolsets.removeOAuthServer"
 }
 
+// SetUserSessionIssuerToolsetsPath returns the URL path to the toolsets service setUserSessionIssuer HTTP endpoint.
+func SetUserSessionIssuerToolsetsPath() string {
+	return "/rpc/toolsets.setUserSessionIssuer"
+}
+
 // SetToolVariationsGroupToolsetsPath returns the URL path to the toolsets service setToolVariationsGroup HTTP endpoint.
 func SetToolVariationsGroupToolsetsPath() string {
 	return "/rpc/toolsets.setToolVariationsGroup"
