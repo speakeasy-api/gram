@@ -14,6 +14,13 @@ import (
 // postflight asserts the demo data landed and nothing leaked outside the demo
 // org. Any failure rolls the whole Postgres seed back.
 func (s *seeder) postflight(ctx context.Context) error {
+	count, err := s.q.PostflightCountRegistryPromotionCandidates(ctx, repo.PostflightCountRegistryPromotionCandidatesParams{OrgID: s.orgID(), ProjectID: s.projectID()})
+	if err != nil {
+		return fmt.Errorf("count synthetic catalogue promotion candidates: %w", err)
+	}
+	if count != 3 {
+		return fmt.Errorf("expected three ineligible catalogue promotion candidates, got %d", count)
+	}
 	if err := s.postflightCore(ctx); err != nil {
 		return err
 	}
@@ -394,7 +401,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway members",
 			count: byProject(s.q.PostflightCountGatewayMembers),
-			fail:  postflightMustEqual(4, "expected 4 gateway members, found %d"),
+			fail:  postflightMustEqual(6, "expected 6 gateway members, found %d"),
 		},
 		{
 			what:  "removed gateway members",
@@ -414,7 +421,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway endpoints",
 			count: byProject(s.q.PostflightCountGatewayEndpoints),
-			fail:  postflightMustEqual(1, "expected 1 gateway endpoint, found %d"),
+			fail:  postflightMustEqual(2, "expected 2 gateway endpoints, found %d"),
 		},
 		// A member whose server lost its backend can never be dispatched to,
 		// so it would sit in the gateway's table permanently unavailable.

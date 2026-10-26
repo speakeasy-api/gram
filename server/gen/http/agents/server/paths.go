@@ -47,6 +47,11 @@ func ListPolicyGrantsAgentsPath() string {
 	return "/rpc/agents.listPolicyGrants"
 }
 
+// CheckPolicyGrantsAgentsPath returns the URL path to the agents service checkPolicyGrants HTTP endpoint.
+func CheckPolicyGrantsAgentsPath() string {
+	return "/rpc/agents.checkPolicyGrants"
+}
+
 // CreatePolicyGrantAgentsPath returns the URL path to the agents service createPolicyGrant HTTP endpoint.
 func CreatePolicyGrantAgentsPath() string {
 	return "/rpc/agents.createPolicyGrant"

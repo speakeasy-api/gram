@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-The OpenClaw observability plugin now lets tool calls and agent runs through when the Speakeasy hooks relay is unavailable, and prints one warning to stderr, instead of blocking every call. Verdicts the relay returns, including policy blocks, still block.
+OpenClaw hooks honor the configured install-failure policy when the relay is unavailable, include bootstrap diagnostics in blocked calls, and restart failed relays with bounded backoff. Broken pipes and missing launch commands no longer crash the Gateway. Explicit policy denies still block under either setting.

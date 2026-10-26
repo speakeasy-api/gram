@@ -453,7 +453,9 @@ func (q *Queries) GetAPIKeyByIDForUpdate(ctx context.Context, arg GetAPIKeyByIDF
 }
 
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
-SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email,
+       EXISTS (SELECT 1 FROM assistant_inference_credentials c
+               WHERE c.api_key_id = api_keys.id AND c.project_id = api_keys.project_id) AS superseded_kit_credential
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = $1
@@ -462,24 +464,25 @@ WHERE key_hash = $1
 `
 
 type GetAPIKeyByKeyHashRow struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	ProjectID              uuid.NullUUID
-	CreatedByUserID        string
-	Name                   string
-	KeyPrefix              string
-	KeyHash                string
-	Scopes                 []string
-	SubjectUrn             pgtype.Text
-	DelegatedGrants        []byte
-	DelegatedGrantsVersion pgtype.Int4
-	ExpiresAt              pgtype.Timestamptz
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
-	LastAccessedAt         pgtype.Timestamptz
-	Email                  string
+	ID                      uuid.UUID
+	OrganizationID          string
+	ProjectID               uuid.NullUUID
+	CreatedByUserID         string
+	Name                    string
+	KeyPrefix               string
+	KeyHash                 string
+	Scopes                  []string
+	SubjectUrn              pgtype.Text
+	DelegatedGrants         []byte
+	DelegatedGrantsVersion  pgtype.Int4
+	ExpiresAt               pgtype.Timestamptz
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
+	LastAccessedAt          pgtype.Timestamptz
+	Email                   string
+	SupersededKitCredential bool
 }
 
 // expires_at is enforced here rather than in Go so every credential shape --
@@ -507,6 +510,7 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 		&i.Deleted,
 		&i.LastAccessedAt,
 		&i.Email,
+		&i.SupersededKitCredential,
 	)
 	return i, err
 }

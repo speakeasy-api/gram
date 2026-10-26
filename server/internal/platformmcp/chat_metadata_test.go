@@ -14,6 +14,7 @@ import (
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 )
 
 var chatListTestNow = time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
@@ -38,9 +39,32 @@ func (r *recordingChatReader) CountChats(_ context.Context, arg chatrepo.CountCh
 	return r.count, r.err
 }
 
-// newChatMetadataService composes the listing without Postgres: the project
-// resolver and the chat query are fakes, and the codec is real so references
-// and cursors round-trip exactly as they do in production.
+// fakeChatRiskFindings serves every requested chat a fixed live finding count
+// and qualifies none for the risk filter.
+type fakeChatRiskFindings struct {
+	count int64
+}
+
+func (f fakeChatRiskFindings) ForProject(context.Context, chatfindings.Scope) (chatRiskProject, error) {
+	return f, nil
+}
+
+func (f fakeChatRiskFindings) QualifyingChatIDs(context.Context, uint64) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (f fakeChatRiskFindings) Counts(_ context.Context, chatIDs []uuid.UUID) (map[uuid.UUID]int64, error) {
+	counts := make(map[uuid.UUID]int64, len(chatIDs))
+	for _, id := range chatIDs {
+		counts[id] = f.count
+	}
+	return counts, nil
+}
+
+// newChatMetadataService composes the listing without Postgres or ClickHouse:
+// the project resolver, the chat query and the finding counts are fakes, and
+// the codec is real so references and cursors round-trip exactly as they do
+// in production.
 func newChatMetadataService(t *testing.T, reader chatMetadataReader, budget OperationBudget) (*ChatMetadataService, ResolvedProject) {
 	t.Helper()
 
@@ -48,11 +72,12 @@ func newChatMetadataService(t *testing.T, reader chatMetadataReader, budget Oper
 	require.NoError(t, err)
 	project := ResolvedProject{ID: uuid.New(), Slug: "default", Name: "Project"}
 	return &ChatMetadataService{
-		projects:   &findingProjects{project: project, calls: nil, err: nil},
-		chats:      reader,
-		references: codec,
-		budget:     budget,
-		now:        func() time.Time { return chatListTestNow },
+		projects:     &findingProjects{project: project, calls: nil, err: nil},
+		chats:        reader,
+		references:   codec,
+		budget:       budget,
+		now:          func() time.Time { return chatListTestNow },
+		riskFindings: fakeChatRiskFindings{count: 2},
 	}, project
 }
 
@@ -70,7 +95,6 @@ func chatListRow(id uuid.UUID, createdAt time.Time, userID, externalUserID, acco
 		PinnedAt:             pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		NumMessages:          14,
 		LastMessageTimestamp: pgtype.Timestamptz{Time: createdAt.Add(10 * time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
-		RiskFindingsCount:    2,
 		AccountType:          "team",
 		AccountEmail:         accountEmail,
 		AssistantID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -427,7 +451,7 @@ func TestListChatsRefusesWithoutBudgetOrProject(t *testing.T) {
 		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: "",
 	})
 	require.ErrorIs(t, err, ErrUnavailable)
-	require.Nil(t, NewChatMetadataService(nil, allowBudget(), "key"), "no database leaves the service nil so the stub registers")
+	require.Nil(t, NewChatMetadataService(nil, nil, allowBudget(), "key"), "no database leaves the service nil so the stub registers")
 }
 
 // denyOperationLimiter models a throttled bucket.

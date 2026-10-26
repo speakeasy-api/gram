@@ -177,14 +177,14 @@ Three behaviors worth knowing:
 - **`after_tool_call` still fires for a blocked call**, with the block text as
   the result. The provider marks these as blocked rather than completed; a
   blocked call must not show up as a successful tool call.
-- **Gates fail open when the relay is unavailable.** If the hooks relay never
-  starts (for example, the hooks binary cannot install on the host), exits, or
-  misses the 10s gate deadline, `before_tool_call` and `before_agent_run` allow
-  the call. The shim prints
-  `speakeasy-observability: the Speakeasy hooks relay is unavailable, so tool calls are allowed and not checked`
-  to the gateway's stderr once per process. Verdicts the relay does return,
-  including policy blocks, still block, and the org's fail-open setting still
-  applies inside the relay.
+- **Unavailable relays follow the org's install-failure policy.** If the
+  hooks relay cannot start, exits, or misses its deadline, gates allow calls
+  only when `InstallFailOpen` is enabled; otherwise they block with the
+  bootstrap diagnostic and repair guidance. Policy denies still block under
+  either setting. A dead relay restarts automatically with backoff from one
+  second to thirty seconds. Gateway logs record the outage once until a
+  successful reply; shutdown cancels retries. Install-failure telemetry still
+  depends on the ingestion contract tracked in DNO-515.
 - **OpenClaw does not impose the 15s policy timeout** we originally briefed.
   A `before_tool_call` handler that stalls is awaited in full. Per-hook
   `timeoutMs` exists on the registration API but is opt-in in the versions we

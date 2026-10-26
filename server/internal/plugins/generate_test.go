@@ -865,8 +865,8 @@ func TestGenerateCodexMarketplaceDescriptions(t *testing.T) {
 		require.LessOrEqual(t, len([]rune(manifest.Interface.ShortDescription)), 240, name)
 		require.Equal(t, manifest.Description, manifest.Interface.LongDescription, name)
 	}
-	// Native, shared Agent Plugins overlay, and observability manifests.
-	require.GreaterOrEqual(t, count, 3)
+	// Only the native and observability packages carry Codex manifests.
+	require.Equal(t, 2, count)
 }
 
 func TestGenerateReadmeEscapesMarkdownInTableCells(t *testing.T) {
@@ -1624,7 +1624,7 @@ func TestHooksBootstrapColdAndWarmPathsPreserveInput(t *testing.T) {
 func TestHooksBootstrapFallsBackToPython3WithoutUnzip(t *testing.T) {
 	t.Parallel()
 	path := hooksBootstrapToolPath(t)
-	require.NoError(t, os.Symlink(workingPython3(t), filepath.Join(path, "python3")))
+	require.NoError(t, os.Symlink(workingTool(t, "python3", "-c", "import sys, zipfile; print(sys.executable)"), filepath.Join(path, "python3")))
 	target := currentHooksBootstrapTarget(t)
 	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n"))
 	sum := sha256.Sum256(archive)
@@ -1665,7 +1665,7 @@ func TestHooksBootstrapNamesUnpackToolsWhenNoneInstalled(t *testing.T) {
 		"PATH=" + hooksBootstrapToolPath(t),
 	}, "")
 	require.Error(t, err)
-	require.Contains(t, string(out), "unzip, busybox, python3 or bsdtar is required for first install")
+	require.Contains(t, string(out), "unzip, busybox, python3, bsdtar or node is required for first install")
 	require.NotContains(t, string(out), "ran")
 }
 
@@ -1702,25 +1702,52 @@ func TestHooksBootstrapFallsBackToBsdtarWithoutPython3(t *testing.T) {
 	require.Equal(t, "args:--first\n", string(out))
 }
 
-// workingPython3 returns the interpreter behind the first python3 on PATH that
-// can import zipfile. Version-manager shims such as mise's resolve their
-// version from the environment, which the bootstrap's restricted PATH lacks,
-// so the test links the real executable rather than the shim.
-func workingPython3(t *testing.T) string {
+// TestHooksBootstrapFallsBackToNodeWithoutBsdtar checks that a machine whose
+// only unpack tool is node, like a slim image built to run a Node app, still
+// installs the binary by reading a real deflated ZIP with node's zlib. The
+// payload on stdin checks that node leaves it for the hooks binary.
+func TestHooksBootstrapFallsBackToNodeWithoutBsdtar(t *testing.T) {
+	t.Parallel()
+	path := hooksBootstrapToolPath(t)
+	require.NoError(t, os.Symlink(workingTool(t, "node", "-p", "process.execPath"), filepath.Join(path, "node")))
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nIFS= read -r input\nprintf 'args:%s stdin:%s\\n' \"$*\" \"$input\"\n"))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	out, err := runHooksBootstrapWithEnv(t, script, []string{
+		"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(),
+		"PATH=" + path,
+	}, "payload\n", "--first")
+	require.NoError(t, err, string(out))
+	require.Equal(t, "args:--first stdin:payload\n", string(out))
+}
+
+// workingTool returns the real executable behind the first name on PATH whose
+// probe arguments make it print its own path. Version-manager shims such as
+// mise's resolve their version from the environment, which the bootstrap's
+// restricted PATH lacks, so tests link the real executable rather than the shim.
+func workingTool(t *testing.T, name string, probe ...string) string {
 	t.Helper()
 	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
-		out, err := exec.Command(filepath.Join(dir, "python3"), "-c", "import sys, zipfile; print(sys.executable)").Output()
+		out, err := exec.Command(filepath.Join(dir, name), probe...).Output()
 		if exe := strings.TrimSpace(string(out)); err == nil && exe != "" {
 			return exe
 		}
 	}
-	require.FailNow(t, "no working python3 on PATH; it is needed to test the zipfile fallback")
+	require.FailNow(t, "no working "+name+" on PATH; it is needed to test the unpack fallbacks")
 	return ""
 }
 
 // hooksBootstrapToolPath returns a PATH directory holding only the tools the
 // bootstrap needs to download and verify an archive, so a test can simulate a
-// machine without unzip or busybox.
+// machine without any unpack tool.
 func hooksBootstrapToolPath(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -2357,18 +2384,14 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 		"frame.timeoutMs = timeoutMs",
 		// gateway ctx reduced to the allowlist (raw carries auth secrets)
 		"{ port: ctx?.port, workspaceDir: ctx?.workspaceDir }",
-		// a gate with no relay verdict allows the call and warns once
+		// a missing verdict follows the generated install policy
 		"if (reply?.timedOut || reply?.error) {",
-		"warnRelayUnavailable()",
-		"speakeasy-observability: the Speakeasy hooks relay is unavailable, so tool calls are allowed and not checked",
+		"const FAIL_CLOSED = true",
+		"Calls are allowed and not checked.",
 		// verdicts the relay returns, including policy blocks, pass through
 		"return reply?.output",
 	} {
 		require.Contains(t, string(shim), want)
-	}
-	// Only the relay may block: the shim never synthesizes a block of its own.
-	for _, unwanted := range []string{"FAIL_CLOSED", "failClosed", "fail-closed", "gate_timeout", "block: true", `outcome: "block"`} {
-		require.NotContains(t, string(shim), unwanted)
 	}
 	// History-sized fields the daemon never reads are stripped pre-pipe: pin
 	// the strip logic itself, not just the call site.
@@ -2424,16 +2447,17 @@ const show = (result) => (result === undefined ? "undefined" : result)
 // runOpenClawShim writes the generated OpenClaw package with bootstrap as the
 // hooks/bootstrap.sh the shim spawns, runs harness after the prelude in Node,
 // and returns the harness's stdout and stderr.
-func runOpenClawShim(t *testing.T, bootstrap, harness string) (string, string) {
+func runOpenClawShim(t *testing.T, failOpen bool, bootstrap, harness string, env ...string) (string, string) {
 	t.Helper()
 
 	node, err := exec.LookPath("node")
 	require.NoError(t, err, "node is required to exercise the OpenClaw shim")
 
 	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
-		OrgName:     "Acme",
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
+		OrgName:         "Example Org",
+		ServerURL:       "https://example.com",
+		HooksAPIKey:     "test-hooks-key",
+		InstallFailOpen: failOpen,
 	}, "openclaw")
 	require.NoError(t, err)
 	require.NotEmpty(t, files["index.js"])
@@ -2455,6 +2479,7 @@ func runOpenClawShim(t *testing.T, bootstrap, harness string) (string, string) {
 	cmd := exec.CommandContext(ctx, node, filepath.Join(dir, "harness.mjs"))
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	cmd.Env = append(os.Environ(), env...)
 	require.NoError(t, cmd.Run(), "openclaw shim harness: %s", stderr.String())
 
 	return stdout.String(), stderr.String()
@@ -2465,7 +2490,7 @@ func runOpenClawShim(t *testing.T, bootstrap, harness string) (string, string) {
 func TestOpenClawShimAllowsGatesWhenRelayExits(t *testing.T) {
 	t.Parallel()
 
-	stdout, stderr := runOpenClawShim(t, "exit 1\n", `
+	stdout, stderr := runOpenClawShim(t, true, "exit 1\n", `
 const results = {
   before_tool_call: show(await handlers.before_tool_call({ toolName: "exec", toolCallId: "call-1", params: {} }, { sessionId: "session-1" })),
   before_agent_run: show(await handlers.before_agent_run({ runId: "run-1" }, { sessionId: "session-1" })),
@@ -2476,7 +2501,107 @@ console.log(JSON.stringify(results))
 	var results map[string]any
 	require.NoError(t, json.Unmarshal([]byte(stdout), &results), "harness stdout: %s", stdout)
 	require.Equal(t, map[string]any{"before_tool_call": "undefined", "before_agent_run": "undefined"}, results)
-	require.Equal(t, 1, strings.Count(stderr, "the Speakeasy hooks relay is unavailable, so tool calls are allowed and not checked"), "warn once per process: %s", stderr)
+	require.Equal(t, 1, strings.Count(stderr, "Calls are allowed and not checked."), "warn once per process: %s", stderr)
+}
+
+func TestOpenClawShimBlocksWithBootstrapDiagnostic(t *testing.T) {
+	t.Parallel()
+	stdout, _ := runOpenClawShim(t, false, "echo 'archive checksum mismatch' >&2\nexit 1\n", `
+const result = await handlers.before_tool_call({ toolName: "exec", toolCallId: "call-1" }, {})
+console.log(JSON.stringify(result))
+handlers.gateway_stop()
+`)
+	var result struct {
+		Block       bool   `json:"block"`
+		BlockReason string `json:"blockReason"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &result))
+	require.True(t, result.Block)
+	require.Contains(t, result.BlockReason, "archive checksum mismatch")
+	require.Contains(t, result.BlockReason, "preinstall the hooks binary")
+}
+
+func TestOpenClawShimHandlesMissingLaunchCommand(t *testing.T) {
+	t.Parallel()
+	for _, failOpen := range []bool{false, true} {
+		t.Run(fmt.Sprint(failOpen), func(t *testing.T) {
+			t.Parallel()
+			stdout, _ := runOpenClawShim(t, failOpen, "exit 1\n", `
+const result = show(await handlers.before_agent_run({ runId: "run-1" }, {}))
+console.log(JSON.stringify(result))
+handlers.gateway_stop()
+`, "PATH="+t.TempDir())
+			if failOpen {
+				require.JSONEq(t, `"undefined"`, stdout)
+				return
+			}
+			var result map[string]string
+			require.NoError(t, json.Unmarshal([]byte(stdout), &result))
+			require.Equal(t, "block", result["outcome"])
+			require.Contains(t, result["reason"], "ENOENT")
+		})
+	}
+}
+
+func TestOpenClawShimRestartsRelayAfterFailure(t *testing.T) {
+	t.Parallel()
+	bootstrap := `if [ ! -f "$0.attempted" ]; then
+  echo attempted > "$0.attempted"
+  echo 'first startup failed' >&2
+  exit 1
+fi
+re='"seq":([0-9]+)'
+while IFS= read -r frame; do
+  [[ $frame =~ $re ]] || exit 1
+  printf '{"seq":%s,"output":{"block":true,"blockReason":"policy after restart"}}\n' "${BASH_REMATCH[1]}"
+done
+`
+	stdout, _ := runOpenClawShim(t, true, bootstrap, `
+let result
+for (let attempt = 0; attempt < 50; attempt++) {
+  result = await handlers.before_tool_call({ toolName: "exec" }, {})
+  if (result?.blockReason === "policy after restart") break
+  await new Promise((resolve) => setTimeout(resolve, 100))
+}
+handlers.gateway_stop()
+console.log(JSON.stringify(show(result)))
+`)
+	require.JSONEq(t, `{"block":true,"blockReason":"policy after restart"}`, stdout)
+}
+
+func TestOpenClawShimAppliesInstallPolicyToMissingVerdicts(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		bootstrap string
+		cause     string
+		failOpen  bool
+	}{
+		{"error closed", `re='"seq":([0-9]+)'; IFS= read -r frame; [[ $frame =~ $re ]]; printf '{"seq":%s,"error":"relay unavailable"}\n' "${BASH_REMATCH[1]}"; cat >/dev/null`, "relay unavailable", false},
+		{"error open", `re='"seq":([0-9]+)'; IFS= read -r frame; [[ $frame =~ $re ]]; printf '{"seq":%s,"error":"relay unavailable"}\n' "${BASH_REMATCH[1]}"; cat >/dev/null`, "relay unavailable", true},
+		{"timeout closed", "cat >/dev/null", "hook deadline", false},
+		{"timeout open", "cat >/dev/null", "hook deadline", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			stdout, _ := runOpenClawShim(t, tc.failOpen, tc.bootstrap, `
+const result = show(await handlers.before_tool_call({ toolName: "exec" }, {}))
+handlers.gateway_stop()
+console.log(JSON.stringify(result))
+`)
+			if tc.failOpen {
+				require.JSONEq(t, `"undefined"`, stdout)
+				return
+			}
+			var result struct {
+				Block       bool   `json:"block"`
+				BlockReason string `json:"blockReason"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(stdout), &result))
+			require.True(t, result.Block)
+			require.Contains(t, result.BlockReason, tc.cause)
+		})
+	}
 }
 
 // Failing open covers only a missing verdict: a block the relay returns must
@@ -2490,7 +2615,7 @@ IFS= read -r frame
 printf '{"seq":%s,"output":{"block":true,"blockReason":"denied by policy"}}\n' "${BASH_REMATCH[1]}"
 cat >/dev/null
 `
-	stdout, stderr := runOpenClawShim(t, relay, `
+	stdout, stderr := runOpenClawShim(t, false, relay, `
 const result = show(await handlers.before_tool_call({ toolName: "exec", toolCallId: "call-1", params: {} }, { sessionId: "session-1" }))
 handlers.gateway_stop()
 console.log(JSON.stringify(result))

@@ -269,6 +269,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 			AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 			AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 			AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
+			AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 			DevMode:                          serviceEnv == "local",
 		})
 
