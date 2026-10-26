@@ -297,7 +297,8 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 	envelope := decodeRPCResponse(t, w)
 	var result struct {
 		Tools []struct {
-			Name string `json:"name"`
+			Name        string         `json:"name"`
+			Annotations map[string]any `json:"annotations"`
 		} `json:"tools"`
 	}
 	require.NoError(t, json.Unmarshal(envelope["result"], &result))
@@ -305,6 +306,11 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 	names := make([]string, 0, len(result.Tools))
 	for _, tool := range result.Tools {
 		names = append(names, tool.Name)
+		if tool.Name == "execute_tool" {
+			require.Nil(t, tool.Annotations, "execution must not be advertised as read-only")
+		} else {
+			require.Equal(t, map[string]any{"readOnlyHint": true}, tool.Annotations, tool.Name)
+		}
 	}
 	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool", "connection_status"}, names)
 
@@ -700,13 +706,8 @@ func TestWellKnown_MetaEndpoint_NoIssuer_NotFound(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
-// TestHandleConsentMCP_MetaEndpoint_NotFound pins that the consent
-// tool-picker transport does not exist for meta-MCP-backed endpoints: they
-// have no per-tool picker (member tool catalogs land with the AGE-3291
-// runtime), so the transport answers NotFound — not the BadRequest a
-// missing-consent-headers request would otherwise get, and never the
-// "neither toolset nor mcp server backend" 500.
-func TestHandleConsentMCP_MetaEndpoint_NotFound(t *testing.T) {
+// Gateway consent transports reject requests without consent credentials.
+func TestHandleConsentMCP_MetaEndpoint_RequiresConsentCredentials(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -729,7 +730,7 @@ func TestHandleConsentMCP_MetaEndpoint_NotFound(t *testing.T) {
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code, "gateways reach the consent transport, which requires its own credentials")
 }
 
 // TestServePublic_MetaEndpoint_Initialize_Negotiation pins the negotiation

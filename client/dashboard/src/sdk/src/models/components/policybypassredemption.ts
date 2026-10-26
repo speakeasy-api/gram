@@ -4,7 +4,8 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -18,7 +19,7 @@ export const PolicyBypassRedemptionKind = {
 /**
  * The kind of request the token redeemed into.
  */
-export type PolicyBypassRedemptionKind = ClosedEnum<
+export type PolicyBypassRedemptionKind = OpenEnum<
   typeof PolicyBypassRedemptionKind
 >;
 
@@ -41,9 +42,10 @@ export type PolicyBypassRedemption = {
 };
 
 /** @internal */
-export const PolicyBypassRedemptionKind$inboundSchema: z.ZodMiniEnum<
-  typeof PolicyBypassRedemptionKind
-> = z.enum(PolicyBypassRedemptionKind);
+export const PolicyBypassRedemptionKind$inboundSchema: z.ZodMiniType<
+  PolicyBypassRedemptionKind,
+  unknown
+> = openEnums.inboundSchema(PolicyBypassRedemptionKind);
 
 /** @internal */
 export const PolicyBypassRedemption$inboundSchema: z.ZodMiniType<

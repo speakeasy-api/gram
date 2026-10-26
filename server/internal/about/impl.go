@@ -33,8 +33,11 @@ import (
 // does server-side so docs/IT-admin instructions have one stable link.
 const DeviceAgentReleasesBaseURL = "https://storage.googleapis.com/speakeasy-device-agent-releases-prod"
 
-const installDeviceAgentMacOSPath = "/v1/install/device-agent-macos.pkg"
-const installDeviceAgentWindowsPath = "/v1/install/device-agent-windows.msi"
+// The stable installer links live under /rpc because the Ingress already
+// sends every /rpc path to the server; any other prefix would fall through to
+// the dashboard and return its HTML instead of a redirect.
+const installDeviceAgentMacOSPath = "/rpc/install/device-agent-macos.pkg"
+const installDeviceAgentWindowsPath = "/rpc/install/device-agent-windows.msi"
 
 // maxManifestSize bounds how much of the releases manifest response we will
 // read; releases.json is tiny, so this is generous headroom against a large

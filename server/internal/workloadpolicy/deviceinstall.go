@@ -106,7 +106,7 @@ func newDeviceInstallCode() (string, error) {
 }
 
 func (s *Service) CreateDeviceInstallCommand(ctx context.Context, payload *gen.CreateDeviceInstallCommandPayload) (*gen.WorkloadDeviceInstallCommand, error) {
-	issuer, err := s.authorizeDeviceJoinToken(ctx, payload.AgentID)
+	issuer, err := s.authorizeDeviceJoinToken(ctx, payload.AgentID, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}

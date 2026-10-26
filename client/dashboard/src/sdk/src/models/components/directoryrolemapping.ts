@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const DirectoryRoleMappingSourceKind = {
 /**
  * What the mapping matches: a directory group or an attribute value.
  */
-export type DirectoryRoleMappingSourceKind = ClosedEnum<
+export type DirectoryRoleMappingSourceKind = OpenEnum<
   typeof DirectoryRoleMappingSourceKind
 >;
 
@@ -33,7 +34,7 @@ export const SourceStatus = {
 /**
  * Whether the mapped source still exists. missing means the group was deleted from the directory, or no live directory user has the attribute value. A missing source matches nobody, so the mapping grants nothing until the source returns.
  */
-export type SourceStatus = ClosedEnum<typeof SourceStatus>;
+export type SourceStatus = OpenEnum<typeof SourceStatus>;
 
 export type DirectoryRoleMapping = {
   /**
@@ -73,13 +74,14 @@ export type DirectoryRoleMapping = {
 };
 
 /** @internal */
-export const DirectoryRoleMappingSourceKind$inboundSchema: z.ZodMiniEnum<
-  typeof DirectoryRoleMappingSourceKind
-> = z.enum(DirectoryRoleMappingSourceKind);
+export const DirectoryRoleMappingSourceKind$inboundSchema: z.ZodMiniType<
+  DirectoryRoleMappingSourceKind,
+  unknown
+> = openEnums.inboundSchema(DirectoryRoleMappingSourceKind);
 
 /** @internal */
-export const SourceStatus$inboundSchema: z.ZodMiniEnum<typeof SourceStatus> = z
-  .enum(SourceStatus);
+export const SourceStatus$inboundSchema: z.ZodMiniType<SourceStatus, unknown> =
+  openEnums.inboundSchema(SourceStatus);
 
 /** @internal */
 export const DirectoryRoleMapping$inboundSchema: z.ZodMiniType<

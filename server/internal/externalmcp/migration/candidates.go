@@ -73,9 +73,7 @@ const (
 	blockerTransport          = "uses a transport remote MCP servers do not support"
 	blockerVariations         = "uses tool variations, which the switch would drop"
 	blockerPrompts            = "has prompts, which the switch would drop"
-	blockerAssistants         = "is attached to an assistant through its toolset"
 	blockerSlackApps          = "is attached to a Slack app through its toolset"
-	blockerToolsetPlugin      = "is in a plugin through its toolset rather than its server"
 	blockerGateway            = "is a member of a gateway"
 	blockerNoServer           = "has no server row; only the legacy toolset address serves it"
 	blockerManyServers        = "has more than one server row"
@@ -85,7 +83,7 @@ const (
 	blockerSelfOwnedClient    = "its sign-in provider has a client that holds its own credentials"
 	blockerEMABindings        = "its sign-in provider has enterprise-managed authorization bindings"
 	warningExternalOAuth      = "uses an external OAuth server, which is not carried over; sign-in through it is dropped"
-	warningOAuthProxy         = "has an OAuth proxy or its stored tokens, which are dropped; sign-in through the proxy stops"
+	warningStoredUserOAuth    = "has stored user OAuth tokens, which are dropped"
 	warningOtherTools         = "serves tools or resources beyond the external MCP attachment, which are dropped"
 	blockerManyResources      = "its signed-in sessions record more than one upstream resource"
 	blockerSharedNonRemote    = "another server signs in through the same provider and is not a remote MCP server"
@@ -140,14 +138,14 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	if !row.HasOrganizationMetadata {
 		block(blockerNoOrganization)
 	}
-	// Sign-in through an external OAuth server or an OAuth proxy does not carry
-	// over. The switched server keeps its user session issuer, if any, and
+	// Sign-in through an external OAuth server and stored user OAuth tokens do
+	// not carry over. The switched server keeps its user session issuer, if any, and
 	// reaches the upstream without upstream credentials.
 	if row.ExternalOauthServerID.Valid {
 		warn(warningExternalOAuth)
 	}
-	if row.OauthProxyServerID.Valid || row.HasUserOauthTokens {
-		warn(warningOAuthProxy)
+	if row.HasUserOauthTokens {
+		warn(warningStoredUserOAuth)
 	}
 	if row.ServesOtherTools {
 		warn(warningOtherTools)
@@ -161,14 +159,8 @@ func assess(row repo.ListCandidatesRow) Candidate {
 	if row.HasPrompts {
 		block(blockerPrompts)
 	}
-	if row.HasAssistants {
-		block(blockerAssistants)
-	}
 	if row.HasSlackApps {
 		block(blockerSlackApps)
-	}
-	if row.HasToolsetPluginEntries {
-		block(blockerToolsetPlugin)
 	}
 	if row.InGateway {
 		block(blockerGateway)

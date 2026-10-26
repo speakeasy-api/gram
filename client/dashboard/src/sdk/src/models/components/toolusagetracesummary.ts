@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -25,7 +26,7 @@ export const ToolUsageTraceSummaryHookStatus = {
 /**
  * Hook execution status when the row came from hook telemetry
  */
-export type ToolUsageTraceSummaryHookStatus = ClosedEnum<
+export type ToolUsageTraceSummaryHookStatus = OpenEnum<
   typeof ToolUsageTraceSummaryHookStatus
 >;
 
@@ -40,7 +41,7 @@ export const ToolUsageTraceSummaryTargetKind = {
 /**
  * Tool usage aggregation target kind
  */
-export type ToolUsageTraceSummaryTargetKind = ClosedEnum<
+export type ToolUsageTraceSummaryTargetKind = OpenEnum<
   typeof ToolUsageTraceSummaryTargetKind
 >;
 
@@ -58,7 +59,7 @@ export const ToolUsageTraceSummaryTargetType = {
 /**
  * Tool usage target type
  */
-export type ToolUsageTraceSummaryTargetType = ClosedEnum<
+export type ToolUsageTraceSummaryTargetType = OpenEnum<
   typeof ToolUsageTraceSummaryTargetType
 >;
 
@@ -75,7 +76,7 @@ export const ToolUsageTraceSummaryUserKind = {
 /**
  * Tool usage user identity kind
  */
-export type ToolUsageTraceSummaryUserKind = ClosedEnum<
+export type ToolUsageTraceSummaryUserKind = OpenEnum<
   typeof ToolUsageTraceSummaryUserKind
 >;
 
@@ -87,6 +88,14 @@ export type ToolUsageTraceSummary = {
    * AI account classification ('team' or 'personal'); empty/absent when unclassified
    */
   accountType?: string | undefined;
+  /**
+   * Email of the authorizer when they resolve to a known user
+   */
+  authorizerLabel?: string | undefined;
+  /**
+   * Person an agent call acted on behalf of; absent for direct calls and for agents that sign in as themselves
+   */
+  authorizerUserId?: string | undefined;
   /**
    * Hook block reason when hook_status is blocked
    */
@@ -135,6 +144,10 @@ export type ToolUsageTraceSummary = {
    * Descriptor used by the dashboard to fetch child logs for a trace row
    */
   logGroup: ToolUsageTraceLogGroup;
+  /**
+   * MCP server id for hosted and tunneled targets; absent for other targets
+   */
+  mcpServerId?: string | undefined;
   /**
    * Earliest log timestamp in Unix nanoseconds as a string for JavaScript integer safety
    */
@@ -186,24 +199,28 @@ export type ToolUsageTraceSummary = {
 };
 
 /** @internal */
-export const ToolUsageTraceSummaryHookStatus$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTraceSummaryHookStatus
-> = z.enum(ToolUsageTraceSummaryHookStatus);
+export const ToolUsageTraceSummaryHookStatus$inboundSchema: z.ZodMiniType<
+  ToolUsageTraceSummaryHookStatus,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTraceSummaryHookStatus);
 
 /** @internal */
-export const ToolUsageTraceSummaryTargetKind$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTraceSummaryTargetKind
-> = z.enum(ToolUsageTraceSummaryTargetKind);
+export const ToolUsageTraceSummaryTargetKind$inboundSchema: z.ZodMiniType<
+  ToolUsageTraceSummaryTargetKind,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTraceSummaryTargetKind);
 
 /** @internal */
-export const ToolUsageTraceSummaryTargetType$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTraceSummaryTargetType
-> = z.enum(ToolUsageTraceSummaryTargetType);
+export const ToolUsageTraceSummaryTargetType$inboundSchema: z.ZodMiniType<
+  ToolUsageTraceSummaryTargetType,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTraceSummaryTargetType);
 
 /** @internal */
-export const ToolUsageTraceSummaryUserKind$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageTraceSummaryUserKind
-> = z.enum(ToolUsageTraceSummaryUserKind);
+export const ToolUsageTraceSummaryUserKind$inboundSchema: z.ZodMiniType<
+  ToolUsageTraceSummaryUserKind,
+  unknown
+> = openEnums.inboundSchema(ToolUsageTraceSummaryUserKind);
 
 /** @internal */
 export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
@@ -212,6 +229,8 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     account_type: z.optional(z.string()),
+    authorizer_label: z.optional(z.string()),
+    authorizer_user_id: z.optional(z.string()),
     block_reason: z.optional(z.string()),
     client_key: z.string(),
     client_label: z.string(),
@@ -224,6 +243,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
     id: z.string(),
     log_count: z.int(),
     log_group: ToolUsageTraceLogGroup$inboundSchema,
+    mcp_server_id: z.optional(z.string()),
     start_time_unix_nano: z.string(),
     target_id: z.string(),
     target_kind: ToolUsageTraceSummaryTargetKind$inboundSchema,
@@ -240,6 +260,8 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "account_type": "accountType",
+      "authorizer_label": "authorizerLabel",
+      "authorizer_user_id": "authorizerUserId",
       "block_reason": "blockReason",
       "client_key": "clientKey",
       "client_label": "clientLabel",
@@ -251,6 +273,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
       "http_status_code": "httpStatusCode",
       "log_count": "logCount",
       "log_group": "logGroup",
+      "mcp_server_id": "mcpServerId",
       "start_time_unix_nano": "startTimeUnixNano",
       "target_id": "targetId",
       "target_kind": "targetKind",

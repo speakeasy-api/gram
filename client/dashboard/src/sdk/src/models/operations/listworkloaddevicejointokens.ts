@@ -28,6 +28,10 @@ export type ListWorkloadDeviceJoinTokensSecurity = {
 
 export type ListWorkloadDeviceJoinTokensRequest = {
   /**
+   * Only this exact token, without returning its secret.
+   */
+  tokenId?: string | undefined;
+  /**
    * Only tokens that enroll devices under this agent.
    */
   agentId?: string | undefined;
@@ -163,6 +167,7 @@ export function listWorkloadDeviceJoinTokensSecurityToJSON(
 
 /** @internal */
 export type ListWorkloadDeviceJoinTokensRequest$Outbound = {
+  token_id?: string | undefined;
   agent_id?: string | undefined;
   cursor?: string | undefined;
   limit: number;
@@ -177,6 +182,7 @@ export const ListWorkloadDeviceJoinTokensRequest$outboundSchema: z.ZodMiniType<
   ListWorkloadDeviceJoinTokensRequest
 > = z.pipe(
   z.object({
+    tokenId: z.optional(z.string()),
     agentId: z.optional(z.string()),
     cursor: z.optional(z.string()),
     limit: z._default(z.int(), 50),
@@ -186,6 +192,7 @@ export const ListWorkloadDeviceJoinTokensRequest$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      tokenId: "token_id",
       agentId: "agent_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",

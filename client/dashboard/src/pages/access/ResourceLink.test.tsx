@@ -37,15 +37,19 @@ function makeBucket(overrides: Partial<ChallengeBucket> = {}): ChallengeBucket {
   };
 }
 
-function renderLink(bucket: ChallengeBucket) {
+function renderLink(
+  bucket: ChallengeBucket,
+  toolsetMap = emptyToolsetMap,
+  mcpServerMap = emptyMcpServerMap,
+) {
   return render(
     <MemoryRouter>
       <ResourceLink
         challenge={bucket}
         orgSlug="acme"
         projectMap={projectMap}
-        toolsetMap={emptyToolsetMap}
-        mcpServerMap={emptyMcpServerMap}
+        toolsetMap={toolsetMap}
+        mcpServerMap={mcpServerMap}
       />
     </MemoryRouter>,
   );
@@ -81,6 +85,55 @@ describe("ResourceLink", () => {
     const link = screen.getByRole("link", { name: /Default/ });
     expect(link.getAttribute("href")).toBe(
       "/acme/projects/default/environments",
+    );
+  });
+
+  it("links toolset-backed MCP grants to the toolset's page", () => {
+    renderLink(
+      makeBucket({
+        scope: "mcp:connect",
+        resourceKind: "mcp",
+        resourceId: "toolset-1",
+      }),
+      new Map([
+        ["toolset-1", { slug: "crm", name: "CRM", projectId: "proj-1" }],
+      ]),
+    );
+    const link = screen.getByRole("link", { name: /CRM/ });
+    expect(link.getAttribute("href")).toBe(
+      "/acme/projects/default/toolsets/crm",
+    );
+  });
+
+  it("links mcp_servers grants by slug", () => {
+    renderLink(
+      makeBucket({
+        scope: "mcp:connect",
+        resourceKind: "mcp",
+        resourceId: "server-1",
+      }),
+      emptyToolsetMap,
+      new Map([
+        ["server-1", { slug: "remote", name: "Remote", projectId: "proj-1" }],
+      ]),
+    );
+    const link = screen.getByRole("link", { name: /Remote/ });
+    expect(link.getAttribute("href")).toBe("/acme/projects/default/mcp/remote");
+  });
+
+  it("links slugless mcp_servers grants by row id", () => {
+    renderLink(
+      makeBucket({
+        scope: "mcp:connect",
+        resourceKind: "mcp",
+        resourceId: "server-2",
+      }),
+      emptyToolsetMap,
+      new Map([["server-2", { name: "Tunnel", projectId: "proj-1" }]]),
+    );
+    const link = screen.getByRole("link", { name: /Tunnel/ });
+    expect(link.getAttribute("href")).toBe(
+      "/acme/projects/default/mcp/server-2",
     );
   });
 

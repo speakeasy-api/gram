@@ -98,6 +98,10 @@ function keyProbeMessage(result: VerifyKmsKeyResult): string {
     case "verified":
       return result.detail ?? "Speakeasy couldn't sign with this key.";
   }
+  return (
+    result.detail ??
+    "Key verification returned an unknown result. Refresh the page before continuing."
+  );
 }
 
 /**

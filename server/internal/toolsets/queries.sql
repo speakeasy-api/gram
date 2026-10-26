@@ -117,29 +117,14 @@ WHERE slug = @slug
   AND project_id = @project_id AND deleted IS FALSE
 RETURNING id, name, slug;
 
--- name: SetToolsetCustomDomain :exec
--- Narrow setter used by test fixtures: UpdateToolset's COALESCE pattern can't
--- set custom_domain_id without also supplying every non-nullable column.
+-- name: ClearToolsetCustomDomain :one
+-- UpdateToolset COALESCEs custom_domain_id, so moving to the platform domain clears it here.
 UPDATE toolsets
 SET
-    custom_domain_id = @custom_domain_id
+    custom_domain_id = NULL
   , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id;
-
--- name: SetToolsetMCPPublicByID :exec
-UPDATE toolsets
-SET mcp_is_public = @mcp_is_public
-WHERE id = @id AND project_id = @project_id;
-
--- name: SetToolsetMCPPublicBySlug :exec
-UPDATE toolsets
-SET mcp_is_public = @mcp_is_public
-WHERE mcp_slug = @mcp_slug;
-
--- name: SetToolsetMCPEnabledByID :exec
-UPDATE toolsets
-SET mcp_enabled = @mcp_enabled
-WHERE id = @id AND project_id = @project_id;
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
 
 -- name: GetHTTPSecurityDefinitions :many
 SELECT *
@@ -340,7 +325,6 @@ RETURNING *;
 UPDATE toolsets
 SET
     external_oauth_server_id = NULL
-  , oauth_proxy_server_id = NULL
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
@@ -442,11 +426,13 @@ WHERE t.project_id = @project_id
       AND tv2.deleted IS FALSE
   );
 
--- name: DeleteAssistantToolsetsByToolset :exec
-DELETE FROM assistant_toolsets
-WHERE toolset_id = @toolset_id AND project_id = @project_id;
-
 -- name: GetToolsetByIDIncludingDeletedFixture :one
 SELECT *
 FROM toolsets
 WHERE id = @id AND project_id = @project_id;
+
+-- name: GetToolsetByMcpSlugAndProjectAndCustomDomain :one
+SELECT * FROM toolsets
+WHERE mcp_slug = @mcp_slug AND project_id = @project_id
+  AND organization_id = @organization_id
+  AND custom_domain_id IS NOT DISTINCT FROM @custom_domain_id AND deleted IS FALSE;

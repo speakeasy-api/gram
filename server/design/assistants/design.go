@@ -299,6 +299,8 @@ var UpdateAssistantForm = Type("UpdateAssistantForm", func() {
 	Attribute("mcp_servers", ArrayOf(shared.AssistantMCPServerRef), "MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.")
 	Attribute("warm_ttl_seconds", Int, "Warm runtime TTL in seconds.")
 	Attribute("max_concurrency", Int, "Maximum active warm runtimes.")
+	Attribute("runtime_version", Int, "Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.", func() { Enum(2, 3) })
+	Attribute("expected_runtime_version", Int, "The runtime version read before requesting a switch. Required with runtime_version; conflicts require a fresh read.", func() { Enum(2, 3) })
 	Attribute("status", String, "The assistant status.", func() {
 		Enum("active", "paused")
 	})

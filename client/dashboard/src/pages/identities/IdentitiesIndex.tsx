@@ -43,10 +43,14 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Bot, Plus, User } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
-import { useCatalogEntries } from "@/pages/agents/provision/workloadCatalog";
+import {
+  catalogEntryForIssuer,
+  useCatalogEntries,
+} from "@/pages/agents/credentials/workloadCatalog";
 import { useWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
 import {
   identityKindOf,
@@ -59,6 +63,14 @@ import {
   fetchDeviceCoverage,
   NO_DEVICE_BUCKET,
 } from "./identityDeviceCoverage";
+import type { DirectoryState } from "./directoryPeople";
+import {
+  DIRECTORY_STATE_DESCRIPTIONS,
+  DIRECTORY_STATE_LABELS,
+  directoryPeopleQueryKey,
+  fetchDirectoryPeople,
+  mergeDirectoryPeople,
+} from "./directoryPeople";
 import type { AgentLifecycleFilter } from "./identityRoster";
 import {
   fetchIdentityRoster,
@@ -111,6 +123,22 @@ const IDENTITY_FILTERS = defineFilters([
     pinned: true,
     description: "People and agents.",
   },
+  // Default-on, and inverted for it: the absent value is the filtered one,
+  // because a URL with no filters still has to arrive excluded. The roster
+  // is mostly these rows, and a page that opens full of opaque hashes reads
+  // as broken rather than as complete.
+  {
+    id: "anonymous",
+    label: "Anonymous",
+    kind: "select",
+    pinned: true,
+    // No clear: emptying it resolves straight back to excluding them, so a ×
+    // would look like it did nothing.
+    required: true,
+    allLabel: "Anonymous excluded",
+    description:
+      "Activity whose only identifier is an opaque client id, never matched to a person. It arrives from sessions signed in with personal credentials, and carries no name, no account and no tokens.",
+  },
   // Three separate facts, each its own filter. None implies another: a
   // directory profile can belong to someone who never signed in, and activity
   // can come from someone with no account here.
@@ -121,6 +149,13 @@ const IDENTITY_FILTERS = defineFilters([
     allLabel: "All",
     description:
       "Whether the identity has a live profile in the organization's synced directory.",
+  },
+  {
+    id: "directory_state",
+    label: "Directory status",
+    kind: "multiselect",
+    description:
+      "How the identity's directory profile relates to accounts here: a member, an account that is not a member, not signed in yet, or an email shared with another profile.",
   },
   {
     id: "membership",
@@ -268,6 +303,23 @@ const DIRECTORY_OPTIONS = [
   { value: "not_in_directory", label: "Not in directory" },
 ];
 
+const DIRECTORY_STATE_VARIANTS: Record<
+  DirectoryState,
+  "success" | "information" | "neutral" | "warning"
+> = {
+  member: "success",
+  account_not_member: "information",
+  not_signed_in: "neutral",
+  ambiguous_email: "warning",
+};
+
+/**
+ * Only the opt-in. "Excluded" is the dimension's own all-label, so it is the
+ * value a page with no filters already holds rather than a second option
+ * saying the same thing.
+ */
+const ANONYMOUS_OPTIONS = [{ value: "included", label: "Anonymous included" }];
+
 const MEMBERSHIP_OPTIONS = [
   { value: "member", label: "Member" },
   { value: "not_member", label: "Not a member" },
@@ -370,6 +422,17 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
         </Badge>
       );
     },
+  },
+  {
+    key: "directoryState",
+    header: "Directory",
+    width: "190px",
+    sortable: true,
+    sortValue: (identity) =>
+      identity.directoryState
+        ? DIRECTORY_STATE_LABELS[identity.directoryState]
+        : "",
+    render: (identity) => <DirectoryStateCell identity={identity} />,
   },
   {
     key: "role",
@@ -499,6 +562,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const isPlatformAdmin = useIsPlatformAdmin();
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
+  const canAdminOrganization = hasScope("org:admin", organization.id);
   // Match the existing agent screen's supported sessions, without changing scope.
   const agentsEnabled =
     organization.slug !== DEMO_ORG_SLUG &&
@@ -607,6 +671,19 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const deviceCoverage = canReadOrganization
     ? deviceCoverageQuery.data
     : undefined;
+  // Directory people who are not members yet: the only read that lists
+  // someone the directory knows but who has never signed in. It needs
+  // org:admin, and the roster stands without it, so a failure leaves the
+  // member and activity rows as they are rather than failing the page.
+  const directoryPeopleQuery = useQuery({
+    queryKey: directoryPeopleQueryKey(organization.id),
+    queryFn: () => fetchDirectoryPeople(client),
+    enabled: canAdminOrganization,
+    throwOnError: false,
+  });
+  const directoryPeople = canAdminOrganization
+    ? directoryPeopleQuery.data
+    : undefined;
 
   // The list is the join of the roster reads, so until they land there is no
   // roster to report on — and "0 identities" or "No identities match these
@@ -616,6 +693,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     membersQuery.isLoading ||
     rolesQuery.isLoading ||
     usageQuery.isLoading ||
+    (canReadOrganization && directoryPeopleQuery.isLoading) ||
     (agentsEnabled && agentsQuery.isLoading);
   const rosterFailed =
     membersQuery.isError ||
@@ -631,10 +709,13 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
 
   const identities = useMemo(
     () => [
-      ...buildEmployees(
-        membersQuery.data?.members ?? [],
-        rolesQuery.data?.roles ?? [],
-        usageQuery.data ?? [],
+      ...mergeDirectoryPeople(
+        buildEmployees(
+          membersQuery.data?.members ?? [],
+          rolesQuery.data?.roles ?? [],
+          usageQuery.data ?? [],
+        ),
+        directoryPeople ?? [],
       ),
       ...(agentsEnabled ? registeredAgents : []).map(registeredAgentIdentity),
     ],
@@ -642,6 +723,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       membersQuery.data,
       rolesQuery.data,
       usageQuery.data,
+      directoryPeople,
       agentsEnabled,
       registeredAgents,
     ],
@@ -687,6 +769,18 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     () => sortedValueOptions(identities.flatMap((identity) => identity.teams)),
     [identities],
   );
+  // In a fixed order rather than alphabetical: member first, then the states
+  // that need an administrator's attention. Every state is offered once the
+  // directory people read has answered: Team and the SSO tab link here with
+  // all three non-member states, and a chip for a state nobody is in should
+  // still read as a label rather than a raw value.
+  const directoryStateOptions = useMemo(() => {
+    const anyState = identities.some((identity) => identity.directoryState);
+    if (!anyState) return [];
+    return (Object.keys(DIRECTORY_STATE_LABELS) as DirectoryState[]).map(
+      (state) => ({ value: state, label: DIRECTORY_STATE_LABELS[state] }),
+    );
+  }, [identities]);
   const deviceStatusOptions = useMemo(() => {
     // A capped walk leaves every identity past the cap looking like it owns no
     // machine, which the filter would report as fact. Offer nothing rather than
@@ -737,6 +831,8 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
             if (dimension.id === "department")
               return departmentOptions.length > 0;
             if (dimension.id === "team") return teamOptions.length > 0;
+            if (dimension.id === "directory_state")
+              return directoryStateOptions.length > 0;
             if (dimension.id === "device_status") {
               return deviceStatusOptions.length > 0;
             }
@@ -755,12 +851,15 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       roleOptions.length,
       departmentOptions.length,
       teamOptions.length,
+      directoryStateOptions.length,
       deviceStatusOptions.length,
     ],
   );
 
   const accountType = (values.account_type as string | undefined) ?? "";
   const personalAccount = (values.personal_account as string | undefined) ?? "";
+  // Absent means excluded: this filter is on before anyone touches it.
+  const anonymous = (values.anonymous as string | undefined) ?? "";
   const directory = (values.directory as string | undefined) ?? "";
   const membership = (values.membership as string | undefined) ?? "";
   const seen = (values.seen as string | undefined) ?? "";
@@ -772,8 +871,10 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const roleKey = JSON.stringify(values.role ?? []);
   const departmentKey = JSON.stringify(values.department ?? []);
   const teamKey = JSON.stringify(values.team ?? []);
+  const directoryStateKey = JSON.stringify(values.directory_state ?? []);
   const rows = useMemo(() => {
     const selectedKinds = kindKey ? kindKey.split(",") : [];
+    const selectedDirectoryStates = JSON.parse(directoryStateKey) as string[];
     const selectedDeviceStatuses = JSON.parse(deviceStatusKey) as string[];
     const selectedRoles = JSON.parse(roleKey) as string[];
     const selectedDepartments = JSON.parse(departmentKey) as string[];
@@ -785,6 +886,19 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       // produced the page. Re-applying people predicates here would drop rows
       // for having no department.
       if (kind === "agent") return true;
+      // An identity with nothing but an opaque client id behind it. Shown
+      // only when asked for: it is a record of activity, not of a person,
+      // and it crowds out every row that names someone.
+      //
+      // Naming the kind is asking for them, so it beats the default. A link
+      // written to show exactly these rows must not land on an empty table.
+      if (
+        anonymous !== "included" &&
+        !selectedKinds.includes("unknown") &&
+        identityKindOf(identity) === "unknown"
+      ) {
+        return false;
+      }
       if (
         selectedKinds.length > 0 &&
         !selectedKinds.includes(identityKindOf(identity))
@@ -799,6 +913,15 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
         )
       )
         return false;
+      if (
+        selectedDirectoryStates.length > 0 &&
+        !(
+          identity.directoryState &&
+          selectedDirectoryStates.includes(identity.directoryState)
+        )
+      ) {
+        return false;
+      }
       if (
         selectedDeviceStatuses.length > 0 &&
         !selectedDeviceStatuses.includes(
@@ -851,6 +974,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     identities,
     search,
     kindKey,
+    anonymous,
     accountType,
     personalAccount,
     directory,
@@ -862,6 +986,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     roleKey,
     departmentKey,
     teamKey,
+    directoryStateKey,
   ]);
 
   const sortedRows = useMemo(
@@ -903,9 +1028,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       // A catalog platform by its own name; anything else was registered by
       // hand and carries the label its operator gave it. "Custom" is the
       // fallback for one that was left unnamed, not the name of all of them.
-      const known = catalog.entries.find(
-        (entry) => entry.issuer.value === admission.issuer,
-      );
+      const known = catalogEntryForIssuer(catalog.entries, admission.issuer);
       const label =
         known?.displayName ?? (admission.issuerName.trim() || "Custom");
       const names = byAgent.get(admission.agentId);
@@ -1114,6 +1237,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   }, [
     search,
     kindKey,
+    anonymous,
     accountType,
     personalAccount,
     directory,
@@ -1153,6 +1277,13 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                   className="size-4"
                 />
                 Set up Claude Tag
+              </Link>
+            </Button>
+            <Button asChild variant="secondary">
+              <Link
+                to={`${routes.identities.agents.new.href()}?capability=inference`}
+              >
+                Set up inference
               </Link>
             </Button>
             <Button asChild variant="primary">
@@ -1208,6 +1339,8 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                       ([value, label]) => ({ value, label }),
                     ),
                     directory: DIRECTORY_OPTIONS,
+                    directory_state: directoryStateOptions,
+                    anonymous: ANONYMOUS_OPTIONS,
                     membership: MEMBERSHIP_OPTIONS,
                     seen: SEEN_OPTIONS,
                     activity: ACTIVITY_OPTIONS,
@@ -1259,7 +1392,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                   Agents
                 </Link>{" "}
                 page to see all agent identities configured on the platform, and
-                provision new agent identities.
+                set up new ones.
               </Text>
             </div>
           )}
@@ -1407,6 +1540,31 @@ function IdentityGroup({
 }
 
 /**
+ * The identity's directory status. Without the directory people read (no
+ * org:admin, or it failed) a member's profile is still known from the member
+ * row, so it says "In directory" rather than guessing a state.
+ */
+function DirectoryStateCell({ identity }: { identity: Employee }): JSX.Element {
+  const state = identity.directoryState;
+  if (!state) {
+    return (
+      <Text muted small className="truncate">
+        {identity.inDirectory ? "In directory" : "\u2014"}
+      </Text>
+    );
+  }
+  return (
+    <SimpleTooltip tooltip={DIRECTORY_STATE_DESCRIPTIONS[state]}>
+      <span className="inline-flex">
+        <Badge variant={DIRECTORY_STATE_VARIANTS[state]}>
+          {DIRECTORY_STATE_LABELS[state]}
+        </Badge>
+      </span>
+    </SimpleTooltip>
+  );
+}
+
+/**
  * When the directory knows which account produced the most recent activity,
  * the timestamp names it — the workspace this identity was last working in.
  * Plain text otherwise.
@@ -1516,10 +1674,28 @@ function personInitials(name: string): string {
  * and quietly.
  */
 function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
-  const isAgent = identityKindOf(identity) === "agent";
+  const agentId = identity.registeredAgentId;
   // A person with no member row has only their address, which is already the
   // name; repeating it underneath would be noise.
   const secondary = identity.email === identity.name ? "" : identity.email;
+
+  if (agentId) {
+    // The shared renderer, so this roster draws the same agent face as every
+    // other surface rather than a lucide glyph inside a round person avatar.
+    //
+    // No authorizer: the Owner column already names the person behind this
+    // agent, and saying it again on every row would be noise — not because
+    // there is nobody to name.
+    return (
+      <ActingPrincipal
+        agent={{ id: agentId, name: identity.name }}
+        // The roster is authorization-filtered, so every agent listed here is
+        // one this reader may open.
+        linked
+        className="font-medium"
+      />
+    );
+  }
 
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -1528,7 +1704,7 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
           <AvatarImage src={identity.photoUrl} alt={identity.name} />
         )}
         <AvatarFallback className="text-[11px] font-medium">
-          {isAgent ? <Bot className="size-4" /> : personInitials(identity.name)}
+          {personInitials(identity.name)}
         </AvatarFallback>
       </Avatar>
       <div className="flex min-w-0 flex-col">
@@ -1537,8 +1713,8 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
               link: no cmd+click, no middle-click, no copy-link, and nothing
               for a screen reader to announce. On a page whose whole job is
               reaching people, the name itself has to be the anchor. */}
-          {/* An agent's name may be a long unbroken id, so it wraps anywhere
-              and stops at two lines rather than running past the row. */}
+          {/* A name can be a long unbroken address, so it wraps anywhere and
+              stops at two lines rather than running past the row. */}
           <Text className="line-clamp-2 min-w-0 font-medium wrap-anywhere">
             <IdentityLink
               identifier={{ urn: identityUrnForEmployee(identity) }}

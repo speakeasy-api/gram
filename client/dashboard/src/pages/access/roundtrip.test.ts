@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, it, expect } from "vitest";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
@@ -6,6 +7,7 @@ import {
   applyRemoveRule,
   diffGrants,
   grantsFromRole,
+  roleHoldsGrants,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
 
@@ -322,5 +324,108 @@ describe("applyRemoveRule", () => {
     expect(next).not.toBeNull();
     expect(next!.rules).toHaveLength(1);
     expect(next!.rules[0]!.effect).toBe("allow");
+  });
+});
+
+describe("forward-compatible role grants", () => {
+  it.each(["future:read", "__proto__", "constructor"])(
+    "preserves unknown scope %s and its selectors",
+    (scope) => {
+      const grants: Role["grants"] = [
+        {
+          scope: unrecognized(scope),
+          selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+        },
+      ];
+      expect(
+        sdkGrantsFromForm(
+          grantsFromRole(role(grants), scopeDefinitions),
+          scopeDefinitions,
+        ),
+      ).toEqual(grants);
+    },
+  );
+  it("preserves unknown resource kinds and dispositions when another grant changes", () => {
+    const grants: Role["grants"] = [
+      {
+        scope: "mcp:connect",
+        selectors: [
+          { resourceKind: unrecognized("future_resource"), resourceId: "*" },
+        ],
+      },
+      {
+        scope: "mcp:write",
+        selectors: [
+          {
+            resourceKind: "mcp",
+            resourceId: "server-1",
+            disposition: unrecognized("__proto__"),
+          },
+        ],
+      },
+    ];
+    const form = grantsFromRole(role(grants), scopeDefinitions);
+    const after = sdkGrantsFromForm(form, scopeDefinitions);
+    expect(after).toEqual(grants);
+    expect(form["mcp:write"]?.rules[0]?.annotations).toEqual([]);
+    expect(diffGrants(grants, [...after, { scope: "project:read" }])).toEqual({
+      addGrants: [{ scope: "project:read", selectors: undefined }],
+      removeGrants: [],
+    });
+  });
+});
+
+describe("roleHoldsGrants", () => {
+  it("accepts a stored wildcard for an unrestricted grant", () => {
+    const saved = role([
+      {
+        scope: "mcp:connect",
+        selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+      },
+    ]);
+    expect(
+      roleHoldsGrants(
+        saved,
+        [{ scope: "mcp:connect", selectors: undefined }],
+        scopeDefinitions,
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects a reply that still holds a removed grant", () => {
+    // The server answers without an error when a removal matches no row, so
+    // the editor must not report the save as done.
+    const saved = role([
+      {
+        scope: "mcp:connect",
+        selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+      },
+      {
+        scope: "mcp:write",
+        selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+      },
+    ]);
+    expect(
+      roleHoldsGrants(
+        saved,
+        [{ scope: "mcp:connect", selectors: undefined }],
+        scopeDefinitions,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a reply missing an added grant", () => {
+    expect(
+      roleHoldsGrants(
+        role([]),
+        [
+          {
+            scope: "mcp:connect",
+            selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
+          },
+        ],
+        scopeDefinitions,
+      ),
+    ).toBe(false);
   });
 });

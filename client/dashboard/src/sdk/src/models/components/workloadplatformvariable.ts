@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const WorkloadPlatformVariableTier = {
 /**
  * Whether it is supplied once per trusted platform or once per access rule.
  */
-export type WorkloadPlatformVariableTier = ClosedEnum<
+export type WorkloadPlatformVariableTier = OpenEnum<
   typeof WorkloadPlatformVariableTier
 >;
 
@@ -58,9 +59,10 @@ export type WorkloadPlatformVariable = {
 };
 
 /** @internal */
-export const WorkloadPlatformVariableTier$inboundSchema: z.ZodMiniEnum<
-  typeof WorkloadPlatformVariableTier
-> = z.enum(WorkloadPlatformVariableTier);
+export const WorkloadPlatformVariableTier$inboundSchema: z.ZodMiniType<
+  WorkloadPlatformVariableTier,
+  unknown
+> = openEnums.inboundSchema(WorkloadPlatformVariableTier);
 
 /** @internal */
 export const WorkloadPlatformVariable$inboundSchema: z.ZodMiniType<

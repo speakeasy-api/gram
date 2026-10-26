@@ -1,6 +1,17 @@
 -- Preflight isolation asserts, org metadata and onboarding, the scoped purge,
 -- the project, features, users, and memberships.
 
+-- name: OrgDeleteSigintDefinitionSnapshots :exec
+DELETE FROM sigint_definition_snapshots
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
+
+-- name: OrgInsertSigintDefinitionSnapshot :exec
+INSERT INTO sigint_definition_snapshots (project_id, sensor_id, definition_hash, definition)
+VALUES (@project_id::uuid, @sensor_id::uuid, @definition_hash, @definition::jsonb);
+
+-- name: OrgCountSigintDefinitionSnapshots :one
+SELECT count(*) FROM sigint_definition_snapshots WHERE project_id = @project_id::uuid;
+
 -- name: OrgForeignOrgExists :one
 -- workos_id is compared against this tenant's expected link rather than merely
 -- tested for NULL: the shared demo org never links to WorkOS (its constant is
@@ -59,6 +70,9 @@ VALUES
 
 -- name: OrgDeleteKillswitchOperations :exec
 DELETE FROM killswitch_operations WHERE organization_id = @org_id::text;
+
+-- name: OrgDeleteRegistryPromotionCandidates :exec
+DELETE FROM registry_promotion_candidates WHERE organization_id = @org_id::text;
 
 -- name: OrgDeleteKillswitchPrescriptions :exec
 DELETE FROM killswitch_prescriptions WHERE organization_id = @org_id::text;
@@ -284,6 +298,16 @@ VALUES
 INSERT INTO organization_features (organization_id, feature_name)
 SELECT @org_id::text, f
 FROM unnest(@features::text[]) AS f
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: OrgInsertGatewayDisabledFeature :exec
+-- Start with access review required, preserving an explicit opt-in on reseed.
+INSERT INTO organization_features (organization_id, feature_name)
+SELECT @org_id::text, 'organization_gateway_disabled'
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_features
+  WHERE organization_id = @org_id::text AND feature_name = 'organization_gateway_disabled'
+)
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: OrgInsertHooksFailOpenFeature :exec

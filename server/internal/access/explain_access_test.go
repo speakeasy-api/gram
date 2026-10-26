@@ -2,17 +2,20 @@ package access
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -460,12 +463,36 @@ func TestService_ExplainResourceAccess_ToolsetVisibilityFollowsItsMCPEndpoint(t 
 
 	require.Equal(t, "disabled", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility, "a switched-off MCP endpoint serves nobody")
 
-	toolsets := toolsetsrepo.New(ti.conn)
-	require.NoError(t, toolsets.SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{McpEnabled: true, ID: id, ProjectID: projectID}))
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{McpEnabled: true, ID: id, ProjectID: projectID}))
 	require.Equal(t, "private", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
 
-	require.NoError(t, toolsets.SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: id, ProjectID: projectID}))
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: id, ProjectID: projectID}))
 	require.Equal(t, "public", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
+}
+
+func TestService_ExplainResourceAccess_ToolsetVisibilityFollowsItsCanonicalServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_viewer", "viewer@test.com", "Viewer", "user_viewer", "membership_viewer")
+	toolsetID := seedMCPServer(t, ctx, ti.conn, orgID)
+	id := uuid.MustParse(toolsetID)
+	projectID, err := accessrepo.New(ti.conn).FindMCPResourceProject(ctx, accessrepo.FindMCPResourceProjectParams{OrganizationID: orgID, ResourceID: id})
+	require.NoError(t, err)
+
+	// A canonical server that disagrees with the toolset columns reads as disabled, as serving denies it.
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: id, ProjectID: projectID, Name: pgtype.Text{String: "Audience", Valid: true}, Slug: pgtype.Text{String: "audience-" + toolsetID[:8], Valid: true},
+		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{}, RemoteMcpServerID: uuid.NullUUID{}, TunneledMcpServerID: uuid.NullUUID{},
+		ToolsetID: uuid.NullUUID{UUID: id, Valid: true}, UnproxiedMcpServerID: uuid.NullUUID{}, ToolVariationsGroupID: uuid.NullUUID{},
+		Visibility: "private", NetworkAccessMode: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "disabled", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
+
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{McpEnabled: true, ID: id, ProjectID: projectID}))
+	require.Equal(t, "private", explainAccess(t, ctx, ti, toolsetID, "local_viewer").Visibility)
 }
 
 func TestService_ExplainResourceAccess_RejectsGateway(t *testing.T) {
@@ -537,4 +564,78 @@ func TestService_ExplainResourceAccess_WildcardToolRuleCoversEveryTool(t *testin
 	use := explainedLevel(t, explainAccess(t, ctx, ti, serverID, "local_hana"), audienceLevelUse)
 	require.True(t, use.Allowed)
 	require.Equal(t, explainedToolAccessAll, *use.ToolAccess)
+}
+
+func TestFindMCPResourceProjectsMatchesTheSingleLookup(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	first, second := uuid.MustParse(seedMCPServer(t, ctx, ti.conn, orgID)), uuid.MustParse(seedMCPServer(t, ctx, ti.conn, orgID))
+	q := accessrepo.New(ti.conn)
+	rows, err := q.FindMCPResourceProjects(ctx, accessrepo.FindMCPResourceProjectsParams{OrganizationID: orgID, ResourceIds: []uuid.UUID{first, second, uuid.New()}})
+	require.NoError(t, err)
+	got := map[uuid.UUID]uuid.UUID{}
+	for _, row := range rows {
+		got[row.ResourceID] = row.ProjectID
+	}
+	want := map[uuid.UUID]uuid.UUID{}
+	for _, id := range []uuid.UUID{first, second} {
+		project, err := q.FindMCPResourceProject(ctx, accessrepo.FindMCPResourceProjectParams{OrganizationID: orgID, ResourceID: id})
+		require.NoError(t, err)
+		want[id] = project
+	}
+	require.Equal(t, want, got, "unknown ids are absent")
+
+	rows, err = q.FindMCPResourceProjects(ctx, accessrepo.FindMCPResourceProjectsParams{OrganizationID: "org-other-" + uuid.NewString(), ResourceIds: []uuid.UUID{first, second}})
+	require.NoError(t, err)
+	require.Empty(t, rows, "another organization resolves nothing")
+}
+
+func TestSummarizeMCPAccessRulesReportsBlocksAndOverridesWithoutIdentity(t *testing.T) {
+	t.Parallel()
+	serverID, projectID := "server-1", "project-1"
+	allow := authz.NewGrant(authz.ScopeMCPConnect, serverID)
+	allow.PrincipalUrn = "role:organization:readers"
+	block := authz.NewGrant(authz.ScopeMCPBlockedConnect, serverID)
+	block.PrincipalUrn = "user:all"
+	direct := authz.NewGrant(authz.ScopeMCPConnect, serverID)
+	direct.PrincipalUrn = "user:private-member-id"
+	narrowBlock := authz.NewGrant(authz.ScopeMCPBlockedConnect, serverID)
+	narrowBlock.Selector[authz.SelectorKeyTool] = "delete_tasks"
+	narrowBlock.PrincipalUrn = "user:all"
+	unrelated := authz.NewGrant(authz.ScopeMCPBlockedConnect, "other-server")
+	unrelated.Selector[authz.SelectorKeyTool] = "other_tool"
+	unrelated.PrincipalUrn = "user:all"
+	for _, test := range []struct {
+		name    string
+		grants  []authz.Grant
+		effects []string
+	}{
+		{name: "narrowed block", grants: []authz.Grant{allow, narrowBlock, unrelated}, effects: []string{"allows", "limits"}},
+		{name: "blocked", grants: []authz.Grant{allow, block}, effects: []string{"blocks", "blocked"}},
+		{name: "override", grants: []authz.Grant{allow, block, direct}, effects: []string{"overrides", "blocked", "overridden"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			effective, rules, err := SummarizeMCPAccessRules(test.grants, serverID, projectID, map[string]string{allow.PrincipalUrn: "Readers"})
+			require.NoError(t, err)
+			expected, err := EvaluateEffectiveMCPAccess(test.grants, serverID, projectID)
+			require.NoError(t, err)
+			require.Equal(t, expected, effective)
+			var effects []string
+			for _, rule := range rules {
+				require.Equal(t, "use", rule.AccessLevel)
+				effects = append(effects, rule.Effect)
+				if rule.SourceKind == "role" {
+					require.Equal(t, "Readers", rule.SourceName)
+				}
+			}
+			require.ElementsMatch(t, test.effects, effects)
+			encoded, err := json.Marshal(rules)
+			require.NoError(t, err)
+			require.NotContains(t, string(encoded), direct.PrincipalUrn)
+			require.NotContains(t, string(encoded), allow.PrincipalUrn)
+		})
+	}
 }

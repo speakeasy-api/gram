@@ -144,8 +144,8 @@ func agentInstallScript(url, key string) string {
 set -eu
 
 GRAM_AGENT_URL=` + shellSingleQuote(url) + `
-GRAM_AGENT_KEY=` + shellSingleQuote(key) + `
-export GRAM_AGENT_KEY
+SPEAKEASY_AGENT_KEY=` + shellSingleQuote(key) + `
+export SPEAKEASY_AGENT_KEY
 
 configured=0
 
@@ -153,7 +153,7 @@ if command -v claude >/dev/null 2>&1; then
   # Idempotent: remove any previous entry before adding this one.
   claude mcp remove gram >/dev/null 2>&1 || true
   claude mcp add --transport http gram "$GRAM_AGENT_URL" \
-    --header "Authorization: Bearer $GRAM_AGENT_KEY"
+    --header "Authorization: Bearer $SPEAKEASY_AGENT_KEY"
   echo "Configured Claude Code."
   configured=$((configured + 1))
 fi
@@ -161,7 +161,7 @@ fi
 if command -v codex >/dev/null 2>&1; then
   codex mcp remove gram >/dev/null 2>&1 || true
   codex mcp add gram --url "$GRAM_AGENT_URL" \
-    --bearer-token-env-var GRAM_AGENT_KEY
+    --bearer-token-env-var SPEAKEASY_AGENT_KEY
   echo "Configured Codex."
   configured=$((configured + 1))
 fi
@@ -170,14 +170,14 @@ if [ "$configured" -eq 0 ]; then
   echo "No supported MCP client found on PATH."
   echo "Connect one manually with:"
   echo "  URL:    $GRAM_AGENT_URL"
-  echo "  Header: Authorization: Bearer \$GRAM_AGENT_KEY"
+  echo "  Header: Authorization: Bearer \$SPEAKEASY_AGENT_KEY"
   echo
-  echo "GRAM_AGENT_KEY is set in this shell only. Store it before closing."
+  echo "SPEAKEASY_AGENT_KEY is set in this shell only. Store it before closing."
   exit 1
 fi
 
 echo
-echo "Done. GRAM_AGENT_KEY was exported for this run only — store it if a"
+echo "Done. SPEAKEASY_AGENT_KEY was exported for this run only — store it if a"
 echo "client you use reads it from the environment."
 `
 }

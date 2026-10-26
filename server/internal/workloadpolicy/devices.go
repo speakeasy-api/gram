@@ -97,7 +97,7 @@ func (s *Service) requireDeviceJoinAgentAuthority(ctx context.Context, userID st
 }
 
 func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.CreateDeviceJoinTokenPayload) (*gen.WorkloadDeviceJoinToken, error) {
-	issuer, err := s.authorizeDeviceJoinToken(ctx, payload.AgentID)
+	issuer, err := s.authorizeDeviceJoinToken(ctx, payload.AgentID, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +108,7 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 	}
 
 	return &gen.WorkloadDeviceJoinToken{
+		ID:        issued.id.String(),
 		Token:     issued.token,
 		ExpiresAt: issued.expiresAt.UTC().Format(time.RFC3339),
 	}, nil
@@ -132,8 +133,8 @@ type issuedDeviceJoinToken struct {
 
 // authorizeDeviceJoinToken runs every check that issuing a join token for an
 // agent needs, whichever way the token is handed over.
-func (s *Service) authorizeDeviceJoinToken(ctx context.Context, rawAgentID string) (deviceJoinTokenIssuer, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+func (s *Service) authorizeDeviceJoinToken(ctx context.Context, rawAgentID string, projectSlug *string) (deviceJoinTokenIssuer, error) {
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, projectSlug)
 	if err != nil {
 		return deviceJoinTokenIssuer{}, err
 	}
@@ -232,7 +233,7 @@ func (s *Service) issueDeviceJoinToken(ctx context.Context, issuer deviceJoinTok
 }
 
 func (s *Service) ListDeviceJoinTokens(ctx context.Context, payload *gen.ListDeviceJoinTokensPayload) (*gen.WorkloadDeviceJoinTokenList, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadRead)
+	t, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -254,22 +255,35 @@ func (s *Service) ListDeviceJoinTokens(ctx context.Context, payload *gen.ListDev
 		}
 		cursor = uuid.NullUUID{UUID: parsed, Valid: true}
 	}
+	tokenID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if payload.TokenID != nil && *payload.TokenID != "" {
+		parsed, err := uuid.Parse(*payload.TokenID)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "token_id is not a valid uuid")
+		}
+		tokenID = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
 
-	// The design bounds limit to [1,200] and Goa fills in its default.
+	// Internal callers share the HTTP page-size bounds.
 	limit := payload.Limit
+	if limit < 1 || limit > 200 {
+		return nil, oops.E(oops.CodeInvalid, nil, "limit must be between 1 and 200")
+	}
 
 	rows, err := s.repo.ListWorkloadDeviceJoinTokens(ctx, repo.ListWorkloadDeviceJoinTokensParams{
 		OrganizationID: t.organizationID,
 		AgentID:        agentID,
+		TokenID:        tokenID,
 		CursorID:       cursor,
-		PageLimit:      int32(limit), //nolint:gosec // design bounds limit to [1,200]
+		PageLimit:      int32(limit + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing join tokens").LogError(ctx, s.logger)
 	}
 
 	var nextCursor *string
-	if len(rows) == limit {
+	if len(rows) > limit {
+		rows = rows[:limit]
 		nextCursor = new(rows[len(rows)-1].ID.String())
 	}
 
@@ -280,7 +294,7 @@ func (s *Service) ListDeviceJoinTokens(ctx context.Context, payload *gen.ListDev
 }
 
 func (s *Service) RevokeDeviceJoinToken(ctx context.Context, payload *gen.RevokeDeviceJoinTokenPayload) (*gen.WorkloadDeviceJoinTokenSummary, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}

@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // fakeWorkOSCreator is an identity provider a test can steer. workos.StubClient
@@ -242,6 +243,11 @@ func TestCreateOrganization_CreatesInWorkOSAndInGram(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, grants, "the %s role must be granted on a created organization", roleSlug)
 	}
+
+	personal, err := authz.LoadGrants(ctx, conn, res.ID, []urn.Principal{authz.AllUsersPrincipal()})
+	require.NoError(t, err)
+	require.Len(t, personal, 1, "a created organization must get the personal auth client default")
+	require.Equal(t, authz.PersonalAuthClientSelector(), personal[0].Selector)
 
 	enabled, err := featuresrepo.New(conn).IsFeatureEnabled(ctx, featuresrepo.IsFeatureEnabledParams{
 		OrganizationID: res.ID,

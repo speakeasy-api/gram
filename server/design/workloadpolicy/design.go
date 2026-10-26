@@ -18,7 +18,8 @@ import (
 var _ = Service("workloadIdentities", func() {
 	Description("Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.")
 	// The trust policy belongs to the organization, so a dashboard session
-	// needs no project. An API key is issued to a project and keeps naming one.
+	// needs no project. An explicit project header is validated by the service.
+	// An API key is issued to a project and keeps naming one.
 	Security(security.Session)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -147,7 +148,7 @@ var _ = Service("workloadIdentities", func() {
 	})
 
 	Method("updateIssuer", func() {
-		Description("Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.")
+		Description("Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.")
 
 		Payload(func() {
 			Extend(UpdateWorkloadIssuerForm)
@@ -352,6 +353,9 @@ var _ = Service("workloadIdentities", func() {
 		Description("List the organization's device join tokens, newest first, optionally for one agent. Revoked tokens are included. Each carries its status but never the token or its hash, which cannot be shown again. Requires workload:read.")
 
 		Payload(func() {
+			Attribute("token_id", String, "Only this exact token, without returning its secret.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("agent_id", String, "Only tokens that enroll devices under this agent.", func() {
 				Format(FormatUUID)
 			})
@@ -370,6 +374,7 @@ var _ = Service("workloadIdentities", func() {
 
 		HTTP(func() {
 			GET("/rpc/workloadIdentities.listDeviceJoinTokens")
+			Param("token_id")
 			Param("agent_id")
 			Param("cursor")
 			Param("limit")
@@ -386,7 +391,7 @@ var _ = Service("workloadIdentities", func() {
 	})
 
 	Method("revokeDeviceJoinToken", func() {
-		Description("Revoke a device join token that has not been redeemed, so it can no longer enroll a device. A token that was already redeemed or revoked returns a failed precondition; revoking stops future enrollments only and leaves a device the token already enrolled in place. Only a person can revoke one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the token's agent or agent:authorize on it, as creating one does.")
+		Description("Revoke a device join token that has not been redeemed, so it can no longer enroll a device. A token that was already redeemed or revoked returns a failed precondition; withdraw the enrolled device instead when a token was redeemed. Only a person can revoke one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the token's agent or agent:authorize on it, as creating one does.")
 
 		Payload(func() {
 			Attribute("id", String, "The join token id.", func() {
@@ -447,11 +452,14 @@ var _ = Service("workloadIdentities", func() {
 })
 
 var WorkloadDeviceJoinToken = Type("WorkloadDeviceJoinToken", func() {
+	Attribute("id", String, "The unique token id used to track or revoke this issuance without its secret.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("token", String, "The join token. Shown once; only its hash is stored.")
 	Attribute("expires_at", String, "When the token stops being redeemable.", func() {
 		Format(FormatDateTime)
 	})
-	Required("token", "expires_at")
+	Required("id", "token", "expires_at")
 })
 
 var WorkloadDeviceInstallCommand = Type("WorkloadDeviceInstallCommand", func() {
@@ -472,7 +480,7 @@ var WorkloadDeviceInstallCommand = Type("WorkloadDeviceInstallCommand", func() {
 })
 
 var WorkloadDeviceJoinTokenSummary = Type("WorkloadDeviceJoinTokenSummary", func() {
-	Description("A device join token as an administrator sees it after creation. The token and its hash are never included.")
+	Description("A device join token's management metadata. The token and its hash are never included.")
 
 	Attribute("id", String, "The join token id.", func() {
 		Format(FormatUUID)
@@ -536,10 +544,11 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	Attribute("jwks_uri", String, "Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.", func() {
 		Format(FormatURI)
 	})
+	Attribute("allow_assertion_reuse", Boolean, "Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.")
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.")
 	Attribute("description", String, "What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.")
 	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
-	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.", func() {
+	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.", func() {
 		Default(false)
 	})
 
@@ -566,6 +575,8 @@ var UpdateWorkloadIssuerForm = Type("UpdateWorkloadIssuerForm", func() {
 		Meta("struct:tag:json", "tags,omitzero")
 	})
 
+	Attribute("allow_assertion_reuse", Boolean, "Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Omit to preserve the current setting; false disables this opt-in. Tokens without replay identifiers retain existing exact-token compatibility.")
+
 	Required("id")
 })
 
@@ -587,7 +598,7 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.", func() {
+	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.", func() {
 		Default(false)
 	})
 
@@ -627,6 +638,7 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 	Attribute("issuer", String, "The issuer identifier the assertion's iss claim must carry.")
 	Attribute("jwks_uri", String, "Where the issuer publishes its signing keys.")
 	Attribute("description", String, "What the platform is and what runs on it. Empty rather than absent where none is set.")
+	Attribute("allow_assertion_reuse", Boolean, "Allow valid assertions with jti or uti identifiers to be exchanged repeatedly until expiry. Defaults to false. Tokens without replay identifiers retain existing exact-token compatibility.")
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule.")
 	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Empty rather than absent where none are set.")
 	Attribute("created_at", String, func() {
@@ -636,7 +648,7 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "description", "allow_wildcard_admission", "tags", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "description", "allow_wildcard_admission", "allow_assertion_reuse", "tags", "created_at", "updated_at")
 })
 
 var WorkloadAdmission = Type("WorkloadAdmission", func() {

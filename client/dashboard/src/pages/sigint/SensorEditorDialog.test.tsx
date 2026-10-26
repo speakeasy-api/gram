@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { SigintSensor } from "@gram/client/models/components/sigintsensor.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -126,6 +127,21 @@ describe("Sensor message context", () => {
         .getByRole("button", { name: "Save sensor" })
         .hasAttribute("disabled"),
     ).toBe(true);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+});
+
+describe("unsupported sensor configuration", () => {
+  it.each([
+    { mode: unrecognized("future_mode") },
+    { inputStrategy: unrecognized("future_context") },
+  ])("does not render an editable form for %j", (unknown) => {
+    const onSave = renderEditor({ ...sensor, ...unknown });
+    expect(
+      screen.getByText(/Refresh the page before editing this sensor/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save sensor" })).toBeNull();
+    expect(screen.queryByLabelText("Name")).toBeNull();
     expect(onSave).not.toHaveBeenCalled();
   });
 });

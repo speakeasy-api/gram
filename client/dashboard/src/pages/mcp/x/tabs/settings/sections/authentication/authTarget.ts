@@ -1,8 +1,13 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
+import {
+  linkMcpServerUserSessionIssuer,
+  linkToolsetUserSessionIssuer,
+} from "@/lib/linkUserSessionIssuer";
 import type { Toolset } from "@/lib/toolTypes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
 import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
@@ -63,6 +68,7 @@ export function useMcpServerAuthTarget(
   mcpUrl?: string,
 ): AuthTarget {
   const client = useSdkClient();
+  const followRenamedServer = useFollowRenamedServer();
 
   return useMemo(
     () => ({
@@ -77,21 +83,13 @@ export function useMcpServerAuthTarget(
       mcpUrl,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
-        const latest = await client.mcpServers.get({ id: mcpServer.id });
-        await client.mcpServers.update({
-          updateMcpServerForm: {
-            id: latest.id,
-            environmentId: latest.environmentId,
-            networkAccessMode: latest.networkAccessMode,
-            remoteMcpServerId: latest.remoteMcpServerId,
-            tunneledMcpServerId: latest.tunneledMcpServerId,
-            toolsetId: latest.toolsetId,
-            unproxiedMcpServerId: latest.unproxiedMcpServerId,
-            toolVariationsGroupId: latest.toolVariationsGroupId,
+        followRenamedServer(
+          await linkMcpServerUserSessionIssuer(
+            client,
+            mcpServer.id,
             userSessionIssuerId,
-            visibility: latest.visibility,
-          },
-        });
+          ),
+        );
       },
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([
@@ -100,12 +98,13 @@ export function useMcpServerAuthTarget(
         ]);
       },
     }),
-    [client, mcpServer, mcpUrl],
+    [client, mcpServer, mcpUrl, followRenamedServer],
   );
 }
 
 export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
   const client = useSdkClient();
+  const followRenamedServer = useFollowRenamedServer();
   const { url, customServerURL } = useMcpUrl(toolset);
   // A custom-domain URL takes the platform host until the domain resolves;
   // that address is not the one clients use, so leave it unknown until then.
@@ -125,22 +124,23 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
       attachImpactTarget: { toolsetId: toolset.id },
       mcpUrl,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
-        // Toolsets are already live, so linking only flips auth gating —
-        // mcpEnabled / mcpIsPublic stay untouched.
-        await client.toolsets.setUserSessionIssuer({
-          slug: toolset.slug,
-          setUserSessionIssuerRequestBody: { userSessionIssuerId },
-        });
+        const server = await linkToolsetUserSessionIssuer(
+          client,
+          toolset,
+          userSessionIssuerId,
+        );
+        if (server) followRenamedServer(server);
       },
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([
           invalidateAllToolset(queryClient, { refetchType: "all" }),
           invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+          invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
           invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         ]);
       },
     }),
-    [client, toolset, mcpUrl],
+    [client, toolset, mcpUrl, followRenamedServer],
   );
 }
 

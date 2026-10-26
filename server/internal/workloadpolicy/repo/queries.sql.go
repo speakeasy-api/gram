@@ -88,7 +88,7 @@ const createDeviceIssuer = `-- name: CreateDeviceIssuer :one
 INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission, key_source)
 VALUES ($1, NULL, $2, $3, $4, false, 'device_keys')
 ON CONFLICT (organization_id, name) WHERE deleted IS FALSE AND project_id IS NULL DO NOTHING
-RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateDeviceIssuerParams struct {
@@ -119,6 +119,7 @@ func (q *Queries) CreateDeviceIssuer(ctx context.Context, arg CreateDeviceIssuer
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.AllowAssertionReuse,
 		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
@@ -258,9 +259,9 @@ func (q *Queries) CreateWorkloadDeviceKey(ctx context.Context, arg CreateWorkloa
 }
 
 const createWorkloadIssuer = `-- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateWorkloadIssuerParams struct {
@@ -272,6 +273,7 @@ type CreateWorkloadIssuerParams struct {
 	Issuer                 string
 	JwksUri                string
 	AllowWildcardAdmission bool
+	AllowAssertionReuse    pgtype.Bool
 }
 
 func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIssuerParams) (WorkloadIssuer, error) {
@@ -284,6 +286,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 		arg.Issuer,
 		arg.JwksUri,
 		arg.AllowWildcardAdmission,
+		arg.AllowAssertionReuse,
 	)
 	var i WorkloadIssuer
 	err := row.Scan(
@@ -296,6 +299,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.AllowAssertionReuse,
 		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
@@ -307,7 +311,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 }
 
 const findDeviceIssuer = `-- name: FindDeviceIssuer :many
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND project_id IS NULL
@@ -338,6 +342,7 @@ func (q *Queries) FindDeviceIssuer(ctx context.Context, organizationID string) (
 			&i.Issuer,
 			&i.JwksUri,
 			&i.AllowWildcardAdmission,
+			&i.AllowAssertionReuse,
 			&i.KeySource,
 			&i.Metadata,
 			&i.CreatedAt,
@@ -356,7 +361,7 @@ func (q *Queries) FindDeviceIssuer(ctx context.Context, organizationID string) (
 }
 
 const findWorkloadIssuersByIssuer = `-- name: FindWorkloadIssuersByIssuer :many
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -399,6 +404,7 @@ func (q *Queries) FindWorkloadIssuersByIssuer(ctx context.Context, arg FindWorkl
 			&i.Issuer,
 			&i.JwksUri,
 			&i.AllowWildcardAdmission,
+			&i.AllowAssertionReuse,
 			&i.KeySource,
 			&i.Metadata,
 			&i.CreatedAt,
@@ -677,7 +683,7 @@ func (q *Queries) GetWorkloadDeviceJoinToken(ctx context.Context, arg GetWorkloa
 }
 
 const getWorkloadIssuer = `-- name: GetWorkloadIssuer :one
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -708,6 +714,7 @@ func (q *Queries) GetWorkloadIssuer(ctx context.Context, arg GetWorkloadIssuerPa
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.AllowAssertionReuse,
 		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
@@ -819,18 +826,25 @@ func (q *Queries) ListWorkloadAdmissions(ctx context.Context, arg ListWorkloadAd
 }
 
 const listWorkloadDeviceJoinTokens = `-- name: ListWorkloadDeviceJoinTokens :many
-SELECT id, agent_id, created_by_user_id, created_at, expires_at, consumed_at, consumed_by_subject, deleted_at
-FROM workload_device_join_tokens
-WHERE organization_id = $1
-  AND ($2::uuid IS NULL OR agent_id = $2::uuid)
-  AND ($3::uuid IS NULL OR id < $3::uuid)
-ORDER BY id DESC
-LIMIT $4
+SELECT token.id, token.agent_id, token.created_by_user_id, token.created_at, token.expires_at, token.consumed_at, token.consumed_by_subject, token.deleted_at
+FROM workload_device_join_tokens AS token
+WHERE token.organization_id = $1
+  AND ($2::uuid IS NULL OR token.agent_id = $2::uuid)
+  AND ($3::uuid IS NULL OR token.id = $3::uuid)
+  AND ($4::uuid IS NULL OR (token.created_at, token.id) < (
+    SELECT cursor_token.created_at, cursor_token.id
+    FROM workload_device_join_tokens AS cursor_token
+    WHERE cursor_token.organization_id = $1
+      AND cursor_token.id = $4::uuid
+  ))
+ORDER BY token.created_at DESC, token.id DESC
+LIMIT $5
 `
 
 type ListWorkloadDeviceJoinTokensParams struct {
 	OrganizationID string
 	AgentID        uuid.NullUUID
+	TokenID        uuid.NullUUID
 	CursorID       uuid.NullUUID
 	PageLimit      int32
 }
@@ -847,14 +861,15 @@ type ListWorkloadDeviceJoinTokensRow struct {
 }
 
 // An organization's join tokens, newest first, revoked ones included so an
-// administrator can see what was withdrawn. Ids are UUIDv7, so id order is
-// creation order and the cursor is the last id of the previous page. Never
+// administrator can see what was withdrawn. Creation time and id break ties;
+// the cursor id resolves both values within the same organization. Never
 // selects token_hash. Filtering by agent uses
 // workload_device_join_tokens_agent_idx.
 func (q *Queries) ListWorkloadDeviceJoinTokens(ctx context.Context, arg ListWorkloadDeviceJoinTokensParams) ([]ListWorkloadDeviceJoinTokensRow, error) {
 	rows, err := q.db.Query(ctx, listWorkloadDeviceJoinTokens,
 		arg.OrganizationID,
 		arg.AgentID,
+		arg.TokenID,
 		arg.CursorID,
 		arg.PageLimit,
 	)
@@ -887,7 +902,7 @@ func (q *Queries) ListWorkloadDeviceJoinTokens(ctx context.Context, arg ListWork
 
 const listWorkloadIssuers = `-- name: ListWorkloadIssuers :many
 
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -926,6 +941,7 @@ func (q *Queries) ListWorkloadIssuers(ctx context.Context, arg ListWorkloadIssue
 			&i.Issuer,
 			&i.JwksUri,
 			&i.AllowWildcardAdmission,
+			&i.AllowAssertionReuse,
 			&i.KeySource,
 			&i.Metadata,
 			&i.CreatedAt,
@@ -1269,7 +1285,7 @@ WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
   AND id = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteWorkloadIssuerParams struct {
@@ -1294,6 +1310,7 @@ func (q *Queries) SoftDeleteWorkloadIssuer(ctx context.Context, arg SoftDeleteWo
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.AllowAssertionReuse,
 		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
@@ -1360,22 +1377,24 @@ SET name = $1,
     description = $2,
     tags = $3,
     jwks_uri = $4,
+    allow_assertion_reuse = $5,
     updated_at = clock_timestamp()
-WHERE organization_id = $5
-  AND (project_id IS NULL OR project_id = $6)
-  AND id = $7
+WHERE organization_id = $6
+  AND (project_id IS NULL OR project_id = $7)
+  AND id = $8
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateWorkloadIssuerParams struct {
-	Name           string
-	Description    pgtype.Text
-	Tags           []string
-	JwksUri        string
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	ID             uuid.UUID
+	Name                string
+	Description         pgtype.Text
+	Tags                []string
+	JwksUri             string
+	AllowAssertionReuse pgtype.Bool
+	OrganizationID      string
+	ProjectID           uuid.NullUUID
+	ID                  uuid.UUID
 }
 
 // Writes every editable field, so the caller merges an edit into the row it
@@ -1388,6 +1407,7 @@ func (q *Queries) UpdateWorkloadIssuer(ctx context.Context, arg UpdateWorkloadIs
 		arg.Description,
 		arg.Tags,
 		arg.JwksUri,
+		arg.AllowAssertionReuse,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ID,
@@ -1403,6 +1423,7 @@ func (q *Queries) UpdateWorkloadIssuer(ctx context.Context, arg UpdateWorkloadIs
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.AllowAssertionReuse,
 		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,

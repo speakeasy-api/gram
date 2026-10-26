@@ -6,18 +6,13 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
-	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 type recordingFalsePositiveStore struct {
@@ -92,7 +87,7 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 	require.NotNil(t, handlers.UnmarkFindingsFalsePositive)
 	require.Nil(t, handlers.CreateExclusion, "a nil exclusion core leaves exclusion writes stubbed")
 
-	first, second, third := seedRiskFinding(t, ctx, conn, principal.OrganizationID, project.ID), seedRiskFinding(t, ctx, conn, principal.OrganizationID, project.ID), seedRiskFinding(t, ctx, conn, principal.OrganizationID, project.ID)
+	first, second, third := uuid.New(), uuid.New(), uuid.New()
 	clickHouseOnly, unknown := uuid.New(), uuid.New()
 	findingsStore.add(first, second, third, clickHouseOnly)
 	dismissBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionRiskResultDismiss)
@@ -105,7 +100,7 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 		"project_slug": project.Slug, "finding_ids": []any{first.String()}, "confirmed": false, "idempotency_key": "unconfirmed",
 	})
 	requireRiskMutationRefusal(t, err, "confirmation_required")
-	requireFindingDismissed(t, ctx, conn, project.ID, first, false)
+	requireFindingDismissed(t, findingsStore, first, false)
 
 	markInput := map[string]any{
 		"project_slug": project.Slug, "finding_ids": []any{first.String(), unknown.String(), clickHouseOnly.String(), second.String(), first.String()},
@@ -119,9 +114,9 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 	require.Empty(t, marked.AlreadyInRequestedStateFindingIDs)
 	require.Equal(t, []string{unknown.String()}, marked.NotFoundFindingIDs)
 	require.Equal(t, riskFindingResultCategoryDismissed, marked.ResultCategory)
-	requireFindingDismissed(t, ctx, conn, project.ID, first, true)
-	requireFindingDismissed(t, ctx, conn, project.ID, second, true)
-	requireFindingDismissed(t, ctx, conn, project.ID, third, false)
+	requireFindingDismissed(t, findingsStore, first, true)
+	requireFindingDismissed(t, findingsStore, second, true)
+	requireFindingDismissed(t, findingsStore, third, false)
 	require.ElementsMatch(t, []uuid.UUID{first, clickHouseOnly, second}, findingsStore.suppressed)
 
 	dismissAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionRiskResultDismiss)
@@ -164,9 +159,9 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 	require.Equal(t, []string{first.String(), clickHouseOnly.String(), second.String()}, restored.ChangedFindingIDs)
 	require.Equal(t, []string{unknown.String()}, restored.NotFoundFindingIDs)
 	require.Equal(t, riskFindingResultCategoryRestored, restored.ResultCategory)
-	requireFindingDismissed(t, ctx, conn, project.ID, first, false)
-	requireFindingDismissed(t, ctx, conn, project.ID, second, false)
-	requireFindingDismissed(t, ctx, conn, project.ID, third, true)
+	requireFindingDismissed(t, findingsStore, first, false)
+	requireFindingDismissed(t, findingsStore, second, false)
+	requireFindingDismissed(t, findingsStore, third, true)
 
 	restoreAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionRiskResultRestore)
 	require.NoError(t, err)
@@ -198,45 +193,11 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 	requireRiskMutationRefusal(t, err, "not_found")
 }
 
-// seedRiskFinding inserts one active gitleaks finding anchored to a fresh chat
-// message and returns its risk_results id, the identifier the tools accept.
-func seedRiskFinding(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID) uuid.UUID {
+func requireFindingDismissed(t *testing.T, store *recordingFalsePositiveStore, findingID uuid.UUID, dismissed bool) {
 	t.Helper()
-
-	policyID := uuid.New()
-	_, err := riskrepo.New(conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID: policyID, ProjectID: projectID, OrganizationID: organizationID, Name: "Finding fixture " + policyID.String()[:8], Sources: []string{"gitleaks"},
-		AnalyzerConfig: []byte(`{}`), DisabledRules: nil, Enabled: true, Action: "flag", AudienceType: "everyone",
-		ShadowMcpDisposition: pgtype.Text{}, UserMessage: pgtype.Text{},
-	})
-	require.NoError(t, err)
-
-	chatID, err := chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
-		ID: uuid.New(), ProjectID: projectID, OrganizationID: organizationID, ExternalUserID: pgtype.Text{},
-	})
-	require.NoError(t, err)
-	messageID, err := testrepo.New(conn).InsertChatMessage(ctx, testrepo.InsertChatMessageParams{
-		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, Role: "user", Content: "fixture message carrying an example token",
-	})
-	require.NoError(t, err)
-
-	findingID := uuid.New()
-	match := "EXAMPLE_TOKEN_VALUE"
-	_, err = riskrepo.New(conn).InsertRiskResults(ctx, []riskrepo.InsertRiskResultsParams{{
-		ID: findingID, ProjectID: projectID, OrganizationID: organizationID, RiskPolicyID: policyID, RiskPolicyVersion: 1,
-		ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true}, Source: "gitleaks", Found: true,
-		RuleID: pgtype.Text{String: "generic-api-key", Valid: true}, Description: pgtype.Text{String: "Generic API key", Valid: true},
-		Match: pgtype.Text{String: match, Valid: true}, StartPos: pgtype.Int4{Int32: 0, Valid: true}, EndPos: pgtype.Int4{Int32: int32(len(match)), Valid: true},
-		Confidence: pgtype.Float8{Float64: 1, Valid: true},
-	}})
-	require.NoError(t, err)
-	return findingID
-}
-
-func requireFindingDismissed(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, findingID uuid.UUID, dismissed bool) {
-	t.Helper()
-	rows, err := riskrepo.New(conn).GetRiskResultsByIDs(ctx, riskrepo.GetRiskResultsByIDsParams{ProjectID: projectID, Ids: []uuid.UUID{findingID}})
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.Equal(t, dismissed, rows[0].FalsePositiveAt.Valid)
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	state, ok := store.states[findingID]
+	require.True(t, ok)
+	require.Equal(t, dismissed, state.Dismissed)
 }

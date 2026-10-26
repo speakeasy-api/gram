@@ -8,9 +8,10 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { useState } from "react";
 import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { DeleteClientDialog, RotateClientDialog } from "../../clientDialogs";
+import { DuplicateClientFlow } from "../../DuplicateClient";
 
-// ClientLifecycleSections holds the Registration and Danger Zone sections below
-// the client card.
+// ClientLifecycleSections holds the Registration, Duplicate, and Danger Zone
+// sections below the client card.
 export function ClientLifecycleSections({
   client,
   issuer,
@@ -23,6 +24,7 @@ export function ClientLifecycleSections({
   const routes = useRoutes();
   const [showDelete, setShowDelete] = useState(false);
   const [showRotate, setShowRotate] = useState(false);
+  const [showDuplicate, setShowDuplicate] = useState(false);
   // A rotation re-registers the client at the issuer's published registration
   // endpoint, so the issuer decides whether one is possible at all.
   const issuerRegistrationEndpoint = issuer?.registrationEndpoint ?? null;
@@ -53,6 +55,29 @@ export function ClientLifecycleSections({
         </Card.Content>
       </Card>
 
+      <RequireScope scope="org:admin" level="component">
+        <Card>
+          <Card.Header>Duplicate</Card.Header>
+          <Card.Content>
+            <div className="flex flex-col gap-3">
+              <Text small muted>
+                Create a new client with this client&apos;s settings, to change
+                some of them without affecting the MCP servers that use this
+                one.
+              </Text>
+              <div>
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowDuplicate(true)}
+                >
+                  <Button.Text>Duplicate client</Button.Text>
+                </Button>
+              </div>
+            </div>
+          </Card.Content>
+        </Card>
+      </RequireScope>
+
       <Card className="border-destructive/30">
         <Card.Header className="text-destructive">Danger zone</Card.Header>
         <Card.Content>
@@ -79,6 +104,15 @@ export function ClientLifecycleSections({
           clientId={client.id}
           clientLabel={remoteSessionClientDisplayName(client)}
           onClose={() => setShowRotate(false)}
+        />
+      )}
+
+      {showDuplicate && (
+        <DuplicateClientFlow
+          client={client}
+          issuer={issuer}
+          issuerId={issuerId}
+          onClose={() => setShowDuplicate(false)}
         />
       )}
 

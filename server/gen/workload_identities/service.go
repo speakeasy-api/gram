@@ -43,10 +43,11 @@ type Service interface {
 	// Returns the whole policy, so a caller replaces its view rather than merging
 	// into it.
 	RegisterIssuer(context.Context, *RegisterIssuerPayload) (res *WorkloadIdentityPolicy, err error)
-	// Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields
-	// are left unchanged. The issuer URL and the wildcard admission setting are
-	// fixed at registration. Requires workload:write. Returns the whole policy, so
-	// a caller replaces its view rather than merging into it.
+	// Edit a trusted issuer's name, description, tags, JWKS URI, or assertion
+	// reuse setting. Omitted fields are left unchanged. The issuer URL and the
+	// wildcard admission setting are fixed at registration. Requires
+	// workload:write. Returns the whole policy, so a caller replaces its view
+	// rather than merging into it.
 	UpdateIssuer(context.Context, *UpdateIssuerPayload) (res *WorkloadIdentityPolicy, err error)
 	// Stop trusting an issuer. Every subject admitted under it is withdrawn in the
 	// same transaction, so no admission can outlive the issuer it names. Requires
@@ -90,11 +91,11 @@ type Service interface {
 	ListDeviceJoinTokens(context.Context, *ListDeviceJoinTokensPayload) (res *WorkloadDeviceJoinTokenList, err error)
 	// Revoke a device join token that has not been redeemed, so it can no longer
 	// enroll a device. A token that was already redeemed or revoked returns a
-	// failed precondition; revoking stops future enrollments only and leaves a
-	// device the token already enrolled in place. Only a person can revoke one: a
-	// key backed by a principal rather than a user is refused with 403 whatever
-	// its grants. Requires workload:write, and either owning the token's agent or
-	// agent:authorize on it, as creating one does.
+	// failed precondition; withdraw the enrolled device instead when a token was
+	// redeemed. Only a person can revoke one: a key backed by a principal rather
+	// than a user is refused with 403 whatever its grants. Requires
+	// workload:write, and either owning the token's agent or agent:authorize on
+	// it, as creating one does.
 	RevokeDeviceJoinToken(context.Context, *RevokeDeviceJoinTokenPayload) (res *WorkloadDeviceJoinTokenSummary, err error)
 	// Enroll a device with its public key, redeeming a join token. No session or
 	// API key: the single-use join token is the credential, and an unknown,
@@ -156,8 +157,9 @@ type AdmitSubjectPayload struct {
 	// The agent whose policy the admitted workload inherits.
 	AgentID string
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped bool
 }
 
@@ -200,6 +202,8 @@ type GetCustomFlowsPayload struct {
 // ListDeviceJoinTokensPayload is the payload type of the workloadIdentities
 // service listDeviceJoinTokens method.
 type ListDeviceJoinTokensPayload struct {
+	// Only this exact token, without returning its secret.
+	TokenID *string
 	// Only tokens that enroll devices under this agent.
 	AgentID *string
 	// Pagination cursor from a previous page.
@@ -263,6 +267,10 @@ type RegisterIssuerPayload struct {
 	// Where the issuer publishes the keys its assertions are signed with. Must be
 	// an https URL on a fully qualified domain name.
 	JwksURI string
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse *bool
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Checked when a wildcard rule is admitted and again on
 	// every lookup, so clearing it makes wildcard rules already written inert
@@ -276,8 +284,9 @@ type RegisterIssuerPayload struct {
 	// tags of at most 64 characters each.
 	Tags []string
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped bool
 }
 
@@ -311,6 +320,11 @@ type UpdateIssuerPayload struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Omit to preserve the current setting; false
+	// disables this opt-in. Tokens without replay identifiers retain existing
+	// exact-token compatibility.
+	AllowAssertionReuse *bool
 }
 
 // UpdateSubjectPayload is the payload type of the workloadIdentities service
@@ -386,6 +400,8 @@ type WorkloadDeviceInstallCommand struct {
 // WorkloadDeviceJoinToken is the result type of the workloadIdentities service
 // createDeviceJoinToken method.
 type WorkloadDeviceJoinToken struct {
+	// The unique token id used to track or revoke this issuance without its secret.
+	ID string
 	// The join token. Shown once; only its hash is stored.
 	Token string
 	// When the token stops being redeemable.

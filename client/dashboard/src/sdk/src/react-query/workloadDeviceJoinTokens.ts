@@ -221,6 +221,7 @@ export function setWorkloadDeviceJoinTokensData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      tokenId?: string | undefined;
       agentId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
@@ -240,6 +241,7 @@ export function invalidateWorkloadDeviceJoinTokens(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      tokenId?: string | undefined;
       agentId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
