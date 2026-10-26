@@ -61,12 +61,15 @@ func (s *Service) SetGatewayDiscoveryMode(ctx context.Context, payload *gen.SetG
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read organization").LogError(ctx, logger)
 	}
-	preflight := orggateway.DiscoveryMode(current)
-	if mode == preflight {
+	// An unset default is stored when chosen explicitly, even as Progressive,
+	// so a later default for unset organizations does not override it.
+	if current.GatewayDiscoveryMode.Valid && current.GatewayDiscoveryMode.String == string(mode) {
 		return s.gatewayView(ctx, current)
 	}
-	// Evaluate the Code Mode gate before taking the organization lock.
-	if mode == metamcp.DiscoveryModeCode && !s.codeModeSelection.Allows(ctx, ac.ActiveOrganizationID) {
+	preflight := orggateway.DiscoveryMode(current)
+	// Evaluate the Code Mode gate before taking the organization lock. Saving
+	// the Code Mode default a gateway already has is not a new selection.
+	if mode == metamcp.DiscoveryModeCode && preflight != metamcp.DiscoveryModeCode && !s.codeModeSelection.Allows(ctx, ac.ActiveOrganizationID) {
 		return nil, oops.E(oops.CodeForbidden, nil, "organization gateway code mode is not available").LogWarn(ctx, logger)
 	}
 
@@ -82,7 +85,7 @@ func (s *Service) SetGatewayDiscoveryMode(ctx context.Context, payload *gen.SetG
 		return nil, oops.E(oops.CodeUnexpected, err, "lock organization").LogError(ctx, logger)
 	}
 	// Reject a changed baseline instead of using a gate evaluated for another mode.
-	if orggateway.DiscoveryMode(existing) != preflight {
+	if existing.GatewayDiscoveryMode != current.GatewayDiscoveryMode {
 		return nil, oops.E(oops.CodeConflict, nil, "organization gateway discovery mode changed concurrently; retry the update").LogWarn(ctx, logger)
 	}
 

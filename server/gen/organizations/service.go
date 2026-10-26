@@ -282,8 +282,9 @@ type OrganizationGateway struct {
 	URL *string
 	// Why the gateway is not served. Set only when not available.
 	UnavailableReason *string
-	// The discovery mode the gateway serves connections that do not choose one at
-	// sign-in. Set whether or not the gateway is available.
+	// The gateway's stored default discovery mode for connections that do not
+	// choose one at sign-in. Set whether or not the gateway is available. While
+	// code_mode_enabled is false, a code_mode default is served as progressive.
 	DiscoveryMode string
 	// Whether the organization can select Code Mode now: the code runtime is
 	// available and the organization has Code Mode. While false, a code_mode

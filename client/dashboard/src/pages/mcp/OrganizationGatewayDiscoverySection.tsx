@@ -47,7 +47,9 @@ export function OrganizationGatewayDiscoverySection({
       codeModeFallbackReason={
         notEnabled
           ? "Code Mode is not enabled for your organization; contact Speakeasy to turn it on."
-          : "The code runtime is unavailable."
+          : codeModeEntitled === undefined
+            ? "Code Mode is unavailable for your organization."
+            : "The code runtime is unavailable."
       }
       isPending={update.isPending}
       error={update.isError ? update.error : null}

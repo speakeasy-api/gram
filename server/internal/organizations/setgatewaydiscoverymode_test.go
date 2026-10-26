@@ -81,7 +81,7 @@ func TestService_SetGatewayDiscoveryMode_StoresAndAuditsMode(t *testing.T) {
 	require.Equal(t, "direct", afterSnapshot["discovery_mode"])
 }
 
-func TestService_SetGatewayDiscoveryMode_UnchangedModeWritesNothing(t *testing.T) {
+func TestService_SetGatewayDiscoveryMode_StoresExplicitProgressive(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
@@ -96,10 +96,28 @@ func TestService_SetGatewayDiscoveryMode_UnchangedModeWritesNothing(t *testing.T
 
 	org, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.False(t, org.GatewayDiscoveryMode.Valid)
+	require.Equal(t, "progressive", org.GatewayDiscoveryMode.String, "an explicit choice is stored even when it matches the unset default")
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationGatewayDiscoveryModeUpdated)
 	require.NoError(t, err)
-	require.Equal(t, before, after)
+	require.Equal(t, before+1, after)
+}
+
+func TestService_SetGatewayDiscoveryMode_UnchangedModeWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	_, err := ti.service.SetGatewayDiscoveryMode(ctx, &gen.SetGatewayDiscoveryModePayload{DiscoveryMode: "direct"})
+	require.NoError(t, err)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationGatewayDiscoveryModeUpdated)
+	require.NoError(t, err)
+
+	res, err := ti.service.SetGatewayDiscoveryMode(ctx, &gen.SetGatewayDiscoveryModePayload{DiscoveryMode: "direct"})
+	require.NoError(t, err)
+	require.Equal(t, "direct", res.DiscoveryMode)
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationGatewayDiscoveryModeUpdated)
+	require.NoError(t, err)
+	require.Equal(t, before, after, "re-saving the stored mode records nothing")
 }
 
 func TestService_SetGatewayDiscoveryMode_ReportedWhileGatewayIsOff(t *testing.T) {

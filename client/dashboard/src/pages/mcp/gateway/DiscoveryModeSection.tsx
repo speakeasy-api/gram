@@ -66,6 +66,13 @@ export function DiscoveryModeSection({
   onSave: (mode: DiscoveryMode) => void;
 }): JSX.Element {
   const [mode, setMode] = useState(savedMode);
+  // A refreshed default replaces the draft, so Save never writes back a
+  // default someone else has since changed.
+  const [draftBase, setDraftBase] = useState(savedMode);
+  if (savedMode !== draftBase) {
+    setDraftBase(savedMode);
+    setMode(savedMode);
+  }
   const supportsEditing = isDiscoveryMode(savedMode);
   const knownDraft = isDiscoveryMode(mode);
   return (

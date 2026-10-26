@@ -11,7 +11,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * The discovery mode the gateway serves connections that do not choose one at sign-in. Set whether or not the gateway is available.
+ * The gateway's stored default discovery mode for connections that do not choose one at sign-in. Set whether or not the gateway is available. While code_mode_enabled is false, a code_mode default is served as progressive.
  */
 export const OrganizationGatewayDiscoveryMode = {
   Progressive: "progressive",
@@ -19,7 +19,7 @@ export const OrganizationGatewayDiscoveryMode = {
   CodeMode: "code_mode",
 } as const;
 /**
- * The discovery mode the gateway serves connections that do not choose one at sign-in. Set whether or not the gateway is available.
+ * The gateway's stored default discovery mode for connections that do not choose one at sign-in. Set whether or not the gateway is available. While code_mode_enabled is false, a code_mode default is served as progressive.
  */
 export type OrganizationGatewayDiscoveryMode = OpenEnum<
   typeof OrganizationGatewayDiscoveryMode
@@ -55,7 +55,7 @@ export type OrganizationGateway = {
    */
   codeModeEnabled: boolean;
   /**
-   * The discovery mode the gateway serves connections that do not choose one at sign-in. Set whether or not the gateway is available.
+   * The gateway's stored default discovery mode for connections that do not choose one at sign-in. Set whether or not the gateway is available. While code_mode_enabled is false, a code_mode default is served as progressive.
    */
   discoveryMode: OrganizationGatewayDiscoveryMode;
   /**

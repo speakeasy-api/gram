@@ -176,7 +176,11 @@ function OrganizationGatewayContent({
                   View assignments
                 </PageTabsTrigger>
               </RequireScope>
-              <RequireScope scope="org:admin" level="component">
+              <RequireScope
+                scope="org:admin"
+                resourceId={organizationId}
+                level="component"
+              >
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </RequireScope>
             </PageTabsList>
@@ -212,7 +216,11 @@ function OrganizationGatewayContent({
             </RequireScope>
           </TabsContent>
           <TabsContent value="settings" className="mt-6">
-            <RequireScope scope="org:admin" level="section">
+            <RequireScope
+              scope="org:admin"
+              resourceId={organizationId}
+              level="section"
+            >
               {gateway.data ? (
                 <OrganizationGatewayDiscoverySection
                   gateway={gateway.data}

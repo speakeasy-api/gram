@@ -138,3 +138,51 @@ it("explains that a saved Code Mode default serves Progressive while Code Mode i
     screen.getByText(/connections currently use Progressive discovery/i),
   ).toBeTruthy();
 });
+
+it("follows a refreshed default instead of keeping a stale draft", async () => {
+  const view = show();
+  fireEvent.click(screen.getByRole("combobox"));
+  fireEvent.click(await screen.findByRole("option", { name: "Direct" }));
+  view.rerender(
+    <TooltipProvider>
+      <OrganizationGatewayDiscoverySection
+        gateway={{ ...gateway, discoveryMode: "direct" }}
+        codeModeEntitled={true}
+        canManage={true}
+        isCurrentOrganization={() => true}
+      />
+    </TooltipProvider>,
+  );
+  view.rerender(
+    <TooltipProvider>
+      <OrganizationGatewayDiscoverySection
+        gateway={{ ...gateway, discoveryMode: "progressive" }}
+        codeModeEntitled={true}
+        canManage={true}
+        isCurrentOrganization={() => true}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.getByRole("combobox").textContent).toContain("Progressive");
+  expect(
+    (screen.getByRole("button", { name: /save/i }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});
+
+it("does not blame the runtime while the Code Mode entitlement is unknown", () => {
+  render(
+    <TooltipProvider>
+      <OrganizationGatewayDiscoverySection
+        gateway={{ ...gateway, discoveryMode: "code_mode" }}
+        codeModeEntitled={undefined}
+        canManage={true}
+        isCurrentOrganization={() => true}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.queryByText(/code runtime is unavailable/i)).toBeNull();
+  expect(
+    screen.getByText(/Code Mode is unavailable for your organization/i),
+  ).toBeTruthy();
+});
