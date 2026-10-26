@@ -897,6 +897,7 @@ export function LogsTools(): JSX.Element {
             selectedStatuses={selectedStatuses}
             selectedRoleIds={selectedRoleIds}
             selectedClientKeys={selectedClientKeys}
+            selectedAgentIds={selectedAgentIds}
             expandedTraceId={expandedTraceId}
             openingTraceId={openingTraceId}
             toggleExpand={toggleExpand}
@@ -1095,6 +1096,7 @@ function LogsToolsContent({
   selectedStatuses,
   selectedRoleIds,
   selectedClientKeys,
+  selectedAgentIds,
   expandedTraceId,
   openingTraceId,
   toggleExpand,
@@ -1146,6 +1148,7 @@ function LogsToolsContent({
   selectedStatuses: ObserveStatusFilterValue[];
   selectedRoleIds: string[];
   selectedClientKeys: string[];
+  selectedAgentIds: string[];
   expandedTraceId: string | null;
   openingTraceId: string | null;
   toggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
@@ -1486,6 +1489,7 @@ function LogsToolsContent({
                         selectedStatuses.length > 0 ||
                         selectedRoleIds.length > 0 ||
                         selectedClientKeys.length > 0 ||
+                        selectedAgentIds.length > 0 ||
                         attributeFilters.length > 0 ||
                         accountType !== "" ||
                         Boolean(attributeSearchQuery)
