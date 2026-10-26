@@ -24,6 +24,7 @@ func TestCodexPackageBoundaries(t *testing.T) {
 
 	for name, files := range map[string]map[string][]byte{"organization": org, "public": public} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			var marketplace codexMarketplaceManifest
 			require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &marketplace))
 			root := "tools-codex/"
