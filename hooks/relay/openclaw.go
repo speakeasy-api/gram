@@ -17,8 +17,8 @@ const openclawLLMInputHook = "llm_input"
 // having reported their user prompt. The serve daemon lives as long as the
 // Gateway, so the record must not grow with every run. 1024 is far more runs
 // than one Gateway has in flight at once. A run evicted while it is still
-// running can report its prompt a second time at most, and the server keeps
-// one user message per OpenClaw run id.
+// running can report its prompt again; the server keeps one user message per
+// OpenClaw run id.
 const openclawPromptRunsCap = 1024
 
 // openclawPromptRuns records the OpenClaw runs whose user prompt the relay
@@ -118,6 +118,9 @@ func (r *Relay) onModelRequest(ctx context.Context, e *agenthooks.ModelEvent) er
 	}
 
 	pe := &agenthooks.PromptEvent{Event: e.Event, Prompt: prompt}
+	// Model requests can include history, system instructions and tool schemas.
+	// Only the extracted user prompt belongs in this synthetic event.
+	pe.Raw = nil
 	pe.Kind = agenthooks.KindPromptSubmitted
 	pe.Session.TurnID = runID
 	r.deliver(ctx, pe)

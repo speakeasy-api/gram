@@ -114,6 +114,28 @@ func TestOpenClawLLMInputReportsPromptWithoutBeforeAgentRun(t *testing.T) {
 	requireOpenclawPrompt(t, prompts[0], "llm_input", "run-codex", "summarize the repo")
 }
 
+func TestOpenClawLLMInputDoesNotUploadModelContext(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	serveOpenClaw(t, authedConfig(t, fs.URL),
+		openclawFrame(t, 1, "llm_input", "run-codex", map[string]any{
+			"prompt":          "summarize the repo",
+			"historyMessages": []any{map[string]any{"role": "user", "content": "private history"}},
+			"systemPrompt":    "private system instructions",
+			"tools":           []any{map[string]any{"name": "private_tool"}},
+		}),
+	)
+
+	prompts := fs.submittedPrompts()
+	require.Len(t, prompts, 1)
+	requireOpenclawPrompt(t, prompts[0], "llm_input", "run-codex", "summarize the repo")
+	require.Empty(t, prompts[0].Raw)
+	encoded, err := json.Marshal(prompts[0])
+	require.NoError(t, err)
+	for _, private := range []string{"private history", "private system instructions", "private_tool"} {
+		require.NotContains(t, string(encoded), private)
+	}
+}
+
 // The built-in harnesses fire before_agent_run before llm_input; the gate
 // already reported the prompt, so llm_input must not add a second one.
 func TestOpenClawLLMInputIgnoredAfterBeforeAgentRun(t *testing.T) {
