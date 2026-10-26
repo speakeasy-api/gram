@@ -35,10 +35,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
 
 type config struct {
 	mode           string
+	fullScanner    string
 	concurrency    []int
 	expected       int
 	findings       int
@@ -174,7 +176,7 @@ func run() error {
 			printPoint(result)
 		}
 	case "full":
-		loop, loopErr := newFullLoop(ctx, logger, redisClient, cfg.pubsubHost)
+		loop, loopErr := newFullLoop(ctx, logger, redisClient, cfg.pubsubHost, cfg.fullScanner, cfg.scanLatency)
 		if loopErr != nil {
 			return loopErr
 		}
@@ -201,10 +203,11 @@ func run() error {
 
 func parseConfig() (config, error) {
 	mode := flag.String("mode", "reply", "load mode: reply or full")
+	fullScanner := flag.String("full-scanner", "gitleaks", "scanner exercised in full mode: gitleaks or judge")
 	concurrencyText := flag.String("concurrency", "10,50,100,500,1000,2500,5000", "comma-separated in-flight scans")
 	expected := flag.Int("expected", 1, "replies expected per scan, from 1 to 5")
 	findings := flag.Int("findings", 0, "synthetic findings per reply in reply mode")
-	scanLatency := flag.Duration("scan-latency", 0, "simulated scanner latency in reply mode")
+	scanLatency := flag.Duration("scan-latency", 0, "simulated scanner latency")
 	timeout := flag.Duration("timeout", 15*time.Second, "deadline for each sweep point")
 	sampleInterval := flag.Duration("sample-interval", 5*time.Millisecond, "Redis sampler interval")
 	redisAddr := flag.String("redis-addr", os.Getenv("GRAM_REDIS_CACHE_ADDR"), "local Redis address")
@@ -228,7 +231,10 @@ func parseConfig() (config, error) {
 		return config{}, fmt.Errorf("expected must be from 1 to 5")
 	}
 	if *mode == "full" && *expected != 1 {
-		return config{}, fmt.Errorf("full mode supports exactly one distinct gitleaks lane")
+		return config{}, fmt.Errorf("full mode supports exactly one distinct lane")
+	}
+	if *fullScanner != "gitleaks" && *fullScanner != "judge" {
+		return config{}, fmt.Errorf("full scanner must be gitleaks or judge")
 	}
 	if *findings < 0 {
 		return config{}, fmt.Errorf("findings cannot be negative")
@@ -253,6 +259,7 @@ func parseConfig() (config, error) {
 	}
 	return config{
 		mode:           *mode,
+		fullScanner:    *fullScanner,
 		concurrency:    concurrency,
 		expected:       *expected,
 		findings:       *findings,
@@ -537,50 +544,135 @@ func runPauseProbe(
 }
 
 type fullLoop struct {
-	broker      *gcp.EmulatedPubSubBroker
-	receiveStop context.CancelFunc
-	receiveDone chan error
-	pubsub      *pubsub.Client
+	broker         *gcp.EmulatedPubSubBroker
+	receiveStop    context.CancelFunc
+	receiveDone    chan error
+	pubsub         *pubsub.Client
+	scanner        string
+	lane           enforcereply.Lane
+	content        string
+	promptPolicies map[string]enforcereply.PromptPolicyConfig
 }
 
-func newFullLoop(ctx context.Context, logger *slog.Logger, redisClient *redis.Client, emulatorHost string) (*fullLoop, error) {
+func newFullLoop(ctx context.Context, logger *slog.Logger, redisClient *redis.Client, emulatorHost, scannerName string, scanLatency time.Duration) (*fullLoop, error) {
 	projectID := fmt.Sprintf("gram-enforcement-load-%d", time.Now().UnixNano())
 	client, err := pubsub.NewClient(ctx, projectID, option.WithEndpoint(emulatorHost), option.WithoutAuthentication())
 	if err != nil {
 		return nil, fmt.Errorf("create Pub/Sub emulator client: %w", err)
 	}
 	broker := gcp.NewEmulatedPubSub(logger, projectID, client, gen.Descriptors)
-	fingerprinter, err := risk.ParsePepperKeyRing([]byte(os.Getenv("GRAM_RISK_FINGERPRINT_PEPPER_KEYRING")))
-	if err != nil {
-		_ = client.Close()
-		return nil, fmt.Errorf("parse risk fingerprint pepper keyring: %w", err)
-	}
-	handler, err := gitleaks.NewEnforceHandler(
-		logger,
-		otel.GetMeterProvider(),
-		enforcereply.NewWriter(redisClient),
-		func(tenantID string, message []byte) (string, error) {
-			sum, _, fingerprintErr := fingerprinter.TenantedHS256(tenantID, message)
-			return risk.EncodeFingerprint(sum), fingerprintErr
-		},
-		gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge, MaxContentBytes: 0},
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+	writer := enforcereply.NewWriter(redisClient)
+	riskRecorder := metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]())
+	var (
+		lane           enforcereply.Lane
+		content        string
+		promptPolicies map[string]enforcereply.PromptPolicyConfig
+		receive        func(context.Context) error
 	)
-	if err != nil {
+	switch scannerName {
+	case "gitleaks":
+		fingerprinter, parseErr := risk.ParsePepperKeyRing([]byte(os.Getenv("GRAM_RISK_FINGERPRINT_PEPPER_KEYRING")))
+		if parseErr != nil {
+			_ = client.Close()
+			return nil, fmt.Errorf("parse risk fingerprint pepper keyring: %w", parseErr)
+		}
+		handler, handlerErr := gitleaks.NewEnforceHandler(
+			logger,
+			otel.GetMeterProvider(),
+			writer,
+			func(tenantID string, message []byte) (string, error) {
+				sum, _, fingerprintErr := fingerprinter.TenantedHS256(tenantID, message)
+				return risk.EncodeFingerprint(sum), fingerprintErr
+			},
+			gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge, MaxContentBytes: 0},
+			riskRecorder,
+		)
+		if handlerErr != nil {
+			_ = client.Close()
+			return nil, fmt.Errorf("create gitleaks enforcement handler: %w", handlerErr)
+		}
+		subscriber, subscriberErr := gcp.PubSubSubscriberForMessage(ctx, broker, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{})
+		if subscriberErr != nil {
+			_ = client.Close()
+			return nil, fmt.Errorf("create gitleaks subscriber: %w", subscriberErr)
+		}
+		receive = func(receiveCtx context.Context) error {
+			return subscriber.Receive(receiveCtx, handler.Handle)
+		}
+		lane = enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
+		const fakeSecret = "wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd" //nolint:gosec // Synthetic gitleaks fixture.
+		const fakeAccessKeyID = "ASIAZ2XY3WNBQR5TUVWX"                //nolint:gosec // Synthetic gitleaks fixture.
+		content = "AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret
+	case "judge":
+		evaluate := promptpolicy.Evaluator(func(evaluateCtx context.Context, _ promptpolicy.Input) (*promptpolicy.Verdict, error) {
+			if scanLatency > 0 {
+				timer := time.NewTimer(scanLatency)
+				defer timer.Stop()
+				select {
+				case <-evaluateCtx.Done():
+					return nil, evaluateCtx.Err()
+				case <-timer.C:
+				}
+			}
+			return &promptpolicy.Verdict{
+				Matched:          true,
+				Confidence:       1,
+				Rationale:        "synthetic load-test match",
+				CostUSD:          0,
+				PromptTokens:     0,
+				CompletionTokens: 0,
+				TotalTokens:      0,
+				STokens:          1,
+				Completed:        true,
+				Model:            "load-test",
+				Provider:         "load-test",
+			}, nil
+		})
+		handler, handlerErr := promptpolicy.NewEnforceHandler(
+			logger,
+			otel.GetMeterProvider(),
+			promptpolicy.NewScanner(logger, evaluate),
+			writer,
+			riskRecorder,
+			promptpolicy.EnforceHandlerConfig{MaxRequestAge: promptpolicy.DefaultEnforcementMaxRequestAge, MaxContentBytes: 0},
+		)
+		if handlerErr != nil {
+			_ = client.Close()
+			return nil, fmt.Errorf("create prompt policy enforcement handler: %w", handlerErr)
+		}
+		subscriber, subscriberErr := gcp.PubSubSubscriberForMessage(ctx, broker, &riskv1.PromptPolicyEnforcement{}, &riskv1.PromptPolicyEnforcer{})
+		if subscriberErr != nil {
+			_ = client.Close()
+			return nil, fmt.Errorf("create prompt policy subscriber: %w", subscriberErr)
+		}
+		receive = func(receiveCtx context.Context) error {
+			return subscriber.Receive(receiveCtx, handler.Handle)
+		}
+		policyID := uuid.NewString()
+		lane = enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, PolicyID: policyID}
+		content = "delete production data"
+		promptPolicies = map[string]enforcereply.PromptPolicyConfig{
+			policyID: {Prompt: "Flag destructive operations", ModelConfig: nil},
+		}
+	default:
 		_ = client.Close()
-		return nil, fmt.Errorf("create gitleaks enforcement handler: %w", err)
-	}
-	subscriber, err := gcp.PubSubSubscriberForMessage(ctx, broker, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{})
-	if err != nil {
-		_ = client.Close()
-		return nil, fmt.Errorf("create gitleaks subscriber: %w", err)
+		return nil, fmt.Errorf("unsupported full scanner %q", scannerName)
 	}
 	receiveCtx, receiveStop := context.WithCancel(ctx)
 	receiveDone := make(chan error, 1)
 	go func() {
-		receiveDone <- subscriber.Receive(receiveCtx, handler.Handle)
+		receiveDone <- receive(receiveCtx)
 	}()
-	return &fullLoop{broker: broker, receiveStop: receiveStop, receiveDone: receiveDone, pubsub: client}, nil
+	return &fullLoop{
+		broker:         broker,
+		receiveStop:    receiveStop,
+		receiveDone:    receiveDone,
+		pubsub:         client,
+		scanner:        scannerName,
+		lane:           lane,
+		content:        content,
+		promptPolicies: promptPolicies,
+	}, nil
 }
 
 func (l *fullLoop) close() {
@@ -615,7 +707,11 @@ func runFullPoint(
 		_ = inbox.Close()
 		_ = redisClient.Del(context.WithoutCancel(ctx), enforcereply.InboxKey(inbox.ReplicaID())).Err()
 	}()
-	dispatcher, err := enforcereply.NewDispatcher(pointCtx, logger, otel.GetMeterProvider(), loop.broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: cfg.timeout, LaneWaitTimeout: nil, Flags: nil})
+	dispatcher, err := enforcereply.NewDispatcher(pointCtx, logger, otel.GetMeterProvider(), loop.broker, inbox, enforcereply.DispatcherConfig{
+		WaitTimeout:     cfg.timeout,
+		LaneWaitTimeout: enforcereply.DefaultLaneWaitTimeouts(),
+		Flags:           nil,
+	})
 	if err != nil {
 		return sweepResult{}, fmt.Errorf("create dispatcher: %w", err)
 	}
@@ -630,11 +726,17 @@ func runFullPoint(
 	ready := sync.WaitGroup{}
 	ready.Add(concurrency)
 	outcomes := make(chan awaitOutcome, concurrency)
-	lane := enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
-	const fakeSecret = "wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd" //nolint:gosec // Synthetic gitleaks fixture.
-	const fakeAccessKeyID = "ASIAZ2XY3WNBQR5TUVWX"                //nolint:gosec // Synthetic gitleaks fixture.
-	content := "AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret
+	lane := loop.lane
+	content := loop.content
 	loadProjectID := uuid.MustParse("018ffad2-1c32-7f73-8a54-85306c37a313")
+	loadPolicyID := uuid.Nil
+	loadPolicyVersion := int64(0)
+	loadPolicyLinkReason := "enforcement_load_test"
+	if lane.PolicyID != "" {
+		loadPolicyID = uuid.MustParse(lane.PolicyID)
+		loadPolicyVersion = 1
+		loadPolicyLinkReason = ""
+	}
 	for range concurrency {
 		go func() {
 			ready.Done()
@@ -647,20 +749,20 @@ func runFullPoint(
 				Content:                content,
 				Body:                   "",
 				ToolName:               "",
-				MessageType:            "",
+				MessageType:            "user_message",
 				ToolCalls:              nil,
 				PresidioEntities:       nil,
 				PresidioScoreThreshold: nil,
 				CustomRuleIDs:          nil,
-				PromptPolicies:         nil,
+				PromptPolicies:         loop.promptPolicies,
 				Lanes:                  []enforcereply.Lane{lane},
 				Origins: map[enforcereply.Lane]metering.RiskProvenance{
 					lane: {
 						OrganizationID:         "load-org",
 						ProjectID:              loadProjectID,
-						RiskPolicyID:           uuid.Nil,
-						RiskPolicyVersion:      0,
-						PolicyLinkReason:       "enforcement_load_test",
+						RiskPolicyID:           loadPolicyID,
+						RiskPolicyVersion:      loadPolicyVersion,
+						PolicyLinkReason:       loadPolicyLinkReason,
 						ChatID:                 uuid.Nil,
 						ExternalConversationID: "",
 						ChatMessageID:          uuid.Nil,
@@ -707,7 +809,7 @@ func runFullPoint(
 	waitForDrainAccounting(pointCtx, inbox, nonnegativeUint64(len(latencies))*nonnegativeUint64(cfg.expected))
 	monitor.stop()
 	snapshot := inbox.Snapshot()
-	result := buildResult("full", concurrency, cfg.expected, -1, -1, 0, duration, latencies)
+	result := buildResult("full-"+loop.scanner, concurrency, cfg.expected, -1, -1, 0, duration, latencies)
 	result.timeouts = timeouts
 	result.errors = dispatchErrors
 	populateRedisStats(&result, snapshot, monitor.stats)
