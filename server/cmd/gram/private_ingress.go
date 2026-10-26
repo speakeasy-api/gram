@@ -220,8 +220,8 @@ func servePrivateIngress(
 	}
 	defer func() { _ = listener.Close() }()
 
-	requestCtx, cancelRequests := context.WithCancel(ctx)
-	defer cancelRequests()
+	requestCtx, cancelRequests := context.WithCancelCause(ctx)
+	defer cancelRequests(nil)
 	server := &http.Server{
 		Addr:              address,
 		Handler:           mux,
@@ -240,7 +240,10 @@ func servePrivateIngress(
 	go func() {
 		defer close(shutdownDone)
 		<-sigctx.Done()
-		shutdownPrivateIngress(ctx, deps.Logger, server, cancelRequests, shutdownDrainTimeout)
+		// Listen streams never finish on their own, so end them first and let
+		// their clients reconnect to a replica that is still serving.
+		deps.Runtime.MCP.StartDrain()
+		drainHTTPServer(ctx, deps.Logger, server, cancelRequests, shutdownDrainTimeout, "failed to shutdown private network ingress listener")
 	}()
 
 	deps.Logger.InfoContext(ctx, "private network ingress listener started", attr.SlogServerAddress(listener.Addr().String()))
@@ -252,17 +255,4 @@ func servePrivateIngress(
 	}
 	<-shutdownDone
 	return nil
-}
-
-func shutdownPrivateIngress(ctx context.Context, logger *slog.Logger, server *http.Server, cancelRequests context.CancelFunc, timeout time.Duration) {
-	graceCtx, graceCancel := context.WithTimeoutCause(context.WithoutCancel(ctx), timeout, errors.New("graceful shutdown timed out"))
-	defer graceCancel()
-	defer cancelRequests()
-	if err := server.Shutdown(graceCtx); err != nil {
-		logger.ErrorContext(ctx, "failed to shutdown private network ingress listener", attr.SlogError(err))
-		cancelRequests()
-		if err := server.Close(); err != nil {
-			logger.ErrorContext(ctx, "close private network ingress connections", attr.SlogError(err))
-		}
-	}
 }

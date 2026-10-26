@@ -123,6 +123,17 @@ func forEachSSEEvent(r io.Reader, maxEventBytes int64, fn func(rawEvent []byte, 
 	return emit()
 }
 
+// sseEventHasID reports whether an event's non-data lines, as produced by
+// [forEachSSEEvent], include an "id" field.
+func sseEventHasID(nonData []byte) bool {
+	for line := range bytes.Lines(nonData) {
+		if bytes.HasPrefix(line, []byte("id:")) {
+			return true
+		}
+	}
+	return false
+}
+
 // formatSSEEventWithData rebuilds an SSE event by combining the original
 // non-data lines from an upstream event (event:, id:, retry:, comments —
 // each terminated with "\n", as produced by [forEachSSEEvent]) with a
