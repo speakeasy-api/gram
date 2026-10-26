@@ -458,7 +458,7 @@ func TestScriptReportsAPluginItCannotTest(t *testing.T) {
 	out := h.run(t, renderScript(t, testParams()))
 
 	require.Contains(t, out, "Speakeasy hooks: FAIL: the plugin is installed, but this script could not find it to test it.")
-	require.Contains(t, out, "Install unzip or python3")
+	require.Contains(t, out, "Install unzip, bsdtar or python3")
 	// The plugin is installed all the same, so the Gateway still needs a restart.
 	require.Contains(t, out, "Next: restart the OpenClaw Gateway.")
 }
@@ -549,6 +549,7 @@ func TestScriptContinuesAfterClaudeFailsWithoutLeakingKeyInArguments(t *testing.
 	require.Contains(t, out, "Configured OpenClaw")
 	args := h.stubFile(t, "claude.log")
 	require.NotContains(t, args, testKey)
+	require.NotContains(t, args, "mcp remove")
 	require.Contains(t, args, "Authorization: Bearer ${SPEAKEASY_AGENT_KEY}")
 }
 
@@ -573,4 +574,33 @@ func TestScriptOmitsUnsupportedPluginFlags(t *testing.T) {
 	calls := h.calls(t)
 	require.NotContains(t, calls[4], "--force")
 	require.NotContains(t, calls[4], "--accept-capabilities")
+}
+
+func TestScriptPreservesCodexConfigurationWhenAddingFails(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	stub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$STUB_DIR/codex.log\"\nexit 1\n"
+	require.NoError(t, os.WriteFile(filepath.Join(h.stubDir, "codex"), []byte(stub), 0o700))
+	out := h.run(t, renderScript(t, testParams()))
+	require.Contains(t, out, "Could not configure Codex. Its existing entry was kept")
+	require.Contains(t, out, "Configured OpenClaw")
+	require.NotContains(t, h.stubFile(t, "codex.log"), "mcp remove")
+}
+
+func TestScriptUsesBSDTarWhenOtherExtractorsAreMissing(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	h.skipLayout = true
+	h.optionalTools = nil
+	stub := `#!/bin/sh
+printf '%s\n' "$*" >"$STUB_DIR/bsdtar.log"
+[ "$1" = "-xf" ] && [ "$3" = "-C" ] || exit 1
+mkdir -p "$4/hooks"
+printf '{}\n' >"$4/speakeasy.json"
+cp "$STUB_DIR/bootstrap.sh" "$4/hooks/bootstrap.sh"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(h.stubDir, "bsdtar"), []byte(stub), 0o700))
+	out := h.run(t, renderScript(t, testParams()))
+	require.Contains(t, out, "Speakeasy hooks: PASS")
+	require.Contains(t, h.stubFile(t, "bsdtar.log"), "-xf ")
 }
