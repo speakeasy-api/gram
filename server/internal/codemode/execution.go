@@ -210,10 +210,9 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	}
 	defer stream.finish()
 	deadline, _ := ctx.Deadline()
-	if err := stream.SetDeadline(deadline); err != nil {
-		fail("runtime_unavailable", "code stream could not be bounded; program was not submitted")
-		return result
-	}
+	// The context alone bounds the stream. A stream deadline at the same
+	// instant can time out a read or reply a moment before the context
+	// reports the deadline, and the run would end as a lost runtime.
 	interruptDone := make(chan struct{})
 	stop := context.AfterFunc(ctx, func() { _ = stream.SetDeadline(time.Now()); close(interruptDone) })
 	defer func() {
@@ -247,6 +246,9 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	err = writeRunnerFrame(stream, runnerStart{Type: "start", Version: ProtocolVersion, ExecutionID: executionID.String(), Code: code, WallMS: remaining})
 	if err != nil {
 		fail("outcome_unknown", "submission response lost; do not replay this program automatically")
+		if ctx.Err() != nil {
+			failCancelled()
+		}
 		return result
 	}
 	seen := make(map[uint32]bool)

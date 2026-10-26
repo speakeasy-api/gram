@@ -86,8 +86,11 @@ Host construction, including an optional exact tool allowlist, runs after
 admission under the 30-second execution context. Each helper reruns issuer
 admission and bypasses the usual session-policy cache, refreshes grants, and
 intersects them with the admission boundary. Cancellation stops new callbacks
-and joins dispatchers for up to two seconds before recording outcomes. Stream
-cleanup adds at most one second. The provider release path also has a bounded
+and joins dispatchers for up to two seconds before recording outcomes. Only the
+execution context bounds the runner stream, so a run that reaches its deadline
+reports `deadline_exceeded`, whichever of Speakeasy and the runner notices it
+first, and keeps its recorded tool outcomes. Stream cleanup adds at most one
+second. The provider release path also has a bounded
 cleanup context. Incomplete writes remain `unknown` even when Python fails.
 
 ## Local runtime

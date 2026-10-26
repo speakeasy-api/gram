@@ -143,3 +143,65 @@ func TestCallbackReplyCarriesExactlyOneResult(t *testing.T) {
 		})
 	}
 }
+
+// deadlineHost completes server--done and holds every other call until the
+// execution ends.
+type deadlineHost struct{ idleHost }
+
+func (deadlineHost) Call(ctx context.Context, path string, _ json.RawMessage) (*ToolResult, error) {
+	if path == "server--done" {
+		return &ToolResult{Outcome: "completed", OK: true, Data: json.RawMessage(`{}`), Content: json.RawMessage(`[]`)}, nil
+	}
+	<-ctx.Done()
+	return nil, fmt.Errorf("call %s: %w", path, ctx.Err())
+}
+
+const (
+	// deadlineBatches runs of deadlineBatch executions each end at their
+	// deadline. A stream timeout firing a moment before the context reported
+	// about one run in five as outcome_unknown, so 100 runs catch it.
+	deadlineBatches = 25
+
+	// deadlineBatch is the stream capacity startedRunner reports.
+	deadlineBatch = 4
+)
+
+// TestDeadlineReportsDeadlineExceeded ends runs at their deadline with one
+// call completed and another in flight. Whichever of the stream and the
+// context notices the deadline first, the run reports deadline_exceeded and
+// keeps both outcomes.
+func TestDeadlineReportsDeadlineExceeded(t *testing.T) {
+	t.Parallel()
+	call := func(id uint32, path string) runnerMessage {
+		return runnerMessage{Type: "callback", ID: id, Method: "call", Arguments: json.RawMessage(fmt.Sprintf(`{"path":%q,"arguments":{}}`, path))}
+	}
+	script := func(string) []runnerMessage { return []runnerMessage{call(1, "server--done"), call(2, "server--wait")} }
+	answered := func(message runnerMessage) bool { return message.ID == 1 }
+	client, err := NewRunnerClient(startedRunner(t, true, script, answered), strings.Repeat("t", 32), &net.Dialer{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+	// Connect first so no run spends its deadline on the handshake.
+	_, err = client.currentSession(t.Context())
+	require.NoError(t, err)
+	factory := func(context.Context) (Host, error) { return deadlineHost{}, nil }
+	codes := map[string]int{}
+	for range deadlineBatches {
+		results := make(chan *ExecutionResult, deadlineBatch)
+		var runs sync.WaitGroup
+		for range deadlineBatch {
+			runs.Go(func() {
+				ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+				defer cancel()
+				results <- client.Run(ctx, uuid.New(), "1", factory)
+			})
+		}
+		runs.Wait()
+		close(results)
+		for result := range results {
+			require.NotNil(t, result.Error)
+			codes[result.Error.Code]++
+			require.Equal(t, []CallOutcome{{Path: "server--done", Outcome: "completed"}, {Path: "server--wait", Outcome: "unknown"}}, result.ToolCalls)
+		}
+	}
+	require.Equal(t, map[string]int{"deadline_exceeded": deadlineBatches * deadlineBatch}, codes)
+}

@@ -132,6 +132,31 @@ func TestCodeRunnerCancellationPreservesUnknownWrite(t *testing.T) {
 	require.JSONEq(t, `42`, string(result.Value))
 }
 
+// codeRunnerDeadlineRuns is how many runs end at their deadline in
+// TestCodeRunnerDeadlineKeepsUnknownWrite. The client and the runner time
+// out at nearly the same instant, so each run is one draw of that race.
+const codeRunnerDeadlineRuns = 10
+
+func TestCodeRunnerDeadlineKeepsUnknownWrite(t *testing.T) {
+	t.Parallel()
+	client := realRunnerClient(t)
+	host := &runnerHost{block: true}
+	factory := func(context.Context) (Host, error) { return host, nil }
+	require.Nil(t, client.Run(t.Context(), uuid.New(), "None", factory).Error)
+	session := client.session
+	for range codeRunnerDeadlineRuns {
+		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+		result := client.Run(ctx, uuid.New(), `await tools.call("remote--write", {})`, factory)
+		cancel()
+		require.NotNil(t, result.Error)
+		require.Equal(t, "deadline_exceeded", result.Error.Code, result.Error.Message)
+		require.Equal(t, []CallOutcome{{Path: "remote--write", Outcome: "unknown"}}, result.ToolCalls)
+	}
+	result := client.Run(t.Context(), uuid.New(), "42", factory)
+	require.Nil(t, result.Error, "%+v", result.Error)
+	require.Same(t, session, client.session)
+}
+
 func TestCodeRunnerConcurrentHelpers(t *testing.T) {
 	t.Parallel()
 	client := realRunnerClient(t)
