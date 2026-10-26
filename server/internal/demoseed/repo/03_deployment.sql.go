@@ -551,10 +551,10 @@ func (q *Queries) DeployInsertOpenAPIAsset(ctx context.Context, arg DeployInsert
 const deployInsertOrgWorkloadIssuer = `-- name: DeployInsertOrgWorkloadIssuer :exec
 INSERT INTO workload_issuers
   (id, organization_id, project_id, name, description, tags, issuer, jwks_uri,
-   allow_wildcard_admission)
+   allow_wildcard_admission, allow_assertion_reuse)
 VALUES
   ($1, $2::text, NULL, $3, $4::text, $5::text[], $6, $7,
-   $8)
+   $8, $9::boolean)
 `
 
 type DeployInsertOrgWorkloadIssuerParams struct {
@@ -566,6 +566,7 @@ type DeployInsertOrgWorkloadIssuerParams struct {
 	Issuer                 string
 	JwksUri                string
 	AllowWildcardAdmission bool
+	AllowAssertionReuse    bool
 }
 
 func (q *Queries) DeployInsertOrgWorkloadIssuer(ctx context.Context, arg DeployInsertOrgWorkloadIssuerParams) error {
@@ -578,6 +579,7 @@ func (q *Queries) DeployInsertOrgWorkloadIssuer(ctx context.Context, arg DeployI
 		arg.Issuer,
 		arg.JwksUri,
 		arg.AllowWildcardAdmission,
+		arg.AllowAssertionReuse,
 	)
 	return err
 }

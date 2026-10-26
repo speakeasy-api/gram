@@ -21,6 +21,10 @@ type Client struct {
 	// endpoint.
 	GetPluginsDoer goahttp.Doer
 
+	// GetMyConnections Doer is the HTTP client used to make requests to the
+	// getMyConnections endpoint.
+	GetMyConnectionsDoer goahttp.Doer
+
 	// ListSyncedUsers Doer is the HTTP client used to make requests to the
 	// listSyncedUsers endpoint.
 	ListSyncedUsersDoer goahttp.Doer
@@ -82,6 +86,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		GetPluginsDoer:           doer,
+		GetMyConnectionsDoer:     doer,
 		ListSyncedUsersDoer:      doer,
 		GetConfigurationDoer:     doer,
 		UpdateConfigurationDoer:  doer,
@@ -119,6 +124,30 @@ func (c *Client) GetPlugins() goa.Endpoint {
 		resp, err := c.GetPluginsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "getPlugins", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMyConnections returns an endpoint that makes HTTP requests to the agent
+// service getMyConnections server.
+func (c *Client) GetMyConnections() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMyConnectionsRequest(c.encoder)
+		decodeResponse = DecodeGetMyConnectionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMyConnectionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMyConnectionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "getMyConnections", err)
 		}
 		return decodeResponse(resp)
 	}

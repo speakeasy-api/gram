@@ -14,6 +14,10 @@ export type AgentPluginServer = {
    */
   dashboardUrl?: string | undefined;
   /**
+   * Stable identifier of the server, the same in every plugin that contains it. Matches the id getMyConnections reports the server's sign-in state under. Absent from servers predating the field.
+   */
+  id?: string | undefined;
+  /**
    * Display name of the server within its plugin.
    */
   name: string;
@@ -26,6 +30,7 @@ export const AgentPluginServer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     dashboard_url: z.optional(z.string()),
+    id: z.optional(z.string()),
     name: z.string(),
   }),
   z.transform((v) => {

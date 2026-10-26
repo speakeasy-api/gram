@@ -33,7 +33,6 @@ scoped_toolsets AS (
     t.custom_domain_id,
     COALESCE(cw.user_session_issuer_id, CASE WHEN cw.id IS NULL THEN t.user_session_issuer_id END) AS user_session_issuer_id,
     t.external_oauth_server_id,
-    t.oauth_proxy_server_id,
     t.tool_variations_group_id,
     (
       (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' WHEN kept.id IS NOT NULL THEN FALSE ELSE t.mcp_enabled END)
@@ -109,7 +108,6 @@ SELECT
   t.custom_domain_id,
   t.user_session_issuer_id,
   t.external_oauth_server_id,
-  t.oauth_proxy_server_id,
   (t.tool_variations_group_id IS NOT NULL)::boolean AS toolset_has_variations,
   usi.slug AS user_session_issuer_slug,
   COALESCE(t.live, FALSE)::boolean AS live,

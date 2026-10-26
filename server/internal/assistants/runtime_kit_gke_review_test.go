@@ -128,7 +128,15 @@ func TestKitGKEColdCreationFailureCleansOwnedResources(t *testing.T) {
 		t.Run(failed, func(t *testing.T) {
 			t.Parallel()
 			k, client, r, fences := kitGKEBackendFixture(t)
-			var secretName string
+			var secretName, serviceAccountName string
+			client.PrependReactor("create", "serviceaccounts", func(action ktesting.Action) (bool, runtime.Object, error) {
+				creation, ok := action.(ktesting.CreateAction)
+				require.True(t, ok)
+				serviceAccount, ok := creation.GetObject().(*unstructured.Unstructured)
+				require.True(t, ok)
+				serviceAccountName = serviceAccount.GetName()
+				return false, nil, nil
+			})
 			client.PrependReactor("create", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
 				create, ok := action.(ktesting.CreateAction)
 				require.True(t, ok)
@@ -148,7 +156,7 @@ func TestKitGKEColdCreationFailureCleansOwnedResources(t *testing.T) {
 				gvr  schema.GroupVersionResource
 				name string
 			}
-			expected := []objectIdentity{{gvr: kitSecretGVR, name: secretName}}
+			expected := []objectIdentity{{gvr: kitServiceAccountGVR, name: serviceAccountName}, {gvr: kitSecretGVR, name: secretName}}
 			if failed == gkeSandboxClaimGVR.Resource {
 				expected = append(expected, objectIdentity{gvr: kitTemplateGVR, name: kitGKEName(r)})
 			}
