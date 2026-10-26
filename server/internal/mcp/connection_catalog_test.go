@@ -227,11 +227,13 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				require.NoError(t, err)
 				insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
 				fixtures := authclientfixtures.New(ti.conn)
-				seedClient := func(value string) uuid.UUID {
-					id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+				// A backfilled client carries copies of the server's headers,
+				// which go stale when the server's headers change.
+				seedClient := func(value, origin string) uuid.UUID {
+					id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: origin, RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 					require.NoError(t, err)
 					require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: id, OrganizationID: auth.ActiveOrganizationID, Name: "X-Typed-Key", Value: pgtype.Text{String: value, Valid: true}}))
-					require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id}))
+					require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id, Source: origin}))
 					return id
 				}
 				source, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *auth.ProjectID})
@@ -242,7 +244,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				if staleHeaders {
 					copiedValue = "stale-key"
 				}
-				original := seedClient(copiedValue)
+				original := seedClient(copiedValue, "backfill")
 				var permitted atomic.Bool
 				permitted.Store(true)
 				ti.service.SetAuthClientPermission(permitted.Load)
@@ -266,7 +268,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				require.Contains(t, call(), "don't have access")
 				require.Equal(t, before, upstream.requests.Load(), "revocation must refuse before any upstream request")
 				permitted.Store(true)
-				replacement := seedClient("replacement-key")
+				replacement := seedClient("replacement-key", "admin")
 				require.NotEqual(t, original, replacement)
 				claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
 				require.NoError(t, err)
