@@ -57,7 +57,7 @@ export type ManagedDeviceAgentState = {
    */
   os?: string | undefined;
   /**
-   * Recovery version the channel pins, when one is set.
+   * Version the organization pinned the fleet to, when set.
    */
   pinnedTarget?: string | undefined;
   /**

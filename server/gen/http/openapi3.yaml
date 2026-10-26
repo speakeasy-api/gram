@@ -113353,7 +113353,7 @@ components:
                     description: Operating system, e.g. darwin.
                 pinned_target:
                     type: string
-                    description: Recovery version the channel pins, when one is set.
+                    description: Version the organization pinned the fleet to, when set.
                 reported_at:
                     type: string
                     description: When the control plane received the report.

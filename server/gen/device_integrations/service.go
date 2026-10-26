@@ -411,7 +411,7 @@ type ManagedDeviceAgentState struct {
 	AutoUpdate *string
 	// Update channel the agent follows, e.g. stable.
 	UpdateChannel *string
-	// Recovery version the channel pins, when one is set.
+	// Version the organization pinned the fleet to, when set.
 	PinnedTarget *string
 	// The agent's most recent self-rollback after a failed update.
 	LastRollback *ManagedDeviceRollback

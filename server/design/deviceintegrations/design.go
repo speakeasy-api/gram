@@ -162,7 +162,7 @@ var ManagedDeviceAgentState = Type("ManagedDeviceAgentState", func() {
 	})
 	Attribute("auto_update", String, "Resolved update mode: automatic, notify, or disabled.")
 	Attribute("update_channel", String, "Update channel the agent follows, e.g. stable.")
-	Attribute("pinned_target", String, "Recovery version the channel pins, when one is set.")
+	Attribute("pinned_target", String, "Version the organization pinned the fleet to, when set.")
 	Attribute("last_rollback", ManagedDeviceRollback, "The agent's most recent self-rollback after a failed update.")
 })
 

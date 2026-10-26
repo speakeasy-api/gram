@@ -6058,7 +6058,8 @@ SET auto_update = $1
   , last_rollback_from = $5
   , last_rollback_to = $6
 WHERE organization_id = $7
-  AND email = $8
+  AND LOWER(email) = LOWER($8)
+  AND LOWER(serial_number) IS NOT DISTINCT FROM LOWER(NULLIF($9::text, ''))
 `
 
 type SetDeviceAgentStateReportUpdateFixtureParams struct {
@@ -6070,9 +6071,11 @@ type SetDeviceAgentStateReportUpdateFixtureParams struct {
 	LastRollbackTo   pgtype.Text
 	OrganizationID   string
 	Email            string
+	SerialNumber     string
 }
 
-// Sets a seeded state report's update posture and last rollback.
+// Sets one seeded state report's update posture and last rollback. Matches
+// the report key: an empty serial selects the serial-less report.
 func (q *Queries) SetDeviceAgentStateReportUpdateFixture(ctx context.Context, arg SetDeviceAgentStateReportUpdateFixtureParams) error {
 	_, err := q.db.Exec(ctx, setDeviceAgentStateReportUpdateFixture,
 		arg.AutoUpdate,
@@ -6083,6 +6086,7 @@ func (q *Queries) SetDeviceAgentStateReportUpdateFixture(ctx context.Context, ar
 		arg.LastRollbackTo,
 		arg.OrganizationID,
 		arg.Email,
+		arg.SerialNumber,
 	)
 	return err
 }

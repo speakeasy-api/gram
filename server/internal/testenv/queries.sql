@@ -465,7 +465,8 @@ VALUES (
 );
 
 -- name: SetDeviceAgentStateReportUpdateFixture :exec
--- Sets a seeded state report's update posture and last rollback.
+-- Sets one seeded state report's update posture and last rollback. Matches
+-- the report key: an empty serial selects the serial-less report.
 UPDATE device_agent_state_reports
 SET auto_update = @auto_update
   , update_channel = @update_channel
@@ -474,7 +475,8 @@ SET auto_update = @auto_update
   , last_rollback_from = @last_rollback_from
   , last_rollback_to = @last_rollback_to
 WHERE organization_id = @organization_id
-  AND email = @email;
+  AND LOWER(email) = LOWER(@email)
+  AND LOWER(serial_number) IS NOT DISTINCT FROM LOWER(NULLIF(@serial_number::text, ''));
 
 -- name: SetDeviceAgentServedEtagFixture :exec
 -- Records the etag GetPlugins last served a user, as a poll would.

@@ -305,6 +305,7 @@ func TestListManagedDevicesPolicyStateFilterAndAgentState(t *testing.T) {
 		LastRollbackTo:   conv.ToPGText("0.41.3"),
 		OrganizationID:   orgID,
 		Email:            "behind@example.test",
+		SerialNumber:     "",
 	}))
 	view = deviceView(ctx, testenv.NewLogger(t), listDevices(t, ctx, store, orgID, false, now, "outdated")["behind"])
 	require.Equal(t, "automatic", *view.AgentState.AutoUpdate)

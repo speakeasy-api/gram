@@ -2278,7 +2278,7 @@ type ManagedDeviceAgentStateResponseBody struct {
 	AutoUpdate *string `form:"auto_update,omitempty" json:"auto_update,omitempty" xml:"auto_update,omitempty"`
 	// Update channel the agent follows, e.g. stable.
 	UpdateChannel *string `form:"update_channel,omitempty" json:"update_channel,omitempty" xml:"update_channel,omitempty"`
-	// Recovery version the channel pins, when one is set.
+	// Version the organization pinned the fleet to, when set.
 	PinnedTarget *string `form:"pinned_target,omitempty" json:"pinned_target,omitempty" xml:"pinned_target,omitempty"`
 	// The agent's most recent self-rollback after a failed update.
 	LastRollback *ManagedDeviceRollbackResponseBody `form:"last_rollback,omitempty" json:"last_rollback,omitempty" xml:"last_rollback,omitempty"`
