@@ -28,6 +28,7 @@ var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", fu
 	Attribute("suggested_metadata", AdminRegistryPromotionSuggestions)
 	Attribute("source_revision", String)
 	Attribute("eligible", Boolean)
+	Attribute("can_override_eligibility", Boolean, "Whether staff may explicitly accept this candidate's health evidence.")
 	Attribute("reason", String)
 	Attribute("status", String)
 	Attribute("observed_successes", Int64)
@@ -46,7 +47,7 @@ var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", fu
 	Attribute("promoted_at", String, func() { Format(FormatDateTime) })
 	Attribute("public_title", String)
 	Attribute("delivery_error", String)
-	Required("created_at", "curation_revision", "id", "organization_id", "project_id", "mcp_server_id", "remote_mcp_server_id", "source_revision", "eligible", "reason", "status", "observed_successes", "observed_failures", "observed_days", "docs_revision", "docs_retry_allowed", "docs_attempts")
+	Required("created_at", "curation_revision", "id", "organization_id", "project_id", "mcp_server_id", "remote_mcp_server_id", "source_revision", "eligible", "can_override_eligibility", "reason", "status", "observed_successes", "observed_failures", "observed_days", "docs_revision", "docs_retry_allowed", "docs_attempts")
 })
 
 var AdminRegistryPromotionCandidates = Type("AdminRegistryPromotionCandidates", func() {
@@ -64,7 +65,7 @@ func promotionTarget() {
 
 func registryPromotionDesign() {
 	Method("listRegistryPromotionCandidates", func() {
-		Description("List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.")
+		Description("List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.")
 		Payload(func() {
 			security.AdminAuthPayload()
 			Attribute("cursor", String)
@@ -109,6 +110,7 @@ func registryPromotionDesign() {
 			Attribute("auth_mode", String, func() { Enum("none", "oauth") })
 			Attribute("retry_key", String)
 			Attribute("public_metadata_confirmed", Boolean)
+			Attribute("override_eligibility", Boolean, "Explicitly accept insufficient, failed, or unavailable health evidence. Source safety checks still apply.", func() { Default(false) })
 			Required("curation_revision", "source_revision", "public_name", "public_title", "public_description", "public_url", "documentation_url", "docs_slug", "auth_mode", "retry_key", "public_metadata_confirmed")
 		})
 		Result(AdminRegistryPromotionCandidate)

@@ -26,7 +26,10 @@ func (f *promotionMutatorFake) GetCandidate(context.Context, catalogpromotion.Ta
 	return f.candidate, nil
 }
 
-func (f *promotionMutatorFake) ValidateTx(_ context.Context, _ pgx.Tx, target catalogpromotion.Target, revision, curationRevision string, _ catalogpromotion.PublicMetadata) (catalogpromotion.Candidate, error) {
+func (f *promotionMutatorFake) ValidateTx(_ context.Context, _ pgx.Tx, target catalogpromotion.Target, revision, curationRevision string, _ catalogpromotion.PublicMetadata, override bool) (catalogpromotion.Candidate, error) {
+	if !f.candidate.Eligible && (!override || !catalogpromotion.CanOverrideEligibility(f.candidate.Reason)) {
+		return catalogpromotion.Candidate{}, catalogpromotion.ErrIneligible
+	}
 	if f.validationErr != nil {
 		return catalogpromotion.Candidate{}, f.validationErr
 	}
@@ -73,6 +76,20 @@ func TestCatalogPromotionApprovalAndReplay(t *testing.T) {
 	view, err := w.view(p)
 	require.NoError(t, err)
 	require.Contains(t, view.SideEffects, "setup-docs")
+	require.Contains(t, view.Changes, proposalViewChange{Setting: "Allow health eligibility override", Before: "", After: "No"})
+	stored, err := storedCatalogPromotion(p)
+	require.NoError(t, err)
+	require.False(t, stored.OverrideEligibility)
+	expected, err := catalogPromotionRequest(input)
+	require.NoError(t, err)
+	args, err := json.Marshal(expected)
+	require.NoError(t, err)
+	require.JSONEq(t, string(args), string(p.Arguments))
+	require.JSONEq(t, string(args), string(p.Preview))
+	digest, err := stateDigest(args)
+	require.NoError(t, err)
+	require.Equal(t, digest, p.ExpectedStateDigest)
+
 	require.Equal(t, f.orgA, view.OrganizationID)
 	_, err = f.store.Approve(ctx, p.ID, f.owner.SubjectURN, p.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
 	require.NoError(t, err)
@@ -190,4 +207,113 @@ func TestCatalogPromotionRejectsApprovalAfterCurationCycle(t *testing.T) {
 	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
 	require.ErrorIs(t, err, ErrStaleState)
 	require.Zero(t, mutator.calls.Load())
+}
+
+func TestCatalogPromotionOverrideApprovalAndReplay(t *testing.T) {
+	t.Parallel()
+	f := newProposalFixture(t, "catalog_promotion_override")
+	seededProject, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
+	require.NoError(t, err)
+	project, server := seededProject.ID.String(), uuid.NewString()
+	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: false, Reason: "errors_observed"}}
+	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+	w := &catalogPromotionWriter{store: f.store, writes: writes, baseURL: "https://staff.example.test/admin-mcp", mutator: mutator, now: time.Now}
+	input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "publish-example", Public: catalogpromotion.PublicMetadata{Name: "com.example/mcp", Title: "Example", Description: "Public example server", URL: "https://mcp.example.test/mcp", DocumentationURL: "https://example.test/docs", DocsSlug: "example", AuthMode: "oauth"}}
+	ctx := writeContext(t, f)
+	_, err = w.prepare(ctx, input)
+	require.ErrorIs(t, err, ErrStaleState)
+	input.OverrideEligibility = true
+	prepared, err := w.prepare(ctx, input)
+	require.NoError(t, err)
+	require.Zero(t, mutator.calls.Load())
+	replayed, err := w.prepare(ctx, input)
+	require.NoError(t, err)
+	require.True(t, replayed.Replay)
+	require.Equal(t, prepared.ProposalID, replayed.ProposalID)
+	tools := newWriteTools(f.store, writes, w.baseURL, map[WriteOperation]operationWriter{OperationPromoteRegistryCandidate: w}) //nolint:exhaustive // Only this operation is enabled.
+	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	require.ErrorIs(t, err, ErrProposalNotApproved)
+	p, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
+	require.NoError(t, err)
+	_, err = f.store.Approve(ctx, p.ID, "user:other-staff", p.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+	require.Error(t, err)
+	view, err := w.view(p)
+	require.NoError(t, err)
+	require.Contains(t, view.SideEffects, "setup-docs")
+	require.Contains(t, view.Changes, proposalViewChange{Setting: "Allow health eligibility override", Before: "", After: "Yes — allow promotion if health evidence does not meet the criteria"})
+	stored, err := storedCatalogPromotion(p)
+	require.NoError(t, err)
+	require.True(t, stored.OverrideEligibility)
+	require.Equal(t, f.orgA, view.OrganizationID)
+	_, err = f.store.Approve(ctx, p.ID, f.owner.SubjectURN, p.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+	require.NoError(t, err)
+	result, err := tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	require.NoError(t, err)
+	require.Equal(t, string(ProposalSucceeded), result.Status)
+	result, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	require.NoError(t, err)
+	require.True(t, result.Replay)
+	require.Equal(t, int32(1), mutator.calls.Load())
+}
+
+func TestCatalogPromotionOverrideReplayPreservesConsentAcrossHealthChanges(t *testing.T) {
+	t.Parallel()
+	for _, initiallyEligible := range []bool{true, false} {
+		name := "becomes eligible"
+		if initiallyEligible {
+			name = "becomes ineligible"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newProposalFixture(t, "catalog_promotion_health_replay")
+			project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
+			require.NoError(t, err)
+			reason := "errors_observed"
+			if initiallyEligible {
+				reason = "eligible"
+			}
+			mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: uuid.NewString(), SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: initiallyEligible, Reason: reason}}
+			writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+			w := &catalogPromotionWriter{store: f.store, writes: writes, mutator: mutator, now: time.Now}
+			ctx := writeContext(t, f)
+			input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: mutator.candidate.MCPServerID, SourceRevision: mutator.candidate.SourceRevision, CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, OverrideEligibility: true, RetryKey: "stable-consent"}
+			prepared, err := w.prepare(ctx, input)
+			require.NoError(t, err)
+			original, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
+			require.NoError(t, err)
+			stored, err := storedCatalogPromotion(original)
+			require.NoError(t, err)
+			require.True(t, stored.OverrideEligibility)
+			view, err := w.view(original)
+			require.NoError(t, err)
+			require.Contains(t, view.Changes, proposalViewChange{Setting: "Allow health eligibility override", After: "Yes — allow promotion if health evidence does not meet the criteria"})
+			_, err = f.store.Approve(ctx, original.ID, f.owner.SubjectURN, original.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+			require.NoError(t, err)
+			mutator.candidate.Eligible = !initiallyEligible
+			mutator.candidate.Reason = "errors_observed"
+			if mutator.candidate.Eligible {
+				mutator.candidate.Reason = "eligible"
+			}
+			replayed, err := w.prepare(ctx, input)
+			require.NoError(t, err)
+			require.True(t, replayed.Replay)
+			require.Equal(t, prepared.ProposalID, replayed.ProposalID)
+			persisted, err := f.store.GetForOwner(ctx, original.ID, f.owner)
+			require.NoError(t, err)
+			require.Equal(t, ProposalApproved, persisted.Status)
+			require.Equal(t, original.Arguments, persisted.Arguments)
+			require.Equal(t, original.Preview, persisted.Preview)
+			require.Equal(t, original.ExpectedStateDigest, persisted.ExpectedStateDigest)
+			require.Equal(t, original.ProposalDigest, persisted.ProposalDigest)
+			replayView, err := w.view(persisted)
+			require.NoError(t, err)
+			require.Equal(t, view, replayView)
+			// A healthy source permits both inputs through validation, so the stored consent must reject the changed request.
+			mutator.candidate.Eligible = true
+			mutator.candidate.Reason = "eligible"
+			input.OverrideEligibility = false
+			_, err = w.prepare(ctx, input)
+			require.ErrorIs(t, err, ErrProposalConflict)
+		})
+	}
 }

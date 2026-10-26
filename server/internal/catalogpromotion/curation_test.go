@@ -195,3 +195,60 @@ func TestCandidatePaginationNewestFirstStableAcrossTiesAndInsertions(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, original.ID, newest[0].ID)
 }
+
+func TestWeeklyDiscoveryDrainsMoreThanOnePage(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	q := repo.New(f.db)
+	for i := range 51 {
+		project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{Name: "Synthetic batch", Slug: fmt.Sprintf("synthetic-batch-%d", i), OrganizationID: f.target.OrganizationID})
+		require.NoError(t, err)
+		_, err = q.SeedPromotionSourceFixture(t.Context(), repo.SeedPromotionSourceFixtureParams{ProjectID: project.ID, Url: "https://catalog.example.com/mcp", CreatedAt: conv.ToPGTimestamptz(f.health.now.Add(-7 * 24 * time.Hour))})
+		require.NoError(t, err)
+	}
+	first, err := f.service.DiscoverBatch(t.Context())
+	require.NoError(t, err)
+	require.True(t, first.More)
+	second, err := f.service.DiscoverBatch(t.Context())
+	require.NoError(t, err)
+	require.False(t, second.More)
+	remaining, err := q.DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.health.now.Add(time.Hour)), ExcludedOrganizationID: "excluded-example"})
+	require.NoError(t, err)
+	require.Empty(t, remaining, "the same sweep must not revisit a claimed source")
+	remaining, err = q.DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.health.now.Add(7 * 24 * time.Hour)), ExcludedOrganizationID: "excluded-example"})
+	require.NoError(t, err)
+	require.Len(t, remaining, 50, "sources must be due again at the next weekly tick")
+	firstIDs := make([]uuid.UUID, 0, len(remaining))
+	for _, source := range remaining {
+		firstIDs = append(firstIDs, source.McpServerID)
+	}
+	f.service.now = func() time.Time { return f.health.now.Add(7 * 24 * time.Hour) }
+	first, err = f.service.DiscoverBatch(t.Context())
+	require.NoError(t, err)
+	require.True(t, first.More)
+	remaining, err = q.DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.service.now()), ExcludedOrganizationID: "excluded-example"})
+	require.NoError(t, err)
+	require.Len(t, remaining, 2)
+	for _, source := range remaining {
+		require.NotContains(t, firstIDs, source.McpServerID)
+	}
+	second, err = f.service.DiscoverBatch(t.Context())
+	require.NoError(t, err)
+	require.False(t, second.More)
+	rows, next, err := f.service.ListCandidates(t.Context(), "", 50, "all")
+	require.NoError(t, err)
+	require.Len(t, rows, 50)
+	tail, end, err := f.service.ListCandidates(t.Context(), next, 50, "all")
+	require.NoError(t, err)
+	require.Len(t, tail, 2)
+	require.Empty(t, end)
+	for _, candidate := range append(rows, tail...) {
+		checked, err := time.Parse(time.RFC3339, candidate.CheckedAt)
+		require.NoError(t, err)
+		require.Equal(t, f.service.now().Truncate(time.Second), checked, "every source must be revisited in week two")
+	}
+	remaining, err = q.DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.service.now().Add(time.Hour)), ExcludedOrganizationID: "excluded-example"})
+	require.NoError(t, err)
+	require.Empty(t, remaining)
+
+}
