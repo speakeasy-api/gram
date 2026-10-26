@@ -155,9 +155,9 @@ func TestLogClassificationPlacesTheProductAndClient(t *testing.T) {
 			client:  "ide",
 		},
 		{
-			name:    "it leaves the client empty when claude.ai says nothing about the device",
+			name:    "it places claude-ai where aivendors attributes it, with no client",
 			record:  inboundTestLog(dialect.GatewayLogScope, "gram", "execute_tool", logStringAttribute("gen_ai.operation.name", "execute_tool"), logStringAttribute("gram.mcp.client.name", "claude-ai")),
-			product: "claude-chat",
+			product: "claude-code",
 			client:  "",
 		},
 		{

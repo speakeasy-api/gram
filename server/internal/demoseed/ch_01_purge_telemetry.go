@@ -325,7 +325,7 @@ func (s *seeder) chTranscriptRows(ctx context.Context, ch driver.Conn) error {
 		SELECT ?, toString(gram_project_id), time_unix_nano, observed_time_unix_nano,
 		       concat('transcript:', toString(attributes.gram.chat.message.id)), chat_id,
 		       concat('transcript:', toString(attributes.gram.chat.message.id)), 'session.observed',
-		       'transcript', hook_source, 'claude-chat', 'web', user_id, user_email, 'anthropic',
+		       'transcript', hook_source, 'claude', 'web', user_id, user_email, 'anthropic',
 		       toString(attributes.gen_ai.response.model), '{}', '{}', '{}'
 		FROM telemetry_logs
 		WHERE gram_project_id = toUUID(?)

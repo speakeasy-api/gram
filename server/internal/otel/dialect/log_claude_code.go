@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
-	"github.com/speakeasy-api/gram/server/internal/agentsurface"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
@@ -119,8 +119,8 @@ func (ClaudeCodeLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
 // Client reads terminal.type, which Claude Code puts on every event.
 func (ClaudeCodeLog) Client(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, value := getOneLogAttr(record, "terminal.type")
-	if client := agentsurface.ClientForTerminal(value); client != "" {
-		return key, client, nil
+	if client := aivendors.ClientForTerminal(value); client != aivendors.ClientUnknown {
+		return key, string(client), nil
 	}
 	return "", "", nil
 }

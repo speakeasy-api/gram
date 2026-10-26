@@ -245,7 +245,7 @@ const mcpServerDescription = "MCP server the call went to, under the display nam
 
 const (
 	surfaceDescription = "Agent surface as the producer named it, mixing the product with where it ran. Deprecated: use product and client."
-	productDescription = "Agent product that made the call: claude-code, claude-chat, cowork, codex, chatgpt, cursor, copilot and others. Empty when the producer named none Speakeasy recognizes."
+	productDescription = "Agent product that made the call, as the AI products catalog names it: claude-code, claude (Claude chat), cowork, codex, chatgpt, cursor and others. Empty when the producer named none the catalog knows."
 	clientDescription  = "Kind of client the product ran in: cli, ide, desktop, web, mobile, cloud or slack. Empty when the producer gives no signal for it."
 	agentDescription   = "Speakeasy agent the call ran as, under its name. Empty for a call a person made."
 )
