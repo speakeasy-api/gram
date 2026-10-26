@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -42,121 +43,119 @@ const maxToolsetNameLength = 60
 // UpdateHostedServer applies an mcpServers.update to a canonical hosted wrapper. The wrapper owns the
 // hosting state; only the name and tool variations group, which the toolset shares, are written to the toolset too.
 func (s *Service) UpdateHostedServer(ctx context.Context, update mcpservers.HostedServerUpdate) (mcpserversrepo.McpServer, error) {
-	return s.writeHostedServer(ctx, update, false)
+	server, _, err := s.writeHostedServer(ctx, update.ToolsetID, hostedServerChange{
+		Name:                   update.Name,
+		Visibility:             &update.Visibility,
+		UserSessionIssuerID:    update.UserSessionIssuerID,
+		ClearUserSessionIssuer: update.ClearUserSessionIssuer,
+		ToolVariationsGroupID:  &update.ToolVariationsGroupID,
+		NetworkAccessMode:      update.NetworkAccessMode,
+	})
+	return server, err
 }
 
 // DisableHostedServer applies an mcpServers.delete on a canonical hosted wrapper: it disables the wrapper and keeps it.
 func (s *Service) DisableHostedServer(ctx context.Context, toolsetID uuid.UUID) error {
-	_, err := s.writeHostedServer(ctx, mcpservers.HostedServerUpdate{
-		ToolsetID:              toolsetID,
+	_, _, err := s.writeHostedServer(ctx, toolsetID, hostedServerChange{
 		Name:                   nil,
-		Visibility:             mcpservers.VisibilityDisabled,
+		Visibility:             new(mcpservers.VisibilityDisabled),
 		UserSessionIssuerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ClearUserSessionIssuer: false,
-		ToolVariationsGroupID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID:  nil,
 		NetworkAccessMode:      nil,
-	}, true)
+	})
 	return err
 }
 
-func (s *Service) writeHostedServer(ctx context.Context, update mcpservers.HostedServerUpdate, keepToolVariationsGroup bool) (mcpserversrepo.McpServer, error) {
+// writeHostedServer writes a change to a canonical hosted wrapper, gated on mcp:write for that server, and returns the
+// wrapper and the toolset view as committed.
+func (s *Service) writeHostedServer(ctx context.Context, toolsetID uuid.UUID, change hostedServerChange) (mcpserversrepo.McpServer, *types.Toolset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return mcpserversrepo.McpServer{}, oops.C(oops.CodeUnauthorized)
+		return mcpserversrepo.McpServer{}, nil, oops.C(oops.CodeUnauthorized)
 	}
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetID(update.ToolsetID.String()))
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetID(toolsetID.String()))
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, update.ToolsetID.String(), authCtx.ProjectID.String())); err != nil {
-		return mcpserversrepo.McpServer{}, err
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolsetID.String(), authCtx.ProjectID.String())); err != nil {
+		return mcpserversrepo.McpServer{}, nil, err
 	}
-	if update.Name != nil && utf8.RuneCountInString(*update.Name) > maxToolsetNameLength {
-		return mcpserversrepo.McpServer{}, oops.E(oops.CodeBadRequest, nil, "name must be at most %d characters", maxToolsetNameLength).LogWarn(ctx, logger)
+	if change.Name != nil && utf8.RuneCountInString(*change.Name) > maxToolsetNameLength {
+		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeBadRequest, nil, "name must be at most %d characters", maxToolsetNameLength).LogWarn(ctx, logger)
 	}
 
-	private := update.NetworkAccessMode != nil && !update.NetworkAccessMode.IsPublicOnly()
+	private := change.NetworkAccessMode != nil && !change.NetworkAccessMode.IsPublicOnly()
 	var finalizeNetworkAccess networkaccess.AdmissionFinalizer
 	if private {
-		finalize, err := s.networkAccessEligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: authCtx.ActiveOrganizationID, Mode: *update.NetworkAccessMode})
+		finalize, err := s.networkAccessEligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: authCtx.ActiveOrganizationID, Mode: *change.NetworkAccessMode})
 		if err != nil {
-			return mcpserversrepo.McpServer{}, oops.E(oops.CodeInvalid, err, "private network access is unavailable")
+			return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeInvalid, err, "private network access is unavailable")
 		}
 		finalizeNetworkAccess = finalize
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	if private {
 		if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
-			return mcpserversrepo.McpServer{}, oops.E(oops.CodeInvalid, err, "private network access is unavailable")
+			return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeInvalid, err, "private network access is unavailable")
 		}
 	} else if err := networkingressRepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle").LogError(ctx, logger)
+		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle").LogError(ctx, logger)
 	}
 	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
-		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "lock project admission").LogError(ctx, logger)
+		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "lock project admission").LogError(ctx, logger)
 	}
-	if update.UserSessionIssuerID.Valid {
-		if _, err := usersessionbindings.ValidateAndLock(ctx, dbtx, update.UserSessionIssuerID.UUID, *authCtx.ProjectID, authCtx.ActiveOrganizationID); err != nil {
+	if change.UserSessionIssuerID.Valid {
+		if _, err := usersessionbindings.ValidateAndLock(ctx, dbtx, change.UserSessionIssuerID.UUID, *authCtx.ProjectID, authCtx.ActiveOrganizationID); err != nil {
 			if errors.Is(err, usersessionbindings.ErrNotFound) {
-				return mcpserversrepo.McpServer{}, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogWarn(ctx, logger)
+				return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogWarn(ctx, logger)
 			}
-			return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "validate user session issuer").LogError(ctx, logger)
+			return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "validate user session issuer").LogError(ctx, logger)
 		}
 	}
-	if update.ToolVariationsGroupID.Valid {
-		if _, err := variationsRepo.New(dbtx).GetToolVariationsGroupByID(ctx, variationsRepo.GetToolVariationsGroupByIDParams{ID: update.ToolVariationsGroupID.UUID, ProjectID: *authCtx.ProjectID}); err != nil {
+	if change.ToolVariationsGroupID != nil && change.ToolVariationsGroupID.Valid {
+		if _, err := variationsRepo.New(dbtx).GetToolVariationsGroupByID(ctx, variationsRepo.GetToolVariationsGroupByIDParams{ID: change.ToolVariationsGroupID.UUID, ProjectID: *authCtx.ProjectID}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return mcpserversrepo.McpServer{}, oops.E(oops.CodeNotFound, err, "tool variations group not found").LogWarn(ctx, logger)
+				return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeNotFound, err, "tool variations group not found").LogWarn(ctx, logger)
 			}
-			return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "load tool variations group").LogError(ctx, logger)
+			return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "load tool variations group").LogError(ctx, logger)
 		}
 	}
 
-	existing, err := lockHostedToolset(ctx, dbtx, authCtx, update.ToolsetID)
+	existing, err := lockHostedToolset(ctx, dbtx, authCtx, toolsetID)
 	if err != nil {
-		return mcpserversrepo.McpServer{}, err
+		return mcpserversrepo.McpServer{}, nil, err
 	}
 	beforeView, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(existing.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
-		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "describe hosted toolset").LogError(ctx, logger)
+		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "describe hosted toolset").LogError(ctx, logger)
 	}
 
 	tr := s.repo.WithTx(dbtx)
 	updated := existing
-	if update.Name != nil && *update.Name != existing.Name {
+	if change.Name != nil && *change.Name != existing.Name {
 		updated, err = tr.UpdateToolsetDetails(ctx, repo.UpdateToolsetDetailsParams{
-			Name: *update.Name, Description: existing.Description, DefaultEnvironmentSlug: existing.DefaultEnvironmentSlug,
+			Name: *change.Name, Description: existing.Description, DefaultEnvironmentSlug: existing.DefaultEnvironmentSlug,
 			ToolSelectionMode: existing.ToolSelectionMode, Slug: existing.Slug, ProjectID: *authCtx.ProjectID,
 		})
 		if err != nil {
-			return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "rename hosted toolset").LogError(ctx, logger)
+			return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "rename hosted toolset").LogError(ctx, logger)
 		}
 	}
-	change := hostedServerChange{
-		Name:                   update.Name,
-		Visibility:             &update.Visibility,
-		UserSessionIssuerID:    update.UserSessionIssuerID,
-		ClearUserSessionIssuer: update.ClearUserSessionIssuer,
-		ToolVariationsGroupID:  nil,
-		NetworkAccessMode:      update.NetworkAccessMode,
-	}
-	if !keepToolVariationsGroup {
-		change.ToolVariationsGroupID = &update.ToolVariationsGroupID
-		if update.ToolVariationsGroupID != existing.ToolVariationsGroupID {
-			updated, err = tr.UpdateToolsetToolVariationsGroup(ctx, repo.UpdateToolsetToolVariationsGroupParams{ToolVariationsGroupID: update.ToolVariationsGroupID, Slug: existing.Slug, ProjectID: *authCtx.ProjectID})
-			if err != nil {
-				return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "update hosted toolset tool variations group").LogError(ctx, logger)
-			}
+	if change.ToolVariationsGroupID != nil && *change.ToolVariationsGroupID != existing.ToolVariationsGroupID {
+		updated, err = tr.UpdateToolsetToolVariationsGroup(ctx, repo.UpdateToolsetToolVariationsGroupParams{ToolVariationsGroupID: *change.ToolVariationsGroupID, Slug: existing.Slug, ProjectID: *authCtx.ProjectID})
+		if err != nil {
+			return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "update hosted toolset tool variations group").LogError(ctx, logger)
 		}
 	}
 
 	written, err := applyHostedServerChange(ctx, dbtx, s.audit, hostedActor(authCtx), updated, change)
 	if err != nil {
-		return mcpserversrepo.McpServer{}, err
+		return mcpserversrepo.McpServer{}, nil, err
 	}
 	wasEnabled := written.Before.Visibility != mcpservers.VisibilityDisabled
 	nowEnabled := written.After.Visibility != mcpservers.VisibilityDisabled
@@ -165,25 +164,25 @@ func (s *Service) writeHostedServer(ctx context.Context, update mcpservers.Hoste
 	if !wasEnabled && nowEnabled {
 		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated.ID, updated.Name)
 		if err != nil {
-			return mcpserversrepo.McpServer{}, err
+			return mcpserversrepo.McpServer{}, nil, err
 		}
 	}
 	// A package renders an OAuth server differently from a key-authenticated one.
 	if nowEnabled && written.Before.UserSessionIssuerID.Valid != written.After.UserSessionIssuerID.Valid {
 		carried, err := toolsetCarriedByPlugin(ctx, dbtx, authCtx, updated.ID)
 		if err != nil {
-			return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
+			return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
 		}
 		if carried {
 			if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
-				return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, logger)
+				return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, logger)
 			}
 		}
 	}
 
 	afterView, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(updated.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
-		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "describe updated hosted toolset").LogError(ctx, logger)
+		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "describe updated hosted toolset").LogError(ctx, logger)
 	}
 	if err := s.audit.LogToolsetUpdate(ctx, dbtx, audit.LogToolsetUpdateEvent{
 		OrganizationID:        authCtx.ActiveOrganizationID,
@@ -198,19 +197,19 @@ func (s *Service) writeHostedServer(ctx context.Context, update mcpservers.Hoste
 		ToolsetSnapshotBefore: beforeView,
 		ToolsetSnapshotAfter:  afterView,
 	}); err != nil {
-		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "log hosted toolset update").LogError(ctx, logger)
+		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "log hosted toolset update").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "commit hosted MCP server update").LogError(ctx, logger)
+		return mcpserversrepo.McpServer{}, nil, oops.E(oops.CodeUnexpected, err, "commit hosted MCP server update").LogError(ctx, logger)
 	}
 
 	s.triggerPluginPublish(ctx, authCtx, wasEnabled || nowEnabled, pluginCreated)
 	s.triggerToolsetIndex(ctx, afterView)
 	if err := s.reconcileCustomDomains(ctx, written.ClearedRootDomainIDs); err != nil {
-		return mcpserversrepo.McpServer{}, err
+		return mcpserversrepo.McpServer{}, nil, err
 	}
-	return written.After, nil
+	return written.After, afterView, nil
 }
 
 // lockHostedToolset locks the toolset behind a canonical wrapper, which hosted writes take before the wrapper.

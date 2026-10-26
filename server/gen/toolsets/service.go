@@ -50,6 +50,13 @@ type Service interface {
 	UpdateExternalOAuthServer(context.Context, *UpdateExternalOAuthServerPayload) (res *types.Toolset, err error)
 	// Remove OAuth server association from a toolset
 	RemoveOAuthServer(context.Context, *RemoveOAuthServerPayload) (res *types.Toolset, err error)
+	// Link a toolset to a user_session_issuer (or pass null to unlink). The
+	// user_session_issuer must already exist in the caller's project.
+
+	// Deprecated: use mcpServers.update with user_session_issuer_id, or
+	// clear_user_session_issuer to unlink. This endpoint will be removed on
+	// 2026-11-25.
+	SetUserSessionIssuer(context.Context, *SetUserSessionIssuerPayload) (res *types.Toolset, err error)
 	// Assign a tool variations group to a toolset to enable MCP tool filtering (or
 	// pass null to disable). The group must already exist in the caller's project.
 	SetToolVariationsGroup(context.Context, *SetToolVariationsGroupPayload) (res *types.Toolset, err error)
@@ -75,7 +82,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "listToolFilters", "listToolSchemaStaticValues", "cloneToolset", "addExternalOAuthServer", "updateExternalOAuthServer", "removeOAuthServer", "setToolVariationsGroup"}
+var MethodNames = [14]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "listToolFilters", "listToolSchemaStaticValues", "cloneToolset", "addExternalOAuthServer", "updateExternalOAuthServer", "removeOAuthServer", "setUserSessionIssuer", "setToolVariationsGroup"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -216,6 +223,18 @@ type SetToolVariationsGroupPayload struct {
 	// The tool variations group id to assign, or null to disable filtering.
 	ToolVariationsGroupID *string
 	ProjectSlugInput      *string
+}
+
+// SetUserSessionIssuerPayload is the payload type of the toolsets service
+// setUserSessionIssuer method.
+type SetUserSessionIssuerPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The slug of the toolset to link
+	Slug types.Slug
+	// The user_session_issuer id to link, or null to unlink.
+	UserSessionIssuerID *string
+	ProjectSlugInput    *string
 }
 
 // A literal value carried by a JSON Schema keyword.

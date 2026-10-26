@@ -28,6 +28,7 @@ type Endpoints struct {
 	AddExternalOAuthServer     goa.Endpoint
 	UpdateExternalOAuthServer  goa.Endpoint
 	RemoveOAuthServer          goa.Endpoint
+	SetUserSessionIssuer       goa.Endpoint
 	SetToolVariationsGroup     goa.Endpoint
 }
 
@@ -48,6 +49,7 @@ func NewEndpoints(s Service) *Endpoints {
 		AddExternalOAuthServer:     NewAddExternalOAuthServerEndpoint(s, a.APIKeyAuth),
 		UpdateExternalOAuthServer:  NewUpdateExternalOAuthServerEndpoint(s, a.APIKeyAuth),
 		RemoveOAuthServer:          NewRemoveOAuthServerEndpoint(s, a.APIKeyAuth),
+		SetUserSessionIssuer:       NewSetUserSessionIssuerEndpoint(s, a.APIKeyAuth),
 		SetToolVariationsGroup:     NewSetToolVariationsGroupEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -66,6 +68,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.AddExternalOAuthServer = m(e.AddExternalOAuthServer)
 	e.UpdateExternalOAuthServer = m(e.UpdateExternalOAuthServer)
 	e.RemoveOAuthServer = m(e.RemoveOAuthServer)
+	e.SetUserSessionIssuer = m(e.SetUserSessionIssuer)
 	e.SetToolVariationsGroup = m(e.SetToolVariationsGroup)
 }
 
@@ -750,6 +753,65 @@ func NewRemoveOAuthServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.RemoveOAuthServer(ctx, p)
+	}
+}
+
+// NewSetUserSessionIssuerEndpoint returns an endpoint function that calls the
+// method "setUserSessionIssuer" of service "toolsets".
+func NewSetUserSessionIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetUserSessionIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetUserSessionIssuer(ctx, p)
 	}
 }
 
