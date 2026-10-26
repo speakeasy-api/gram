@@ -4202,8 +4202,8 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	for _, toolset := range toolsets {
 		// Traffic can arrive through the frozen alias or any of the canonical server's endpoints.
 		var slugs []string
-		if toolset.McpSlug.Valid && toolset.McpSlug.String != "" {
-			slugs = append(slugs, toolset.McpSlug.String)
+		if alias := hostingstate.LegacyAlias(toolset).Slug; alias.Valid && alias.String != "" {
+			slugs = append(slugs, alias.String)
 		}
 		if row := hostingstate.For(hosting, toolset.ID); row != nil && row.Canonical {
 			for _, slug := range row.EndpointSlugs {

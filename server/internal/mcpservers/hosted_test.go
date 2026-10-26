@@ -292,7 +292,7 @@ func TestUpdateMcpServerHostedWrapperFlipsVisibilityWithRetiredOAuthProxyLink(t 
 	require.NoError(t, err)
 	toolset, server := f.requireProjected(t, ctx)
 	require.Equal(t, "disabled", server.Visibility)
-	require.False(t, hostedmcp.WithServerState(toolset, &server).Public)
+	require.False(t, hostedmcp.ServerHosting(toolset, &server).Public)
 
 	tx := testenv.BeginTx(t, ctx, f.ti.conn)
 	enabled, err := hostedmcp.Enable(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("re-enable-test"), toolset)

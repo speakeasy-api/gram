@@ -259,7 +259,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		return s.executeProxiedMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta)
 	}
 
-	toolset, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
+	toolset, hosting, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
@@ -268,10 +268,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	}
 
 	// Pre-dispatch security check so an unsatisfied member surfaces as a
-	// member-scoped result (as in serveToolsetResolved). Members keep the
-	// toolset's own publicness; the meta surface is outside wrapper
-	// governance.
-	satisfied, err := s.checkToolsetSecurity(ctx, toolset, *inputs.toolsetIsPublic, inputs)
+	// member-scoped result (as in serveToolsetResolved). Members keep their
+	// toolset's hosting publicness.
+	satisfied, err := s.checkToolsetSecurity(ctx, toolset, hosting.Public, inputs)
 	if err != nil {
 		return nil, err
 	}
@@ -434,10 +433,10 @@ func (s *Service) buildMemberDispatch(
 	logger *slog.Logger,
 	gate *metaGateContext,
 	member metaMember,
-) (*toolsets_repo.Toolset, *mcpInputs, error) {
+) (*toolsets_repo.Toolset, hostingstate.Hosting, *mcpInputs, error) {
 	toolset, hosting, projectID, err := s.loadMemberToolset(ctx, logger, gate, member)
 	if err != nil {
-		return nil, nil, err
+		return nil, hostingstate.NotHosted(), nil, err
 	}
 
 	// A hosted member records no upstream resource, so its credential is the
@@ -447,15 +446,15 @@ func (s *Service) buildMemberDispatch(
 	// connected meta sessions keep hosted members callable.
 	tokens, err := gate.memberTokens(ctx, member)
 	if err != nil {
-		return nil, nil, err
+		return nil, hostingstate.NotHosted(), nil, err
 	}
 	hostedTokens, err := hostedMemberTokens(tokens, member)
 	if err != nil {
-		return nil, nil, err
+		return nil, hostingstate.NotHosted(), nil, err
 	}
 	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
+		return nil, hostingstate.NotHosted(), nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
 
 	var environment string
@@ -470,7 +469,7 @@ func (s *Service) buildMemberDispatch(
 			case errors.Is(err, pgx.ErrNoRows):
 				// Dangling environment: keep the toolset default.
 			case err != nil:
-				return nil, nil, oops.E(oops.CodeUnexpected, err, "load member environment").LogError(ctx, logger)
+				return nil, hostingstate.NotHosted(), nil, oops.E(oops.CodeUnexpected, err, "load member environment").LogError(ctx, logger)
 			default:
 				environment = row.Slug
 			}
@@ -520,7 +519,7 @@ func (s *Service) buildMemberDispatch(
 		identityCoverageRecorded: false,
 		toolSelection:            nil,
 	}
-	return toolset, inputs, nil
+	return toolset, hosting, inputs, nil
 }
 
 // hostedMemberTokens narrows a gate's token map to what a hosted member may
@@ -555,7 +554,7 @@ func (s *Service) loadMemberToolset(
 	member metaMember,
 ) (*toolsets_repo.Toolset, hostingstate.Hosting, uuid.UUID, error) {
 	if !member.toolsetID.Valid {
-		return nil, hostingstate.Hosting{}, uuid.Nil, oops.E(oops.CodeUnexpected, nil, "hosted member %q has no toolset", member.slug).LogError(ctx, logger)
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, nil, "hosted member %q has no toolset", member.slug).LogError(ctx, logger)
 	}
 	toolset, err := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
 		ID: member.toolsetID.UUID,
@@ -566,27 +565,27 @@ func (s *Service) loadMemberToolset(
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, hostingstate.Hosting{}, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	case err != nil:
-		return nil, hostingstate.Hosting{}, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
 	}
 	hosting, _, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
 	if err != nil {
-		return nil, hostingstate.Hosting{}, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member hosting state").LogError(ctx, logger)
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member hosting state").LogError(ctx, logger)
 	}
 	// Match direct wrapper dispatch: only the canonical wrapper gates on the
 	// toolset's hosting state. Independently configured servers use their own
 	// visibility, already checked during member admission.
 	if member.serverID == toolset.ID && !hosting.Enabled {
-		return nil, hostingstate.Hosting{}, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
 	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset, hosting.Public)
 	if err != nil {
-		return nil, hostingstate.Hosting{}, uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
 	}
 	if !allowed {
 		// Unauthorized reads as nonexistent (as in ServeToolsetResolved).
-		return nil, hostingstate.Hosting{}, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
+		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
 	}
 	return &toolset, hosting, toolset.ProjectID, nil
 }

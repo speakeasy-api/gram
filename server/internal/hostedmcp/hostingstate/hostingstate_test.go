@@ -20,7 +20,6 @@ func TestDerive(t *testing.T) {
 		Address: Address{Slug: pgtype.Text{String: "alias", Valid: true}, CustomDomainID: uuid.NullUUID{UUID: uuid.New(), Valid: true}},
 	}
 	endpoint := Address{Slug: pgtype.Text{String: "endpoint", Valid: true}, CustomDomainID: domain}
-	//nolint:exhaustruct // Only the fields Derive reads.
 	canonical := func(vis string, hasEndpoint bool) *Row {
 		return &Row{Canonical: true, Visibility: vis, UserSessionIssuerID: issuer, HasEndpoint: hasEndpoint, EndpointSlug: endpoint.Slug.String, EndpointCustomDomainID: domain}
 	}
@@ -32,7 +31,6 @@ func TestDerive(t *testing.T) {
 		address Address
 	}{
 		{name: "no server keeps the columns", row: nil, hosting: columns.Hosting, address: columns.Address},
-		//nolint:exhaustruct // A kept row carries no hosting state.
 		{name: "kept id serves nothing", row: &Row{Canonical: false}, hosting: Hosting{Enabled: false, Public: false, UserSessionIssuerID: columns.UserSessionIssuerID}, address: columns.Address},
 		{name: "public wrapper with endpoint", row: canonical(visibility.Public, true), hosting: Hosting{Enabled: true, Public: true, UserSessionIssuerID: issuer}, address: endpoint},
 		{name: "private wrapper with endpoint", row: canonical(visibility.Private, true), hosting: Hosting{Enabled: true, Public: false, UserSessionIssuerID: issuer}, address: endpoint},
@@ -51,7 +49,9 @@ func TestDerive(t *testing.T) {
 func TestFromServerDisabledWithExternalOAuthReadsPublic(t *testing.T) {
 	t.Parallel()
 
-	hosting := FromServer(uuid.NullUUID{UUID: uuid.New(), Valid: true}, visibility.Disabled, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	issuer := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	hosting := FromServer(uuid.NullUUID{UUID: uuid.New(), Valid: true}, visibility.Disabled, issuer)
 	require.False(t, hosting.Enabled)
 	require.True(t, hosting.Public)
+	require.Equal(t, issuer, hosting.UserSessionIssuerID)
 }

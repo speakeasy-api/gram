@@ -569,15 +569,16 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 
 // newResolvedMcpEndpointFromToolset materialises a ResolvedMcpEndpoint
 // from a resolved toolsets row. Caller is responsible for first checking
-// toolset.UserSessionIssuerID.Valid. routeBase is the URL surface the
+// hosting.UserSessionIssuerID.Valid. routeBase is the URL surface the
 // request arrived under — the WWW-Authenticate URL, OAuth issuer URL, and
 // consent form action all need to match the caller's surface.
 func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, hosting hostingstate.Hosting, routeBase mcproute.Base) *ResolvedMcpEndpoint {
+	alias := hostingstate.LegacyAlias(*toolset)
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewToolset(toolset.ID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
-		CustomDomainID:            toolset.CustomDomainID,
+		CustomDomainID:            alias.CustomDomainID,
 		IsPublic:                  hosting.Public,
 		idJAGConfigured:           false,
 		issuerStamped:             false,
@@ -589,7 +590,7 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, hosting h
 		RouteBase:                 routeBase,
 		sharedAuthorizationServer: nil,
 		sharedResource:            nil,
-		Slug:                      conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
+		Slug:                      conv.PtrValOr(conv.FromPGText[string](alias.Slug), ""),
 		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		UpstreamResource:          "",
 		UserSessionIssuerID:       hosting.UserSessionIssuerID.UUID,

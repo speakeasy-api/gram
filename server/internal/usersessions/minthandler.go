@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -305,11 +306,12 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	if !hosting.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated toolsets").LogError(ctx, s.logger)
 	}
-	if toolset.McpSlug.String == "" {
+	alias := hostingstate.LegacyAlias(toolset)
+	if alias.Slug.String == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "the hosted MCP server has no address; add one before minting a user-session token").LogWarn(ctx, s.logger)
 	}
 
-	issuerURL, err := url.JoinPath(s.serverURL, "mcp", toolset.McpSlug.String)
+	issuerURL, err := url.JoinPath(s.serverURL, "mcp", alias.Slug.String)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
 	}

@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
@@ -840,7 +841,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		if wErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, wErr, "verify toolset mcp server").LogError(ctx, s.logger)
 		}
-		hosted := hosting.Enabled && toolset.McpSlug.Valid && toolset.McpSlug.String != ""
+		alias := hostingstate.LegacyAlias(toolset)
+		hosted := hosting.Enabled && alias.Slug.Valid && alias.Slug.String != ""
 		if wrapper != nil && hosting.Enabled && !hosted {
 			// Without the legacy slug alias the server needs an endpoint of its own.
 			server, mcpErr := s.repo.GetMcpServerForPluginServer(ctx, repo.GetMcpServerForPluginServerParams{McpServerID: wrapper.ID, ProjectID: *ac.ProjectID})

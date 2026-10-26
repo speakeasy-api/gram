@@ -316,7 +316,7 @@ func TriggerToolsetIndex(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	}
 	if hasProxy {
 		// The current indexer cannot embed proxy tools, so this toolset is
-		// never served from the index.
+		// never hosting from the index.
 		return ErrToolsetIndexNotRequired
 	}
 
@@ -477,7 +477,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe existing toolset").LogError(ctx, logger)
 	}
 
-	effectiveExisting, _, err := hostedmcp.LoadServerState(ctx, dbtx, existingToolset)
+	existingHosting, _, err := hostedmcp.LoadServerState(ctx, dbtx, existingToolset)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load hosted MCP server").LogError(ctx, logger)
 	}
@@ -577,7 +577,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	// An enabled toolset publishes too: a rename moves its entry in the
 	// generated package even though no attach ran.
-	s.triggerPluginPublish(ctx, authCtx, effectiveExisting.Enabled || pluginContentsChanged, false)
+	s.triggerPluginPublish(ctx, authCtx, existingHosting.Enabled || pluginContentsChanged, false)
 	s.triggerToolsetIndex(ctx, toolsetDetails)
 
 	return toolsetDetails, nil
@@ -633,12 +633,12 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	// Only an MCP-enabled toolset is in a generated package, so only its
 	// deletion can change one. Membership is probed before the hosted wrapper
 	// is deleted below, since that deletion detaches wrapper-backed plugins.
-	served, _, err := hostedmcp.LoadServerState(ctx, dbtx, toDelete)
+	hosting, _, err := hostedmcp.LoadServerState(ctx, dbtx, toDelete)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load hosted MCP server").LogError(ctx, logger)
 	}
 	carried := false
-	if served.Enabled {
+	if hosting.Enabled {
 		carried, err = toolsetCarriedByPlugin(ctx, dbtx, authCtx, toDelete.ID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
@@ -1073,11 +1073,11 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 	}
-	served, _, err := hostedmcp.LoadServerState(ctx, dbtx, lockedToolset)
+	hosting, _, err := hostedmcp.LoadServerState(ctx, dbtx, lockedToolset)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load hosted MCP server").LogError(ctx, s.logger)
 	}
-	if !served.Public {
+	if !hosting.Public {
 		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have external OAuth servers").LogError(ctx, s.logger)
 	}
 	if lockedToolset.ExternalOauthServerID.Valid {

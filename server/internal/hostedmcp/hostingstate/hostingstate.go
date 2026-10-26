@@ -44,6 +44,17 @@ type Address struct {
 	CustomDomainID uuid.NullUUID
 }
 
+// NotHosted is the hosting state of a toolset nothing serves.
+func NotHosted() Hosting {
+	return Hosting{Enabled: false, Public: false, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+}
+
+// LegacyAlias is the legacy /mcp/<slug> address a toolset created before hosted servers owned their endpoints still
+// answers on (AIM-670). It is the only reader of the toolset's address columns.
+func LegacyAlias(toolset toolsetsrepo.Toolset) Address {
+	return Address{Slug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID}
+}
+
 // Columns are a toolset's own hosting columns, which stand only for a toolset without a canonical wrapper.
 type Columns struct {
 	Hosting
@@ -54,7 +65,7 @@ type Columns struct {
 func ToolsetColumns(toolset toolsetsrepo.Toolset) Columns {
 	return Columns{
 		Hosting: Hosting{Enabled: toolset.McpEnabled, Public: toolset.McpIsPublic, UserSessionIssuerID: toolset.UserSessionIssuerID},
-		Address: Address{Slug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID},
+		Address: LegacyAlias(toolset),
 	}
 }
 
@@ -165,12 +176,13 @@ func CheckPrivateIngress(ctx context.Context, db networkingressrepo.DBTX, organi
 // current address while an endpoint still holds it, else the platform endpoint, else the oldest one. With no live
 // endpoint the alias stays. This is the address rule pods that mirror the toolset columns apply, so both agree.
 func AliasAddress(toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
+	alias := LegacyAlias(toolset)
 	var preferred *mcpendpointsrepo.McpEndpoint
 	for i := range endpoints {
 		candidate := &endpoints[i]
 		switch {
-		case toolset.McpSlug.Valid && candidate.Slug == toolset.McpSlug.String && candidate.CustomDomainID == toolset.CustomDomainID:
-			return toolset.McpSlug, toolset.CustomDomainID
+		case alias.Slug.Valid && candidate.Slug == alias.Slug.String && candidate.CustomDomainID == alias.CustomDomainID:
+			return alias.Slug, alias.CustomDomainID
 		case preferred == nil:
 			preferred = candidate
 		case !candidate.CustomDomainID.Valid && preferred.CustomDomainID.Valid:
@@ -180,7 +192,7 @@ func AliasAddress(toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.Mcp
 		}
 	}
 	if preferred == nil {
-		return toolset.McpSlug, toolset.CustomDomainID
+		return alias.Slug, alias.CustomDomainID
 	}
 	return pgtype.Text{String: preferred.Slug, Valid: true}, preferred.CustomDomainID
 }
@@ -194,7 +206,9 @@ func FollowAlias(ctx context.Context, tx toolsetsrepo.DBTX, organizationID strin
 		return nil
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "load hosted toolset")
-	case !toolset.McpSlug.Valid || toolset.McpSlug.String == "":
+	}
+	alias := LegacyAlias(toolset)
+	if !alias.Slug.Valid || alias.Slug.String == "" {
 		return nil
 	}
 	rows, err := mcpendpointsrepo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
@@ -208,7 +222,7 @@ func FollowAlias(ctx context.Context, tx toolsetsrepo.DBTX, organizationID strin
 		live = append(live, row.McpEndpoint)
 	}
 	slug, domainID := AliasAddress(toolset, live)
-	if slug == toolset.McpSlug && domainID == toolset.CustomDomainID {
+	if slug == alias.Slug && domainID == alias.CustomDomainID {
 		return nil
 	}
 	if err := toolsetsrepo.New(tx).MoveToolsetMCPAlias(ctx, toolsetsrepo.MoveToolsetMCPAliasParams{McpSlug: slug, CustomDomainID: domainID, ID: toolsetID, ProjectID: projectID}); err != nil {

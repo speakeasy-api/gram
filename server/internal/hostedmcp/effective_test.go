@@ -11,7 +11,7 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-func TestWithServerState(t *testing.T) {
+func TestServerHosting(t *testing.T) {
 	t.Parallel()
 
 	toolsetID := uuid.New()
@@ -46,7 +46,7 @@ func TestWithServerState(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := WithServerState(stale, tt.wrapper)
+			got := ServerHosting(stale, tt.wrapper)
 			require.Equal(t, tt.enabled, got.Enabled)
 			require.Equal(t, tt.public, got.Public)
 			require.Equal(t, tt.issuer, got.UserSessionIssuerID)
@@ -54,15 +54,15 @@ func TestWithServerState(t *testing.T) {
 	}
 }
 
-func TestWithServerStateDisabledReadsHowItReEnables(t *testing.T) {
+func TestServerHostingDisabledReadsHowItReEnables(t *testing.T) {
 	t.Parallel()
 
 	toolsetID := uuid.New()
 	disabled := &mcpserversrepo.McpServer{ID: toolsetID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: visibility.Disabled}
 	private := toolsetsrepo.Toolset{ID: toolsetID, McpEnabled: true, McpIsPublic: false}
-	require.False(t, WithServerState(private, disabled).Public, "a private alias re-enables private")
+	require.False(t, ServerHosting(private, disabled).Public, "a private alias re-enables private")
 
 	withOAuth := private
 	withOAuth.ExternalOauthServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
-	require.True(t, WithServerState(withOAuth, disabled).Public, "external OAuth re-enables public")
+	require.True(t, ServerHosting(withOAuth, disabled).Public, "external OAuth re-enables public")
 }
