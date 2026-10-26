@@ -1945,6 +1945,9 @@ func EncodeListManagedDevicesRequest(encoder func(*http.Request) goahttp.Encoder
 		if p.CoverageBucket != nil {
 			values.Add("coverage_bucket", *p.CoverageBucket)
 		}
+		if p.PolicyState != nil {
+			values.Add("policy_state", *p.PolicyState)
+		}
 		for _, value := range p.UserIds {
 			values.Add("user_ids", value)
 		}
@@ -2494,8 +2497,62 @@ func unmarshalManagedDeviceResponseBodyToDeviceintegrationsManagedDevice(v *Mana
 		AgentLastSeenAt:  v.AgentLastSeenAt,
 		CoverageBucket:   *v.CoverageBucket,
 		MissingSince:     v.MissingSince,
+		PolicyState:      v.PolicyState,
 		FirstSeenAt:      *v.FirstSeenAt,
 		LastSeenAt:       *v.LastSeenAt,
+	}
+	if v.AgentState != nil {
+		res.AgentState = unmarshalManagedDeviceAgentStateResponseBodyToDeviceintegrationsManagedDeviceAgentState(v.AgentState)
+	}
+
+	return res
+}
+
+// unmarshalManagedDeviceAgentStateResponseBodyToDeviceintegrationsManagedDeviceAgentState
+// builds a value of type *deviceintegrations.ManagedDeviceAgentState from a
+// value of type *ManagedDeviceAgentStateResponseBody.
+func unmarshalManagedDeviceAgentStateResponseBodyToDeviceintegrationsManagedDeviceAgentState(v *ManagedDeviceAgentStateResponseBody) *deviceintegrations.ManagedDeviceAgentState {
+	if v == nil {
+		return nil
+	}
+	res := &deviceintegrations.ManagedDeviceAgentState{
+		ReportedAt:         *v.ReportedAt,
+		AppliedEtag:        v.AppliedEtag,
+		AppliedAt:          v.AppliedAt,
+		EnforcementHalted:  *v.EnforcementHalted,
+		CurrentBlocked:     *v.CurrentBlocked,
+		SpeakeasydVersion:  v.SpeakeasydVersion,
+		SpeakeasyVersion:   v.SpeakeasyVersion,
+		SpeakeasyUIVersion: v.SpeakeasyUIVersion,
+		Os:                 v.Os,
+		Arch:               v.Arch,
+		DriftCountingSince: v.DriftCountingSince,
+	}
+	res.Tools = make([]*deviceintegrations.ManagedDeviceTool, len(v.Tools))
+	for i, val := range v.Tools {
+		if val == nil {
+			res.Tools[i] = nil
+			continue
+		}
+		res.Tools[i] = unmarshalManagedDeviceToolResponseBodyToDeviceintegrationsManagedDeviceTool(val)
+	}
+
+	return res
+}
+
+// unmarshalManagedDeviceToolResponseBodyToDeviceintegrationsManagedDeviceTool
+// builds a value of type *deviceintegrations.ManagedDeviceTool from a value of
+// type *ManagedDeviceToolResponseBody.
+func unmarshalManagedDeviceToolResponseBodyToDeviceintegrationsManagedDeviceTool(v *ManagedDeviceToolResponseBody) *deviceintegrations.ManagedDeviceTool {
+	res := &deviceintegrations.ManagedDeviceTool{
+		Tool:             *v.Tool,
+		Layer:            *v.Layer,
+		Outcome:          *v.Outcome,
+		PendingReason:    v.PendingReason,
+		ErrorKind:        v.ErrorKind,
+		RestartRequired:  *v.RestartRequired,
+		ActionRequired:   *v.ActionRequired,
+		DriftCorrections: v.DriftCorrections,
 	}
 
 	return res

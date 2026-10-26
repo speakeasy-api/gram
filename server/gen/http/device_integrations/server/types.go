@@ -242,6 +242,17 @@ type GetCoverageResponseBody struct {
 	// Agent users with no matching device in any connected MDM inventory — shadow
 	// devices or fleets outside MDM.
 	UnmanagedAgentUsers int64 `form:"unmanaged_agent_users" json:"unmanaged_agent_users" xml:"unmanaged_agent_users"`
+	// agent_active devices whose latest report applies the policy last served to
+	// the reporting user.
+	PolicyAttested int64 `form:"policy_attested" json:"policy_attested" xml:"policy_attested"`
+	// agent_active devices that report a different policy, or none.
+	PolicyOutdated int64 `form:"policy_outdated" json:"policy_outdated" xml:"policy_outdated"`
+	// agent_active devices with no state report within the window, typically an
+	// agent that predates reporting.
+	PolicyUnreported int64 `form:"policy_unreported" json:"policy_unreported" xml:"policy_unreported"`
+	// agent_active devices whose agent build is blocked, so the kill switch has
+	// halted enforcement.
+	EnforcementHalted int64 `form:"enforcement_halted" json:"enforcement_halted" xml:"enforcement_halted"`
 }
 
 // ListProvidersUnauthorizedResponseBody is the type of the
@@ -2211,9 +2222,9 @@ type ManagedDeviceResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Last device check-in as reported by the MDM.
 	MdmLastCheckInAt *string `form:"mdm_last_check_in_at,omitempty" json:"mdm_last_check_in_at,omitempty" xml:"mdm_last_check_in_at,omitempty"`
-	// The device-agent heartbeat that classified this device: the machine's own
-	// under device-level matching, otherwise its assigned user's. Omitted when no
-	// agent has ever synced.
+	// The latest sign of life that classified this device, a policy poll or a
+	// state report: the machine's own under device-level matching, otherwise its
+	// assigned user's. Omitted when no agent has ever synced.
 	AgentLastSeenAt *string `form:"agent_last_seen_at,omitempty" json:"agent_last_seen_at,omitempty" xml:"agent_last_seen_at,omitempty"`
 	// Coverage classification for the device. What agent_active attests depends on
 	// the org's matching mode and on whether this device matched by serial or by
@@ -2221,8 +2232,73 @@ type ManagedDeviceResponseBody struct {
 	CoverageBucket string `form:"coverage_bucket" json:"coverage_bucket" xml:"coverage_bucket"`
 	// When the device went absent from the MDM inventory. Omitted while present.
 	MissingSince *string `form:"missing_since,omitempty" json:"missing_since,omitempty" xml:"missing_since,omitempty"`
-	FirstSeenAt  string  `form:"first_seen_at" json:"first_seen_at" xml:"first_seen_at"`
-	LastSeenAt   string  `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
+	// Whether an agent_active device verifiably applies its policy. attested: its
+	// latest report applies the policy last served to the reporting user.
+	// outdated: it reports a different or no policy. unreported: no report within
+	// the window, from an agent that predates reporting or has stopped sending.
+	// halted: the kill switch stopped enforcement on a blocked agent build.
+	// Omitted for every other bucket.
+	PolicyState *string `form:"policy_state,omitempty" json:"policy_state,omitempty" xml:"policy_state,omitempty"`
+	// The latest state report that classified this device. Omitted when its agent
+	// has never reported.
+	AgentState  *ManagedDeviceAgentStateResponseBody `form:"agent_state,omitempty" json:"agent_state,omitempty" xml:"agent_state,omitempty"`
+	FirstSeenAt string                               `form:"first_seen_at" json:"first_seen_at" xml:"first_seen_at"`
+	LastSeenAt  string                               `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
+}
+
+// ManagedDeviceAgentStateResponseBody is used to define fields on response
+// body types.
+type ManagedDeviceAgentStateResponseBody struct {
+	// When the control plane received the report.
+	ReportedAt string `form:"reported_at" json:"reported_at" xml:"reported_at"`
+	// Etag of the policy the agent last applied.
+	AppliedEtag *string `form:"applied_etag,omitempty" json:"applied_etag,omitempty" xml:"applied_etag,omitempty"`
+	// When the agent first applied that etag.
+	AppliedAt *string `form:"applied_at,omitempty" json:"applied_at,omitempty" xml:"applied_at,omitempty"`
+	// True when the kill switch has halted policy enforcement.
+	EnforcementHalted bool `form:"enforcement_halted" json:"enforcement_halted" xml:"enforcement_halted"`
+	// True when the agent build is in blocked_versions.
+	CurrentBlocked bool `form:"current_blocked" json:"current_blocked" xml:"current_blocked"`
+	// Version of the speakeasyd daemon.
+	SpeakeasydVersion *string `form:"speakeasyd_version,omitempty" json:"speakeasyd_version,omitempty" xml:"speakeasyd_version,omitempty"`
+	// Version of the speakeasy CLI.
+	SpeakeasyVersion *string `form:"speakeasy_version,omitempty" json:"speakeasy_version,omitempty" xml:"speakeasy_version,omitempty"`
+	// Version of the menu bar app.
+	SpeakeasyUIVersion *string `form:"speakeasy_ui_version,omitempty" json:"speakeasy_ui_version,omitempty" xml:"speakeasy_ui_version,omitempty"`
+	// Operating system, e.g. darwin.
+	Os *string `form:"os,omitempty" json:"os,omitempty" xml:"os,omitempty"`
+	// CPU architecture, e.g. arm64.
+	Arch *string `form:"arch,omitempty" json:"arch,omitempty" xml:"arch,omitempty"`
+	// Each managed tool's outcome from the agent's last reconcile.
+	Tools []*ManagedDeviceToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// Start of the window tools[].drift_corrections counts over. Omitted when no
+	// tool measures drift.
+	DriftCountingSince *string `form:"drift_counting_since,omitempty" json:"drift_counting_since,omitempty" xml:"drift_counting_since,omitempty"`
+}
+
+// ManagedDeviceToolResponseBody is used to define fields on response body
+// types.
+type ManagedDeviceToolResponseBody struct {
+	// Stable tool id, e.g. claude_code.
+	Tool string `form:"tool" json:"tool" xml:"tool"`
+	// Enforcement layer: user, managed, off, or unknown.
+	Layer string `form:"layer" json:"layer" xml:"layer"`
+	// Reconcile outcome: armed, pending, skipped (tool not installed), error,
+	// unmanaged, or unknown.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// Why a pending tool is not enforcing yet: privileged_writer_not_ready,
+	// plugin_bundle_not_cloned, or unknown.
+	PendingReason *string `form:"pending_reason,omitempty" json:"pending_reason,omitempty" xml:"pending_reason,omitempty"`
+	// Class of a reconcile error: permission_denied, not_found, invalid_config, or
+	// unknown.
+	ErrorKind *string `form:"error_kind,omitempty" json:"error_kind,omitempty" xml:"error_kind,omitempty"`
+	// True when the tool loads the agent's changes only after it restarts.
+	RestartRequired bool `form:"restart_required" json:"restart_required" xml:"restart_required"`
+	// True when a problem the user can fix is blocking this tool.
+	ActionRequired bool `form:"action_required" json:"action_required" xml:"action_required"`
+	// Times the agent restored what it owns in this tool since
+	// drift_counting_since. Omitted when not measured.
+	DriftCorrections *int `form:"drift_corrections,omitempty" json:"drift_corrections,omitempty" xml:"drift_corrections,omitempty"`
 }
 
 // NewListProvidersResponseBody builds the HTTP response body from the result
@@ -2396,6 +2472,10 @@ func NewGetCoverageResponseBody(res *deviceintegrations.DeviceIntegrationCoverag
 		Missing:                   res.Missing,
 		TotalDevices:              res.TotalDevices,
 		UnmanagedAgentUsers:       res.UnmanagedAgentUsers,
+		PolicyAttested:            res.PolicyAttested,
+		PolicyOutdated:            res.PolicyOutdated,
+		PolicyUnreported:          res.PolicyUnreported,
+		EnforcementHalted:         res.EnforcementHalted,
 	}
 	return body
 }
@@ -3970,10 +4050,11 @@ func NewRetrySchedulePayload(body *RetryScheduleRequestBody, apikeyToken *string
 
 // NewListManagedDevicesPayload builds a deviceIntegrations service
 // listManagedDevices endpoint payload.
-func NewListManagedDevicesPayload(provider *string, coverageBucket *string, userIds []string, userEmails []string, cursor *string, limit int, apikeyToken *string, sessionToken *string) *deviceintegrations.ListManagedDevicesPayload {
+func NewListManagedDevicesPayload(provider *string, coverageBucket *string, policyState *string, userIds []string, userEmails []string, cursor *string, limit int, apikeyToken *string, sessionToken *string) *deviceintegrations.ListManagedDevicesPayload {
 	v := &deviceintegrations.ListManagedDevicesPayload{}
 	v.Provider = provider
 	v.CoverageBucket = coverageBucket
+	v.PolicyState = policyState
 	v.UserIds = userIds
 	v.UserEmails = userEmails
 	v.Cursor = cursor

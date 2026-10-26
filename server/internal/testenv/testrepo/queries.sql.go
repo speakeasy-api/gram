@@ -2970,6 +2970,46 @@ func (q *Queries) InsertDeviceAgentDeviceSyncFixture(ctx context.Context, arg In
 	return err
 }
 
+const insertDeviceAgentStateReportFixture = `-- name: InsertDeviceAgentStateReportFixture :exec
+INSERT INTO device_agent_state_reports (
+    organization_id, email, serial_number, schema_version, generated_at, reported_at,
+    applied_etag, enforcement_halted, current_blocked, speakeasyd_version, tools
+)
+VALUES (
+    $1, $2, NULLIF($3::text, ''), 1, $4, $4,
+    NULLIF($5::text, ''), $6, $7, NULLIF($8::text, ''), $9
+)
+`
+
+type InsertDeviceAgentStateReportFixtureParams struct {
+	OrganizationID    string
+	Email             string
+	SerialNumber      string
+	ReportedAt        pgtype.Timestamptz
+	AppliedEtag       string
+	EnforcementHalted bool
+	CurrentBlocked    bool
+	SpeakeasydVersion string
+	Tools             []byte
+}
+
+// Seeds one stored state report for coverage tests; the write path is
+// agent.reportState.
+func (q *Queries) InsertDeviceAgentStateReportFixture(ctx context.Context, arg InsertDeviceAgentStateReportFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDeviceAgentStateReportFixture,
+		arg.OrganizationID,
+		arg.Email,
+		arg.SerialNumber,
+		arg.ReportedAt,
+		arg.AppliedEtag,
+		arg.EnforcementHalted,
+		arg.CurrentBlocked,
+		arg.SpeakeasydVersion,
+		arg.Tools,
+	)
+	return err
+}
+
 const insertDeviceAgentSyncFixture = `-- name: InsertDeviceAgentSyncFixture :exec
 INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
 VALUES ($1, $2, $3, $3)
@@ -5987,6 +6027,25 @@ type SetDeploymentFunctionInfraOverridesParams struct {
 
 func (q *Queries) SetDeploymentFunctionInfraOverrides(ctx context.Context, arg SetDeploymentFunctionInfraOverridesParams) error {
 	_, err := q.db.Exec(ctx, setDeploymentFunctionInfraOverrides, arg.MemoryMibOverride, arg.ScaleOverride, arg.DeploymentID)
+	return err
+}
+
+const setDeviceAgentServedEtagFixture = `-- name: SetDeviceAgentServedEtagFixture :exec
+UPDATE device_agent_syncs
+SET served_etag = $1, served_etag_changed_at = clock_timestamp()
+WHERE organization_id = $2
+  AND LOWER(email) = LOWER($3)
+`
+
+type SetDeviceAgentServedEtagFixtureParams struct {
+	ServedEtag     pgtype.Text
+	OrganizationID string
+	Email          string
+}
+
+// Records the etag GetPlugins last served a user, as a poll would.
+func (q *Queries) SetDeviceAgentServedEtagFixture(ctx context.Context, arg SetDeviceAgentServedEtagFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDeviceAgentServedEtagFixture, arg.ServedEtag, arg.OrganizationID, arg.Email)
 	return err
 }
 

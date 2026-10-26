@@ -739,6 +739,7 @@ func (s *Service) ListManagedDevices(ctx context.Context, payload *gen.ListManag
 		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
 		CursorID:       cursor,
 		Bucket:         conv.PtrToPGTextEmpty(payload.CoverageBucket),
+		PolicyState:    conv.PtrToPGTextEmpty(payload.PolicyState),
 		UserIds:        userIDs,
 		UserEmails:     userEmails,
 		PageLimit:      int32(limit), //nolint:gosec // design bounds limit to [1,200]
@@ -749,7 +750,7 @@ func (s *Service) ListManagedDevices(ctx context.Context, payload *gen.ListManag
 
 	devices := make([]*gen.ManagedDevice, 0, len(rows))
 	for _, row := range rows {
-		devices = append(devices, deviceView(row))
+		devices = append(devices, deviceView(ctx, s.logger, row))
 	}
 	var nextCursor *string
 	if len(rows) == limit {
@@ -808,6 +809,10 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 		Missing:                   counts.Missing,
 		TotalDevices:              counts.Total,
 		UnmanagedAgentUsers:       unmanaged,
+		PolicyAttested:            counts.PolicyAttested,
+		PolicyOutdated:            counts.PolicyOutdated,
+		PolicyUnreported:          counts.PolicyUnreported,
+		EnforcementHalted:         counts.EnforcementHalted,
 	}, nil
 }
 

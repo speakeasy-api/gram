@@ -1571,6 +1571,8 @@ trackedFiles:
   src/models/components/logfilter.ts: {}
   src/models/components/managedagent.ts: {}
   src/models/components/manageddevice.ts: {}
+  src/models/components/manageddeviceagentstate.ts: {}
+  src/models/components/manageddevicetool.ts: {}
   src/models/components/marketplacesettingsresult.ts: {}
   src/models/components/markriskresultsfalsepositiverequestbody.ts: {}
   src/models/components/mcpendpoint.ts: {}
@@ -7400,7 +7402,7 @@ examples:
     speakeasy-default-get-device-integration-coverage:
       responses:
         "200":
-          application/json: {"active_window_minutes": 656966, "agent_active": 936181, "agent_active_device_attested": 656966, "agent_other_device": 656966, "agent_stale": 628953, "attestation": "user", "missing": 482460, "no_agent": 978251, "no_email": 639554, "organization_id": "<id>", "total_devices": 639009, "unmanaged_agent_users": 235041, "unresolved_email": 11818}
+          application/json: {"active_window_minutes": 656966, "agent_active": 936181, "agent_active_device_attested": 656966, "agent_other_device": 656966, "agent_stale": 628953, "attestation": "user", "enforcement_halted": 656966, "missing": 482460, "no_agent": 978251, "no_email": 639554, "organization_id": "<id>", "policy_attested": 936181, "policy_outdated": 628953, "policy_unreported": 482460, "total_devices": 639009, "unmanaged_agent_users": 235041, "unresolved_email": 11818}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

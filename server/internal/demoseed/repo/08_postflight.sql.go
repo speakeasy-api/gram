@@ -123,6 +123,20 @@ func (q *Queries) PostflightCountChats(ctx context.Context, orgID string) (int64
 	return count, err
 }
 
+const postflightCountDeviceAgentStateReports = `-- name: PostflightCountDeviceAgentStateReports :one
+
+SELECT count(*) FROM device_agent_state_reports WHERE organization_id = $1::text
+`
+
+// State reports: one attested machine and one enforcing an older policy.
+// Without them every active device reads unreported.
+func (q *Queries) PostflightCountDeviceAgentStateReports(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountDeviceAgentStateReports, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountDeviceIntegrationConfigs = `-- name: PostflightCountDeviceIntegrationConfigs :one
 SELECT count(*) FROM device_integration_configs
 WHERE organization_id = $1::text AND deleted IS FALSE

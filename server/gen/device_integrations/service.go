@@ -149,6 +149,17 @@ type DeviceIntegrationCoverage struct {
 	// Agent users with no matching device in any connected MDM inventory — shadow
 	// devices or fleets outside MDM.
 	UnmanagedAgentUsers int64
+	// agent_active devices whose latest report applies the policy last served to
+	// the reporting user.
+	PolicyAttested int64
+	// agent_active devices that report a different policy, or none.
+	PolicyOutdated int64
+	// agent_active devices with no state report within the window, typically an
+	// agent that predates reporting.
+	PolicyUnreported int64
+	// agent_active devices whose agent build is blocked, so the kill switch has
+	// halted enforcement.
+	EnforcementHalted int64
 }
 
 // A vendor the device integrations framework can connect to.
@@ -274,6 +285,8 @@ type ListManagedDevicesPayload struct {
 	Provider *string
 	// Only devices in this coverage bucket.
 	CoverageBucket *string
+	// Only agent_active devices in this policy state.
+	PolicyState *string
 	// Only devices assigned to these Speakeasy users. Combined with user_emails as
 	// an OR, because a device only carries a resolved user id when the MDM's
 	// reported email matched a member.
@@ -342,9 +355,9 @@ type ManagedDevice struct {
 	UserID *string
 	// Last device check-in as reported by the MDM.
 	MdmLastCheckInAt *string
-	// The device-agent heartbeat that classified this device: the machine's own
-	// under device-level matching, otherwise its assigned user's. Omitted when no
-	// agent has ever synced.
+	// The latest sign of life that classified this device, a policy poll or a
+	// state report: the machine's own under device-level matching, otherwise its
+	// assigned user's. Omitted when no agent has ever synced.
 	AgentLastSeenAt *string
 	// Coverage classification for the device. What agent_active attests depends on
 	// the org's matching mode and on whether this device matched by serial or by
@@ -352,8 +365,72 @@ type ManagedDevice struct {
 	CoverageBucket string
 	// When the device went absent from the MDM inventory. Omitted while present.
 	MissingSince *string
-	FirstSeenAt  string
-	LastSeenAt   string
+	// Whether an agent_active device verifiably applies its policy. attested: its
+	// latest report applies the policy last served to the reporting user.
+	// outdated: it reports a different or no policy. unreported: no report within
+	// the window, from an agent that predates reporting or has stopped sending.
+	// halted: the kill switch stopped enforcement on a blocked agent build.
+	// Omitted for every other bucket.
+	PolicyState *string
+	// The latest state report that classified this device. Omitted when its agent
+	// has never reported.
+	AgentState  *ManagedDeviceAgentState
+	FirstSeenAt string
+	LastSeenAt  string
+}
+
+// What a device's agent last reported it enforces. Carries no error text or
+// user-facing message.
+type ManagedDeviceAgentState struct {
+	// When the control plane received the report.
+	ReportedAt string
+	// Etag of the policy the agent last applied.
+	AppliedEtag *string
+	// When the agent first applied that etag.
+	AppliedAt *string
+	// True when the kill switch has halted policy enforcement.
+	EnforcementHalted bool
+	// True when the agent build is in blocked_versions.
+	CurrentBlocked bool
+	// Version of the speakeasyd daemon.
+	SpeakeasydVersion *string
+	// Version of the speakeasy CLI.
+	SpeakeasyVersion *string
+	// Version of the menu bar app.
+	SpeakeasyUIVersion *string
+	// Operating system, e.g. darwin.
+	Os *string
+	// CPU architecture, e.g. arm64.
+	Arch *string
+	// Each managed tool's outcome from the agent's last reconcile.
+	Tools []*ManagedDeviceTool
+	// Start of the window tools[].drift_corrections counts over. Omitted when no
+	// tool measures drift.
+	DriftCountingSince *string
+}
+
+// One managed tool's enforcement state on a device.
+type ManagedDeviceTool struct {
+	// Stable tool id, e.g. claude_code.
+	Tool string
+	// Enforcement layer: user, managed, off, or unknown.
+	Layer string
+	// Reconcile outcome: armed, pending, skipped (tool not installed), error,
+	// unmanaged, or unknown.
+	Outcome string
+	// Why a pending tool is not enforcing yet: privileged_writer_not_ready,
+	// plugin_bundle_not_cloned, or unknown.
+	PendingReason *string
+	// Class of a reconcile error: permission_denied, not_found, invalid_config, or
+	// unknown.
+	ErrorKind *string
+	// True when the tool loads the agent's changes only after it restarts.
+	RestartRequired bool
+	// True when a problem the user can fix is blocking this tool.
+	ActionRequired bool
+	// Times the agent restored what it owns in this tool since
+	// drift_counting_since. Omitted when not measured.
+	DriftCorrections *int
 }
 
 // RetrySchedulePayload is the payload type of the deviceIntegrations service

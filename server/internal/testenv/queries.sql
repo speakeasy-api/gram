@@ -452,6 +452,25 @@ FROM device_agent_syncs
 WHERE organization_id = @organization_id
   AND email = @email;
 
+-- name: InsertDeviceAgentStateReportFixture :exec
+-- Seeds one stored state report for coverage tests; the write path is
+-- agent.reportState.
+INSERT INTO device_agent_state_reports (
+    organization_id, email, serial_number, schema_version, generated_at, reported_at,
+    applied_etag, enforcement_halted, current_blocked, speakeasyd_version, tools
+)
+VALUES (
+    @organization_id, @email, NULLIF(@serial_number::text, ''), 1, @reported_at, @reported_at,
+    NULLIF(@applied_etag::text, ''), @enforcement_halted, @current_blocked, NULLIF(@speakeasyd_version::text, ''), @tools
+);
+
+-- name: SetDeviceAgentServedEtagFixture :exec
+-- Records the etag GetPlugins last served a user, as a poll would.
+UPDATE device_agent_syncs
+SET served_etag = @served_etag, served_etag_changed_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND LOWER(email) = LOWER(@email);
+
 -- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
 VALUES (@device_integration_config_id, @organization_id, @external_id, NULLIF(@user_email::text, ''), sqlc.narg('user_id')::text, NULLIF(@serial_number::text, ''), sqlc.narg('missing_since')::timestamptz);

@@ -473,6 +473,13 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byOrg(s.q.PostflightCountMDMDevices),
 			fail:  postflightMustEqual(7, "expected 7 mdm devices, found %d"),
 		},
+		// The policy states coverage refines agent_active into: one attested
+		// machine and one behind, beside a third with no report.
+		{
+			what:  "device agent state reports",
+			count: byOrg(s.q.PostflightCountDeviceAgentStateReports),
+			fail:  postflightMustEqual(2, "expected 2 device agent state reports, found %d"),
+		},
 		{
 			what:  "device integration configs",
 			count: byOrg(s.q.PostflightCountDeviceIntegrationConfigs),

@@ -294,9 +294,13 @@ SELECT
     -- reporting, so without it this count could EXCEED agent_active and the
     -- caller's equality check would never match again — permanently printing
     -- the weaker claim for an org whose every active device is serial-attested.
-  , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_active' AND $1::boolean AND dads.last_seen_at >= $2::timestamptz) AS agent_active_device_attested
+  , count(*) FILTER (WHERE cov.coverage_bucket = 'agent_active' AND $1::boolean AND GREATEST(dads.last_seen_at, CASE WHEN rpt.by_serial THEN rpt.reported_at END) >= $2::timestamptz) AS agent_active_device_attested
   , count(*) FILTER (WHERE cov.coverage_bucket = 'no_agent') AS no_agent
   , count(*) FILTER (WHERE cov.coverage_bucket = 'unresolved_email') AS unresolved_email
+  , count(*) FILTER (WHERE pol.policy_state = 'attested') AS policy_attested
+  , count(*) FILTER (WHERE pol.policy_state = 'outdated') AS policy_outdated
+  , count(*) FILTER (WHERE pol.policy_state = 'unreported') AS policy_unreported
+  , count(*) FILTER (WHERE pol.policy_state = 'halted') AS enforcement_halted
   , count(*) AS total
 FROM mdm_devices d
 JOIN device_integration_configs c
@@ -309,6 +313,37 @@ LEFT JOIN device_agent_device_syncs dads
   ON dads.organization_id = d.organization_id
  AND LOWER(dads.serial_number) = LOWER(d.serial_number)
 LEFT JOIN LATERAL (
+  SELECT
+      r.id
+    , r.email
+    , r.reported_at
+    , r.applied_etag
+    , r.applied_at
+    , r.enforcement_halted
+    , r.current_blocked
+    , r.speakeasyd_version
+    , r.speakeasy_version
+    , r.speakeasy_ui_version
+    , r.os
+    , r.arch
+    , r.tools
+    , coalesce($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) AS by_serial
+  FROM device_agent_state_reports r
+  WHERE r.organization_id = d.organization_id
+    AND (
+      ($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
+      OR (NOT ($1::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email))
+    )
+  ORDER BY
+      coalesce($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
+    , coalesce(LOWER(r.email) = LOWER(d.user_email), false) DESC
+    , r.reported_at DESC
+  LIMIT 1
+) rpt ON TRUE
+LEFT JOIN device_agent_syncs served
+  ON served.organization_id = d.organization_id
+ AND LOWER(served.email) = LOWER(rpt.email)
+LEFT JOIN LATERAL (
   SELECT 1 AS found
   FROM device_agent_device_syncs o
   WHERE o.organization_id = d.organization_id
@@ -320,11 +355,12 @@ LEFT JOIN LATERAL (
 CROSS JOIN LATERAL (
   SELECT CASE
     WHEN d.missing_since IS NOT NULL THEN 'missing'
-    -- Device-level: this machine's own heartbeat answers for it, and outranks
-    -- everything email-based including no_email — a device the MDM records
-    -- with no assigned user is still legible when its own agent reports in.
-    WHEN $1::boolean AND dads.last_seen_at >= $2::timestamptz THEN 'agent_active'
-    WHEN $1::boolean AND dads.id IS NOT NULL THEN 'agent_stale'
+    -- Device-level: this machine's own heartbeat or report answers for it, and
+    -- outranks everything email-based including no_email — a device the MDM
+    -- records with no assigned user is still legible when its own agent
+    -- reports in. GREATEST ignores the NULL of whichever signal is absent.
+    WHEN $1::boolean AND GREATEST(dads.last_seen_at, CASE WHEN rpt.by_serial THEN rpt.reported_at END) >= $2::timestamptz THEN 'agent_active'
+    WHEN $1::boolean AND (dads.id IS NOT NULL OR rpt.by_serial) THEN 'agent_stale'
     -- Device-level only, and it requires POSITIVE evidence: the assigned user
     -- has a fresh heartbeat from a different serial-identified machine, so
     -- this one is a real gap. Without that evidence we must NOT land here —
@@ -336,14 +372,26 @@ CROSS JOIN LATERAL (
     -- consistent: a device with only a user-level heartbeat stays
     -- agent_active (the evidence push says the same thing, at "user"
     -- attestation), so enabling device-level matching can never demote a
-    -- covered fleet to 0%.
+    -- covered fleet to 0%. A serial-matched report returned above, so rpt
+    -- here is the assigned user's.
     WHEN coalesce(d.user_email, '') = '' THEN 'no_email'
-    WHEN das.last_seen_at >= $2::timestamptz THEN 'agent_active'
-    WHEN das.id IS NOT NULL THEN 'agent_stale'
+    WHEN GREATEST(das.last_seen_at, rpt.reported_at) >= $2::timestamptz THEN 'agent_active'
+    WHEN das.id IS NOT NULL OR rpt.id IS NOT NULL THEN 'agent_stale'
     WHEN d.user_id IS NOT NULL THEN 'no_agent'
     ELSE 'unresolved_email'
   END AS coverage_bucket
 ) cov
+CROSS JOIN LATERAL (
+  SELECT CASE
+    WHEN cov.coverage_bucket <> 'agent_active' THEN NULL
+    WHEN rpt.id IS NULL OR rpt.reported_at < $2::timestamptz THEN 'unreported'
+    WHEN rpt.enforcement_halted THEN 'halted'
+    WHEN rpt.applied_etag = served.served_etag THEN 'attested'
+    -- Includes a user the server has not served since it began recording
+    -- served etags; every poll records one, so that lasts one poll.
+    ELSE 'outdated'
+  END AS policy_state
+) pol
 WHERE d.organization_id = $3
   AND ($4::text IS NULL OR c.provider = $4::text)
 `
@@ -364,6 +412,10 @@ type GetCoverageCountsRow struct {
 	AgentActiveDeviceAttested int64
 	NoAgent                   int64
 	UnresolvedEmail           int64
+	PolicyAttested            int64
+	PolicyOutdated            int64
+	PolicyUnreported          int64
+	EnforcementHalted         int64
 	Total                     int64
 }
 
@@ -395,8 +447,28 @@ type GetCoverageCountsRow struct {
 //
 // Under user-level matching the heartbeat attests only that the assigned USER
 // runs the agent somewhere, never that this device does.
+//
+// A fresh state report (device_agent_state_reports) counts as a sign of life
+// alongside the heartbeat. The kill switch stops a blocked agent build from
+// polling while it keeps reporting, and without this the device would read
+// as agent_stale exactly when it is reporting why.
+//
+// policy_state then refines agent_active by what the agent reports it
+// enforces, without renaming the bucket:
+//
+//	unreported  no report within the window (an agent that predates reporting)
+//	halted      the kill switch stopped enforcement on a blocked build
+//	attested    the report applies the etag last served to the reporting user
+//	outdated    it reports a different etag, or none
+//
+// The report that answers for a device follows the bucket's own matching: this
+// machine's report under device-level matching (preferring its assigned user's
+// daemon on a shared machine), otherwise the assigned user's latest from any
+// machine. A machine with its own heartbeat never borrows another machine's
+// report through the email fallback.
 // Counts read the lateral's bucket rather than restating its predicates, so
 // the aggregate and the per-row list in ListManagedDevices cannot disagree.
+// The state report that answers for this device; see the header for which.
 // Positive evidence for the agent_other_device bucket: a fresh heartbeat from
 // this user on a DIFFERENT machine. LIMIT 1 because existence is the whole
 // question.
@@ -417,6 +489,10 @@ func (q *Queries) GetCoverageCounts(ctx context.Context, arg GetCoverageCountsPa
 		&i.AgentActiveDeviceAttested,
 		&i.NoAgent,
 		&i.UnresolvedEmail,
+		&i.PolicyAttested,
+		&i.PolicyOutdated,
+		&i.PolicyUnreported,
+		&i.EnforcementHalted,
 		&i.Total,
 	)
 	return i, err
@@ -680,10 +756,27 @@ SELECT
     -- a serial match is what makes the device active, so surfacing the user's
     -- timestamp instead would contradict the bucket beside it.
   , (CASE
-      WHEN $1::boolean AND dads.id IS NOT NULL THEN dads.last_seen_at
-      ELSE das.last_seen_at
+      WHEN $1::boolean AND (dads.id IS NOT NULL OR rpt.by_serial) THEN GREATEST(dads.last_seen_at, CASE WHEN rpt.by_serial THEN rpt.reported_at END)
+      ELSE GREATEST(das.last_seen_at, rpt.reported_at)
     END)::timestamptz AS agent_last_seen_at
   , cov.coverage_bucket
+    -- Empty rather than NULL outside agent_active, and has_report rather than
+    -- the report id: both keep the generated row scannable for devices with no
+    -- report.
+  , coalesce(pol.policy_state, '')::text AS policy_state
+  , (rpt.id IS NOT NULL)::boolean AS has_report
+  , rpt.reported_at AS report_reported_at
+  , rpt.applied_etag AS report_applied_etag
+  , rpt.applied_at AS report_applied_at
+  , coalesce(rpt.enforcement_halted, false) AS report_enforcement_halted
+  , coalesce(rpt.current_blocked, false) AS report_current_blocked
+  , rpt.speakeasyd_version AS report_speakeasyd_version
+  , rpt.speakeasy_version AS report_speakeasy_version
+  , rpt.speakeasy_ui_version AS report_speakeasy_ui_version
+  , rpt.os AS report_os
+  , rpt.arch AS report_arch
+  , rpt.tools AS report_tools
+  , rpt.drift_counting_since AS report_drift_counting_since
 FROM mdm_devices d
 JOIN device_integration_configs c
   ON c.id = d.device_integration_config_id
@@ -695,6 +788,38 @@ LEFT JOIN device_agent_device_syncs dads
   ON dads.organization_id = d.organization_id
  AND LOWER(dads.serial_number) = LOWER(d.serial_number)
 LEFT JOIN LATERAL (
+  SELECT
+      r.id
+    , r.email
+    , r.reported_at
+    , r.applied_etag
+    , r.applied_at
+    , r.enforcement_halted
+    , r.current_blocked
+    , r.speakeasyd_version
+    , r.speakeasy_version
+    , r.speakeasy_ui_version
+    , r.os
+    , r.arch
+    , r.tools
+    , r.drift_counting_since
+    , coalesce($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) AS by_serial
+  FROM device_agent_state_reports r
+  WHERE r.organization_id = d.organization_id
+    AND (
+      ($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
+      OR (NOT ($1::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email))
+    )
+  ORDER BY
+      coalesce($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
+    , coalesce(LOWER(r.email) = LOWER(d.user_email), false) DESC
+    , r.reported_at DESC
+  LIMIT 1
+) rpt ON TRUE
+LEFT JOIN device_agent_syncs served
+  ON served.organization_id = d.organization_id
+ AND LOWER(served.email) = LOWER(rpt.email)
+LEFT JOIN LATERAL (
   SELECT 1 AS found
   FROM device_agent_device_syncs o
   WHERE o.organization_id = d.organization_id
@@ -704,16 +829,18 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) other ON TRUE
 CROSS JOIN LATERAL (
-  -- Kept byte-identical to the CASE in GetCoverageCounts. Both the projected
-  -- column and the bucket filter below read this alias, so what is shown and
-  -- what is filtered cannot drift apart.
+  -- Kept byte-identical to the CASE in GetCoverageCounts, as are the rpt
+  -- lateral and the policy_state CASE. Both the projected columns and the
+  -- filters below read these aliases, so what is shown and what is filtered
+  -- cannot drift apart.
   SELECT CASE
     WHEN d.missing_since IS NOT NULL THEN 'missing'
-    -- Device-level: this machine's own heartbeat answers for it, and outranks
-    -- everything email-based including no_email — a device the MDM records
-    -- with no assigned user is still legible when its own agent reports in.
-    WHEN $1::boolean AND dads.last_seen_at >= $2::timestamptz THEN 'agent_active'
-    WHEN $1::boolean AND dads.id IS NOT NULL THEN 'agent_stale'
+    -- Device-level: this machine's own heartbeat or report answers for it, and
+    -- outranks everything email-based including no_email — a device the MDM
+    -- records with no assigned user is still legible when its own agent
+    -- reports in. GREATEST ignores the NULL of whichever signal is absent.
+    WHEN $1::boolean AND GREATEST(dads.last_seen_at, CASE WHEN rpt.by_serial THEN rpt.reported_at END) >= $2::timestamptz THEN 'agent_active'
+    WHEN $1::boolean AND (dads.id IS NOT NULL OR rpt.by_serial) THEN 'agent_stale'
     -- Device-level only, and it requires POSITIVE evidence: the assigned user
     -- has a fresh heartbeat from a different serial-identified machine, so
     -- this one is a real gap. Without that evidence we must NOT land here —
@@ -725,30 +852,43 @@ CROSS JOIN LATERAL (
     -- consistent: a device with only a user-level heartbeat stays
     -- agent_active (the evidence push says the same thing, at "user"
     -- attestation), so enabling device-level matching can never demote a
-    -- covered fleet to 0%.
+    -- covered fleet to 0%. A serial-matched report returned above, so rpt
+    -- here is the assigned user's.
     WHEN coalesce(d.user_email, '') = '' THEN 'no_email'
-    WHEN das.last_seen_at >= $2::timestamptz THEN 'agent_active'
-    WHEN das.id IS NOT NULL THEN 'agent_stale'
+    WHEN GREATEST(das.last_seen_at, rpt.reported_at) >= $2::timestamptz THEN 'agent_active'
+    WHEN das.id IS NOT NULL OR rpt.id IS NOT NULL THEN 'agent_stale'
     WHEN d.user_id IS NOT NULL THEN 'no_agent'
     ELSE 'unresolved_email'
   END AS coverage_bucket
 ) cov
+CROSS JOIN LATERAL (
+  SELECT CASE
+    WHEN cov.coverage_bucket <> 'agent_active' THEN NULL
+    WHEN rpt.id IS NULL OR rpt.reported_at < $2::timestamptz THEN 'unreported'
+    WHEN rpt.enforcement_halted THEN 'halted'
+    WHEN rpt.applied_etag = served.served_etag THEN 'attested'
+    -- Includes a user the server has not served since it began recording
+    -- served etags; every poll records one, so that lasts one poll.
+    ELSE 'outdated'
+  END AS policy_state
+) pol
 WHERE d.organization_id = $3
   AND ($4::text IS NULL OR c.provider = $4::text)
   AND ($5::uuid IS NULL OR d.id < $5::uuid)
   AND ($6::text IS NULL OR $6::text = cov.coverage_bucket)
+  AND ($7::text IS NULL OR $7::text = pol.policy_state)
   -- One person's devices. Both legs are needed and neither subsumes the other:
   -- user_id is only set when the MDM's reported email resolved to a member, so
   -- matching on it alone would drop the devices of someone whose MDM email is
   -- a work alias, while matching on email alone would drop a device whose
   -- assigned email the MDM has since changed.
   AND (
-    (COALESCE(cardinality($7::text[]), 0) = 0 AND COALESCE(cardinality($8::text[]), 0) = 0)
-    OR d.user_id = ANY($7::text[])
-    OR LOWER(d.user_email) = ANY(ARRAY(SELECT LOWER(e) FROM unnest($8::text[]) AS e))
+    (COALESCE(cardinality($8::text[]), 0) = 0 AND COALESCE(cardinality($9::text[]), 0) = 0)
+    OR d.user_id = ANY($8::text[])
+    OR LOWER(d.user_email) = ANY(ARRAY(SELECT LOWER(e) FROM unnest($9::text[]) AS e))
   )
 ORDER BY d.id DESC
-LIMIT $9
+LIMIT $10
 `
 
 type ListManagedDevicesParams struct {
@@ -758,6 +898,7 @@ type ListManagedDevicesParams struct {
 	Provider       pgtype.Text
 	CursorID       uuid.NullUUID
 	Bucket         pgtype.Text
+	PolicyState    pgtype.Text
 	UserIds        []string
 	UserEmails     []string
 	PageLimit      int32
@@ -784,12 +925,27 @@ type ListManagedDevicesRow struct {
 	Provider                  string
 	AgentLastSeenAt           pgtype.Timestamptz
 	CoverageBucket            string
+	PolicyState               string
+	HasReport                 bool
+	ReportReportedAt          pgtype.Timestamptz
+	ReportAppliedEtag         pgtype.Text
+	ReportAppliedAt           pgtype.Timestamptz
+	ReportEnforcementHalted   bool
+	ReportCurrentBlocked      bool
+	ReportSpeakeasydVersion   pgtype.Text
+	ReportSpeakeasyVersion    pgtype.Text
+	ReportSpeakeasyUiVersion  pgtype.Text
+	ReportOs                  pgtype.Text
+	ReportArch                pgtype.Text
+	ReportTools               []byte
+	ReportDriftCountingSince  pgtype.Timestamptz
 }
 
 // ListManagedDevices pages the org's device inventory newest-first by id
 // (UUIDv7, so id order is creation order) with an `id <` cursor, computing
 // each device's coverage bucket with the same rules as GetCoverageCounts.
 // The optional bucket filter accepts the bucket names plus 'missing'.
+// The state report that answers for this device; see the header for which.
 // Positive evidence for the agent_other_device bucket: a fresh heartbeat from
 // this user on a DIFFERENT machine. LIMIT 1 because existence is the whole
 // question.
@@ -801,6 +957,7 @@ func (q *Queries) ListManagedDevices(ctx context.Context, arg ListManagedDevices
 		arg.Provider,
 		arg.CursorID,
 		arg.Bucket,
+		arg.PolicyState,
 		arg.UserIds,
 		arg.UserEmails,
 		arg.PageLimit,
@@ -833,6 +990,20 @@ func (q *Queries) ListManagedDevices(ctx context.Context, arg ListManagedDevices
 			&i.Provider,
 			&i.AgentLastSeenAt,
 			&i.CoverageBucket,
+			&i.PolicyState,
+			&i.HasReport,
+			&i.ReportReportedAt,
+			&i.ReportAppliedEtag,
+			&i.ReportAppliedAt,
+			&i.ReportEnforcementHalted,
+			&i.ReportCurrentBlocked,
+			&i.ReportSpeakeasydVersion,
+			&i.ReportSpeakeasyVersion,
+			&i.ReportSpeakeasyUiVersion,
+			&i.ReportOs,
+			&i.ReportArch,
+			&i.ReportTools,
+			&i.ReportDriftCountingSince,
 		); err != nil {
 			return nil, err
 		}

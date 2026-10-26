@@ -502,6 +502,12 @@ SELECT count(*) FROM (
 -- name: PostflightCountMDMDevices :one
 SELECT count(*) FROM mdm_devices WHERE organization_id = @org_id::text;
 
+-- State reports: one attested machine and one enforcing an older policy.
+-- Without them every active device reads unreported.
+
+-- name: PostflightCountDeviceAgentStateReports :one
+SELECT count(*) FROM device_agent_state_reports WHERE organization_id = @org_id::text;
+
 -- name: PostflightCountDeviceIntegrationConfigs :one
 SELECT count(*) FROM device_integration_configs
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
