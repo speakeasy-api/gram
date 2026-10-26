@@ -30,12 +30,6 @@ const (
 	// reject it, so a regression fails on the assertions instead of exhausting
 	// the test host.
 	endlessBodyCap = 32 << 20 // 32 MiB
-
-	// maxBufferedEndlessBytes bounds how much of an endless body the server may
-	// have written by the time the client rejects it. Loopback socket buffers
-	// absorb a few MiB beyond what the client read; anything near this means
-	// the client kept consuming past the limit.
-	maxBufferedEndlessBytes = 24 << 20 // 24 MiB
 )
 
 // limitServer is a minimal Streamable HTTP MCP server. respond may take over
@@ -155,7 +149,48 @@ func requireRejectedEndless(t *testing.T, ctx context.Context, err error, writte
 	require.ErrorIs(t, err, ErrResponseTooLarge)
 	require.NoError(t, ctx.Err(), "the limit must reject the body, not the test deadline")
 	require.Positive(t, written.Load(), "the oversized body must have reached the client")
-	require.Less(t, written.Load(), int64(maxBufferedEndlessBytes), "the client must stop reading at the limit")
+}
+
+func TestBodyLimitStopsReadingAfterRejection(t *testing.T) {
+	t.Parallel()
+
+	for _, contentType := range []string{"application/json", "text/event-stream"} {
+		t.Run(contentType, func(t *testing.T) {
+			t.Parallel()
+
+			// Inspect transport reads directly: server-side writes can run far
+			// ahead of the client inside kernel socket buffers.
+			content := "data: " + strings.Repeat("x", 4*testMessageLimit)
+			source := strings.NewReader(content)
+			transport := &bodyLimitRoundTripper{
+				base: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header:     http.Header{"Content-Type": {contentType}},
+						Body:       io.NopCloser(source),
+					}, nil
+				}),
+				messageLimit: testMessageLimit,
+			}
+			req := httptest.NewRequest(http.MethodGet, "https://example.com/mcp", nil)
+			response, err := transport.RoundTrip(req)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, response.Body.Close()) })
+
+			var buffer [1024]byte
+			for err == nil {
+				_, err = response.Body.Read(buffer[:])
+			}
+			require.ErrorIs(t, err, ErrResponseTooLarge)
+			require.True(t, transport.tripped.Load())
+			remaining := source.Len()
+			require.LessOrEqual(t, len(content)-remaining, testMessageLimit+len(buffer), "at most one read may cross the limit")
+
+			_, err = io.Copy(io.Discard, response.Body)
+			require.ErrorIs(t, err, ErrResponseTooLarge)
+			require.Equal(t, remaining, source.Len(), "draining after rejection must not consume more of the source")
+		})
+	}
 }
 
 func TestNewClientRejectsOversizedHandshakeJSON(t *testing.T) {
