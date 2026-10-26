@@ -250,8 +250,8 @@ func RequireLiveAddress(ctx context.Context, tx pgx.Tx, organizationID string, s
 }
 
 // Enable re-enables a toolset's disabled canonical wrapper with hostingstate.ReEnableVisibility: public only with
-// external OAuth or an OAuth proxy, else private. A private network mode needs a live ingress for the server's
-// endpoints. It reports false when there is no disabled wrapper to enable.
+// external OAuth, else private. A private network mode needs a live ingress for the server's endpoints. It reports
+// false when there is no disabled wrapper to enable.
 func Enable(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) (bool, error) {
 	endpoints, canonical, err := LockServer(ctx, tx, toolset.OrganizationID, toolset.ProjectID, toolset.ID)
 	switch {
