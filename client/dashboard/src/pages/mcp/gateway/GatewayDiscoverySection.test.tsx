@@ -5,6 +5,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
@@ -287,7 +288,7 @@ it("disables Code Mode for a gateway that allows anonymous callers", () => {
   expect(option.getAttribute("aria-disabled")).toBe("true");
 });
 
-it("shows Code Mode disabled to an organization without it", () => {
+it("shows Code Mode disabled to an organization without it", async () => {
   state.entitled = false;
   render(
     <TooltipProvider>
@@ -299,12 +300,16 @@ it("shows Code Mode disabled to an organization without it", () => {
       />
     </TooltipProvider>,
   );
-  expect(screen.getByText(/Contact\s+Speakeasy to turn it on/i)).toBeTruthy();
+  expect(screen.queryByText(/Contact\s+Speakeasy to turn it on/i)).toBeNull();
   fireEvent.click(screen.getByRole("combobox"));
   const option = screen.getByRole("option", {
     name: "Code Mode (not enabled)",
   });
   expect(option.getAttribute("aria-disabled")).toBe("true");
+  await userEvent.hover(option.parentElement!);
+  expect(
+    (await screen.findAllByText(/Contact\s+Speakeasy to turn it on/i)).length,
+  ).toBeGreaterThan(0);
 });
 
 it("explains a saved Code gateway in an organization without Code Mode", () => {

@@ -20,6 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrganization } from "@/contexts/Auth";
@@ -114,23 +119,33 @@ export function GatewayDiscoverySection({
               <SelectContent>
                 <SelectItem value="progressive">Progressive</SelectItem>
                 <SelectItem value="direct">Direct</SelectItem>
-                <SelectItem value="code_mode" disabled={!codeModeSelectable}>
-                  {notEnabled
-                    ? "Code Mode (not enabled)"
-                    : requiresSignIn
+                {notEnabled ? (
+                  // A disabled item ignores the pointer, so the wrapper
+                  // receives the hover that opens the tooltip.
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div>
+                        <SelectItem value="code_mode" disabled>
+                          Code Mode (not enabled)
+                        </SelectItem>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      Code Mode is not enabled for your organization. Contact
+                      Speakeasy to turn it on.
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <SelectItem value="code_mode" disabled={!codeModeSelectable}>
+                    {requiresSignIn
                       ? "Code Mode (requires sign-in)"
                       : codeModeSelectable
                         ? "Code Mode"
                         : "Code Mode (unavailable)"}
-                </SelectItem>
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
-            {notEnabled && metaMcpServer.discoveryMode !== "code_mode" && (
-              <p className="text-muted-foreground text-sm">
-                Code Mode is not enabled for your organization. Contact
-                Speakeasy to turn it on.
-              </p>
-            )}
             {metaMcpServer.discoveryMode === "code_mode" &&
               !codeModeSelectable && (
                 <p className="text-muted-foreground text-sm">
