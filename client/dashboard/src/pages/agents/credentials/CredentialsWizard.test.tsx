@@ -108,7 +108,9 @@ vi.mock("@/hooks/useRBAC", () => ({
     hasAllScopes: (scopes: string[]) => scopes.every(hasScope),
     hasAnyScope: (scopes: string[]) => scopes.some(hasScope),
     isLoading: false,
+    grants: [{ scope: "mcp:connect" }],
   }),
+  hasScopeInGrants: () => true,
 }));
 vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
   useWorkloadIdentities: () => ({ data: { issuers: [], admissions: [] } }),

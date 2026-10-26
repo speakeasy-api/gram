@@ -1,6 +1,8 @@
 import { useOrganization } from "@/contexts/Auth";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { mcpUrlSuffix } from "@/hooks/useToolsetUrl";
 import { isKnownEnumValue } from "@/lib/enum";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { McpServerVisibility } from "@gram/client/models/components/mcpserver.js";
 import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
@@ -35,6 +37,7 @@ export interface ServerInventory {
 
 export function useServerInventory(): ServerInventory {
   const organization = useOrganization();
+  const { grants, isLoading: grantsLoading } = useRBAC();
   const toolsets = useListToolsetsForOrg(undefined, undefined, {
     retry: false,
     throwOnError: false,
@@ -47,6 +50,9 @@ export function useServerInventory(): ServerInventory {
   const projects = new Map(
     (organization.projects ?? []).map((project) => [project.id, project]),
   );
+
+  const canConnectTo = (resourceId: string, projectId: string): boolean =>
+    hasScopeInGrants(grants, Scope.McpConnect, resourceId, projectId);
   const servableServers = (servers.data?.mcpServers ?? []).filter(
     (server) =>
       !server.unproxiedMcpServerId &&
@@ -112,9 +118,17 @@ export function useServerInventory(): ServerInventory {
       ),
   ];
 
+  // Filter to only servers the user has mcp:connect permission on. This
+  // prevents the wizard from showing servers the user cannot grant to an
+  // agent, which would otherwise fail with "requested agent access exceeds
+  // your permissions" on creation.
+  const accessibleInventory = inventory.filter((server) =>
+    canConnectTo(server.resourceId, server.projectId),
+  );
+
   return {
-    servers: inventory,
-    isLoading: toolsets.isLoading || servers.isLoading,
+    servers: accessibleInventory,
+    isLoading: toolsets.isLoading || servers.isLoading || grantsLoading,
     isError: toolsets.isError || servers.isError,
     refetch: () => {
       void toolsets.refetch();
