@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
@@ -12,7 +18,25 @@ import {
   ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
-import { orgRoutePaths, useRoutes } from "./routes";
+import { orgRoutePaths, useOrgRoutes, useRoutes } from "./routes";
+
+describe("organization route search aliases", () => {
+  it("registers both trusted-platform names on the access page", () => {
+    const { result } = renderHook(() => useOrgRoutes(), {
+      wrapper: MemoryRouter,
+    });
+    // RouteProvider turns this production route into the nav-org-access action.
+    // Assert the source as well as the candidate matcher so deleting an alias
+    // from the real route fails even when candidate tests supply their own data.
+    expect(result.current.access).toMatchObject({
+      title: "Roles & Permissions",
+      url: "access",
+      keywords: ["trusted platforms", "workload identities"],
+    });
+    expect(result.current.access.component).toBeDefined();
+    expect(result.current.access.href()).toBe("/org/access");
+  });
+});
 
 function GuideHref(): JSX.Element {
   const routes = useRoutes();
