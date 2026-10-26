@@ -59,7 +59,7 @@ export type AdminListRegistryPromotionCandidatesQueryError =
  * listRegistryPromotionCandidates admin
  *
  * @remarks
- * List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.
+ * List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.
  */
 export function useAdminListRegistryPromotionCandidates(
   request?: AdminListRegistryPromotionCandidatesRequest | undefined,
@@ -86,7 +86,7 @@ export function useAdminListRegistryPromotionCandidates(
  * listRegistryPromotionCandidates admin
  *
  * @remarks
- * List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.
+ * List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.
  */
 export function useAdminListRegistryPromotionCandidatesSuspense(
   request?: AdminListRegistryPromotionCandidatesRequest | undefined,

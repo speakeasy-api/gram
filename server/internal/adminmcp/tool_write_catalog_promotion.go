@@ -18,7 +18,7 @@ import (
 // catalogPromotionMutator shares the same transactional rules as the admin UI.
 type catalogPromotionMutator interface {
 	GetCandidate(context.Context, catalogpromotion.Target) (catalogpromotion.Candidate, error)
-	ValidateTx(context.Context, pgx.Tx, catalogpromotion.Target, string, string, catalogpromotion.PublicMetadata) (catalogpromotion.Candidate, error)
+	ValidateTx(context.Context, pgx.Tx, catalogpromotion.Target, string, string, catalogpromotion.PublicMetadata, bool) (catalogpromotion.Candidate, error)
 	PromoteTx(context.Context, pgx.Tx, catalogpromotion.Request, string) (catalogpromotion.Candidate, error)
 }
 
@@ -38,6 +38,8 @@ type PrepareCatalogPromotionInput struct {
 	Public catalogpromotion.PublicMetadata `json:"public" jsonschema:"Independently reviewed public metadata; never copy customer endpoints, credentials, names or configuration"`
 	// PublicMetadataConfirmed attests that these fields can be publicly distributed.
 	PublicMetadataConfirmed bool `json:"public_metadata_confirmed" jsonschema:"Confirm every public field is suitable for the public catalogue and setup docs"`
+	// OverrideEligibility permits promotion if health evidence does not meet the criteria.
+	OverrideEligibility bool `json:"override_eligibility,omitempty" jsonschema:"Explicit staff permission to promote if health evidence is insufficient, failed, or unavailable; never bypasses source safety checks"`
 	// RetryKey deduplicates preparation of this exact change.
 	RetryKey string `json:"retry_key" jsonschema:"Unique retry key for this exact change, at most 128 characters"`
 }
@@ -69,7 +71,7 @@ func catalogPromotionRequest(input PrepareCatalogPromotionInput) (catalogpromoti
 	return catalogpromotion.Request{
 		Target:         catalogpromotion.Target{OrganizationID: input.OrganizationID, ProjectID: uuid.MustParse(input.ProjectID), MCPServerID: uuid.MustParse(input.MCPServerID)},
 		SourceRevision: input.SourceRevision, CurationRevision: input.CurationRevision, Public: input.Public,
-		PublicMetadataConfirmed: true, RetryKey: input.RetryKey,
+		PublicMetadataConfirmed: true, OverrideEligibility: input.OverrideEligibility, RetryKey: input.RetryKey,
 	}, nil
 }
 
@@ -90,7 +92,7 @@ func (w *catalogPromotionWriter) prepare(ctx context.Context, input PrepareCatal
 	if err != nil {
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
-	if !candidate.Eligible || candidate.SourceRevision != request.SourceRevision || candidate.CurationRevision != request.CurationRevision || candidate.Status != "candidate" {
+	if (!candidate.Eligible && (!request.OverrideEligibility || !candidate.CanOverrideEligibility())) || candidate.SourceRevision != request.SourceRevision || candidate.CurationRevision != request.CurationRevision || candidate.Status != "candidate" {
 		return ProposalOutput{}, ErrStaleState
 	}
 	tx, err := w.store.db.Begin(ctx)
@@ -98,12 +100,14 @@ func (w *catalogPromotionWriter) prepare(ctx context.Context, input PrepareCatal
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
-	if _, err := w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public); err != nil {
+	_, err = w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public, request.OverrideEligibility)
+	if err != nil {
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
+	// Approval binds the staff permission, not changing health evidence, so identical retries retain the same digest.
 	args, err := json.Marshal(request)
 	if err != nil {
 		return ProposalOutput{}, fmt.Errorf("encode promotion proposal: %w", err)
@@ -139,7 +143,10 @@ func (w *catalogPromotionWriter) revalidate(ctx context.Context, tx pgx.Tx, prop
 	if err != nil {
 		return err
 	}
-	_, err = w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public)
+	_, err = w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public, request.OverrideEligibility)
+	if errors.Is(err, catalogpromotion.ErrPublicTitleTooLong) || errors.Is(err, catalogpromotion.ErrPublicDescriptionTooLong) {
+		return ErrStaleState
+	}
 	if err != nil {
 		return catalogPromotionValidationError(err)
 	}
@@ -155,10 +162,15 @@ func (w *catalogPromotionWriter) view(proposal Proposal) (proposalView, error) {
 	if json.Unmarshal(proposal.Preview, &preview) != nil || preview != request {
 		return proposalView{}, ErrProposalInvalidated
 	}
+	override := "No"
+	if request.OverrideEligibility {
+		override = "Yes — allow promotion if health evidence does not meet the criteria"
+	}
 	return proposalView{
 		Summary:        "Publish reviewed remote MCP server to the catalogue",
 		PlatformGlobal: false, OrganizationID: request.Target.OrganizationID, OrganizationName: "", OrganizationSlug: "",
 		Changes: []proposalViewChange{
+			{Setting: "Allow health eligibility override", Before: "", After: override},
 			{Setting: "Source project", Before: "", After: request.Target.ProjectID.String()},
 			{Setting: "Source server", Before: "", After: request.Target.MCPServerID.String()},
 			{Setting: "Public catalogue name", Before: "", After: request.Public.Name},
@@ -206,7 +218,7 @@ func (w *catalogPromotionWriter) registerPrepare(server *mcp.Server) {
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
 		Name:        "prepare_registry_promotion", Title: "Prepare Catalogue Promotion",
-		Description: "Prepare publication of a healthy remote MCP source using exact organization, project, server and current source and curation revisions. Supply independently reviewed public metadata only. Creates a stored preview for same-staff browser approval; execute_admin_proposal publishes and queues setup docs. Requires admin:write. Does not publish during preparation.",
+		Description: "Prepare publication of a remote MCP source using exact organization, project, server and current source and curation revisions. Supply independently reviewed public metadata only. Set override_eligibility only for explicit staff permission to promote if health evidence is insufficient, failed, or unavailable; source safety checks still apply. Creates a stored preview for same-staff browser approval; execute_admin_proposal publishes and queues setup docs. Requires admin:write. Does not publish during preparation.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareCatalogPromotionInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := w.prepare(ctx, input)
 		return nil, out, err
@@ -215,6 +227,10 @@ func (w *catalogPromotionWriter) registerPrepare(server *mcp.Server) {
 
 func catalogPromotionValidationError(err error) error {
 	switch {
+	case errors.Is(err, catalogpromotion.ErrPublicTitleTooLong):
+		return catalogpromotion.ErrPublicTitleTooLong
+	case errors.Is(err, catalogpromotion.ErrPublicDescriptionTooLong):
+		return catalogpromotion.ErrPublicDescriptionTooLong
 	case errors.Is(err, catalogpromotion.ErrStale), errors.Is(err, catalogpromotion.ErrNotFound), errors.Is(err, catalogpromotion.ErrConflict), errors.Is(err, catalogpromotion.ErrIneligible), errors.Is(err, catalogpromotion.ErrInvalid):
 		return ErrStaleState
 	default:
