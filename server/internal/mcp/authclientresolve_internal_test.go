@@ -107,6 +107,10 @@ func TestDecideAuthClient(t *testing.T) {
 		{"an unknown type is a gap", live("smoke_signal"), authClientGap, authClientReasonUnknownType},
 		{"an unmapped OAuth choice is served the old way", with(authClientTypeRemoteSession, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.AuthClientID = uuid.NullUUID{} }), authClientLegacy, authClientReasonUnmapped},
 		{"a personal connection that may chain is served the old way", with(authClientTypeRemoteSession, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RegistrationHasEma = true }), authClientLegacy, authClientReasonLegacyMayChain},
+		{"a personal connection that may chain but misses a server credential header is a setup gap", with(authClientTypeRemoteSession, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) {
+			r.RegistrationHasEma = true
+			r.CredentialHeadersUncovered = true
+		}), authClientGap, authClientReasonSetup},
 		{"a service account never chains", with(authClientTypeServiceAccount, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RegistrationHasEma = true }), authClientResolved, ""},
 		{"an OAuth client missing a server credential header is a setup gap", with(authClientTypeRemoteSession, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.CredentialHeadersUncovered = true }), authClientGap, authClientReasonSetup},
 		{"an OAuth client requiring the inbound Authorization is a setup gap", with(authClientTypeServiceAccount, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RequiresDeniedSource = true }), authClientGap, authClientReasonSetup},
@@ -126,6 +130,11 @@ func TestDecideAuthClient(t *testing.T) {
 			row.ServerHasHeaderClients = true
 			return row
 		}(), authClientLegacy, authClientReasonUnmapped},
+		{"no-auth on a server that declares none and keeps header clients is served the old way until enforced", func() upstreamclientsrepo.GetAuthClientSelectionRow {
+			row := noAuth(pgtype.Bool{Bool: false, Valid: true}, true)
+			row.ServerHasHeaderClients = true
+			return row
+		}(), authClientLegacy, authClientReasonNoAuthDeclared},
 		{"no-auth on a server with header and OAuth clients is a gap", func() upstreamclientsrepo.GetAuthClientSelectionRow {
 			row := noAuth(pgtype.Bool{Bool: true, Valid: true}, true)
 			row.ServerHasHeaderClients = true
@@ -642,6 +651,42 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 
 		require.NoError(t, f.q.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: ema}))
 		require.Equal(t, authClientResolved, f.resolve(f.choose(validUUID(id))).outcome, "a disabled EMA client chains nothing")
+	})
+
+	t.Run("an enforced no-auth choice on a server that declares none is served with a header client attached", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
+		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}, ID: f.serverID}))
+		selector := f.choose(uuid.NullUUID{})
+		subject := urn.NewUserSubject("user_1")
+		for range 2 {
+			res, err := f.service.resolveEnforcedAuthClient(ctx, selector, f.serverID, f.projectID, subject)
+			require.NoError(t, err)
+			require.Equal(t, authClientNoAuth, res.outcome)
+		}
+
+		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}, ID: f.serverID}))
+		res, err := f.service.resolveEnforcedAuthClient(ctx, selector, f.serverID, f.projectID, subject)
+		require.NoError(t, err)
+		require.Equal(t, authClientGap, res.outcome, "a server that needs auth still refuses the old no-auth choice")
+	})
+
+	t.Run("a personal connection that may chain sends its own headers", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.attach()
+		id := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+		f.copyHeader(id, "X-Upstream", false, false, pgtype.Text{}, text("X-Caller"))
+		ema := f.client(authClientTypeEMA, validUUID(f.registration), true)
+		require.NoError(t, f.q.SeedAuthClientEMAFixture(ctx, authclientbackfill.SeedAuthClientEMAFixtureParams{Resource: "https://mcp.example.com", AuthClientID: ema}))
+		res := f.serve(f.choose(validUUID(id)))
+		require.Equal(t, authClientLegacy, res.outcome)
+		require.Equal(t, authClientReasonLegacyMayChain, res.reason)
+		require.Equal(t, []proxy.ConfiguredHeader{{IsRequired: false, Name: "X-Upstream", StaticValue: "", ValueFromRequestHeader: "X-Caller"}}, res.headers)
+
+		authentication := &issuerGateAuthentication{chainingAuthClient: &res}
+		require.Len(t, authClientBuildOptions(authentication), 1, "the client's headers replace the server's")
 	})
 
 	t.Run("headers-only clients on a tunneled server are served the old way", func(t *testing.T) {
