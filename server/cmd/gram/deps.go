@@ -536,9 +536,6 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
 	// Pub/Sub lanes to pystreams. A CSV row can still turn this off.
 	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
-	// Every organization reads ClickHouse findings, so the batch activity must
-	// leave judging and webhooks to the handlers and the ClickHouse writer.
-	inmem.SetFlag(feature.FlagRiskFindingsClickHouseCutover, feature.AnyDistinctID, true)
 	// The issuer kill switch fails closed when unset, so local dev sets it off.
 	inmem.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, feature.AnyDistinctID, false)
 	// The dashboard shows every flag on in local dev, so the server lets local
