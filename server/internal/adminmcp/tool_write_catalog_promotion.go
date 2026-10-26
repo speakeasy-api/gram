@@ -92,7 +92,7 @@ func (w *catalogPromotionWriter) prepare(ctx context.Context, input PrepareCatal
 	if err != nil {
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
-	if (!candidate.Eligible && (!request.OverrideEligibility || !catalogpromotion.CanOverrideEligibility(candidate.Reason))) || candidate.SourceRevision != request.SourceRevision || candidate.CurationRevision != request.CurationRevision || candidate.Status != "candidate" {
+	if (!candidate.Eligible && (!request.OverrideEligibility || !candidate.CanOverrideEligibility())) || candidate.SourceRevision != request.SourceRevision || candidate.CurationRevision != request.CurationRevision || candidate.Status != "candidate" {
 		return ProposalOutput{}, ErrStaleState
 	}
 	tx, err := w.store.db.Begin(ctx)
@@ -100,12 +100,14 @@ func (w *catalogPromotionWriter) prepare(ctx context.Context, input PrepareCatal
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
-	if _, err := w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public, request.OverrideEligibility); err != nil {
+	validated, err := w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public, request.OverrideEligibility)
+	if err != nil {
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return ProposalOutput{}, catalogPromotionValidationError(err)
 	}
+	request.OverrideEligibility = request.OverrideEligibility && !validated.Eligible
 	args, err := json.Marshal(request)
 	if err != nil {
 		return ProposalOutput{}, fmt.Errorf("encode promotion proposal: %w", err)

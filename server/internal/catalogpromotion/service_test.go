@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
+	remoterepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -440,7 +441,7 @@ func TestPromotionHealthOverrideRequiresExplicitConsentAndAudits(t *testing.T) {
 	}
 }
 
-func TestPromotionOverrideDoesNotBypassSourceChecks(t *testing.T) {
+func TestPromotionOverrideRejectsNonHealthReasons(t *testing.T) {
 	t.Parallel()
 	for _, reason := range []string{"unsupported_configuration", "disabled", "already_catalogued", "source_changed", "authentication_required", "unknown_future_reason"} {
 		t.Run(reason, func(t *testing.T) {
@@ -518,6 +519,61 @@ func TestCataloguedURLsExcludedBeforeDiscoveryAndPagination(t *testing.T) {
 			rows, _, err = f.service.ListCandidates(t.Context(), "", 1, "candidate")
 			require.NoError(t, err)
 			require.Len(t, rows, 1, "staff can explicitly include catalogued endpoints")
+		})
+	}
+}
+
+func TestPromotionOverrideDoesNotBypassSourceChecks(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"disabled", "header"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			f := newPromotionFixture(t)
+			q := repo.New(f.db)
+			params := repo.GetSourceParams{OrganizationID: f.target.OrganizationID, ProjectID: f.target.ProjectID, McpServerID: f.target.MCPServerID}
+			source, err := q.GetSource(t.Context(), params)
+			require.NoError(t, err)
+			if kind == "disabled" {
+				require.NoError(t, q.ChangePromotionSourceFixture(t.Context(), repo.ChangePromotionSourceFixtureParams{ProjectID: f.target.ProjectID, ID: f.target.MCPServerID, Visibility: "disabled"}))
+			} else {
+				_, err = remoterepo.New(f.db).CreateServerHeader(t.Context(), remoterepo.CreateServerHeaderParams{ProjectID: f.target.ProjectID, RemoteMcpServerID: source.RemoteMcpServerID, Name: "X-API-Key", IsRequired: true, IsSecret: true, Value: conv.ToPGText("synthetic")})
+				require.NoError(t, err)
+			}
+			source, err = q.GetSource(t.Context(), params)
+			require.NoError(t, err)
+			// Matching evidence reaches the physical source checks rather than failing the revision check.
+			_, err = q.StoreEvidence(t.Context(), repo.StoreEvidenceParams{OrganizationID: f.target.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.target.ProjectID, Valid: true}, McpServerID: uuid.NullUUID{UUID: f.target.MCPServerID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: source.RemoteMcpServerID, Valid: true}, SourceRevision: source.SourceRevision, Reason: "insufficient_evidence", CheckedAt: conv.ToPGTimestamptz(f.health.now.Add(time.Second))})
+			require.NoError(t, err)
+			f.request.SourceRevision = source.SourceRevision
+			f.request.OverrideEligibility = true
+			_, err = f.promote(t)
+			require.ErrorIs(t, err, ErrIneligible)
+			require.NotErrorIs(t, err, ErrStale)
+		})
+	}
+}
+
+func TestCandidateOverrideCapability(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, reason, status string
+		eligible, allowed    bool
+	}{
+		{name: "insufficient", reason: "insufficient_evidence", status: "candidate", allowed: true},
+		{name: "errors", reason: "errors_observed", status: "candidate", allowed: true},
+		{name: "logging", reason: "logging_disabled", status: "candidate", allowed: true},
+		{name: "telemetry", reason: "telemetry_unavailable", status: "candidate", allowed: true},
+		{name: "eligible", reason: "eligible", status: "candidate", eligible: true},
+		{name: "disabled", reason: "disabled", status: "candidate"},
+		{name: "unknown", reason: "future_reason", status: "candidate"},
+		{name: "rejected", reason: "errors_observed", status: "rejected"},
+		{name: "archived", reason: "errors_observed", status: "archived"},
+		{name: "promoted", reason: "errors_observed", status: "promoted"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := Candidate{Eligible: tc.eligible, Reason: tc.reason, Status: tc.status}
+			require.Equal(t, tc.allowed, candidate.CanOverrideEligibility())
 		})
 	}
 }

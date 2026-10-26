@@ -345,7 +345,8 @@ func CanOverrideEligibility(reason string) bool {
 	}
 }
 
-// ValidateTx locks the source and candidate and requires explicit acceptance of insufficient evidence.
+// ValidateTx locks the source and candidate. Explicit staff acceptance can override
+// allowed health-evidence reasons, but never source safety or lifecycle checks.
 func (s *Service) ValidateTx(ctx context.Context, tx pgx.Tx, target Target, revision, curationRevision string, public PublicMetadata, overrideEligibility bool) (Candidate, error) {
 	source, err := lockSource(ctx, tx, target)
 	if errors.Is(err, pgx.ErrNoRows) {

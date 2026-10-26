@@ -36,7 +36,8 @@ type DiscoveryBatch struct {
 	Failures int
 }
 
-// Discover retains the single-batch contract for executions started before the weekly schedule.
+// Discover processes at most one bounded batch for executions started before the weekly schedule.
+// Due sources left by the page limit or batch deadline wait for a subsequent scheduled run.
 func (s *Service) Discover(ctx context.Context) error {
 	batch, err := s.DiscoverBatch(ctx)
 	if err != nil {
@@ -92,7 +93,9 @@ func (s *Service) DiscoverBatch(ctx context.Context) (DiscoveryBatch, error) {
 			failed++
 		}
 	}
-	remaining, err := q.DiscoveryTargets(parent, repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(s.now()), ExcludedOrganizationID: constants.DemoOrganizationID})
+	remainingCtx, remainingCancel := context.WithTimeout(parent, DiscoveryRecordTimeout)
+	remaining, err := q.DiscoveryTargets(remainingCtx, repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(s.now()), ExcludedOrganizationID: constants.DemoOrganizationID})
+	remainingCancel()
 	if err != nil {
 		return DiscoveryBatch{}, fmt.Errorf("check remaining promotion discovery: %w", err)
 	}

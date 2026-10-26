@@ -130,6 +130,11 @@ type Candidate struct {
 	DeliveryError string `json:"delivery_error,omitempty"`
 }
 
+// CanOverrideEligibility reports whether staff may explicitly accept this candidate's health evidence.
+func (c Candidate) CanOverrideEligibility() bool {
+	return c.Status == "candidate" && !c.Eligible && CanOverrideEligibility(c.Reason)
+}
+
 // HealthReader supplies the existing server-specific outcomes and direct-call series.
 type HealthReader interface {
 	Outcomes(context.Context, telemetry.MCPServerTelemetryTarget, time.Time, time.Time) (*telemetry.MCPServerOutcomes, error)

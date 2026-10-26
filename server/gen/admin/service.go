@@ -1440,24 +1440,26 @@ type AdminRegistryPromotionCandidate struct {
 	SuggestedMetadata *AdminRegistryPromotionSuggestions
 	SourceRevision    string
 	Eligible          bool
-	Reason            string
-	Status            string
-	ObservedSuccesses int64
-	ObservedFailures  int64
-	ObservedDays      int
-	CheckedAt         *string
-	RegistryEntryID   *string
-	DocsStatus        *string
-	DocsURL           *string
-	DocsRevision      string
-	DocsRetryAllowed  bool
-	DocsAttempts      int
-	DocsLastAttemptAt *string
-	DocsNextAttemptAt *string
-	DocsQueuedAt      *string
-	PromotedAt        *string
-	PublicTitle       *string
-	DeliveryError     *string
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility bool
+	Reason                 string
+	Status                 string
+	ObservedSuccesses      int64
+	ObservedFailures       int64
+	ObservedDays           int
+	CheckedAt              *string
+	RegistryEntryID        *string
+	DocsStatus             *string
+	DocsURL                *string
+	DocsRevision           string
+	DocsRetryAllowed       bool
+	DocsAttempts           int
+	DocsLastAttemptAt      *string
+	DocsNextAttemptAt      *string
+	DocsQueuedAt           *string
+	PromotedAt             *string
+	PublicTitle            *string
+	DeliveryError          *string
 }
 
 // AdminRegistryPromotionCandidates is the result type of the admin service

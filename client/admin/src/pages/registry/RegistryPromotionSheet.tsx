@@ -24,11 +24,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import {
-  promotionReason,
-  promotionTimestamp,
-  canOverridePromotionEligibility,
-} from "./registryPromotionLabels";
+import { promotionReason, promotionTimestamp } from "./registryPromotionLabels";
 import { RegistryPromotionDocs } from "./RegistryPromotionDocs";
 import { Badge } from "@/components/ui/badge";
 import { badgeTone } from "@/lib/badgeTone";
@@ -89,7 +85,7 @@ export function RegistryPromotionSheet({
   const canOverride =
     candidate?.status === "candidate" &&
     !candidate.eligible &&
-    canOverridePromotionEligibility(candidate.reason);
+    candidate.canOverrideEligibility;
   const canPromote =
     candidate?.eligible || (canOverride && overrideEligibility);
   const [reviewedRevision, setReviewedRevision] = useState("");

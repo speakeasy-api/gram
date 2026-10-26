@@ -33,6 +33,7 @@ const candidate = {
   sourceRevision: "revision-1",
   curationRevision: "curation-1",
   eligible: true,
+  canOverrideEligibility: false,
   reason: "eligible",
   status: "candidate",
   observedSuccesses: 30,
@@ -340,6 +341,7 @@ it("requires a separate override and public review before promoting despite fail
     ...candidate,
     eligible: false,
     reason: "errors_observed",
+    canOverrideEligibility: true,
     suggestedMetadata: { ...metadata, authMode: "none" },
   });
   await renderWithApp(
@@ -374,4 +376,21 @@ it.each([
   );
   await screen.findByText("30 successful calls", { exact: false });
   expect(screen.queryByRole("checkbox", { name: /Promote anyway/ })).toBeNull();
+});
+
+it("uses the server override capability for unfamiliar health reasons", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    eligible: false,
+    reason: "new_health_reason",
+    canOverrideEligibility: true,
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  expect(
+    await screen.findByRole("checkbox", {
+      name: "Promote anyway despite the health criteria",
+    }),
+  ).toBeTruthy();
 });

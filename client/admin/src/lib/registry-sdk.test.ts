@@ -114,6 +114,7 @@ test("eligibility refresh uses POST with a canonical target and decodes timestam
               auth_mode: "oauth",
             },
             eligible: true,
+            can_override_eligibility: false,
             reason: "eligible",
             status: "candidate",
             observed_successes: 12,

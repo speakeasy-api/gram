@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
@@ -195,7 +196,7 @@ func TestCatalogPromotionWeeklyReviewDrainsBatches(t *testing.T) {
 	env.RegisterActivityWithOptions(func(context.Context) (catalogpromotion.DiscoveryBatch, error) {
 		calls++
 		return catalogpromotion.DiscoveryBatch{More: calls < 3, Failures: 1}, nil
-	}, activity.RegisterOptions{Name: "CatalogPromotionReviewBatch"})
+	}, activity.RegisterOptions{Name: catalogPromotionReviewBatchActivity})
 	env.ExecuteWorkflow(CatalogPromotionReviewWorkflow)
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, 3, calls, "unavailable observations must not strand the remaining fleet")
@@ -209,8 +210,72 @@ func TestCatalogPromotionWeeklyReviewBoundsHistory(t *testing.T) {
 	env.RegisterActivityWithOptions(func(context.Context) (catalogpromotion.DiscoveryBatch, error) {
 		calls++
 		return catalogpromotion.DiscoveryBatch{More: true}, nil
-	}, activity.RegisterOptions{Name: "CatalogPromotionReviewBatch"})
+	}, activity.RegisterOptions{Name: catalogPromotionReviewBatchActivity})
 	env.ExecuteWorkflow(CatalogPromotionReviewWorkflow)
 	require.True(t, workflow.IsContinueAsNewError(env.GetWorkflowError()))
 	require.Equal(t, 10, calls)
+}
+
+func TestCatalogPromotionWeeklyReviewRetriesTransientFailure(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	attempts := 0
+	env.RegisterActivityWithOptions(func(context.Context) (catalogpromotion.DiscoveryBatch, error) {
+		attempts++
+		if attempts == 1 {
+			return catalogpromotion.DiscoveryBatch{}, errors.New("database unavailable")
+		}
+		return catalogpromotion.DiscoveryBatch{More: attempts < 3}, nil
+	}, activity.RegisterOptions{Name: catalogPromotionReviewBatchActivity})
+	env.ExecuteWorkflow(CatalogPromotionReviewWorkflow)
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 3, attempts)
+}
+
+func TestCatalogPromotionWeeklyReviewBoundsFailedClaims(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	attempts := 0
+	env.RegisterActivityWithOptions(func(context.Context) (catalogpromotion.DiscoveryBatch, error) {
+		attempts++
+		return catalogpromotion.DiscoveryBatch{}, errors.New("claim promotion discovery: database unavailable")
+	}, activity.RegisterOptions{Name: catalogPromotionReviewBatchActivity})
+	env.ExecuteWorkflow(CatalogPromotionReviewWorkflow)
+	require.Error(t, env.GetWorkflowError())
+	require.False(t, workflow.IsContinueAsNewError(env.GetWorkflowError()))
+	require.Equal(t, 3, attempts)
+}
+
+func TestCatalogPromotionWeeklyScheduleUpgradesCatchupPolicy(t *testing.T) {
+	t.Parallel()
+	sc := &temporalmocks.ScheduleClient{}
+	handle := &temporalmocks.ScheduleHandle{}
+	sc.On("Create", mock.Anything, mock.MatchedBy(func(options client.ScheduleOptions) bool {
+		return options.ID == "v1:catalog-promotion:example" && options.CatchupWindow == catalogPromotionInterval-time.Second
+	})).Return(nil, temporal.ErrScheduleAlreadyRunning).Once()
+	sc.On("GetHandle", mock.Anything, "v1:catalog-promotion:example").Return(handle).Once()
+	state := &client.ScheduleState{Paused: true, Note: "maintenance", LimitedActions: true, RemainingActions: 7}
+	handle.On("Update", mock.Anything, mock.MatchedBy(func(options client.ScheduleUpdateOptions) bool {
+		policy := &client.SchedulePolicies{Overlap: enums.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE, CatchupWindow: time.Hour - time.Second, PauseOnFailure: true}
+		schedule := client.Schedule{Spec: &client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: catalogPromotionInterval}}}, Action: &client.ScheduleWorkflowAction{TaskQueue: "example", Workflow: "CatalogPromotionReviewWorkflow"}, State: state, Policy: policy}
+		result, err := options.DoUpdate(client.ScheduleUpdateInput{Description: client.ScheduleDescription{Schedule: schedule}})
+		require.NoError(t, err)
+		require.Equal(t, catalogPromotionInterval-time.Second, result.Schedule.Policy.CatchupWindow)
+		require.Equal(t, enums.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE, result.Schedule.Policy.Overlap)
+		require.True(t, result.Schedule.Policy.PauseOnFailure)
+		require.Same(t, state, result.Schedule.State)
+		require.Same(t, policy, result.Schedule.Policy)
+		result, err = options.DoUpdate(client.ScheduleUpdateInput{Description: client.ScheduleDescription{Schedule: *result.Schedule}})
+		require.ErrorIs(t, err, temporal.ErrSkipScheduleUpdate)
+		require.Nil(t, result)
+		return true
+	})).Return(nil).Once()
+	sc.On("Create", mock.Anything, mock.MatchedBy(func(options client.ScheduleOptions) bool {
+		return options.ID == "v1:catalog-promotion-docs:example" && options.Paused
+	})).Return(nil, nil).Once()
+	require.NoError(t, configureCatalogPromotionSchedules(t.Context(), sc, "example"))
+	sc.AssertExpectations(t)
+	handle.AssertExpectations(t)
 }

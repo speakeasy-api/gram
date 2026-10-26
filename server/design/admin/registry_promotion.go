@@ -28,6 +28,7 @@ var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", fu
 	Attribute("suggested_metadata", AdminRegistryPromotionSuggestions)
 	Attribute("source_revision", String)
 	Attribute("eligible", Boolean)
+	Attribute("can_override_eligibility", Boolean, "Whether staff may explicitly accept this candidate's health evidence.")
 	Attribute("reason", String)
 	Attribute("status", String)
 	Attribute("observed_successes", Int64)
@@ -46,7 +47,7 @@ var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", fu
 	Attribute("promoted_at", String, func() { Format(FormatDateTime) })
 	Attribute("public_title", String)
 	Attribute("delivery_error", String)
-	Required("created_at", "curation_revision", "id", "organization_id", "project_id", "mcp_server_id", "remote_mcp_server_id", "source_revision", "eligible", "reason", "status", "observed_successes", "observed_failures", "observed_days", "docs_revision", "docs_retry_allowed", "docs_attempts")
+	Required("created_at", "curation_revision", "id", "organization_id", "project_id", "mcp_server_id", "remote_mcp_server_id", "source_revision", "eligible", "can_override_eligibility", "reason", "status", "observed_successes", "observed_failures", "observed_days", "docs_revision", "docs_retry_allowed", "docs_attempts")
 })
 
 var AdminRegistryPromotionCandidates = Type("AdminRegistryPromotionCandidates", func() {

@@ -94099,6 +94099,9 @@ components:
         AdminRegistryPromotionCandidate:
             type: object
             properties:
+                can_override_eligibility:
+                    type: boolean
+                    description: Whether staff may explicitly accept this candidate's health evidence.
                 checked_at:
                     type: string
                     format: date-time
@@ -94178,6 +94181,7 @@ components:
                 - remote_mcp_server_id
                 - source_revision
                 - eligible
+                - can_override_eligibility
                 - reason
                 - status
                 - observed_successes

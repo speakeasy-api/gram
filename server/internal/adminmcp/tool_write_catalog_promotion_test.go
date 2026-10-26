@@ -57,7 +57,7 @@ func TestCatalogPromotionApprovalAndReplay(t *testing.T) {
 	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: true}}
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
 	w := &catalogPromotionWriter{store: f.store, writes: writes, baseURL: "https://staff.example.test/admin-mcp", mutator: mutator, now: time.Now}
-	input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "publish-example", Public: catalogpromotion.PublicMetadata{Name: "com.example/mcp", Title: "Example", Description: "Public example server", URL: "https://mcp.example.test/mcp", DocumentationURL: "https://example.test/docs", DocsSlug: "example", AuthMode: "oauth"}}
+	input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, OverrideEligibility: true, RetryKey: "publish-example", Public: catalogpromotion.PublicMetadata{Name: "com.example/mcp", Title: "Example", Description: "Public example server", URL: "https://mcp.example.test/mcp", DocumentationURL: "https://example.test/docs", DocsSlug: "example", AuthMode: "oauth"}}
 	ctx := writeContext(t, f)
 	prepared, err := w.prepare(ctx, input)
 	require.NoError(t, err)
@@ -76,6 +76,26 @@ func TestCatalogPromotionApprovalAndReplay(t *testing.T) {
 	view, err := w.view(p)
 	require.NoError(t, err)
 	require.Contains(t, view.SideEffects, "setup-docs")
+	require.Contains(t, view.Changes, proposalViewChange{Setting: "Override health eligibility", Before: "", After: "No"})
+	stored, err := storedCatalogPromotion(p)
+	require.NoError(t, err)
+	require.False(t, stored.OverrideEligibility)
+	expected, err := catalogPromotionRequest(input)
+	require.NoError(t, err)
+	expected.OverrideEligibility = false
+	args, err := json.Marshal(expected)
+	require.NoError(t, err)
+	require.JSONEq(t, string(args), string(p.Arguments))
+	require.JSONEq(t, string(args), string(p.Preview))
+	digest, err := stateDigest(args)
+	require.NoError(t, err)
+	require.Equal(t, digest, p.ExpectedStateDigest)
+	input.OverrideEligibility = false
+	normalizedReplay, err := w.prepare(ctx, input)
+	require.NoError(t, err)
+	require.True(t, normalizedReplay.Replay)
+	require.Equal(t, prepared.ProposalID, normalizedReplay.ProposalID)
+
 	require.Equal(t, f.orgA, view.OrganizationID)
 	_, err = f.store.Approve(ctx, p.ID, f.owner.SubjectURN, p.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
 	require.NoError(t, err)

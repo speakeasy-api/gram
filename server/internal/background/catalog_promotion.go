@@ -26,6 +26,9 @@ const (
 	// catalogPromotionDiscoverActivity names the bounded candidate scan.
 	catalogPromotionDiscoverActivity = "CatalogPromotionDiscover"
 
+	// catalogPromotionReviewBatchActivity names one checkpointed part of the weekly review.
+	catalogPromotionReviewBatchActivity = "CatalogPromotionReviewBatch"
+
 	// catalogPromotionDispatchActivity names delivery of durable pending jobs.
 	catalogPromotionDispatchActivity = "CatalogPromotionDispatch"
 )
@@ -60,10 +63,14 @@ func CatalogPromotionWorkflow(ctx workflow.Context) error {
 
 // CatalogPromotionReviewWorkflow drains bounded batches without growing an unbounded history.
 func CatalogPromotionReviewWorkflow(ctx workflow.Context) error {
-	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: 10 * time.Minute, HeartbeatTimeout: time.Minute, RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 1}})
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 10 * time.Minute,
+		HeartbeatTimeout:    time.Minute,
+		RetryPolicy:         &temporal.RetryPolicy{InitialInterval: 10 * time.Second, BackoffCoefficient: 2, MaximumInterval: time.Minute, MaximumAttempts: 3},
+	})
 	for range 10 {
 		var batch catalogpromotion.DiscoveryBatch
-		if err := workflow.ExecuteActivity(ctx, "CatalogPromotionReviewBatch").Get(ctx, &batch); err != nil {
+		if err := workflow.ExecuteActivity(ctx, catalogPromotionReviewBatchActivity).Get(ctx, &batch); err != nil {
 			return err
 		}
 		if !batch.More {
@@ -178,7 +185,7 @@ func configureCatalogPromotionSchedules(ctx context.Context, sc client.ScheduleC
 	id := fmt.Sprintf("v1:catalog-promotion:%s", queue)
 	options := client.ScheduleOptions{
 		ID: id, Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		CatchupWindow: time.Hour - time.Second,
+		CatchupWindow: catalogPromotionInterval - time.Second,
 		Spec:          client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: catalogPromotionInterval}}},
 		Action:        &client.ScheduleWorkflowAction{ID: id + "/scheduled", Workflow: CatalogPromotionReviewWorkflow, TaskQueue: queue, WorkflowRunTimeout: time.Hour, WorkflowExecutionTimeout: 24 * time.Hour},
 	}
@@ -193,10 +200,11 @@ func configureCatalogPromotionSchedules(ctx context.Context, sc client.ScheduleC
 					return nil, fmt.Errorf("catalogue promotion schedule is owned by another task queue")
 				}
 				paused = schedule.State != nil && schedule.State.Paused
-				if schedule.Spec != nil && len(schedule.Spec.Intervals) == 1 && schedule.Spec.Intervals[0].Every == catalogPromotionInterval && action.Workflow == "CatalogPromotionReviewWorkflow" {
+				if schedule.Spec != nil && len(schedule.Spec.Intervals) == 1 && schedule.Spec.Intervals[0].Every == catalogPromotionInterval && action.Workflow == "CatalogPromotionReviewWorkflow" && schedule.Policy != nil && schedule.Policy.CatchupWindow == options.CatchupWindow {
 					return nil, temporal.ErrSkipScheduleUpdate
 				}
 				// Existing executions retain their original workflow; only future starts use the batched review.
+				setScheduleCatchup(&schedule, options.CatchupWindow)
 				schedule.Spec = &options.Spec
 				action.Workflow = "CatalogPromotionReviewWorkflow"
 				action.WorkflowRunTimeout = time.Hour

@@ -218,4 +218,37 @@ func TestWeeklyDiscoveryDrainsMoreThanOnePage(t *testing.T) {
 	remaining, err = q.DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.health.now.Add(7 * 24 * time.Hour)), ExcludedOrganizationID: "excluded-example"})
 	require.NoError(t, err)
 	require.Len(t, remaining, 50, "sources must be due again at the next weekly tick")
+	firstIDs := make([]uuid.UUID, 0, len(remaining))
+	for _, source := range remaining {
+		firstIDs = append(firstIDs, source.McpServerID)
+	}
+	f.service.now = func() time.Time { return f.health.now.Add(7 * 24 * time.Hour) }
+	first, err = f.service.DiscoverBatch(t.Context())
+	require.NoError(t, err)
+	require.True(t, first.More)
+	remaining, err = q.DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.service.now()), ExcludedOrganizationID: "excluded-example"})
+	require.NoError(t, err)
+	require.Len(t, remaining, 2)
+	for _, source := range remaining {
+		require.NotContains(t, firstIDs, source.McpServerID)
+	}
+	second, err = f.service.DiscoverBatch(t.Context())
+	require.NoError(t, err)
+	require.False(t, second.More)
+	rows, next, err := f.service.ListCandidates(t.Context(), "", 50, "all")
+	require.NoError(t, err)
+	require.Len(t, rows, 50)
+	tail, end, err := f.service.ListCandidates(t.Context(), next, 50, "all")
+	require.NoError(t, err)
+	require.Len(t, tail, 2)
+	require.Empty(t, end)
+	for _, candidate := range append(rows, tail...) {
+		checked, err := time.Parse(time.RFC3339, candidate.CheckedAt)
+		require.NoError(t, err)
+		require.Equal(t, f.service.now().Truncate(time.Second), checked, "every source must be revisited in week two")
+	}
+	remaining, err = q.DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.service.now().Add(time.Hour)), ExcludedOrganizationID: "excluded-example"})
+	require.NoError(t, err)
+	require.Empty(t, remaining)
+
 }
