@@ -28,32 +28,58 @@ const (
 	maxDocsFailures = 5
 )
 
-// Discover advances durable attempt ordering before observing each source. A broken
-// telemetry read therefore cannot occupy the first page on every hourly sweep.
+// DiscoveryBatch reports bounded progress; per-source failures have durable receipts.
+type DiscoveryBatch struct {
+	// More indicates due sources remain for the same weekly sweep.
+	More bool
+	// Failures counts observations unavailable in this batch.
+	Failures int
+}
+
+// Discover retains the single-batch contract for executions started before the weekly schedule.
 func (s *Service) Discover(ctx context.Context) error {
+	batch, err := s.DiscoverBatch(ctx)
+	if err != nil {
+		return err
+	}
+	if batch.Failures > 0 {
+		return fmt.Errorf("refresh promotion discovery: %d candidates unavailable", batch.Failures)
+	}
+	return nil
+}
+
+// DiscoverBatch advances durable attempt ordering before observing each source, so failures cannot block subsequent batches.
+func (s *Service) DiscoverBatch(ctx context.Context) (DiscoveryBatch, error) {
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, BatchTimeout)
 	defer cancel()
 	q := repo.New(s.db)
 	targets, err := q.DiscoveryTargets(ctx, repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(s.now()), ExcludedOrganizationID: constants.DemoOrganizationID})
 	if err != nil {
-		return fmt.Errorf("select promotion discovery batch: %w", err)
+		return DiscoveryBatch{}, fmt.Errorf("select promotion discovery batch: %w", err)
 	}
 	failed := 0
 	for _, target := range targets {
 		if ctx.Err() != nil {
-			return fmt.Errorf("promotion discovery canceled: %w", ctx.Err())
+			if parent.Err() != nil {
+				return DiscoveryBatch{}, fmt.Errorf("promotion discovery canceled: %w", parent.Err())
+			}
+			break
 		}
 		recordCtx, recordCancel := context.WithTimeout(ctx, DiscoveryRecordTimeout)
 		now := s.now()
-		row, claimErr := q.ClaimDiscovery(recordCtx, repo.ClaimDiscoveryParams{Now: conv.ToPGTimestamptz(now), NextAttemptAt: conv.ToPGTimestamptz(now.Add(time.Hour)), OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.McpServerID})
+		// Leave a day of headroom so processing time cannot skip the next weekly tick.
+		row, claimErr := q.ClaimDiscovery(recordCtx, repo.ClaimDiscoveryParams{Now: conv.ToPGTimestamptz(now), NextAttemptAt: conv.ToPGTimestamptz(now.Add(6 * 24 * time.Hour)), OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.McpServerID})
 		if errors.Is(claimErr, pgx.ErrNoRows) {
 			recordCancel()
 			continue
 		}
 		if claimErr != nil {
 			recordCancel()
-			failed++
-			continue
+			if ctx.Err() != nil && parent.Err() == nil {
+				break
+			}
+			return DiscoveryBatch{}, fmt.Errorf("claim promotion discovery: %w", claimErr)
 		}
 		result, observeErr := s.GetCandidate(recordCtx, Target{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, MCPServerID: target.McpServerID})
 		recordCancel()
@@ -66,10 +92,11 @@ func (s *Service) Discover(ctx context.Context) error {
 			failed++
 		}
 	}
-	if failed > 0 {
-		return fmt.Errorf("refresh promotion discovery: %d candidates unavailable", failed)
+	remaining, err := q.DiscoveryTargets(parent, repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(s.now()), ExcludedOrganizationID: constants.DemoOrganizationID})
+	if err != nil {
+		return DiscoveryBatch{}, fmt.Errorf("check remaining promotion discovery: %w", err)
 	}
-	return nil
+	return DiscoveryBatch{More: len(remaining) > 0, Failures: failed}, nil
 }
 
 // Dispatch claims each due job before HTTP, then records its outcome independently

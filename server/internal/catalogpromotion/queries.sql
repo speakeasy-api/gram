@@ -37,6 +37,12 @@ WHERE p.organization_id = @organization_id AND m.project_id = @project_id AND m.
 FOR UPDATE OF m, r, p;
 
 -- name: DiscoveryTargets :many
+WITH catalogued_endpoints AS MATERIALIZED (
+ SELECT DISTINCT regexp_replace(lower(substring(remote->>'url' FROM '(?i)^https://[^/?#]+')), ':443$', '')
+  || COALESCE(substring(remote->>'url' FROM '(?i)^https://[^/?#]+(.*)$'), '') AS url
+ FROM mcp_registry_entries e,
+ jsonb_array_elements(CASE WHEN jsonb_typeof(e.data #> '{server,remotes}')='array' THEN e.data #> '{server,remotes}' ELSE '[]'::jsonb END) AS remote
+)
 SELECT p.organization_id, m.project_id, m.id AS mcp_server_id
 FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id
@@ -44,6 +50,7 @@ JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.
 LEFT JOIN registry_promotion_candidates c ON c.project_id = m.project_id AND c.mcp_server_id = m.id
 WHERE m.deleted IS FALSE AND r.deleted IS FALSE AND p.deleted IS FALSE AND c.promoted_at IS NULL
  AND (c.curation_status IS NULL OR c.curation_status='active')
+ AND NOT EXISTS (SELECT 1 FROM catalogued_endpoints e WHERE e.url = regexp_replace(lower(substring(r.url FROM '(?i)^https://[^/?#]+')), ':443$', '') || COALESCE(substring(r.url FROM '(?i)^https://[^/?#]+(.*)$'), ''))
  AND p.organization_id <> @excluded_organization_id::text
 AND (c.discovery_next_attempt_at IS NULL OR c.discovery_next_attempt_at <= @now::timestamptz)
 ORDER BY c.discovery_last_attempt_at NULLS FIRST, m.id
@@ -69,8 +76,15 @@ WHERE organization_id= @organization_id AND project_id= @project_id AND mcp_serv
 FOR UPDATE;
 
 -- name: ListCandidates :many
+WITH catalogued_endpoints AS MATERIALIZED (
+ SELECT DISTINCT regexp_replace(lower(substring(remote->>'url' FROM '(?i)^https://[^/?#]+')), ':443$', '')
+  || COALESCE(substring(remote->>'url' FROM '(?i)^https://[^/?#]+(.*)$'), '') AS url
+ FROM mcp_registry_entries e,
+ jsonb_array_elements(CASE WHEN jsonb_typeof(e.data #> '{server,remotes}')='array' THEN e.data #> '{server,remotes}' ELSE '[]'::jsonb END) AS remote
+)
 SELECT sqlc.embed(c),left(COALESCE(m.name,''),200)::text AS source_name FROM registry_promotion_candidates c
 LEFT JOIN mcp_servers m ON m.id=c.mcp_server_id AND m.project_id=c.project_id AND m.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r ON r.id=m.remote_mcp_server_id AND r.project_id=m.project_id AND r.deleted IS FALSE
 WHERE (c.promoted_at IS NOT NULL OR EXISTS (
  SELECT 1 FROM mcp_servers source
  JOIN projects source_project ON source_project.id=source.project_id
@@ -81,7 +95,8 @@ WHERE (c.promoted_at IS NOT NULL OR EXISTS (
 AND (
  @status_filter::text='all'
  OR (@status_filter::text IN ('active','candidate') AND c.promoted_at IS NULL AND c.curation_status='active'
- AND (@status_filter::text='candidate' OR c.reason <> 'already_catalogued'))
+ AND (@status_filter::text='candidate' OR (c.reason <> 'already_catalogued'
+  AND NOT EXISTS (SELECT 1 FROM catalogued_endpoints e WHERE e.url = regexp_replace(lower(substring(r.url FROM '(?i)^https://[^/?#]+')), ':443$', '') || COALESCE(substring(r.url FROM '(?i)^https://[^/?#]+(.*)$'), '')))))
  OR (@status_filter::text IN ('rejected','archived') AND c.promoted_at IS NULL AND c.curation_status= @status_filter::text)
  OR (@status_filter::text='promoted' AND c.promoted_at IS NOT NULL)
 )
@@ -164,8 +179,8 @@ FROM registry_promotion_candidates;
 -- name: FindRegistryEndpoint :one
 SELECT EXISTS(SELECT 1 FROM mcp_registry_entries e,
  jsonb_array_elements(CASE WHEN jsonb_typeof(e.data #> '{server,remotes}')='array' THEN e.data #> '{server,remotes}' ELSE '[]'::jsonb END) AS remote
- WHERE regexp_replace(lower(substring(remote->>'url' FROM '^https://[^/?#]+')), ':443$', '')
- || COALESCE(substring(remote->>'url' FROM '^https://[^/?#]+(.*)$'), '') = @url::text)::boolean;
+ WHERE regexp_replace(lower(substring(remote->>'url' FROM '(?i)^https://[^/?#]+')), ':443$', '')
+ || COALESCE(substring(remote->>'url' FROM '(?i)^https://[^/?#]+(.*)$'), '') = @url::text)::boolean;
 
 -- name: LockEndpoint :exec
 SELECT pg_advisory_xact_lock(hashtextextended(@url::text, 0));
@@ -270,3 +285,8 @@ ORDER BY h.id FOR SHARE OF h NOWAIT;
 UPDATE mcp_auth_client_headers h SET is_required= @is_required,deleted_at=sqlc.narg(deleted_at)::timestamptz,updated_at=clock_timestamp()
 WHERE h.auth_client_id= @auth_client_id AND h.organization_id= @organization_id
  AND EXISTS(SELECT 1 FROM mcp_server_auth_clients l WHERE l.auth_client_id=h.auth_client_id AND l.project_id= @project_id);
+
+-- name: ChangePromotionSourceURLFixture :exec
+UPDATE remote_mcp_servers r SET url= @url, updated_at=clock_timestamp()
+FROM mcp_servers m
+WHERE m.id= @mcp_server_id AND m.project_id= @project_id AND r.id=m.remote_mcp_server_id AND r.project_id=m.project_id;

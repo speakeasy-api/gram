@@ -236,7 +236,7 @@ func TestDiscoveryFailureAdvancesScheduleAndReportsHealth(t *testing.T) {
 	status, err = f.service.Status(t.Context())
 	require.NoError(t, err)
 	require.EqualValues(t, 1, status.DiscoveryFailures)
-	f.service.now = func() time.Time { return f.health.now.Add(2 * time.Hour) }
+	f.service.now = func() time.Time { return f.health.now.Add(7 * 24 * time.Hour) }
 	require.NoError(t, f.service.Discover(t.Context()))
 	status, err = f.service.Status(t.Context())
 	require.NoError(t, err)
@@ -474,5 +474,50 @@ func TestAlreadyCataloguedCandidatesHiddenByDefault(t *testing.T) {
 			require.Len(t, rows, 1)
 			require.Equal(t, candidate.ID, rows[0].ID)
 		}
+	}
+}
+
+func TestCataloguedURLsExcludedBeforeDiscoveryAndPagination(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		url       string
+		sourceURL string
+		matches   bool
+	}{
+		{url: "https://catalog.example.com/mcp", matches: true},
+		{url: "https://CATALOG.example.com:443/mcp", matches: true},
+		{url: "https://catalog.example.com/mcp", sourceURL: "HTTPS://CATALOG.example.com:443/mcp", matches: true},
+		{url: "https://catalog.example.com/other", matches: false},
+		{url: "https://other.example.com/mcp", matches: false},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			t.Parallel()
+			f := newPromotionFixture(t)
+			public := f.request.Public
+			public.URL = tc.url
+			if tc.sourceURL != "" {
+				require.NoError(t, repo.New(f.db).ChangePromotionSourceURLFixture(t.Context(), repo.ChangePromotionSourceURLFixtureParams{ProjectID: f.target.ProjectID, McpServerID: f.target.MCPServerID, Url: tc.sourceURL}))
+			}
+			record, err := buildRecord(public, "streamable-http")
+			require.NoError(t, err)
+			_, err = f.service.registry.Create(t.Context(), record)
+			require.NoError(t, err)
+			// The evidence still says eligible: URL filtering must not wait for the next health refresh.
+			targets, err := repo.New(f.db).DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.health.now), ExcludedOrganizationID: "excluded-example"})
+			require.NoError(t, err)
+			rows, next, err := f.service.ListCandidates(t.Context(), "", 1, "active")
+			require.NoError(t, err)
+			require.Empty(t, next)
+			if tc.matches {
+				require.Empty(t, targets)
+				require.Empty(t, rows)
+			} else {
+				require.Len(t, targets, 1)
+				require.Len(t, rows, 1)
+			}
+			rows, _, err = f.service.ListCandidates(t.Context(), "", 1, "candidate")
+			require.NoError(t, err)
+			require.Len(t, rows, 1, "staff can explicitly include catalogued endpoints")
+		})
 	}
 }

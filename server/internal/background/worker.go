@@ -760,7 +760,10 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(IndexToolsetSweepWorkflow)
 	if opts.CatalogPromotions != nil {
 		temporalWorker.RegisterWorkflow(CatalogPromotionWorkflow)
+		temporalWorker.RegisterWorkflow(CatalogPromotionDeliveryWorkflow)
+		temporalWorker.RegisterWorkflow(CatalogPromotionReviewWorkflow)
 		promotionActivities := &catalogPromotionActivities{jobs: opts.CatalogPromotions, deliveryPaused: opts.CatalogPromotionDeliveryPaused, now: time.Now}
+		temporalWorker.RegisterActivityWithOptions(promotionActivities.reviewBatch, activity.RegisterOptions{Name: "CatalogPromotionReviewBatch"})
 		temporalWorker.RegisterActivityWithOptions(promotionActivities.discover, activity.RegisterOptions{Name: catalogPromotionDiscoverActivity})
 		temporalWorker.RegisterActivityWithOptions(promotionActivities.dispatch, activity.RegisterOptions{Name: catalogPromotionDispatchActivity})
 	}

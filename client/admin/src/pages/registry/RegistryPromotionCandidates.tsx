@@ -82,9 +82,8 @@ export function RegistryPromotionCandidates({
         </Button>
       </div>
       <p className="text-muted-foreground text-sm">
-        Servers with observed tool call health are evaluated for the catalog.
-        Open a review to check current eligibility and supply public listing
-        details.
+        Automatic eligibility review runs weekly. Open a review to refresh
+        eligibility and supply public listing details.
       </p>
       <div className="flex items-center gap-3">
         <Select

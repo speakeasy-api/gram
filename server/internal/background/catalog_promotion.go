@@ -17,8 +17,11 @@ import (
 )
 
 const (
-	// catalogPromotionInterval bounds discovery cost to 720 runs per month.
-	catalogPromotionInterval = time.Hour
+	// catalogPromotionInterval schedules staff candidate discovery once a week.
+	catalogPromotionInterval = 7 * 24 * time.Hour
+
+	// catalogPromotionDeliveryInterval keeps published guide requests moving between reviews.
+	catalogPromotionDeliveryInterval = time.Hour
 
 	// catalogPromotionDiscoverActivity names the bounded candidate scan.
 	catalogPromotionDiscoverActivity = "CatalogPromotionDiscover"
@@ -32,6 +35,9 @@ type CatalogPromotionJobs interface {
 	// Discover checks a bounded page of remote sources for promotion eligibility.
 	Discover(context.Context) error
 
+	// DiscoverBatch advances one bounded part of the weekly fleet review.
+	DiscoverBatch(context.Context) (catalogpromotion.DiscoveryBatch, error)
+
 	// Dispatch submits due setup-guide requests for approved promotions.
 	Dispatch(context.Context) error
 
@@ -39,7 +45,7 @@ type CatalogPromotionJobs interface {
 	Status(context.Context) (catalogpromotion.JobStatus, error)
 }
 
-// CatalogPromotionWorkflow runs two batch activities per hourly tick. Delivery
+// CatalogPromotionWorkflow retains the original command order for in-flight executions. Delivery
 // still runs when discovery fails so existing promotions are not stranded.
 func CatalogPromotionWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -50,6 +56,44 @@ func CatalogPromotionWorkflow(ctx workflow.Context) error {
 	discoveryErr := workflow.ExecuteActivity(ctx, catalogPromotionDiscoverActivity).Get(ctx, nil)
 	deliveryErr := workflow.ExecuteActivity(ctx, catalogPromotionDispatchActivity).Get(ctx, nil)
 	return errors.Join(discoveryErr, deliveryErr)
+}
+
+// CatalogPromotionReviewWorkflow drains bounded batches without growing an unbounded history.
+func CatalogPromotionReviewWorkflow(ctx workflow.Context) error {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: 10 * time.Minute, HeartbeatTimeout: time.Minute, RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 1}})
+	for range 10 {
+		var batch catalogpromotion.DiscoveryBatch
+		if err := workflow.ExecuteActivity(ctx, "CatalogPromotionReviewBatch").Get(ctx, &batch); err != nil {
+			return err
+		}
+		if !batch.More {
+			return nil
+		}
+	}
+	return workflow.NewContinueAsNewError(ctx, CatalogPromotionReviewWorkflow)
+}
+
+func (a *catalogPromotionActivities) reviewBatch(ctx context.Context) (catalogpromotion.DiscoveryBatch, error) {
+	var batch catalogpromotion.DiscoveryBatch
+	err := a.run(ctx, "discovery", func(ctx context.Context) error {
+		var err error
+		batch, err = a.jobs.DiscoverBatch(ctx)
+		if err != nil {
+			return fmt.Errorf("discover catalogue review batch: %w", err)
+		}
+		return nil
+	})
+	return batch, err
+}
+
+// CatalogPromotionDeliveryWorkflow drains approved guide requests between weekly reviews.
+func CatalogPromotionDeliveryWorkflow(ctx workflow.Context) error {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 10 * time.Minute,
+		HeartbeatTimeout:    time.Minute,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
+	})
+	return workflow.ExecuteActivity(ctx, catalogPromotionDispatchActivity).Get(ctx, nil)
 }
 
 type catalogPromotionActivities struct {
@@ -127,20 +171,53 @@ func (a *catalogPromotionActivities) run(ctx context.Context, phase string, oper
 }
 
 func addCatalogPromotionSchedule(ctx context.Context, env *tenv.Environment) error {
-	queue := string(env.Queue())
+	return configureCatalogPromotionSchedules(ctx, env.Client().ScheduleClient(), string(env.Queue()))
+}
+
+func configureCatalogPromotionSchedules(ctx context.Context, sc client.ScheduleClient, queue string) error {
 	id := fmt.Sprintf("v1:catalog-promotion:%s", queue)
-	_, err := env.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
-		ID:            id,
-		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		CatchupWindow: catalogPromotionInterval - time.Second,
+	options := client.ScheduleOptions{
+		ID: id, Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: time.Hour - time.Second,
 		Spec:          client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: catalogPromotionInterval}}},
-		Action: &client.ScheduleWorkflowAction{
-			ID: id + "/scheduled", Workflow: CatalogPromotionWorkflow,
-			TaskQueue: queue, WorkflowRunTimeout: 25 * time.Minute,
-		},
+		Action:        &client.ScheduleWorkflowAction{ID: id + "/scheduled", Workflow: CatalogPromotionReviewWorkflow, TaskQueue: queue, WorkflowRunTimeout: time.Hour, WorkflowExecutionTimeout: 24 * time.Hour},
+	}
+	_, err := sc.Create(ctx, options)
+	paused := false
+	if errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+		err = sc.GetHandle(ctx, id).Update(ctx, client.ScheduleUpdateOptions{
+			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+				schedule := input.Description.Schedule
+				action, ok := schedule.Action.(*client.ScheduleWorkflowAction)
+				if !ok || action.TaskQueue != queue {
+					return nil, fmt.Errorf("catalogue promotion schedule is owned by another task queue")
+				}
+				paused = schedule.State != nil && schedule.State.Paused
+				if schedule.Spec != nil && len(schedule.Spec.Intervals) == 1 && schedule.Spec.Intervals[0].Every == catalogPromotionInterval && action.Workflow == "CatalogPromotionReviewWorkflow" {
+					return nil, temporal.ErrSkipScheduleUpdate
+				}
+				// Existing executions retain their original workflow; only future starts use the batched review.
+				schedule.Spec = &options.Spec
+				action.Workflow = "CatalogPromotionReviewWorkflow"
+				action.WorkflowRunTimeout = time.Hour
+				action.WorkflowExecutionTimeout = 24 * time.Hour
+				return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
+			},
+		})
+	}
+	if err != nil {
+		return fmt.Errorf("configure catalogue promotion schedule: %w", err)
+	}
+	docsID := fmt.Sprintf("v1:catalog-promotion-docs:%s", queue)
+	_, err = sc.Create(ctx, client.ScheduleOptions{
+		ID: docsID, Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: catalogPromotionDeliveryInterval - time.Second,
+		Paused:        paused,
+		Spec:          client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: catalogPromotionDeliveryInterval}}},
+		Action:        &client.ScheduleWorkflowAction{ID: docsID + "/scheduled", Workflow: CatalogPromotionDeliveryWorkflow, TaskQueue: queue, WorkflowRunTimeout: 15 * time.Minute},
 	})
 	if err != nil && !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-		return fmt.Errorf("create catalogue promotion schedule: %w", err)
+		return fmt.Errorf("configure catalogue documentation schedule: %w", err)
 	}
 	return nil
 }

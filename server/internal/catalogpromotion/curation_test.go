@@ -195,3 +195,27 @@ func TestCandidatePaginationNewestFirstStableAcrossTiesAndInsertions(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, original.ID, newest[0].ID)
 }
+
+func TestWeeklyDiscoveryDrainsMoreThanOnePage(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	q := repo.New(f.db)
+	for i := range 51 {
+		project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{Name: "Synthetic batch", Slug: fmt.Sprintf("synthetic-batch-%d", i), OrganizationID: f.target.OrganizationID})
+		require.NoError(t, err)
+		_, err = q.SeedPromotionSourceFixture(t.Context(), repo.SeedPromotionSourceFixtureParams{ProjectID: project.ID, Url: "https://catalog.example.com/mcp", CreatedAt: conv.ToPGTimestamptz(f.health.now.Add(-7 * 24 * time.Hour))})
+		require.NoError(t, err)
+	}
+	first, err := f.service.DiscoverBatch(t.Context())
+	require.NoError(t, err)
+	require.True(t, first.More)
+	second, err := f.service.DiscoverBatch(t.Context())
+	require.NoError(t, err)
+	require.False(t, second.More)
+	remaining, err := q.DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.health.now.Add(time.Hour)), ExcludedOrganizationID: "excluded-example"})
+	require.NoError(t, err)
+	require.Empty(t, remaining, "the same sweep must not revisit a claimed source")
+	remaining, err = q.DiscoveryTargets(t.Context(), repo.DiscoveryTargetsParams{Now: conv.ToPGTimestamptz(f.health.now.Add(7 * 24 * time.Hour)), ExcludedOrganizationID: "excluded-example"})
+	require.NoError(t, err)
+	require.Len(t, remaining, 50, "sources must be due again at the next weekly tick")
+}
