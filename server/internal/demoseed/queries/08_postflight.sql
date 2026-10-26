@@ -395,6 +395,18 @@ SELECT count(*)
 FROM meta_mcp_server_members m
 WHERE m.project_id = @project_id::uuid AND m.deleted IS TRUE;
 
+-- The approval policy is only usable when the approvals server it points
+-- agents at has an endpoint and sits in the Default plugin.
+
+-- name: PostflightCountApprovalsServers :one
+SELECT count(*)
+FROM mcp_servers s
+JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
+JOIN plugin_servers ps ON ps.mcp_server_id = s.id AND ps.deleted IS FALSE
+JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_default IS TRUE AND p.deleted IS FALSE
+WHERE s.project_id = @project_id::uuid AND s.builtin_backend = 'approvals'
+  AND s.deleted IS FALSE;
+
 -- Hosted toolsets mirror their canonical wrapper: name, tool variations group, visibility, issuer, and the
 -- single endpoint's address, so the toolset-to-server sync older pods run writes nothing.
 -- name: PostflightCountHostedToolsetDrift :one
@@ -505,3 +517,18 @@ WHERE organization_id = @org_id::text AND deleted IS FALSE;
 -- name: PostflightCountPersonalAccounts :one
 SELECT count(*) FROM user_accounts
 WHERE organization_id = @org_id::text AND account_type = 'personal';
+
+-- name: PostflightCountRegistryPromotionCandidates :one
+SELECT count(*) FROM registry_promotion_candidates
+WHERE organization_id = @org_id::text AND project_id = @project_id::uuid
+ AND eligible IS FALSE AND promoted_at IS NULL ;
+
+-- name: PostflightCountAuthClientAssociations :one
+SELECT count(*) FROM mcp_server_auth_clients
+WHERE organization_id = @org_id::text AND deleted IS FALSE;
+
+-- name: PostflightCountApprovals :one
+-- The Tool approvals tab needs its four seeded approval requests: pending,
+-- used, denied and expired.
+SELECT count(*) FROM risk_policy_approvals
+WHERE organization_id = @org_id::text AND deleted IS FALSE;

@@ -8,6 +8,10 @@ import {
 import { afterEach, expect, it, vi } from "vitest";
 import { renderWithApp } from "@/test/harness";
 
+vi.mock("./RegistryPromotionCandidates", () => ({
+  RegistryPromotionCandidates: () => null,
+}));
+
 const list = vi.hoisted(() => vi.fn());
 vi.mock("@gram/admin-client/react-query/adminListRegistryEntries.core", () => ({
   buildAdminListRegistryEntriesQuery: (_client: unknown, request: unknown) => ({

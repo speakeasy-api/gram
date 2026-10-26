@@ -89,6 +89,15 @@ overrides:
 
 sql:
   - schema: schema.sql
+    queries: ../internal/catalogpromotion/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/catalogpromotion/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+  - schema: schema.sql
     queries: ./stub.sql
     engine: postgresql
     database:
@@ -203,7 +212,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: schema.sql
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/deployments/queries.sql
     engine: postgresql
     gen:
@@ -243,7 +252,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: schema.sql
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/toolsets/queries.sql
     engine: postgresql
     gen:
@@ -900,6 +909,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/risk/approval/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/risk/approval/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/risk/queries.sql
     engine: postgresql
     gen:
@@ -1022,7 +1041,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: schema.sql
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/admin/queries.sql
     engine: postgresql
     gen:
@@ -1032,7 +1051,7 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: schema.sql
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/externalmcp/migration/queries.sql
     engine: postgresql
     gen:

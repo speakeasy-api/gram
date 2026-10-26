@@ -9,12 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 )
 
-func TestChatMetadataList_ClickHouseCutover(t *testing.T) {
+func TestChatMetadataList_ClickHouseFindings(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_chat_findings")
@@ -58,10 +57,7 @@ func TestChatMetadataList_ClickHouseCutover(t *testing.T) {
 		EventKind:         chrepo.EventKindFinding,
 	}}))
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, principal.OrganizationID, true)
-	service := NewChatMetadataService(conn, allowBudget(), "chat-list-test-key").
-		WithRiskFindingsClickHouse(chatfindings.New(conn, chrepo.New(chConn)), flags, NewPostgresOrganizationSlugResolver(conn))
+	service := NewChatMetadataService(conn, chatfindings.New(conn, chrepo.New(chConn)), allowBudget(), "chat-list-test-key")
 	service.now = func() time.Time { return now.Add(time.Minute) }
 	output, err := service.List(ctx, principal, ListChatsInput{
 		ProjectID: project.ID.String(), Risk: ChatRiskWithFindings,

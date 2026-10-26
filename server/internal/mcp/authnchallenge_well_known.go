@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"slices"
 
@@ -242,7 +241,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 //   - Remote-backed, not issuer-gated: 404 — the upstream remote MCP server
 //     publishes its own .well-known and Speakeasy is not its authorization server.
 //   - Toolset-backed, not issuer-gated: reuse the legacy wellknown resolver
-//     (oauth_proxy_server_id / external_oauth_server_id).
+//     (external_oauth_server_id).
 func (s *Service) ServeWellKnownProtectedResourceForServer(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -383,7 +382,7 @@ func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w htt
 func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, oauthSlug, resourceURL string) error {
 	// Only a toolset with no user session issuer reaches this path. Its
 	// metadata describes the legacy OAuth configuration (an external
-	// authorization server or the OAuth proxy), and it has no issuer to set
+	// authorization server), and it has no issuer to set
 	// use_authentication_host on, so the authentication host never serves it.
 	// A toolset gated by a user session issuer is served through
 	// ServeGetAuthorizationServer like every other backend.
@@ -396,27 +395,6 @@ func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w h
 	}
 	if result == nil {
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
-	}
-
-	if result.Kind == wellknown.OAuthServerMetadataResultKindProxy {
-		target, parseErr := url.Parse(result.ProxyURL)
-		if parseErr != nil {
-			return oops.E(oops.CodeUnexpected, parseErr, "failed to parse well-known URL").LogError(ctx, logger)
-		}
-		proxy := &httputil.ReverseProxy{
-			Director: nil,
-			Rewrite: func(pr *httputil.ProxyRequest) {
-				pr.SetURL(target)
-			},
-			Transport:      nil,
-			FlushInterval:  0,
-			ErrorLog:       nil,
-			BufferPool:     nil,
-			ModifyResponse: nil,
-			ErrorHandler:   nil,
-		}
-		proxy.ServeHTTP(w, r)
-		return nil
 	}
 
 	return writeOAuthServerMetadataResponse(ctx, logger, w, r, result)

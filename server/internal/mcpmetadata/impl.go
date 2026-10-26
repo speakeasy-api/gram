@@ -2191,7 +2191,7 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mcpservers_repo.McpServer) securityMode {
 	if server != nil {
 		sessionGated := server.UserSessionIssuerID.Valid ||
-			(toolset != nil && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid))
+			(toolset != nil && toolset.ExternalOauthServerID.Valid)
 		switch {
 		case sessionGated:
 			return securityModeOAuth
@@ -2202,8 +2202,7 @@ func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mc
 		}
 	}
 
-	oauthRequired := toolset.OauthProxyServerID.Valid ||
-		toolset.ExternalOauthServerID.Valid ||
+	oauthRequired := toolset.ExternalOauthServerID.Valid ||
 		toolset.UserSessionIssuerID.Valid
 	if oauthRequired {
 		return securityModeOAuth

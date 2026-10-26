@@ -257,3 +257,23 @@ func TestAuthClientAudienceShowsProjectRulesOnlyWhereTheClientIsOffered(t *testi
 	require.Len(t, got.Entries, 1)
 	require.Equal(t, ti.projectID.String(), *got.Entries[0].ProjectID)
 }
+
+func TestSetPrincipalLevelRejectsPrincipalsThatCannotHoldRules(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Shared")
+	actor := callerPrincipal(t, ctx)
+
+	for _, principal := range []urn.Principal{
+		urn.NewPrincipal(urn.PrincipalTypeAPIKey, uuid.NewString()),
+		urn.NewPrincipal(urn.PrincipalTypeRole, "missing-role"),
+	} {
+		_, err := authclients.SetPrincipalLevel(ctx, ti.conn, audit.NewLogger(), ti.organizationID, actor, clientID, principal, authclients.LevelUse)
+		require.ErrorIs(t, err, authclients.ErrPrincipalInvalid, principal.String())
+	}
+
+	saved, err := authclients.SetPrincipalLevel(ctx, ti.conn, audit.NewLogger(), ti.organizationID, actor, clientID, actor, authclients.LevelBlocked)
+	require.NoError(t, err)
+	require.Equal(t, []string{actor.String() + "|" + authclients.LevelBlocked}, ownRules(saved))
+}

@@ -57,18 +57,20 @@ func (i KitGKEIdentity) validate() error {
 // Snapshot-enabled provisioning is reserved for a caller holding the admission
 // lock with settled work and fenced prior authority. No warm pool is used.
 type KitGKEProvisionInput struct {
-	Identity                                       KitGKEIdentity
-	Model                                          string
-	Name, Image, IngressCIDR                       string
-	GuestPort                                      int32
-	Command, Args                                  []string
-	AgentsMD, InferenceJSON, MCPJSON, GatewayToken []byte
-	MCPFiles                                       map[string][]byte
-	TLSCertificate, TLSPrivateKey                  []byte
-	AllowInsecureHTTP                              bool
-	Resources                                      corev1.ResourceRequirements
-	WorkSizeLimit, TmpSizeLimit                    string
-	SnapshotsEnabled                               bool
+	Workload                                 *KitWorkloadBinding
+	InferenceEndpoint                        string
+	WorkloadServiceAccount, WorkloadAudience string
+	Identity                                 KitGKEIdentity
+	Model                                    string
+	Name, Image, IngressCIDR                 string
+	GuestPort                                int32
+	Command, Args                            []string
+	AgentsMD, MCPJSON, GatewayToken          []byte
+	TLSCertificate, TLSPrivateKey            []byte
+	AllowInsecureHTTP                        bool
+	Resources                                corev1.ResourceRequirements
+	WorkSizeLimit, TmpSizeLimit              string
+	SnapshotsEnabled                         bool
 	// PreviousIdentity is mandatory for an intentional cold/reset transition.
 	ColdReset        bool
 	PreviousIdentity *KitGKEIdentity
@@ -102,6 +104,12 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	if len(validation.IsDNS1123Subdomain(in.Name)) != 0 || strings.HasPrefix(in.Name, "gram-asst") {
 		return out, fmt.Errorf("invalid dedicated Kit object name")
 	}
+	if len(validation.IsDNS1123Subdomain(in.WorkloadServiceAccount)) != 0 {
+		return out, fmt.Errorf("invalid Kit workload service account")
+	}
+	if strings.TrimSpace(in.WorkloadAudience) == "" {
+		return out, fmt.Errorf("kit workload audience is required")
+	}
 	if !kitGKEExplicitImage(in.Image) {
 		return out, fmt.Errorf("kit image requires an explicit non-latest version tag or digest")
 	}
@@ -120,8 +128,12 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	if err := validateKitGatewayCommand(in.Command, in.Args, int(in.GuestPort)); err != nil {
 		return out, err
 	}
-	if err := validateKitBootstrap(KitLocalBootstrap{AgentsMD: in.AgentsMD, InferenceJSON: in.InferenceJSON, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken, MCPFiles: in.MCPFiles}); err != nil {
+	bootstrap := KitLocalBootstrap{Model: in.Model, Workload: in.Workload, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: in.InferenceEndpoint, AgentsMD: in.AgentsMD, MCPJSON: in.MCPJSON, GatewayToken: in.GatewayToken}
+	if err := validateKitBootstrap(bootstrap); err != nil {
 		return out, err
+	}
+	if in.Workload.ServiceAccount != in.WorkloadServiceAccount || in.Workload.Audience != in.WorkloadAudience {
+		return out, fmt.Errorf("kit workload projection binding mismatch")
 	}
 	if _, err := tls.X509KeyPair(in.TLSCertificate, in.TLSPrivateKey); err != nil {
 		return out, fmt.Errorf("kit GKE requires fresh TLS key pair")
@@ -129,14 +141,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	if _, err := kitGKETLSConfig(in.TLSCertificate, in.Name+".kit.internal"); err != nil {
 		return out, err
 	}
-	origin, err := kitInferenceOrigin(in.InferenceJSON)
-	if err != nil {
-		return out, err
-	}
-	if strings.HasPrefix(origin, "http:") && !in.AllowInsecureHTTP {
-		return out, fmt.Errorf("insecure Kit inference requires explicit HTTP opt-in")
-	}
-	environment := []corev1.EnvVar{{Name: "HOME", Value: "/home/kit"}, {Name: "SPEAKEASY_ORIGIN", Value: origin}}
+	environment := []corev1.EnvVar{{Name: "HOME", Value: "/home/kit"}}
 	if in.AllowInsecureHTTP {
 		environment = append(environment, corev1.EnvVar{Name: "SPEAKEASY_ALLOW_INSECURE_HTTP", Value: "1"})
 	}
@@ -163,8 +168,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		}
 		annotations["podsnapshot.gke.io/ps-name"] = in.Restore.name
 	}
-	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitBootstrapConfig(KitLocalBootstrap{Model: in.Model})), "speakeasy.json": in.InferenceJSON, "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
-	maps.Copy(data, in.MCPFiles)
+	data := map[string][]byte{"AGENTS.md": in.AgentsMD, "config.toml": []byte(kitBootstrapConfig(bootstrap)), "mcp.json": in.MCPJSON, "gateway-token": in.GatewayToken}
 	data["tls.crt"], data["tls.key"] = in.TLSCertificate, in.TLSPrivateKey
 	data["nginx.conf"] = []byte(kitGKETLSProxyConfig(in.GuestPort))
 	data["checkpoint-marker"] = in.CheckpointMarker
@@ -177,9 +181,6 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 			continue
 		}
 		path := "credentials/" + name
-		if name == "speakeasy.json" {
-			path = "credentials/" + KitInferenceCredentialFilename
-		}
 		if name == "AGENTS.md" || name == "config.toml" || name == "checkpoint-marker" || name == "expected-checkpoint-marker" {
 			path = name
 		}
@@ -221,12 +222,12 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	args := append([]string{kitBootstrapScript + "exec \"$@\"\n", "kit-bootstrap"}, in.Command...)
 	args = append(args, "gateway", "--listen", "127.0.0.1:"+strconv.Itoa(kitGKEPlaintextPort), "--credential-file", "/home/kit/.kit/credentials/gateway-token", "--project", KitWorkspacePath)
 	pod := corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: in.Identity.labels(), Annotations: annotations}, Spec: corev1.PodSpec{
-		RuntimeClassName: new("gvisor"), AutomountServiceAccountToken: &no,
+		RuntimeClassName: new("gvisor"), AutomountServiceAccountToken: &no, ServiceAccountName: in.WorkloadServiceAccount,
 		DNSPolicy: corev1.DNSNone, DNSConfig: &corev1.PodDNSConfig{Nameservers: []string{"8.8.8.8", "1.1.1.1"}},
 		NodeSelector:    map[string]string{"sandbox.gke.io/runtime": "gvisor", "workload-type": "sandbox"},
 		Tolerations:     []corev1.Toleration{{Key: "sandbox.gke.io/runtime", Operator: corev1.TolerationOpEqual, Value: "gvisor", Effect: corev1.TaintEffectNoSchedule}, {Key: "workload-type", Operator: corev1.TolerationOpEqual, Value: "sandbox", Effect: corev1.TaintEffectNoSchedule}},
 		SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: &yes, RunAsUser: &uid, RunAsGroup: &uid, FSGroup: &uid},
-		Containers:      []corev1.Container{{Name: "kit", Image: in.Image, Command: []string{"/bin/sh", "-ec"}, Args: args, WorkingDir: "/home/kit", Env: environment, SecurityContext: security, Resources: resources, VolumeMounts: []corev1.VolumeMount{{Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}, {Name: "tmp", MountPath: "/tmp"}}}},
+		Containers:      []corev1.Container{{Name: "kit", Image: in.Image, Command: []string{"/bin/sh", "-ec"}, Args: args, WorkingDir: "/home/kit", Env: environment, SecurityContext: security, Resources: resources, VolumeMounts: []corev1.VolumeMount{{Name: "bootstrap", MountPath: "/bootstrap", ReadOnly: true}, {Name: "tmp", MountPath: "/tmp"}, {Name: "workload", MountPath: "/var/run/secrets/speakeasy/workload", ReadOnly: true}}}},
 		Volumes:         []corev1.Volume{tmp, {Name: "bootstrap", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretName, DefaultMode: &mode, Items: items}}}},
 	}}
 	proxyTmp, err := kitMemoryVolume("tls-tmp", "32Mi")
@@ -235,6 +236,16 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	}
 	pod.Spec.Volumes = append(pod.Spec.Volumes, proxyTmp, corev1.Volume{Name: "tls", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secretName, DefaultMode: &mode, Items: []corev1.KeyToPath{{Key: "tls.crt", Path: "tls.crt"}, {Key: "tls.key", Path: "tls.key"}, {Key: "nginx.conf", Path: "nginx.conf"}}}}})
 	pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{Name: "acp-tls", Image: kitGKETLSProxyImage, Command: []string{"nginx"}, Args: []string{"-c", "/tls/nginx.conf", "-g", "daemon off;"}, Ports: []corev1.ContainerPort{{ContainerPort: in.GuestPort}}, SecurityContext: security, Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("16Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("64Mi")}}, VolumeMounts: []corev1.VolumeMount{{Name: "tls", MountPath: "/tls", ReadOnly: true}, {Name: "tls-tmp", MountPath: "/tmp"}}})
+	// Projected credentials rotate independently and never enter the bootstrap or rootfs.
+	pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+		Name: "workload",
+		VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{
+			DefaultMode: &mode,
+			Sources: []corev1.VolumeProjection{{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+				Audience: in.WorkloadAudience, ExpirationSeconds: new(int64(600)), Path: "assertion",
+			}}},
+		}},
+	})
 	if in.SnapshotsEnabled {
 		pod.Labels["gram.ai/snapshots"] = "enabled"
 	}

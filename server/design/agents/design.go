@@ -49,7 +49,7 @@ var PolicySelector = Type("AgentPolicySelector", func() {
 	Description("A constraint that narrows which resources an agent grant applies to.")
 	Required("resource_kind", "resource_id")
 	Attribute("resource_kind", String, "The kind of resource this selector targets.", func() {
-		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*")
+		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "mcp_auth_client", "*")
 	})
 	Attribute("resource_id", String, "The resource identifier, or '*' for all resources of this kind.")
 	Attribute("client_type", String, "Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).", func() {
@@ -61,7 +61,7 @@ var PolicySelector = Type("AgentPolicySelector", func() {
 		Enum("read_only", "destructive", "idempotent", "open_world")
 	})
 	Attribute("tool", String, "Specific tool name filter (MCP scopes only).")
-	Attribute("project_id", String, "Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).")
+	Attribute("project_id", String, "Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).")
 	Attribute("server_url", String, "Server URL filter (risk policy scopes only).", func() { Format(FormatURI) })
 	Attribute("server_identity", String, "Server identity filter (risk policy scopes only).")
 })
@@ -83,10 +83,45 @@ var PolicyGrant = Type("AgentPolicyGrant", func() {
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })
 })
 
+var CheckPolicyGrantsForm = Type("CheckAgentPolicyGrantsForm", func() {
+	Attribute("agent_id", String, "The agent the grants would be written to. Omit for an agent the caller would create.", func() { Format(FormatUUID) })
+	Attribute("owner_user_id", String, "Owner of the agent the caller would create, as agents.create takes it; defaults to the caller. Not allowed with agent_id, whose owner is its own.")
+	Attribute("policy_grants", ArrayOf(PolicyGrantForm), "The grants to check, answered in the same order.", func() {
+		MinLength(1)
+		MaxLength(100)
+	})
+	Required("policy_grants")
+})
+
+var PolicyGrantCheck = Type("AgentPolicyGrantCheck", func() {
+	Description("Whether one policy grant could be written, by the same rule agents.create and agents.createPolicyGrant enforce.")
+	Required("allowed")
+	Attribute("allowed", Boolean, "Whether the grant fits within the caller's and the owner's permissions.")
+	Attribute("limited_by", String, "Whose permissions the grant exceeds; absent when allowed.", func() {
+		Enum("caller", "owner")
+	})
+})
+
+var CheckPolicyGrantsResult = Type("CheckAgentPolicyGrantsResult", func() {
+	Required("results")
+	Attribute("results", ArrayOf(PolicyGrantCheck), "One answer per requested grant, in request order.")
+})
+
 var PolicyGrantIDForm = Type("AgentPolicyGrantIDForm", func() {
 	Extend(AgentIDForm)
 	Attribute("grant_id", String, "Direct policy grant identifier", func() { Format(FormatUUID) })
 	Required("grant_id")
+})
+
+var ExpectedPolicy = Type("AgentExpectedPolicy", func() {
+	Attribute("scope", String, "Scope of the grant originally read", func() { MinLength(1) })
+	Attribute("selector", PolicySelector, "Selector of the grant originally read")
+	Required("scope", "selector")
+})
+
+var DeletePolicyGrantForm = Type("DeleteAgentPolicyGrantForm", func() {
+	Extend(PolicyGrantIDForm)
+	Attribute("expected_policy", ExpectedPolicy, "Optional delete precondition. Returns conflict if the current scope or selector differs; omission preserves unconditional deletion.")
 })
 
 var OwnerAssignmentForm = Type("AgentOwnerAssignmentForm", func() {
@@ -302,6 +337,24 @@ var _ = Service("agents", func() {
 		})
 	})
 
+	Method("checkPolicyGrants", func() {
+		Description("Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.")
+		Meta("openapi:operationId", "checkAgentPolicyGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "checkPolicyGrants")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CheckAgentPolicyGrants"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Extend(CheckPolicyGrantsForm)
+		})
+		Result(CheckPolicyGrantsResult)
+		HTTP(func() {
+			POST("/rpc/agents.checkPolicyGrants")
+			security.SessionHeader()
+			Body(CheckPolicyGrantsForm)
+			Response(StatusOK)
+		})
+	})
+
 	Method("createPolicyGrant", func() {
 		Meta("openapi:operationId", "createAgentPolicyGrant")
 		Meta("openapi:extension:x-speakeasy-name-override", "createPolicyGrant")
@@ -339,12 +392,12 @@ var _ = Service("agents", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deletePolicyGrant")
 		Payload(func() {
 			security.SessionPayload()
-			Extend(PolicyGrantIDForm)
+			Extend(DeletePolicyGrantForm)
 		})
 		HTTP(func() {
 			POST("/rpc/agents.deletePolicyGrant")
 			security.SessionHeader()
-			Body(PolicyGrantIDForm)
+			Body(DeletePolicyGrantForm)
 			Response(StatusNoContent)
 		})
 	})

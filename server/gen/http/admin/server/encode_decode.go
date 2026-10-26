@@ -13931,6 +13931,1090 @@ func EncodeMigrateExternalMcpServersError(encoder func(context.Context, http.Res
 	}
 }
 
+// EncodeListRegistryPromotionCandidatesResponse returns an encoder for
+// responses returned by the admin listRegistryPromotionCandidates endpoint.
+func EncodeListRegistryPromotionCandidatesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminRegistryPromotionCandidates)
+		enc := encoder(ctx, w)
+		body := NewListRegistryPromotionCandidatesResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListRegistryPromotionCandidatesRequest returns a decoder for requests
+// sent to the admin listRegistryPromotionCandidates endpoint.
+func DecodeListRegistryPromotionCandidatesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.ListRegistryPromotionCandidatesPayload, error) {
+	return func(r *http.Request) (*admin.ListRegistryPromotionCandidatesPayload, error) {
+		var payload *admin.ListRegistryPromotionCandidatesPayload
+		var (
+			cursor            *string
+			status            string
+			limit             int
+			adminSessionToken *string
+			err               error
+		)
+		qp := r.URL.Query()
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		statusRaw := qp.Get("status")
+		if statusRaw != "" {
+			status = statusRaw
+		} else {
+			status = "active"
+		}
+		if !(status == "active" || status == "all" || status == "candidate" || status == "rejected" || status == "archived" || status == "promoted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", status, []any{"active", "all", "candidate", "rejected", "archived", "promoted"}))
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 25
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 50 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 50, false))
+		}
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListRegistryPromotionCandidatesPayload(cursor, status, limit, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListRegistryPromotionCandidatesError returns an encoder for errors
+// returned by the listRegistryPromotionCandidates admin endpoint.
+func EncodeListRegistryPromotionCandidatesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryPromotionCandidatesUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryPromotionCandidatesForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryPromotionCandidatesBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryPromotionCandidatesNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryPromotionCandidatesConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryPromotionCandidatesUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryPromotionCandidatesInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryPromotionCandidatesInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryPromotionCandidatesUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRegistryPromotionCandidatesGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetRegistryPromotionCandidateResponse returns an encoder for responses
+// returned by the admin getRegistryPromotionCandidate endpoint.
+func EncodeGetRegistryPromotionCandidateResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminRegistryPromotionCandidate)
+		enc := encoder(ctx, w)
+		body := NewGetRegistryPromotionCandidateResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetRegistryPromotionCandidateRequest returns a decoder for requests
+// sent to the admin getRegistryPromotionCandidate endpoint.
+func DecodeGetRegistryPromotionCandidateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.GetRegistryPromotionCandidatePayload, error) {
+	return func(r *http.Request) (*admin.GetRegistryPromotionCandidatePayload, error) {
+		var payload *admin.GetRegistryPromotionCandidatePayload
+		var (
+			body GetRegistryPromotionCandidateRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateGetRegistryPromotionCandidateRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewGetRegistryPromotionCandidatePayload(&body, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetRegistryPromotionCandidateError returns an encoder for errors
+// returned by the getRegistryPromotionCandidate admin endpoint.
+func EncodeGetRegistryPromotionCandidateError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryPromotionCandidateUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryPromotionCandidateForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryPromotionCandidateBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryPromotionCandidateNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryPromotionCandidateConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryPromotionCandidateUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryPromotionCandidateInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryPromotionCandidateInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryPromotionCandidateUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRegistryPromotionCandidateGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodePromoteRegistryCandidateResponse returns an encoder for responses
+// returned by the admin promoteRegistryCandidate endpoint.
+func EncodePromoteRegistryCandidateResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminRegistryPromotionCandidate)
+		enc := encoder(ctx, w)
+		body := NewPromoteRegistryCandidateResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodePromoteRegistryCandidateRequest returns a decoder for requests sent to
+// the admin promoteRegistryCandidate endpoint.
+func DecodePromoteRegistryCandidateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.PromoteRegistryCandidatePayload, error) {
+	return func(r *http.Request) (*admin.PromoteRegistryCandidatePayload, error) {
+		var payload *admin.PromoteRegistryCandidatePayload
+		var (
+			body PromoteRegistryCandidateRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidatePromoteRegistryCandidateRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewPromoteRegistryCandidatePayload(&body, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodePromoteRegistryCandidateError returns an encoder for errors returned
+// by the promoteRegistryCandidate admin endpoint.
+func EncodePromoteRegistryCandidateError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPromoteRegistryCandidateUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPromoteRegistryCandidateForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPromoteRegistryCandidateBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPromoteRegistryCandidateNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPromoteRegistryCandidateConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPromoteRegistryCandidateUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPromoteRegistryCandidateInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPromoteRegistryCandidateInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPromoteRegistryCandidateUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewPromoteRegistryCandidateGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeCurateRegistryPromotionCandidateResponse returns an encoder for
+// responses returned by the admin curateRegistryPromotionCandidate endpoint.
+func EncodeCurateRegistryPromotionCandidateResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminRegistryPromotionCandidate)
+		enc := encoder(ctx, w)
+		body := NewCurateRegistryPromotionCandidateResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeCurateRegistryPromotionCandidateRequest returns a decoder for requests
+// sent to the admin curateRegistryPromotionCandidate endpoint.
+func DecodeCurateRegistryPromotionCandidateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.CurateRegistryPromotionCandidatePayload, error) {
+	return func(r *http.Request) (*admin.CurateRegistryPromotionCandidatePayload, error) {
+		var payload *admin.CurateRegistryPromotionCandidatePayload
+		var (
+			body CurateRegistryPromotionCandidateRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateCurateRegistryPromotionCandidateRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewCurateRegistryPromotionCandidatePayload(&body, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeCurateRegistryPromotionCandidateError returns an encoder for errors
+// returned by the curateRegistryPromotionCandidate admin endpoint.
+func EncodeCurateRegistryPromotionCandidateError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCurateRegistryPromotionCandidateUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCurateRegistryPromotionCandidateForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCurateRegistryPromotionCandidateBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCurateRegistryPromotionCandidateNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCurateRegistryPromotionCandidateConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCurateRegistryPromotionCandidateUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCurateRegistryPromotionCandidateInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCurateRegistryPromotionCandidateInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCurateRegistryPromotionCandidateUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCurateRegistryPromotionCandidateGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeRetryRegistryPromotionDocsResponse returns an encoder for responses
+// returned by the admin retryRegistryPromotionDocs endpoint.
+func EncodeRetryRegistryPromotionDocsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminRegistryPromotionCandidate)
+		enc := encoder(ctx, w)
+		body := NewRetryRegistryPromotionDocsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeRetryRegistryPromotionDocsRequest returns a decoder for requests sent
+// to the admin retryRegistryPromotionDocs endpoint.
+func DecodeRetryRegistryPromotionDocsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.RetryRegistryPromotionDocsPayload, error) {
+	return func(r *http.Request) (*admin.RetryRegistryPromotionDocsPayload, error) {
+		var payload *admin.RetryRegistryPromotionDocsPayload
+		var (
+			body RetryRegistryPromotionDocsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRetryRegistryPromotionDocsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			adminSessionToken *string
+		)
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		payload = NewRetryRegistryPromotionDocsPayload(&body, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeRetryRegistryPromotionDocsError returns an encoder for errors returned
+// by the retryRegistryPromotionDocs admin endpoint.
+func EncodeRetryRegistryPromotionDocsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRetryRegistryPromotionDocsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRetryRegistryPromotionDocsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRetryRegistryPromotionDocsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRetryRegistryPromotionDocsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRetryRegistryPromotionDocsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRetryRegistryPromotionDocsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRetryRegistryPromotionDocsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRetryRegistryPromotionDocsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRetryRegistryPromotionDocsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRetryRegistryPromotionDocsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGetRegistryOktaCandidatesResponse returns an encoder for responses
 // returned by the admin getRegistryOktaCandidates endpoint.
 func EncodeGetRegistryOktaCandidatesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -21847,6 +22931,50 @@ func marshalAdminAdminMcpServerHealthRemoteSessionsToAdminMcpServerHealthRemoteS
 	return res
 }
 
+// marshalAdminAdminMcpServerHealthUpstreamAuthToAdminMcpServerHealthUpstreamAuthResponseBody
+// builds a value of type *AdminMcpServerHealthUpstreamAuthResponseBody from a
+// value of type *admin.AdminMcpServerHealthUpstreamAuth.
+func marshalAdminAdminMcpServerHealthUpstreamAuthToAdminMcpServerHealthUpstreamAuthResponseBody(v *admin.AdminMcpServerHealthUpstreamAuth) *AdminMcpServerHealthUpstreamAuthResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminMcpServerHealthUpstreamAuthResponseBody{
+		Status:               v.Status,
+		RequiresUpstreamAuth: v.RequiresUpstreamAuth,
+	}
+	if v.AuthClients != nil {
+		res.AuthClients = make([]*AdminMcpServerHealthAuthClientResponseBody, len(v.AuthClients))
+		for i, val := range v.AuthClients {
+			if val == nil {
+				res.AuthClients[i] = nil
+				continue
+			}
+			res.AuthClients[i] = marshalAdminAdminMcpServerHealthAuthClientToAdminMcpServerHealthAuthClientResponseBody(val)
+		}
+	} else {
+		res.AuthClients = []*AdminMcpServerHealthAuthClientResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAdminAdminMcpServerHealthAuthClientToAdminMcpServerHealthAuthClientResponseBody
+// builds a value of type *AdminMcpServerHealthAuthClientResponseBody from a
+// value of type *admin.AdminMcpServerHealthAuthClient.
+func marshalAdminAdminMcpServerHealthAuthClientToAdminMcpServerHealthAuthClientResponseBody(v *admin.AdminMcpServerHealthAuthClient) *AdminMcpServerHealthAuthClientResponseBody {
+	res := &AdminMcpServerHealthAuthClientResponseBody{
+		ID:                    v.ID,
+		ClientType:            v.ClientType,
+		Source:                v.Source,
+		Enabled:               v.Enabled,
+		RemoteSessionClientID: v.RemoteSessionClientID,
+		ServerCount:           v.ServerCount,
+		HeaderCount:           v.HeaderCount,
+	}
+
+	return res
+}
+
 // marshalAdminAdminMcpServerToolCallOutcomesToAdminMcpServerToolCallOutcomesResponseBody
 // builds a value of type *AdminMcpServerToolCallOutcomesResponseBody from a
 // value of type *admin.AdminMcpServerToolCallOutcomes.
@@ -22030,6 +23158,67 @@ func marshalAdminAdminExternalMcpMigrationOutcomeToAdminExternalMcpMigrationOutc
 		}
 	} else {
 		res.Warnings = []string{}
+	}
+
+	return res
+}
+
+// marshalAdminAdminRegistryPromotionCandidateToAdminRegistryPromotionCandidateResponseBody
+// builds a value of type *AdminRegistryPromotionCandidateResponseBody from a
+// value of type *admin.AdminRegistryPromotionCandidate.
+func marshalAdminAdminRegistryPromotionCandidateToAdminRegistryPromotionCandidateResponseBody(v *admin.AdminRegistryPromotionCandidate) *AdminRegistryPromotionCandidateResponseBody {
+	res := &AdminRegistryPromotionCandidateResponseBody{
+		ID:                v.ID,
+		OrganizationID:    v.OrganizationID,
+		ProjectID:         v.ProjectID,
+		McpServerID:       v.McpServerID,
+		RemoteMcpServerID: v.RemoteMcpServerID,
+		SourceName:        v.SourceName,
+		CreatedAt:         v.CreatedAt,
+		CurationRevision:  v.CurationRevision,
+		SourceRevision:    v.SourceRevision,
+		Eligible:          v.Eligible,
+		Reason:            v.Reason,
+		Status:            v.Status,
+		ObservedSuccesses: v.ObservedSuccesses,
+		ObservedFailures:  v.ObservedFailures,
+		ObservedDays:      v.ObservedDays,
+		CheckedAt:         v.CheckedAt,
+		RegistryEntryID:   v.RegistryEntryID,
+		DocsStatus:        v.DocsStatus,
+		DocsURL:           v.DocsURL,
+		DocsRevision:      v.DocsRevision,
+		DocsRetryAllowed:  v.DocsRetryAllowed,
+		DocsAttempts:      v.DocsAttempts,
+		DocsLastAttemptAt: v.DocsLastAttemptAt,
+		DocsNextAttemptAt: v.DocsNextAttemptAt,
+		DocsQueuedAt:      v.DocsQueuedAt,
+		PromotedAt:        v.PromotedAt,
+		PublicTitle:       v.PublicTitle,
+		DeliveryError:     v.DeliveryError,
+	}
+	if v.SuggestedMetadata != nil {
+		res.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(v.SuggestedMetadata)
+	}
+
+	return res
+}
+
+// marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody
+// builds a value of type *AdminRegistryPromotionSuggestionsResponseBody from a
+// value of type *admin.AdminRegistryPromotionSuggestions.
+func marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(v *admin.AdminRegistryPromotionSuggestions) *AdminRegistryPromotionSuggestionsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminRegistryPromotionSuggestionsResponseBody{
+		PublicName:        v.PublicName,
+		PublicTitle:       v.PublicTitle,
+		PublicDescription: v.PublicDescription,
+		PublicURL:         v.PublicURL,
+		DocumentationURL:  v.DocumentationURL,
+		DocsSlug:          v.DocsSlug,
+		AuthMode:          v.AuthMode,
 	}
 
 	return res

@@ -78,7 +78,7 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 	published, err := compileAgentPlugin(plugin, cfg, agentPluginCredentialsPackage)
 	require.NoError(t, err)
 	require.Contains(t, published, ".cursor-plugin/plugin.json")
-	require.Contains(t, published, ".codex-plugin/plugin.json")
+	require.NotContains(t, published, ".codex-plugin/plugin.json")
 	require.Contains(t, published, ".mcp.json")
 	for path, content := range published {
 		require.NotContains(t, string(content), cfg.APIKey, path)

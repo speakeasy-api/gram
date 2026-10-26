@@ -180,6 +180,16 @@ describe("hasFormChanges", () => {
     ).toBe(true);
   });
 
+  it("upstream credential rules changed → true", () => {
+    expect(hasFormChanges(makeInput({ clientTypesChanged: true }))).toBe(true);
+  });
+
+  it("upstream credential rules unchanged → false", () => {
+    expect(hasFormChanges(makeInput({ clientTypesChanged: false }))).toBe(
+      false,
+    );
+  });
+
   it("create mode → always true (no initial state to compare)", () => {
     expect(hasFormChanges(makeInput({ isEditing: false }))).toBe(true);
   });
@@ -231,6 +241,18 @@ describe("isSaveDisabled", () => {
 
     it("description changed → enabled", () => {
       expect(isSaveDisabled(makeInput({ description: "Updated" }))).toBe(false);
+    });
+
+    it("upstream credential rules changed → enabled", () => {
+      expect(isSaveDisabled(makeInput({ clientTypesChanged: true }))).toBe(
+        false,
+      );
+    });
+
+    it("upstream credential rules unchanged → disabled", () => {
+      expect(isSaveDisabled(makeInput({ clientTypesChanged: false }))).toBe(
+        true,
+      );
     });
 
     it("grant added → enabled", () => {
@@ -624,3 +646,25 @@ describe("computeRuleTooltip", () => {
     ).toBe("Permits access to all assistants in ecommerce-api");
   });
 });
+
+it.each(["allow", "deny"] as const)(
+  "describes project-specific inference %s without treating inference as a collection",
+  (effect) => {
+    expect(
+      computeRuleTooltip(
+        effect,
+        [
+          {
+            resourceKind: "inference",
+            resourceId: "*",
+            projectId: "project_one",
+          },
+        ],
+        "inference",
+        [{ id: "project_one", name: "Project one" }],
+      ),
+    ).toBe(
+      `${effect === "allow" ? "Permits" : "Excludes"} access to inference in Project one`,
+    );
+  },
+);
