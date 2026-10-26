@@ -11,6 +11,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	endpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -362,4 +364,38 @@ func TestHeldCallRecordsTheMCPServerOnlyWhenItIsInTheProject(t *testing.T) {
 	row, err = repo.New(f.db).GetApprovalByToken(t.Context(), f.hold(t, elsewhere))
 	require.NoError(t, err)
 	require.False(t, row.McpServerID.Valid)
+}
+
+func TestHeldCallNamesTheProjectsApprovalsServer(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	serverID := uuid.New()
+	_, err := repo.New(f.db).CreateBuiltinMCPServer(t.Context(), repo.CreateBuiltinMCPServerParams{
+		ID:                serverID,
+		ProjectID:         f.projectID,
+		Name:              conv.ToPGText("Speakeasy Approvals"),
+		Slug:              conv.ToPGText("speakeasy-approvals-abcd"),
+		BuiltinBackend:    conv.ToPGText(BuiltinBackend),
+		Visibility:        "private",
+		NetworkAccessMode: conv.ToPGText("public_only"),
+	})
+	require.NoError(t, err)
+
+	// Without an endpoint the shared route is the only address.
+	outcome, err := f.service.HoldCall(t.Context(), f.call(`{"title":"no endpoint yet"}`))
+	require.NoError(t, err)
+	require.Contains(t, outcome.UserMessage, "https://speakeasy.test/approvals-mcp")
+
+	_, err = endpointsrepo.New(f.db).CreateMCPEndpoint(t.Context(), endpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       f.projectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: serverID, Valid: true},
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:            "acme-default-approvals",
+	})
+	require.NoError(t, err)
+
+	outcome, err = f.service.HoldCall(t.Context(), f.call(`{"title":"with endpoint"}`))
+	require.NoError(t, err)
+	require.Contains(t, outcome.UserMessage, "Call request_approval on the speakeasy-approvals MCP server (https://speakeasy.test/mcp/acme-default-approvals)")
 }

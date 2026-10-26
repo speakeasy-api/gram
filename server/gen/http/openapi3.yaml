@@ -111312,6 +111312,11 @@ components:
         McpServer:
             type: object
             properties:
+                builtin_backend:
+                    type: string
+                    description: A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
+                    enum:
+                        - approvals
                 created_at:
                     type: string
                     description: When the MCP server was created
@@ -117960,6 +117965,8 @@ components:
                         - require_approval
                 approval_config:
                     $ref: '#/components/schemas/RiskPolicyApprovalConfig'
+                approvals_server_setup:
+                    $ref: '#/components/schemas/RiskPolicyApprovalsServerSetup'
                 approved_email_domains:
                     type: array
                     items:
@@ -118231,6 +118238,27 @@ components:
             required:
                 - id
                 - decision
+        RiskPolicyApprovalsServerSetup:
+            type: object
+            properties:
+                added_to_default_plugin:
+                    type: boolean
+                    description: Whether the server joined the project's Default plugin, which republishes so agents that use the plugin get it.
+                mcp_server_id:
+                    type: string
+                    description: The approvals server Speakeasy created in the project.
+                    format: uuid
+                mcp_server_slug:
+                    type: string
+                    description: The approvals server's slug.
+                plugin_server_name:
+                    type: string
+                    description: How plugins name the server, and how held calls refer to it.
+            required:
+                - mcp_server_id
+                - mcp_server_slug
+                - plugin_server_name
+                - added_to_default_plugin
         RiskPolicyBypassApprovalRequestBody:
             type: object
             properties:

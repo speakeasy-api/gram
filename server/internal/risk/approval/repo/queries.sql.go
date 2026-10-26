@@ -99,6 +99,60 @@ func (q *Queries) ConsumeApprovedApproval(ctx context.Context, arg ConsumeApprov
 	return i, err
 }
 
+const createBuiltinMCPServer = `-- name: CreateBuiltinMCPServer :one
+INSERT INTO mcp_servers (
+  id
+  , project_id
+  , name
+  , slug
+  , builtin_backend
+  , visibility
+  , network_access_mode
+) VALUES (
+  $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+)
+ON CONFLICT (project_id, builtin_backend) WHERE builtin_backend IS NOT NULL AND deleted IS FALSE DO NOTHING
+RETURNING id, slug
+`
+
+type CreateBuiltinMCPServerParams struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	Name              pgtype.Text
+	Slug              pgtype.Text
+	BuiltinBackend    pgtype.Text
+	Visibility        string
+	NetworkAccessMode pgtype.Text
+}
+
+type CreateBuiltinMCPServerRow struct {
+	ID   uuid.UUID
+	Slug pgtype.Text
+}
+
+// Creates the project's server for a first-party backend. A concurrent create
+// for the same project and backend inserts nothing, and the caller rereads.
+func (q *Queries) CreateBuiltinMCPServer(ctx context.Context, arg CreateBuiltinMCPServerParams) (CreateBuiltinMCPServerRow, error) {
+	row := q.db.QueryRow(ctx, createBuiltinMCPServer,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+		arg.BuiltinBackend,
+		arg.Visibility,
+		arg.NetworkAccessMode,
+	)
+	var i CreateBuiltinMCPServerRow
+	err := row.Scan(&i.ID, &i.Slug)
+	return i, err
+}
+
 const decideApproval = `-- name: DecideApproval :one
 UPDATE risk_policy_approvals
 SET status = $1
@@ -430,6 +484,45 @@ func (q *Queries) GetApprovalServer(ctx context.Context, arg GetApprovalServerPa
 	row := q.db.QueryRow(ctx, getApprovalServer, arg.ID, arg.ProjectID)
 	var i GetApprovalServerRow
 	err := row.Scan(&i.Name, &i.Slug)
+	return i, err
+}
+
+const getBuiltinMCPServer = `-- name: GetBuiltinMCPServer :one
+SELECT ms.id
+  , ms.slug
+  , coalesce((
+      SELECT me.slug
+      FROM mcp_endpoints me
+      WHERE me.mcp_server_id = ms.id
+        AND me.project_id = ms.project_id
+        AND me.custom_domain_id IS NULL
+        AND me.deleted IS FALSE
+      ORDER BY me.created_at, me.id
+      LIMIT 1
+    ), '')::text AS endpoint_slug
+FROM mcp_servers ms
+WHERE ms.project_id = $1
+  AND ms.builtin_backend = $2
+  AND ms.deleted IS FALSE
+`
+
+type GetBuiltinMCPServerParams struct {
+	ProjectID      uuid.UUID
+	BuiltinBackend pgtype.Text
+}
+
+type GetBuiltinMCPServerRow struct {
+	ID           uuid.UUID
+	Slug         pgtype.Text
+	EndpointSlug string
+}
+
+// The project's live server for a first-party backend, with the slug of its
+// oldest platform endpoint when it has one.
+func (q *Queries) GetBuiltinMCPServer(ctx context.Context, arg GetBuiltinMCPServerParams) (GetBuiltinMCPServerRow, error) {
+	row := q.db.QueryRow(ctx, getBuiltinMCPServer, arg.ProjectID, arg.BuiltinBackend)
+	var i GetBuiltinMCPServerRow
+	err := row.Scan(&i.ID, &i.Slug, &i.EndpointSlug)
 	return i, err
 }
 
@@ -802,6 +895,28 @@ func (q *Queries) MarkApprovalRequested(ctx context.Context, arg MarkApprovalReq
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const setBuiltinMCPServerUserSessionIssuer = `-- name: SetBuiltinMCPServerUserSessionIssuer :exec
+UPDATE mcp_servers
+SET user_session_issuer_id = $1
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND builtin_backend IS NOT NULL
+  AND deleted IS FALSE
+`
+
+type SetBuiltinMCPServerUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+// Gives a first-party backend's server the issuer its callers sign in with.
+func (q *Queries) SetBuiltinMCPServerUserSessionIssuer(ctx context.Context, arg SetBuiltinMCPServerUserSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, setBuiltinMCPServerUserSessionIssuer, arg.UserSessionIssuerID, arg.ID, arg.ProjectID)
+	return err
 }
 
 const upsertBlockedApproval = `-- name: UpsertBlockedApproval :one
