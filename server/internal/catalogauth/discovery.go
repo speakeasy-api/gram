@@ -48,7 +48,7 @@ func Discover(ctx context.Context, policy *guardian.Policy, endpoint, authMode s
 		return result
 	}
 	// Multiple issuers do not establish which registration strategy an installer will select.
-	if len(warnings) != 0 || len(resource.AuthorizationServers) != 1 {
+	if !resource.ValidForResource(endpoint) || len(warnings) != 0 || len(resource.AuthorizationServers) != 1 {
 		result.Status = "partial"
 		return result
 	}

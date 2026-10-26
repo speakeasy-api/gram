@@ -51,7 +51,7 @@ func registerCatalogPromotionTools(server *mcp.Server, reader catalogPromotionRe
 	mcp.AddTool(server, &mcp.Tool{
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name: "list_registry_promotion_candidates", Title: "List Catalogue Promotion Candidates",
-		Description: "List newest-first remote MCP promotion candidates, defaulting to active unpublished candidates excluding endpoints already in the catalogue; status filters include all, candidate, rejected, archived, and promoted. Returns a bounded staff-only page with aggregate health evidence and setup documentation delivery status. Source URLs, credentials, headers, tool arguments and customer text are omitted. Eligibility does not authorize publication.",
+		Description: "List newest-first remote MCP promotion candidates, defaulting to active unpublished candidates excluding endpoints already in the catalogue; status filters include all, candidate, rejected, archived, and promoted. Returns a bounded staff-only page with aggregate health evidence, setup documentation delivery status, and auth_discovery for promoted entries when available. Authentication capabilities are advertised evidence, not a verified connection; unknown setup does not mean manual setup. Source URLs, credentials, headers, tool arguments and customer text are omitted. Eligibility does not authorize publication.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListCatalogPromotionInput) (*mcp.CallToolResult, CatalogPromotionPage, error) {
 		out := CatalogPromotionPage{Candidates: []CatalogPromotionCandidate{}, NextCursor: ""}

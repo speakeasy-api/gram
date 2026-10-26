@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -143,6 +144,7 @@ func TestCatalogPromotionDetailRejectsDifferentTenantResult(t *testing.T) {
 func TestCatalogPromotionProjectionRejectsUnsafeOutput(t *testing.T) {
 	t.Parallel()
 	for _, candidate := range []catalogpromotion.Candidate{
+		{ID: testRegistryID, OrganizationID: "org-example", ProjectID: testRegistryID, MCPServerID: testRegistryID, RemoteMCPServerID: testRegistryID, SourceRevision: "aabbccdd", Status: "candidate", Reason: "eligible", AuthDiscovery: &catalogauth.Discovery{Status: "complete", AuthSetup: "none"}},
 		{ID: testRegistryID, OrganizationID: "org-example", ProjectID: testRegistryID, MCPServerID: testRegistryID, RemoteMCPServerID: testRegistryID, SourceRevision: "aabbccdd", Status: "candidate", Reason: "eligible", DocsURL: "https://private.example.com?credential=secret"},
 		{ID: testRegistryID, OrganizationID: "org-example", ProjectID: testRegistryID, MCPServerID: testRegistryID, RemoteMCPServerID: testRegistryID, SourceRevision: "aabbccdd", Status: "candidate", Reason: "eligible", DeliveryError: "private upstream failure"},
 	} {

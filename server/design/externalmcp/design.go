@@ -250,7 +250,8 @@ var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
 	Attribute("repository", ExternalMCPRepository, "The source repository the registry links for this server, when it declares one")
 	Attribute("packages", ArrayOf(ExternalMCPPackage), "Published packages that run this server, when the registry declares any")
 
-	// tool_count, is_read_only, and supports_dcr are always computed for every catalog entry.
+	// These computed fields are required by existing clients. New capability fields
+	// remain optional so clients can also read responses from older servers.
 	Required("registry_specifier", "version", "description", "tool_count", "is_read_only", "supports_dcr")
 })
 

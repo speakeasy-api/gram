@@ -21,6 +21,7 @@ func TestDiscoverPublicAuthCapabilities(t *testing.T) {
 		methods                                                 []string
 		issuerFailure, partial, missingResource, tooManyIssuers bool
 		mismatch, missingEndpoints, resourceMismatch            bool
+		originFallback                                          bool
 		want                                                    Discovery
 	}{
 		{name: "DCR", dcr: true, want: Discovery{SupportsDCR: true, AuthSetup: "dcr", Status: "complete"}},
@@ -33,6 +34,7 @@ func TestDiscoverPublicAuthCapabilities(t *testing.T) {
 		{name: "resource absent", missingResource: true, want: Unknown()},
 		{name: "issuer mismatch", mismatch: true, want: Discovery{AuthSetup: "unknown", Status: "partial"}},
 		{name: "missing endpoints", missingEndpoints: true, want: Discovery{AuthSetup: "unknown", Status: "partial"}},
+		{name: "speculative origin fallback", originFallback: true, dcr: true, cimd: true, want: Discovery{AuthSetup: "unknown", Status: "partial"}},
 		{name: "resource mismatch", resourceMismatch: true, want: Discovery{AuthSetup: "unknown", Status: "partial"}},
 		{name: "bounded issuers", tooManyIssuers: true, want: Discovery{AuthSetup: "unknown", Status: "partial"}},
 	} {
@@ -56,6 +58,9 @@ func TestDiscoverPublicAuthCapabilities(t *testing.T) {
 						issuers = []string{endpoint + "/a", endpoint + "/b"}
 					}
 					resource := endpoint
+					if tc.originFallback {
+						resource += "/mcp"
+					}
 					if tc.resourceMismatch {
 						resource += "/other"
 					}
@@ -84,6 +89,10 @@ func TestDiscoverPublicAuthCapabilities(t *testing.T) {
 					_ = json.NewEncoder(w).Encode(doc)
 					return
 				}
+				if tc.originFallback && r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
+					http.NotFound(w, r)
+					return
+				}
 				unexpected.Store(true)
 				http.NotFound(w, r)
 			}))
@@ -91,10 +100,14 @@ func TestDiscoverPublicAuthCapabilities(t *testing.T) {
 			endpoint = server.URL
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 			require.NoError(t, err)
-			actual := Discover(t.Context(), policy, endpoint, "oauth")
+			resourceURL := endpoint
+			if tc.originFallback {
+				resourceURL += "/mcp"
+			}
+			actual := Discover(t.Context(), policy, resourceURL, "oauth")
 			require.Equal(t, tc.want, actual)
 			require.False(t, unexpected.Load(), "discovery must only read metadata without credentials or registration")
-			if tc.tooManyIssuers {
+			if tc.tooManyIssuers || tc.originFallback {
 				require.Zero(t, issuerRequests.Load())
 			}
 			encoded, err := json.Marshal(actual)

@@ -44,7 +44,7 @@ type PrepareCatalogPromotionInput struct {
 	// OverrideEligibility permits promotion if health evidence does not meet the criteria.
 	OverrideEligibility bool `json:"override_eligibility,omitempty" jsonschema:"Explicit staff permission to promote if health evidence is insufficient, failed, or unavailable; never bypasses source safety checks"`
 	// RetryKey deduplicates preparation of this exact change.
-	RetryKey string `json:"retry_key" jsonschema:"Unique retry key for this exact change, at most 128 characters"`
+	RetryKey string `json:"retry_key" jsonschema:"Unique retry key for this exact change, at most 128 characters. Reusing a key retains its original authentication discovery snapshot; use a new key to recheck unavailable or partial discovery and approve the new proposal"`
 }
 
 type catalogPromotionWriter struct {

@@ -566,7 +566,9 @@ it("lets staff retry inconclusive discovery without calling promotion", async ()
   );
   await waitFor(() => expect(api.candidate).toHaveBeenCalledTimes(2));
   expect(
-    screen.queryByText("Manual OAuth client setup is required."),
-  ).toBeNull();
+    await screen.findByText(
+      "Sign-in setup could not be confirmed. This does not mean automatic setup is unsupported.",
+    ),
+  ).toBeDefined();
   expect(api.promote).not.toHaveBeenCalled();
 });

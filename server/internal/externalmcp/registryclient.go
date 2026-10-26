@@ -894,6 +894,7 @@ func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string)
 		}
 	}
 	if selected < 0 {
+		details.SupportsDCR, details.SupportsCIMD, details.AuthSetup = projectCatalogAuth(record.Meta.Catalog, false)
 		return details
 	}
 	remote := record.Server.Remotes[selected]

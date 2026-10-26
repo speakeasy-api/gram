@@ -504,7 +504,10 @@ func TestCatalogPromotionConcurrentPrepareReusesWinningEvidence(t *testing.T) {
 			require.NoError(t, err)
 			stored, err := storedCatalogPromotion(persisted)
 			require.NoError(t, err)
-			require.True(t, stored.AuthDiscovery.Valid())
+			require.Contains(t, []catalogauth.Discovery{
+				{SupportsCIMD: true, AuthSetup: "cimd", Status: "complete"},
+				catalogauth.Unknown(),
+			}, stored.AuthDiscovery)
 			require.Zero(t, mutator.promotionMutatorFake.calls.Load())
 		})
 	}

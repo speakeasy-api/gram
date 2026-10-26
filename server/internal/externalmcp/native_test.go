@@ -87,7 +87,8 @@ func TestNativeListSupportsDcr(t *testing.T) {
 			}
 			if tc.pulse {
 				version := nativeTestMap(t, meta["com.pulsemcp/server-version"])
-				remote := nativeTestMap(t, version["remotes[0]"])
+				remote := map[string]any{}
+				version["remotes[2]"] = remote
 				remote["authOptions"] = []any{map[string]any{
 					"type": "oauth",
 					"detail": map[string]any{
@@ -115,9 +116,7 @@ func TestNativeListSupportsDcr(t *testing.T) {
 			require.NoError(t, json.Unmarshal(raw, &detail))
 			projected := projectServerDetails(detail, nil)
 			require.Equal(t, tc.wantCIMD, projected.SupportsCIMD)
-			if tc.pulse && tc.want {
-				expectedSetup = "unknown"
-			}
+			require.Equal(t, tc.want, projected.SupportsDCR)
 			require.Equal(t, expectedSetup, projected.AuthSetup)
 		})
 	}
@@ -316,4 +315,24 @@ func nativeTestMap(t *testing.T, value any) map[string]any {
 	result, ok := value.(map[string]any)
 	require.True(t, ok)
 	return result
+}
+
+func TestNativeDetailsPreservesCatalogAuthWithoutAllowedRemote(t *testing.T) {
+	t.Parallel()
+	for _, setup := range []string{"none", "manual", "cimd"} {
+		t.Run(setup, func(t *testing.T) {
+			t.Parallel()
+			var record map[string]any
+			require.NoError(t, json.Unmarshal([]byte(nativeRecord), &record))
+			nativeTestMap(t, record["_meta"])["com.speakeasy.ai/catalog"] = map[string]any{"authSetup": setup, "supportsCimd": setup == "cimd"}
+			raw, err := json.Marshal(record)
+			require.NoError(t, err)
+			var detail serverDetailsEntry
+			require.NoError(t, json.Unmarshal(raw, &detail))
+			projected := projectServerDetails(detail, []string{"https://other.example.test/mcp"})
+			require.Empty(t, projected.RemoteURL)
+			require.Equal(t, setup, projected.AuthSetup)
+			require.Equal(t, setup == "cimd", projected.SupportsCIMD)
+		})
+	}
 }
