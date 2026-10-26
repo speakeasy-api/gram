@@ -9,7 +9,6 @@ import { clientTypeLabel } from "@/lib/auth-clients";
 import { useMcpServerAuthClientChoices } from "@gram/client/react-query/mcpServerAuthClientChoices.js";
 import { Text } from "@/components/ui/Text";
 import { useEffect, type JSX } from "react";
-
 /**
  * Which of a server's shared credentials the key uses there. A server with
  * one or none needs no choice, so nothing is shown; with several the key

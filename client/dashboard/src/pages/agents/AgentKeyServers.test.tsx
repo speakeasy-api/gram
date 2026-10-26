@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   bindings: vi.fn(),
   attach: vi.fn(),
   detach: vi.fn(),
+  choices: vi.fn(),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
@@ -62,6 +63,18 @@ vi.mock("@gram/client/react-query/listToolsetsForOrg.js", () => ({
 vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
   useListMcpServersForOrg: (_r: unknown, _s: unknown, options: object) =>
     useQuery({ queryKey: ["modern"], queryFn: mocks.modern, ...options }),
+}));
+vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
+  useMcpServerAuthClientChoices: (
+    request: { mcpServerId: string },
+    _s: unknown,
+    options: object,
+  ) =>
+    useQuery({
+      queryKey: ["choices", request.mcpServerId],
+      queryFn: () => mocks.choices(request.mcpServerId),
+      ...options,
+    }),
 }));
 const agent = { id: "agent_example" } as ManagedAgent;
 const server: KeyServer = {
@@ -196,6 +209,7 @@ beforeEach(() => {
   mocks.bindings.mockResolvedValue([]);
   mocks.attach.mockResolvedValue(undefined);
   mocks.detach.mockResolvedValue(undefined);
+  mocks.choices.mockResolvedValue({ choices: [] });
 });
 afterEach(cleanup);
 describe("Agent key MCP servers", () => {
@@ -239,6 +253,32 @@ describe("Agent key MCP servers", () => {
       expect(
         await screen.findByRole("checkbox", { name: new RegExp(name) }),
       ).toBeTruthy();
+  });
+  it("asks which credential the key uses on a selected server that offers several", async () => {
+    mocks.choices.mockImplementation(async (serverId: string) => ({
+      choices:
+        serverId === "remote"
+          ? [
+              {
+                id: "client_a",
+                name: "Team token",
+                clientType: "static_credential",
+              },
+              {
+                id: "client_b",
+                name: "Read-only token",
+                clientType: "static_credential",
+              },
+            ]
+          : [],
+    }));
+    setup(0, [server]);
+    expect(
+      await screen.findByRole("combobox", {
+        name: "Credential the key uses on Remote server",
+      }),
+    ).toBeTruthy();
+    expect(mocks.choices).toHaveBeenCalledWith("remote");
   });
   it("searches by server and project while preserving hidden selections", async () => {
     setup();

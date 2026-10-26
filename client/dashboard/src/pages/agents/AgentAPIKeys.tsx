@@ -44,6 +44,7 @@ import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 
 import { AgentKeyServers, type KeyServer } from "./AgentKeyServers";
+import { keyCredentialChoices } from "./credentials/keyCredentialChoices";
 
 import { narrowGrantsToServers } from "./agent-key-server-grants";
 import { discoverKeyServerGrants } from "./agent-key-discovery";
@@ -152,6 +153,7 @@ function AgentAPIKeysContent({
   const [servers, setServers] = useState<KeyServer[]>([]);
   const [accountsReady, setAccountsReady] = useState(false);
   const [serversBusy, setServersBusy] = useState(false);
+  const [checkingChoices, setCheckingChoices] = useState(false);
   const [name, setName] = useState("");
   const [narrowings, setNarrowings] = useState<GrantNarrowings>({});
   const [expiryDays, setExpiryDays] = useState("90");
@@ -475,50 +477,68 @@ function AgentAPIKeysContent({
       setStep(2);
       return;
     }
-    create.mutate(
-      {
-        security,
-        request: {
-          createKeyForm: {
-            agentId: agent.id,
-            name: validatedName,
-            expiresAt,
-            delegatedGrantsVersion: 3,
-            requestedGrants,
-            scopes: [],
+    // The credentials each server offers are read again at issue: one may
+    // have changed since the servers step.
+    setCheckingChoices(true);
+    void keyCredentialChoices(sdk, servers).then(
+      (authClientChoices) => {
+        setCheckingChoices(false);
+        create.mutate(
+          {
+            security,
+            request: {
+              createKeyForm: {
+                agentId: agent.id,
+                name: validatedName,
+                expiresAt,
+                delegatedGrantsVersion: 3,
+                requestedGrants,
+                scopes: [],
+                authClientChoices,
+              },
+            },
           },
-        },
+          {
+            onSuccess: (key) => {
+              if (mounted.current) {
+                setIssued(true);
+                setSecret(key.key ?? null);
+              }
+              create.reset();
+              refresh();
+            },
+            onError: (failure) => {
+              // A failed issuance may reflect a live policy change. Withdraw the
+              // reviewed ceiling even when the error does not identify its cause.
+              setNarrowings({});
+              setReviewGrants([]);
+              setReviewAccounts([]);
+              setStep(2);
+              if (mounted.current) void delegable.refetch();
+              // A name already in use is the one failure the caller can fix from
+              // this screen, and the server names it. Everything else keeps the
+              // policy explanation, which is what the other causes have in common.
+              const conflict =
+                failure instanceof GramError &&
+                failure.statusCode === 409 &&
+                failure.message;
+              setError(
+                conflict ||
+                  "Could not create API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.",
+              );
+              create.reset();
+            },
+          },
+        );
       },
-      {
-        onSuccess: (key) => {
-          if (mounted.current) {
-            setIssued(true);
-            setSecret(key.key ?? null);
-          }
-          create.reset();
-          refresh();
-        },
-        onError: (failure) => {
-          // A failed issuance may reflect a live policy change. Withdraw the
-          // reviewed ceiling even when the error does not identify its cause.
-          setNarrowings({});
-          setReviewGrants([]);
-          setReviewAccounts([]);
-          setStep(2);
-          if (mounted.current) void delegable.refetch();
-          // A name already in use is the one failure the caller can fix from
-          // this screen, and the server names it. Everything else keeps the
-          // policy explanation, which is what the other causes have in common.
-          const conflict =
-            failure instanceof GramError &&
-            failure.statusCode === 409 &&
-            failure.message;
-          setError(
-            conflict ||
-              "Could not create API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.",
-          );
-          create.reset();
-        },
+      (failure: unknown) => {
+        setCheckingChoices(false);
+        setStep(0);
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : "Choose which credential the key uses on each server.",
+        );
       },
     );
   };
@@ -825,12 +845,36 @@ function AgentAPIKeysContent({
                 )}
                 <Button
                   title={blockedReason ?? undefined}
-                  disabled={!!blockedReason || create.isPending}
-                  onClick={() =>
-                    step < 2 ? setStep(step + 1) : issue(step === 2)
+                  disabled={
+                    !!blockedReason || create.isPending || checkingChoices
                   }
+                  onClick={() => {
+                    if (step === 0) {
+                      // A server offering several shared credentials needs
+                      // one picked before the key's accounts are checked.
+                      setCheckingChoices(true);
+                      void keyCredentialChoices(sdk, servers).then(
+                        () => {
+                          setCheckingChoices(false);
+                          setError(null);
+                          setStep(1);
+                        },
+                        (failure: unknown) => {
+                          setCheckingChoices(false);
+                          setError(
+                            failure instanceof Error
+                              ? failure.message
+                              : "Choose which credential the key uses on each server.",
+                          );
+                        },
+                      );
+                      return;
+                    }
+                    if (step < 2) setStep(step + 1);
+                    else issue(step === 2);
+                  }}
                 >
-                  {create.isPending
+                  {create.isPending || checkingChoices
                     ? "Creating…"
                     : step < 2
                       ? "Continue"
