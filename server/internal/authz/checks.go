@@ -215,3 +215,9 @@ func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 	}
 	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: ""}
 }
+
+// InferenceExecuteCheck authorizes inference in one project, not chat mutation.
+// Always include project_id so project-bounded grants cannot match by omission.
+func InferenceExecuteCheck(projectID string) Check {
+	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
+}

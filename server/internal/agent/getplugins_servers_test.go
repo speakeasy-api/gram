@@ -130,7 +130,7 @@ func TestGetPlugins_ListsPluginServersWithDashboardLinksForMCPRead(t *testing.T)
 	require.Equal(t, "Linear", servers[0].Name)
 	require.Equal(t, serverID.String(), *servers[0].ID, "the server id is shared by every plugin and keys getMyConnections")
 	require.Equal(t,
-		testSiteURL+"/"+authCtx.OrganizationSlug+"/projects/"+project.Slug+"/mcp/x/"+serverID.String(),
+		testSiteURL+"/"+authCtx.OrganizationSlug+"/projects/"+project.Slug+"/mcp/"+serverID.String(),
 		*servers[0].DashboardURL,
 		"mcp:read on the server's backing toolset links its dashboard page")
 	require.Equal(t, "Gateway", servers[1].Name)

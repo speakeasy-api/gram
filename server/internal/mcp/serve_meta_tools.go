@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -228,7 +229,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 	}
-	if gate.catalog != nil && gate.catalogMode == toolfilter.CatalogModeCached {
+	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		found := false
 		for _, tool := range gate.catalog.Tools {
 			if tool.Name == qualified {
@@ -317,6 +318,12 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 				if innerShareable, ok := errors.AsType[*oops.ShareableError](inner); ok {
 					deepest = innerShareable
 				}
+			}
+			// An unknown tool or invalid call refused before dispatch is one
+			// the program can correct.
+			if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && !invocation.dispatched &&
+				(shareable.Code == oops.CodeNotFound || shareable.Code == oops.CodeInvalid) {
+				invocation.rejected = true
 			}
 			return marshalMetaToolError(ctx, logger, req.ID,
 				fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepest.Error()))
@@ -499,8 +506,9 @@ func (s *Service) buildMemberDispatch(
 		attributionServerID:   nil,
 		// Meta members keep their toolset-keyed per-tool checks; the meta
 		// surface's RBAC model is outside the wrapper-governance cutover.
+		// Publicness is the hosting state the member was admitted under.
 		wrapperRBACResourceID:    "",
-		wrapperIsPublic:          nil,
+		wrapperIsPublic:          new(toolset.McpIsPublic),
 		metaMcpServerID:          gate.metaServerID.String(),
 		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
 		skipProxyTools:           true,
@@ -561,9 +569,13 @@ func (s *Service) loadMemberToolset(
 	case err != nil:
 		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
 	}
-	// Match direct wrapper dispatch: only the legacy canonical wrapper uses
-	// the toolset's enablement flag. Independently configured servers use
-	// their own visibility, already checked during member admission.
+	toolset, _, err = hostedmcp.LoadServerState(ctx, s.db, toolset)
+	if err != nil {
+		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member hosting state").LogError(ctx, logger)
+	}
+	// Match direct wrapper dispatch: only the canonical wrapper gates on the
+	// toolset's hosting state. Independently configured servers use their own
+	// visibility, already checked during member admission.
 	if member.serverID == toolset.ID && !toolset.McpEnabled {
 		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
@@ -634,6 +646,16 @@ func marshalMetaToolCallResult(ctx context.Context, logger *slog.Logger, id mcpj
 // marshalMetaToolError emits a member-scoped failure as an isError tool
 // result rather than a protocol error.
 func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, message string) (json.RawMessage, error) {
+	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+		invocation.message = message
+		return nil, invocation.failure()
+	}
+	return marshalToolErrorResult(ctx, logger, id, message, serverInfoMetaServer)
+}
+
+// marshalToolErrorResult serializes a tools/call result with isError set and
+// one text block, under the given server identity.
+func marshalToolErrorResult(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, message string, identity serverInfo) (json.RawMessage, error) {
 	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{
 		Type:     "text",
 		MimeType: nil,
@@ -651,7 +673,7 @@ func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrp
 			StructuredContent: nil,
 			IsError:           true,
 		},
-		serverIdentity: serverInfoMetaServer,
+		serverIdentity: identity,
 		cacheHints:     nil,
 	})
 	if err != nil {

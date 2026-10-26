@@ -62,6 +62,10 @@ export const AUDIT_ACTIONS = [
   "billing_metadata:create_stripe_portal",
   "billing_metadata:resume_stripe_subscription",
   "billing_metadata:update",
+  "catalog-promotion:archive",
+  "catalog-promotion:reject",
+  "catalog-promotion:restore",
+  "catalog-promotion:retry-docs",
   "chat_analysis_settings:upsert",
   "chat_session:access",
   "chat_session:handoff_export",
@@ -134,6 +138,7 @@ export const AUDIT_ACTIONS = [
   "mcp-endpoint:update",
   "mcp-server:create",
   "mcp-server:delete",
+  "mcp-server:promote-catalogue",
   "mcp-server:update",
   "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
@@ -250,6 +255,9 @@ export const AUDIT_ACTIONS = [
   "risk_exclusion:create",
   "risk_exclusion:delete",
   "risk_exclusion:update",
+  "risk_policy:approval_approve",
+  "risk_policy:approval_deny",
+  "risk_policy:approval_request",
   "risk_policy:bypass_request_approve",
   "risk_policy:bypass_request_create",
   "risk_policy:bypass_request_deny",
@@ -534,6 +542,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "resumed Stripe subscription for";
     case "billing_metadata:update":
       return "updated billing metadata";
+    case "catalog-promotion:archive":
+      return "archived catalog promotion candidate";
+    case "catalog-promotion:reject":
+      return "rejected catalog promotion candidate";
+    case "catalog-promotion:restore":
+      return "restored catalog promotion candidate";
+    case "catalog-promotion:retry-docs":
+      return "retried setup documentation for";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":
@@ -651,6 +667,8 @@ export function staticActionPhrase(action: AuditAction): string {
     case "meta-mcp:remove_member":
       return "removed meta MCP member";
 
+    case "mcp-server:promote-catalogue":
+      return "published to the MCP catalog";
     case "mcp-server:create":
       return "created MCP server";
     case "mcp-server:update":
@@ -897,6 +915,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "deleted risk policy";
     case "risk_policy:trigger":
       return "triggered risk policy";
+    case "risk_policy:approval_request":
+      return "requested approval of a tool call under";
+    case "risk_policy:approval_approve":
+      return "approved a held tool call under";
+    case "risk_policy:approval_deny":
+      return "denied a held tool call under";
     case "risk_policy:bypass_request_create":
       return "requested a bypass for";
     case "risk_policy:bypass_request_approve":

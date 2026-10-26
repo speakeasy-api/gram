@@ -73,6 +73,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -597,7 +598,7 @@ func newStreamsCommand() *cli.Command {
 					sum, _, fingerprintErr := riskFingerprinter.TenantedHS256(tenantID, message)
 					return risk.EncodeFingerprint(sum), fingerprintErr
 				},
-				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
+				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge, MaxContentBytes: 0},
 				riskRecorder,
 			)
 			if err != nil {
@@ -606,9 +607,31 @@ func newStreamsCommand() *cli.Command {
 			promptInjectionScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
 			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, riskRecorder)
+			promptInjectionEnforceHandler, err := promptinjection.NewEnforceHandler(
+				logger,
+				meterProvider,
+				promptInjectionScanner,
+				replyWriter,
+				riskRecorder,
+				promptinjection.EnforceHandlerConfig{MaxRequestAge: 0, MaxContentBytes: 0},
+			)
+			if err != nil {
+				return fmt.Errorf("create prompt injection enforcement handler: %w", err)
+			}
 			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
 			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
 			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, riskRecorder)
+			promptPolicyEnforceHandler, err := promptpolicy.NewEnforceHandler(
+				logger,
+				meterProvider,
+				promptPolicyScanner,
+				replyWriter,
+				riskRecorder,
+				promptpolicy.EnforceHandlerConfig{MaxRequestAge: 0, MaxContentBytes: 0},
+			)
+			if err != nil {
+				return fmt.Errorf("create prompt policy enforcement handler: %w", err)
+			}
 
 			// Fine-tuned risk model analyzer: both its lanes run here. Without a
 			// model URL the analyzer is disabled and its handlers ack untouched.
@@ -634,6 +657,17 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create custom rules scanner: %w", err)
 			}
 			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub, riskRecorder)
+			customRulesEnforceHandler, err := customruleanalyzer.NewEnforceHandler(
+				logger,
+				meterProvider,
+				scanner,
+				replyWriter,
+				riskRecorder,
+				customruleanalyzer.EnforceHandlerConfig{MaxRequestAge: 0, MaxContentBytes: 0},
+			)
+			if err != nil {
+				return fmt.Errorf("create custom rules enforcement handler: %w", err)
+			}
 
 			{
 				controlServer := control.Server{
@@ -687,6 +721,7 @@ func newStreamsCommand() *cli.Command {
 			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
 			trialConversionKeyReconcileHandler := usage.NewEnterpriseTrialConversionKeyReconcileHandler(logger, openRouterKeyRefresher)
 			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
+			approvalSlackHandler := slackapproval.NewEventHandler(logger, &background.TemporalRiskApprovalSlackScheduler{TemporalEnv: temporalEnv})
 
 			var siteURL *url.URL
 			if raw := c.String("site-url"); raw != "" {
@@ -720,6 +755,9 @@ func newStreamsCommand() *cli.Command {
 				}
 				if err := growthSignalHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("report growth activity: %w", err))
+				}
+				if err := approvalSlackHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("send approval requests to Slack: %w", err))
 				}
 				return errors.Join(handlerErrors...)
 			})
@@ -827,6 +865,9 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 				mustReceive(rg, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{}, gitleaksEnforceHandler)
 				mustReceive(rg, &riskv1.LLMEnforcement{}, &riskv1.LLMEnforcer{}, llmanalyzer.NewEnforceHandler(logger, tracerProvider, meterProvider, llmAnalyzer, replyWriter, llmanalyzer.WithRiskRecorder(riskRecorder)))
+				mustReceive(rg, &riskv1.PromptInjectionEnforcement{}, &riskv1.PromptInjectionEnforcer{}, promptInjectionEnforceHandler)
+				mustReceive(rg, &riskv1.CustomRulesEnforcement{}, &riskv1.CustomRulesEnforcer{}, customRulesEnforceHandler)
+				mustReceive(rg, &riskv1.PromptPolicyEnforcement{}, &riskv1.PromptPolicyEnforcer{}, promptPolicyEnforceHandler)
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)

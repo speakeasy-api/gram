@@ -1192,7 +1192,7 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload", "mcp_auth_client", "*")
+		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "workload", "mcp_auth_client", "*")
 	})
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
@@ -1215,7 +1215,7 @@ var SelectorModel = Type("Selector", func() {
 		Description("Specific tool name filter (MCP scopes only).")
 	})
 	Attribute("project_id", String, func() {
-		Description("Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.")
+		Description("Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.")
 	})
 	Attribute("server_url", String, func() {
 		Description("Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.")
@@ -1228,7 +1228,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -1242,13 +1242,13 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 		})
 	})
 
@@ -1291,12 +1291,12 @@ var ScopeModel = Type("ScopeDefinition", func() {
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload", "mcp_auth_client")
+		Enum("org", "project", "mcp", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "workload", "mcp_auth_client")
 	})
 	Attribute("visibility", String, func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
@@ -2002,7 +2002,7 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope being requested.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 	Attribute("resource_id", String, "Optional resource ID the scope applies to.")
 	Attribute("resource_name", String, "Optional human-readable name for the resource (e.g. project name, MCP server name).")

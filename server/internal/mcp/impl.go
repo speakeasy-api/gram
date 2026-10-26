@@ -42,10 +42,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -58,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
@@ -113,12 +116,22 @@ type IdentityResolver interface {
 }
 
 type Service struct {
+	// builtinBackends serve mcp_servers rows whose builtin_backend names
+	// them, such as the approvals server.
+	builtinBackends         map[string]BuiltinBackend
 	assistantWorkloadTokens AssistantWorkloadTokenIssuer
+	codeExecutor            codemode.Executor
 	federatedLoginConsumer  FederatedLoginConsumer
 	identityChainer         identityChainer
-	// authClientPermitter decides whether the caller may use a resolved typed
-	// auth client; nil keeps the connect-equivalent rule (connectPermitter).
-	authClientPermitter       authClientPermitter
+	// authClientPermitter overrides how the caller's use of a resolved typed
+	// auth client is decided, for every organization. nil uses the mandatory
+	// mcp:auth check (mandatoryPermitter) for an organization that enforces
+	// when authz is configured, and the connect-equivalent rule
+	// (connectPermitter) otherwise.
+	authClientPermitter authClientPermitter
+	// authEnforcement says which organizations have upstream auth
+	// enforcement enabled; the resolver is authoritative only for them.
+	authEnforcement           *authenforcement.Gate
 	logger                    *slog.Logger
 	tracer                    trace.Tracer
 	metrics                   *mcpmetrics.Metrics
@@ -269,6 +282,9 @@ type Service struct {
 
 	// metaRuntime bounds the gateway's per-member upstream work.
 	metaRuntime MetaRuntimeConfig
+	// codeSessions keeps proxied member sessions for verified callers'
+	// rapid successive Code Mode executions.
+	codeSessions *codeMemberSessions
 	// replayLiveness overrides the refresh-replay session check in unit tests
 	// that run without a database.
 	replayLiveness func(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool)
@@ -501,7 +517,11 @@ func NewService(
 	redisClient *redis.Client,
 	tunnelPublicConfig TunnelPublicConfig,
 	metaRuntimeConfig MetaRuntimeConfig,
+	codeExecutor codemode.Executor,
 ) (*Service, error) {
+	if codeExecutor == nil {
+		codeExecutor = codemode.Disabled{}
+	}
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
@@ -529,10 +549,12 @@ func NewService(
 	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
 	service := &Service{
 		assistantWorkloadTokens:   nil,
+		builtinBackends:           map[string]BuiltinBackend{},
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
-		authClientPermitter:       connectPermitter{},
+		authClientPermitter:       nil,
+		authEnforcement:           authenforcement.NewGate(db),
 		consentBindings:           nil,
 		logger:                    logger,
 		tracer:                    tracer,
@@ -632,6 +654,8 @@ func NewService(
 			cache.SuffixNone,
 		),
 		connectionCatalogCache: cacheImpl,
+		codeExecutor:           codeExecutor,
+		codeSessions:           newCodeMemberSessions(logger, codeSessionIdleTTL, codeSessionMaxAge, codeSessionPingAfter, codeSessionMaxEntries),
 		sessionClientInfo:      sessionClientInfo,
 		tunnelClientFamilies:   newTunnelClientFamilies(sessionClientInfo),
 		identityResolver:       identityResolver,
@@ -1384,6 +1408,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			}
 		default:
 			ctx, err = s.TryPublicIdentityAuth(ctx, r, false, toolset.ID)
+			if err == nil {
+				err = s.refuseForeignCaller(ctx, toolset.OrganizationID)
+			}
 			if err != nil {
 				s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
 				return err
@@ -1795,7 +1822,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 // on the platform domain — the value is an explicit assertion rather
 // than a route inference.
 //
-// Disabled toolsets (mcp_enabled false) surface as errToolsetNotFound so
+// Disabled servers (wrapper visibility, else mcp_enabled) surface as errToolsetNotFound so
 // every legacy-routed surface (serving, well-known metadata, OAuth
 // challenges) treats them as nonexistent — mirroring how the
 // mcp_endpoints → mcp_servers path handles visibility 'disabled'.
@@ -1820,21 +1847,29 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 	case err != nil:
 		return nil, noWrapper, fmt.Errorf("lookup toolset: %w", err)
 	}
-	if !toolset.McpEnabled {
-		return nil, noWrapper, errToolsetNotFound
-	}
 	wrapper, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
+		if !toolset.McpEnabled {
+			return nil, noWrapper, errToolsetNotFound
+		}
 		return &toolset, noWrapper, nil
 	}
 	if err != nil {
 		return nil, noWrapper, fmt.Errorf("lookup hosted MCP network policy: %w", err)
 	}
+	if !hostedmcp.InSync(toolset, &wrapper) {
+		return nil, noWrapper, errToolsetNotFound
+	}
+	// The canonical wrapper owns hosting state; the toolset slug is only the legacy alias.
+	toolset = hostedmcp.WithServerState(toolset, &wrapper)
+	if !toolset.McpEnabled {
+		return nil, noWrapper, errToolsetNotFound
+	}
 	mode, err := networkaccess.Effective(wrapper.NetworkAccessMode)
 	if err != nil {
 		return nil, noWrapper, fmt.Errorf("invalid hosted MCP network policy: %w", err)
 	}
-	if !mode.Allows(networkaccess.SurfacePublic) || !mcpmetadata.CanonicalWrapperMatchesToolset(&wrapper, &toolset) {
+	if !mode.Allows(networkaccess.SurfacePublic) {
 		return nil, noWrapper, errToolsetNotFound
 	}
 	return &toolset, uuid.NullUUID{UUID: wrapper.ID, Valid: true}, nil

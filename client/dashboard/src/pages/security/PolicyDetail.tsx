@@ -1,5 +1,4 @@
-import { enumPresentation, requireKnownEnumValue } from "@/lib/enum";
-import { RiskPolicyAction } from "@gram/client/models/components/riskpolicy.js";
+import { enumPresentation } from "@/lib/enum";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ShadowMCPDispositionPicker } from "@/components/shadow-mcp/ShadowMCPDispositionPicker";
@@ -111,6 +110,7 @@ import {
   type ShadowMCPDecisionConflict,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
+import { ApprovalPolicyEditor } from "./ApprovalPolicyEditor";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
@@ -153,6 +153,7 @@ import {
   allCategories,
   categoriesToPayload,
   categoryLevelDetectors,
+  detectionPolicyAction,
   mcpCompatibleAction,
   normalizeCategoriesForMode,
   parseApprovedEmailDomains,
@@ -262,6 +263,7 @@ const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
   warn: "Warn",
   block: "Block",
   quarantine: "Quarantine",
+  require_approval: "Require approval",
 };
 
 // Mock title summarization from the guardrail prompt (a real impl would use the
@@ -291,6 +293,9 @@ export function PolicyEditorFor({
 }: {
   policy: RiskPolicy;
 }): JSX.Element {
+  if (policy.action === "require_approval") {
+    return <ApprovalPolicyEditor policy={policy} />;
+  }
   if (!supportsPolicyEditing(policy))
     return (
       <Stack gap={6}>
@@ -387,6 +392,7 @@ function NewPolicyFrame({ children }: { children: ReactNode }): JSX.Element {
 
 function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
+  const toolApprovals = useFeatureFlag(FEATURE_FLAGS.toolApprovals).status;
   const [category] = useQueryState("category");
   const location = useLocation();
   const draft = readPolicyDraft(location.state);
@@ -421,6 +427,17 @@ function PolicyNewContent(): JSX.Element {
     return (
       <NewPolicyFrame>
         <ShadowAIPolicyEditor policy={null} />
+      </NewPolicyFrame>
+    );
+  }
+  // With the flag off, a stale link to the approval editor opens the chooser.
+  if (
+    kind === "approval" &&
+    (toolApprovals === "enabled" || toolApprovals === "loading")
+  ) {
+    return (
+      <NewPolicyFrame>
+        <ApprovalPolicyEditor policy={null} />
       </NewPolicyFrame>
     );
   }
@@ -468,8 +485,7 @@ function PromptPolicyEditor({
     policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
   );
   const [action, setAction] = useState<PolicyAction>(() => {
-    const initial = requireKnownEnumValue(
-      RiskPolicyAction,
+    const initial = detectionPolicyAction(
       policy?.action ?? draft?.action ?? "flag",
     );
     return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;

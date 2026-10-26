@@ -5147,6 +5147,83 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: createRegistryEntry
+    /admin/registry.curatePromotionCandidate:
+        post:
+            description: Reject, archive, or restore one exact unpublished catalogue candidate. Hidden candidates cannot be promoted until restored and refreshed.
+            operationId: adminCurateRegistryPromotionCandidate
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CurateRegistryPromotionCandidateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryPromotionCandidate'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: curateRegistryPromotionCandidate admin
+            tags:
+                - admin
+            x-speakeasy-name-override: curateRegistryPromotionCandidate
     /admin/registry.get:
         get:
             description: Staff-only registry administration.
@@ -5477,6 +5554,336 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: listRegistryOktaUnmapped
+    /admin/registry.promoteCandidate:
+        post:
+            description: Publish an explicitly reviewed public catalogue entry and queue setup documentation. Customer credentials are never copied.
+            operationId: adminPromoteRegistryCandidate
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PromoteRegistryCandidateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryPromotionCandidate'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: promoteRegistryCandidate admin
+            tags:
+                - admin
+            x-speakeasy-name-override: promoteRegistryCandidate
+    /admin/registry.promotionCandidate:
+        post:
+            description: Refresh health evidence for one exact remote MCP deployment before staff review.
+            operationId: adminGetRegistryPromotionCandidate
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetRegistryPromotionCandidateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryPromotionCandidate'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getRegistryPromotionCandidate admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getRegistryPromotionCandidate
+    /admin/registry.promotionCandidates:
+        get:
+            description: List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.
+            operationId: adminListRegistryPromotionCandidates
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: cursor
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: status
+                  schema:
+                    default: active
+                    enum:
+                        - active
+                        - all
+                        - candidate
+                        - rejected
+                        - archived
+                        - promoted
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: limit
+                  schema:
+                    default: 25
+                    format: int64
+                    maximum: 50
+                    minimum: 1
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryPromotionCandidates'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listRegistryPromotionCandidates admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listRegistryPromotionCandidates
+    /admin/registry.retryPromotionDocs:
+        post:
+            description: Retry a failed setup-guide request for one exact reviewed promotion without republishing the catalogue entry.
+            operationId: adminRetryRegistryPromotionDocs
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RetryRegistryPromotionDocsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryPromotionCandidate'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: retryRegistryPromotionDocs admin
+            tags:
+                - admin
+            x-speakeasy-name-override: retryRegistryPromotionDocs
     /admin/registry.save:
         post:
             description: Staff-only registry administration.
@@ -7529,6 +7936,160 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/upstreamOAuthMigration.disableEnforcement:
+        post:
+            description: 'Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.'
+            operationId: adminDisableUpstreamAuthEnforcement
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DisableUpstreamAuthEnforcementRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: disableUpstreamAuthEnforcement admin
+            tags:
+                - admin
+            x-speakeasy-name-override: disableUpstreamAuthEnforcement
+    /admin/upstreamOAuthMigration.enableEnforcement:
+        post:
+            description: 'Enables upstream auth enforcement for one organization: its direct proxied servers and assistant turns are served by the typed auth client resolver, and using the chosen auth client requires mcp:auth. Refused unless the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that can name an auth client does, and its assistant profiles are recorded. Choices left ambiguous and profile gaps are not blocking: those credentials are asked to reconnect and those turns are refused with the reason. Shadow parity and the cross-organization denial notice are confirmed by the caller, since they are read from telemetry and communication outside the database. Enabled enforcement does not depend on the auth-client-resolver flags.'
+            operationId: adminEnableUpstreamAuthEnforcement
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/EnableUpstreamAuthEnforcementRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: enableUpstreamAuthEnforcement admin
+            tags:
+                - admin
+            x-speakeasy-name-override: enableUpstreamAuthEnforcement
     /admin/upstreamOAuthMigration.organizations:
         get:
             description: Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.
@@ -16438,7 +16999,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/AgentPolicyGrantIDForm'
+                            $ref: '#/components/schemas/DeleteAgentPolicyGrantForm'
                 required: true
             responses:
                 "204":
@@ -64163,6 +64724,112 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskCreatePolicyBypassRequest
                 type: mutation
+    /rpc/risk.decideApproval:
+        post:
+            description: Approve or deny a pending tool approval request. Only a listed approver may decide, and never the person who made the call. An approval releases one retry of the exact call.
+            operationId: decideRiskPolicyApproval
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskPolicyApprovalDecisionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicyApproval'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: decideRiskPolicyApproval risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.approvals
+            x-speakeasy-name-override: decide
+            x-speakeasy-react-hook:
+                name: RiskDecideApproval
+                type: mutation
     /rpc/risk.declinePolicyChallenge:
         post:
             description: 'Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.'
@@ -64766,6 +65433,114 @@ paths:
             x-speakeasy-name-override: analysisStatus
             x-speakeasy-react-hook:
                 name: RiskAnalysisStatus
+    /rpc/risk.getApproval:
+        get:
+            description: Get one tool approval request, including a preview of the call's arguments.
+            operationId: getRiskPolicyApproval
+            parameters:
+                - allowEmptyValue: true
+                  description: The approval request ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The approval request ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskPolicyApproval'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getRiskPolicyApproval risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.approvals
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: RiskGetApproval
     /rpc/risk.getBlock:
         get:
             description: Get a tool call block by its risk result ID for the durable block page.
@@ -65638,6 +66413,138 @@ paths:
             x-speakeasy-name-override: userBreakdown
             x-speakeasy-react-hook:
                 name: RiskUserBreakdown
+    /rpc/risk.listApprovals:
+        get:
+            description: List tool approval requests held by require_approval policies, newest first. Org admins see every request; others see requests they can approve and their own.
+            operationId: listRiskPolicyApprovals
+            parameters:
+                - allowEmptyValue: true
+                  description: Optional status filter. An open request past its window counts as expired.
+                  in: query
+                  name: status
+                  schema:
+                    description: Optional status filter. An open request past its window counts as expired.
+                    enum:
+                        - blocked
+                        - pending
+                        - approved
+                        - denied
+                        - consumed
+                        - expired
+                    type: string
+                - allowEmptyValue: true
+                  description: Continue after this approval request ID.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Continue after this approval request ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of requests to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Maximum number of requests to return.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskPolicyApprovalsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listRiskPolicyApprovals risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.approvals
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: RiskListApprovals
     /rpc/risk.listBuiltinExclusions:
         get:
             description: List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.
@@ -91886,12 +92793,59 @@ components:
                         - gram_private
                 server:
                     $ref: '#/components/schemas/AdminMcpServerHealthServer'
+                upstream_auth:
+                    $ref: '#/components/schemas/AdminMcpServerHealthUpstreamAuth'
                 user_session_issuer:
                     $ref: '#/components/schemas/AdminMcpServerHealthUserSessionIssuer'
             description: 'Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.'
             required:
                 - server
                 - correlation
+        AdminMcpServerHealthAuthClient:
+            type: object
+            properties:
+                client_type:
+                    type: string
+                    description: How the client authenticates upstream.
+                    enum:
+                        - remote_session
+                        - service_account
+                        - static_credential
+                        - pass_through
+                        - ema
+                enabled:
+                    type: boolean
+                    description: Whether the client can be used.
+                header_count:
+                    type: integer
+                    description: Headers the client sends upstream.
+                    format: int64
+                id:
+                    type: string
+                    description: Auth client id.
+                    format: uuid
+                remote_session_client_id:
+                    type: string
+                    description: The OAuth registration behind an OAuth-backed client.
+                    format: uuid
+                server_count:
+                    type: integer
+                    description: Servers offering the client, this one included.
+                    format: int64
+                source:
+                    type: string
+                    description: backfill when created from existing configuration, admin when an administrator created it.
+                    enum:
+                        - backfill
+                        - admin
+            description: One auth client the server offers for reaching its upstream. Never carries its name or header values.
+            required:
+                - id
+                - client_type
+                - source
+                - enabled
+                - server_count
+                - header_count
         AdminMcpServerHealthCorrelation:
             type: object
             properties:
@@ -92127,6 +93081,28 @@ components:
             required:
                 - issuer_id
                 - client_id
+        AdminMcpServerHealthUpstreamAuth:
+            type: object
+            properties:
+                auth_clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminMcpServerHealthAuthClient'
+                requires_upstream_auth:
+                    type: boolean
+                    description: Whether the upstream needs authentication. Omitted while undecided.
+                status:
+                    type: string
+                    description: configured, setup_incomplete (required with no enabled client), no_auth_required or undecided.
+                    enum:
+                        - configured
+                        - setup_incomplete
+                        - no_auth_required
+                        - undecided
+            description: Whether the server's upstream needs authentication and the auth clients it offers.
+            required:
+                - status
+                - auth_clients
         AdminMcpServerHealthUserSessionIssuer:
             type: object
             properties:
@@ -93120,6 +94096,128 @@ components:
                     type: string
             required:
                 - entries
+        AdminRegistryPromotionCandidate:
+            type: object
+            properties:
+                checked_at:
+                    type: string
+                    format: date-time
+                created_at:
+                    type: string
+                    format: date-time
+                curation_revision:
+                    type: string
+                    format: uuid
+                delivery_error:
+                    type: string
+                docs_attempts:
+                    type: integer
+                    format: int64
+                docs_last_attempt_at:
+                    type: string
+                    format: date-time
+                docs_next_attempt_at:
+                    type: string
+                    format: date-time
+                docs_queued_at:
+                    type: string
+                    format: date-time
+                docs_retry_allowed:
+                    type: boolean
+                docs_revision:
+                    type: string
+                docs_status:
+                    type: string
+                docs_url:
+                    type: string
+                eligible:
+                    type: boolean
+                id:
+                    type: string
+                mcp_server_id:
+                    type: string
+                observed_days:
+                    type: integer
+                    format: int64
+                observed_failures:
+                    type: integer
+                    format: int64
+                observed_successes:
+                    type: integer
+                    format: int64
+                organization_id:
+                    type: string
+                project_id:
+                    type: string
+                promoted_at:
+                    type: string
+                    format: date-time
+                public_title:
+                    type: string
+                reason:
+                    type: string
+                registry_entry_id:
+                    type: string
+                remote_mcp_server_id:
+                    type: string
+                source_name:
+                    type: string
+                source_revision:
+                    type: string
+                status:
+                    type: string
+                suggested_metadata:
+                    $ref: '#/components/schemas/AdminRegistryPromotionSuggestions'
+            required:
+                - created_at
+                - curation_revision
+                - id
+                - organization_id
+                - project_id
+                - mcp_server_id
+                - remote_mcp_server_id
+                - source_revision
+                - eligible
+                - reason
+                - status
+                - observed_successes
+                - observed_failures
+                - observed_days
+                - docs_revision
+                - docs_retry_allowed
+                - docs_attempts
+        AdminRegistryPromotionCandidates:
+            type: object
+            properties:
+                candidates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminRegistryPromotionCandidate'
+                next_cursor:
+                    type: string
+            required:
+                - candidates
+        AdminRegistryPromotionSuggestions:
+            type: object
+            properties:
+                auth_mode:
+                    type: string
+                    enum:
+                        - none
+                        - oauth
+                docs_slug:
+                    type: string
+                documentation_url:
+                    type: string
+                public_description:
+                    type: string
+                public_name:
+                    type: string
+                public_title:
+                    type: string
+                public_url:
+                    type: string
+            description: Untrusted observed metadata suggestions. Staff must edit and explicitly confirm every value before publication.
         AdminRegistrySummary:
             type: object
             properties:
@@ -93294,6 +94392,25 @@ components:
                 - id
                 - customer_id
                 - status
+        AdminUpstreamAuthEnforcement:
+            type: object
+            properties:
+                blockers:
+                    type: array
+                    items:
+                        type: string
+                    description: What keeps enforcement from being turned on, empty when ready.
+                enabled:
+                    type: boolean
+                    description: Whether enforcement is on.
+                ready:
+                    type: boolean
+                    description: Whether the coverage enforcement needs is in place, so it can be turned on.
+            description: One organization's upstream auth enforcement.
+            required:
+                - enabled
+                - ready
+                - blockers
         AdminUpstreamOAuthMigrationAuthClientKind:
             type: object
             properties:
@@ -93359,6 +94476,10 @@ components:
                 pending_clients:
                     type: integer
                     description: Auth clients not yet recorded.
+                    format: int64
+                pending_grants:
+                    type: integer
+                    description: Default auth permission grants (mcp:auth) the organization's roles, users, agents and API keys are missing, which a run adds. Enforcement needs them, so existing callers keep their access.
                     format: int64
                 pending_headers:
                     type: integer
@@ -93657,6 +94778,8 @@ components:
                     type: integer
                     description: Live user session credentials scanned.
                     format: int64
+                enforcement:
+                    $ref: '#/components/schemas/AdminUpstreamAuthEnforcement'
                 execution_profiles:
                     $ref: '#/components/schemas/AdminUpstreamOAuthMigrationExecutionProfiles'
                 migrated:
@@ -93824,7 +94947,7 @@ components:
                     minLength: 1
                 project_scoped:
                     type: boolean
-                    description: Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+                    description: Admit the subject for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.
                     default: false
                 subject:
                     type: string
@@ -93895,6 +95018,18 @@ components:
             required:
                 - requested
                 - effective
+        AgentExpectedPolicy:
+            type: object
+            properties:
+                scope:
+                    type: string
+                    description: Scope of the grant originally read
+                    minLength: 1
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+            required:
+                - scope
+                - selector
         AgentIDForm:
             type: object
             properties:
@@ -94116,7 +95251,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth scopes).
+                    description: Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -94132,6 +95267,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - mcp_auth_client
                         - '*'
@@ -99431,13 +100567,16 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+                    description: 'Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
                     default: flag
                     enum:
                         - flag
                         - warn
                         - block
                         - quarantine
+                        - require_approval
+                approval_config:
+                    $ref: '#/components/schemas/RiskPolicyApprovalConfig'
                 approved_email_domains:
                     type: array
                     items:
@@ -100035,6 +101174,13 @@ components:
                     enum:
                         - chain
                         - interactive
+                authorization_server_mode:
+                    type: string
+                    description: Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.
+                    default: endpoint
+                    enum:
+                        - endpoint
+                        - shared
                 session_duration_hours:
                     type: integer
                     description: Maximum issued user session lifetime, in hours.
@@ -100092,6 +101238,31 @@ components:
             required:
                 - credits_used
                 - monthly_credits
+        CurateRegistryPromotionCandidateRequestBody:
+            type: object
+            properties:
+                action:
+                    type: string
+                    enum:
+                        - reject
+                        - archive
+                        - restore
+                curation_revision:
+                    type: string
+                    format: uuid
+                organization_id:
+                    type: string
+                promotion_id:
+                    type: string
+                    format: uuid
+                retry_key:
+                    type: string
+            required:
+                - organization_id
+                - promotion_id
+                - curation_revision
+                - action
+                - retry_key
         CursorHookPayload:
             type: object
             properties:
@@ -100547,6 +101718,22 @@ components:
             required:
                 - status
                 - count
+        DeleteAgentPolicyGrantForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: First-class agent identifier
+                    format: uuid
+                expected_policy:
+                    $ref: '#/components/schemas/AgentExpectedPolicy'
+                grant_id:
+                    type: string
+                    description: Direct policy grant identifier
+                    format: uuid
+            required:
+                - grant_id
+                - agent_id
         DeleteAiScanTargetRequestBody:
             type: object
             properties:
@@ -101623,6 +102810,14 @@ components:
                     minLength: 1
             required:
                 - id
+        DisableUpstreamAuthEnforcementRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: The organization ID.
+            required:
+                - organization_id
         DisconnectSlackDirectoryConnectionRequestBody:
             type: object
             properties:
@@ -102047,6 +103242,22 @@ components:
                     minLength: 1
             required:
                 - id
+        EnableUpstreamAuthEnforcementRequestBody:
+            type: object
+            properties:
+                cross_organization_denial_communicated:
+                    type: boolean
+                    description: The organization was told that valid credentials from another organization are refused on its public servers once enforcement is on, instead of being served anonymously.
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                shadow_parity_confirmed:
+                    type: boolean
+                    description: The caller checked the organization's mandatory authorization shadow (mcp.authz.mandatory_shadow) and found no unexplained new denial.
+            required:
+                - organization_id
+                - shadow_parity_confirmed
+                - cross_organization_denial_communicated
         EnsureServerReviewRequestBody:
             type: object
             properties:
@@ -104403,6 +105614,21 @@ components:
                     $ref: '#/components/schemas/PromptTemplate'
             required:
                 - template
+        GetRegistryPromotionCandidateRequestBody:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    format: uuid
+                organization_id:
+                    type: string
+                project_id:
+                    type: string
+                    format: uuid
+            required:
+                - organization_id
+                - project_id
+                - mcp_server_id
         GetRiskPolicyChallengeResponseBody:
             type: object
             properties:
@@ -108506,6 +109732,19 @@ components:
                     description: The list of risk policies.
             required:
                 - policies
+        ListRiskPolicyApprovalsResult:
+            type: object
+            properties:
+                approvals:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskPolicyApproval'
+                    description: Approval requests, newest first.
+                next_cursor:
+                    type: string
+                    description: Pass as cursor to fetch the next page. Absent on the last page.
+            required:
+                - approvals
         ListRiskPolicyBypassRequestsResult:
             type: object
             properties:
@@ -108612,6 +109851,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -108668,6 +109908,7 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - inference:execute
                             - log:read
                             - agent:read
                             - agent:write
@@ -110202,6 +111443,11 @@ components:
         McpServer:
             type: object
             properties:
+                builtin_backend:
+                    type: string
+                    description: A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
+                    enum:
+                        - approvals
                 created_at:
                     type: string
                     description: When the MCP server was created
@@ -110490,6 +111736,9 @@ components:
         MetaMcpServer:
             type: object
             properties:
+                code_mode_enabled:
+                    type: boolean
+                    description: Whether this gateway can select Code Mode. True only when the code runtime is available, the organization has Code Mode, and the gateway requires sign-in through a user session issuer.
                 created_at:
                     type: string
                     description: When the meta MCP server was created
@@ -110500,6 +111749,7 @@ components:
                     enum:
                         - progressive
                         - direct
+                        - code_mode
                 id:
                     type: string
                     description: The ID of the meta MCP server
@@ -110834,6 +112084,7 @@ components:
                     enum:
                         - progressive
                         - direct
+                        - code_mode
                 mcp_server_id:
                     type: string
                     description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -113561,6 +114812,9 @@ components:
                 authz_challenge_logging_enabled:
                     type: boolean
                     description: Whether authz challenge logging to ClickHouse is enabled
+                code_mode_enabled:
+                    type: boolean
+                    description: Whether the organization has the staff-managed gateway Code Mode entitlement
                 custom_model_keys_enabled:
                     type: boolean
                     description: Whether the organization can supply its own model provider API keys (BYOK)
@@ -113639,6 +114893,7 @@ components:
                 - network_ingress_enabled
                 - signals_intelligence_enabled
                 - organization_gateway_disabled
+                - code_mode_enabled
                 - device_agent
         Project:
             type: object
@@ -113891,6 +115146,58 @@ components:
                 - distinct_providers
                 - models
                 - tools
+        PromoteRegistryCandidateRequestBody:
+            type: object
+            properties:
+                auth_mode:
+                    type: string
+                    enum:
+                        - none
+                        - oauth
+                curation_revision:
+                    type: string
+                    format: uuid
+                docs_slug:
+                    type: string
+                documentation_url:
+                    type: string
+                mcp_server_id:
+                    type: string
+                    format: uuid
+                organization_id:
+                    type: string
+                project_id:
+                    type: string
+                    format: uuid
+                public_description:
+                    type: string
+                public_metadata_confirmed:
+                    type: boolean
+                public_name:
+                    type: string
+                public_title:
+                    type: string
+                public_url:
+                    type: string
+                retry_key:
+                    type: string
+                source_revision:
+                    type: string
+            required:
+                - organization_id
+                - project_id
+                - mcp_server_id
+                - curation_revision
+                - source_revision
+                - public_name
+                - public_title
+                - public_description
+                - public_url
+                - documentation_url
+                - docs_slug
+                - auth_mode
+                - retry_key
+                - public_metadata_confirmed
         PromoteRequestBody:
             type: object
             properties:
@@ -114763,7 +116070,7 @@ components:
                     maxLength: 100
                 project_scoped:
                     type: boolean
-                    description: Register the issuer for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
+                    description: Register the issuer for the selected project alone rather than the whole organization. Requires an explicitly selected project via the Gram-Project header or a project-bound API key. Dashboard sessions require access to that project. Defaults to false.
                     default: false
                 tags:
                     type: array
@@ -115712,6 +117019,7 @@ components:
                         - risk_policy:bypass
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -116206,6 +117514,24 @@ components:
                     type: string
             required:
                 - organization_id
+        RetryRegistryPromotionDocsRequestBody:
+            type: object
+            properties:
+                docs_revision:
+                    type: string
+                    format: uuid
+                organization_id:
+                    type: string
+                promotion_id:
+                    type: string
+                    format: uuid
+                retry_key:
+                    type: string
+            required:
+                - organization_id
+                - promotion_id
+                - docs_revision
+                - retry_key
         RetryScheduleRequestBody:
             type: object
             properties:
@@ -116769,13 +118095,18 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+                    description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
                     default: flag
                     enum:
                         - flag
                         - warn
                         - block
                         - quarantine
+                        - require_approval
+                approval_config:
+                    $ref: '#/components/schemas/RiskPolicyApprovalConfig'
+                approvals_server_setup:
+                    $ref: '#/components/schemas/RiskPolicyApprovalsServerSetup'
                 approved_email_domains:
                     type: array
                     items:
@@ -116905,6 +118236,169 @@ components:
                 - version
                 - created_at
                 - updated_at
+        RiskPolicyApproval:
+            type: object
+            properties:
+                arguments_preview:
+                    type: object
+                    description: 'A shortened preview of the call''s arguments: long strings are cut and only the first keys are kept.'
+                    additionalProperties: true
+                can_decide:
+                    type: boolean
+                    description: Whether the caller can decide this request now.
+                chat_id:
+                    type: string
+                    description: The chat the call belongs to, when known.
+                    format: uuid
+                consumed_at:
+                    type: string
+                    description: When a retry used the approval.
+                    format: date-time
+                created_at:
+                    type: string
+                    description: When the call was first held.
+                    format: date-time
+                decided_at:
+                    type: string
+                    description: When an approver decided.
+                    format: date-time
+                decided_by_urn:
+                    type: string
+                    description: The approver who decided.
+                decided_via:
+                    type: string
+                    description: Where the decision came from.
+                    enum:
+                        - slack
+                        - dashboard
+                        - api
+                decision_note:
+                    type: string
+                    description: The approver's message for the agent.
+                expires_at:
+                    type: string
+                    description: When the request stops waiting for a decision, or the approval stops covering a retry.
+                    format: date-time
+                granted_scope:
+                    type: string
+                    description: What the approver granted, once approved.
+                id:
+                    type: string
+                    description: The approval request ID.
+                    format: uuid
+                policy_id:
+                    type: string
+                    description: The require_approval risk policy that held the call.
+                    format: uuid
+                policy_name:
+                    type: string
+                    description: The policy's name.
+                policy_version:
+                    type: integer
+                    description: The policy version when the call was held.
+                    format: int64
+                reason:
+                    type: string
+                    description: The agent's reason, once it requested approval.
+                requested_at:
+                    type: string
+                    description: When the agent requested approval.
+                    format: date-time
+                requested_scope:
+                    type: string
+                    description: What the agent asked to be approved, such as exact_once.
+                requester_urn:
+                    type: string
+                    description: 'The principal that made the call: agent:<id> or user:<id>.'
+                status:
+                    type: string
+                    description: The request's status. An open request past its window is expired.
+                    enum:
+                        - blocked
+                        - pending
+                        - approved
+                        - denied
+                        - consumed
+                        - expired
+                surface:
+                    type: string
+                    description: The MCP surface that received the call.
+                tool_name:
+                    type: string
+                    description: The tool that was called.
+                toolset_id:
+                    type: string
+                    description: The hosted toolset that served the call, when known.
+                    format: uuid
+                updated_at:
+                    type: string
+                    description: Last update timestamp.
+                    format: date-time
+            required:
+                - id
+                - policy_id
+                - policy_name
+                - policy_version
+                - status
+                - requester_urn
+                - surface
+                - tool_name
+                - arguments_preview
+                - can_decide
+                - created_at
+                - updated_at
+        RiskPolicyApprovalConfig:
+            type: object
+            properties:
+                approvers:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Principal URNs that may approve held calls: specific users (user:...) or roles (role:...). Everyone is not allowed.'
+                    minItems: 1
+            required:
+                - approvers
+        RiskPolicyApprovalDecisionRequestBody:
+            type: object
+            properties:
+                decision:
+                    type: string
+                    description: The decision.
+                    enum:
+                        - approve
+                        - deny
+                id:
+                    type: string
+                    description: The approval request ID.
+                    format: uuid
+                note:
+                    type: string
+                    description: Optional message for the agent.
+                    maxLength: 500
+            required:
+                - id
+                - decision
+        RiskPolicyApprovalsServerSetup:
+            type: object
+            properties:
+                added_to_default_plugin:
+                    type: boolean
+                    description: Whether the server joined the project's Default plugin, which republishes so agents that use the plugin get it.
+                mcp_server_id:
+                    type: string
+                    description: The approvals server Speakeasy created in the project.
+                    format: uuid
+                mcp_server_slug:
+                    type: string
+                    description: The approvals server's slug.
+                plugin_server_name:
+                    type: string
+                    description: How plugins name the server, and how held calls refer to it.
+            required:
+                - mcp_server_id
+                - mcp_server_slug
+                - plugin_server_name
+                - added_to_default_plugin
         RiskPolicyBypassApprovalRequestBody:
             type: object
             properties:
@@ -117845,6 +119339,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -118211,6 +119706,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - workload
                         - mcp_auth_client
@@ -118253,6 +119749,7 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - inference:execute
                         - log:read
                         - agent:read
                         - agent:write
@@ -118747,7 +120244,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
+                    description: Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -118763,6 +120260,7 @@ components:
                         - assistant
                         - risk_policy
                         - chat
+                        - inference
                         - agent
                         - workload
                         - mcp_auth_client
@@ -119725,6 +121223,7 @@ components:
                         - network_ingress
                         - signals_intelligence
                         - organization_gateway_disabled
+                        - code_mode
                     maxLength: 60
                 organization_id:
                     type: string
@@ -119839,6 +121338,7 @@ components:
                         - network_ingress
                         - signals_intelligence
                         - organization_gateway_disabled
+                        - code_mode
                     maxLength: 60
                 organization_id:
                     type: string
@@ -121857,6 +123357,11 @@ components:
                     type: integer
                     description: Members observed in the last complete snapshot, including guests and bots.
                     format: int64
+                missing_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Permissions Speakeasy asks for that this install has not granted. Reinstalling the app grants them. Without chat:write, approval requests do not reach approvers in Slack.
                 status:
                     type: string
                     description: Authorization status, independent of directory sync.
@@ -121903,6 +123408,7 @@ components:
                 - status
                 - generation
                 - granted_scopes
+                - missing_scopes
                 - updated_at
                 - member_count
                 - directory_status
@@ -126733,6 +128239,7 @@ components:
                     enum:
                         - progressive
                         - direct
+                        - code_mode
                 id:
                     type: string
                     description: The ID of the meta MCP server to update
@@ -127241,12 +128748,15 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
+                    description: 'Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
                     enum:
                         - flag
                         - warn
                         - block
                         - quarantine
+                        - require_approval
+                approval_config:
+                    $ref: '#/components/schemas/RiskPolicyApprovalConfig'
                 approved_email_domains:
                     type: array
                     items:

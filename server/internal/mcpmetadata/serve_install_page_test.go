@@ -3,7 +3,6 @@ package mcpmetadata_test
 import (
 	"context"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -40,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -84,7 +84,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				require.NoError(t, err)
 
 				// Update to make it public (since CreateToolset doesn't have McpIsPublic field)
-				err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+				err = testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 					McpIsPublic: true,
 					ID:          toolset.ID,
 					ProjectID:   toolset.ProjectID,
@@ -292,7 +292,7 @@ func TestServeInstallPage_Instructions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make it public
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -360,7 +360,7 @@ func TestServeInstallPage_ToolDetails(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make it public
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -497,7 +497,7 @@ func TestServeInstallPage_CustomDomain_WrongDomainReturnsNotFound(t *testing.T) 
 	require.NoError(t, err)
 
 	// Make it public so auth isn't the reason for rejection.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -604,7 +604,7 @@ func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make it public and link it to the custom domain.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -696,7 +696,7 @@ func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make it public and link it to the custom domain.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -786,7 +786,7 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolsetA.ID,
 		ProjectID:   toolsetA.ProjectID,
@@ -855,7 +855,7 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolsetB.ID,
 		ProjectID:   toolsetB.ProjectID,
@@ -930,7 +930,7 @@ func TestServeInstallPage_ClaudeDesktop_NoSecurityInputs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -1024,7 +1024,7 @@ func TestServeInstallPage_AntigravityClients_NoSecurityInputs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -1253,9 +1253,10 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make the toolset public.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicBySlug(ctx, toolsets_repo.SetToolsetMCPPublicBySlugParams{
+	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicBySlug(ctx, testrepo.SetToolsetMCPPublicBySlugParams{
 		McpIsPublic: true,
 		McpSlug:     pgtype.Text{String: mcpSlug, Valid: true},
+		ProjectID:   *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
 
@@ -1300,7 +1301,7 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -1740,7 +1741,7 @@ func TestServeInstallPage_McpServer_ToolsetBacked_WrapperVisibilityGates(t *test
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -1790,7 +1791,7 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -1859,7 +1860,7 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -2159,7 +2160,7 @@ func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 		Description: conv.ToPGText("must not render"), DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, McpEnabled: true,
 	})
 	require.NoError(t, err)
-	require.NoError(t, ti.toolsetRepo.SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true, ID: legacy.ID, ProjectID: legacy.ProjectID,
 	}))
 
@@ -2226,7 +2227,7 @@ func seedMetaBackedEndpoint(t *testing.T, ctx context.Context, ti *testInstance,
 		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -2678,7 +2679,7 @@ func TestServeInstallPage_DisabledServerBackend_ReturnsNotFound(t *testing.T) {
 		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	require.NoError(t, toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	require.NoError(t, testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -2720,7 +2721,7 @@ func TestServeInstallPage_ChatGPTDesktop_NoSecurityInputs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -2884,7 +2885,7 @@ func TestServeInstallPage_ChatGPTDesktop_PublicWithHeaders(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	err = testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -3007,7 +3008,7 @@ func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
 				McpEnabled:     true,
 			})
 			require.NoError(t, err)
-			require.NoError(t, ti.toolsetRepo.SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+			require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 				ID: toolset.ID, ProjectID: toolset.ProjectID, McpIsPublic: true,
 			}))
 			// No endpoint row: force lookup through the legacy slug, with the

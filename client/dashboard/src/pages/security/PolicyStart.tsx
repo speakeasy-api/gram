@@ -57,6 +57,7 @@ const ACTION_LABEL: Record<string, string> = {
   warn: "Warn",
   block: "Block",
   quarantine: "Quarantine",
+  require_approval: "Approval",
 };
 
 const ACTION_LONG_LABEL: Record<string, string> = {
@@ -177,6 +178,7 @@ export function PolicyStartChooser(): JSX.Element {
   const mode = useDetectorMode();
   const promptPoliciesEnabled =
     telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
+  const toolApprovals = useFeatureFlag(FEATURE_FLAGS.toolApprovals);
   const [, setKind] = useQueryState("kind");
   // "Change starting point" hands the state over in the route; otherwise
   // pick up a description left behind earlier in this browser session.
@@ -349,6 +351,7 @@ export function PolicyStartChooser(): JSX.Element {
                 mode={mode}
                 promptPoliciesEnabled={promptPoliciesEnabled}
                 shadowAISlot={shadowAISlot}
+                approvalsEnabled={toolApprovals.status === "enabled"}
                 onSelect={(preset) => openDraft(draftFromPreset(preset))}
                 onShadowAI={openShadowAI}
                 onScratch={(kind) => void setKind(kind)}
@@ -376,6 +379,7 @@ function UseCaseTable({
   mode,
   promptPoliciesEnabled,
   shadowAISlot,
+  approvalsEnabled,
   onSelect,
   onShadowAI,
   onScratch,
@@ -387,9 +391,10 @@ function UseCaseTable({
   mode: DetectorMode;
   promptPoliciesEnabled: boolean;
   shadowAISlot: ShadowAIPolicySlot;
+  approvalsEnabled: boolean;
   onSelect: (preset: RiskPreset) => void;
   onShadowAI: () => void;
-  onScratch: (kind: "standard" | "prompt" | "shadow-ai") => void;
+  onScratch: (kind: "standard" | "prompt" | "shadow-ai" | "approval") => void;
 }): JSX.Element {
   return (
     <div className="bg-card border">
@@ -477,6 +482,10 @@ function UseCaseTable({
           );
         })
       )}
+      {/* Needs no preset, so it stays when the presets fail to load. */}
+      {approvalsEnabled && !isLoading ? (
+        <ApprovalUseCaseRow onPick={() => onScratch("approval")} />
+      ) : null}
       <div className="bg-muted/30 flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
         <Eyebrow>From scratch</Eyebrow>
         <Button
@@ -500,6 +509,45 @@ function UseCaseTable({
         <ShadowAIScratchOption onPick={() => onScratch("shadow-ai")} />
       </div>
     </div>
+  );
+}
+
+/** The tool approval use case. It has no detectors or severity: a person
+ *  decides each held call, so it opens its own Tools, Who and Review steps. */
+function ApprovalUseCaseRow({ onPick }: { onPick: () => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className="hover:bg-muted/40 group grid w-full grid-cols-[minmax(0,1fr)_16px] items-center gap-4 border-b p-4 text-left transition-colors sm:grid-cols-[minmax(0,1fr)_80px_128px_16px]"
+    >
+      <span className="flex min-w-0 gap-3">
+        <Icon
+          name="shield-check"
+          className="text-muted-foreground mt-0.5 size-5 shrink-0"
+        />
+        <span className="min-w-0 space-y-1">
+          <span className="text-sm font-medium">
+            Require approval for tool calls
+          </span>
+          <span className="text-muted-foreground block max-w-[560px] text-[13px] leading-[18px]">
+            Hold calls to chosen MCP tools until an approver approves them. The
+            agent asks, waits for the decision and retries.
+          </span>
+          <span className="text-muted-foreground block font-mono text-[11px] leading-4">
+            Decided by a person, not a detector
+          </span>
+          <span className="flex items-center gap-2 pt-1 sm:hidden">
+            <ActionBadge action="require_approval" />
+          </span>
+        </span>
+      </span>
+      <span className="hidden sm:block">
+        <ActionBadge action="require_approval" />
+      </span>
+      <span className="hidden sm:block" />
+      <ArrowRight className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
+    </button>
   );
 }
 
