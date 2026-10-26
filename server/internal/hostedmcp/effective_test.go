@@ -47,8 +47,8 @@ func TestWithServerState(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := WithServerState(stale, tt.wrapper)
-			require.Equal(t, tt.enabled, got.McpEnabled)
-			require.Equal(t, tt.public, got.McpIsPublic)
+			require.Equal(t, tt.enabled, got.Enabled)
+			require.Equal(t, tt.public, got.Public)
 			require.Equal(t, tt.issuer, got.UserSessionIssuerID)
 		})
 	}
@@ -60,9 +60,9 @@ func TestWithServerStateDisabledReadsHowItReEnables(t *testing.T) {
 	toolsetID := uuid.New()
 	disabled := &mcpserversrepo.McpServer{ID: toolsetID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: visibility.Disabled}
 	private := toolsetsrepo.Toolset{ID: toolsetID, McpEnabled: true, McpIsPublic: false}
-	require.False(t, WithServerState(private, disabled).McpIsPublic, "a private alias re-enables private")
+	require.False(t, WithServerState(private, disabled).Public, "a private alias re-enables private")
 
 	withOAuth := private
 	withOAuth.ExternalOauthServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
-	require.True(t, WithServerState(withOAuth, disabled).McpIsPublic, "external OAuth re-enables public")
+	require.True(t, WithServerState(withOAuth, disabled).Public, "external OAuth re-enables public")
 }

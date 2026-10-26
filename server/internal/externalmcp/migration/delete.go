@@ -53,7 +53,7 @@ func (m *Migrator) deleteInTx(ctx context.Context, tx pgx.Tx, actor Actor, tools
 		return fmt.Errorf("load hosted MCP server: %w", err)
 	}
 	carried := false
-	if served.McpEnabled {
+	if served.Enabled {
 		carried, err = pluginsrepo.New(tx).HasPluginMembershipForToolset(ctx, pluginsrepo.HasPluginMembershipForToolsetParams{ProjectID: toolset.ProjectID, ToolsetID: toolset.ID})
 		if err != nil {
 			return fmt.Errorf("check toolset plugin membership: %w", err)

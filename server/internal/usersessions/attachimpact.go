@@ -133,12 +133,12 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolset.ID.String(), projectID.String())); err != nil {
 			return none, err
 		}
-		toolset, wrapper, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
+		hosting, wrapper, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "load toolset MCP server").LogError(ctx, logger)
 		}
 		if wrapper == nil {
-			return attachTarget{issuerID: toolset.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
+			return attachTarget{issuerID: hosting.UserSessionIssuerID, onPlatformHost: !toolset.CustomDomainID.Valid}, nil
 		}
 		return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, wrapper, toolset)
 	default:

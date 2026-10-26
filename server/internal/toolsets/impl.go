@@ -577,7 +577,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	// An enabled toolset publishes too: a rename moves its entry in the
 	// generated package even though no attach ran.
-	s.triggerPluginPublish(ctx, authCtx, effectiveExisting.McpEnabled || pluginContentsChanged, false)
+	s.triggerPluginPublish(ctx, authCtx, effectiveExisting.Enabled || pluginContentsChanged, false)
 	s.triggerToolsetIndex(ctx, toolsetDetails)
 
 	return toolsetDetails, nil
@@ -638,7 +638,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "load hosted MCP server").LogError(ctx, logger)
 	}
 	carried := false
-	if served.McpEnabled {
+	if served.Enabled {
 		carried, err = toolsetCarriedByPlugin(ctx, dbtx, authCtx, toDelete.ID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
@@ -1077,7 +1077,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load hosted MCP server").LogError(ctx, s.logger)
 	}
-	if !served.McpIsPublic {
+	if !served.Public {
 		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have external OAuth servers").LogError(ctx, s.logger)
 	}
 	if lockedToolset.ExternalOauthServerID.Valid {
