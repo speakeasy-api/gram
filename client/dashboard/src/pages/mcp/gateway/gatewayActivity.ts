@@ -7,7 +7,7 @@ import type { MemberRow } from "./memberRows";
 // The modes a gateway connection can be served in, from the most discovery to
 // the least, then calls recorded before connections recorded their mode. A
 // mode keeps its slot, and so its color, whichever modes a range contains.
-export const GATEWAY_MODES = [
+const GATEWAY_MODES = [
   "progressive",
   "code_mode",
   "direct",
@@ -15,7 +15,7 @@ export const GATEWAY_MODES = [
 ] as const;
 export type GatewayMode = (typeof GATEWAY_MODES)[number];
 
-export const GATEWAY_MODE_LABELS: Record<GatewayMode, string> = {
+const GATEWAY_MODE_LABELS: Record<GatewayMode, string> = {
   progressive: "Progressive",
   code_mode: "Code Mode",
   direct: "Direct",
