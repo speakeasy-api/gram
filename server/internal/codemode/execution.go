@@ -231,7 +231,7 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	}()
 	remaining := (time.Until(deadline) - runnerDeadlineLead).Milliseconds()
 	if remaining < 1 {
-		fail("deadline_exceeded", "execution deadline elapsed before submission; program was not submitted")
+		fail("deadline_exceeded", "too little execution time remained to run the program; program was not submitted")
 		return result
 	}
 	// Everything before the start frame is admission; the coordinator reports

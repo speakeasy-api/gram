@@ -44,7 +44,7 @@ Search returns summaries; describe returns full definitions. Exact paths: server
 
 Calls return {ok, data, content, outcome, error?}; check ok. data preserves structuredContent; None when absent. A server refusing the call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and its reason in content: describe the tool and fix the call. Disallowed paths and non-object arguments raise RuntimeError.
 
-Python subset; import asyncio enables await asyncio.gather(...). No external packages, filesystem, environment access, direct network or sleep. Limits: 64 KiB source, 64 MiB heap, 30 s wall, 2 s active Python (tool waits excluded), 64 helper attempts, 8 concurrent helpers, 1 MiB per reply/8 MiB total, 256 KiB result, 16 KiB printed output (truncated). A failed run still returns what it printed before failing.
+Python subset; import asyncio enables await asyncio.gather(...). No external packages, filesystem, environment access, direct network or sleep. Limits: 64 KiB source, 64 MiB heap, 30 s wall, 2 s active Python (tool waits excluded), 64 helper attempts, 8 concurrent helpers, 1 MiB per reply/8 MiB total, 256 KiB result, 16 KiB printed output (truncated). Output printed before a Python error, limit or timeout is still returned.
 
 Optional tools argument restricts every helper to exact paths; omit = all permitted, [] = none.
 

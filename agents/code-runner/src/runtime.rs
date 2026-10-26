@@ -56,6 +56,11 @@ struct Printed {
 impl Output {
     fn push(&self, text: &str) {
         let mut printed = self.0.lock().unwrap();
+        // Once a print is cut, later shorter prints must not fill the leftover
+        // bytes: the output stays a prefix of what the program printed.
+        if printed.truncated {
+            return;
+        }
         let remaining = MAX_OUTPUT.saturating_sub(printed.text.len());
         let mut end = remaining.min(text.len());
         while !text.is_char_boundary(end) {

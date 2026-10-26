@@ -305,6 +305,28 @@ async fn failed_run_output_is_bounded_without_corrupting_utf8() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn truncated_output_stays_a_prefix() {
+    // The cut leaves three bytes free, which the later print would fit. The
+    // name lookup suspends the program, which flushes the first print, so the
+    // later one arrives separately.
+    let result = run(
+        state(1).await,
+        "print('a' + '🌍' * 5000)\ntry:\n    undefined_name\nexcept NameError:\n    pass\nprint('b')\n7",
+    )
+    .await;
+    let ServerFrame::Complete {
+        output,
+        output_truncated,
+        ..
+    } = result
+    else {
+        panic!("expected result")
+    };
+    assert!(output_truncated);
+    assert_eq!(output, format!("a{}", "🌍".repeat(4095)));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn deadline_keeps_printed_output() {
     let mut pending = Run::new(
         state(1).await,
