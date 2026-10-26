@@ -137,13 +137,18 @@ WHERE key = ANY(@security_keys::TEXT[])
   );
 
 -- name: GetToolsetByMcpSlug :one
+-- A winning row in a deleted project still owns the slug, so it yields no row rather than a fallback.
 SELECT *
 FROM toolsets
-WHERE mcp_slug = @mcp_slug
-  AND deleted IS FALSE
-  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE)
-ORDER BY (custom_domain_id IS NULL) DESC
-LIMIT 1;
+WHERE id = (
+    SELECT t.id
+    FROM toolsets t
+    WHERE t.mcp_slug = @mcp_slug
+      AND t.deleted IS FALSE
+    ORDER BY (t.custom_domain_id IS NULL) DESC
+    LIMIT 1
+  )
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE);
 
 -- name: GetToolsetByPlatformMcpSlug :one
 SELECT *
@@ -151,7 +156,7 @@ FROM toolsets
 WHERE mcp_slug = @mcp_slug
   AND custom_domain_id IS NULL
   AND deleted IS FALSE
-  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE);
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE);
 
 -- name: GetToolsetByMcpSlugAndCustomDomain :one
 SELECT *
@@ -159,7 +164,7 @@ FROM toolsets
 WHERE mcp_slug = @mcp_slug
   AND custom_domain_id = @custom_domain_id
   AND deleted IS FALSE
-  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE);
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE);
 
 -- name: GetToolsetByMcpSlugAndProject :one
 SELECT *
@@ -167,7 +172,7 @@ FROM toolsets
 WHERE mcp_slug = @mcp_slug
   AND project_id = @project_id
   AND deleted IS FALSE
-  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.deleted IS FALSE);
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = toolsets.project_id AND p.organization_id = toolsets.organization_id AND p.deleted IS FALSE);
 
 -- name: GetPromptTemplatesForToolset :many
 WITH ranked_templates AS (

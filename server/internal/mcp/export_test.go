@@ -60,6 +60,11 @@ func (s *Service) VerifyRemoteGrantOn(ctx context.Context, endpoint *ResolvedMcp
 	s.probeRemoteGrant(ctx, s.logger, endpoint, challengeState, grant)
 }
 
+// LoadResolvedMcpEndpointByRef resumes a cached challenge's endpoint.
+func (s *Service) LoadResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	return s.loadResolvedMcpEndpointByRef(ctx, ref)
+}
+
 // RemoteChallengeManager is the manager the service registered its grant hook on.
 func (s *Service) RemoteChallengeManager() *remotesessions.ChallengeManager {
 	return s.remoteChallengeMgr
@@ -115,9 +120,4 @@ type testAuthClientPermission func() bool
 
 func (f testAuthClientPermission) Permitted(context.Context, authClientPermitRequest) (bool, error) {
 	return f(), nil
-}
-
-// LoadResolvedMcpEndpointByRef resumes a cached challenge's endpoint.
-func (s *Service) LoadResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
-	return s.loadResolvedMcpEndpointByRef(ctx, ref)
 }

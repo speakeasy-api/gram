@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -41,6 +42,9 @@ func TestLegacyFallback_DeletedProjectAnswersAsUnknownSlug(t *testing.T) {
 	w, err = runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, gated.McpSlug.String)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
+	gatedRef := mcp.EndpointRef{McpSlug: gated.McpSlug.String, RouteBase: mcproute.MCP, ToolsetID: conv.ToNullUUID(gated.ID)}
+	_, err = ti.service.LoadResolvedMcpEndpointByRef(ctx, gatedRef)
+	require.NoError(t, err)
 
 	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
@@ -77,7 +81,62 @@ func TestLegacyFallback_DeletedProjectAnswersAsUnknownSlug(t *testing.T) {
 	require.Equal(t, 1, clients, "registration must not add a client for a deleted project")
 
 	// A challenge minted before the delete must not resume after it.
-	_, err = ti.service.LoadResolvedMcpEndpointByRef(ctx, mcp.EndpointRef{McpSlug: gated.McpSlug.String, RouteBase: mcproute.MCP, ToolsetID: conv.ToNullUUID(gated.ID)})
+	_, err = ti.service.LoadResolvedMcpEndpointByRef(ctx, gatedRef)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// A deleted project's toolset keeps owning its slug on the platform host instead of
+// yielding to a live custom-domain toolset that shares it.
+func TestLegacyFallback_DeletedProjectSlugNotTakenOverByCustomDomainToolset(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Live project", Slug: "live-" + uuid.NewString()[:8], OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	otherAuth := *authCtx
+	otherAuth.ProjectID = &other.ID
+	slug := "deleted-proj-shared-" + uuid.NewString()[:8]
+	live, domain := createPublicMCPToolsetWithCustomDomain(t, ctx, ti, &otherAuth, slug, slug+".example.com")
+	createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
+
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+
+	_, err = servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), "", nil)
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	customCtx := customdomains.WithContext(context.Background(), &customdomains.Context{OrganizationID: authCtx.ActiveOrganizationID, Domain: domain.Domain, DomainID: domain.ID})
+	w, err := servePublicHTTP(t, customCtx, ti, live.McpSlug.String, makeInitializeBody(), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+// A custom-domain toolset in a deleted project is unknown on its own domain too.
+func TestLegacyFallback_DeletedProjectCustomDomainToolset(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "deleted-proj-cd-" + uuid.NewString()[:8]
+	toolset, domain := createPublicMCPToolsetWithCustomDomain(t, ctx, ti, authCtx, slug, slug+".example.com")
+	customCtx := customdomains.WithContext(context.Background(), &customdomains.Context{OrganizationID: authCtx.ActiveOrganizationID, Domain: domain.Domain, DomainID: domain.ID})
+	w, err := servePublicHTTP(t, customCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+
+	_, err = servePublicHTTP(t, customCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
