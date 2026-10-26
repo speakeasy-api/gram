@@ -102,7 +102,11 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				CatalogRef:     result.CatalogRef,
 			})
 			if err != nil {
-				return nil, RegisterCatalogMCPToolOutput{}, err
+				// The registration has already committed. A failed setup link must
+				// not report the add as failed and prompt a duplicate retry; the
+				// caller can still continue setup from the dashboard.
+				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
+				dashboardSetupURL = ""
 			}
 		}
 		return nil, RegisterCatalogMCPToolOutput{
