@@ -737,6 +737,12 @@ func (s *Service) serveRemoteBackend(
 		return err
 	}
 
+	// Identity auth above stamps an AuthContext for every caller that
+	// presented a Speakeasy credential, so its absence marks an anonymous caller.
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
+		buildOptions = append(buildOptions, remotemcp.WithAnonymousCaller())
+	}
+
 	build, err := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, organizationID, mcpServer, upstream.Token, wwwAuthenticate, selection, buildOptions...)
 	if err != nil {
 		return err

@@ -117,6 +117,7 @@ trackedFiles:
   src/funcs/agentUpdateConfiguration.ts: {}
   src/funcs/agentUpsertAiScanTarget.ts: {}
   src/funcs/agentsBlockOnConnection.ts: {}
+  src/funcs/agentsCheckPolicyGrants.ts: {}
   src/funcs/agentsCreate.ts: {}
   src/funcs/agentsCreatePolicyGrant.ts: {}
   src/funcs/agentsDelete.ts: {}
@@ -912,6 +913,7 @@ trackedFiles:
   src/models/components/agentplugin.ts: {}
   src/models/components/agentpluginserver.ts: {}
   src/models/components/agentpolicygrant.ts: {}
+  src/models/components/agentpolicygrantcheck.ts: {}
   src/models/components/agentpolicygrantform.ts: {}
   src/models/components/agentpolicyselector.ts: {}
   src/models/components/agentpollingprincipal.ts: {}
@@ -1020,6 +1022,8 @@ trackedFiles:
   src/models/components/chatsessionlink.ts: {}
   src/models/components/chatsummary.ts: {}
   src/models/components/chattotals.ts: {}
+  src/models/components/checkagentpolicygrantsform.ts: {}
+  src/models/components/checkagentpolicygrantsresult.ts: {}
   src/models/components/cimdclientpreset.ts: {}
   src/models/components/claudeagentusage.ts: {}
   src/models/components/claudehookpayload.ts: {}
@@ -2200,6 +2204,7 @@ trackedFiles:
   src/models/operations/blockagentonconnection.ts: {}
   src/models/operations/cancelstripesubscription.ts: {}
   src/models/operations/captureevent.ts: {}
+  src/models/operations/checkagentpolicygrants.ts: {}
   src/models/operations/checkdomainhealth.ts: {}
   src/models/operations/checkmcpendpointslugavailability.ts: {}
   src/models/operations/checkmcpslugavailability.ts: {}
@@ -3102,6 +3107,7 @@ trackedFiles:
   src/react-query/chatSessionsRevoke.ts: {}
   src/react-query/chatSetPinned.ts: {}
   src/react-query/chatSubmitFeedback.ts: {}
+  src/react-query/checkAgentPolicyGrants.ts: {}
   src/react-query/checkDomainHealth.ts: {}
   src/react-query/checkMCPSlugAvailability.core.ts: {}
   src/react-query/checkMCPSlugAvailability.ts: {}
@@ -4746,6 +4752,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  checkAgentPolicyGrants:
+    speakeasy-default-check-agent-policy-grants:
+      requestBody:
+        application/json: {"policy_grants": []}
+      responses:
+        "200":
+          application/json: {"results": [{"allowed": false}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   checkDomainHealth:
     speakeasy-default-check-domain-health:
       responses:
