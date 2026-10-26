@@ -113333,6 +113333,9 @@ components:
                 arch:
                     type: string
                     description: CPU architecture, e.g. arm64.
+                auto_update:
+                    type: string
+                    description: 'Resolved update mode: automatic, notify, or disabled.'
                 current_blocked:
                     type: boolean
                     description: True when the agent build is in blocked_versions.
@@ -113343,9 +113346,14 @@ components:
                 enforcement_halted:
                     type: boolean
                     description: True when the kill switch has halted policy enforcement.
+                last_rollback:
+                    $ref: '#/components/schemas/ManagedDeviceRollback'
                 os:
                     type: string
                     description: Operating system, e.g. darwin.
+                pinned_target:
+                    type: string
+                    description: Recovery version the channel pins, when one is set.
                 reported_at:
                     type: string
                     description: When the control plane received the report.
@@ -113364,12 +113372,31 @@ components:
                     items:
                         $ref: '#/components/schemas/ManagedDeviceTool'
                     description: Each managed tool's outcome from the agent's last reconcile.
+                update_channel:
+                    type: string
+                    description: Update channel the agent follows, e.g. stable.
             description: What a device's agent last reported it enforces. Carries no error text or user-facing message.
             required:
                 - reported_at
                 - enforcement_halted
                 - current_blocked
                 - tools
+        ManagedDeviceRollback:
+            type: object
+            properties:
+                at:
+                    type: string
+                    description: When the rollback happened.
+                    format: date-time
+                from:
+                    type: string
+                    description: Version the agent rolled back from.
+                to:
+                    type: string
+                    description: Version the agent rolled back to.
+            description: 'A self-rollback: the updated build failed to start, so the agent restored the previous one.'
+            required:
+                - at
         ManagedDeviceTool:
             type: object
             properties:

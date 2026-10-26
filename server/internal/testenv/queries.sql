@@ -464,12 +464,24 @@ VALUES (
     NULLIF(@applied_etag::text, ''), @enforcement_halted, @current_blocked, NULLIF(@speakeasyd_version::text, ''), @tools
 );
 
+-- name: SetDeviceAgentStateReportUpdateFixture :exec
+-- Sets a seeded state report's update posture and last rollback.
+UPDATE device_agent_state_reports
+SET auto_update = @auto_update
+  , update_channel = @update_channel
+  , pinned_target = @pinned_target
+  , last_rollback_at = @last_rollback_at
+  , last_rollback_from = @last_rollback_from
+  , last_rollback_to = @last_rollback_to
+WHERE organization_id = @organization_id
+  AND email = @email;
+
 -- name: SetDeviceAgentServedEtagFixture :exec
 -- Records the etag GetPlugins last served a user, as a poll would.
 UPDATE device_agent_syncs
 SET served_etag = @served_etag, served_etag_changed_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND LOWER(email) = LOWER(@email);
+  AND email = @email;
 
 -- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)

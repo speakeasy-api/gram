@@ -2274,6 +2274,14 @@ type ManagedDeviceAgentStateResponseBody struct {
 	// Start of the window tools[].drift_corrections counts over. Omitted when no
 	// tool measures drift.
 	DriftCountingSince *string `form:"drift_counting_since,omitempty" json:"drift_counting_since,omitempty" xml:"drift_counting_since,omitempty"`
+	// Resolved update mode: automatic, notify, or disabled.
+	AutoUpdate *string `form:"auto_update,omitempty" json:"auto_update,omitempty" xml:"auto_update,omitempty"`
+	// Update channel the agent follows, e.g. stable.
+	UpdateChannel *string `form:"update_channel,omitempty" json:"update_channel,omitempty" xml:"update_channel,omitempty"`
+	// Recovery version the channel pins, when one is set.
+	PinnedTarget *string `form:"pinned_target,omitempty" json:"pinned_target,omitempty" xml:"pinned_target,omitempty"`
+	// The agent's most recent self-rollback after a failed update.
+	LastRollback *ManagedDeviceRollbackResponseBody `form:"last_rollback,omitempty" json:"last_rollback,omitempty" xml:"last_rollback,omitempty"`
 }
 
 // ManagedDeviceToolResponseBody is used to define fields on response body
@@ -2299,6 +2307,17 @@ type ManagedDeviceToolResponseBody struct {
 	// Times the agent restored what it owns in this tool since
 	// drift_counting_since. Omitted when not measured.
 	DriftCorrections *int `form:"drift_corrections,omitempty" json:"drift_corrections,omitempty" xml:"drift_corrections,omitempty"`
+}
+
+// ManagedDeviceRollbackResponseBody is used to define fields on response body
+// types.
+type ManagedDeviceRollbackResponseBody struct {
+	// When the rollback happened.
+	At *string `form:"at,omitempty" json:"at,omitempty" xml:"at,omitempty"`
+	// Version the agent rolled back from.
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// Version the agent rolled back to.
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
 // NewUpsertConfigRequestBody builds the HTTP request body from the payload of
@@ -6884,6 +6903,11 @@ func ValidateManagedDeviceAgentStateResponseBody(body *ManagedDeviceAgentStateRe
 	if body.DriftCountingSince != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.drift_counting_since", *body.DriftCountingSince, goa.FormatDateTime))
 	}
+	if body.LastRollback != nil {
+		if err2 := ValidateManagedDeviceRollbackResponseBody(body.LastRollback); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	return
 }
 
@@ -6904,6 +6928,18 @@ func ValidateManagedDeviceToolResponseBody(body *ManagedDeviceToolResponseBody) 
 	}
 	if body.ActionRequired == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("action_required", "body"))
+	}
+	return
+}
+
+// ValidateManagedDeviceRollbackResponseBody runs the validations defined on
+// ManagedDeviceRollbackResponseBody
+func ValidateManagedDeviceRollbackResponseBody(body *ManagedDeviceRollbackResponseBody) (err error) {
+	if body.At == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("at", "body"))
+	}
+	if body.At != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.at", *body.At, goa.FormatDateTime))
 	}
 	return
 }

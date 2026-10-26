@@ -6034,7 +6034,7 @@ const setDeviceAgentServedEtagFixture = `-- name: SetDeviceAgentServedEtagFixtur
 UPDATE device_agent_syncs
 SET served_etag = $1, served_etag_changed_at = clock_timestamp()
 WHERE organization_id = $2
-  AND LOWER(email) = LOWER($3)
+  AND email = $3
 `
 
 type SetDeviceAgentServedEtagFixtureParams struct {
@@ -6046,6 +6046,44 @@ type SetDeviceAgentServedEtagFixtureParams struct {
 // Records the etag GetPlugins last served a user, as a poll would.
 func (q *Queries) SetDeviceAgentServedEtagFixture(ctx context.Context, arg SetDeviceAgentServedEtagFixtureParams) error {
 	_, err := q.db.Exec(ctx, setDeviceAgentServedEtagFixture, arg.ServedEtag, arg.OrganizationID, arg.Email)
+	return err
+}
+
+const setDeviceAgentStateReportUpdateFixture = `-- name: SetDeviceAgentStateReportUpdateFixture :exec
+UPDATE device_agent_state_reports
+SET auto_update = $1
+  , update_channel = $2
+  , pinned_target = $3
+  , last_rollback_at = $4
+  , last_rollback_from = $5
+  , last_rollback_to = $6
+WHERE organization_id = $7
+  AND email = $8
+`
+
+type SetDeviceAgentStateReportUpdateFixtureParams struct {
+	AutoUpdate       pgtype.Text
+	UpdateChannel    pgtype.Text
+	PinnedTarget     pgtype.Text
+	LastRollbackAt   pgtype.Timestamptz
+	LastRollbackFrom pgtype.Text
+	LastRollbackTo   pgtype.Text
+	OrganizationID   string
+	Email            string
+}
+
+// Sets a seeded state report's update posture and last rollback.
+func (q *Queries) SetDeviceAgentStateReportUpdateFixture(ctx context.Context, arg SetDeviceAgentStateReportUpdateFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDeviceAgentStateReportUpdateFixture,
+		arg.AutoUpdate,
+		arg.UpdateChannel,
+		arg.PinnedTarget,
+		arg.LastRollbackAt,
+		arg.LastRollbackFrom,
+		arg.LastRollbackTo,
+		arg.OrganizationID,
+		arg.Email,
+	)
 	return err
 }
 

@@ -86,6 +86,23 @@ func (q *Queries) PostflightCountApprovalsServers(ctx context.Context, projectID
 	return count, err
 }
 
+const postflightCountAttestedDeviceAgentStateReports = `-- name: PostflightCountAttestedDeviceAgentStateReports :one
+SELECT count(*)
+FROM device_agent_state_reports r
+JOIN device_agent_syncs s
+  ON s.organization_id = r.organization_id
+ AND LOWER(s.email) = LOWER(r.email)
+WHERE r.organization_id = $1::text
+  AND r.applied_etag = s.served_etag
+`
+
+func (q *Queries) PostflightCountAttestedDeviceAgentStateReports(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAttestedDeviceAgentStateReports, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountAuthClientAssociations = `-- name: PostflightCountAuthClientAssociations :one
 SELECT count(*) FROM mcp_server_auth_clients
 WHERE organization_id = $1::text AND deleted IS FALSE
@@ -762,6 +779,26 @@ WHERE organization_id = $1::text
 
 func (q *Queries) PostflightCountNetworkIngresses(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountNetworkIngresses, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountOutdatedDeviceAgentStateReports = `-- name: PostflightCountOutdatedDeviceAgentStateReports :one
+SELECT count(*)
+FROM device_agent_state_reports r
+JOIN device_agent_syncs s
+  ON s.organization_id = r.organization_id
+ AND LOWER(s.email) = LOWER(r.email)
+WHERE r.organization_id = $1::text
+  AND r.applied_etag IS DISTINCT FROM s.served_etag
+  AND r.tools @> '[{"outcome": "error", "error_kind": "permission_denied"}]'::jsonb
+`
+
+// Behind on policy because a tool hit a permission error, the case the
+// device panel exists to explain.
+func (q *Queries) PostflightCountOutdatedDeviceAgentStateReports(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountOutdatedDeviceAgentStateReports, orgID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

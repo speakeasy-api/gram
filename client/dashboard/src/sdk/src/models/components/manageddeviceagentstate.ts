@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ManagedDeviceRollback,
+  ManagedDeviceRollback$inboundSchema,
+} from "./manageddevicerollback.js";
+import {
   ManagedDeviceTool,
   ManagedDeviceTool$inboundSchema,
 } from "./manageddevicetool.js";
@@ -29,6 +33,10 @@ export type ManagedDeviceAgentState = {
    */
   arch?: string | undefined;
   /**
+   * Resolved update mode: automatic, notify, or disabled.
+   */
+  autoUpdate?: string | undefined;
+  /**
    * True when the agent build is in blocked_versions.
    */
   currentBlocked: boolean;
@@ -41,9 +49,17 @@ export type ManagedDeviceAgentState = {
    */
   enforcementHalted: boolean;
   /**
+   * A self-rollback: the updated build failed to start, so the agent restored the previous one.
+   */
+  lastRollback?: ManagedDeviceRollback | undefined;
+  /**
    * Operating system, e.g. darwin.
    */
   os?: string | undefined;
+  /**
+   * Recovery version the channel pins, when one is set.
+   */
+  pinnedTarget?: string | undefined;
   /**
    * When the control plane received the report.
    */
@@ -64,6 +80,10 @@ export type ManagedDeviceAgentState = {
    * Each managed tool's outcome from the agent's last reconcile.
    */
   tools: Array<ManagedDeviceTool>;
+  /**
+   * Update channel the agent follows, e.g. stable.
+   */
+  updateChannel?: string | undefined;
 };
 
 /** @internal */
@@ -77,12 +97,15 @@ export const ManagedDeviceAgentState$inboundSchema: z.ZodMiniType<
     ),
     applied_etag: z.optional(z.string()),
     arch: z.optional(z.string()),
+    auto_update: z.optional(z.string()),
     current_blocked: z.boolean(),
     drift_counting_since: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     enforcement_halted: z.boolean(),
+    last_rollback: z.optional(ManagedDeviceRollback$inboundSchema),
     os: z.optional(z.string()),
+    pinned_target: z.optional(z.string()),
     reported_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -91,18 +114,23 @@ export const ManagedDeviceAgentState$inboundSchema: z.ZodMiniType<
     speakeasy_version: z.optional(z.string()),
     speakeasyd_version: z.optional(z.string()),
     tools: z.array(ManagedDeviceTool$inboundSchema),
+    update_channel: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "applied_at": "appliedAt",
       "applied_etag": "appliedEtag",
+      "auto_update": "autoUpdate",
       "current_blocked": "currentBlocked",
       "drift_counting_since": "driftCountingSince",
       "enforcement_halted": "enforcementHalted",
+      "last_rollback": "lastRollback",
+      "pinned_target": "pinnedTarget",
       "reported_at": "reportedAt",
       "speakeasy_ui_version": "speakeasyUiVersion",
       "speakeasy_version": "speakeasyVersion",
       "speakeasyd_version": "speakeasydVersion",
+      "update_channel": "updateChannel",
     });
   }),
 );

@@ -1572,6 +1572,7 @@ trackedFiles:
   src/models/components/managedagent.ts: {}
   src/models/components/manageddevice.ts: {}
   src/models/components/manageddeviceagentstate.ts: {}
+  src/models/components/manageddevicerollback.ts: {}
   src/models/components/manageddevicetool.ts: {}
   src/models/components/marketplacesettingsresult.ts: {}
   src/models/components/markriskresultsfalsepositiverequestbody.ts: {}

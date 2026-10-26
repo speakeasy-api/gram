@@ -160,6 +160,20 @@ var ManagedDeviceAgentState = Type("ManagedDeviceAgentState", func() {
 	Attribute("drift_counting_since", String, "Start of the window tools[].drift_corrections counts over. Omitted when no tool measures drift.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("auto_update", String, "Resolved update mode: automatic, notify, or disabled.")
+	Attribute("update_channel", String, "Update channel the agent follows, e.g. stable.")
+	Attribute("pinned_target", String, "Recovery version the channel pins, when one is set.")
+	Attribute("last_rollback", ManagedDeviceRollback, "The agent's most recent self-rollback after a failed update.")
+})
+
+var ManagedDeviceRollback = Type("ManagedDeviceRollback", func() {
+	Description("A self-rollback: the updated build failed to start, so the agent restored the previous one.")
+	Required("at")
+	Attribute("at", String, "When the rollback happened.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("from", String, "Version the agent rolled back from.")
+	Attribute("to", String, "Version the agent rolled back to.")
 })
 
 var ManagedDeviceTool = Type("ManagedDeviceTool", func() {

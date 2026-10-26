@@ -777,6 +777,12 @@ SELECT
   , rpt.arch AS report_arch
   , rpt.tools AS report_tools
   , rpt.drift_counting_since AS report_drift_counting_since
+  , rpt.auto_update AS report_auto_update
+  , rpt.update_channel AS report_update_channel
+  , rpt.pinned_target AS report_pinned_target
+  , rpt.last_rollback_at AS report_last_rollback_at
+  , rpt.last_rollback_from AS report_last_rollback_from
+  , rpt.last_rollback_to AS report_last_rollback_to
 FROM mdm_devices d
 JOIN device_integration_configs c
   ON c.id = d.device_integration_config_id
@@ -803,6 +809,12 @@ LEFT JOIN LATERAL (
     , r.arch
     , r.tools
     , r.drift_counting_since
+    , r.auto_update
+    , r.update_channel
+    , r.pinned_target
+    , r.last_rollback_at
+    , r.last_rollback_from
+    , r.last_rollback_to
     , coalesce($1::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) AS by_serial
   FROM device_agent_state_reports r
   WHERE r.organization_id = d.organization_id
@@ -939,6 +951,12 @@ type ListManagedDevicesRow struct {
 	ReportArch                pgtype.Text
 	ReportTools               []byte
 	ReportDriftCountingSince  pgtype.Timestamptz
+	ReportAutoUpdate          pgtype.Text
+	ReportUpdateChannel       pgtype.Text
+	ReportPinnedTarget        pgtype.Text
+	ReportLastRollbackAt      pgtype.Timestamptz
+	ReportLastRollbackFrom    pgtype.Text
+	ReportLastRollbackTo      pgtype.Text
 }
 
 // ListManagedDevices pages the org's device inventory newest-first by id
@@ -1004,6 +1022,12 @@ func (q *Queries) ListManagedDevices(ctx context.Context, arg ListManagedDevices
 			&i.ReportArch,
 			&i.ReportTools,
 			&i.ReportDriftCountingSince,
+			&i.ReportAutoUpdate,
+			&i.ReportUpdateChannel,
+			&i.ReportPinnedTarget,
+			&i.ReportLastRollbackAt,
+			&i.ReportLastRollbackFrom,
+			&i.ReportLastRollbackTo,
 		); err != nil {
 			return nil, err
 		}

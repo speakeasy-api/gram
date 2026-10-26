@@ -2527,6 +2527,9 @@ func unmarshalManagedDeviceAgentStateResponseBodyToDeviceintegrationsManagedDevi
 		Os:                 v.Os,
 		Arch:               v.Arch,
 		DriftCountingSince: v.DriftCountingSince,
+		AutoUpdate:         v.AutoUpdate,
+		UpdateChannel:      v.UpdateChannel,
+		PinnedTarget:       v.PinnedTarget,
 	}
 	res.Tools = make([]*deviceintegrations.ManagedDeviceTool, len(v.Tools))
 	for i, val := range v.Tools {
@@ -2535,6 +2538,9 @@ func unmarshalManagedDeviceAgentStateResponseBodyToDeviceintegrationsManagedDevi
 			continue
 		}
 		res.Tools[i] = unmarshalManagedDeviceToolResponseBodyToDeviceintegrationsManagedDeviceTool(val)
+	}
+	if v.LastRollback != nil {
+		res.LastRollback = unmarshalManagedDeviceRollbackResponseBodyToDeviceintegrationsManagedDeviceRollback(v.LastRollback)
 	}
 
 	return res
@@ -2553,6 +2559,22 @@ func unmarshalManagedDeviceToolResponseBodyToDeviceintegrationsManagedDeviceTool
 		RestartRequired:  *v.RestartRequired,
 		ActionRequired:   *v.ActionRequired,
 		DriftCorrections: v.DriftCorrections,
+	}
+
+	return res
+}
+
+// unmarshalManagedDeviceRollbackResponseBodyToDeviceintegrationsManagedDeviceRollback
+// builds a value of type *deviceintegrations.ManagedDeviceRollback from a
+// value of type *ManagedDeviceRollbackResponseBody.
+func unmarshalManagedDeviceRollbackResponseBodyToDeviceintegrationsManagedDeviceRollback(v *ManagedDeviceRollbackResponseBody) *deviceintegrations.ManagedDeviceRollback {
+	if v == nil {
+		return nil
+	}
+	res := &deviceintegrations.ManagedDeviceRollback{
+		At:   *v.At,
+		From: v.From,
+		To:   v.To,
 	}
 
 	return res

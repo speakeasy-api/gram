@@ -293,4 +293,25 @@ func TestListManagedDevicesPolicyStateFilterAndAgentState(t *testing.T) {
 	require.True(t, tool.ActionRequired)
 	require.NotNil(t, tool.DriftCorrections, "a measured zero is kept")
 	require.Equal(t, 0, *tool.DriftCorrections)
+	require.Nil(t, view.AgentState.LastRollback, "no rollback reported")
+
+	rolledBackAt := now.Add(-time.Hour).UTC().Truncate(time.Second)
+	require.NoError(t, testrepo.New(conn).SetDeviceAgentStateReportUpdateFixture(ctx, testrepo.SetDeviceAgentStateReportUpdateFixtureParams{
+		AutoUpdate:       conv.ToPGText("automatic"),
+		UpdateChannel:    conv.ToPGText("stable"),
+		PinnedTarget:     conv.ToPGText("0.41.3"),
+		LastRollbackAt:   conv.ToPGTimestamptz(rolledBackAt),
+		LastRollbackFrom: conv.ToPGText("0.42.0"),
+		LastRollbackTo:   conv.ToPGText("0.41.3"),
+		OrganizationID:   orgID,
+		Email:            "behind@example.test",
+	}))
+	view = deviceView(ctx, testenv.NewLogger(t), listDevices(t, ctx, store, orgID, false, now, "outdated")["behind"])
+	require.Equal(t, "automatic", *view.AgentState.AutoUpdate)
+	require.Equal(t, "stable", *view.AgentState.UpdateChannel)
+	require.Equal(t, "0.41.3", *view.AgentState.PinnedTarget)
+	require.NotNil(t, view.AgentState.LastRollback)
+	require.Equal(t, rolledBackAt.Format(time.RFC3339), view.AgentState.LastRollback.At)
+	require.Equal(t, "0.42.0", *view.AgentState.LastRollback.From)
+	require.Equal(t, "0.41.3", *view.AgentState.LastRollback.To)
 }

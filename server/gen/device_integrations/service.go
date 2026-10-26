@@ -407,6 +407,25 @@ type ManagedDeviceAgentState struct {
 	// Start of the window tools[].drift_corrections counts over. Omitted when no
 	// tool measures drift.
 	DriftCountingSince *string
+	// Resolved update mode: automatic, notify, or disabled.
+	AutoUpdate *string
+	// Update channel the agent follows, e.g. stable.
+	UpdateChannel *string
+	// Recovery version the channel pins, when one is set.
+	PinnedTarget *string
+	// The agent's most recent self-rollback after a failed update.
+	LastRollback *ManagedDeviceRollback
+}
+
+// A self-rollback: the updated build failed to start, so the agent restored
+// the previous one.
+type ManagedDeviceRollback struct {
+	// When the rollback happened.
+	At string
+	// Version the agent rolled back from.
+	From *string
+	// Version the agent rolled back to.
+	To *string
 }
 
 // One managed tool's enforcement state on a device.

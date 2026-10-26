@@ -249,5 +249,21 @@ func agentStateView(ctx context.Context, logger *slog.Logger, row repo.ListManag
 		Arch:               pgTextPtr(row.ReportArch),
 		Tools:              tools,
 		DriftCountingSince: conv.PtrEmpty(conv.FromPGTimestamptz(row.ReportDriftCountingSince)),
+		AutoUpdate:         pgTextPtr(row.ReportAutoUpdate),
+		UpdateChannel:      pgTextPtr(row.ReportUpdateChannel),
+		PinnedTarget:       pgTextPtr(row.ReportPinnedTarget),
+		LastRollback:       rollbackView(row),
+	}
+}
+
+// rollbackView is nil until the agent has rolled itself back.
+func rollbackView(row repo.ListManagedDevicesRow) *gen.ManagedDeviceRollback {
+	if !row.ReportLastRollbackAt.Valid {
+		return nil
+	}
+	return &gen.ManagedDeviceRollback{
+		At:   row.ReportLastRollbackAt.Time.UTC().Format(time.RFC3339),
+		From: pgTextPtr(row.ReportLastRollbackFrom),
+		To:   pgTextPtr(row.ReportLastRollbackTo),
 	}
 }

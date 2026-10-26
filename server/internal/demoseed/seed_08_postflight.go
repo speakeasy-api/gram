@@ -481,6 +481,16 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustEqual(2, "expected 2 device agent state reports, found %d"),
 		},
 		{
+			what:  "attested device agent state reports",
+			count: byOrg(s.q.PostflightCountAttestedDeviceAgentStateReports),
+			fail:  postflightMustEqual(1, "expected 1 state report applying its served etag, found %d"),
+		},
+		{
+			what:  "outdated device agent state reports",
+			count: byOrg(s.q.PostflightCountOutdatedDeviceAgentStateReports),
+			fail:  postflightMustEqual(1, "expected 1 state report behind on policy with a permission error, found %d"),
+		},
+		{
 			what:  "device integration configs",
 			count: byOrg(s.q.PostflightCountDeviceIntegrationConfigs),
 			fail:  postflightMustEqual(1, "expected 1 device integration config, found %d"),
