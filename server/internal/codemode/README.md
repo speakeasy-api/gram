@@ -150,6 +150,14 @@ result. These outcomes describe dispatch, not whether a remote service
 made a side effect. Only typed guard refusals prove `not_dispatched`; unclassified backend or host
 failures retain an unknown outcome.
 
+Callback replies are limited to 1 MiB each and 8 MiB per execution. Speakeasy
+and the runner count the same bytes, the encoded reply frames and not the
+callback arguments, and Speakeasy checks before sending each reply, so the
+runner's own check is only a backstop. A reply over either limit ends the
+execution with `callback_limit`, whichever side detects it. Calls that
+returned stay `completed`; calls still in flight are cancelled and stay
+`unknown`. The runner connection stays open for later executions.
+
 ## Validation and product surfaces
 
 Run `mise run test:server ./internal/codemode ./internal/authz

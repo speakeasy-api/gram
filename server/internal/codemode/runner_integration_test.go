@@ -221,6 +221,58 @@ func TestCodeRunnerAdmissionRefusalClosesStream(t *testing.T) {
 	require.Same(t, connection, client.session, "refused streams must release both sides before another opens")
 }
 
+// replyData returns tool result data whose callback reply frame is about
+// reply bytes long.
+func replyData(t *testing.T, reply int) json.RawMessage {
+	t.Helper()
+	value, err := json.Marshal(&ToolResult{Outcome: "completed", OK: true, Data: json.RawMessage(`""`), Content: json.RawMessage(`[]`)})
+	require.NoError(t, err)
+	envelope, err := json.Marshal(callbackReply(1, value, nil))
+	require.NoError(t, err)
+	data, err := json.Marshal(strings.Repeat("x", reply-len(envelope)))
+	require.NoError(t, err)
+	return data
+}
+
+// Eight replies just under 1 MiB fit the 8 MiB reply budget. Their 64 KiB
+// arguments do not count toward it on either side of the protocol.
+func TestCodeRunnerReplyBudgetCountsOnlyReplies(t *testing.T) {
+	t.Parallel()
+	client := realRunnerClient(t)
+	host := &runnerHost{data: replyData(t, 1_040_000)}
+	result := client.Run(t.Context(), uuid.New(), `import asyncio
+pad = "x" * 65536
+replies = await asyncio.gather(*[tools.call("remote--read", {"pad": pad}) for _ in range(8)])
+len(replies)`, func(context.Context) (Host, error) { return host, nil })
+	require.Nil(t, result.Error, "%+v", result.Error)
+	require.JSONEq(t, `8`, string(result.Value))
+	require.Len(t, result.ToolCalls, 8)
+}
+
+// The ninth reply of about 1 MiB passes the 8 MiB budget. The run reports
+// callback_limit, every call the host returned stays completed, and the
+// connection serves the next run.
+func TestCodeRunnerReplyBudgetReportsCallbackLimit(t *testing.T) {
+	t.Parallel()
+	client := realRunnerClient(t)
+	host := &runnerHost{data: replyData(t, 1_040_000)}
+	factory := func(context.Context) (Host, error) { return host, nil }
+	result := client.Run(t.Context(), uuid.New(), `import asyncio
+for _ in range(2):
+    await asyncio.gather(*[tools.call("remote--read", {}) for _ in range(8)])`, factory)
+	require.NotNil(t, result.Error)
+	require.Equal(t, "callback_limit", result.Error.Code, result.Error.Message)
+	require.GreaterOrEqual(t, len(result.ToolCalls), 9)
+	for _, call := range result.ToolCalls {
+		require.Equal(t, "completed", call.Outcome, "the host returned every dispatched call")
+	}
+	session := client.session
+	next := client.Run(t.Context(), uuid.New(), "42", factory)
+	require.Nil(t, next.Error, "%+v", next.Error)
+	require.JSONEq(t, `42`, string(next.Value))
+	require.Same(t, session, client.session, "a budget failure must not close the runner connection")
+}
+
 func TestCodeRunnerFullSizeCallbackFitsEnvelope(t *testing.T) {
 	t.Parallel()
 	client := realRunnerClient(t)

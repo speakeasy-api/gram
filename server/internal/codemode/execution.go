@@ -28,8 +28,14 @@ const (
 	maxPrintBytes = 16 << 10
 	// callbackCleanupGrace allows cancelled dispatchers to report their final known outcomes.
 	callbackCleanupGrace = 2 * time.Second
+	// callbackBudgetMessage reports a reply over the per-reply or cumulative
+	// budget. The runner sends the same message with callback_limit when it
+	// detects the overrun first.
+	callbackBudgetMessage = "callback result budget exceeded; dispatched tool outcomes are recorded separately"
 )
 
+// errCallbackBudget is the cause of a run ended by its reply budget. Its text
+// is also the message of a runner that reports its overrun as execution_failed.
 var errCallbackBudget = errors.New("callback result budget exceeded")
 var errRunnerTransport = errors.New("runner transport disconnected")
 
@@ -181,7 +187,7 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 		case errors.Is(context.Cause(ctx), errRunnerTransport):
 			fail("outcome_unknown", "runtime disconnected; dispatched tool outcomes may be unknown; do not replay automatically")
 		case errors.Is(context.Cause(ctx), errCallbackBudget):
-			fail("callback_limit", "callback result budget exceeded; dispatched tool outcomes are recorded separately")
+			fail("callback_limit", callbackBudgetMessage)
 		default:
 			fail("cancelled", "execution cancelled; dispatched tool outcomes may be unknown")
 		}
@@ -330,6 +336,14 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 			}
 			if len(message.Code) > 128 || len(message.Message) > 4096 || message.Code == "" {
 				fail("protocol_error", "invalid runtime error")
+				return result
+			}
+			// A runner that counts callback arguments toward the reply budget
+			// reports its overrun as execution_failed, and can still serve from
+			// the previous image pool during a rollout. Report the same code as
+			// the client's own budget check.
+			if message.Code == "execution_failed" && message.Message == errCallbackBudget.Error() {
+				fail("callback_limit", callbackBudgetMessage)
 				return result
 			}
 			fail(message.Code, message.Message)

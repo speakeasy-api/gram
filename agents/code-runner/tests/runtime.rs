@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use gram_code_runner::{
     MAX_START_READS, State, serve_stream,
-    wire::{ClientFrame, MAX_FRAME, ServerFrame, read_frame, write_frame},
+    wire::{ClientFrame, MAX_CALLBACK, MAX_FRAME, ServerFrame, read_frame, write_frame},
 };
 use serde_json::{Value, json};
 use tokio::{
@@ -645,6 +645,83 @@ async fn callback_concurrency_is_bounded() {
         matches!(pending.next().await, ServerFrame::Error { message, .. } if message.contains("eight callbacks"))
     );
     pending.close().await.unwrap();
+}
+
+/// Answers the next callback with a string result of `len` bytes.
+async fn answer_with_text(run: &mut Run, len: usize) {
+    let ServerFrame::Callback { id, .. } = run.next().await else {
+        panic!("expected callback")
+    };
+    write_frame(
+        &mut run.stream,
+        &ClientFrame::CallbackResult {
+            id,
+            value: Some(json!("x".repeat(len))),
+            error: None,
+        },
+    )
+    .await
+    .unwrap();
+}
+
+// Speakeasy counts only the callback result frames it sends, so the runner
+// must not count arguments too: it would end a run the server still admits.
+#[tokio::test(flavor = "multi_thread")]
+async fn callback_arguments_do_not_count_toward_the_result_budget() {
+    let mut run = Run::new(
+        state(1).await,
+        Uuid::new_v4().to_string(),
+        "for _ in range(8):\n    await tools.call('a--read', {'pad': 'x' * 65536})\n'done'",
+        5000,
+    )
+    .await;
+    run.started().await;
+    // Eight results just under 1 MiB fit in 8 MiB; adding the eight 64 KiB
+    // arguments would not.
+    for _ in 0..8 {
+        answer_with_text(&mut run, 1_040_000).await;
+    }
+    assert!(
+        matches!(run.next().await, ServerFrame::Complete { value, .. } if value == json!("done"))
+    );
+    run.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn exceeding_the_result_budget_reports_callback_limit() {
+    let mut run = Run::new(
+        state(1).await,
+        Uuid::new_v4().to_string(),
+        "for _ in range(9):\n    await tools.call('a--read', {})",
+        5000,
+    )
+    .await;
+    run.started().await;
+    // The ninth result takes the total past 8 MiB.
+    for _ in 0..9 {
+        answer_with_text(&mut run, 1_000_000).await;
+    }
+    assert!(
+        matches!(run.next().await, ServerFrame::Error { code, message } if code == "callback_limit" && message.contains("budget exceeded"))
+    );
+    run.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_oversized_callback_result_reports_callback_limit() {
+    let mut run = Run::new(
+        state(1).await,
+        Uuid::new_v4().to_string(),
+        "await tools.call('a--read', {})",
+        5000,
+    )
+    .await;
+    run.started().await;
+    answer_with_text(&mut run, MAX_CALLBACK + 1).await;
+    assert!(
+        matches!(run.next().await, ServerFrame::Error { code, message } if code == "callback_limit" && message.contains("budget exceeded"))
+    );
+    run.close().await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
