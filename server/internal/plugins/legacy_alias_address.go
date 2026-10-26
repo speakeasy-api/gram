@@ -42,6 +42,7 @@ func listPluginMCPServers(ctx context.Context, db repo.DBTX, params repo.ListPlu
 		return nil, fmt.Errorf("load plugin MCP server aliases: %w", err)
 	}
 	none := pgtype.Text{String: "", Valid: false}
+	domains := make(map[uuid.UUID]pgtype.Text)
 	out := make([]pluginMCPServerRow, 0, len(rows))
 	for _, row := range rows {
 		server := pluginMCPServerRow{ListPluginsWithMcpServersForProjectRow: row, AddressSlug: none, AddressCustomDomain: none}
@@ -51,14 +52,22 @@ func listPluginMCPServers(ctx context.Context, db repo.DBTX, params repo.ListPlu
 			case ok && alias.Slug.Valid:
 				server.AddressSlug = alias.Slug
 				if alias.CustomDomainID.Valid {
-					domain, err := customdomainsrepo.New(db).GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{ID: alias.CustomDomainID.UUID, OrganizationID: row.PluginOrganizationID})
-					switch {
-					case errors.Is(err, pgx.ErrNoRows):
-					case err != nil:
-						return nil, fmt.Errorf("load legacy alias custom domain: %w", err)
-					case domain.Verified && domain.Activated:
-						server.AddressCustomDomain = pgtype.Text{String: domain.Domain, Valid: true}
+					domain, cached := domains[alias.CustomDomainID.UUID]
+					if !cached {
+						record, err := customdomainsrepo.New(db).GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{ID: alias.CustomDomainID.UUID, OrganizationID: row.PluginOrganizationID})
+						switch {
+						case errors.Is(err, pgx.ErrNoRows):
+							domain = none
+						case err != nil:
+							return nil, fmt.Errorf("load legacy alias custom domain: %w", err)
+						case record.Verified && record.Activated:
+							domain = pgtype.Text{String: record.Domain, Valid: true}
+						default:
+							domain = none
+						}
+						domains[alias.CustomDomainID.UUID] = domain
 					}
+					server.AddressCustomDomain = domain
 				}
 			case row.PrivateEndpointSlug == "" && !row.UnproxiedUrl.Valid && !row.NetworkAccessMode.Valid:
 				continue

@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/google/uuid"
@@ -107,9 +108,25 @@ func (m *Migrator) ListCandidates(ctx context.Context) ([]Candidate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list external MCP candidates: %w", err)
 	}
+	byProject := make(map[uuid.UUID][]uuid.UUID)
+	for _, row := range rows {
+		byProject[row.ProjectID] = append(byProject[row.ProjectID], row.ToolsetID)
+	}
+	aliases := make(map[uuid.UUID]legacyalias.Alias, len(rows))
+	for projectID, ids := range byProject {
+		listed, err := legacyalias.List(ctx, m.db, projectID, ids)
+		if err != nil {
+			return nil, fmt.Errorf("load candidate aliases: %w", err)
+		}
+		maps.Copy(aliases, listed)
+	}
 	candidates := make([]Candidate, 0, len(rows))
 	for _, row := range rows {
-		alias, err := loadCandidateAlias(ctx, m.db, row)
+		address, ok := aliases[row.ToolsetID]
+		if !ok {
+			address = legacyalias.None()
+		}
+		alias, err := candidateAliasFor(ctx, m.db, row, address)
 		if err != nil {
 			return nil, err
 		}
@@ -142,6 +159,11 @@ func loadCandidateAlias(ctx context.Context, db mcpendpointsrepo.DBTX, row repo.
 	if err != nil {
 		return candidateAlias{address: address, isEndpoint: false}, fmt.Errorf("load candidate alias: %w", err)
 	}
+	return candidateAliasFor(ctx, db, row, address)
+}
+
+// candidateAliasFor checks whether a candidate's alias is one of its server's endpoints.
+func candidateAliasFor(ctx context.Context, db mcpendpointsrepo.DBTX, row repo.ListCandidatesRow, address legacyalias.Alias) (candidateAlias, error) {
 	if !address.Slug.Valid || address.Slug.String == "" {
 		return candidateAlias{address: address, isEndpoint: true}, nil
 	}
