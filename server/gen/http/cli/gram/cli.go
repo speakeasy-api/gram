@@ -17105,7 +17105,7 @@ func cliAuthUsage() {
 	fmt.Fprintln(os.Stderr, `Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] cli-auth COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    authorize: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
+	fmt.Fprintln(os.Stderr, `    authorize: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
 	fmt.Fprintln(os.Stderr, `    redeem: Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -17120,7 +17120,7 @@ func cliAuthAuthorizeUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
+	fmt.Fprintln(os.Stderr, `Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -32190,7 +32190,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-external-mcp-migration-candidates: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.`)
 	fmt.Fprintln(os.Stderr, `    preview-external-mcp-migration: Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.`)
 	fmt.Fprintln(os.Stderr, `    migrate-external-mcp-servers: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.`)
-	fmt.Fprintln(os.Stderr, `    list-registry-promotion-candidates: List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.`)
+	fmt.Fprintln(os.Stderr, `    list-registry-promotion-candidates: List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.`)
 	fmt.Fprintln(os.Stderr, `    get-registry-promotion-candidate: Refresh health evidence for one exact remote MCP deployment before staff review.`)
 	fmt.Fprintln(os.Stderr, `    promote-registry-candidate: Publish an explicitly reviewed public catalogue entry and queue setup documentation. Customer credentials are never copied.`)
 	fmt.Fprintln(os.Stderr, `    curate-registry-promotion-candidate: Reject, archive, or restore one exact unpublished catalogue candidate. Hidden candidates cannot be promoted until restored and refreshed.`)
@@ -33599,7 +33599,7 @@ func adminListRegistryPromotionCandidatesUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.`)
+	fmt.Fprintln(os.Stderr, `List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
@@ -33649,7 +33649,7 @@ func adminPromoteRegistryCandidateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin promote-registry-candidate --body '{\n      \"auth_mode\": \"oauth\",\n      \"curation_revision\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin promote-registry-candidate --body '{\n      \"auth_mode\": \"oauth\",\n      \"curation_revision\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"docs_slug\": \"abc123\",\n      \"documentation_url\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"override_eligibility\": false,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"public_description\": \"abc123\",\n      \"public_metadata_confirmed\": false,\n      \"public_name\": \"abc123\",\n      \"public_title\": \"abc123\",\n      \"public_url\": \"abc123\",\n      \"retry_key\": \"abc123\",\n      \"source_revision\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminCurateRegistryPromotionCandidateUsage() {

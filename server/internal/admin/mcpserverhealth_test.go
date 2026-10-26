@@ -506,13 +506,6 @@ func TestDescribeMcpServerHealth_LegacyModes(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	proxied := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "proxied", true)
-	//nolint:glint // notestingrawsql: oauth_proxy_servers is retired and has no writer left; this models an existing legacy toolset.
-	_, err = f.conn.Exec(ctx, `
-		WITH proxy AS (INSERT INTO oauth_proxy_servers (project_id, slug) VALUES ($1, 'proxy') RETURNING id)
-		UPDATE toolsets SET oauth_proxy_server_id = (SELECT id FROM proxy) WHERE id = $2`, f.projectID, proxied)
-	require.NoError(t, err)
-
 	private := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "private", true)
 	public := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "public", true)
 	_, err = toolsetsRepo.New(f.conn).UpdateToolset(ctx, toolsetsRepo.UpdateToolsetParams{
@@ -531,7 +524,6 @@ func TestDescribeMcpServerHealth_LegacyModes(t *testing.T) {
 
 	cases := map[uuid.UUID]*string{
 		external: new("external_oauth"),
-		proxied:  new("oauth_proxy"),
 		private:  new("gram_private"),
 		public:   nil,
 	}

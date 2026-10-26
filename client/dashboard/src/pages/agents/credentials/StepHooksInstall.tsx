@@ -5,7 +5,7 @@ import { useRoutes } from "@/routes";
 import type { JSX } from "react";
 import { Link } from "react-router";
 import { isCredentialSafe } from "./gateway";
-import { CodeBlock } from "./StepInstall";
+import { CodeBlock } from "./CodeBlock";
 import { WizardStepHeader } from "./WizardChrome";
 
 /**

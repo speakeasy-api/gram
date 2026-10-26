@@ -610,11 +610,8 @@ open their effective assignments; the dropdown always offers compact member sear
       Code Mode on the consent page ("Gateway default (Progressive)" stays the
       default), and confirm one execute tool whose search and calls reach
       servers from every project you can reach.
-    - Command K: gateways are not Command K resource candidates (the MCP Servers
-      source indexes `/mcp` server rows, not gateways), so searching "Python
-      Code Gateway" is not expected to find it. Open it from the MCP page
-      instead. This is a known gap shared by every gateway, not specific to this
-      fixture.
+    - Command K: search "Python Code Gateway". It is listed under Gateways and
+      opens the gateway's overview.
 
 ## On failure
 

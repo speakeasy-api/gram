@@ -977,6 +977,94 @@ describe("Federating a platform's own tokens", () => {
   );
 });
 
+const gkeCluster =
+  "https://container.googleapis.com/v1/projects/{project}/locations/{location}/clusters/{cluster}";
+
+const gke = {
+  key: "gke",
+  displayName: "GKE",
+  description: "Workloads on one cluster.",
+  icon: "",
+  enabled: true,
+  issuer: { value: gkeCluster, visibility: "read-only" },
+  jwksUri: { value: `${gkeCluster}/jwks`, visibility: "hidden" },
+  variables: [
+    ["project", "platform", "Project ID", "[a-z][a-z0-9-]{4,28}[a-z0-9]"],
+    ["location", "platform", "Location", "[a-z0-9-]+"],
+    ["cluster", "platform", "Cluster name", "[a-z0-9-]+"],
+    ["namespace", "rule", "Namespace", "[a-z0-9-]+"],
+    ["service_account", "rule", "Service account", "[a-z0-9.-]+"],
+  ].map(([key, tier, label, pattern]) => ({
+    key,
+    tier,
+    label,
+    help: "",
+    placeholder: "",
+    pattern,
+    patternMessage: "",
+  })),
+  subject: {
+    template: "system:serviceaccount:{namespace}:{service_account}",
+    wildcard: false,
+  },
+};
+
+describe("Connecting a GKE cluster", () => {
+  it("trusts the cluster on its own and admits one service account", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Billing Worker" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your cluster" });
+
+    for (const [label, value] of [
+      ["Project ID", "acme-prod"],
+      ["Location", "us-central1"],
+      ["Cluster name", "payments"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your workload" });
+    for (const [label, value] of [
+      ["Namespace", "billing"],
+      ["Service account", "invoice-worker"],
+    ] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Connect GKE" }));
+
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    const issuer =
+      "https://container.googleapis.com/v1/projects/acme-prod/locations/us-central1/clusters/payments";
+    // Each cluster signs its own tokens, so it is its own trusted platform,
+    // named so a second cluster does not collide with it.
+    expect(
+      mocks.registerIssuer.mock.calls[0]?.[0]?.request
+        ?.registerWorkloadIssuerForm,
+    ).toMatchObject({
+      name: "GKE payments (acme-prod, us-central1)",
+      issuer,
+      jwksUri: `${issuer}/jwks`,
+    });
+    expect(
+      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
+    ).toEqual({
+      issuer,
+      subject: "system:serviceaccount:billing:invoice-worker",
+      matchKind: "exact",
+      agentId: "agent_new",
+      tags: [],
+    });
+  });
+});
+
 describe("Agent project", () => {
   it("binds a new agent to the project it is created in", async () => {
     // Not a choice any more: an agent belongs where it is made. It was once

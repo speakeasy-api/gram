@@ -5710,7 +5710,7 @@ paths:
             x-speakeasy-name-override: getRegistryPromotionCandidate
     /admin/registry.promotionCandidates:
         get:
-            description: List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.
+            description: List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.
             operationId: adminListRegistryPromotionCandidates
             parameters:
                 - allowEmptyValue: true
@@ -26756,7 +26756,7 @@ paths:
             x-speakeasy-name-override: revoke
     /rpc/cliAuth.authorize:
         post:
-            description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin. Refused (403) while impersonating an organization or user, or without membership in the active org.
+            description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
             operationId: cliAuthAuthorize
             parameters:
                 - allowEmptyValue: true
@@ -92876,7 +92876,6 @@ components:
                     description: Legacy authentication in force. Set only when the server has no user session issuer.
                     enum:
                         - external_oauth
-                        - oauth_proxy
                         - gram_private
                 server:
                     $ref: '#/components/schemas/AdminMcpServerHealthServer'
@@ -94186,6 +94185,9 @@ components:
         AdminRegistryPromotionCandidate:
             type: object
             properties:
+                can_override_eligibility:
+                    type: boolean
+                    description: Whether staff may explicitly accept this candidate's health evidence.
                 checked_at:
                     type: string
                     format: date-time
@@ -94265,6 +94267,7 @@ components:
                 - remote_mcp_server_id
                 - source_revision
                 - eligible
+                - can_override_eligibility
                 - reason
                 - status
                 - observed_successes
@@ -115297,17 +115300,23 @@ components:
                     format: uuid
                 organization_id:
                     type: string
+                override_eligibility:
+                    type: boolean
+                    description: Explicitly accept insufficient, failed, or unavailable health evidence. Source safety checks still apply.
+                    default: false
                 project_id:
                     type: string
                     format: uuid
                 public_description:
                     type: string
+                    description: Public description, at most 100 Unicode code points.
                 public_metadata_confirmed:
                     type: boolean
                 public_name:
                     type: string
                 public_title:
                     type: string
+                    description: Public title, at most 100 Unicode code points.
                 public_url:
                     type: string
                 retry_key:
