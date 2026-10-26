@@ -40,7 +40,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/approvalserver"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -1243,11 +1242,7 @@ func TestPluginsService_DirectToolsetUserConfigFailsClosed(t *testing.T) {
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "User Config"})
 	require.NoError(t, err)
 	toolset := createTestToolset(t, ctx, ti.conn, "user-config")
-	require.NoError(t, setTestToolsetMCPPublic(ctx, ti.conn, testrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	}))
+	setTestToolsetVisibility(t, ctx, ti.conn, toolset, mcpservers.VisibilityPublic)
 
 	metadata, err := mcpmetarepo.New(ti.conn).UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
 		McpServerID:               toolset.ID,
@@ -1342,8 +1337,7 @@ func TestPluginsService_PublishAgentPluginCompatibilityTransitions(t *testing.T)
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Portable Transition"})
 	require.NoError(t, err)
 	toolset := createTestToolset(t, ctx, ti.conn, "portable-transition")
-	err = setTestToolsetMCPPublic(ctx, ti.conn, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID})
-	require.NoError(t, err)
+	setTestToolsetVisibility(t, ctx, ti.conn, toolset, mcpservers.VisibilityPublic)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(toolset.ID.String()), Policy: "required", SortOrder: 0})
 	require.NoError(t, err)
 
@@ -1385,14 +1379,12 @@ func TestPluginsService_PublishAgentPluginCompatibilityTransitions(t *testing.T)
 	require.NoError(t, err)
 	assertSources("portable-transition-cursor", "./portable-transition-codex", true)
 
-	err = setTestToolsetMCPPublic(ctx, ti.conn, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: false, ID: toolset.ID, ProjectID: toolset.ProjectID})
-	require.NoError(t, err)
+	setTestToolsetVisibility(t, ctx, ti.conn, toolset, mcpservers.VisibilityPrivate)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 	assertSources("portable-transition-cursor", "./portable-transition-codex", false)
 
-	err = setTestToolsetMCPPublic(ctx, ti.conn, testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID})
-	require.NoError(t, err)
+	setTestToolsetVisibility(t, ctx, ti.conn, toolset, mcpservers.VisibilityPublic)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 	assertSources("portable-transition-cursor", "./portable-transition-codex", true)
@@ -2072,12 +2064,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 
 	// Create a toolset and make it public.
 	toolset := createTestToolset(t, ctx, ti.conn, "public-toolset")
-	err = setTestToolsetMCPPublic(ctx, ti.conn, testrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	setTestToolsetVisibility(t, ctx, ti.conn, toolset, mcpservers.VisibilityPublic)
 
 	// Create MCP metadata + environment config for the public toolset.
 	mcpRepo := mcpmetarepo.New(ti.conn)
@@ -2154,12 +2141,7 @@ func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *t
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "headerless-toolset")
-	err = setTestToolsetMCPPublic(ctx, ti.conn, testrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	setTestToolsetVisibility(t, ctx, ti.conn, toolset, mcpservers.VisibilityPublic)
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
@@ -2254,12 +2236,7 @@ func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
 	}
 
 	// Disable MCP after the server was added (slug stays persisted).
-	err = testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false,
-		ID:         disabled.ID,
-		ProjectID:  disabled.ProjectID,
-	})
-	require.NoError(t, err)
+	setTestToolsetVisibility(t, ctx, ti.conn, disabled, mcpservers.VisibilityDisabled)
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
@@ -2293,12 +2270,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "public-no-meta")
-	err = setTestToolsetMCPPublic(ctx, ti.conn, testrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	setTestToolsetVisibility(t, ctx, ti.conn, toolset, mcpservers.VisibilityPublic)
 
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
@@ -2591,12 +2563,7 @@ func TestPluginsService_PublishPlugins_CodexPublicToolsetEnvHeaders(t *testing.T
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "codex-public-toolset")
-	err = setTestToolsetMCPPublic(ctx, ti.conn, testrepo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	setTestToolsetVisibility(t, ctx, ti.conn, toolset, mcpservers.VisibilityPublic)
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
 	metadata, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
@@ -2677,12 +2644,7 @@ func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.
 		require.NoError(t, err)
 	}
 
-	err = testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false,
-		ID:         disabled.ID,
-		ProjectID:  disabled.ProjectID,
-	})
-	require.NoError(t, err)
+	setTestToolsetVisibility(t, ctx, ti.conn, disabled, mcpservers.VisibilityDisabled)
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)

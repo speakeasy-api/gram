@@ -4820,6 +4820,34 @@ func (q *Queries) RejectPublishOutboxWritesFixture(ctx context.Context) error {
 	return err
 }
 
+const replaceHostedToolsetEndpointFixture = `-- name: ReplaceHostedToolsetEndpointFixture :exec
+WITH retired AS (
+  UPDATE mcp_endpoints
+  SET deleted_at = clock_timestamp()
+  WHERE mcp_server_id = $2 AND project_id = $1 AND deleted IS FALSE
+)
+INSERT INTO mcp_endpoints (project_id, mcp_server_id, custom_domain_id, slug)
+VALUES ($1, $2, $3::uuid, $4)
+`
+
+type ReplaceHostedToolsetEndpointFixtureParams struct {
+	ProjectID      uuid.UUID
+	ID             uuid.NullUUID
+	CustomDomainID uuid.NullUUID
+	Slug           string
+}
+
+// Leaves the canonical MCP server of a toolset with the one live endpoint given.
+func (q *Queries) ReplaceHostedToolsetEndpointFixture(ctx context.Context, arg ReplaceHostedToolsetEndpointFixtureParams) error {
+	_, err := q.db.Exec(ctx, replaceHostedToolsetEndpointFixture,
+		arg.ProjectID,
+		arg.ID,
+		arg.CustomDomainID,
+		arg.Slug,
+	)
+	return err
+}
+
 const repointMCPServerToolsetFixture = `-- name: RepointMCPServerToolsetFixture :one
 UPDATE mcp_servers AS m
 SET toolset_id = (
@@ -5909,6 +5937,47 @@ func (q *Queries) SetGcpIamCredentialServiceAccountFixture(ctx context.Context, 
 	return err
 }
 
+const setHostedToolsetIssuerFixture = `-- name: SetHostedToolsetIssuerFixture :execrows
+UPDATE mcp_servers
+SET user_session_issuer_id = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND toolset_id = $2 AND project_id = $3 AND deleted IS FALSE
+`
+
+type SetHostedToolsetIssuerFixtureParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+func (q *Queries) SetHostedToolsetIssuerFixture(ctx context.Context, arg SetHostedToolsetIssuerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setHostedToolsetIssuerFixture, arg.UserSessionIssuerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setHostedToolsetVisibilityFixture = `-- name: SetHostedToolsetVisibilityFixture :execrows
+UPDATE mcp_servers
+SET visibility = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND toolset_id = $2 AND project_id = $3 AND deleted IS FALSE
+`
+
+type SetHostedToolsetVisibilityFixtureParams struct {
+	Visibility string
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// Sets a toolset's hosting visibility on its canonical MCP server, which owns it.
+func (q *Queries) SetHostedToolsetVisibilityFixture(ctx context.Context, arg SetHostedToolsetVisibilityFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setHostedToolsetVisibilityFixture, arg.Visibility, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setLocalLockTimeoutFixture = `-- name: SetLocalLockTimeoutFixture :one
 SELECT set_config('lock_timeout', $1::text, true)
 `
@@ -6551,77 +6620,27 @@ func (q *Queries) SetToolsetCustomDomain(ctx context.Context, arg SetToolsetCust
 	return err
 }
 
-const setToolsetMCPEnabledByID = `-- name: SetToolsetMCPEnabledByID :exec
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_enabled = $1
-    WHERE toolsets.id = $2 AND toolsets.project_id = $3
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE
+const setToolsetLegacyAliasFixture = `-- name: SetToolsetLegacyAliasFixture :exec
+UPDATE toolsets
+SET mcp_slug = $1::text, custom_domain_id = $2::uuid, updated_at = clock_timestamp()
+WHERE id = $3 AND project_id = $4
 `
 
-type SetToolsetMCPEnabledByIDParams struct {
-	McpEnabled bool
-	ID         uuid.UUID
-	ProjectID  uuid.UUID
+type SetToolsetLegacyAliasFixtureParams struct {
+	McpSlug        pgtype.Text
+	CustomDomainID uuid.NullUUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
 }
 
-// Enables or disables as an MCP server update would: on the canonical wrapper, and on the column for wrapper-less toolsets.
-func (q *Queries) SetToolsetMCPEnabledByID(ctx context.Context, arg SetToolsetMCPEnabledByIDParams) error {
-	_, err := q.db.Exec(ctx, setToolsetMCPEnabledByID, arg.McpEnabled, arg.ID, arg.ProjectID)
-	return err
-}
-
-const setToolsetMCPPublicByID = `-- name: SetToolsetMCPPublicByID :exec
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_is_public = $1
-    WHERE toolsets.id = $2 AND toolsets.project_id = $3
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE
-`
-
-type SetToolsetMCPPublicByIDParams struct {
-	McpIsPublic bool
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-}
-
-// Sets publicness as an MCP server update would: on the canonical wrapper, and on the columns for wrapper-less toolsets.
-func (q *Queries) SetToolsetMCPPublicByID(ctx context.Context, arg SetToolsetMCPPublicByIDParams) error {
-	_, err := q.db.Exec(ctx, setToolsetMCPPublicByID, arg.McpIsPublic, arg.ID, arg.ProjectID)
-	return err
-}
-
-const setToolsetMCPPublicBySlug = `-- name: SetToolsetMCPPublicBySlug :exec
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_is_public = $1
-    WHERE toolsets.mcp_slug = $2 AND toolsets.project_id = $3
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE
-`
-
-type SetToolsetMCPPublicBySlugParams struct {
-	McpIsPublic bool
-	McpSlug     pgtype.Text
-	ProjectID   uuid.UUID
-}
-
-func (q *Queries) SetToolsetMCPPublicBySlug(ctx context.Context, arg SetToolsetMCPPublicBySlugParams) error {
-	_, err := q.db.Exec(ctx, setToolsetMCPPublicBySlug, arg.McpIsPublic, arg.McpSlug, arg.ProjectID)
+// Sets the legacy /mcp/<slug> alias a toolset created before hosted servers owned their endpoints still carries.
+func (q *Queries) SetToolsetLegacyAliasFixture(ctx context.Context, arg SetToolsetLegacyAliasFixtureParams) error {
+	_, err := q.db.Exec(ctx, setToolsetLegacyAliasFixture,
+		arg.McpSlug,
+		arg.CustomDomainID,
+		arg.ID,
+		arg.ProjectID,
+	)
 	return err
 }
 

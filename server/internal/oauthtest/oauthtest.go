@@ -13,7 +13,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -84,33 +87,10 @@ func CreateExternalOAuthToolset(
 	})
 	require.NoError(t, err)
 
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "External OAuth MCP " + suffix,
-		Slug:                   slug,
-		Description:            conv.ToPGText("Test toolset with external OAuth"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
+	toolset := createLegacyHostedToolset(t, ctx, conn, authCtx, legacyHostedToolset{
+		name: "External OAuth MCP " + suffix, slug: slug, description: "Test toolset with external OAuth",
+		public: opts.IsPublic, issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
-	require.NoError(t, err)
-
-	if opts.IsPublic {
-		toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-			Name:                   toolset.Name,
-			Description:            toolset.Description,
-			DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-			McpSlug:                toolset.McpSlug,
-			McpIsPublic:            true,
-			McpEnabled:             toolset.McpEnabled,
-			CustomDomainID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ToolSelectionMode:      "",
-			Slug:                   toolset.Slug,
-			ProjectID:              toolset.ProjectID,
-		})
-		require.NoError(t, err)
-	}
 
 	toolset, err = toolsetsRepo.UpdateToolsetExternalOAuthServer(ctx, toolsets_repo.UpdateToolsetExternalOAuthServerParams{
 		ExternalOauthServerID: uuid.NullUUID{UUID: serverMetadata.ID, Valid: true},
@@ -123,4 +103,56 @@ func CreateExternalOAuthToolset(
 		Toolset:        toolset,
 		ServerMetadata: serverMetadata,
 	}
+}
+
+// legacyHostedToolset is a toolset served through its legacy /mcp/<slug> alias, as toolsets created before hosted
+// servers owned their endpoints are.
+type legacyHostedToolset struct {
+	name        string
+	slug        string
+	description string
+	public      bool
+	issuerID    uuid.NullUUID
+}
+
+// createLegacyHostedToolset creates the toolset, its alias, and an enabled canonical MCP server without endpoints, so
+// requests reach it through the legacy slug fallback.
+func createLegacyHostedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, authCtx *contextvalues.AuthContext, input legacyHostedToolset) toolsets_repo.Toolset {
+	t.Helper()
+
+	toolset, err := toolsets_repo.New(conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   input.name,
+		Slug:                   input.slug,
+		Description:            conv.ToPGText(input.description),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, conn, toolset.ProjectID, toolset.ID, input.slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+
+	vis := mcpservers.VisibilityPrivate
+	if input.public {
+		vis = mcpservers.VisibilityPublic
+	}
+	_, err = mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+		ID:                    toolset.ID,
+		ProjectID:             toolset.ProjectID,
+		Name:                  conv.ToPGText(toolset.Name),
+		Slug:                  conv.ToPGText(input.slug),
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   input.issuerID,
+		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            vis,
+		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	toolset, err = toolsets_repo.New(conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
+	require.NoError(t, err)
+	return toolset
 }

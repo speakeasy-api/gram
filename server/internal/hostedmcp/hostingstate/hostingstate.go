@@ -1,6 +1,6 @@
-// Package hostingstate derives a toolset's MCP hosting state from the server row holding its id. The canonical
-// wrapper owns that state; the toolset's own hosting columns stand only without one, apart from the legacy alias
-// address, which FollowAlias moves onto the endpoint holding it.
+// Package hostingstate derives a toolset's MCP hosting state from its canonical wrapper, the server row holding its
+// id; a toolset without one is not hosted. The legacy alias address is the only toolset column still read, and
+// FollowAlias moves it onto the endpoint holding it.
 package hostingstate
 
 import (
@@ -55,21 +55,6 @@ func LegacyAlias(toolset toolsetsrepo.Toolset) Address {
 	return Address{Slug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID}
 }
 
-// Columns are a toolset's own hosting columns. Hosting stands only without a canonical wrapper; Address also stands
-// when the wrapper has no servable endpoint.
-type Columns struct {
-	Hosting
-	Address
-}
-
-// ToolsetColumns reads toolset's own hosting columns.
-func ToolsetColumns(toolset toolsetsrepo.Toolset) Columns {
-	return Columns{
-		Hosting: Hosting{Enabled: toolset.McpEnabled, Public: toolset.McpIsPublic, UserSessionIssuerID: toolset.UserSessionIssuerID},
-		Address: LegacyAlias(toolset),
-	}
-}
-
 // FromServer is the hosting state of a canonical wrapper with the given visibility and issuer. A disabled server
 // reads as the visibility it re-enables to, which depends on the toolset's external OAuth server.
 func FromServer(externalOAuthServerID uuid.NullUUID, serverVisibility string, issuer uuid.NullUUID) Hosting {
@@ -98,23 +83,15 @@ func reEnableVisibility(externalOAuthServerID uuid.NullUUID) string {
 	return visibility.Private
 }
 
-// Kept is the hosting state of a toolset whose id a non-canonical server kept after leaving it: nothing serves it.
-func Kept(issuer uuid.NullUUID) Hosting {
-	return Hosting{Enabled: false, Public: false, UserSessionIssuerID: issuer}
-}
-
-// Derive is a toolset's hosting state and preferred address given the server row holding its id. A nil row leaves
-// the toolset columns standing; a canonical wrapper without a servable endpoint keeps the toolset's address.
-func Derive(columns Columns, externalOAuthServerID uuid.NullUUID, row *Row) (Hosting, Address) {
-	switch {
-	case row == nil:
-		return columns.Hosting, columns.Address
-	case !row.Canonical:
-		return Kept(columns.UserSessionIssuerID), columns.Address
+// Derive is a toolset's hosting state and preferred address given the server row holding its id. Only a canonical
+// wrapper hosts the toolset, and only a servable endpoint gives it an address.
+func Derive(externalOAuthServerID uuid.NullUUID, row *Row) (Hosting, Address) {
+	if row == nil || !row.Canonical {
+		return NotHosted(), Address{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
 	}
 	hosting := FromServer(externalOAuthServerID, row.Visibility, row.UserSessionIssuerID)
 	if !row.HasEndpoint {
-		return hosting, columns.Address
+		return hosting, Address{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
 	}
 	return hosting, Address{Slug: pgtype.Text{String: row.EndpointSlug, Valid: true}, CustomDomainID: row.EndpointCustomDomainID}
 }

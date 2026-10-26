@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -35,10 +36,9 @@ func createHostedMCPServerFixture(t *testing.T, ctx context.Context, ti *testIns
 		Slug:                   slug,
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-" + slug, Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-"+slug, uuid.NullUUID{})
 
 	return addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-"+slug)
 }
@@ -410,10 +410,9 @@ func TestToolUsage_DisabledToolsetKeepsServerIDForPastCalls(t *testing.T) {
 		Slug:                   "retired",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-retired", Valid: true},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-retired", uuid.NullUUID{})
 	serverID := addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-retired")
 
 	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
@@ -450,10 +449,9 @@ func TestToolUsage_DisabledCanonicalKeepsUnstampedCalls(t *testing.T) {
 		Slug:                   "paused",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-paused", Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-paused", uuid.NullUUID{})
 	canonicalID := addToolsetWrapperWith(t, ctx, ti, toolset.ID, toolset.ID, "acme-paused", "disabled", true)
 	memberID := addToolsetWrapperWith(t, ctx, ti, toolset.ID, uuid.New(), "acme-paused-member", "public", true)
 

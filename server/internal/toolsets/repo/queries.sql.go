@@ -86,8 +86,6 @@ INSERT INTO toolsets (
   , slug
   , description
   , default_environment_slug
-  , mcp_slug
-  , mcp_enabled
 ) VALUES (
     $1
   , $2
@@ -95,8 +93,6 @@ INSERT INTO toolsets (
   , $4
   , $5
   , $6
-  , $7
-  , $8
 )
 RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 `
@@ -108,8 +104,6 @@ type CreateToolsetParams struct {
 	Slug                   string
 	Description            pgtype.Text
 	DefaultEnvironmentSlug pgtype.Text
-	McpSlug                pgtype.Text
-	McpEnabled             bool
 }
 
 func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (Toolset, error) {
@@ -120,8 +114,6 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 		arg.Slug,
 		arg.Description,
 		arg.DefaultEnvironmentSlug,
-		arg.McpSlug,
-		arg.McpEnabled,
 	)
 	var i Toolset
 	err := row.Scan(
@@ -1439,9 +1431,6 @@ SELECT
   t.slug,
   t.description,
   t.default_environment_slug,
-  t.mcp_slug,
-  t.mcp_is_public,
-  t.mcp_enabled,
   t.tool_selection_mode,
   t.external_oauth_server_id,
   t.created_at,
@@ -1471,9 +1460,6 @@ type ListToolsetsWithVersionsByOrganizationRow struct {
 	Slug                   string
 	Description            pgtype.Text
 	DefaultEnvironmentSlug pgtype.Text
-	McpSlug                pgtype.Text
-	McpIsPublic            bool
-	McpEnabled             bool
 	ToolSelectionMode      string
 	ExternalOauthServerID  uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
@@ -1499,9 +1485,6 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 			&i.Slug,
 			&i.Description,
 			&i.DefaultEnvironmentSlug,
-			&i.McpSlug,
-			&i.McpIsPublic,
-			&i.McpEnabled,
 			&i.ToolSelectionMode,
 			&i.ExternalOauthServerID,
 			&i.CreatedAt,
@@ -1638,13 +1621,9 @@ SET
     name = COALESCE($1, name)
   , description = COALESCE($2, description)
   , default_environment_slug = COALESCE($3, default_environment_slug)
-  , mcp_slug = COALESCE($4, mcp_slug)
-  , mcp_is_public = COALESCE($5, mcp_is_public)
-  , custom_domain_id = COALESCE($6, custom_domain_id)
-  , mcp_enabled = COALESCE($7, mcp_enabled)
-  , tool_selection_mode = COALESCE($8, tool_selection_mode)
+  , tool_selection_mode = COALESCE($4, tool_selection_mode)
   , updated_at = clock_timestamp()
-WHERE slug = $9 AND project_id = $10 AND deleted IS FALSE
+WHERE slug = $5 AND project_id = $6 AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
 `
 
@@ -1652,26 +1631,17 @@ type UpdateToolsetParams struct {
 	Name                   string
 	Description            pgtype.Text
 	DefaultEnvironmentSlug pgtype.Text
-	McpSlug                pgtype.Text
-	McpIsPublic            bool
-	CustomDomainID         uuid.NullUUID
-	McpEnabled             bool
 	ToolSelectionMode      string
 	Slug                   string
 	ProjectID              uuid.UUID
 }
 
-// Test fixture: also writes the MCP hosting columns. Production code writes them only through MoveToolsetMCPAlias,
-// the external MCP migration's DisableToolset and the issuer migration for toolsets without a wrapper.
+// Test fixture.
 func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolset,
 		arg.Name,
 		arg.Description,
 		arg.DefaultEnvironmentSlug,
-		arg.McpSlug,
-		arg.McpIsPublic,
-		arg.CustomDomainID,
-		arg.McpEnabled,
 		arg.ToolSelectionMode,
 		arg.Slug,
 		arg.ProjectID,
@@ -1819,49 +1789,6 @@ type UpdateToolsetToolVariationsGroupParams struct {
 
 func (q *Queries) UpdateToolsetToolVariationsGroup(ctx context.Context, arg UpdateToolsetToolVariationsGroupParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolsetToolVariationsGroup, arg.ToolVariationsGroupID, arg.Slug, arg.ProjectID)
-	var i Toolset
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Slug,
-		&i.Description,
-		&i.DefaultEnvironmentSlug,
-		&i.McpSlug,
-		&i.McpIsPublic,
-		&i.McpEnabled,
-		&i.ToolSelectionMode,
-		&i.CustomDomainID,
-		&i.ExternalOauthServerID,
-		&i.UserSessionIssuerID,
-		&i.ToolVariationsGroupID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
-const updateToolsetUserSessionIssuer = `-- name: UpdateToolsetUserSessionIssuer :one
-UPDATE toolsets
-SET
-    user_session_issuer_id = $1
-  , updated_at = clock_timestamp()
-WHERE slug = $2 AND project_id = $3 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
-`
-
-type UpdateToolsetUserSessionIssuerParams struct {
-	UserSessionIssuerID uuid.NullUUID
-	Slug                string
-	ProjectID           uuid.UUID
-}
-
-// Test fixture: production code writes the issuer column only through the issuer migration, for toolsets without a wrapper.
-func (q *Queries) UpdateToolsetUserSessionIssuer(ctx context.Context, arg UpdateToolsetUserSessionIssuerParams) (Toolset, error) {
-	row := q.db.QueryRow(ctx, updateToolsetUserSessionIssuer, arg.UserSessionIssuerID, arg.Slug, arg.ProjectID)
 	var i Toolset
 	err := row.Scan(
 		&i.ID,

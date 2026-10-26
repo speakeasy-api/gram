@@ -568,20 +568,23 @@ func TestToolsetViewsDeriveAddressFromCanonicalServer(t *testing.T) {
 	require.True(t, *view.McpIsPublic, "visibility still comes from the server")
 }
 
-func TestToolsetViewsFallBackToFrozenAlias(t *testing.T) {
+func TestToolsetViewsOmitFrozenAliasWithoutServableEndpoint(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestToolsetsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	legacy, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, Name: "Frozen Alias", Slug: "frozen-alias",
-		McpSlug: conv.ToPGText(authCtx.OrganizationSlug + "-frozen-alias"), McpEnabled: true,
 	})
 	require.NoError(t, err)
-	tx := testenv.BeginTx(t, ctx, ti.conn)
-	_, err = hostedmcp.BackfillSync(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), legacy)
+	alias := authCtx.OrganizationSlug + "-frozen-alias"
+	testenv.SetLegacyAlias(t, ctx, ti.conn, *authCtx.ProjectID, legacy.ID, alias, uuid.NullUUID{})
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: legacy.ID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText(legacy.Name), Slug: conv.ToPGText(alias),
+		ToolsetID: conv.ToNullUUID(legacy.ID), Visibility: mcpservers.VisibilityPrivate,
+	})
 	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
+	testenv.SetHostedMCP(t, ctx, ti.conn, *authCtx.ProjectID, legacy.ID, testenv.HostedMCP{Slug: alias})
 	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: legacy.ID})
 	require.NoError(t, err)
 	require.Len(t, endpoints, 1)
@@ -589,7 +592,8 @@ func TestToolsetViewsFallBackToFrozenAlias(t *testing.T) {
 	require.NoError(t, err)
 
 	view := getToolset(t, ctx, ti, types.Slug(legacy.Slug))
-	require.Equal(t, legacy.McpSlug.String, string(*view.McpSlug), "a server with no endpoint reports its frozen alias")
+	require.Nil(t, view.McpSlug, "a server with no servable endpoint reports no address")
+	require.Nil(t, view.CustomDomainID)
 	require.True(t, *view.McpEnabled)
-	require.Equal(t, legacy.McpSlug.String, string(*listedEntry(t, ctx, ti, legacy.ID.String()).McpSlug))
+	require.Nil(t, listedEntry(t, ctx, ti, legacy.ID.String()).McpSlug)
 }

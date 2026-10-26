@@ -1214,20 +1214,18 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// Legacy toolset-by-slug path: hosting comes from the canonical wrapper when
-	// present, which also keys kill switches and attribution, else the toolset
-	// columns.
+	// Legacy toolset-by-slug path: the canonical wrapper's hosting state
+	// governs and keys kill switches and attribution.
 	return s.serveToolsetResolved(w, r, toolset, mcpSlug, mcproute.MCP, hostedServingFromToolset(toolset, hosting, wrapperID), nil, nil, nil, nil)
 }
 
 // hostedServing is the hosting configuration one toolset-backed MCP request
 // is served under: derived from the mcp_servers row on the wrapper-resolved
-// path (AIS-633), from the toolset columns on the legacy toolsets.mcp_slug
-// path. Toolset concerns (tools, resources, prompts, environment, tool
+// path (AIS-633), from the canonical wrapper's hosting state on the legacy
+// toolsets.mcp_slug path. Toolset concerns (tools, resources, prompts, environment, tool
 // selection mode, external OAuth) always stay on the toolset.
 type hostedServing struct {
-	// isPublic: wrapper visibility == 'public', or toolsets.mcp_is_public on
-	// the legacy path.
+	// isPublic: wrapper visibility == 'public'.
 	isPublic bool
 
 	// runInToolsetGate: run the in-toolset issuer gate (legacy path only; the
@@ -1828,7 +1826,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 // on the platform domain — the value is an explicit assertion rather
 // than a route inference.
 //
-// Disabled servers (wrapper visibility, else mcp_enabled) surface as errToolsetNotFound so
+// Toolsets without an enabled canonical wrapper surface as errToolsetNotFound so
 // every legacy-routed surface (serving, well-known metadata, OAuth
 // challenges) treats them as nonexistent — mirroring how the
 // mcp_endpoints → mcp_servers path handles visibility 'disabled'.

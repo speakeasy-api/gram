@@ -97,8 +97,6 @@ func seedPublicServerOnIssuer(t *testing.T, ctx context.Context, ti *testInstanc
 		Slug:                   slug,
 		Description:            conv.ToPGText("MCP server behind a shared authorization server"),
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 	createToolsetMcpEndpoint(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{}, issuerID)

@@ -2251,44 +2251,6 @@ SET
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id;
 
--- name: SetToolsetMCPPublicByID :exec
--- Sets publicness as an MCP server update would: on the canonical wrapper, and on the columns for wrapper-less toolsets.
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_is_public = @mcp_is_public
-    WHERE toolsets.id = @id AND toolsets.project_id = @project_id
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
-
--- name: SetToolsetMCPPublicBySlug :exec
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_is_public = @mcp_is_public
-    WHERE toolsets.mcp_slug = @mcp_slug AND toolsets.project_id = @project_id
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
-
--- name: SetToolsetMCPEnabledByID :exec
--- Enables or disables as an MCP server update would: on the canonical wrapper, and on the column for wrapper-less toolsets.
-WITH toolset AS (
-    UPDATE toolsets
-    SET mcp_enabled = @mcp_enabled
-    WHERE toolsets.id = @id AND toolsets.project_id = @project_id
-    RETURNING toolsets.id, toolsets.project_id, toolsets.mcp_enabled, toolsets.mcp_is_public
-)
-UPDATE mcp_servers
-SET visibility = CASE WHEN NOT toolset.mcp_enabled THEN 'disabled' WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END
-FROM toolset
-WHERE mcp_servers.id = toolset.id AND mcp_servers.toolset_id = toolset.id AND mcp_servers.project_id = toolset.project_id AND mcp_servers.deleted IS FALSE;
-
 -- name: SetWorkloadIssuerWildcardAdmissionForTest :execrows
 -- Test-only fixture for an issuer policy change while admission waits on its lock.
 UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission
@@ -2307,3 +2269,30 @@ SELECT EXISTS (
       AND wait_event_type = 'Lock'
       AND query LIKE '%LockWorkloadIssuerForWrite%'
 )::boolean;
+
+-- name: SetHostedToolsetVisibilityFixture :execrows
+-- Sets a toolset's hosting visibility on its canonical MCP server, which owns it.
+UPDATE mcp_servers
+SET visibility = @visibility, updated_at = clock_timestamp()
+WHERE id = @id AND toolset_id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: SetHostedToolsetIssuerFixture :execrows
+UPDATE mcp_servers
+SET user_session_issuer_id = @user_session_issuer_id, updated_at = clock_timestamp()
+WHERE id = @id AND toolset_id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: ReplaceHostedToolsetEndpointFixture :exec
+-- Leaves the canonical MCP server of a toolset with the one live endpoint given.
+WITH retired AS (
+  UPDATE mcp_endpoints
+  SET deleted_at = clock_timestamp()
+  WHERE mcp_server_id = @id AND project_id = @project_id AND deleted IS FALSE
+)
+INSERT INTO mcp_endpoints (project_id, mcp_server_id, custom_domain_id, slug)
+VALUES (@project_id, @id, sqlc.narg('custom_domain_id')::uuid, @slug);
+
+-- name: SetToolsetLegacyAliasFixture :exec
+-- Sets the legacy /mcp/<slug> alias a toolset created before hosted servers owned their endpoints still carries.
+UPDATE toolsets
+SET mcp_slug = sqlc.narg('mcp_slug')::text, custom_domain_id = sqlc.narg('custom_domain_id')::uuid, updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id;
