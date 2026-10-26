@@ -2,7 +2,6 @@ package catalogpromotion
 
 import (
 	"strings"
-	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -18,13 +17,7 @@ func suggestedMetadata(source repo.GetSourceRow) *PublicMetadata {
 			break
 		}
 	}
-	// Public titles have a 200-byte limit; retain only complete UTF-8 characters.
-	if len(title) > 200 {
-		title = title[:200]
-		for !utf8.ValidString(title) {
-			title = title[:len(title)-1]
-		}
-	}
+	title = conv.TruncateString(title, maxPublicDisplayCharacters)
 	title = strings.TrimSpace(title)
 	result := &PublicMetadata{Name: "", Title: title, Description: "", URL: "", DocumentationURL: "", DocsSlug: "", AuthMode: ""}
 	if source.RemoteSessionIssuerID.Valid {
