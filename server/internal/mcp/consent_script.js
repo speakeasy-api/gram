@@ -122,7 +122,9 @@
         if (
           savedMode === "" ||
           savedMode === "direct" ||
-          savedMode === "progressive"
+          savedMode === "progressive" ||
+          (savedMode === "code_mode" &&
+            discoverySelect.querySelector('option[value="code_mode"]'))
         ) {
           discoverySelect.value = savedMode;
         }

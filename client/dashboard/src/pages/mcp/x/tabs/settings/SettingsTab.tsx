@@ -32,6 +32,7 @@ import {
   AgentSetupSection,
   MCP_AGENT_SETUP_SECTION_ID,
 } from "./sections/AgentSetupSection";
+import { BuiltinServerSection } from "./sections/BuiltinServerSection";
 import { CallerIdentitySection } from "./sections/CallerIdentitySection";
 import {
   IDENTITY_CHAINING_SECTION_ID,
@@ -156,6 +157,16 @@ export function SettingsTab({
 
   useScrollToSettingsHash(sourceSettled);
 
+  // Speakeasy manages a built-in server, such as the approvals server, so it
+  // has no settings to edit.
+  if (mcpServer.builtinBackend) {
+    return (
+      <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
+        <BuiltinServerSection />
+      </div>
+    );
+  }
+
   let deleteTarget: SourceBackedDeleteTarget | undefined;
   if (remoteMcpServer) {
     deleteTarget = { kind: "remote", source: remoteMcpServer };
@@ -177,8 +188,15 @@ export function SettingsTab({
             resourceId={hostedToolset.id}
             level="section"
           >
-            <HostedAddressSections toolset={hostedToolset} />
-            <NetworkAccessSection toolset={hostedToolset} />
+            <HostedAddressSections
+              toolset={hostedToolset}
+              endpoints={endpoints}
+              isLoadingEndpoints={isLoadingEndpoints}
+            />
+            <NetworkAccessSection
+              mcpServer={mcpServer}
+              toolset={hostedToolset}
+            />
             <div id={MCP_AUTHENTICATION_SECTION_ID}>
               <ToolsetOAuthSection toolset={hostedToolset} />
             </div>

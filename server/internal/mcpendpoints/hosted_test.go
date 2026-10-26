@@ -427,3 +427,52 @@ func TestUpdateMcpEndpointHostedLeavingDomainDropsRoot(t *testing.T) {
 	require.False(t, endpoint.CustomDomainID.Valid)
 	require.False(t, endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool, "the platform endpoint is not a domain root")
 }
+
+func TestUpdateMcpEndpointHostedAcceptsServerScopedWrite(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+
+	otherServerID := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
+	other, err := f.ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		CustomDomainID:   nil,
+		McpServerID:      new(otherServerID.String()),
+		Slug:             types.McpEndpointSlug(f.authCtx.OrganizationSlug + "-plain"),
+	})
+	require.NoError(t, err)
+
+	scoped := withExactAuthzGrants(t, ctx, f.ti.conn,
+		authz.NewGrant(authz.ScopeMCPWrite, f.toolset.ID.String()),
+		authz.NewGrant(authz.ScopeMCPWrite, otherServerID.String()),
+	)
+
+	newSlug := f.authCtx.OrganizationSlug + "-scoped"
+	view, err := f.ti.service.UpdateMcpEndpoint(scoped, f.payload(newSlug, nil))
+	require.NoError(t, err)
+	require.Equal(t, newSlug, string(view.Slug))
+	require.Equal(t, newSlug, f.requireProjected(t, ctx).Slug)
+
+	_, err = f.ti.service.UpdateMcpEndpoint(scoped, &gen.UpdateMcpEndpointPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               other.ID,
+		CustomDomainID:   nil,
+		McpServerID:      new(otherServerID.String()),
+		Slug:             types.McpEndpointSlug(f.authCtx.OrganizationSlug + "-plain-renamed"),
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestUpdateMcpEndpointHostedRejectsOtherServerScopedWrite(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+
+	scoped := withExactAuthzGrants(t, ctx, f.ti.conn, authz.NewGrant(authz.ScopeMCPWrite, uuid.NewString()))
+
+	_, err := f.ti.service.UpdateMcpEndpoint(scoped, f.payload(f.authCtx.OrganizationSlug+"-denied", nil))
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Equal(t, f.endpoint.Slug, f.requireProjected(t, ctx).Slug)
+}

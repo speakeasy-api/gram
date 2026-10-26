@@ -75,6 +75,7 @@ func ToGoa(policy Policy) *types.RiskPolicy {
 		Prompt:                 policy.Prompt,
 		ModelConfig:            modelConfig,
 		ApprovalConfig:         approvalConfig,
+		ApprovalsServerSetup:   nil,
 		Score:                  policy.Score,
 		Version:                policy.Version,
 		CreatedAt:              policy.CreatedAt.Format(time.RFC3339),

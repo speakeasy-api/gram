@@ -148,3 +148,14 @@ func (s *Service) RecordAuthClientPermitCallers() func() []string {
 		return slices.Clone(permitter.users)
 	}
 }
+
+// SetAuthClientPermission installs a mutable permit decision in the test binary.
+func (s *Service) SetAuthClientPermission(allowed func() bool) {
+	s.authClientPermitter = testAuthClientPermission(allowed)
+}
+
+type testAuthClientPermission func() bool
+
+func (f testAuthClientPermission) Permitted(context.Context, authClientPermitRequest) (bool, error) {
+	return f(), nil
+}

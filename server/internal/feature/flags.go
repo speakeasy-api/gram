@@ -26,7 +26,7 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
+	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
 	// truncation limit globally. Evaluated server-side with no targeting. The
@@ -43,11 +43,6 @@ const (
 	// Targeted by PostHog organization group (org slug), like FlagBudgets.
 	// Removed once device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
-
-	// FlagRiskFindingsClickHouseCutover means the organization is on the ClickHouse findings path:
-	// batch judges run in the analysis handlers, and finding reads and webhooks use ClickHouse.
-	// Server-side org-group targeting fails closed to the Postgres path.
-	FlagRiskFindingsClickHouseCutover Flag = "risk-findings-clickhouse-cutover"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated

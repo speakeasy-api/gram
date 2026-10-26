@@ -6,7 +6,7 @@ import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
@@ -29,7 +29,11 @@ import {
   mintInstallCommand,
 } from "./gateway";
 import { StepInstall } from "./StepInstall";
-import { StepServers, type ServerSelection } from "./StepServers";
+import {
+  StepServers,
+  type AllServersRefusal,
+  type ServerSelection,
+} from "./StepServers";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
 import { StepWorkload } from "./StepWorkload";
@@ -49,6 +53,7 @@ import { useAgentsDeletePolicyGrantMutation } from "@gram/client/react-query/age
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
+import type { AgentPolicyGrantCheck } from "@gram/client/models/components/agentpolicygrantcheck.js";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import { useCatalogEntries, valuesFromSubject } from "./workloadCatalog";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -85,6 +90,9 @@ type Credential = "api-key" | "workload";
 
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
+
+/** The most grants agents.checkPolicyGrants answers in one request. */
+const CHECK_BATCH_SIZE = 100;
 
 /**
  * What the agent API accepts as a name. The input's own `maxLength` stops
@@ -378,6 +386,179 @@ export function CredentialsWizard({
     allServersProjectIDs.length === 0
       ? organization.name
       : allServersProjectIDs.map(projectName).join(", ");
+  // The wildcard "All servers" would write, or undefined where choosing it
+  // writes nothing: an agent that already holds one keeps it. A new agent's
+  // waits for its project, as creating one does.
+  const writesGrants = !existing || editing;
+  const wildcardToWrite = useMemo(() => {
+    if (!writesGrants) return undefined;
+    if (editing && wildcardReach !== undefined) return undefined;
+    const projectId = existing ? scopedProjectID : project.id;
+    if (!existing && !projectId) return undefined;
+    return {
+      resourceKind: "mcp" as const,
+      resourceId: "*",
+      ...(projectId ? { projectId } : {}),
+    };
+  }, [
+    writesGrants,
+    existing,
+    editing,
+    wildcardReach,
+    scopedProjectID,
+    project.id,
+  ]);
+  // The servers a tick would grant: every one the list offers that the agent
+  // does not reach yet. A grant it already holds is kept, never written again.
+  const grantedIds = useMemo(
+    () => new Set(grants === undefined ? [] : grantedServers(grants).keys()),
+    [grants],
+  );
+  const serversToCheck = useMemo(
+    () =>
+      !writesGrants || (!existing && !project.id)
+        ? []
+        : inventory.servers.filter(
+            (server) =>
+              !server.issuerId &&
+              !grantedIds.has(server.resourceId) &&
+              (scopedProjectID === undefined ||
+                server.projectId === scopedProjectID),
+          ),
+    [
+      writesGrants,
+      existing,
+      project.id,
+      inventory.servers,
+      grantedIds,
+      scopedProjectID,
+    ],
+  );
+  // A grant is accepted only when the person saving it, and the agent's
+  // owner, can reach what it covers: for "All servers" that includes servers
+  // this list never shows them. The server answers with the rule the write
+  // itself applies, so a choice it would refuse is withheld up front rather
+  // than offered and then refused when the agent is created.
+  const checkedSelectors = useMemo(
+    () => [
+      ...(wildcardToWrite ? [wildcardToWrite] : []),
+      ...serversToCheck.map((server) => ({
+        resourceKind: "mcp" as const,
+        resourceId: server.resourceId,
+        projectId: server.projectId,
+      })),
+    ],
+    [wildcardToWrite, serversToCheck],
+  );
+  const agentId = agent?.id;
+  const policyCheck = useQuery({
+    queryKey: [
+      "agent-policy-check",
+      organization.id,
+      user.id,
+      agentId ?? null,
+      checkedSelectors,
+    ],
+    queryFn: async ({ signal }) => {
+      const answers: AgentPolicyGrantCheck[] = [];
+      for (let at = 0; at < checkedSelectors.length; at += CHECK_BATCH_SIZE) {
+        const { results } = await sdk.agents.checkPolicyGrants(
+          {
+            checkAgentPolicyGrantsForm: {
+              ...(agentId ? { agentId } : {}),
+              policyGrants: checkedSelectors
+                .slice(at, at + CHECK_BATCH_SIZE)
+                .map((selector) => ({
+                  effect: "allow",
+                  scope: CONNECT_SCOPE,
+                  selector,
+                })),
+            },
+          },
+          undefined,
+          { signal },
+        );
+        answers.push(...results);
+      }
+      return answers;
+    },
+    enabled: !inventory.isLoading && checkedSelectors.length > 0,
+    retry: false,
+    throwOnError: false,
+  });
+  const refetchPolicyCheck = policyCheck.refetch;
+  const recheck = useCallback(() => {
+    if (checkedSelectors.length > 0) void refetchPolicyCheck();
+  }, [checkedSelectors, refetchPolicyCheck]);
+  // A failed refetch retains React Query's last answer, which no longer
+  // establishes that the selection can be saved.
+  const checkedAnswers = policyCheck.isError ? undefined : policyCheck.data;
+  const wildcardAnswer = wildcardToWrite ? checkedAnswers?.[0] : undefined;
+  const allServersRefusal = ((): AllServersRefusal | undefined => {
+    if (wildcardToWrite === undefined) return undefined;
+    if (wildcardAnswer?.allowed === true) return undefined;
+    if (wildcardAnswer?.limitedBy === "owner") {
+      return {
+        message: `This agent's owner cannot reach every server in ${allServersScopeName}, so the agent cannot either. Choose its servers below, or ask an administrator to review the owner's access.`,
+      };
+    }
+    if (wildcardAnswer !== undefined) {
+      return {
+        message: `You cannot reach every server in ${allServersScopeName}, so this agent cannot either. Choose its servers below, or ask an administrator for access to the rest.`,
+      };
+    }
+    if (policyCheck.isError) {
+      return {
+        message: `Could not check that you can reach every server in ${allServersScopeName}.`,
+      };
+    }
+    return {
+      message: `Checking that you can reach every server in ${allServersScopeName}…`,
+      pending: true,
+    };
+  })();
+  // The servers a tick would be refused for, by id, with why.
+  const refusedServers = useMemo(() => {
+    const refused = new Map<string, string>();
+    const offset = wildcardToWrite ? 1 : 0;
+    serversToCheck.forEach((server, index) => {
+      const answer = checkedAnswers?.[offset + index];
+      if (answer === undefined || answer.allowed) return;
+      refused.set(
+        server.id,
+        answer.limitedBy === "owner"
+          ? "This agent's owner cannot reach this server, so the agent cannot either."
+          : "You cannot reach this server, so this agent cannot either.",
+      );
+    });
+    return refused;
+  }, [wildcardToWrite, serversToCheck, checkedAnswers]);
+  // A choice is saved only once the check has accepted it: one it refused
+  // would be refused by the server in turn, and one it has not answered for,
+  // still pending or failed, might be. "All servers" can be on while its
+  // answer changes, and a server can be ticked before its answer arrives.
+  // Said here, before anything is written, instead.
+  const checkedIds = useMemo(
+    () => new Set(serversToCheck.map((server) => server.id)),
+    [serversToCheck],
+  );
+  const refusedSelection = allServers
+    ? []
+    : selected.filter((entry) => refusedServers.has(entry.server.id));
+  const unansweredSelection =
+    allServers || checkedAnswers !== undefined
+      ? []
+      : selected.filter((entry) => checkedIds.has(entry.server.id));
+  const refusedChoice =
+    allServers && allServersRefusal !== undefined
+      ? allServersRefusal.message
+      : refusedSelection.length > 0
+        ? `Deselect ${refusedSelection.map((entry) => entry.server.name).join(", ")}: ${refusedServers.get(refusedSelection[0]!.server.id)}`
+        : unansweredSelection.length > 0
+          ? policyCheck.isError
+            ? "Could not check that you can reach the servers you chose. Check again above the list."
+            : "Checking that you can reach the servers you chose…"
+          : null;
   // The rows the picker offers. Under "All servers" they are the ones those
   // wildcards reach, so an organization-wide one shows every project's;
   // otherwise it is the project the agent is bound to.
@@ -461,6 +642,7 @@ export function CredentialsWizard({
     if (!projectID) {
       throw new Error("This project is still loading. Try again in a moment.");
     }
+    if (refusedChoice) throw new Error(refusedChoice);
     // "All servers" is one wildcard selector rather than today's inventory
     // listed out, so it covers the servers added after this is saved. Scoped
     // to the project, never the draft's bare `null`: `null` means
@@ -514,6 +696,10 @@ export function CredentialsWizard({
     // The selection is only the agent's reach once the grants have been
     // reconciled into it; before that every grant would read as withdrawn.
     if (!reconciled || saving) return;
+    if (refusedChoice) {
+      setError(refusedChoice);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -974,9 +1160,17 @@ export function CredentialsWizard({
               servers={listedServers}
               isLoading={inventory.isLoading}
               isError={inventory.isError}
-              onRetry={inventory.refetch}
+              onRetry={() => {
+                inventory.refetch();
+                // Coming back to the tab after asking for access is also the
+                // moment the answer may have changed.
+                recheck();
+              }}
               scopeLabel={allServersScopeName}
               allServers={allServers}
+              allServersRefusal={allServersRefusal}
+              refusedServers={refusedServers}
+              onRecheck={policyCheck.isError ? recheck : undefined}
               onAllServersChange={(next) => {
                 setAllServers(next);
                 setHighlight(next ? "server:all" : null);
@@ -1064,16 +1258,18 @@ export function CredentialsWizard({
       : step === 1
         ? !allServers && selected.length === 0
           ? "Select at least one MCP server."
-          : // A key names servers one by one, and a server that authorizes
-            // each person separately is not one a key can name. So "all
-            // servers" with none of them left is a key that would reach
-            // nothing — said here rather than after the agent is created.
-            allServers &&
-              !inventory.isLoading &&
-              !inventory.isError &&
-              listedServers.every((server) => server.issuerId)
-            ? "No server here can be reached with a key yet."
-            : null
+          : refusedChoice
+            ? refusedChoice
+            : // A key names servers one by one, and a server that authorizes
+              // each person separately is not one a key can name. So "all
+              // servers" with none of them left is a key that would reach
+              // nothing, said here rather than after the agent is created.
+              allServers &&
+                !inventory.isLoading &&
+                !inventory.isError &&
+                listedServers.every((server) => server.issuerId)
+              ? "No server here can be reached with a key yet."
+              : null
         : null;
 
   const footer = () => {
@@ -1085,11 +1281,13 @@ export function CredentialsWizard({
           note={
             step === 0
               ? "Renaming an agent is recorded in the organization audit log."
-              : reconciled
-                ? "Changing what an agent reaches is recorded in the organization audit log."
-                : inventory.isError
-                  ? "The server list could not be loaded, so the servers this agent reaches are not known. Retry the list before saving."
-                  : "Reading the servers this agent reaches…"
+              : refusedChoice
+                ? refusedChoice
+                : reconciled
+                  ? "Changing what an agent reaches is recorded in the organization audit log."
+                  : inventory.isError
+                    ? "The server list could not be loaded, so the servers this agent reaches are not known. Retry the list before saving."
+                    : "Reading the servers this agent reaches…"
           }
           onBack={step === 0 ? undefined : () => setStep(step - 1)}
           primary={
@@ -1104,7 +1302,7 @@ export function CredentialsWizard({
               <Button
                 // Nothing may be written until the stored grants are in the
                 // selection: the diff against an empty one withdraws them all.
-                disabled={saving || !reconciled}
+                disabled={saving || !reconciled || refusedChoice !== null}
                 onClick={() => void save()}
               >
                 {saving ? "Saving…" : "Save changes and exit"}
