@@ -508,6 +508,13 @@ SELECT EXISTS (
     WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE
 );
 
+-- name: AdminAuditProjectBelongsToOrganization :one
+-- Audit history remains readable after a project is soft-deleted.
+SELECT EXISTS (
+    SELECT 1 FROM projects
+    WHERE id = @project_id AND organization_id = @organization_id
+);
+
 -- name: AdminListProjectMcpServerRows :many
 -- One row per live endpoint, and one with no endpoint columns for a server that
 -- has none. custom_domain is null for an endpoint whose domain cannot serve it;

@@ -1099,7 +1099,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization for activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
 	}
 	if filter.ProjectID.Valid {
-		belongs, err := repo.New(s.db).AdminProjectBelongsToOrganization(ctx, repo.AdminProjectBelongsToOrganizationParams{
+		belongs, err := repo.New(s.db).AdminAuditProjectBelongsToOrganization(ctx, repo.AdminAuditProjectBelongsToOrganizationParams{
 			ProjectID: filter.ProjectID.UUID, OrganizationID: filter.OrganizationID,
 		})
 		switch {

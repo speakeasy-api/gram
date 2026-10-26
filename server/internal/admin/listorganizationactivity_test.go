@@ -433,6 +433,33 @@ func TestListOrganizationActivityFiltered_ProjectIsolation(t *testing.T) {
 	}
 }
 
+func TestListOrganizationActivityFiltered_DeletedProject(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	const orgID = "org_activity_deleted_project"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Deleted project", slug: "activity-deleted-project"})
+	seedOrg(t, ctx, conn, orgFixture{id: "org_activity_other_deleted_project", name: "Other", slug: "activity-other-deleted-project"})
+	projects := projectsrepo.New(conn)
+	project, err := projects.CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Deleted", Slug: "deleted", OrganizationID: orgID})
+	require.NoError(t, err)
+	id := insertActivity(t, ctx, conn, activitySeed{
+		organizationID: orgID, projectID: uuid.NullUUID{UUID: project.ID, Valid: true},
+		subjectType: "project", subjectID: project.ID.String(), action: "project:delete",
+	})
+	_, err = projects.DeleteProject(ctx, project.ID)
+	require.NoError(t, err)
+	filter := OrganizationActivityFilter{OrganizationID: orgID, ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}}
+	result, err := svc.ListOrganizationActivityFiltered(ctx, filter)
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	require.Equal(t, id.String(), result.Logs[0].ID)
+	require.Equal(t, "project:delete", result.Logs[0].Action)
+	filter.OrganizationID = "org_activity_other_deleted_project"
+	result, err = svc.ListOrganizationActivityFiltered(ctx, filter)
+	require.Nil(t, result)
+	assertOopsCode(t, err, oops.CodeNotFound)
+}
+
 func TestListOrganizationActivityFiltered_TimeBounds(t *testing.T) {
 	t.Parallel()
 	ctx, svc, conn := newTestAdminService(t)

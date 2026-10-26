@@ -17,6 +17,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 type recordingFilteredActivityReader struct {
@@ -278,6 +279,32 @@ func TestAuditLogEntriesRejectMalformedFiltersBeforeReads(t *testing.T) {
 			require.Nil(t, reads.filterInput)
 			require.Nil(t, reads.getInput)
 		})
+	}
+}
+
+func TestAuditLogEntriesTimestampGuards(t *testing.T) {
+	t.Parallel()
+	for _, field := range []string{"from", "to"} {
+		for _, tc := range []struct{ name, value string }{
+			{"long valid timestamp", "2026-01-01T00:00:00." + strings.Repeat("1", maxAuditTimestampBytes) + "Z"},
+			{"leading padding", " 2026-01-01T00:00:00Z"},
+			{"trailing padding", "2026-01-01T00:00:00Z "},
+		} {
+			t.Run(field+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				_, _, err := conv.ParseOptionalTimeWindow(&tc.value, nil)
+				require.NoError(t, err, "the time parser alone must accept this value")
+				reads := testAuditReads()
+				args, err := json.Marshal(map[string]string{"organization_id": "org-a", field: tc.value})
+				require.NoError(t, err)
+				_, body, data := callStaffReadTool(t, reads, "list_audit_log_entries", string(args))
+				require.Contains(t, body, `"isError":true`)
+				require.Contains(t, body, "provide an unpadded "+field+" up to 64 bytes")
+				require.Empty(t, data)
+				require.Nil(t, reads.getInput)
+				require.Nil(t, reads.filterInput)
+			})
+		}
 	}
 }
 
