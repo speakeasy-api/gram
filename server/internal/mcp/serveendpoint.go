@@ -753,7 +753,8 @@ func authClientBuildOptions(authentication *issuerGateAuthentication) []remotemc
 		return nil
 	case authentication.authClient != nil:
 		return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.authClient.headers)}
-	case authentication.chainingAuthClient != nil:
+	case authentication.chainingAuthClient != nil && !authentication.chosenNoAuth:
+		// A no-auth choice sends no client's headers.
 		return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.chainingAuthClient.headers)}
 	default:
 		return nil
