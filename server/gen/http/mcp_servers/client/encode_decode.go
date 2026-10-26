@@ -3135,6 +3135,7 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		ToolsetID:             v.ToolsetID,
 		UnproxiedMcpServerID:  v.UnproxiedMcpServerID,
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
+		BuiltinBackend:        v.BuiltinBackend,
 		Visibility:            types.McpServerVisibility(*v.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(*v.NetworkAccessMode),
 		PrimaryEndpointID:     v.PrimaryEndpointID,

@@ -36,12 +36,15 @@ import type { InventoryServer } from "./useServerInventory";
 export function PersonServers({
   servers,
   connections,
+  refusedServers,
   allServers,
   selected,
   onChange,
 }: {
   servers: InventoryServer[];
   connections?: OwnerConnections;
+  /** Policy grants the caller or owner cannot delegate. */
+  refusedServers?: ReadonlyMap<string, string>;
   /**
    * "All servers" names servers one by one in the key it issues, and these
    * are not among them, so they are chosen individually only while it is off.
@@ -126,9 +129,10 @@ export function PersonServers({
                     disabled={
                       allServers ||
                       (!chosen(server.id) &&
-                        !connectionSelectable(
-                          connections.byServer.get(server.id),
-                        ))
+                        (refusedServers?.has(server.id) ||
+                          !connectionSelectable(
+                            connections.byServer.get(server.id),
+                          )))
                     }
                     onCheckedChange={() => toggle(server)}
                   />
@@ -143,6 +147,11 @@ export function PersonServers({
                   <span className="text-muted-foreground block truncate font-mono text-xs">
                     /mcp/{server.slug}
                   </span>
+                  {refusedServers?.has(server.id) && (
+                    <span className="mt-1 block text-xs">
+                      {refusedServers.get(server.id)}
+                    </span>
+                  )}
                   {connections && (
                     <ConnectionLine
                       server={server}

@@ -4,8 +4,8 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { useEffect, useState, type JSX } from "react";
 import { PersonServers } from "./PersonServers";
+import { useEffect, useId, useState, type JSX } from "react";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
@@ -22,6 +22,13 @@ export interface ServerSelection {
   tools?: string[];
 }
 
+/** Why "All servers" cannot be turned on, said beside it. */
+export interface AllServersRefusal {
+  message: string;
+  /** Still being checked, rather than refused. */
+  pending?: boolean;
+}
+
 export function StepServers({
   servers,
   isLoading,
@@ -29,6 +36,9 @@ export function StepServers({
   onRetry,
   allServers,
   onAllServersChange,
+  allServersRefusal,
+  refusedServers,
+  onRecheck,
   scopeLabel,
   selected,
   onChange,
@@ -47,6 +57,23 @@ export function StepServers({
   allServers: boolean;
   onAllServersChange: (next: boolean) => void;
   /**
+   * Set while "All servers" cannot be saved: the wildcard is refused unless
+   * the person saving it, and the agent's owner, reach every server it
+   * covers. It can still be turned off, never on.
+   */
+  allServersRefusal?: AllServersRefusal;
+  /**
+   * Servers a tick would be refused for, by id, with why: the grant is
+   * refused when the person saving it, or the agent's owner, cannot reach the
+   * server. One already ticked can still be unticked.
+   */
+  refusedServers?: ReadonlyMap<string, string>;
+  /**
+   * Set when the check of what can be saved failed, to ask again. Until it
+   * answers, nothing ticked here can be saved.
+   */
+  onRecheck?: () => void;
+  /**
    * What "all" covers, named: the agent's project, or the organization where
    * the agent already holds a wildcard that reaches every one of them.
    * Nothing here chooses it — it is the reach the grant carries.
@@ -61,6 +88,8 @@ export function StepServers({
    */
   connections?: OwnerConnections;
 }): JSX.Element {
+  const refusalId = useId();
+  const allServersLocked = !allServers && allServersRefusal !== undefined;
   // "Change identity" opens the server's settings in another tab, so the
   // inventory this list was built from is stale the moment it is used. Coming
   // back to this tab is the signal that something may have changed.
@@ -77,6 +106,7 @@ export function StepServers({
   const query = search.trim().toLowerCase();
   const isSelected = (id: string) =>
     allServers || selected.some((entry) => entry.server.id === id);
+  const isRefused = (id: string) => refusedServers?.has(id) ?? false;
   // A server that authorizes each person separately needs an account attached
   // to the agent before a key can call it. It is listed apart, and chosen
   // there only when the creator's own connection to it can be attached.
@@ -153,11 +183,17 @@ export function StepServers({
                 size="sm"
                 variant="secondary"
                 disabled={
-                  allServers || shown.every((server) => isSelected(server.id))
+                  allServers ||
+                  shown.every(
+                    (server) => isSelected(server.id) || isRefused(server.id),
+                  )
                 }
                 onClick={() => {
                   const additions = shown
-                    .filter((server) => !isSelected(server.id))
+                    .filter(
+                      (server) =>
+                        !isSelected(server.id) && !isRefused(server.id),
+                    )
                     .map((server) => ({ server }));
                   onChange([...selected, ...additions]);
                 }}
@@ -181,14 +217,36 @@ export function StepServers({
               </Button>
             </div>
           </div>
+          {onRecheck && (
+            <div
+              role="alert"
+              className="border-border flex items-center justify-between gap-3 border-b px-4 py-3"
+            >
+              <Text small>Could not check which servers you can reach.</Text>
+              <Button size="sm" variant="secondary" onClick={onRecheck}>
+                Check again
+              </Button>
+            </div>
+          )}
           {/* Above the rows and outside the filters, because it is not one of
               them: it covers servers this list has never shown, including the
               ones that do not exist yet. */}
-          <label className="border-border hover:bg-muted/40 flex cursor-pointer items-center gap-4 border-b px-4 py-3">
+          <label
+            className={cn(
+              "border-border flex items-center gap-4 border-b px-4 py-3",
+              allServersLocked
+                ? "cursor-not-allowed"
+                : "hover:bg-muted/40 cursor-pointer",
+            )}
+          >
             <Checkbox
               checked={allServers}
+              // Locked only on the way on: a refused wildcard that is already
+              // ticked can still be turned off.
+              disabled={allServersLocked}
               onCheckedChange={() => onAllServersChange(!allServers)}
               aria-label="All servers"
+              aria-describedby={allServersRefusal ? refusalId : undefined}
             />
             <span className="min-w-0 flex-1">
               <span className="block">All servers</span>
@@ -203,6 +261,15 @@ export function StepServers({
                 {perUserCount > 0 &&
                   ` The ${perUserCount} below that sign in as a person stay out of it.`}
               </span>
+              {allServersRefusal && (
+                <span
+                  id={refusalId}
+                  role={allServersRefusal.pending ? "status" : undefined}
+                  className="mt-1 block text-xs"
+                >
+                  {allServersRefusal.message}
+                </span>
+              )}
             </span>
           </label>
           {shown.length === 0 ? (
@@ -217,12 +284,14 @@ export function StepServers({
             <ul className="divide-border divide-y">
               {shown.map((server) => {
                 const checked = isSelected(server.id);
+                const refusal = refusedServers?.get(server.id);
+                const locked = allServers || (!checked && !!refusal);
                 return (
                   <li key={server.id}>
                     <label
                       className={cn(
                         "flex items-center gap-4 px-4 py-3",
-                        allServers
+                        locked
                           ? "cursor-default"
                           : checked
                             ? "cursor-pointer bg-accent/40"
@@ -234,7 +303,7 @@ export function StepServers({
                           true until the wildcard above is turned off. */}
                       <Checkbox
                         checked={checked}
-                        disabled={allServers}
+                        disabled={locked}
                         onCheckedChange={() => toggle(server)}
                         aria-label={server.name}
                       />
@@ -248,6 +317,9 @@ export function StepServers({
                         <span className="text-muted-foreground block truncate font-mono text-xs">
                           /mcp/{server.slug}
                         </span>
+                        {refusal && (
+                          <span className="mt-1 block text-xs">{refusal}</span>
+                        )}
                       </span>
                     </label>
                   </li>
@@ -258,6 +330,7 @@ export function StepServers({
           <PersonServers
             servers={blockedServers}
             connections={connections}
+            refusedServers={refusedServers}
             allServers={allServers}
             selected={selected}
             onChange={onChange}

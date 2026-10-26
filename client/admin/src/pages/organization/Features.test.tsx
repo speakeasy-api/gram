@@ -34,6 +34,7 @@ const ORG = anOrganization();
 const FEATURES: ProductFeatures = {
   aiPlatformPushIntegrationsEnabled: false,
   authzChallengeLoggingEnabled: true,
+  codeModeEnabled: false,
   customModelKeysEnabled: true,
   customerManagedEncryptionKeysEnabled: false,
   deviceAgent: false,
@@ -58,6 +59,7 @@ const FEATURES: ProductFeatures = {
 const FEATURES_RESPONSE = {
   ai_platform_push_integrations_enabled: false,
   authz_challenge_logging_enabled: true,
+  code_mode_enabled: false,
   custom_model_keys_enabled: true,
   customer_managed_encryption_keys_enabled: false,
   device_agent: false,
@@ -94,6 +96,11 @@ const TOGGLE_FEATURES = [
     featureName: "customer_managed_encryption_keys",
     enabledKey: "customerManagedEncryptionKeysEnabled",
     label: "Customer-Managed Encryption Keys",
+  },
+  {
+    featureName: "code_mode",
+    enabledKey: "codeModeEnabled",
+    label: "Gateway Code Mode",
   },
   {
     featureName: "custom_model_keys",

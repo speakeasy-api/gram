@@ -1,11 +1,6 @@
 package assistants
 
 import (
-	"archive/tar"
-	"bytes"
-	"context"
-	"errors"
-	"io"
 	"net/url"
 	"testing"
 
@@ -14,16 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestKitCompositionMachineConfigUsesFiles(t *testing.T) {
+func TestKitCompositionMachineConfigUsesAssertions(t *testing.T) {
 	t.Parallel()
 	resource, _ := url.Parse("https://mcp.example/mcp/resource")
-	issuer, _ := url.Parse("https://issuer.example/oauth/project")
-	raw, files, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource, MCPIssuer: issuer}, KitMCPProvisionResult{ClientID: "registered-client", Secret: "never-in-configuration"})
+	raw, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource}, &KitWorkloadBinding{Audience: "https://issuer.example/oauth/usi/test"})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"mcpServers":{"workload":{"type":"streamable-http","url":"https://mcp.example/mcp/resource","auth":{"type":"client_credentials","client_id":"registered-client","resource":"https://mcp.example/mcp/resource","expected_issuer":"https://issuer.example/oauth/project","scopes":["mcp:connect"],"method":{"type":"client_secret","client_secret_file":"/home/kit/.kit/credentials/mcp-workload-secret"}}}}}`, string(raw))
-	require.NotContains(t, string(raw), "never-in-configuration")
-	require.Equal(t, []byte("never-in-configuration"), files["mcp-workload-secret"])
-	require.NotContains(t, string(raw), "Authorization")
+	require.JSONEq(t, `{"mcpServers":{"workload":{"type":"streamable-http","url":"https://mcp.example/mcp/resource","auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://mcp.example/mcp/resource","scope":"mcp:connect"}}}}`, string(raw))
+	require.NotContains(t, string(raw), "client_id")
 }
 
 func TestKitCompositionRejectsInvalidConfig(t *testing.T) {
@@ -31,14 +23,19 @@ func TestKitCompositionRejectsInvalidConfig(t *testing.T) {
 	origin, _ := url.Parse("https://ai.speakeasy.com")
 	resource, _ := url.Parse("https://mcp.example/mcp/resource")
 	issuer, _ := url.Parse("https://issuer.example")
-	valid := KitLocalCompositionConfig{Environment: "local", Image: "image:tag", Network: "isolated-test", ExtraCACertFile: "/test/ca.pem", Origin: origin, MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: uuid.New(), TurnStream: new(chat.TurnStream), ProvisionMCP: func(_ context.Context, _ KitMCPProvisionRequest) (KitMCPProvisionResult, error) {
-		return KitMCPProvisionResult{}, nil
-	}}
+	valid := KitLocalCompositionConfig{Environment: "local", Image: "image:tag", Network: "isolated-test", ExtraCACertFile: "/test/ca.pem", Origin: origin, MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: uuid.New(), TurnStream: new(chat.TurnStream), WorkloadJWKSURL: "https://external.example/jwks", WorkloadIssuerURL: "https://external.example", WorkloadIssuerBaseURL: "https://issuer.example", WorkloadSubject: "operator-subject", WorkloadAssertionFile: "/run/assertion"}
+
 	require.NoError(t, validateKitLocalComposition(valid))
 	for _, mutate := range []func(*KitLocalCompositionConfig){
 		func(c *KitLocalCompositionConfig) { c.Environment = "production" },
 		func(c *KitLocalCompositionConfig) { c.Image = "" },
-		func(c *KitLocalCompositionConfig) { c.ProvisionMCP = nil },
+		func(c *KitLocalCompositionConfig) { c.WorkloadJWKSURL = "" },
+		func(c *KitLocalCompositionConfig) { c.WorkloadJWKSURL = "http://external.example/keys" },
+		func(c *KitLocalCompositionConfig) { c.WorkloadIssuerURL = "" },
+		func(c *KitLocalCompositionConfig) { c.WorkloadSubject = "" },
+		func(c *KitLocalCompositionConfig) { c.WorkloadAssertionFile = "" },
+		func(c *KitLocalCompositionConfig) { c.WorkloadIssuerBaseURL = "" },
+		func(c *KitLocalCompositionConfig) { c.WorkloadIssuerBaseURL = "http://issuer.example" },
 		func(c *KitLocalCompositionConfig) { c.MCPUserSessionIssuerID = uuid.Nil },
 		func(c *KitLocalCompositionConfig) { c.MCPResource, _ = url.Parse("http://mcp.example/mcp/resource") },
 		func(c *KitLocalCompositionConfig) {
@@ -62,6 +59,10 @@ func TestKitCompositionRequiresExplicitAttachedResource(t *testing.T) {
 	origin, _ := url.Parse("https://mcp.example")
 	a := assistantRecord{MCPServers: []assistantMCPServerRow{{EndpointSlug: "attached", Visibility: "private"}}}
 	require.True(t, kitResourceAttached(a, origin, resource))
+	constructed := a.MCPServers[0].endpointURL(origin)
+	require.Equal(t, "mcp/attached", constructed.Path)
+	require.Equal(t, resource.String(), constructed.String())
+	require.True(t, kitResourceAttached(a, origin, constructed))
 	for _, raw := range []string{
 		"https://other.example/mcp/attached",
 		"https://mcp.example:8443/mcp/attached",
@@ -75,12 +76,15 @@ func TestKitCompositionRequiresExplicitAttachedResource(t *testing.T) {
 		require.False(t, kitResourceAttached(a, origin, other), raw)
 	}
 	require.False(t, kitResourceAttached(a, nil, resource))
+	require.False(t, kitResourceAttached(a, origin, nil))
 	a.MCPServers[0].Visibility = "disabled"
 	require.False(t, kitResourceAttached(a, origin, resource))
 	a.MCPServers[0].Visibility = "private"
 	a.MCPServers[0].EndpointSlug = "other"
 	require.False(t, kitResourceAttached(a, origin, resource))
-	_, _, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource, MCPIssuer: resource}, KitMCPProvisionResult{})
+	a.MCPServers[0].EndpointSlug = ""
+	require.False(t, kitResourceAttached(a, origin, a.MCPServers[0].endpointURL(origin)))
+	_, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource, MCPIssuer: resource}, nil)
 	require.Error(t, err)
 }
 
@@ -91,57 +95,12 @@ func TestKitCompositionCustomDomainResource(t *testing.T) {
 	a := assistantRecord{MCPServers: []assistantMCPServerRow{{EndpointSlug: "attached", EndpointDomain: "mcp.customer.example", Visibility: "private"}}}
 	onDomain, _ := url.Parse("https://mcp.customer.example/mcp/attached")
 	require.True(t, kitResourceAttached(a, origin, onDomain))
+	constructed := a.MCPServers[0].endpointURL(origin)
+	require.Equal(t, "mcp/attached", constructed.Path)
+	require.Equal(t, onDomain.String(), constructed.String())
+	require.True(t, kitResourceAttached(a, origin, constructed))
 	onPlatform, _ := url.Parse("https://platform.example/mcp/attached")
 	require.False(t, kitResourceAttached(a, origin, onPlatform))
-}
-
-func TestKitCompositionPrivateKeyUsesProtectedFile(t *testing.T) {
-	t.Parallel()
-	resource, _ := url.Parse("https://mcp.example/mcp/resource")
-	issuer, _ := url.Parse("https://issuer.example/oauth/project")
-	private := []byte("bootstrap-private-key-bytes")
-	raw, files, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource, MCPIssuer: issuer}, KitMCPProvisionResult{ClientID: "registered-client", AuthMethod: "private_key_jwt", PrivateKeyPEM: private})
-	require.NoError(t, err)
-	require.JSONEq(t, `{"mcpServers":{"workload":{"type":"streamable-http","url":"https://mcp.example/mcp/resource","auth":{"type":"client_credentials","client_id":"registered-client","resource":"https://mcp.example/mcp/resource","expected_issuer":"https://issuer.example/oauth/project","scopes":["mcp:connect"],"method":{"type":"private_key_jwt","private_key_file":"/home/kit/.kit/credentials/mcp-workload-private-key.pem","signing_algorithm":"ES256"}}}}}`, string(raw))
-	require.NotContains(t, string(raw), string(private))
-	require.Equal(t, map[string][]byte{"mcp-workload-private-key.pem": private}, files)
-	k, _, runtime, _ := kitLocalFixture(t)
-	bootstrap, err := k.config.Bootstrap(t.Context(), runtime)
-	require.NoError(t, err)
-	bootstrap.MCPJSON, bootstrap.MCPFiles = raw, files
-	archive, err := kitLocalBootstrapArchive(bootstrap)
-	require.NoError(t, err)
-	reader := tar.NewReader(bytes.NewReader(archive))
-	found := false
-	for {
-		header, err := reader.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		require.NoError(t, err)
-		if header.Name == ".kit/credentials/mcp-workload-private-key.pem" {
-			found = true
-			require.Equal(t, int64(0600), header.Mode)
-			require.Equal(t, 1000, header.Uid)
-			data, err := io.ReadAll(reader)
-			require.NoError(t, err)
-			require.Equal(t, private, data)
-		}
-	}
-	require.True(t, found)
-}
-
-func TestKitCompositionRejectsInvalidCredentials(t *testing.T) {
-	t.Parallel()
-	for _, client := range []KitMCPProvisionResult{
-		{ClientID: "id", AuthMethod: "invalid", Secret: "secret"},
-		{ClientID: "id", AuthMethod: "private_key_jwt"},
-		{ClientID: "id", AuthMethod: "private_key_jwt", Secret: "secret", PrivateKeyPEM: []byte("key")},
-		{ClientID: "id", AuthMethod: "client_secret_basic", Secret: "secret", PrivateKeyPEM: []byte("key")},
-	} {
-		_, _, err := kitCompositionMCP(KitLocalCompositionConfig{}, client)
-		require.Error(t, err)
-	}
 }
 
 func TestKitCompositionBootstrapRejectsUnattachedDisabledAndWrongOrigin(t *testing.T) {
@@ -153,10 +112,6 @@ func TestKitCompositionBootstrapRejectsUnattachedDisabledAndWrongOrigin(t *testi
 	resource := origin.JoinPath("mcp", "team-remote")
 	config := KitLocalCompositionConfig{
 		MCPResource: resource,
-		ProvisionMCP: func(context.Context, KitMCPProvisionRequest) (KitMCPProvisionResult, error) {
-			t.Fatal("rejected attachment must not provision credentials")
-			return KitMCPProvisionResult{}, nil
-		},
 	}
 	runtime := assistantRuntimeRecord{ID: uuid.New(), ProjectID: f.projectID, AssistantID: f.assistant, RuntimeVersion: 3}
 	assertRejected := func() {

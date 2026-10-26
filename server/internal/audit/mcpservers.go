@@ -13,10 +13,47 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// LogMcpServerPromoteCatalogueEvent identifies the source and staff actor without
+// copying public metadata or private connection configuration into tenant feeds.
+type LogMcpServerPromoteCatalogueEvent struct {
+	// OrganizationID scopes the source tenant.
+	OrganizationID string
+	// ProjectID scopes the source project.
+	ProjectID uuid.UUID
+	// Actor is the verified staff principal.
+	Actor urn.Principal
+	// McpServerURN identifies the source deployment.
+	McpServerURN urn.McpServer
+	// EligibilityOverridden records deliberate staff acceptance of failing health criteria.
+	EligibilityOverridden bool
+	// EligibilityReason is the bounded evidence code observed during promotion.
+	EligibilityReason string
+}
+
+// LogMcpServerPromoteCatalogue records promotion in the publication transaction.
+func (l *Logger) LogMcpServerPromoteCatalogue(ctx context.Context, dbtx repo.DBTX, event LogMcpServerPromoteCatalogueEvent) error {
+	metadata, err := marshalAuditPayload(struct {
+		EligibilityOverridden bool   `json:"eligibility_overridden"`
+		EligibilityReason     string `json:"eligibility_reason"`
+	}{EligibilityOverridden: event.EligibilityOverridden, EligibilityReason: event.EligibilityReason})
+	if err != nil {
+		return fmt.Errorf("encode catalogue promotion audit: %w", err)
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: event.ProjectID, Valid: true},
+		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.ToPGTextEmpty(""), ActorSlug: conv.ToPGTextEmpty(""),
+		Action: string(ActionMcpServerPromoteCatalogue), SubjectID: event.McpServerURN.ID.String(), SubjectType: string(subjectTypeMcpServer),
+		SubjectDisplayName: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), BeforeSnapshot: nil, AfterSnapshot: nil, Metadata: metadata,
+	}, OutboxEvent: events.McpServerV1})
+}
+
 const (
 	ActionMcpServerCreate Action = "mcp-server:create"
 	ActionMcpServerUpdate Action = "mcp-server:update"
 	ActionMcpServerDelete Action = "mcp-server:delete"
+
+	// ActionMcpServerPromoteCatalogue records staff publication of a reviewed catalogue entry.
+	ActionMcpServerPromoteCatalogue Action = "mcp-server:promote-catalogue"
 
 	// ActionMcpServerToolMetadataUpdate is recorded once per mutation of an MCP
 	// server's tool metadata. The subject is the server itself: a batch write

@@ -72,8 +72,8 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
    status.
 6. **Isolation spot-check** — switch back out of the demo org: your own org's
    pages show no `*@demo.getgram.ai` data anywhere.
-7. **Policy Center** — nine policies listed; Action column shows a mix of
-   Flag / Warn / Block / Quarantine; Severity shows Medium through Critical;
+7. **Policy Center** — 11 policies listed; Action column shows a mix of
+   Flag / Warn / Block / Quarantine / Require approval; Severity shows Medium through Critical;
    "Applies To" varies (All types, Tool Requests, ...); no row renders an
    empty summary. Open the **Quarantines** tab and confirm one active row for
    `gram-demo-quarantine-session-1`, attributed to **Acme session quarantine
@@ -588,6 +588,30 @@ open their effective assignments; the dropdown always offers compact member sear
     - Select one server's heading, then a single tool from another server, and approve. The connection's tools list, Progressive `describe_tools`, and `execute_tool` only reach the chosen tools; calls to the others are refused.
     - Reconnect: the consent screen opens with the previous choice selected.
     - Repeat on the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it): its picker groups tools from every project you can reach, and the chosen tools are the only ones listed, described or callable.
+
+33. **Python Code Gateway** (local seed with the local code runner; the shared demo org stores it as Progressive)
+    - Open Inspect: confirm exactly one execute tool, Python helper documentation,
+      and the two permitted member prefixes. Execute `await tools.search("health")`.
+    - Describe a returned path, then call a local read-only fixture tool and inspect
+      its return value and completed nested-call outcome. Print a value and confirm
+      the submitted source remains visible after editing the next snippet.
+    - Select Progressive/Direct overrides and reconnect; return to the gateway
+      default and confirm execute returns. Reconnect through the consent screen
+      with Specific tools and a Code Mode override: search and calls only reach the
+      chosen tools.
+    - In Settings select Code Mode, save, and verify a new default connection. A missing
+      runtime must prevent new Code selections with a visible error or
+      unavailable option; stored Code defaults and connections are served in
+      Progressive mode until the runtime returns.
+    - Run the seed twice and the demoseed safety test: the third gateway, its two
+      members and endpoint must survive, with no rows changed in other tenants.
+    - Connect to the organization gateway (`/mcp/gateway/acme-demo` on the demo
+      org, or `/mcp/gateway/speakeasy` after `mise run seed`), choose
+      Code Mode on the consent page ("Gateway default (Progressive)" stays the
+      default), and confirm one execute tool whose search and calls reach
+      servers from every project you can reach.
+    - Command K: search "Python Code Gateway". It is listed under Gateways and
+      opens the gateway's overview.
 
 ## On failure
 
