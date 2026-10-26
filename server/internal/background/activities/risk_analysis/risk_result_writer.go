@@ -308,8 +308,8 @@ func groupFindings(findings []scanners.Finding) []findingGroup {
 
 // writeResults commits the batch's rows and announces new findings through the
 // webhook outbox. It runs only for organizations off the ClickHouse findings
-// path, whose ClickHouse writer does not emit webhooks. The bool reports whether a commit
-// actually happened: false when the policy was deleted mid-analysis and the
+// path; for the others the ClickHouse findings writer emits the webhooks.
+// The bool reports whether a commit actually happened: false when the policy was deleted mid-analysis and the
 // results were dropped, so callers gating side effects (e.g. the batch-only
 // finding publish) on a durable write can tell the two nil-error outcomes
 // apart.

@@ -54,18 +54,27 @@ func batchOperationID(args AnalyzeBatchArgs, msg batchMessage, executionPath str
 	)
 }
 
+// scanLane separates a message's standard-policy and prompt-policy scan
+// requests so their request ids never collide.
+type scanLane string
+
+const (
+	scanLaneStandard     scanLane = "standard"
+	scanLanePromptPolicy scanLane = "prompt_policy"
+)
+
 // batchScanRequestID derives the correlation id of one anchor's scan request
 // from the anchor, policy, version and standard/prompt-policy lane, never from
 // the rest of the batch. The handlers fold it into their finding ids, so a
 // retry that lands the anchor in a differently composed batch republishes the
 // same finding ids and ClickHouse converges instead of duplicating.
-func batchScanRequestID(args AnalyzeBatchArgs, discriminator string, contentPart bool, anchorID uuid.UUID) uuid.UUID {
+func batchScanRequestID(args AnalyzeBatchArgs, lane scanLane, contentPart bool, anchorID uuid.UUID) uuid.UUID {
 	anchorKind := "chat_message"
 	if contentPart {
 		anchorKind = "content_part"
 	}
 	parts := []string{
-		discriminator,
+		string(lane),
 		args.ProjectID.String(),
 		args.RiskPolicyID.String(),
 		strconv.FormatInt(args.PolicyVersion, 10),
@@ -76,8 +85,8 @@ func batchScanRequestID(args AnalyzeBatchArgs, discriminator string, contentPart
 }
 
 // messageScanRequestID is batchScanRequestID for a scanned message or part.
-func messageScanRequestID(args AnalyzeBatchArgs, discriminator string, msg batchMessage) string {
-	return batchScanRequestID(args, discriminator, msg.ContentPart, msg.ID).String()
+func messageScanRequestID(args AnalyzeBatchArgs, lane scanLane, msg batchMessage) string {
+	return batchScanRequestID(args, lane, msg.ContentPart, msg.ID).String()
 }
 
 func nilUUIDString(id uuid.UUID) *string {
@@ -151,7 +160,7 @@ func (a *AnalyzeBatch) recordBatchResults(
 		if err := a.riskRecorder.Record(
 			ctx,
 			definition,
-			batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, messageScanRequestID(args, "standard", messages[i])),
+			batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, messageScanRequestID(args, scanLaneStandard, messages[i])),
 			results[i].STokens,
 			startedAt,
 		); err != nil {
@@ -170,12 +179,12 @@ func findingsFromResults(results []scanners.Result) [][]scanners.Finding {
 
 // llmLane is the fine-tuned LLM analyzer lane a standard-policy batch uses.
 type llmLane struct {
-	// enforcing means the lane replaces the legacy engines for the sources the
+	// enforcing means the lane replaces the per-source engines for the sources the
 	// model enforces (the llm risk engine mode).
 	enforcing bool
 
 	// shadow means the lane only records the model's verdict for comparison
-	// while the legacy engines keep enforcing (the shadow risk engine mode).
+	// while the per-source engines keep enforcing (the shadow risk engine mode).
 	shadow bool
 
 	// orgSlug is carried on each request for the analyzer's attribution.
@@ -197,9 +206,9 @@ func (l llmLane) runs(sources sourceSet, source string) bool {
 //
 // The mode selects the engine behind every covered source (gitleaks,
 // presidio, prompt_injection, destructive_tool, cli_destructive). In the llm
-// mode the fine-tuned model's async lane replaces the legacy engines: no
-// legacy analysis request for those sources, whose findings come from the
-// model alone. In the shadow mode the legacy engines run exactly as in the
+// mode the fine-tuned model's async lane replaces the per-source engines: no
+// per-source analysis request for those sources, whose findings come from the
+// model alone. In the shadow mode the per-source engines run exactly as in the
 // off mode and the same messages are also published to the model's lane,
 // marked shadow, so both engines' verdicts can be compared on identical
 // traffic without the model ever enforcing. Custom rules, shadow_mcp and
@@ -207,7 +216,7 @@ func (l llmLane) runs(sources sourceSet, source string) bool {
 //
 // Both model modes only publish when this worker knows an analyzer is
 // configured: with GRAM_RISK_LLM_URL empty the streams consumer acks every
-// request without findings. The llm mode then falls back to the legacy
+// request without findings. The llm mode then falls back to the per-source
 // engines rather than leave the organization without async coverage; the
 // shadow mode just skips the comparison lane.
 func (a *AnalyzeBatch) resolveLLMLane(ctx context.Context, args AnalyzeBatchArgs) llmLane {
@@ -221,7 +230,7 @@ func (a *AnalyzeBatch) resolveLLMLane(ctx context.Context, args AnalyzeBatchArgs
 		lane.enforcing, lane.orgSlug = true, orgSlug
 	case mode == feature.VariantRiskLLMLLM:
 		a.llmFallbackOnce.Do(func() {
-			a.logger.WarnContext(ctx, "LLM analyzer mode llm but GRAM_RISK_LLM_URL empty; batch scans fall back to legacy engines",
+			a.logger.WarnContext(ctx, "LLM analyzer mode llm but GRAM_RISK_LLM_URL empty; batch scans fall back to per-source engines",
 				attr.SlogOrganizationID(args.OrganizationID),
 				attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
 			)
@@ -238,7 +247,7 @@ func (a *AnalyzeBatch) resolveLLMLane(ctx context.Context, args AnalyzeBatchArgs
 // publishLLMLane publishes the batch to the model's lane when one is active.
 // A shadow-lane publish failure is counted and swallowed: the shadow lane only
 // compares, so a dropped request costs the comparison one message, while
-// failing the activity would redrive the legacy engines behind an LLM
+// failing the activity would redrive the per-source engines behind an LLM
 // transport outage. The enforcing lane fails the activity instead.
 func (a *AnalyzeBatch) publishLLMLane(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, lane llmLane, sources sourceSet, masks CategoryScopeMasks) error {
 	if !lane.enforcing && !lane.shadow {

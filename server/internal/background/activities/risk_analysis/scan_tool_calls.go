@@ -84,8 +84,8 @@ func (a *AnalyzeBatch) publishToolCallScanRequests(
 	messages []batchMessage,
 	sources sourceSet,
 	masks CategoryScopeMasks,
-	legacyDestructive bool,
-	legacyCLI bool,
+	destructiveEngineRuns bool,
+	cliEngineRuns bool,
 ) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	results := make([]gcp.PublishResult, 0, len(messages))
@@ -98,10 +98,10 @@ func (a *AnalyzeBatch) publishToolCallScanRequests(
 		if sources.Has(shadowmcpscan.Source) && masks.AdmitsAny(i, sourceCategories[shadowmcpscan.Source]) {
 			requestSources = append(requestSources, shadowmcpscan.Source)
 		}
-		if legacyDestructive && sources.Has(destructivetool.Source) && masks.AdmitsAny(i, sourceCategories[destructivetool.Source]) {
+		if destructiveEngineRuns && sources.Has(destructivetool.Source) && masks.AdmitsAny(i, sourceCategories[destructivetool.Source]) {
 			requestSources = append(requestSources, destructivetool.Source)
 		}
-		if legacyCLI && sources.Has(clidestructive.Source) && masks.AdmitsAny(i, sourceCategories[clidestructive.Source]) {
+		if cliEngineRuns && sources.Has(clidestructive.Source) && masks.AdmitsAny(i, sourceCategories[clidestructive.Source]) {
 			requestSources = append(requestSources, clidestructive.Source)
 		}
 		if len(requestSources) == 0 {
@@ -120,7 +120,7 @@ func (a *AnalyzeBatch) publishToolCallScanRequests(
 			}.Build())
 		}
 
-		requestID := messageScanRequestID(args, "standard", msg)
+		requestID := messageScanRequestID(args, scanLaneStandard, msg)
 		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID)
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		results = append(results, a.toolCallPub.Publish(ctx, riskv1.ToolCallAnalysis_builder{

@@ -143,11 +143,11 @@ func TestBatchScanRequestIDIgnoresBatchComposition(t *testing.T) {
 	bumped := first
 	bumped.PolicyVersion = 8
 
-	require.Equal(t, messageScanRequestID(first, "standard", message), messageScanRequestID(rebatched, "standard", message))
-	require.NotEqual(t, messageScanRequestID(first, "standard", message), messageScanRequestID(first, "prompt_policy", message))
-	require.NotEqual(t, messageScanRequestID(first, "standard", message), messageScanRequestID(bumped, "standard", message))
-	require.NotEqual(t, batchScanRequestID(first, "standard", false, anchorID), batchScanRequestID(first, "standard", true, anchorID))
-	require.NotEqual(t, batchScanRequestID(first, "standard", false, anchorID), batchScanRequestID(first, "standard", false, otherID))
+	require.Equal(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(rebatched, scanLaneStandard, message))
+	require.NotEqual(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(first, scanLanePromptPolicy, message))
+	require.NotEqual(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(bumped, scanLaneStandard, message))
+	require.NotEqual(t, batchScanRequestID(first, scanLaneStandard, false, anchorID), batchScanRequestID(first, scanLaneStandard, true, anchorID))
+	require.NotEqual(t, batchScanRequestID(first, scanLaneStandard, false, anchorID), batchScanRequestID(first, scanLaneStandard, false, otherID))
 	require.Equal(t, batchOperationID(first, message, inlineBatchExecutionPath), batchOperationID(rebatched, message, inlineBatchExecutionPath))
 	require.NotEqual(t, batchOperationID(first, message, inlineBatchExecutionPath), batchOperationID(first, message, shadowStreamExecutionPath))
 }
@@ -297,7 +297,7 @@ func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
 	require.NotNil(t, request)
 	require.Equal(t, messages[1].scanSurface(), request.GetContent())
 	require.Equal(t, "scan_surface", request.GetFindingSurface())
-	require.Equal(t, messageScanRequestID(args, "standard", messages[1]), request.GetRequestId())
+	require.Equal(t, messageScanRequestID(args, scanLaneStandard, messages[1]), request.GetRequestId())
 	require.Equal(t, messages[1].ChatID.String(), request.GetChatId())
 	require.Equal(t, messages[1].UserID, request.GetUserId())
 	require.Equal(t, shadowStreamExecutionPath, request.GetExecutionPath())

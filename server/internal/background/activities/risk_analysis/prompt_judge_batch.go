@@ -103,7 +103,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		return findingsFromResults(out), nil
 	}
 
-	if !hasPrompt(policy) || a.judge == nil {
+	if !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" || a.judge == nil {
 		// Fresh slice per index (not one shared slice) so setEventMatch below
 		// stamps each finding with its own message rather than aliasing.
 		for _, idx := range indices {
@@ -138,7 +138,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		if !out[i].Completed {
 			continue
 		}
-		provenance := batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, messageScanRequestID(args, "prompt_policy", messages[i]))
+		provenance := batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, messageScanRequestID(args, scanLanePromptPolicy, messages[i]))
 		provenance.Model = models[i]
 		provenance.Provider = providers[i]
 		if err := a.riskRecorder.Record(ctx, metering.RiskPromptPolicy(), provenance, out[i].STokens, startedAt); err != nil {
@@ -163,10 +163,6 @@ func promptPolicyIndices(messages []batchMessage, masks CategoryScopeMasks) []in
 	return indices
 }
 
-func hasPrompt(policy repo.RiskPolicy) bool {
-	return policy.Prompt.Valid && strings.TrimSpace(policy.Prompt.String) != ""
-}
-
 // publishPromptPolicyScanRequests publishes one request per indexed message.
 // runJudge has the handler run the judge and publish its findings; without it
 // the handler only records the comparison while the inline judge enforces.
@@ -179,7 +175,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 	}
 	for _, idx := range indices {
 		msg := messages[idx]
-		requestID := messageScanRequestID(args, "prompt_policy", msg)
+		requestID := messageScanRequestID(args, scanLanePromptPolicy, msg)
 		provenance := batchRiskProvenance(args, msg, executionPath, requestID)
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)

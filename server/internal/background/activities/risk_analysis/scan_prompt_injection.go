@@ -50,7 +50,7 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 		if !results[i].Completed {
 			continue
 		}
-		provenance := batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, messageScanRequestID(args, "standard", messages[i]))
+		provenance := batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, messageScanRequestID(args, scanLaneStandard, messages[i]))
 		provenance.Model = verdicts[i].Model
 		provenance.Provider = verdicts[i].Provider
 		if err := a.riskRecorder.Record(ctx, metering.RiskPromptInjection(), provenance, results[i].STokens, startedAt); err != nil {
@@ -71,7 +71,7 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 		executionPath = judgeHandlerStreamExecutionPath
 	}
 	for _, msg := range messages {
-		requestID := messageScanRequestID(args, "standard", msg)
+		requestID := messageScanRequestID(args, scanLaneStandard, msg)
 		provenance := batchRiskProvenance(args, msg, executionPath, requestID)
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)

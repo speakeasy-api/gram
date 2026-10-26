@@ -61,7 +61,7 @@ func (a *AnalyzeBatch) publishCustomRulesScanRequests(ctx context.Context, args 
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for _, msg := range messages {
-		requestID := messageScanRequestID(args, "standard", msg)
+		requestID := messageScanRequestID(args, scanLaneStandard, msg)
 		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID)
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		view := batchMessageView(msg)

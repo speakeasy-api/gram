@@ -101,7 +101,7 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			continue
 		}
 		chatMessageID, contentPartID := msg.anchorIDStrings()
-		requestID := messageScanRequestID(args, "standard", msg)
+		requestID := messageScanRequestID(args, scanLaneStandard, msg)
 		provenance := batchRiskProvenance(args, msg, executionPath, requestID)
 		body, toolCalls := llmMessageInput(msg)
 

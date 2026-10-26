@@ -40,7 +40,7 @@ func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args Ana
 	createdAtText := createdAt.Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for _, msg := range messages {
-		requestID := messageScanRequestID(args, "standard", msg)
+		requestID := messageScanRequestID(args, scanLaneStandard, msg)
 		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID)
 		content := msg.scanSurface()
 		findingSurface := scanners.SurfaceContent

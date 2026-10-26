@@ -30,7 +30,7 @@ func (a *AnalyzeBatch) publishGitleaksScanRequests(ctx context.Context, args Ana
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for _, msg := range messages {
 		chatMessageID, contentPartID := msg.anchorIDStrings()
-		requestID := messageScanRequestID(args, "standard", msg)
+		requestID := messageScanRequestID(args, scanLaneStandard, msg)
 		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID)
 		publishResults = append(publishResults, a.gitleaksPub.Publish(ctx, riskv1.GitleaksAnalysis_builder{
 			RequestId:               &requestID,

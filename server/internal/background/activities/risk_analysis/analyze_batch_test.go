@@ -982,6 +982,74 @@ func TestAnalyzeBatch_PromptPolicyCutoverPublishesRealJudgeRequests(t *testing.T
 	}
 }
 
+func TestAnalyzeBatch_PromptPolicyCutoverPublishesPolicyWithoutPrompt(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "prompt policy without prompt",
+		PolicyType:     "prompt_based",
+		Sources:        []string{},
+		Enabled:        true,
+		Action:         "flag",
+		AudienceType:   "everyone",
+		AutoName:       false,
+		Prompt:         pgtype.Text{},
+	})
+	require.NoError(t, err)
+	msgIDs := seedMessages(t, conn, td, 2)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
+	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, td.orgID, true)
+	promptPolicyPub, published := capturingPromptPolicyPub(t)
+
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		nil,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		nil,
+		flags,
+		newPresidioPub(),
+		newGitleaksPub(),
+		newPromptInjectionPub(),
+		promptPolicyPub,
+		newCustomRulesPub(), newLLMPub(), newToolCallPub(), newAccountIdentityPub(), mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
+	)
+	require.NoError(t, err)
+
+	runAnalyzeBatch(t, ab, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     policy.ID,
+		PolicyVersion:    policy.Version,
+		MessageIDs:       msgIDs,
+		Sources:          nil,
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.Len(t, *published, len(msgIDs), "the handler applies the fail mode to a policy without a prompt")
+	for _, req := range *published {
+		require.True(t, req.GetRunJudge())
+		require.Empty(t, req.GetPrompt())
+	}
+}
+
 func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)

@@ -54,9 +54,10 @@ func (a *AnalyzeBatch) publishBatch(ctx context.Context, args AnalyzeBatchArgs, 
 }
 
 // publishPromptPolicy publishes the in-scope messages for the handler to judge.
-// A policy without a prompt publishes nothing.
+// A policy without a prompt still publishes: the handler applies the policy's
+// fail mode to it, flagging every message when the policy fails closed.
 func (a *AnalyzeBatch) publishPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) error {
-	if !hasPrompt(policy) || !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
+	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
 		return nil
 	}
 	indices := promptPolicyIndices(messages, masks)
@@ -72,7 +73,6 @@ func (a *AnalyzeBatch) publishPromptPolicy(ctx context.Context, args AnalyzeBatc
 func (a *AnalyzeBatch) publishStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, masks CategoryScopeMasks) error {
 	sources := newSourceSet(args.Sources)
 	lane := a.resolveLLMLane(ctx, args)
-	runs := func(source string) bool { return lane.runs(sources, source) }
 	inScope := func(source string) []batchMessage {
 		cats := sourceCategories[source]
 		a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, source, masks.RecommendedPrefilteredCount(cats))
@@ -89,24 +89,24 @@ func (a *AnalyzeBatch) publishStandardPolicy(ctx context.Context, args AnalyzeBa
 	group.Go(func() error {
 		return a.publishLLMLane(ctx, args, messages, lane, sources, masks)
 	})
-	if sources.Has(shadowmcp.SourceShadowMCP) || runs(shadowmcp.SourceDestructiveTool) || runs(SourceCLIDestructive) {
+	if sources.Has(shadowmcp.SourceShadowMCP) || lane.runs(sources, shadowmcp.SourceDestructiveTool) || lane.runs(sources, SourceCLIDestructive) {
 		group.Go(func() error {
 			return a.publishToolCallScanRequests(ctx, args, messages, sources, masks, lane.ownEngineRuns(shadowmcp.SourceDestructiveTool), lane.ownEngineRuns(SourceCLIDestructive))
 		})
 	}
-	if runs(SourceGitleaks) {
+	if lane.runs(sources, SourceGitleaks) {
 		subMessages := inScope(SourceGitleaks)
 		group.Go(func() error {
 			return a.publishGitleaksScanRequests(ctx, args, subMessages)
 		})
 	}
-	if runs(SourcePresidio) {
+	if lane.runs(sources, SourcePresidio) {
 		subMessages := inScope(SourcePresidio)
 		group.Go(func() error {
 			return a.publishPresidioScanRequests(ctx, args, subMessages, resolvePresidioScoreThreshold(args.PresidioScoreThreshold))
 		})
 	}
-	if runs(SourcePromptInjection) {
+	if lane.runs(sources, SourcePromptInjection) {
 		subMessages := inScope(SourcePromptInjection)
 		group.Go(func() error {
 			return a.publishPromptInjectionScanRequests(ctx, args, subMessages, true)
