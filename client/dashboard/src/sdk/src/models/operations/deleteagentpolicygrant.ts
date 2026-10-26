@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  AgentPolicyGrantIDForm,
-  AgentPolicyGrantIDForm$Outbound,
-  AgentPolicyGrantIDForm$outboundSchema,
-} from "../components/agentpolicygrantidform.js";
+  DeleteAgentPolicyGrantForm,
+  DeleteAgentPolicyGrantForm$Outbound,
+  DeleteAgentPolicyGrantForm$outboundSchema,
+} from "../components/deleteagentpolicygrantform.js";
 
 export type DeleteAgentPolicyGrantSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,7 @@ export type DeleteAgentPolicyGrantRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  agentPolicyGrantIDForm: AgentPolicyGrantIDForm;
+  deleteAgentPolicyGrantForm: DeleteAgentPolicyGrantForm;
 };
 
 /** @internal */
@@ -55,7 +55,7 @@ export function deleteAgentPolicyGrantSecurityToJSON(
 /** @internal */
 export type DeleteAgentPolicyGrantRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  AgentPolicyGrantIDForm: AgentPolicyGrantIDForm$Outbound;
+  DeleteAgentPolicyGrantForm: DeleteAgentPolicyGrantForm$Outbound;
 };
 
 /** @internal */
@@ -65,12 +65,12 @@ export const DeleteAgentPolicyGrantRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    agentPolicyGrantIDForm: AgentPolicyGrantIDForm$outboundSchema,
+    deleteAgentPolicyGrantForm: DeleteAgentPolicyGrantForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      agentPolicyGrantIDForm: "AgentPolicyGrantIDForm",
+      deleteAgentPolicyGrantForm: "DeleteAgentPolicyGrantForm",
     });
   }),
 );

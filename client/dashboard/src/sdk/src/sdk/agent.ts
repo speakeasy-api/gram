@@ -5,6 +5,7 @@
 import { agentCreateSessionHandoff } from "../funcs/agentCreateSessionHandoff.js";
 import { agentDeleteAiScanTarget } from "../funcs/agentDeleteAiScanTarget.js";
 import { agentGetConfiguration } from "../funcs/agentGetConfiguration.js";
+import { agentGetMyConnections } from "../funcs/agentGetMyConnections.js";
 import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
 import { agentGetSessionMeta } from "../funcs/agentGetSessionMeta.js";
 import { agentListAiScanTargets } from "../funcs/agentListAiScanTargets.js";
@@ -18,6 +19,7 @@ import { AiScanTargetMutationResult } from "../models/components/aiscantargetmut
 import { CreateSessionHandoffResult } from "../models/components/createsessionhandoffresult.js";
 import { DeleteAiScanTargetResult } from "../models/components/deleteaiscantargetresult.js";
 import { DeviceAgentConfiguration } from "../models/components/deviceagentconfiguration.js";
+import { GetMyConnectionsResult } from "../models/components/getmyconnectionsresult.js";
 import { GetPluginsResult } from "../models/components/getpluginsresult.js";
 import { GetSessionMetaResult } from "../models/components/getsessionmetaresult.js";
 import { ListAiScanTargetsResult } from "../models/components/listaiscantargetsresult.js";
@@ -30,6 +32,10 @@ import {
   DeleteAiScanTargetRequest,
   DeleteAiScanTargetSecurity,
 } from "../models/operations/deleteaiscantarget.js";
+import {
+  GetAgentMyConnectionsRequest,
+  GetAgentMyConnectionsSecurity,
+} from "../models/operations/getagentmyconnections.js";
 import {
   GetAgentPluginsRequest,
   GetAgentPluginsSecurity,
@@ -119,6 +125,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<DeviceAgentConfiguration> {
     return unwrapAsync(agentGetConfiguration(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getMyConnections agent
+   *
+   * @remarks
+   * Report the enrolled user's sign-in state for each MCP server in the plugins delivered to them, with the page that signs in to each. Sign-in belongs to the server, so one sign-in covers every plugin that contains it. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.
+   */
+  async getMyConnections(
+    request?: GetAgentMyConnectionsRequest | undefined,
+    security?: GetAgentMyConnectionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetMyConnectionsResult> {
+    return unwrapAsync(agentGetMyConnections(
       this,
       request,
       security,

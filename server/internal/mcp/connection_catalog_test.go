@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -47,9 +49,11 @@ type catalogUpstream struct {
 	url         string
 	requests    atomic.Int32
 	calls       atomic.Int32
+	initializes atomic.Int32
 	unavailable atomic.Bool
 	future      atomic.Bool
 	tools       int
+	callHeader  atomic.Value
 	// holdNextList parks the next tools/list until its release closes.
 	holdNextList atomic.Pointer[catalogListHold]
 }
@@ -63,6 +67,7 @@ func newCatalogUpstream(t *testing.T, tools int) *catalogUpstream {
 	t.Helper()
 	upstream := &catalogUpstream{tools: tools}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstream.requests.Add(1)
 		if upstream.unavailable.Load() {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -79,7 +84,6 @@ func newCatalogUpstream(t *testing.T, tools int) *catalogUpstream {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		upstream.requests.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		var result any
 		switch request.Method {
@@ -87,6 +91,7 @@ func newCatalogUpstream(t *testing.T, tools int) *catalogUpstream {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		case "initialize":
+			upstream.initializes.Add(1)
 			result = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "catalog-fixture", "version": "1"}}
 		case "notifications/initialized":
 			w.WriteHeader(http.StatusAccepted)
@@ -106,6 +111,7 @@ func newCatalogUpstream(t *testing.T, tools int) *catalogUpstream {
 			}
 			result = map[string]any{"tools": tools}
 		case "tools/call":
+			upstream.callHeader.Store(r.Header.Get("X-Typed-Key"))
 			upstream.calls.Add(1)
 			result = map[string]any{"content": []map[string]any{{"type": "text", "text": "executed live"}}}
 		case "ping":
@@ -190,6 +196,87 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 	}
 }
 
+// Each case uses the real consent, issuance and public tools/call paths. A
+// typed client's headers resolve only as exact copies of the server's declared
+// headers, so fresh cases declare the same header the client copies; stale
+// cases change the copy, and execution must send the server's current value.
+func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) {
+	t.Parallel()
+	for _, discovery := range []metamcp.DiscoveryMode{metamcp.DiscoveryModeDirect, metamcp.DiscoveryModeProgressive} {
+		for _, choice := range []struct{ specific, staleHeaders bool }{
+			{specific: false, staleHeaders: false},
+			{specific: false, staleHeaders: true},
+			{specific: true, staleHeaders: false},
+			{specific: true, staleHeaders: true},
+		} {
+			specific, staleHeaders := choice.specific, choice.staleHeaders
+			t.Run(fmt.Sprintf("%s/specific=%t/stale_headers=%t", discovery, specific, staleHeaders), func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+				auth, _ := contextvalues.GetAuthContext(ctx)
+				_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+				slug := "catalog-recheck-" + uuid.NewString()
+				gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+				upstream := newCatalogUpstream(t, 1)
+				serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
+				registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "typed-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+				_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration})
+				require.NoError(t, err)
+				insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
+				fixtures := authclientfixtures.New(ti.conn)
+				seedClient := func(value string) uuid.UUID {
+					id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+					require.NoError(t, err)
+					require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: id, OrganizationID: auth.ActiveOrganizationID, Name: "X-Typed-Key", Value: pgtype.Text{String: value, Valid: true}}))
+					require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id}))
+					return id
+				}
+				source, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *auth.ProjectID})
+				require.NoError(t, err)
+				_, err = fixtures.SeedRemoteHeaderFixture(ctx, authclientfixtures.SeedRemoteHeaderFixtureParams{RemoteMcpServerID: source.RemoteMcpServerID.UUID, Name: "X-Typed-Key", Value: pgtype.Text{String: "approved-key", Valid: true}})
+				require.NoError(t, err)
+				copiedValue := "approved-key"
+				if staleHeaders {
+					copiedValue = "stale-key"
+				}
+				original := seedClient(copiedValue)
+				var permitted atomic.Bool
+				permitted.Store(true)
+				ti.service.SetAuthClientPermission(permitted.Load)
+				var selected []string
+				if specific {
+					selected = []string{"source--tool_000"}
+				}
+				ti.service.manual = true
+				connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, discovery, selected)
+				call := func() string {
+					name, args := "source--tool_000", map[string]any{}
+					if discovery == metamcp.DiscoveryModeProgressive {
+						name, args = metamcp.ToolExecuteTool, map[string]any{"name": "source--tool_000", "arguments": map[string]any{}}
+					}
+					return callGatewayTool(t, ti, slug, connection.token, name, args)
+				}
+				require.Contains(t, call(), "executed live")
+				require.Equal(t, "approved-key", upstream.callHeader.Load(), "execution must send current credential headers")
+				before := upstream.requests.Load()
+				permitted.Store(false)
+				require.Contains(t, call(), "don't have access")
+				require.Equal(t, before, upstream.requests.Load(), "revocation must refuse before any upstream request")
+				permitted.Store(true)
+				replacement := seedClient("replacement-key")
+				require.NotEqual(t, original, replacement)
+				claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
+				require.NoError(t, err)
+				session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
+				require.NoError(t, err)
+				require.NoError(t, fixtures.SwapUpstreamAuthClientFixture(ctx, authclientfixtures.SwapUpstreamAuthClientFixtureParams{AuthClientID: uuid.NullUUID{UUID: replacement, Valid: true}, CredentialID: session.ID, McpServerID: serverID}))
+				require.Contains(t, call(), "authentication changed")
+				require.Equal(t, before, upstream.requests.Load(), "a different typed client cannot inherit approval")
+			})
+		}
+	}
+}
+
 func TestGatewayConsentAmbiguousTypedClientRequiresSetup(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
@@ -262,6 +349,7 @@ func TestConnectionCatalogCachedDiscoveryNeverContactsUpstream(t *testing.T) {
 	}{
 		{false, metamcp.DiscoveryModeDirect}, {true, metamcp.DiscoveryModeDirect},
 		{false, metamcp.DiscoveryModeProgressive}, {true, metamcp.DiscoveryModeProgressive},
+		{false, metamcp.DiscoveryModeCode}, {true, metamcp.DiscoveryModeCode},
 	} {
 		t.Run(fmt.Sprintf("specific=%t/%s", tc.specific, tc.discovery), func(t *testing.T) {
 			specific := tc.specific
@@ -277,6 +365,32 @@ func TestConnectionCatalogCachedDiscoveryNeverContactsUpstream(t *testing.T) {
 			var selected []string
 			if specific {
 				selected = []string{memberSlug + "--tool_000"}
+			}
+			if tc.discovery == metamcp.DiscoveryModeCode {
+				// Consent approval checks the entitlement, so grant it first.
+				enableCodeMode(t, ctx, ti)
+				mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(ctx context.Context, code string, host codemode.Host) (*codemode.ExecutionResult, error) {
+					if code == "discover" {
+						servers, err := host.Servers(ctx, codemode.PageArgs{})
+						require.NoError(t, err)
+						require.Equal(t, []codemode.Server{{Slug: memberSlug, Name: "Source"}}, servers.Items)
+						page, err := host.Search(ctx, codemode.SearchArgs{Query: "tool_000"})
+						require.NoError(t, err)
+						require.NotEmpty(t, page.Items)
+						require.False(t, page.Incomplete)
+						described, err := host.Describe(ctx, memberSlug+"--tool_000")
+						require.NoError(t, err)
+						require.Contains(t, string(described.Definition), `"inputSchema"`)
+						return &codemode.ExecutionResult{Value: json.RawMessage(`true`)}, nil
+					}
+					result, err := host.Call(ctx, code, json.RawMessage(`{}`))
+					if err != nil {
+						return &codemode.ExecutionResult{Error: &codemode.ExecutionError{Code: "tool_unavailable", Message: err.Error()}}, nil
+					}
+					value, err := json.Marshal(result)
+					require.NoError(t, err)
+					return &codemode.ExecutionResult{Value: value}, nil
+				}})
 			}
 			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, tc.discovery, selected)
 			tokenRequests := seedExpiredCatalogCredential(t, ctx, ti, issuer.ID, urn.NewUserSubject(mockidp.MockUserID))
@@ -330,27 +444,43 @@ func TestConnectionCatalogCachedDiscoveryNeverContactsUpstream(t *testing.T) {
 					}
 				}
 			}
+			if tc.discovery == metamcp.DiscoveryModeCode {
+				result := callGatewayTool(t, ti, slug, connection.token, "execute", map[string]any{"code": "discover"})
+				require.NotContains(t, result, `"isError":true`)
+			}
 			require.Equal(t, before, upstream.requests.Load(), "discovery must issue zero upstream requests")
 			require.Zero(t, tokenRequests.Load(), "discovery must never refresh upstream credentials")
 			upstream.future.Store(true)
-			if tc.discovery == metamcp.DiscoveryModeDirect {
+			switch tc.discovery {
+			case metamcp.DiscoveryModeDirect:
 				require.Contains(t, callGatewayTool(t, ti, slug, connection.token, memberSlug+"--tool_150", map[string]any{}), `"isError":true`)
-			} else {
+			case metamcp.DiscoveryModeCode:
+				require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "execute", map[string]any{"code": memberSlug + "--tool_150"}), `"isError":true`)
+			default:
 				require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "execute_tool", map[string]any{"name": memberSlug + "--tool_150", "arguments": map[string]any{}}), `"isError":true`)
 			}
 			require.Equal(t, before, upstream.requests.Load(), "an unseen read-only tool is rejected without discovery or execution")
 
 			execute := func(name string) string {
+				if tc.discovery == metamcp.DiscoveryModeCode {
+					return callGatewayTool(t, ti, slug, connection.token, "execute", map[string]any{"code": name})
+				}
 				if tc.discovery == metamcp.DiscoveryModeProgressive {
 					return callGatewayTool(t, ti, slug, connection.token, "execute_tool", map[string]any{"name": name, "arguments": map[string]any{}})
 				}
 				return callGatewayTool(t, ti, slug, connection.token, name, map[string]any{})
 			}
+			initializations := upstream.initializes.Load()
 			require.Contains(t, execute(memberSlug+"--tool_000"), "executed live")
 			require.EqualValues(t, 1, upstream.calls.Load())
 			if specific {
 				require.NotContains(t, execute(memberSlug+"--tool_001"), "executed live")
 				require.EqualValues(t, 1, upstream.calls.Load())
+			}
+			if tc.discovery == metamcp.DiscoveryModeCode {
+				require.Contains(t, execute(memberSlug+"--tool_000"), "executed live")
+				require.EqualValues(t, 2, upstream.calls.Load())
+				require.Equal(t, initializations+1, upstream.initializes.Load(), "real Code Mode callbacks reuse the caller's upstream session across executions")
 			}
 		})
 	}
@@ -607,47 +737,72 @@ func (c *catalogCountingCache) Get(ctx context.Context, key string, value any) e
 
 func TestConnectionCatalogProtocolLoadCost(t *testing.T) {
 	t.Parallel()
-	var counted *catalogCountingCache
-	ctx, ti := newTestMCPServiceWithCacheWrapper(t, func(delegate cache.Cache) cache.Cache {
-		conditional, ok := delegate.(cache.ConditionalCache)
-		require.True(t, ok)
-		cas, ok := delegate.(cache.CompareAndSwapCache)
-		require.True(t, ok)
-		counted = &catalogCountingCache{Cache: delegate, ConditionalCache: conditional, CompareAndSwapCache: cas}
-		return counted
-	})
-	auth, _ := contextvalues.GetAuthContext(ctx)
-	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	slug := "catalog-cost-" + uuid.NewString()
-	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
-	upstream := newCatalogUpstream(t, 150)
-	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
-	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
-	// The fixture's migration wrapper is outside the production request path.
-	ti.service.manual = true
-	counted.loads.Store(0)
-	beforeUpstream := upstream.requests.Load()
-	for _, method := range []string{"initialize", "ping"} {
-		params := map[string]any{}
-		if method == "initialize" {
-			params = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "fixture", "version": "1"}}
-		}
-		before := ti.conn.Stat().AcquireCount()
-		response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, method, params), connection.token, nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-		require.Zero(t, counted.loads.Load(), "protocol setup does not read the catalog")
-		require.LessOrEqual(t, ti.conn.Stat().AcquireCount()-before, int64(20), "protocol setup DB work is independent of the catalog size")
+	for _, mode := range []metamcp.DiscoveryMode{metamcp.DiscoveryModeDirect, metamcp.DiscoveryModeCode} {
+		t.Run(string(mode), func(t *testing.T) {
+			t.Parallel()
+			var counted *catalogCountingCache
+			ctx, ti := newTestMCPServiceWithCacheWrapper(t, func(delegate cache.Cache) cache.Cache {
+				conditional, ok := delegate.(cache.ConditionalCache)
+				require.True(t, ok)
+				cas, ok := delegate.(cache.CompareAndSwapCache)
+				require.True(t, ok)
+				counted = &catalogCountingCache{Cache: delegate, ConditionalCache: conditional, CompareAndSwapCache: cas}
+				return counted
+			})
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			slug := "catalog-cost-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+			upstream := newCatalogUpstream(t, 150)
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
+			if mode == metamcp.DiscoveryModeCode {
+				mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(ctx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
+					enableCodeMode(t, ctx, ti)
+					_, err := host.Servers(ctx, codemode.PageArgs{})
+					require.NoError(t, err)
+					page, err := host.Search(ctx, codemode.SearchArgs{Query: "tool_000"})
+					require.NoError(t, err)
+					require.NotEmpty(t, page.Items)
+					_, err = host.Describe(ctx, "source--tool_000")
+					require.NoError(t, err)
+					return &codemode.ExecutionResult{Value: json.RawMessage(`true`)}, nil
+				}})
+			}
+			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, mode, nil)
+			// The fixture's migration wrapper is outside the production request path.
+			ti.service.manual = true
+			counted.loads.Store(0)
+			beforeUpstream := upstream.requests.Load()
+			for _, method := range []string{"initialize", "ping"} {
+				params := map[string]any{}
+				if method == "initialize" {
+					params = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "fixture", "version": "1"}}
+				}
+				before := ti.conn.Stat().AcquireCount()
+				response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, method, params), connection.token, nil)
+				require.NoError(t, err)
+				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+				require.Zero(t, counted.loads.Load(), "protocol setup does not read the catalog")
+				require.LessOrEqual(t, ti.conn.Stat().AcquireCount()-before, int64(20), "protocol setup DB work is independent of the catalog size")
+			}
+			beforeDB := ti.conn.Stat().AcquireCount()
+			response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
+			require.NoError(t, err)
+			require.Contains(t, response.Body.String(), "source--")
+			require.Equal(t, int32(1), counted.loads.Load(), "one immutable record per discovery request")
+			require.LessOrEqual(t, ti.conn.Stat().AcquireCount()-beforeDB, int64(20), "discovery uses a single batch configuration check")
+			require.Equal(t, beforeUpstream, upstream.requests.Load())
+			if mode == metamcp.DiscoveryModeCode {
+				beforeDB = ti.conn.Stat().AcquireCount()
+				result := callGatewayTool(t, ti, slug, connection.token, "execute", map[string]any{"code": "discover"})
+				require.NotContains(t, result, `"isError":true`)
+				require.EqualValues(t, 2, counted.loads.Load(), "one catalog load serves every callback in an execution")
+				require.LessOrEqual(t, ti.conn.Stat().AcquireCount()-beforeDB, int64(80), "callback authorization cost does not scale with 150 tool definitions")
+				require.Equal(t, beforeUpstream, upstream.requests.Load())
+			}
+		})
 	}
-	beforeDB := ti.conn.Stat().AcquireCount()
-	response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
-	require.NoError(t, err)
-	require.Contains(t, response.Body.String(), "source--tool_000")
-	require.Equal(t, int32(1), counted.loads.Load(), "one immutable record per discovery request")
-	require.LessOrEqual(t, ti.conn.Stat().AcquireCount()-beforeDB, int64(20), "discovery uses a single batch configuration check")
-	require.Equal(t, beforeUpstream, upstream.requests.Load())
 }
-
 func seedExpiredCatalogCredential(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, subject urn.SessionSubject) *atomic.Int32 {
 	t.Helper()
 	auth, _ := contextvalues.GetAuthContext(ctx)
@@ -756,8 +911,28 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
 	upstream := newCatalogUpstream(t, 1)
 	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
+	// Code Mode helpers name the changed member as needing a new consent
+	// instead of silently dropping it.
+	var codeChecked atomic.Bool
+	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil, run: func(ctx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
+		enableCodeMode(t, ctx, ti)
+		servers, err := host.Servers(ctx, codemode.PageArgs{})
+		require.NoError(t, err)
+		require.Equal(t, []codemode.Server{{Slug: "source", Name: "Source"}}, servers.Items)
+		page, err := host.Search(ctx, codemode.SearchArgs{})
+		require.NoError(t, err)
+		require.True(t, page.Incomplete)
+		require.Equal(t, []codemode.FailedMember{{Server: "source", Reason: "consent_required"}}, page.FailedMembers)
+		_, err = host.Describe(ctx, "source--tool_000")
+		require.ErrorIs(t, err, codemode.ErrConsentRequired)
+		_, err = host.Call(ctx, "source--tool_000", json.RawMessage(`{}`))
+		require.ErrorIs(t, err, codemode.ErrConsentRequired)
+		codeChecked.Store(true)
+		return &codemode.ExecutionResult{}, nil
+	}})
 	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
 	progressive := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive, nil)
+	code := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeCode, nil)
 	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: memberID, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
 	remote, err := remotemcprepo.New(ti.conn).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: server.RemoteMcpServerID.UUID, ProjectID: *auth.ProjectID})
@@ -776,7 +951,9 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	status, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "connection_status", "arguments": map[string]any{}}), progressive.token, nil)
 	require.NoError(t, err)
 	require.Contains(t, status.Body.String(), "configuration changed")
-
+	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
+	require.True(t, codeChecked.Load())
+	require.Zero(t, replacement.calls.Load())
 }
 
 // The transport is part of a member's approved route: switching it leaves the
@@ -912,4 +1089,24 @@ func TestGatewayConsentLockdownPreventsCaptureAndApproval(t *testing.T) {
 	inventory := gatewayInventoryFromPage(t, consentGetPageWithContext(t, admitted, ti, slug, admittedState))
 	require.Len(t, inventory.Tools, 1, "admission on the owning custom domain permits capture")
 	require.Positive(t, upstream.requests.Load())
+}
+
+func TestGatewayConsentPreselectsProgressiveWhenSavedCodeModeUnavailable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "code-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	upstream := newCatalogUpstream(t, 1)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 0, upstream.url)
+	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{})
+	enableCodeMode(t, ctx, ti)
+	approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeCode, nil)
+	mcp.SetTestCodeExecutor(ti.service.Service, codemode.Disabled{})
+	state, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+	page := consentGetPageWithContext(t, ctx, ti, slug, state)
+	require.Contains(t, page, `<option value="progressive" selected>Progressive</option>`)
+	require.NotContains(t, page, `<option value="code_mode"`)
+	require.Contains(t, page, "The code runtime is unavailable. Progressive discovery is available for this connection.")
 }

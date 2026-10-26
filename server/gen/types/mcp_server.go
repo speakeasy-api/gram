@@ -38,6 +38,10 @@ type McpServer struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string
 	// The visibility of the server
 	Visibility McpServerVisibility
 	// The effective allowed network surfaces. Existing NULL rows are public_only.

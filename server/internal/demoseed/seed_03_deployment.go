@@ -26,6 +26,9 @@ func (s *seeder) seedDeployment(ctx context.Context) error {
 	if err := s.seedDeploymentWorkloads(ctx); err != nil {
 		return err
 	}
+	if err := s.seedDeploymentInference(ctx); err != nil {
+		return err
+	}
 	return s.seedDeploymentAssistants(ctx)
 }
 
@@ -402,16 +405,18 @@ func (s *seeder) seedDeploymentWorkloads(ctx context.Context) error {
 			Issuer:                 "https://ci-identity.example.com",
 			JwksUri:                "https://ci-identity.example.com/.well-known/jwks.json",
 			AllowWildcardAdmission: false,
+			AllowAssertionReuse:    false,
 		},
 		{
 			ID:                     agentIssuer,
 			OrganizationID:         org,
 			Name:                   "Acme Agent Platform",
-			Description:            "Autonomous support and operations agents, one identity per agent deployment.",
+			Description:            "Autonomous support and operations agents, one identity per agent deployment, reusing short-lived projected tokens until rotation.",
 			Tags:                   []string{"agents", "build"},
 			Issuer:                 "https://agents.example.com",
 			JwksUri:                "https://agents.example.com/.well-known/jwks.json",
 			AllowWildcardAdmission: true,
+			AllowAssertionReuse:    true,
 		},
 	}
 	for _, p := range issuers {
@@ -521,6 +526,7 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 		OrganizationID: org,
 		ProjectID:      proj,
 		OwnerUserID:    owner,
+		Name:           "Identity-bound assistant agent",
 	}); err != nil {
 		return fmt.Errorf("insert demo assistant agent: %w", err)
 	}

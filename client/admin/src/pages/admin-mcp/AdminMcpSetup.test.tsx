@@ -1,8 +1,12 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 
 import { AdminMcpSetup } from "./AdminMcpSetup";
 import { renderWithApp } from "@/test/harness";
+
+vi.mock("@/lib/gramAdminApi", () => ({
+  gramAdminFetch: vi.fn().mockResolvedValue({ tools: [] }),
+}));
 
 const browser = window as typeof window & {
   happyDOM: { setURL(url: string): void };

@@ -144,6 +144,7 @@ const DISPOSITION_LABELS_LOWER: Record<string, string> = {
 };
 
 function projectResourceNoun(resourceType: ResourceType): string | null {
+  if (resourceType === "inference") return "inference";
   if (resourceType === "skill") return "skills";
   if (resourceType === "assistant") return "assistants";
   return null;
@@ -156,6 +157,7 @@ export function computeRuleLabel(
   projects: ProjectRef[],
 ): string {
   if (selectors === null) {
+    if (resourceType === "inference") return "All projects";
     if (isProjectFilteredResourceType(resourceType)) return "All assistants";
     return isProjectScopedResourceType(resourceType)
       ? "All projects"
@@ -250,6 +252,9 @@ export function computeRuleTooltip(
       const name = projects.find(
         (p) => p.id === projectSels[0]!.projectId!,
       )?.name;
+      if (resourceType === "inference") {
+        return `${verb} access to inference in ${name ?? "1 project"}`;
+      }
       const resources = isProjectFilteredResourceType(resourceType)
         ? `${resourceType}s`
         : "servers";

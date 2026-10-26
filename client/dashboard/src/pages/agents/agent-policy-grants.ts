@@ -28,6 +28,14 @@ export const AGENT_POLICY_SCOPES: (ScopeDefinition & {
   resourceType: ResourceType;
 })[] = [
   {
+    slug: "inference:execute",
+    resourceType: "inference",
+    visibility: "user_visible",
+    description:
+      "Run inference in selected projects. Does not grant MCP access.",
+    agentEligible: true,
+  },
+  {
     slug: "mcp:connect",
     resourceType: "mcp",
     visibility: "user_visible",
@@ -136,6 +144,7 @@ export function isAgentPolicyNarrowable(resourceType: ResourceType): boolean {
     resourceType === "mcp" ||
     resourceType === "project" ||
     resourceType === "skill" ||
+    resourceType === "inference" ||
     resourceType === "assistant"
   );
 }
@@ -156,6 +165,7 @@ const RESOURCE_KIND_BY_SCOPE_FAMILY: Record<
   environment: "environment",
   skill: "skill",
   assistant: "assistant",
+  inference: "inference",
   risk_policy: "risk_policy",
 };
 
@@ -177,6 +187,7 @@ const ALLOWED_SELECTOR_KEYS: Record<
   mcp: ["projectId", "disposition", "tool"],
   environment: ["projectId"],
   assistant: ["projectId"],
+  inference: ["projectId"],
   risk_policy: ["serverUrl", "serverIdentity"],
 };
 
@@ -238,6 +249,7 @@ const DRAFT_DIMENSIONS: Record<string, readonly string[]> = {
   mcp: ["projectId", "disposition", "tool"],
   environment: ["projectId"],
   assistant: ["projectId"],
+  inference: ["projectId"],
 };
 
 /**

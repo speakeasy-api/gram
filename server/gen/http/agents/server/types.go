@@ -45,6 +45,19 @@ type RenameRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
+// CheckPolicyGrantsRequestBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP request body.
+type CheckPolicyGrantsRequestBody struct {
+	// The agent the grants would be written to. Omit for an agent the caller would
+	// create.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Owner of the agent the caller would create, as agents.create takes it;
+	// defaults to the caller. Not allowed with agent_id, whose owner is its own.
+	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
+	// The grants to check, answered in the same order.
+	PolicyGrants []*AgentPolicyGrantFormRequestBodyRequestBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+}
+
 // CreatePolicyGrantRequestBody is the type of the "agents" service
 // "createPolicyGrant" endpoint HTTP request body.
 type CreatePolicyGrantRequestBody struct {
@@ -74,6 +87,9 @@ type UpdatePolicyGrantRequestBody struct {
 // DeletePolicyGrantRequestBody is the type of the "agents" service
 // "deletePolicyGrant" endpoint HTTP request body.
 type DeletePolicyGrantRequestBody struct {
+	// Optional delete precondition. Returns conflict if the current scope or
+	// selector differs; omission preserves unconditional deletion.
+	ExpectedPolicy *AgentExpectedPolicyRequestBodyRequestBody `form:"expected_policy,omitempty" json:"expected_policy,omitempty" xml:"expected_policy,omitempty"`
 	// Direct policy grant identifier
 	GrantID *string `form:"grant_id,omitempty" json:"grant_id,omitempty" xml:"grant_id,omitempty"`
 	// First-class agent identifier
@@ -231,6 +247,13 @@ type ListDelegableGrantsResponseBody []*AgentPolicyGrantFormResponse
 // ListPolicyGrantsResponseBody is the type of the "agents" service
 // "listPolicyGrants" endpoint HTTP response body.
 type ListPolicyGrantsResponseBody []*AgentPolicyGrantResponse
+
+// CheckPolicyGrantsResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body.
+type CheckPolicyGrantsResponseBody struct {
+	// One answer per requested grant, in request order.
+	Results []*AgentPolicyGrantCheckResponseBody `form:"results" json:"results" xml:"results"`
+}
 
 // CreatePolicyGrantResponseBody is the type of the "agents" service
 // "createPolicyGrant" endpoint HTTP response body.
@@ -1821,6 +1844,190 @@ type ListPolicyGrantsUnexpectedResponseBody struct {
 // ListPolicyGrantsGatewayErrorResponseBody is the type of the "agents" service
 // "listPolicyGrants" endpoint HTTP response body for the "gateway_error" error.
 type ListPolicyGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsUnauthorizedResponseBody is the type of the "agents"
+// service "checkPolicyGrants" endpoint HTTP response body for the
+// "unauthorized" error.
+type CheckPolicyGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsForbiddenResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "forbidden" error.
+type CheckPolicyGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsBadRequestResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "bad_request" error.
+type CheckPolicyGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsNotFoundResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "not_found" error.
+type CheckPolicyGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsConflictResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "conflict" error.
+type CheckPolicyGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsUnsupportedMediaResponseBody is the type of the "agents"
+// service "checkPolicyGrants" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CheckPolicyGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsInvalidResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "invalid" error.
+type CheckPolicyGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsInvariantViolationResponseBody is the type of the "agents"
+// service "checkPolicyGrants" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CheckPolicyGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsUnexpectedResponseBody is the type of the "agents" service
+// "checkPolicyGrants" endpoint HTTP response body for the "unexpected" error.
+type CheckPolicyGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CheckPolicyGrantsGatewayErrorResponseBody is the type of the "agents"
+// service "checkPolicyGrants" endpoint HTTP response body for the
+// "gateway_error" error.
+type CheckPolicyGrantsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4116,8 +4323,8 @@ type AgentPolicySelectorResponse struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
-	// scopes).
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -4133,6 +4340,15 @@ type AgentPolicyGrantResponse struct {
 	Selector  *AgentPolicySelectorResponse `form:"selector" json:"selector" xml:"selector"`
 	CreatedAt string                       `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string                       `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// AgentPolicyGrantCheckResponseBody is used to define fields on response body
+// types.
+type AgentPolicyGrantCheckResponseBody struct {
+	// Whether the grant fits within the caller's and the owner's permissions.
+	Allowed bool `form:"allowed" json:"allowed" xml:"allowed"`
+	// Whose permissions the grant exceeds; absent when allowed.
+	LimitedBy *string `form:"limited_by,omitempty" json:"limited_by,omitempty" xml:"limited_by,omitempty"`
 }
 
 // AgentPolicySelectorResponseBody is used to define fields on response body
@@ -4155,8 +4371,8 @@ type AgentPolicySelectorResponseBody struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
-	// scopes).
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -4206,8 +4422,8 @@ type AgentPolicySelectorRequestBodyRequestBody struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
-	// scopes).
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -4234,13 +4450,22 @@ type AgentPolicySelector struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
-	// scopes).
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 	// Server identity filter (risk policy scopes only).
 	ServerIdentity *string `form:"server_identity,omitempty" json:"server_identity,omitempty" xml:"server_identity,omitempty"`
+}
+
+// AgentExpectedPolicyRequestBodyRequestBody is used to define fields on
+// request body types.
+type AgentExpectedPolicyRequestBodyRequestBody struct {
+	// Scope of the grant originally read
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Selector of the grant originally read
+	Selector *AgentPolicySelectorRequestBodyRequestBody `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
 }
 
 // NewListSessionsResponseBody builds the HTTP response body from the result of
@@ -4378,6 +4603,25 @@ func NewListPolicyGrantsResponseBody(res []*agents.AgentPolicyGrant) ListPolicyG
 			continue
 		}
 		body[i] = marshalAgentsAgentPolicyGrantToAgentPolicyGrantResponse(val)
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsResponseBody builds the HTTP response body from the
+// result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsResponseBody(res *agents.CheckAgentPolicyGrantsResult) *CheckPolicyGrantsResponseBody {
+	body := &CheckPolicyGrantsResponseBody{}
+	if res.Results != nil {
+		body.Results = make([]*AgentPolicyGrantCheckResponseBody, len(res.Results))
+		for i, val := range res.Results {
+			if val == nil {
+				body.Results[i] = nil
+				continue
+			}
+			body.Results[i] = marshalAgentsAgentPolicyGrantCheckToAgentPolicyGrantCheckResponseBody(val)
+		}
+	} else {
+		body.Results = []*AgentPolicyGrantCheckResponseBody{}
 	}
 	return body
 }
@@ -5683,6 +5927,148 @@ func NewListPolicyGrantsUnexpectedResponseBody(res *goa.ServiceError) *ListPolic
 // from the result of the "listPolicyGrants" endpoint of the "agents" service.
 func NewListPolicyGrantsGatewayErrorResponseBody(res *goa.ServiceError) *ListPolicyGrantsGatewayErrorResponseBody {
 	body := &ListPolicyGrantsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsUnauthorizedResponseBody(res *goa.ServiceError) *CheckPolicyGrantsUnauthorizedResponseBody {
+	body := &CheckPolicyGrantsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsForbiddenResponseBody builds the HTTP response body from
+// the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsForbiddenResponseBody(res *goa.ServiceError) *CheckPolicyGrantsForbiddenResponseBody {
+	body := &CheckPolicyGrantsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsBadRequestResponseBody builds the HTTP response body
+// from the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsBadRequestResponseBody(res *goa.ServiceError) *CheckPolicyGrantsBadRequestResponseBody {
+	body := &CheckPolicyGrantsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsNotFoundResponseBody builds the HTTP response body from
+// the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsNotFoundResponseBody(res *goa.ServiceError) *CheckPolicyGrantsNotFoundResponseBody {
+	body := &CheckPolicyGrantsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsConflictResponseBody builds the HTTP response body from
+// the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsConflictResponseBody(res *goa.ServiceError) *CheckPolicyGrantsConflictResponseBody {
+	body := &CheckPolicyGrantsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "checkPolicyGrants" endpoint of the "agents"
+// service.
+func NewCheckPolicyGrantsUnsupportedMediaResponseBody(res *goa.ServiceError) *CheckPolicyGrantsUnsupportedMediaResponseBody {
+	body := &CheckPolicyGrantsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsInvalidResponseBody builds the HTTP response body from
+// the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsInvalidResponseBody(res *goa.ServiceError) *CheckPolicyGrantsInvalidResponseBody {
+	body := &CheckPolicyGrantsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "checkPolicyGrants" endpoint of the "agents"
+// service.
+func NewCheckPolicyGrantsInvariantViolationResponseBody(res *goa.ServiceError) *CheckPolicyGrantsInvariantViolationResponseBody {
+	body := &CheckPolicyGrantsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsUnexpectedResponseBody(res *goa.ServiceError) *CheckPolicyGrantsUnexpectedResponseBody {
+	body := &CheckPolicyGrantsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCheckPolicyGrantsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "checkPolicyGrants" endpoint of the "agents" service.
+func NewCheckPolicyGrantsGatewayErrorResponseBody(res *goa.ServiceError) *CheckPolicyGrantsGatewayErrorResponseBody {
+	body := &CheckPolicyGrantsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7512,6 +7898,26 @@ func NewListPolicyGrantsPayload(agentID string, sessionToken *string) *agents.Li
 	return v
 }
 
+// NewCheckPolicyGrantsPayload builds a agents service checkPolicyGrants
+// endpoint payload.
+func NewCheckPolicyGrantsPayload(body *CheckPolicyGrantsRequestBody, sessionToken *string) *agents.CheckPolicyGrantsPayload {
+	v := &agents.CheckPolicyGrantsPayload{
+		AgentID:     body.AgentID,
+		OwnerUserID: body.OwnerUserID,
+	}
+	v.PolicyGrants = make([]*agents.AgentPolicyGrantForm, len(body.PolicyGrants))
+	for i, val := range body.PolicyGrants {
+		if val == nil {
+			v.PolicyGrants[i] = nil
+			continue
+		}
+		v.PolicyGrants[i] = unmarshalAgentPolicyGrantFormRequestBodyRequestBodyToAgentsAgentPolicyGrantForm(val)
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewCreatePolicyGrantPayload builds a agents service createPolicyGrant
 // endpoint payload.
 func NewCreatePolicyGrantPayload(body *CreatePolicyGrantRequestBody, sessionToken *string) *agents.CreatePolicyGrantPayload {
@@ -7547,6 +7953,9 @@ func NewDeletePolicyGrantPayload(body *DeletePolicyGrantRequestBody, sessionToke
 	v := &agents.DeletePolicyGrantPayload{
 		GrantID: *body.GrantID,
 		AgentID: *body.AgentID,
+	}
+	if body.ExpectedPolicy != nil {
+		v.ExpectedPolicy = unmarshalAgentExpectedPolicyRequestBodyRequestBodyToAgentsAgentExpectedPolicy(body.ExpectedPolicy)
 	}
 	v.SessionToken = sessionToken
 
@@ -7716,6 +8125,31 @@ func ValidateRenameRequestBody(body *RenameRequestBody) (err error) {
 	return
 }
 
+// ValidateCheckPolicyGrantsRequestBody runs the validations defined on
+// CheckPolicyGrantsRequestBody
+func ValidateCheckPolicyGrantsRequestBody(body *CheckPolicyGrantsRequestBody) (err error) {
+	if body.PolicyGrants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_grants", "body"))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if len(body.PolicyGrants) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.policy_grants", body.PolicyGrants, len(body.PolicyGrants), 1, true))
+	}
+	if len(body.PolicyGrants) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.policy_grants", body.PolicyGrants, len(body.PolicyGrants), 100, false))
+	}
+	for _, e := range body.PolicyGrants {
+		if e != nil {
+			if err2 := ValidateAgentPolicyGrantFormRequestBodyRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateCreatePolicyGrantRequestBody runs the validations defined on
 // CreatePolicyGrantRequestBody
 func ValidateCreatePolicyGrantRequestBody(body *CreatePolicyGrantRequestBody) (err error) {
@@ -7802,6 +8236,11 @@ func ValidateDeletePolicyGrantRequestBody(body *DeletePolicyGrantRequestBody) (e
 	}
 	if body.AgentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.ExpectedPolicy != nil {
+		if err2 := ValidateAgentExpectedPolicyRequestBodyRequestBody(body.ExpectedPolicy); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.GrantID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.grant_id", *body.GrantID, goa.FormatUUID))
@@ -7956,8 +8395,8 @@ func ValidateAgentPolicySelectorRequestBodyRequestBody(body *AgentPolicySelector
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "inference" || *body.ResourceKind == "agent" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "mcp_auth_client", "*"}))
 		}
 	}
 	if body.ClientType != nil {
@@ -7986,8 +8425,8 @@ func ValidateAgentPolicySelector(body *AgentPolicySelector) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "inference" || *body.ResourceKind == "agent" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "mcp_auth_client", "*"}))
 		}
 	}
 	if body.ClientType != nil {
@@ -8002,6 +8441,28 @@ func ValidateAgentPolicySelector(body *AgentPolicySelector) (err error) {
 	}
 	if body.ServerURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
+	}
+	return
+}
+
+// ValidateAgentExpectedPolicyRequestBodyRequestBody runs the validations
+// defined on AgentExpectedPolicyRequestBodyRequestBody
+func ValidateAgentExpectedPolicyRequestBodyRequestBody(body *AgentExpectedPolicyRequestBodyRequestBody) (err error) {
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if body.Scope != nil {
+		if utf8.RuneCountInString(*body.Scope) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope", *body.Scope, utf8.RuneCountInString(*body.Scope), 1, true))
+		}
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelectorRequestBodyRequestBody(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }

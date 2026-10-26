@@ -761,6 +761,8 @@ const (
 
 	RiskPolicyCountKey           = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey              = attribute.Key("gram.risk.policy_id")
+	RiskPolicyApprovalIDKey      = attribute.Key("gram.risk.policy_approval.id")
+	RiskPolicyApprovalStatusKey  = attribute.Key("gram.risk.policy_approval.status")
 	RiskPolicyNameKey            = attribute.Key("gram.risk.policy_name")
 	RiskPolicyTypeKey            = attribute.Key("gram.risk.policy_type")
 	RiskMessageTypeKey           = attribute.Key("gram.risk.message_type")
@@ -2957,6 +2959,18 @@ func SlogRiskPolicyCount(v int) slog.Attr      { return slog.Int(string(RiskPoli
 
 func RiskPolicyID(v string) attribute.KeyValue { return RiskPolicyIDKey.String(v) }
 func SlogRiskPolicyID(v string) slog.Attr      { return slog.String(string(RiskPolicyIDKey), v) }
+
+func RiskPolicyApprovalID(v string) attribute.KeyValue { return RiskPolicyApprovalIDKey.String(v) }
+func SlogRiskPolicyApprovalID(v string) slog.Attr {
+	return slog.String(string(RiskPolicyApprovalIDKey), v)
+}
+
+func RiskPolicyApprovalStatus(v string) attribute.KeyValue {
+	return RiskPolicyApprovalStatusKey.String(v)
+}
+func SlogRiskPolicyApprovalStatus(v string) slog.Attr {
+	return slog.String(string(RiskPolicyApprovalStatusKey), v)
+}
 
 func RiskPolicyName(v string) attribute.KeyValue { return RiskPolicyNameKey.String(v) }
 func SlogRiskPolicyName(v string) slog.Attr      { return slog.String(string(RiskPolicyNameKey), v) }
