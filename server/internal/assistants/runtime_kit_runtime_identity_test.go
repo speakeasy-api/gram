@@ -112,7 +112,12 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: hosted.ID}})
 	require.NoError(t, err)
 	assertEnvironment(bootstrap(), "default-env")
-	_, err = db.Exec(t.Context(), "UPDATE toolsets SET default_environment_slug = NULL WHERE id = $1 AND project_id = $2", hosted.ID, r.ProjectID)
+	plain, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, Name: "Plain tools", Slug: "plain-tools", McpSlug: pgtype.Text{String: "plain-tools-endpoint", Valid: true}, McpEnabled: true})
+	require.NoError(t, err)
+	syncCanonicalWrapper(t, db, plain)
+	require.NoError(t, q.SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{ID: plain.ID, ProjectID: r.ProjectID, UserSessionIssuerID: uuid.NullUUID{UUID: config.MCPUserSessionIssuerID, Valid: true}}))
+	require.NoError(t, q.ClearAssistantMcpServersForServers(t.Context(), assistantrepo.ClearAssistantMcpServersForServersParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, McpServerIds: []uuid.UUID{hosted.ID}}))
+	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: plain.ID}})
 	require.NoError(t, err)
 	assertEnvironment(bootstrap(), "")
 	// Replacement selecting the same agent is still a different authority.
