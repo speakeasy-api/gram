@@ -115,7 +115,8 @@ func TestCallbackMarksOnlyProvenRefusalsNotDispatched(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			state := &executionState{}
-			_, err := state.callback(t.Context(), callFailureHost{err: tc.err}, runnerMessage{Method: "call", Arguments: json.RawMessage(`{"path":"server--tool","arguments":{}}`)})
+			message := runnerMessage{Method: "call", Arguments: json.RawMessage(`{"path":"server--tool","arguments":{}}`)}
+			_, err := state.callback(t.Context(), callFailureHost{err: tc.err}, message, state.receiveCall(message))
 			require.Error(t, err)
 			require.Equal(t, []CallOutcome{{Path: "server--tool", Outcome: tc.outcome}}, state.calls)
 		})

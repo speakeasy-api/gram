@@ -356,13 +356,13 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     write_frame(&mut stream, &ServerFrame::Started { execution_id }).await?;
     let (mut reader, mut writer) = tokio::io::split(stream);
     let (frames, mut outbound) = mpsc::channel(1);
-    let terminal = CancellationToken::new();
-    let writer_terminal = terminal.clone();
+    let interrupted = CancellationToken::new();
+    let writer_interrupted = interrupted.clone();
     // This task owns framing through cancellation: a terminal frame can only
     // follow whole callback frames, never a cancelled prefix or partial payload.
     let writer_task = AbortOnDropHandle::new(tokio::spawn(async move {
         while let Some(frame) = outbound.recv().await {
-            if writer_terminal.is_cancelled() && matches!(frame, ServerFrame::Callback { .. }) {
+            if writer_interrupted.is_cancelled() && matches!(frame, ServerFrame::Callback { .. }) {
                 continue;
             }
             write_frame(&mut writer, &frame).await?;
@@ -387,14 +387,14 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
         }
         reader_cancel.cancel();
     }));
-    let mut result = tokio::select! {
+    let (mut result, mut interrupt) = tokio::select! {
         biased;
-        _ = cancelled.cancelled() => cancelled_error(),
+        _ = cancelled.cancelled() => (cancelled_error(), true),
         result = tokio::time::timeout(Duration::from_millis(wall_ms), runtime::execute(&state.pool, code, &mut replies, &frames)) => {
             match result {
-                Ok(Ok(result)) => result,
-                Ok(Err(error)) => runtime::public_error(&error),
-                Err(_) => ServerFrame::Error { code: "deadline_exceeded".into(), message: "execution deadline exceeded; dispatched tool outcomes may be unknown".into() },
+                Ok(Ok(result)) => (result, false),
+                Ok(Err(error)) => (runtime::public_error(&error), false),
+                Err(_) => (ServerFrame::Error { code: "deadline_exceeded".into(), message: "execution deadline exceeded; dispatched tool outcomes may be unknown".into() }, true),
             }
         }
     };
@@ -402,8 +402,15 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     // during one poll. Cancellation also wins after polling the runtime.
     if cancelled.is_cancelled() {
         result = cancelled_error();
+        interrupt = true;
     }
-    terminal.cancel();
+    // Cancellation and the deadline discard queued callbacks: the host has
+    // stopped dispatching. A run that failed on its own, such as at the
+    // concurrency limit, still delivers every callback it issued ahead of its
+    // terminal frame, so the host can record each call.
+    if interrupt {
+        interrupted.cancel();
+    }
     drop(reader_task);
     // A disconnected peer must not hold an execution slot while refusing reads.
     tokio::time::timeout(Duration::from_secs(1), async {

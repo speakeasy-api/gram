@@ -89,9 +89,11 @@ credentials, arbitrary OS callback, snapshot or resume operation.
 Speakeasy owns callback dispatch records and derives unknown outcomes from them for
 every terminal error or connection loss. SIGTERM stops admissions and drains
 active streams for up to 31 seconds before forcing cancellation.
-Queued callbacks are discarded once execution ends. A callback already being
+Cancellation and the deadline discard queued callbacks. A callback already being
 written finishes its frame; Speakeasy must check its own deadline/cancellation before
-dispatch and ignore callbacks received after it. Sandbox termination grace must
+dispatch and ignore callbacks received after it. A run that fails on its own,
+such as at the concurrency limit, first delivers every callback it already
+issued, ahead of its terminal `error`, so Speakeasy can record each call. Sandbox termination grace must
 be at least 35 seconds to cover execution, terminal-frame and connection draining.
 
 ## Initial bounds
@@ -99,7 +101,8 @@ be at least 35 seconds to cover execution, terminal-frame and connection drainin
 - 64 KiB source; 30 seconds wall time; 2 CPU-seconds per execution through the
   worker shim, with Monty's 25-second active-execution limit as a backstop.
 - 64 MiB interpreter allocation; recursion depth 128; 256 suspensions.
-- 64 helper attempts and at most eight unresolved callbacks per execution.
+- 64 helper attempts and at most eight unresolved callbacks per execution; a
+  ninth ends the run with `execution_failed` and is never sent.
 - 1 MiB per helper result; 8 MiB cumulative callback arguments and results.
 - 256 KiB final JSON; 16 KiB captured print output, truncated at a UTF-8 boundary.
 - Twelve executions by default (`GRAM_CODE_RUNNER_CAPACITY`), configurable

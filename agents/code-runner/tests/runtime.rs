@@ -647,6 +647,49 @@ async fn callback_concurrency_is_bounded() {
     pending.close().await.unwrap();
 }
 
+// A slow reader stalls the writer on the seventh callback while the eighth
+// waits behind it and the ninth fails the run. Every callback the program
+// issued still reaches the host, ahead of the terminal error, so the host can
+// account for each call.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_run_still_delivers_every_issued_callback() {
+    let (mut stream, server) = tokio::io::duplex(65_000);
+    let task = tokio::spawn(serve_stream(
+        server,
+        state(1).await,
+        CancellationToken::new(),
+    ));
+    write_frame(
+        &mut stream,
+        &ClientFrame::Start {
+            version: 1,
+            execution_id: Uuid::new_v4().to_string(),
+            code: "import asyncio\nawait asyncio.gather(*[tools.call('a--write', {'p': 'x' * 10000}) for _ in range(9)])".into(),
+            wall_ms: 5000,
+        },
+    )
+    .await
+    .unwrap();
+    // Each callback is about 10 KB, so the buffer fills partway through the
+    // seventh while the run fails.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let mut callbacks = 0;
+    loop {
+        match read_frame::<_, ServerFrame>(&mut stream).await.unwrap().0 {
+            ServerFrame::Started { .. } => {}
+            ServerFrame::Callback { .. } => callbacks += 1,
+            ServerFrame::Error { message, .. } => {
+                assert!(message.contains("eight callbacks"), "{message}");
+                break;
+            }
+            ServerFrame::Complete { .. } => panic!("the ninth call must fail the run"),
+        }
+    }
+    assert_eq!(callbacks, 8);
+    drop(stream);
+    task.await.unwrap().unwrap();
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn json_integer_precision_survives_callback_round_trip() {
     let value: Value =
