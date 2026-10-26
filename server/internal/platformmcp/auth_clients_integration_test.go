@@ -363,18 +363,20 @@ func TestPlatformMCPChoosesAHeadlessCallersCredential(t *testing.T) {
 	input := ChooseMCPHeadlessCallerCredentialInput{ProjectID: project.ID.String(), MCPID: target.McpServerID.String(), UserSessionClientID: client.ID.String(), AuthClientID: shared.String(), Name: "Nightly job"}
 	preview, err := service.ChooseHeadlessCallerCredential(ctx, principal, input)
 	require.NoError(t, err)
-	require.Empty(t, preview.Callers, "a preview changes nothing")
+	require.Equal(t, []MCPHeadlessCallerChoice{{Name: "Nightly job", UserSessionClientID: client.ID.String()}}, preview.Callers, "a registered app needing its first choice is listed, and a preview changes nothing")
 
 	unconfigured := input
 	unconfigured.AuthClientID, unconfigured.Remove, unconfigured.Confirmed = "", true, true
 	got, err := service.ChooseHeadlessCallerCredential(ctx, principal, unconfigured)
 	require.NoError(t, err, "removing a choice a caller never had changes nothing")
-	require.Empty(t, got.Callers)
+	require.Len(t, got.Callers, 1)
+	require.Empty(t, got.Callers[0].ProfileID)
 
 	input.Confirmed = true
 	got, err = service.ChooseHeadlessCallerCredential(ctx, principal, input)
 	require.NoError(t, err)
-	require.Len(t, got.Callers, 1)
+	require.Len(t, got.Callers, 1, "a configured app is listed once")
+	require.NotEmpty(t, got.Callers[0].ProfileID)
 	require.True(t, got.Callers[0].Chosen)
 	require.Equal(t, shared.String(), got.Callers[0].AuthClientID)
 	require.Equal(t, client.ID.String(), got.Callers[0].UserSessionClientID)

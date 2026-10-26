@@ -4009,3 +4009,19 @@ SELECT n.id, n.seq, n.created_at, n.role, n.generation,
                ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
        ), '[]')::jsonb AS participants
 FROM neighbors n ORDER BY n.seq;
+
+-- name: ListHeadlessCallerClients :many
+-- The live OAuth clients that sign in through one sign-in, in the
+-- organization: its own, or one of a live project's.
+SELECT c.id, c.client_name
+FROM user_session_clients AS c
+LEFT JOIN projects AS p
+  ON p.id = c.project_id
+WHERE c.user_session_issuer_id = @user_session_issuer_id
+  AND c.deleted IS FALSE
+  AND (
+    (c.project_id IS NULL AND c.organization_id = @organization_id::text)
+    OR (p.organization_id = @organization_id::text AND p.deleted IS FALSE)
+  )
+ORDER BY c.client_name, c.id
+LIMIT 500;
