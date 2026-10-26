@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -106,7 +109,7 @@ func TestProxy_Get_DrainClosesListenStreamWithRetry(t *testing.T) {
 
 	done := runAsync(func() error { return p.Get(rr, req) })
 	waitFor(t, upstream.opened, "the upstream stream to open")
-	drain.Start()
+	drain.Start(time.Hour)
 
 	require.NoError(t, waitForHandler(t, done), "a stream closed for shutdown ends cleanly")
 	waitFor(t, upstream.canceled, "the upstream request to be cancelled")
@@ -120,7 +123,7 @@ func TestProxy_Get_DrainStartedBeforeStreamClosesItImmediately(t *testing.T) {
 
 	upstream := newHeldSSEUpstream(t)
 	drain := proxy.NewDrain()
-	drain.Start()
+	drain.Start(time.Hour)
 	p := newProxyForTest(t, upstream.server.URL)
 	p.Drain = drain
 
@@ -148,7 +151,7 @@ func TestProxy_Post_DrainEndsSubscriptionsListenWithCompletion(t *testing.T) {
 
 	done := runAsync(func() error { return p.Post(rr, req) })
 	waitFor(t, upstream.opened, "the upstream stream to open")
-	drain.Start()
+	drain.Start(time.Hour)
 
 	require.NoError(t, waitForHandler(t, done))
 	waitFor(t, upstream.canceled, "the upstream subscription to be cancelled")
@@ -197,7 +200,7 @@ func TestProxy_Post_DrainLeavesToolCallStreamOpen(t *testing.T) {
 
 	done := runAsync(func() error { return p.Post(rr, req) })
 	waitFor(t, opened, "the upstream stream to open")
-	drain.Start()
+	drain.Start(time.Hour)
 	close(release)
 
 	require.NoError(t, waitForHandler(t, done))
@@ -251,7 +254,7 @@ func TestProxy_Get_RecordsShutdownStreamEnd(t *testing.T) {
 
 	done := runAsync(func() error { return p.Get(httptest.NewRecorder(), req) })
 	waitFor(t, upstream.opened, "the upstream stream to open")
-	drain.Start()
+	drain.Start(time.Hour)
 	require.NoError(t, waitForHandler(t, done))
 
 	streams := collectMetric(t, reader, proxy.MeterStreams)
@@ -294,4 +297,187 @@ func sseDataEvents(t *testing.T, body string) []string {
 		}
 	}
 	return events
+}
+
+// pendingUpstream holds every request's SSE stream open without responding,
+// as a remote MCP server running a slow tool call would, and records any
+// notifications/cancelled it receives.
+type pendingUpstream struct {
+	server *httptest.Server
+
+	// opened closes once the first stream's headers and progress event are
+	// flushed.
+	opened chan struct{}
+
+	// cancels receives the body of each notifications/cancelled request.
+	cancels chan string
+
+	// requests counts every request the upstream received.
+	requests atomic.Int64
+}
+
+func newPendingUpstream(t *testing.T, sendHeaders bool) *pendingUpstream {
+	t.Helper()
+
+	u := &pendingUpstream{server: nil, opened: make(chan struct{}), cancels: make(chan string, 1), requests: atomic.Int64{}}
+	var openOnce sync.Once
+	u.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u.requests.Add(1)
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), `"notifications/cancelled"`) {
+			u.cancels <- string(body)
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		if sendHeaders {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, "data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progressToken\":1,\"progress\":1}}\n\n")
+			_ = http.NewResponseController(w).Flush()
+		}
+		openOnce.Do(func() { close(u.opened) })
+		<-r.Context().Done()
+	}))
+	t.Cleanup(u.server.Close)
+
+	return u
+}
+
+func newToolsCallPost(t *testing.T, method string) *http.Request {
+	t.Helper()
+
+	body := fmt.Sprintf(`{"jsonrpc":"2.0","id":3,"method":%q,"params":{"name":"slow","arguments":{}}}`, method)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	return req
+}
+
+// interruptedReply decodes the JSON-RPC error a drain interruption answers with.
+type interruptedReply struct {
+	ID    int `json:"id"`
+	Error struct {
+		Code int `json:"code"`
+		Data struct {
+			Reason    string `json:"reason"`
+			Retryable bool   `json:"retryable"`
+		} `json:"data"`
+	} `json:"error"`
+}
+
+func TestProxy_Post_DrainEndsStreamOnceResponseIsRelayed(t *testing.T) {
+	t.Parallel()
+
+	canceled := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, "data: {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[]}}\n\n")
+		_ = http.NewResponseController(w).Flush()
+		// Keeps the stream open after responding, which MCP asks servers
+		// not to do.
+		<-r.Context().Done()
+		close(canceled)
+	}))
+	t.Cleanup(upstream.Close)
+
+	drain := proxy.NewDrain()
+	drain.Start(time.Hour)
+	p := newProxyForTest(t, upstream.URL)
+	p.Drain = drain
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, waitForHandler(t, runAsync(func() error { return p.Post(rr, newToolsCallPost(t, "tools/call")) })))
+	waitFor(t, canceled, "the upstream stream to be closed")
+	require.Contains(t, rr.Body.String(), `"id":3,"result"`)
+	require.NotContains(t, rr.Body.String(), `"error"`)
+}
+
+func TestProxy_Post_InterruptAnswersPendingStreamAndCancelsUpstream(t *testing.T) {
+	t.Parallel()
+
+	upstream := newPendingUpstream(t, true)
+	reader := sdkmetric.NewManualReader()
+	failures := &mockToolsCallFailureInterceptor{}
+	drain := proxy.NewDrain()
+	p := newProxyForTest(t, upstream.server.URL)
+	p.Drain = drain
+	p.Metrics = proxy.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
+	p.ToolsCallFailureInterceptors = []proxy.ToolsCallFailureInterceptor{failures}
+
+	rr := httptest.NewRecorder()
+	done := runAsync(func() error { return p.Post(rr, newToolsCallPost(t, "tools/call")) })
+	waitFor(t, upstream.opened, "the upstream stream to open")
+	drain.Start(time.Millisecond)
+	require.NoError(t, waitForHandler(t, done))
+
+	events := sseDataEvents(t, rr.Body.String())
+	require.NotEmpty(t, events)
+	var reply interruptedReply
+	require.NoError(t, json.Unmarshal([]byte(events[len(events)-1]), &reply))
+	require.Equal(t, 3, reply.ID)
+	require.Equal(t, -32603, reply.Error.Code)
+	require.Equal(t, "server_shutdown", reply.Error.Data.Reason)
+	require.False(t, reply.Error.Data.Retryable, "a tool call may have side effects, so it is never marked retryable")
+
+	select {
+	case cancel := <-upstream.cancels:
+		require.Contains(t, cancel, `"requestId":3`)
+	case <-time.After(drainTestTimeout):
+		t.Fatal("the upstream was not sent notifications/cancelled")
+	}
+
+	require.Len(t, failures.failures, 1)
+	var serr *oops.ShareableError
+	require.ErrorAs(t, failures.failures[0].Err, &serr)
+	require.Equal(t, oops.CodeUnavailable, serr.Code, "an interruption is Speakeasy's doing, not the remote server's")
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, proxy.MeterStreams),
+		attr.RemoteMCPProxyStreamEndReason(string(proxy.StreamEndShutdownInterrupted)),
+		attr.RemoteMCPProxyStreamResponseRelayed(false),
+	)
+}
+
+func TestProxy_Post_InterruptBeforeHeadersAnswersWithJSONError(t *testing.T) {
+	t.Parallel()
+
+	upstream := newPendingUpstream(t, false)
+	drain := proxy.NewDrain()
+	p := newProxyForTest(t, upstream.server.URL)
+	p.Drain = drain
+
+	rr := httptest.NewRecorder()
+	done := runAsync(func() error { return p.Post(rr, newToolsCallPost(t, "tools/list")) })
+	waitFor(t, upstream.opened, "the upstream to receive the request")
+	drain.Start(time.Millisecond)
+	require.NoError(t, waitForHandler(t, done))
+
+	require.Equal(t, http.StatusOK, rr.Code, "a request answered with a JSON body gets 200")
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	var reply interruptedReply
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &reply))
+	require.Equal(t, 3, reply.ID)
+	require.Equal(t, -32603, reply.Error.Code)
+	require.True(t, reply.Error.Data.Retryable, "a read-only request can be sent again")
+}
+
+func TestProxy_Post_InterruptSkipsUpstreamCancelUnder20260728(t *testing.T) {
+	t.Parallel()
+
+	upstream := newPendingUpstream(t, true)
+	drain := proxy.NewDrain()
+	p := newProxyForTest(t, upstream.server.URL)
+	p.Drain = drain
+
+	req := newToolsCallPost(t, "tools/call")
+	req.Header.Set("MCP-Protocol-Version", "2026-07-28")
+	done := runAsync(func() error { return p.Post(httptest.NewRecorder(), req) })
+	waitFor(t, upstream.opened, "the upstream stream to open")
+	drain.Start(time.Millisecond)
+	require.NoError(t, waitForHandler(t, done))
+
+	// The upstream cancel is sent before Post returns, so none arriving by
+	// now means none was sent: closing the stream is the cancellation.
+	require.Equal(t, int64(1), upstream.requests.Load())
 }

@@ -317,6 +317,13 @@ func restoreLocalPluginRepositories(
 // value for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
+// relayedRequestInterruptAfter is how long after SIGTERM a request relayed to
+// a remote MCP server may keep waiting for its response before it is answered
+// with a JSON-RPC error. It leaves 15s of shutdownDrainTimeout to write those
+// errors, cancel the upstream calls, and let handlers return before the
+// deadline cancels whatever is left.
+const relayedRequestInterruptAfter = 45 * time.Second
+
 func networkIngressLifecycleDeliveryReady(reconcileQueue, temporalQueue string, devSingleProcess bool) (bool, error) {
 	if reconcileQueue == "" {
 		return false, nil
@@ -2260,7 +2267,7 @@ func newStartCommand() *cli.Command {
 
 				// Listen streams never finish on their own, so end them first and
 				// let their clients reconnect to a replica that is still serving.
-				mcpService.StartDrain()
+				mcpService.StartDrain(relayedRequestInterruptAfter)
 				drainHTTPServer(ctx, logger, srv, cancelRequests, shutdownDrainTimeout, "failed to shutdown server")
 
 				// HTTP shutdown has quiesced handlers that produce realtime
