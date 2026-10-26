@@ -58,4 +58,20 @@ func TestDeviceAgentToken_ActsAsTheAgentAdmissionGranted(t *testing.T) {
 	effective, ok := contextvalues.EffectiveAgent(admitted)
 	require.True(t, ok)
 	require.Equal(t, f.agentID.String(), effective.ID)
+
+	// The unchanged token carries the workload, not the old agent. A subsequent
+	// request resolves the new assignment without pairing its identity with the
+	// old request's grants.
+	currentEngine := authz.NewEngine(testenv.NewLogger(t), f.ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
+		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
+		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+		AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
+		DevMode:                          false,
+	})
+	current, currentAgent, err := deviceagenttoken.New(callerIssuer, f.ti.conn).Admit(t.Context(), token, currentEngine)
+	require.NoError(t, err)
+	require.Equal(t, other.ID.String(), currentAgent.Principal.ID)
+	currentEffective, ok := contextvalues.EffectiveAgent(current)
+	require.True(t, ok)
+	require.Equal(t, other.ID.String(), currentEffective.ID)
 }

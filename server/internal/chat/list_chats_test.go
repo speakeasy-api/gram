@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -76,8 +75,9 @@ func seedChatAtTime(t *testing.T, ctx context.Context, ti *chatTestInstance, ext
 	return id
 }
 
-// seedRiskOnChat creates a chat message and attaches a risk result to it.
-func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID, found bool) {
+// seedRiskOnChat creates a chat message under a new enabled policy and records
+// a live ClickHouse finding on it.
+func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID) {
 	t.Helper()
 	r := repo.New(ti.conn)
 	msgID, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
@@ -90,14 +90,9 @@ func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, cha
 		OrganizationID: ti.orgID,
 	})
 	require.NoError(t, err)
-	err = r.SeedRiskResult(ctx, repo.SeedRiskResultParams{
-		ProjectID:      ti.projectID,
-		OrganizationID: ti.orgID,
-		RiskPolicyID:   policyID,
-		ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
-		Found:          found,
-	})
-	require.NoError(t, err)
+	require.NoError(t, riskchrepo.New(ti.chConn).InsertRiskFindings(ctx, []riskchrepo.RiskFindingRow{
+		seedClickHouseFinding(t, ti, uuid.New(), chatID, msgID, policyID),
+	}))
 }
 
 func seedClickHouseFinding(t *testing.T, ti *chatTestInstance, findingID, chatID, messageID, policyID uuid.UUID) riskchrepo.RiskFindingRow {
@@ -135,9 +130,9 @@ func seedChatWithSource(t *testing.T, ctx context.Context, ti *chatTestInstance,
 	return chatID
 }
 
-// seedRiskOnChatDisabledPolicy seeds a found risk result whose policy is
-// disabled. The finding row is real, but every risk surface must treat it as
-// absent because the policy is off (mirrors a policy disabled after detection).
+// seedRiskOnChatDisabledPolicy seeds a live finding whose policy is disabled.
+// The finding row is real, but every risk surface must treat it as absent
+// because the policy is off (mirrors a policy disabled after detection).
 func seedRiskOnChatDisabledPolicy(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID) {
 	t.Helper()
 	r := repo.New(ti.conn)
@@ -151,14 +146,9 @@ func seedRiskOnChatDisabledPolicy(t *testing.T, ctx context.Context, ti *chatTes
 		OrganizationID: ti.orgID,
 	})
 	require.NoError(t, err)
-	err = r.SeedRiskResult(ctx, repo.SeedRiskResultParams{
-		ProjectID:      ti.projectID,
-		OrganizationID: ti.orgID,
-		RiskPolicyID:   policyID,
-		ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
-		Found:          true,
-	})
-	require.NoError(t, err)
+	require.NoError(t, riskchrepo.New(ti.chConn).InsertRiskFindings(ctx, []riskchrepo.RiskFindingRow{
+		seedClickHouseFinding(t, ti, uuid.New(), chatID, msgID, policyID),
+	}))
 }
 
 // initSessionCtx creates a session-authenticated context and overrides ProjectID
@@ -803,7 +793,7 @@ func TestListChats_Filter_HasRisk_True(t *testing.T) {
 	risky := seedChat(t, ctx, ti, "", "ext-risk", "risky chat")
 	_ = seedChat(t, ctx, ti, "", "ext-risk", "safe chat")
 
-	seedRiskOnChat(t, ctx, ti, risky, true)
+	seedRiskOnChat(t, ctx, ti, risky)
 
 	hasRisk := "true"
 	payload := defaultPayload()
@@ -826,7 +816,7 @@ func TestListChats_Filter_HasRisk_False(t *testing.T) {
 	risky := seedChat(t, ctx, ti, "", "ext-risk2", "risky chat")
 	safe := seedChat(t, ctx, ti, "", "ext-risk2", "safe chat")
 
-	seedRiskOnChat(t, ctx, ti, risky, true)
+	seedRiskOnChat(t, ctx, ti, risky)
 
 	hasRisk := "false"
 	payload := defaultPayload()
@@ -852,10 +842,10 @@ func TestListChats_Filter_MinRiskScore(t *testing.T) {
 	_ = seedChat(t, ctx, ti, "", "ext-minrisk", "safe chat")
 
 	// high accrues 3 findings, low accrues 1, safe none.
-	seedRiskOnChat(t, ctx, ti, high, true)
-	seedRiskOnChat(t, ctx, ti, high, true)
-	seedRiskOnChat(t, ctx, ti, high, true)
-	seedRiskOnChat(t, ctx, ti, low, true)
+	seedRiskOnChat(t, ctx, ti, high)
+	seedRiskOnChat(t, ctx, ti, high)
+	seedRiskOnChat(t, ctx, ti, high)
+	seedRiskOnChat(t, ctx, ti, low)
 
 	// Threshold 3 is inclusive: only the chat with exactly 3 findings qualifies.
 	min3 := 3
@@ -880,11 +870,10 @@ func TestListChats_Filter_MinRiskScore(t *testing.T) {
 	require.Equal(t, 2, result.Total)
 }
 
-func TestListChats_ClickHouseCutover(t *testing.T) {
+func TestListChats_ClickHouseFindingEligibility(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := externalUserCtx(t, ti, "ext-ch-risk")
-	ti.flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, ti.orgID, true)
 
 	r := repo.New(ti.conn)
 	high := seedChat(t, ctx, ti, "", "ext-ch-risk", "high policy score")
@@ -1227,7 +1216,7 @@ func TestListChats_RiskFindingsCountInResult(t *testing.T) {
 
 	chatID := seedChat(t, ctx, ti, "", "ext-count", "chat with risk")
 	for range 3 {
-		seedRiskOnChat(t, ctx, ti, chatID, true)
+		seedRiskOnChat(t, ctx, ti, chatID)
 	}
 
 	result, err := ti.service.ListChats(ctx, defaultPayload())

@@ -2321,6 +2321,11 @@ FROM mcp_auth_clients AS ac
 JOIN remote_session_clients AS c ON c.id = ac.remote_session_client_id
 WHERE ac.id = @auth_client_id::uuid;
 
+-- name: SwapUpstreamAuthClientFixture :exec
+UPDATE upstream_client_selections
+SET auth_client_id = @auth_client_id,
+    auth_client_attachment_scope = (SELECT attachment_scope FROM mcp_auth_clients WHERE id = @auth_client_id)
+WHERE credential_id = @credential_id AND mcp_server_id = @mcp_server_id;
 -- name: SoftDeleteAttachmentUserSessionIssuerFixture :exec
 UPDATE user_session_issuers SET deleted_at = clock_timestamp()
 WHERE id = (SELECT user_session_issuer_id FROM principal_remote_session_bindings WHERE principal_remote_session_bindings.id = @binding_id);

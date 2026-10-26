@@ -2,10 +2,7 @@ package assistants
 
 import (
 	"context"
-	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/auth"
-	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
-	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -21,7 +18,6 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
@@ -54,47 +50,28 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	chatID := threadRow.ChatID
 	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
 	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), nil)
-	issue := func() assistanttokens.KitAPIKey {
+	issuerID := uuid.New()
+	subject := "runtime-generation-one"
+	persist := func(subject string) {
 		t.Helper()
-		require.NoError(t, manager.RevokeRuntimeInferenceCredentials(t.Context(), project, runtime))
-		credential, err := manager.IssueKitAPIKey(t.Context(), assistanttokens.InferenceIssueInput{Identity: *resolution.Identity, RuntimeID: runtime, Lifetime: 24 * time.Hour}, "test")
+		metadata, err := json.Marshal(map[string]any{"workload": map[string]any{"issuer_id": issuerID, "subject": subject, "identity": resolution.Identity}})
 		require.NoError(t, err)
-		return credential
+		require.NoError(t, queries.UpdateAssistantRuntimeMetadata(t.Context(), assistantrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: project, RuntimeID: runtime, BackendMetadataJson: metadata}))
 	}
-	// Build the principal context from the native key's persisted issuance ceiling.
-	// Full HTTP API-key authentication is covered by completion_kit_auth_test.go.
-	authorize := func(key assistanttokens.KitAPIKey) (context.Context, error) {
-		hash, err := auth.GetAPIKeyHash(key.Key)
-		if err != nil {
-			return t.Context(), err
-		}
-		row, err := keysrepo.New(db).GetAPIKeyByKeyHash(t.Context(), hash)
-		if err != nil {
-			return t.Context(), err
-		}
-		ac := &contextvalues.AuthContext{APIKeyID: key.ID.String(), ActiveOrganizationID: "org-test", ProjectID: &project}
-		ctx := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), ac, urn.NewPrincipal(urn.PrincipalTypeAgent, resolution.Identity.AgentID.String()), contextvalues.PrincipalCredential{AuthorizerUserID: row.CreatedByUserID, DelegatedGrants: row.DelegatedGrants, DelegatedGrantsVersion: row.DelegatedGrantsVersion.Int32})
-		ctx, err = engine.PrepareContext(ctx)
-		if err != nil {
-			return ctx, fmt.Errorf("prepare authorization context: %w", err)
-		}
-		ctx, _, err = manager.AuthorizeKitAPIKey(ctx)
-		if err != nil {
-			return ctx, fmt.Errorf("authorize Kit API key: %w", err)
-		}
-		return ctx, nil
+	persist(subject)
+	// The MCP authorizer separately verifies the bearer, live admission and
+	// owner/agent inference policy. Attribution consumes only that trusted context.
+	authorize := func(subject string) (context.Context, error) {
+		ac := &contextvalues.AuthContext{ActiveOrganizationID: "org-test", ProjectID: &project}
+		ctx := contextvalues.WithAuthenticatedActor(t.Context(), ac, urn.NewWorkloadPrincipal(issuerID, subject))
+		ctx = contextvalues.WithWorkloadAgent(ctx, urn.NewPrincipal(urn.PrincipalTypeAgent, resolution.Identity.AgentID.String()))
+		return manager.AuthorizeKitWorkload(ctx)
 	}
-	credential := issue()
-	ctx, err := authorize(credential)
+	ctx, err := authorize(subject)
 	require.NoError(t, err)
 	actor, ok := contextvalues.AuthenticatedActor(ctx)
 	require.True(t, ok)
-	require.Equal(t, urn.PrincipalTypeAgent, actor.Type)
-	principal, ok := contextvalues.PrincipalCredentialAuthorization(ctx)
-	require.True(t, ok)
-	require.Equal(t, "user-1", principal.AuthorizerUserID)
-	_, _, err = manager.Authorize(t.Context(), credential.Key)
-	require.Error(t, err, "inference bearer cannot authorize transcript/legacy APIs")
+	require.Equal(t, urn.PrincipalTypeWorkload, actor.Type)
 	const sessionID = "kit-inference-session"
 	_, err = queries.InsertKitRuntimeSession(t.Context(), assistantrepo.InsertKitRuntimeSessionParams{SessionID: sessionID, RuntimeID: runtime, ProjectID: project, AssistantID: assistant.ID, ThreadID: thread})
 	require.NoError(t, err)
@@ -128,37 +105,22 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	messages, err := chatrepo.New(db).CountChatMessages(t.Context(), chatrepo.CountChatMessagesParams{ProjectID: project, ChatID: chatID})
 	require.NoError(t, err)
 	require.Zero(t, messages)
-	// Runtime-wide revoke is the restore/startup rotation boundary.
-	require.NoError(t, manager.RevokeRuntimeInferenceCredentials(t.Context(), project, runtime))
-	_, err = authorize(credential)
+
+	// Replacement metadata fences even an already-authorized request before binding.
+	persist("runtime-generation-two")
+	_, err = manager.BindKitSession(ctx, uuid.NewSHA1(uuid.NameSpaceDNS, []byte(sessionID)))
 	require.Error(t, err)
-	credential = issue()
-	binding, err := tokenrepo.New(db).ReadKitAPIKeyBinding(t.Context(), credential.ID)
+	stale, err := authorize(subject)
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(db).ExpireAssistantInferenceCredentialForTest(t.Context(), testrepo.ExpireAssistantInferenceCredentialForTestParams{OrganizationID: "other-org", ProjectID: project, ID: binding.ID}))
-	_, err = authorize(credential)
-	require.NoError(t, err, "another organization cannot expire the native key")
-	err = testrepo.New(db).ExpireAssistantInferenceCredentialForTest(t.Context(), testrepo.ExpireAssistantInferenceCredentialForTestParams{OrganizationID: "org-test", ProjectID: project, ID: binding.ID})
+	require.False(t, assistanttokens.InferenceTranscriptOwned(stale))
+	_, err = manager.BindKitSession(stale, uuid.NewSHA1(uuid.NameSpaceDNS, []byte(sessionID)))
+	require.Error(t, err)
+	subject = "runtime-generation-two"
+	ctx, err = authorize(subject)
 	require.NoError(t, err)
-	_, err = authorize(credential)
-	require.Error(t, err, "persisted expiry is enforced")
-	credential = issue()
+	require.True(t, assistanttokens.InferenceTranscriptOwned(ctx))
 	_, err = agentrepo.New(db).SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: "org-test", ID: resolution.Identity.AgentID})
 	require.NoError(t, err)
-	_, err = authorize(credential)
-	require.Error(t, err, "live workload eligibility is checked on every request")
-	_, err = agentrepo.New(db).ResumeAgent(t.Context(), agentrepo.ResumeAgentParams{OrganizationID: "org-test", ID: resolution.Identity.AgentID})
-	require.NoError(t, err)
-	ctx, err = authorize(credential)
-	require.NoError(t, err)
-	check := authz.MCPCheck(authz.ScopeMCPConnect, uuid.NewString(), project.String())
-	require.NoError(t, engine.Require(ctx, check))
-	deleteAgentScope(t, db, resolution.Identity.AgentID.String(), authz.ScopeMCPConnect)
-	deleteAgentScope(t, db, resolution.Identity.AgentID.String(), authz.ScopeMCPRead)
-	ctx, err = authorize(credential)
-	require.NoError(t, err)
-	require.Error(t, engine.Require(ctx, check), "live policy narrows the persisted issuance ceiling")
-	require.NoError(t, manager.RevokeInferenceCredential(t.Context(), project, credential.ID))
-	_, err = authorize(credential)
-	require.Error(t, err)
+	_, err = authorize(subject)
+	require.Error(t, err, "current identity eligibility is checked on every request")
 }

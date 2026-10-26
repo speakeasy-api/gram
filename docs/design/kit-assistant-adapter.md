@@ -4,24 +4,22 @@ Use this reference when implementing or diagnosing the local Speakeasy Kit
 adapter. For configuration and validation steps, see
 [Run Kit assistants locally](../runbooks/kit-assistant-local.md).
 
-These contracts apply to local runtime version 3 with Kit commit
-`2c4a35e` and image
-`localhost/kit-control-plane:2c4a35e`. Production deployment has a separate
-[GKE lifecycle contract](../runbooks/kit-assistant-production.md). Neither path
-imports legacy history or migrates existing conversations.
+The workload configuration requires Kit v0.2.19 or a build containing its MCP
+and inference workload support. Production has a separate
+[GKE lifecycle contract](../runbooks/kit-assistant-production.md). Existing
+hybrid-auth Kit runtimes are invalidated; no credential compatibility is provided.
 
 ## Bootstrap files and gateway
 
 Provision files before starting the gateway. Private files are owned by UID/GID
 1000 and use mode `0600` under `/home/kit`. Never log their contents.
 
-| Path relative to `/home/kit`                                                             | Contract                                                                                                                                                                                                                       |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `.kit/AGENTS.md`                                                                         | Global assistant instructions, loaded before workspace rules.                                                                                                                                                                  |
-| `.kit/config.toml`                                                                       | Set `provider = "speakeasy"`, `credential_store = "file"`, `credential_dir = "/home/kit/.kit/credentials"`, and `mcp_config = "/home/kit/.kit/credentials/mcp.json"`.                                                          |
-| `.kit/credentials/9bad6d07edf01f03e226b74e3be944c9fc374754bf1903ac36e2c7ce4cd7f305.json` | Native `speakeasy/default` record containing `api_key`, `project` (project slug), `email: null`, and `organization_id: null`. No version, bearer, or origin fields; `inference.json` is not a recognized replacement filename. |
-| `.kit/credentials/gateway-token`                                                         | Gateway bearer credential.                                                                                                                                                                                                     |
-| `.kit/credentials/mcp.json` and referenced private files                                 | MCP client-credentials configuration and machine secrets; not a fabricated credential-store record.                                                                                                                            |
+| Path relative to `/home/kit`                             | Contract                                                                                                                                                              |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.kit/AGENTS.md`                                         | Global assistant instructions, loaded before workspace rules.                                                                                                         |
+| `.kit/config.toml`                                       | Set `provider = "speakeasy"`, `credential_store = "file"`, `credential_dir = "/home/kit/.kit/credentials"`, and `mcp_config = "/home/kit/.kit/credentials/mcp.json"`. |
+| `.kit/credentials/gateway-token`                         | Gateway bearer credential.                                                                                                                                            |
+| `.kit/credentials/mcp.json` and referenced private files | MCP workload exchange configuration; no client secret or private signing key.                                                                                         |
 
 The persistent workspace is `/home/kit/workspace`; ACP `cwd` must match it
 exactly. The gateway listens on `0.0.0.0:8081` with explicit wildcard permission
@@ -35,41 +33,31 @@ records are not equivalent to the empty sentinel.
 
 ## Inference and MCP authority
 
-Every fresh process start or restore must revoke/remint inference credentials
-before startup. `PrepareKitStartupBootstrap` revokes runtime-row credentials and
-issues a replacement native API key bound to the runtime. Composition also
-rotates gateway authority and
-provisions MCP machine authentication. Do not add a per-turn inference-token
-exchange or reuse an API key restored from a snapshot.
+MCP and inference use the same externally projected, short-lived assertion file.
+Kit exchanges it independently for each resource through its generic workload
+configuration. Inference uses RFC 7523 at `/oauth/usi/<ISSUER_ID>/token`, with
+`resource=urn:speakeasy:inference` and the exact `project_id`; completion uses the
+returned bearer. No API-key record or client secret is bootstrapped.
 
-The control plane persists the canonical chat binding and fences transcript
-projection against that binding. ACP session creation/resumption omits
-`_meta["ai.speakeasy/gram-chat-id"]`; the canonical chat UUID is not sent to Kit.
-An ACP session UUID is not a substitute for the canonical chat UUID.
+One workload issuer is shared within the project/cluster trust boundary. Each
+runtime generation has an exact subject admission assigned to the assistant's
+existing agent. Owner and agent inference permission remain mandatory. Retirement
+revokes that admission; restore receives a fresh projected token, never a token
+copied from rootfs or a snapshot.
 
-The native provider reads the file-backed `api_key`/`project` record and sends
-`Gram-Key` and `Gram-Project` to `POST /chat/completions` at the fixed HTTPS
-origin `https://ai.speakeasy.com`. It does not use inference bearer authentication
-or a `Gram-Chat-ID` header. The adapter writes the saved model into startup
-configuration and selects it through ACP `session/set_config_option` before
-prompting. Kit `2c4a35e` fetches public OpenRouter model metadata and has an
-offline fallback; it does not use authenticated `GET /chat/models` discovery.
-The control plane's model allowlist remains authoritative on completion; a
-model menu or session creation alone does not prove authenticated inference.
-
-The local composition accepts one configured, attached, issuer-gated HTTPS
-`/mcp/<slug>` resource. Its machine token sessions use the agent principal only.
-The persisted user-session issuer UUID must match the resource's advertised
-OAuth issuer. Built-in Platform MCP machine authentication is outside this
-composition's supported contract; neither human credentials nor inference
-bearers are substitutes.
+The control plane binds verified issuer/subject identity to persisted runtime
+metadata. Kit's completion body `user` field selects only an existing ACP session
+inside that authority. Canonical chat ownership, assistant billing, and transcript
+deduplication remain control-plane decisions; caller-supplied assistant/chat
+headers do not establish authority. ACP session creation and resumption must omit
+`ai.speakeasy/gram-chat-id`; the canonical chat UUID is never sent to Kit.
 
 ## MCP configuration lifecycle
 
 The approved `_kit/session/update_mcp` contract is **additive upsert**, not
 replacement of the server set. Verify support in the runtime image before using
-this API; this contract does not change or establish support in the image pinned
-above.
+this API; workload authentication requires Kit v0.2.19 or a build containing
+its MCP and inference workload support.
 
 | Operation                                                             | Required behavior                                                                                     |
 | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -82,9 +70,9 @@ above.
 | `_kit/session/update_mcp` with `[]`                                   | No-op; retain all servers.                                                                            |
 | A submitted name colliding with a host- or plugin-owned server        | Reject the collision; host/plugin servers and built-ins remain protected.                             |
 
-The pinned Kit gateway itself accepts omitted or empty `mcpServers` as retention
-(`src/gateway.rs`, released Kit `v0.2.17`, commit `90a1805`; unchanged from the
-image pin `2c4a35e`). The Speakeasy adapter is deliberately stricter:
+The gateway's additive retention contract was verified in `src/gateway.rs`
+for Kit v0.2.17 (commit `90a1805`); that provenance is distinct from the v0.2.19
+workload-authentication requirement. The Speakeasy adapter is deliberately stricter:
 an explicit list represents a desired set, and `[]` must not silently retain
 servers the caller intended to remove. Omission is the adapter's only retain form.
 

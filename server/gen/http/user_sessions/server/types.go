@@ -1679,8 +1679,8 @@ func ValidateMintUserSessionRequestBody(body *MintUserSessionRequestBody) (err e
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 	}
 	if body.DiscoveryMode != nil {
-		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
 		}
 	}
 	return

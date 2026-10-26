@@ -2,9 +2,12 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -56,6 +59,12 @@ func (s *Service) authorizeWorkloadCompletion(r *http.Request) (context.Context,
 	if project := r.Header.Get("Gram-Project"); project != "" && project != authCtx.ProjectID.String() && (authCtx.ProjectSlug == nil || project != *authCtx.ProjectSlug) {
 		return ctx, nil, true, oops.C(oops.CodeForbidden)
 	}
+	if s.assistantTokens != nil {
+		ctx, err = s.assistantTokens.AuthorizeKitWorkload(ctx)
+		if err != nil {
+			return ctx, nil, true, fmt.Errorf("attribute managed workload: %w", err)
+		}
+	}
 	ctx = context.WithValue(ctx, workloadInferenceContextKey{}, true)
 	return ctx, authCtx, true, nil
 }
@@ -63,3 +72,16 @@ func (s *Service) authorizeWorkloadCompletion(r *http.Request) (context.Context,
 // workloadInferenceSource is a billable customer source and key slot. A
 // caller-controlled source cannot select internal exemptions or assistant keys.
 var workloadInferenceSource = billing.ModelUsageSourcePlayground
+
+// Kit v0.2.19 uses agentkit-adapter-completions 0.11.0, whose request
+// builder puts the ACP session ID in the OpenAI body `user` field.
+// This is only a selector into persisted bindings, never authentication.
+func kitCompletionSessionID(body []byte) (uuid.UUID, error) {
+	var attribution struct {
+		User string `json:"user"`
+	}
+	if err := json.Unmarshal(body, &attribution); err != nil || attribution.User == "" {
+		return uuid.Nil, oops.C(oops.CodeForbidden)
+	}
+	return SessionIDToChatID(attribution.User), nil
+}
