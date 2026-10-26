@@ -92,6 +92,23 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, proj); err != nil {
 		return fmt.Errorf("insert demo hosted toolset mcp servers: %w", err)
 	}
+	for _, candidate := range []struct {
+		server  string
+		status  string
+		ageDays int32
+	}{
+		{server: "linear", status: "active", ageDays: 1},
+		{server: "slack", status: "rejected", ageDays: 2},
+		{server: "github", status: "archived", ageDays: 3},
+	} {
+		if err := s.q.ServersInsertRegistryPromotionCandidate(ctx, repo.ServersInsertRegistryPromotionCandidateParams{
+			ID: s.det("registry-promotion-" + candidate.status), OrgID: org, ProjectID: proj,
+			McpServerID: s.det("mcpserver-" + candidate.server), RemoteMcpServerID: s.det("remotemcp-" + candidate.server),
+			CurationStatus: candidate.status, AgeDays: candidate.ageDays,
+		}); err != nil {
+			return fmt.Errorf("insert synthetic catalogue promotion %s: %w", candidate.status, err)
+		}
+	}
 	if err := s.q.ServersInsertHostedToolsetEndpoints(ctx, repo.ServersInsertHostedToolsetEndpointsParams{
 		EndpointNamePrefix: s.name("endpoint-hosted-"),
 		ProjectID:          proj,

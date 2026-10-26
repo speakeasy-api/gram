@@ -56,6 +56,8 @@ type LocalFixturesOptions struct {
 	// ObservedEnv holds the current values of StaleOverrideVars, so the
 	// fixtures can warn when mise.local.toml is shadowing them.
 	ObservedEnv map[string]string
+	// Slack connects the org to the developer's Slack test app, when set.
+	Slack LocalSlackOptions
 }
 
 // RunLocalFixtures adds everything the local development organization needs on
@@ -144,6 +146,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"grant tool log visibility", localToolLogVisibilitySQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
 		{"enable sso and directory sync", localIdentityFeaturesSQL, []any{spec.OrgID}},
+		{"approve tool calls", localToolApproverSQL, []any{spec.OrgID, spec.FixedUUID(approvalPolicyFixedID), "user:" + dev.ID}},
 		{"verify developer email domain", localVerifiedDomainSQL, []any{spec.OrgID, emailDomain(dev.Email)}},
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
 		{"api key policy", localAPIKeyPolicySQL, []any{spec.OrgID, localAPIKeyID(), spec.ProjectID()}},
@@ -174,7 +177,8 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
 	bustLocalCaches(ctx, logger, cache, spec.OrgID, dev.ID)
-	return nil
+
+	return connectLocalSlack(ctx, logger, db, spec.OrgID, dev, opts.Slack)
 }
 
 // warnOnStaleOverrides catches the one way this seed can leave a developer
@@ -377,6 +381,15 @@ const localCodeModeFeatureSQL = `
 INSERT INTO organization_features (organization_id, feature_name)
 VALUES ($1, 'code_mode')
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
+// The developer approves the seeded tool approval policy too, so the Tool
+// approvals tab offers Approve once and Deny locally. The shared demo org keeps
+// its demo approvers only.
+const localToolApproverSQL = `
+UPDATE risk_policies
+SET approval_config = jsonb_set(approval_config, '{approvers}', (approval_config -> 'approvers') || to_jsonb($3::text))
+WHERE organization_id = $1 AND id = $2::uuid AND NOT (approval_config -> 'approvers') ? $3::text
 `
 
 // SSO and directory sync (scim) are paid entitlements that gate the WorkOS

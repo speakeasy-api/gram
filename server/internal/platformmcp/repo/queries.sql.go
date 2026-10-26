@@ -2630,7 +2630,7 @@ func (q *Queries) GetPlatformMCPInstallTarget(ctx context.Context, arg GetPlatfo
 }
 
 const getPlatformMCPInventoryItem = `-- name: GetPlatformMCPInventoryItem :one
-SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
+SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
 FROM (
     SELECT
         m.id AS mcp_server_id,
@@ -2644,6 +2644,7 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
+        m.builtin_backend,
         COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
@@ -2723,6 +2724,7 @@ type GetPlatformMCPInventoryItemRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
+	BuiltinBackend                  pgtype.Text
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
@@ -2761,6 +2763,7 @@ func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatfo
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
 		&i.UpstreamUrl,
 		&i.RegistrationID,
 		&i.SourceKind,
@@ -5247,6 +5250,7 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
+    m.builtin_backend,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -5356,6 +5360,7 @@ type ListPlatformMCPInventoryRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
+	BuiltinBackend                  pgtype.Text
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
@@ -5411,6 +5416,7 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
+			&i.BuiltinBackend,
 			&i.UpstreamUrl,
 			&i.RegistrationID,
 			&i.SourceKind,

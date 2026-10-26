@@ -129,8 +129,9 @@ WHERE project_id = @project_id::uuid
 -- credential kind, plus the pre-column row. A rerun that dropped or
 -- duplicated any of them would leave the badges telling a different story
 -- than the one they were seeded to tell.
--- Two upstream MCP issuers, two independent gateway issuers, and one
--- Connections issuer; GitHub uses the organization workforce issuer.
+-- Two upstream MCP issuers, two independent gateway issuers, one
+-- Connections issuer, and the approvals server's issuer; GitHub uses the
+-- organization workforce issuer.
 -- name: PostflightIDProjectUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;

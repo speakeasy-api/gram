@@ -72,8 +72,8 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
    status.
 6. **Isolation spot-check** — switch back out of the demo org: your own org's
    pages show no `*@demo.getgram.ai` data anywhere.
-7. **Policy Center** — nine policies listed; Action column shows a mix of
-   Flag / Warn / Block / Quarantine; Severity shows Medium through Critical;
+7. **Policy Center** — 11 policies listed; Action column shows a mix of
+   Flag / Warn / Block / Quarantine / Require approval; Severity shows Medium through Critical;
    "Applies To" varies (All types, Tool Requests, ...); no row renders an
    empty summary. Open the **Quarantines** tab and confirm one active row for
    `gram-demo-quarantine-session-1`, attributed to **Acme session quarantine

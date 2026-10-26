@@ -779,8 +779,9 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 // credential kind, plus the pre-column row. A rerun that dropped or
 // duplicated any of them would leave the badges telling a different story
 // than the one they were seeded to tell.
-// Two upstream MCP issuers, two independent gateway issuers, and one
-// Connections issuer; GitHub uses the organization workforce issuer.
+// Two upstream MCP issuers, two independent gateway issuers, one
+// Connections issuer, and the approvals server's issuer; GitHub uses the
+// organization workforce issuer.
 func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, projectID)
 	var count int64

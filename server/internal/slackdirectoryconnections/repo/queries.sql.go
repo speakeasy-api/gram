@@ -548,6 +548,49 @@ func (q *Queries) ListMappedSlackMembershipIDs(ctx context.Context, arg ListMapp
 	return items, nil
 }
 
+const listSlackAccountsForUser = `-- name: ListSlackAccountsForUser :many
+SELECT im.slack_team_id, im.slack_user_id
+FROM slack_identity_mappings im
+JOIN slack_directory_connections c ON c.organization_id = im.organization_id AND c.slack_team_id = im.slack_team_id
+WHERE im.organization_id = $1
+  AND im.user_id = $2
+  AND im.revoked_at IS NULL
+  AND c.disconnected_at IS NULL
+ORDER BY im.created_at DESC, im.id DESC
+`
+
+type ListSlackAccountsForUserParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+type ListSlackAccountsForUserRow struct {
+	SlackTeamID string
+	SlackUserID string
+}
+
+// The person's confirmed Slack accounts in workspaces that are still connected,
+// newest first.
+func (q *Queries) ListSlackAccountsForUser(ctx context.Context, arg ListSlackAccountsForUserParams) ([]ListSlackAccountsForUserRow, error) {
+	rows, err := q.db.Query(ctx, listSlackAccountsForUser, arg.OrganizationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSlackAccountsForUserRow
+	for rows.Next() {
+		var i ListSlackAccountsForUserRow
+		if err := rows.Scan(&i.SlackTeamID, &i.SlackUserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSlackDirectoryConnectionSummaries = `-- name: ListSlackDirectoryConnectionSummaries :many
 SELECT c.id, c.organization_id, c.slack_team_id, c.slack_team_name, c.credentials_encrypted, c.granted_scopes, c.generation, c.health, c.disconnected_at, c.last_sync_started_at, c.last_full_sync_generation, c.last_full_sync_succeeded_at, c.last_sync_failed_at, c.last_error_code, c.created_at, c.updated_at,
   (SELECT count(*) FROM slack_directory_memberships m WHERE m.organization_id = c.organization_id

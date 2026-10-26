@@ -1,4 +1,4 @@
-h1:yepM2gclMH6zbT/uUK8TPE8ibvdeIX61aS5bdtzkmTY=
+h1:1KFGV9aNNiiptFXylOHWj2R+HEsS6CeFacfP1Se1ku8=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -499,3 +499,6 @@ h1:yepM2gclMH6zbT/uUK8TPE8ibvdeIX61aS5bdtzkmTY=
 20261023161300_aim_673_mcp_metadata_server_id_not_null.sql h1:RSmvpCxqjgEjmaz3dRLSz/r3jQcRxVzFOG+yxNJm9o8=
 20261023161334_execution-selection-profiles.sql h1:2Bj0cHd6epWok5BsUXCOits57IY3eaeTMD9emCVREZI=
 20261023234326_risk-policy-approvals.sql h1:tAVev4akcwhO4D6Wk+MH+DP/AO7df+XlnFE8V5UicaY=
+20261024015713_approvals-builtin-server.sql h1:FZhMnZ6Fv1vOdfd4YtT+4TtXfjm9ewFdvn2PjEVEa20=
+20261024170105_registry_promotion_candidates.sql h1:YA5G2IcVVaKibNyTc+ppT7Vje2Gc3cDPf/DQf6Vgll0=
+20261025234432_mcp_header_revision_indexes.sql h1:ad0u1yGI/02HQ+RxPdluADBmT57NVGRigcmGIkpexxc=
