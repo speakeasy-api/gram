@@ -153,6 +153,22 @@ func (h HTTPLogAttributes) RecordMCPClient(name, version string) {
 	}
 }
 
+// RecordGatewayConnection stamps a gateway row with its connection's
+// discovery mode and the session it belongs to: the client's MCP session,
+// and the chat when the row does not already name one. Gateway activity
+// orders each session's calls by these keys.
+func (h HTTPLogAttributes) RecordGatewayConnection(connection contextvalues.GatewayConnection) {
+	if connection.DiscoveryMode != "" {
+		h[attr.MetaMcpDiscoveryModeKey] = connection.DiscoveryMode
+	}
+	if connection.SessionID != "" {
+		h[attr.McpSessionIDKey] = connection.SessionID
+	}
+	if _, ok := h[attr.GenAIConversationIDKey]; !ok && connection.ChatID != "" {
+		h[attr.GenAIConversationIDKey] = connection.ChatID
+	}
+}
+
 func truncateBody(body []byte) string {
 	if len(body) <= maxBodyContentBytes {
 		return string(body)

@@ -506,6 +506,10 @@ const (
 	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey              = attribute.Key("gram.mcp.url")
 
+	// MetaMcpDiscoveryModeKey is the effective discovery mode of the gateway
+	// connection that served a call: progressive, direct or code_mode.
+	MetaMcpDiscoveryModeKey = attribute.Key("gram.meta_mcp_server.discovery_mode")
+
 	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
 	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
 	McpFallbackCanonicalWrapperKey    = attribute.Key("gram.mcp.fallback.canonical_wrapper")

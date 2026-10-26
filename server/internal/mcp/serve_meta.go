@@ -104,6 +104,10 @@ type metaGateContext struct {
 	protocolVersion mcpversions.Resolution
 	// connectURL is the gateway's browser connect page; empty when ungated.
 	connectURL string
+	// clientSessionID is the Mcp-Session-Id the client sent, which sessionID
+	// replaces with a fresh id when absent. Telemetry orders a session's calls
+	// by it, so it stays empty rather than naming a one-request session.
+	clientSessionID string
 }
 
 // metaMembership names where a meta request's members come from. The zero
@@ -585,9 +589,7 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 	logAttrs.RecordStatusCode(statusCode)
 	logAttrs.RecordTraceContext(ctx)
 	logAttrs.RecordAuthenticatedActor(ctx)
-	if gate.chatID != "" {
-		logAttrs[attr.GenAIConversationIDKey] = gate.chatID
-	}
+	logAttrs.RecordGatewayConnection(gate.connection())
 	if gate.externalUserID != "" {
 		logAttrs[attr.ExternalUserIDKey] = gate.externalUserID
 	}
@@ -609,6 +611,16 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 		UserInfo:   tm.UserInfoByID(gate.userID),
 		Attributes: logAttrs,
 	})
+}
+
+// connection identifies the gateway connection a call was served through for
+// telemetry: its effective discovery mode and the session it belongs to.
+func (gate *metaGateContext) connection() contextvalues.GatewayConnection {
+	return contextvalues.GatewayConnection{
+		DiscoveryMode: string(gate.discoveryMode),
+		SessionID:     gate.clientSessionID,
+		ChatID:        gate.chatID,
+	}
 }
 
 // catalogSelectedMembers keeps the members with at least one tool a Specific
@@ -762,6 +774,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion: request.resolution,
 		connectURL:      connectURL,
+		clientSessionID: request.clientSessionID,
 	}
 	if gatePolicy != nil {
 		gate.catalogRef = gatePolicy.Catalog

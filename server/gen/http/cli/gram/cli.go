@@ -29657,7 +29657,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    get-employee-data-flow-graph: Get an employee's MCP data flow graph across origins, clients, servers, and tools`)
 	fmt.Fprintln(os.Stderr, `    get-observability-overview: Get observability overview metrics including time series, tool breakdowns, and summary stats`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-network-traffic: Observed inbound public and private MCP request counts for a server or gateway over a recent window`)
-	fmt.Fprintln(os.Stderr, `    get-meta-mcp-server-usage: Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.`)
+	fmt.Fprintln(os.Stderr, `    get-meta-mcp-server-usage: Discovery versus execution across every discovery mode, the Progressive discovery funnel, and the per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.`)
 	fmt.Fprintln(os.Stderr, `    get-project-overview: Get project-level overview including total chats, tool calls, active servers/users, and top lists`)
 	fmt.Fprintln(os.Stderr, `    get-unproxied-mcp-server-usage: Best-effort tool-call activity for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Coverage is opportunistic: only calls made from hook-instrumented sessions in this project are visible, so a freshly added or rarely used server may show no data.`)
 	fmt.Fprintln(os.Stderr, `    get-unproxied-mcp-server-tool-usage: Best-effort per-tool call counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Same coverage caveats as getUnproxiedMcpServerUsage.`)
@@ -29940,7 +29940,7 @@ func telemetryGetMetaMcpServerUsageUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.`)
+	fmt.Fprintln(os.Stderr, `Discovery versus execution across every discovery mode, the Progressive discovery funnel, and the per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

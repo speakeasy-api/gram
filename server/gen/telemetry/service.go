@@ -39,8 +39,9 @@ type Service interface {
 	// Observed inbound public and private MCP request counts for a server or
 	// gateway over a recent window
 	GetMcpNetworkTraffic(context.Context, *GetMcpNetworkTrafficPayload) (res *GetMcpNetworkTrafficResult, err error)
-	// Discovery funnel and per-member execution breakdown for one gateway (meta
-	// MCP server), from gateway-attributed telemetry.
+	// Discovery versus execution across every discovery mode, the Progressive
+	// discovery funnel, and the per-member execution breakdown for one gateway
+	// (meta MCP server), from gateway-attributed telemetry.
 	GetMetaMcpServerUsage(context.Context, *GetMetaMcpServerUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
@@ -375,6 +376,7 @@ type GetMetaMcpServerUsagePayload struct {
 // GetMetaMcpServerUsageResult is the result type of the telemetry service
 // getMetaMcpServerUsage method.
 type GetMetaMcpServerUsageResult struct {
+	Phases *MetaMcpCallPhases
 	Funnel *MetaMcpDiscoveryFunnel
 	// Per-member execution breakdown, most active first
 	Members []*MetaMcpMemberUsage
@@ -1500,8 +1502,35 @@ type McpServerActivity struct {
 // reports are valid, unlike the broader tool-usage target types.
 type McpServerActivityTargetType string
 
-// Counts of each gateway drill-down stage in the window. Discovery stages come
-// from meta_discovery events; executions from gateway-attributed tool calls.
+// How a gateway's calls divide between discovery and execution, by discovery
+// mode. A gateway serves each connection in the mode it was approved with, so
+// one gateway can carry several modes at once.
+type MetaMcpCallPhases struct {
+	// Counts by discovery mode, for each mode with calls in the window or the
+	// previous window
+	Modes []*MetaMcpModePhases
+	// Counts by position within the session, for calls whose session is known.
+	// Positions count from the first call in the window, so a session that began
+	// earlier starts again at 1.
+	Positions []*MetaMcpPositionPhases
+	// Width of each series bucket in seconds: a day for windows of a week or more,
+	// finer for shorter windows
+	IntervalSeconds int64
+	// Buckets with calls, in ascending time order. Buckets start at the window
+	// start and step by interval_seconds; a bucket with no calls is omitted.
+	Series []*MetaMcpPhaseBucket
+	// Discovery and execution calls in the window with neither an MCP session nor
+	// a chat, which positions leave out
+	CallsWithoutSession int64
+}
+
+// A range of positions of a call within its session, counting the session's
+// discovery and execution calls in order from 1.
+type MetaMcpCallPosition string
+
+// Counts of each Progressive drill-down stage in the window. Discovery stages
+// come from meta_discovery events; executions from gateway-attributed tool
+// calls in every discovery mode.
 type MetaMcpDiscoveryFunnel struct {
 	// list_servers calls
 	ListServers int64
@@ -1513,6 +1542,11 @@ type MetaMcpDiscoveryFunnel struct {
 	ExecuteTool int64
 }
 
+// The discovery mode of the gateway connection that served a call. unrecorded
+// marks member calls written before gateway calls recorded their connection's
+// mode.
+type MetaMcpDiscoveryMode string
+
 // Gateway-dispatched execution activity for one member server.
 type MetaMcpMemberUsage struct {
 	// The member's mcp_servers row id
@@ -1523,6 +1557,50 @@ type MetaMcpMemberUsage struct {
 	ErrorCount int64
 	// ISO 8601 timestamp of the most recent call
 	LastCalledAt *string
+}
+
+// Discovery and execution counts for one discovery mode, in the window and in
+// the window of equal length before it.
+type MetaMcpModePhases struct {
+	Mode MetaMcpDiscoveryMode
+	// Discovery calls: Progressive list_servers, describe_server and
+	// describe_tools, and Code Mode tools.servers, tools.search and tools.describe
+	DiscoveryCalls int64
+	// Member tool calls, however the connection reached them
+	ExecutionCalls int64
+	// Code Mode execute runs. Each run contains discovery and execution calls and
+	// is counted as neither
+	ExecuteRuns int64
+	// Discovery calls in the previous window
+	PreviousDiscoveryCalls int64
+	// Member tool calls in the previous window
+	PreviousExecutionCalls int64
+	// Code Mode execute runs in the previous window
+	PreviousExecuteRuns int64
+}
+
+// Discovery and execution calls for one discovery mode during one time bucket.
+type MetaMcpPhaseBucket struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string
+	Mode               MetaMcpDiscoveryMode
+	// Discovery calls in this bucket
+	DiscoveryCalls int64
+	// Member tool calls in this bucket
+	ExecutionCalls int64
+	// Code Mode execute runs in this bucket
+	ExecuteRuns int64
+}
+
+// Discovery and execution calls at one range of positions within their
+// sessions, for one discovery mode.
+type MetaMcpPositionPhases struct {
+	Mode     MetaMcpDiscoveryMode
+	Position MetaMcpCallPosition
+	// Discovery calls at these positions
+	DiscoveryCalls int64
+	// Member tool calls at these positions
+	ExecutionCalls int64
 }
 
 // Model usage statistics

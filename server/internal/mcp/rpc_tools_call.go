@@ -471,6 +471,9 @@ func handleToolsCall(
 		recordServingLogAttrs(logAttrs, attributedMCPServerID, payload.mcpEndpointID)
 		if payload.metaMcpServerID != "" {
 			logAttrs[attr.MetaMcpServerIDKey] = payload.metaMcpServerID
+			if connection, ok := contextvalues.GetGatewayConnection(ctx); ok {
+				logAttrs.RecordGatewayConnection(connection)
+			}
 		}
 		logAttrs.RecordMCPURL(mcpURL)
 		logAttrs.RecordMCPClient(clientIdentity.Name, clientIdentity.Version)
