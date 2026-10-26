@@ -188,6 +188,11 @@ func (l llmLane) ownEngineRuns(source string) bool {
 	return !l.enforcing || !llmanalyzer.Enforces(source)
 }
 
+// runs reports whether the policy selects source and its own engine evaluates it.
+func (l llmLane) runs(sources sourceSet, source string) bool {
+	return sources.Has(source) && l.ownEngineRuns(source)
+}
+
 // resolveLLMLane reads the risk engine mode for the batch's organization.
 //
 // The mode selects the engine behind every covered source (gitleaks,
@@ -274,7 +279,6 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	customFindings := make([][]scanners.Finding, n)
 
 	lane := a.resolveLLMLane(ctx, args)
-	ownEngineRuns := lane.ownEngineRuns
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
@@ -290,8 +294,8 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	})
 
 	if sources.Has(shadowmcp.SourceShadowMCP) ||
-		(ownEngineRuns(shadowmcp.SourceDestructiveTool) && sources.Has(shadowmcp.SourceDestructiveTool)) ||
-		(ownEngineRuns(SourceCLIDestructive) && sources.Has(SourceCLIDestructive)) {
+		lane.runs(sources, shadowmcp.SourceDestructiveTool) ||
+		lane.runs(sources, SourceCLIDestructive) {
 		wg.Go(func() {
 			toolCallPublishErr = a.publishToolCallScanRequests(
 				ctx,
@@ -299,13 +303,13 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 				messages,
 				sources,
 				masks,
-				ownEngineRuns(shadowmcp.SourceDestructiveTool),
-				ownEngineRuns(SourceCLIDestructive),
+				lane.ownEngineRuns(shadowmcp.SourceDestructiveTool),
+				lane.ownEngineRuns(SourceCLIDestructive),
 			)
 		})
 	}
 
-	if ownEngineRuns(SourceGitleaks) && sources.Has(SourceGitleaks) {
+	if lane.runs(sources, SourceGitleaks) {
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourceGitleaks])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourceGitleaks, masks.RecommendedPrefilteredCount(sourceCategories[SourceGitleaks]))
@@ -318,7 +322,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
-	if ownEngineRuns(SourcePresidio) && sources.Has(SourcePresidio) {
+	if lane.runs(sources, SourcePresidio) {
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePresidio, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
@@ -340,7 +344,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
-	if ownEngineRuns(SourcePromptInjection) && sources.Has(SourcePromptInjection) {
+	if lane.runs(sources, SourcePromptInjection) {
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
@@ -405,11 +409,11 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, args.ProjectID, args.RiskPolicyID, messages)
 		activity.RecordHeartbeat(ctx, shadowmcp.SourceShadowMCP)
 	}
-	if ownEngineRuns(shadowmcp.SourceDestructiveTool) && sources.Has(shadowmcp.SourceDestructiveTool) {
+	if lane.runs(sources, shadowmcp.SourceDestructiveTool) {
 		destructiveToolFindings = a.scanDestructiveToolAnnotations(ctx, args.OrganizationID, messages)
 		activity.RecordHeartbeat(ctx, shadowmcp.SourceDestructiveTool)
 	}
-	if ownEngineRuns(SourceCLIDestructive) && sources.Has(SourceCLIDestructive) {
+	if lane.runs(sources, SourceCLIDestructive) {
 		findings, err := a.scanDestructiveCLICommands(ctx, args, messages)
 		if err != nil {
 			scanSpan.SetStatus(codes.Error, err.Error())

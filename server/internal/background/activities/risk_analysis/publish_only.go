@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"go.opentelemetry.io/otel/codes"
 	"go.temporal.io/sdk/activity"
 	"golang.org/x/sync/errgroup"
 
@@ -20,14 +19,7 @@ import (
 // the batch analyzed only after it succeeds, so a dropped request is redriven
 // rather than lost. Disabled rules, builtin presets and exclusions are applied
 // by the ClickHouse findings writer. It returns the number of units fetched.
-func (a *AnalyzeBatch) publishBatch(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy) (processed int, err error) {
-	ctx, span := a.tracer.Start(ctx, "risk.publishBatch")
-	defer func() {
-		if err != nil {
-			span.SetStatus(codes.Error, err.Error())
-		}
-		span.End()
-	}()
+func (a *AnalyzeBatch) publishBatch(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy) (int, error) {
 	activity.RecordHeartbeat(ctx, 0)
 
 	if len(args.MessageIDs) > 0 && newSourceSet(args.Sources).Has(SourceAccountIdentity) {
@@ -80,13 +72,16 @@ func (a *AnalyzeBatch) publishPromptPolicy(ctx context.Context, args AnalyzeBatc
 func (a *AnalyzeBatch) publishStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, masks CategoryScopeMasks) error {
 	sources := newSourceSet(args.Sources)
 	lane := a.resolveLLMLane(ctx, args)
-	runs := func(source string) bool {
-		return sources.Has(source) && lane.ownEngineRuns(source)
-	}
-	contents := messageContents(messages)
+	runs := func(source string) bool { return lane.runs(sources, source) }
 	inScope := func(source string) []batchMessage {
-		subMessages, _, _ := masks.Subset(messages, contents, sourceCategories[source])
-		a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, source, masks.RecommendedPrefilteredCount(sourceCategories[source]))
+		cats := sourceCategories[source]
+		a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, source, masks.RecommendedPrefilteredCount(cats))
+		subMessages := make([]batchMessage, 0, len(messages))
+		for i, msg := range messages {
+			if masks.AdmitsAny(i, cats) {
+				subMessages = append(subMessages, msg)
+			}
+		}
 		return subMessages
 	}
 

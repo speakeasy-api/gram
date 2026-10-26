@@ -1919,11 +1919,7 @@ func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage as
 	)
 	require.NoError(t, err)
 
-	var ts testsuite.WorkflowTestSuite
-	env := ts.NewTestActivityEnvironment()
-	env.RegisterActivity(ab.Do)
-
-	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+	return runAnalyzeBatch(t, ab, risk_analysis.AnalyzeBatchArgs{
 		ProjectID:        td.projectID,
 		OrganizationID:   td.orgID,
 		RiskPolicyID:     td.policyID,
@@ -1934,11 +1930,6 @@ func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage as
 		PresidioEntities: nil,
 		CustomRuleIds:    nil,
 	})
-	require.NoError(t, err)
-
-	var result risk_analysis.AnalyzeBatchResult
-	require.NoError(t, val.Get(&result))
-	return result
 }
 
 func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData, ruleID string, detectionExpr string) testData {
@@ -2303,20 +2294,6 @@ func TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents(t *testing.T) {
 	require.Len(t, allOutbox, len(firstOutbox), "a redrive must not re-emit webhook events for already-announced findings")
 }
 
-func capturingGitleaksPub(t *testing.T) (*gcp.MockPublisher[*riskv1.GitleaksAnalysis], *[]*riskv1.GitleaksAnalysis) {
-	t.Helper()
-	pub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
-	var published []*riskv1.GitleaksAnalysis
-	pub.On("Publish", mock.Anything, mock.Anything).
-		Return(gcp.NewSuccessPublishResult()).
-		Run(func(args mock.Arguments) {
-			msg, ok := args.Get(1).(*riskv1.GitleaksAnalysis)
-			require.True(t, ok)
-			published = append(published, msg)
-		})
-	return pub, &published
-}
-
 // publishOnlyAnalyzer builds an analyzer for an organization on the ClickHouse
 // findings path whose inline engines fail the test if they run.
 func publishOnlyAnalyzer(t *testing.T, conn *pgxpool.Pool, td testData, gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis], meterPub gcp.Publisher[*meteringv1.MeterReading]) *risk_analysis.AnalyzeBatch {
@@ -2381,7 +2358,7 @@ func TestAnalyzeBatch_ClickHouseCutoverOnlyPublishes(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	gitleaksPub, published := capturingGitleaksPub(t)
+	gitleaksPub, published := capturingPub[*riskv1.GitleaksAnalysis](t)
 	meterPub, readings := capturingMeterPub(t)
 	ab := publishOnlyAnalyzer(t, conn, td, gitleaksPub, meterPub)
 	result := runAnalyzeBatch(t, ab, risk_analysis.AnalyzeBatchArgs{
@@ -2418,7 +2395,7 @@ func TestAnalyzeBatch_ClickHouseCutoverRequestIDsIgnoreBatchComposition(t *testi
 	td := seedTestData(t, conn, true)
 	msgIDs := seedMessages(t, conn, td, 2)
 
-	gitleaksPub, published := capturingGitleaksPub(t)
+	gitleaksPub, published := capturingPub[*riskv1.GitleaksAnalysis](t)
 	ab := publishOnlyAnalyzer(t, conn, td, gitleaksPub, gcp.NewNoopPublisher[*meteringv1.MeterReading]())
 	args := risk_analysis.AnalyzeBatchArgs{
 		ProjectID:        td.projectID,
