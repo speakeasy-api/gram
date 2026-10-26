@@ -7285,6 +7285,97 @@ paths:
       x-speakeasy-name-override: getConfiguration
       x-speakeasy-react-hook:
         name: DeviceAgentConfiguration
+  /rpc/agent.getMyConnections:
+    get:
+      description: Report the enrolled user's sign-in state for each MCP server in the plugins delivered to them, with the page that signs in to each. Sign-in belongs to the server, so one sign-in covers every plugin that contains it. Accepts a per-user key, or an org install key with the user's email vouched in the Gram-User-Email header, the same way getPlugins resolves the polling user.
+      operationId: getAgentMyConnections
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+          example: dev@acme.corp
+          in: header
+          name: Gram-User-Email
+          schema:
+            description: Email address of the enrolled user, sent in the Gram-User-Email header. Required when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+            example: dev@acme.corp
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMyConnectionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getMyConnections agent
+      tags:
+        - agent
+      x-speakeasy-name-override: getMyConnections
+      x-speakeasy-react-hook:
+        name: AgentMyConnections
   /rpc/agent.getPlugins:
     get:
       description: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.
@@ -84432,6 +84523,9 @@ components:
           type: string
           description: Link to the server's page in the Speakeasy dashboard. Present only when the enrolled user holds mcp:read on the server; the agent tells the user that links need that scope when it is absent.
           format: uri
+        id:
+          type: string
+          description: Stable identifier of the server, the same in every plugin that contains it. Matches the id getMyConnections reports the server's sign-in state under. Absent from servers predating the field.
         name:
           type: string
           description: Display name of the server within its plugin.
@@ -84557,6 +84651,34 @@ components:
       required:
         - urn
         - display_name
+    AgentServerConnection:
+      type: object
+      properties:
+        connect_url:
+          type: string
+          description: Page that signs the user in to this server in the browser. Present when state is not_connected or reauthorization_required.
+          format: uri
+        id:
+          type: string
+          description: The server's id, as getPlugins reports it on each plugin server.
+        request_access_url:
+          type: string
+          description: Page where the user can ask an administrator for access to this server. Present only when state is no_access and the organization accepts access requests.
+          format: uri
+        state:
+          type: string
+          description: '`connected`: the user is signed in. `not_connected`: the user has not signed in. `reauthorization_required`: a sign-in exists but must be renewed. `not_required`: the server needs no sign-in from the user. `setup_required`: an administrator must finish the server''s sign-in setup first. `no_access`: the user lacks permission to connect to the server. `unknown`: the state can''t be determined, for example for a gateway.'
+          enum:
+            - connected
+            - not_connected
+            - reauthorization_required
+            - not_required
+            - setup_required
+            - no_access
+            - unknown
+      required:
+        - id
+        - state
     AgentSession:
       type: object
       properties:
@@ -94026,6 +94148,16 @@ components:
       description: Result of metrics summary query
       required:
         - metrics
+    GetMyConnectionsResult:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentServerConnection'
+          description: One entry per distinct MCP server in the plugins delivered to the user, in plugin order. Servers the user can neither read nor connect to are omitted; a server the user can read but not connect to is reported as no_access.
+      required:
+        - servers
     GetObservabilityOverviewPayload:
       type: object
       properties:
