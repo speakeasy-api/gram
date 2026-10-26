@@ -8,6 +8,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -15,9 +16,11 @@ import (
 // publishBatch hands the batch to the Pub/Sub analysis handlers, which produce
 // every finding and usage reading for an organization on the ClickHouse
 // findings path. It scans nothing inline and writes nothing to Postgres. It
-// fails unless every scan request is acknowledged, and the coordinator marks
-// the batch analyzed only after it succeeds, so a dropped request is redriven
-// rather than lost. Disabled rules, builtin presets and exclusions are applied
+// fails unless every enforcing scan request is acknowledged, and the
+// coordinator marks the batch analyzed only after it succeeds, so a dropped
+// request is redriven rather than lost. Shadow LLM analyzer requests are the
+// one exception: they only feed engine comparison, so their failures are
+// counted and dropped. Disabled rules, builtin presets and exclusions are applied
 // by the ClickHouse findings writer. It returns the number of units fetched.
 func (a *AnalyzeBatch) publishBatch(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy) (int, error) {
 	activity.RecordHeartbeat(ctx, 0)
@@ -57,7 +60,11 @@ func (a *AnalyzeBatch) publishBatch(ctx context.Context, args AnalyzeBatchArgs, 
 // A policy without a prompt still publishes: the handler applies the policy's
 // fail mode to it, flagging every message when the policy fails closed.
 func (a *AnalyzeBatch) publishPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) error {
-	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
+	enabled, err := policyflags.ProjectFlagChecked(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies)
+	if err != nil {
+		return fmt.Errorf("check prompt policies flag: %w", err)
+	}
+	if !enabled {
 		return nil
 	}
 	indices := promptPolicyIndices(messages, masks)

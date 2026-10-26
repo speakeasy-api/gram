@@ -309,10 +309,9 @@ func groupFindings(findings []scanners.Finding) []findingGroup {
 // writeResults commits the batch's rows and announces new findings through the
 // webhook outbox. It runs only for organizations off the ClickHouse findings
 // path; for the others the ClickHouse findings writer emits the webhooks.
-// The bool reports whether a commit actually happened: false when the policy was deleted mid-analysis and the
-// results were dropped, so callers gating side effects (e.g. the batch-only
-// finding publish) on a durable write can tell the two nil-error outcomes
-// apart.
+// The bool reports whether a commit actually happened: false when the policy
+// was deleted mid-analysis and the results were dropped, so callers can tell
+// the two nil-error outcomes apart.
 func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, rows []repo.InsertRiskResultsParams) (bool, error) {
 	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
 	defer writeSpan.End()
