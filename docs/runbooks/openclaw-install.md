@@ -145,15 +145,38 @@ on `PATH` the script:
 
 1. Saves the agent gateway as the `speakeasy` MCP server
    (`openclaw mcp set`), replacing any `gram` or `speakeasy` entry.
-2. Installs this observability plugin with the agent's key and project baked
-   into `speakeasy.json`, so its sessions are recorded under the agent. It
-   passes `--force`, plus `--accept-capabilities` when
-   `openclaw plugins install --help` lists it (2026.8.1 and later).
+2. If the agent has a project, installs this observability plugin with the
+   agent's key and project baked into `speakeasy.json`, so its sessions are
+   recorded under the agent. It passes `--force`, plus `--accept-capabilities`
+   when `openclaw plugins install --help` lists it (2026.8.1 and later). An
+   agent with no project, or whose project was deleted, gets the gateway only:
+   the script skips steps 2 to 4 and prints `Speakeasy hooks: FAIL` saying its
+   sessions are not recorded. Move the agent into a project and run a new
+   command to add hooks.
 3. Sets `allowConversationAccess`.
 4. Sends one `before_tool_call` frame through the plugin's hooks binary and
    prints `Speakeasy hooks: PASS` or `Speakeasy hooks: FAIL: <reason>`. A
    `permission denied` reason means the agent lacks `org:hooks_ingest` on its
-   project or `project:read`.
+   project or `project:read`. When the installed plugin is not where the
+   script expects it, the script tests the archive's own copy instead, which
+   needs `unzip` or `python3`.
+5. Prints `Next: restart the OpenClaw Gateway`. The script does not restart
+   it: when OpenClaw runs the script, a restart would end the turn before it
+   reports back. Until the restart the plugin is not loaded.
+
+The agent key ends up in plaintext in two files, both owner-only: the
+plugin's `speakeasy.json` (the script sets it to `0600` after install) and
+the `mcp.servers.speakeasy` entry in OpenClaw's config. Neither is a secret
+store. Newer OpenClaw releases accept a SecretRef for MCP headers, but every
+ref source (the Gateway's environment, or a file, exec or store provider)
+needs setup the script cannot do on every supported release, and plugin
+config has no SecretRef. To move the header to a SecretRef by hand, replace it
+with a ref and keep `speakeasy.json` owner-only. Revoking the agent key
+invalidates both copies.
+
+The coverage caveat in [Before you start](#before-you-start) applies: models
+routed through the Claude CLI harness bypass these hooks, so the PASS line
+covers only the embedded runtime.
 
 ## Verify
 
