@@ -160,6 +160,31 @@ func TestDescribeReportsAChoiceWhoseClientWasWithdrawn(t *testing.T) {
 	require.Equal(t, GapNoClient, *view.Servers[0].Gap)
 }
 
+func TestDescribeReportsAChoiceDetachedFromItsServerButOfferedElsewhere(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	server := f.server(pgtype.Bool{Bool: true, Valid: true})
+	other := f.server(pgtype.Bool{Bool: true, Valid: true})
+	f.authClient(server, typeStaticCredential, uuid.Nil)
+	chosen := f.authClient(server, typeStaticCredential, uuid.Nil)
+	require.NoError(t, f.q.LinkAuthClientFixture(t.Context(), LinkAuthClientFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: other, AuthClientID: chosen}))
+	f.bind(ContextUserless)
+	_, err := f.setChoice(ContextUserless, server, client(chosen))
+	require.NoError(t, err)
+	require.NoError(t, f.q.DetachAuthClientFixture(t.Context(), DetachAuthClientFixtureParams{McpServerID: server, AuthClientID: chosen, OrganizationID: f.orgID}))
+
+	view, err := Describe(t.Context(), f.pool, f.target(ContextUserless))
+	require.NoError(t, err)
+	for _, row := range view.Servers {
+		if row.MCPServerID != server {
+			continue
+		}
+		require.NotNil(t, row.Choice)
+		require.NotNil(t, row.Gap, "another server still offering the client does not serve this one")
+		require.Equal(t, GapNoClient, *row.Gap)
+	}
+}
+
 func TestDescribeReportsANoAuthChoiceOnceTheServerNeedsAuthentication(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

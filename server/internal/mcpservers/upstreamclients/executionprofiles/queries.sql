@@ -361,6 +361,10 @@ SELECT @organization_id, @project_id, @organization_id, @project_id,
        1, generate_uuidv7(), 'workload', 1
 FROM ab;
 
+-- name: DetachAuthClientFixture :exec
+UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = @mcp_server_id AND auth_client_id = @auth_client_id AND organization_id = @organization_id;
+
 -- name: DisableAuthClientFixture :exec
 UPDATE mcp_auth_clients SET enabled = FALSE WHERE id = @id AND organization_id = @organization_id;
 

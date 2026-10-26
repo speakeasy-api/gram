@@ -124,12 +124,13 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 		return View{}, fmt.Errorf("list server auth clients: %w", err)
 	}
 	options := map[uuid.UUID][]Option{}
-	live := map[uuid.UUID]bool{}
+	type offer struct{ serverID, authClientID uuid.UUID }
+	live := map[offer]bool{}
 	for _, row := range offered {
 		if !row.AuthClientID.Valid {
 			continue
 		}
-		live[row.AuthClientID.UUID] = true
+		live[offer{serverID: row.McpServerID, authClientID: row.AuthClientID.UUID}] = true
 		if upstreamclients.CheckConfiguredChoice([]upstreamclientsrepo.ListServerConsentAuthClientsRow{row}, row.AuthClientID, target.Context == ContextUserless) != nil {
 			continue
 		}
@@ -150,7 +151,7 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 			// A recorded client the server no longer offers enabled serves
 			// nothing until another is chosen.
 			switch {
-			case choice.AuthClientID.Valid && !live[choice.AuthClientID.UUID]:
+			case choice.AuthClientID.Valid && !live[offer{serverID: row.McpServerID, authClientID: choice.AuthClientID.UUID}]:
 				reason := GapNoClient
 				server.Gap = &reason
 			case !choice.AuthClientID.Valid && !server.NoAuthAllowed:

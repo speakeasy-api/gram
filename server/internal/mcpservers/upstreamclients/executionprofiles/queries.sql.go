@@ -114,6 +114,22 @@ func (q *Queries) CreateProfileVersion(ctx context.Context, arg CreateProfileVer
 	return id, err
 }
 
+const detachAuthClientFixture = `-- name: DetachAuthClientFixture :exec
+UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = $1 AND auth_client_id = $2 AND organization_id = $3
+`
+
+type DetachAuthClientFixtureParams struct {
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DetachAuthClientFixture(ctx context.Context, arg DetachAuthClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, detachAuthClientFixture, arg.McpServerID, arg.AuthClientID, arg.OrganizationID)
+	return err
+}
+
 const disableAuthClientFixture = `-- name: DisableAuthClientFixture :exec
 UPDATE mcp_auth_clients SET enabled = FALSE WHERE id = $1 AND organization_id = $2
 `
