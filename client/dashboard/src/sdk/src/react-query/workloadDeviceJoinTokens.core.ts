@@ -83,6 +83,7 @@ export function buildWorkloadDeviceJoinTokensQuery(
 } {
   return {
     queryKey: queryKeyWorkloadDeviceJoinTokens({
+      tokenId: request?.tokenId,
       agentId: request?.agentId,
       cursor: request?.cursor,
       limit: request?.limit,
@@ -127,6 +128,7 @@ export function buildWorkloadDeviceJoinTokensInfiniteQuery(
 } {
   return {
     queryKey: queryKeyWorkloadDeviceJoinTokensInfinite({
+      tokenId: request?.tokenId,
       agentId: request?.agentId,
       cursor: request?.cursor,
       limit: request?.limit,
@@ -172,6 +174,7 @@ export function buildWorkloadDeviceJoinTokensInfiniteQuery(
 
 export function queryKeyWorkloadDeviceJoinTokens(
   parameters: {
+    tokenId?: string | undefined;
     agentId?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
@@ -190,6 +193,7 @@ export function queryKeyWorkloadDeviceJoinTokens(
 
 export function queryKeyWorkloadDeviceJoinTokensInfinite(
   parameters: {
+    tokenId?: string | undefined;
     agentId?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;

@@ -44,7 +44,7 @@ func BuildWorkloadDeviceJoinTokenView(row repo.GetWorkloadDeviceJoinTokenRow, no
 		ID:                row.ID.String(),
 		AgentID:           row.AgentID.String(),
 		CreatedByUserID:   row.CreatedByUserID,
-		CreatedAt:         conv.FromPGTimestamptz(row.CreatedAt),
+		CreatedAt:         row.CreatedAt.Time.UTC().Format(time.RFC3339Nano),
 		ExpiresAt:         conv.FromPGTimestamptz(row.ExpiresAt),
 		ConsumedAt:        conv.PtrFromPGTimestamptz(row.ConsumedAt),
 		ConsumedBySubject: conv.FromPGText[string](row.ConsumedBySubject),

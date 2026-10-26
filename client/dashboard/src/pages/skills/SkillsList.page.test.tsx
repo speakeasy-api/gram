@@ -395,15 +395,15 @@ vi.mock("@/components/ui/Table", () => ({
     ) => void;
   }) => {
     const sortableColumns = columns.filter((column) => column.sortable);
-    const nextSort = (column: (typeof columns)[number]) => {
-      if (sort?.id !== column.key) {
-        return { id: column.key, direction: "asc" as const };
-      }
-      if (sort.direction === "asc") {
-        return { id: column.key, direction: "desc" as const };
-      }
-      return null;
-    };
+    // Two states, as the real Table has: a sorted column toggles ascending
+    // and descending and never returns to unsorted.
+    const nextSort = (column: (typeof columns)[number]) => ({
+      id: column.key,
+      direction:
+        sort?.id === column.key && sort.direction === "asc"
+          ? ("desc" as const)
+          : ("asc" as const),
+    });
 
     return (
       <div>
@@ -424,9 +424,7 @@ vi.mock("@/components/ui/Table", () => ({
           const action =
             direction === "asc"
               ? `Sort by ${label} descending`
-              : direction === "desc"
-                ? `Clear sort for ${label}`
-                : `Sort by ${label} ascending`;
+              : `Sort by ${label} ascending`;
           return (
             <button
               data-sortable-id={column.key}
@@ -681,7 +679,7 @@ describe("SkillsList pagination surfaces", () => {
     ).toBeNull();
   });
 
-  it("sorts the current server page by skill and clears back to backend order", () => {
+  it("opens on the backend's order and sorts the current server page by skill", () => {
     testState.skills = [
       { ...makeSkills(1)[0], id: "zulu", displayName: "Zulu" },
       { ...makeSkills(1)[0], id: "alpha", displayName: "Alpha" },
@@ -698,10 +696,13 @@ describe("SkillsList pagination surfaces", () => {
       screen.getByRole("button", { name: "Sort by Skill descending" }),
     );
     expect(renderedSkillNames()).toEqual(["Zulu", "Mike", "Alpha"]);
+    // Back to ascending rather than to no sort at all: the column keeps an
+    // order, and the list opens on the server's own order instead of needing
+    // a click that gets back to it.
     fireEvent.click(
-      screen.getByRole("button", { name: "Clear sort for Skill" }),
+      screen.getByRole("button", { name: "Sort by Skill ascending" }),
     );
-    expect(renderedSkillNames()).toEqual(["Zulu", "Alpha", "Mike"]);
+    expect(renderedSkillNames()).toEqual(["Alpha", "Mike", "Zulu"]);
     expect(testState.metricSkillRequests).toEqual([]);
   });
 

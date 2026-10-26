@@ -22,6 +22,7 @@ type proxiedToolEventParams struct {
 	toolName    string
 	userID      string
 	statusCode  int
+	outcome     string
 }
 
 // insertProxiedToolEvent inserts the row the remote MCP proxy records for one
@@ -44,6 +45,9 @@ func insertProxiedToolEvent(t *testing.T, ctx context.Context, ti *testInstance,
 	}
 	if p.toolsetSlug != "" {
 		attrs["gram.toolset.slug"] = p.toolsetSlug
+	}
+	if p.outcome != "" {
+		attrs["gram.outcome"] = p.outcome
 	}
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)
@@ -113,6 +117,43 @@ func TestGetMCPOutcomeBreakdown_MatchesProxiedCallsByConfiguredServerID(t *testi
 		telemetryRepo.MCPOutcomeSuccess:     2,
 		telemetryRepo.MCPOutcomeServerError: 1,
 	}, outcomeCounts(all))
+}
+
+// TestGetMCPOutcomeBreakdown_ProxiedIsErrorIsFailed pins that a remote proxy
+// row recording an isError verdict inside a 200 counts as failed for its
+// server, in the breakdown and in the drill-down trace references.
+func TestGetMCPOutcomeBreakdown_ProxiedIsErrorIsFailed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+	selected := uuid.New().String()
+
+	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-5 * time.Minute), mcpServerID: selected, toolName: "search", userID: "user-1", statusCode: 200, outcome: "ok"})
+	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-4 * time.Minute), mcpServerID: selected, toolName: "search", userID: "user-2", statusCode: 200, outcome: "error"})
+
+	params := telemetryRepo.GetMCPOutcomeBreakdownParams{
+		GramProjectIDs: []string{projectID},
+		MCPServerIDs:   []string{selected},
+		TimeStart:      now.Add(-time.Hour).UnixNano(),
+		TimeEnd:        now.UnixNano(),
+	}
+	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, map[string]uint64{
+		telemetryRepo.MCPOutcomeSuccess: 1,
+		telemetryRepo.MCPOutcomeFailed:  1,
+	}, outcomeCounts(rows))
+
+	refs, err := ti.chClient.ListMCPTraceReferences(ctx, telemetryRepo.ListMCPTraceReferencesParams{
+		GetMCPOutcomeBreakdownParams: params,
+		Outcomes:                     []string{telemetryRepo.MCPOutcomeFailed},
+	})
+	require.NoError(t, err)
+	require.Len(t, refs, 1)
+	require.Equal(t, "search", refs[0].ToolName)
 }
 
 // TestServerReads_LeaveToolsetRowsOfOtherServers pins that a hosted server's

@@ -17,6 +17,7 @@ var AuditLogCreated = outbox.NewEventDef[AuditLogCreatedPayloadV1](
 )
 
 var (
+	CatalogPromotionV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.catalog_promotion_event_v1", "Emitted when staff curate catalogue promotion candidates or retry setup documentation")
 	AccessChallengeV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_challenge_event_v1", "Emitted when changes to access challenges are made")
 	AIIntegrationV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_integration_event_v1", "Emitted when changes to AI integration configs are made")
 	AccessMemberV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_member_event_v1", "Emitted when changes to org members are made")
@@ -83,6 +84,7 @@ var (
 	DashboardV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.dashboard_event_v1", "Emitted when changes to dashboards are made")
 	RemoteMcpServerV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_event_v1", "Emitted when changes to remote MCP servers are made")
 	RemoteMcpServerHeaderV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_header_event_v1", "Emitted when changes to remote MCP server headers are made")
+	AuthClientV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.auth_client_event_v1", "Emitted when changes to MCP auth clients or the servers offering them are made")
 	RemoteSessionClientV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_client_event_v1", "Emitted when changes to remote session clients are made")
 	RemoteSessionV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_event_v1", "Emitted when changes to remote sessions are made")
 	RemoteSessionIssuerV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_issuer_event_v1", "Emitted when changes to remote session issuers are made")
@@ -110,7 +112,7 @@ var (
 	VariationV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.variation_event_v1", "Emitted when changes to tool names and other properties are made")
 	WorkloadAdmissionV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.workload_admission_event_v1", "Emitted when a workload subject is admitted or withdrawn, which grants or revokes machine access")
 	WorkloadIssuerV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.workload_issuer_event_v1", "Emitted when the external issuers an organization trusts to vouch for its workloads are changed")
-	WorkloadDeviceJoinTokenV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.workload_device_join_token_event_v1", "Emitted when a device join token is created or redeemed to enroll a device as a workload")
+	WorkloadDeviceJoinTokenV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.workload_device_join_token_event_v1", "Emitted when a device join token is created, redeemed to enroll a device as a workload, or revoked")
 )
 
 // AuditLogCreatedPayloadV1 is the webhook payload for audit_log.created events.

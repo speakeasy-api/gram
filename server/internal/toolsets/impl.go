@@ -538,7 +538,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	}
 	updateParams.McpSlug, updateParams.CustomDomainID = mcpSlug, customDomainID
 	if payload.McpIsPublic != nil {
-		oAuthIsAttached := existingToolset.ExternalOauthServerID.Valid || existingToolset.OauthProxyServerID.Valid
+		oAuthIsAttached := existingToolset.ExternalOauthServerID.Valid
 		if (existingToolset.McpIsPublic != *payload.McpIsPublic) && oAuthIsAttached {
 			_, err := tr.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
 				ProjectID: existingToolset.ProjectID,
@@ -743,21 +743,10 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset").LogError(ctx, logger)
 	}
 
-	if err := tr.DeleteAssistantToolsetsByToolset(ctx, repo.DeleteAssistantToolsetsByToolsetParams{
-		ToolsetID: deleted.ID,
-		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to detach assistant toolsets").LogError(ctx, logger)
-	}
 	hostedDeleted, err := s.deleteHostedServer(ctx, dbtx, authCtx, toDelete)
 	if err != nil {
 		return err
 	}
-	detached, err := detachToolsetPluginServers(ctx, dbtx, s.audit, authCtx, deleted.ID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to detach toolset plugin servers").LogError(ctx, logger)
-	}
-	carried = carried || (toDelete.McpEnabled && detached > 0)
 	if carried {
 		if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, logger)

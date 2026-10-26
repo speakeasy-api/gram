@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -19,7 +20,7 @@ export const SourceKind = {
 /**
  * What the source is: a directory group or an attribute value.
  */
-export type SourceKind = ClosedEnum<typeof SourceKind>;
+export type SourceKind = OpenEnum<typeof SourceKind>;
 
 export type DirectoryRoleSetupSource = {
   /**
@@ -41,11 +42,11 @@ export type DirectoryRoleSetupSource = {
 };
 
 /** @internal */
-export const SourceKind$inboundSchema: z.ZodMiniEnum<typeof SourceKind> = z
-  .enum(SourceKind);
+export const SourceKind$inboundSchema: z.ZodMiniType<SourceKind, unknown> =
+  openEnums.inboundSchema(SourceKind);
 /** @internal */
-export const SourceKind$outboundSchema: z.ZodMiniEnum<typeof SourceKind> =
-  SourceKind$inboundSchema;
+export const SourceKind$outboundSchema: z.ZodMiniType<string, SourceKind> =
+  openEnums.outboundSchema(SourceKind);
 
 /** @internal */
 export const DirectoryRoleSetupSource$inboundSchema: z.ZodMiniType<

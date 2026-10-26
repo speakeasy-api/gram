@@ -124,6 +124,7 @@ async function $do(
     "agent_id": payload?.agent_id,
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "token_id": payload?.token_id,
   });
 
   const headers = new Headers(compactMap({

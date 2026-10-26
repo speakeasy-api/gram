@@ -47,8 +47,19 @@ export function grantedServers(
 
 /** A wildcard MCP grant, and how far its selector reaches. */
 export type WildcardConnectGrant = {
-  /** The project it is scoped to, or `""` where it reaches every project. */
-  projectId: string;
+  /**
+   * The projects the wildcards reach, or `[]` where they reach every project.
+   * A policy can hold one wildcard per project, and reporting only the first
+   * would hide the rest of the reach from the picker and from the servers a
+   * key is issued for.
+   */
+  projectIds: string[];
+  /**
+   * Every wildcard row, so replacing the reach with a chosen list can remove
+   * all of them. Leaving one behind would keep the agent reaching everything
+   * while the list claims otherwise.
+   */
+  grantIds: string[];
 };
 
 /**
@@ -58,7 +69,7 @@ export type WildcardConnectGrant = {
  * covers: the picker would come up empty, saving it would look like a
  * narrowing, and the wildcard would stay in place and keep granting
  * everything. The caller has to say so rather than present a list it cannot
- * enforce — and the project comes back with it, because a grant scoped to one
+ * enforce — and the projects come back with it, because a grant scoped to one
  * project reaches that project's servers, which is not every server the
  * organization has.
  */
@@ -72,12 +83,29 @@ export function wildcardConnectGrant(
       grant.selector.resourceId === "*",
   );
   if (wildcards.length === 0) return undefined;
+  const grantIds = wildcards.map((grant) => grant.id);
   // An unscoped wildcard swallows every scoped one, so it is the reach to
   // report: naming one project beside it would understate what the agent has.
   if (wildcards.some((grant) => !grant.selector.projectId)) {
-    return { projectId: "" };
+    return { projectIds: [], grantIds };
   }
-  return { projectId: wildcards[0]?.selector.projectId ?? "" };
+  return {
+    projectIds: [
+      ...new Set(wildcards.map((grant) => grant.selector.projectId ?? "")),
+    ],
+    grantIds,
+  };
+}
+
+/**
+ * Whether a wildcard reach covers a server in `projectId`. An empty reach is
+ * every project, not none.
+ */
+export function reachCoversProject(
+  projectIds: string[],
+  projectId: string,
+): boolean {
+  return projectIds.length === 0 || projectIds.includes(projectId);
 }
 
 /**

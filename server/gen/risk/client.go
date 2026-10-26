@@ -53,6 +53,9 @@ type Client struct {
 	ApproveRiskPolicyBypassRequestEndpoint goa.Endpoint
 	DenyRiskPolicyBypassRequestEndpoint    goa.Endpoint
 	RevokeRiskPolicyBypassRequestEndpoint  goa.Endpoint
+	ListRiskPolicyApprovalsEndpoint        goa.Endpoint
+	GetRiskPolicyApprovalEndpoint          goa.Endpoint
+	DecideRiskPolicyApprovalEndpoint       goa.Endpoint
 	TriggerRiskAnalysisEndpoint            goa.Endpoint
 	CreateCustomDetectionRuleEndpoint      goa.Endpoint
 	ListCustomDetectionRulesEndpoint       goa.Endpoint
@@ -73,7 +76,7 @@ type Client struct {
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, listMCPPlatformToolsets, listRiskPoliciesForMcpServer, listBuiltinExclusions, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listSessionQuarantines, releaseSessionQuarantine, listRiskResults, listRiskResultsForAgent, unmaskRiskResult, revealRiskResultPayload, listRiskResultsByChat, markRiskResultsFalsePositive, unmarkRiskResultsFalsePositive, listDismissedRiskResults, getRiskOverview, listRiskCategories, listRiskPresets, suggestRiskPolicy, compileExpr, getRiskUserBreakdown, getRiskSignals, getRiskMcpServerCounts, getRiskAnalysisStatus, createRiskPolicyBypassRequest, acknowledgeRiskPolicyChallenge, getRiskPolicyChallenge, declineRiskPolicyChallenge, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, suggestExclusion, testDetectionRule, evaluatePromptGuardrail, saveRiskEvalReview, listRiskEvalReviews, deleteRiskEvalReview goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, listMCPPlatformToolsets, listRiskPoliciesForMcpServer, listBuiltinExclusions, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listSessionQuarantines, releaseSessionQuarantine, listRiskResults, listRiskResultsForAgent, unmaskRiskResult, revealRiskResultPayload, listRiskResultsByChat, markRiskResultsFalsePositive, unmarkRiskResultsFalsePositive, listDismissedRiskResults, getRiskOverview, listRiskCategories, listRiskPresets, suggestRiskPolicy, compileExpr, getRiskUserBreakdown, getRiskSignals, getRiskMcpServerCounts, getRiskAnalysisStatus, createRiskPolicyBypassRequest, acknowledgeRiskPolicyChallenge, getRiskPolicyChallenge, declineRiskPolicyChallenge, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, listRiskPolicyApprovals, getRiskPolicyApproval, decideRiskPolicyApproval, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, suggestExclusion, testDetectionRule, evaluatePromptGuardrail, saveRiskEvalReview, listRiskEvalReviews, deleteRiskEvalReview goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:               createRiskPolicy,
 		ListRiskPoliciesEndpoint:               listRiskPolicies,
@@ -112,6 +115,9 @@ func NewClient(createRiskPolicy, listRiskPolicies, listMCPPlatformToolsets, list
 		ApproveRiskPolicyBypassRequestEndpoint: approveRiskPolicyBypassRequest,
 		DenyRiskPolicyBypassRequestEndpoint:    denyRiskPolicyBypassRequest,
 		RevokeRiskPolicyBypassRequestEndpoint:  revokeRiskPolicyBypassRequest,
+		ListRiskPolicyApprovalsEndpoint:        listRiskPolicyApprovals,
+		GetRiskPolicyApprovalEndpoint:          getRiskPolicyApproval,
+		DecideRiskPolicyApprovalEndpoint:       decideRiskPolicyApproval,
 		TriggerRiskAnalysisEndpoint:            triggerRiskAnalysis,
 		CreateCustomDetectionRuleEndpoint:      createCustomDetectionRule,
 		ListCustomDetectionRulesEndpoint:       listCustomDetectionRules,
@@ -957,6 +963,75 @@ func (c *Client) RevokeRiskPolicyBypassRequest(ctx context.Context, p *RevokeRis
 		return
 	}
 	return ires.(*RiskPolicyBypassRequest), nil
+}
+
+// ListRiskPolicyApprovals calls the "listRiskPolicyApprovals" endpoint of the
+// "risk" service.
+// ListRiskPolicyApprovals may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRiskPolicyApprovals(ctx context.Context, p *ListRiskPolicyApprovalsPayload) (res *ListRiskPolicyApprovalsResult, err error) {
+	var ires any
+	ires, err = c.ListRiskPolicyApprovalsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListRiskPolicyApprovalsResult), nil
+}
+
+// GetRiskPolicyApproval calls the "getRiskPolicyApproval" endpoint of the
+// "risk" service.
+// GetRiskPolicyApproval may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRiskPolicyApproval(ctx context.Context, p *GetRiskPolicyApprovalPayload) (res *RiskPolicyApproval, err error) {
+	var ires any
+	ires, err = c.GetRiskPolicyApprovalEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskPolicyApproval), nil
+}
+
+// DecideRiskPolicyApproval calls the "decideRiskPolicyApproval" endpoint of
+// the "risk" service.
+// DecideRiskPolicyApproval may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DecideRiskPolicyApproval(ctx context.Context, p *DecideRiskPolicyApprovalPayload) (res *RiskPolicyApproval, err error) {
+	var ires any
+	ires, err = c.DecideRiskPolicyApprovalEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskPolicyApproval), nil
 }
 
 // TriggerRiskAnalysis calls the "triggerRiskAnalysis" endpoint of the "risk"

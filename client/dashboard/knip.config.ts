@@ -15,6 +15,10 @@ const config: KnipConfig = {
     "src/consent-page/consent-page.css",
   ],
   // Vitest, ESLint, Tailwind, and TypeScript plugins are auto-enabled.
+  ignoreDependencies: [
+    // Launched by .mise-tasks/start/agentation.sh, outside the import graph.
+    "agentation-mcp",
+  ],
   ignoreBinaries: [
     // The package manager itself, used to chain scripts and to reach the
     // workspace-root oxfmt binary; not on the dep tree.

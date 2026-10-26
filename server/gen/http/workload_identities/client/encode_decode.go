@@ -2707,6 +2707,9 @@ func EncodeListDeviceJoinTokensRequest(encoder func(*http.Request) goahttp.Encod
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
+		if p.TokenID != nil {
+			values.Add("token_id", *p.TokenID)
+		}
 		if p.AgentID != nil {
 			values.Add("agent_id", *p.AgentID)
 		}
@@ -3402,6 +3405,7 @@ func unmarshalWorkloadIssuerResponseBodyToTypesWorkloadIssuer(v *WorkloadIssuerR
 		Issuer:                 *v.Issuer,
 		JwksURI:                *v.JwksURI,
 		Description:            *v.Description,
+		AllowAssertionReuse:    *v.AllowAssertionReuse,
 		AllowWildcardAdmission: *v.AllowWildcardAdmission,
 		CreatedAt:              *v.CreatedAt,
 		UpdatedAt:              *v.UpdatedAt,

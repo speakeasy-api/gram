@@ -55,7 +55,7 @@ export type RevokeWorkloadDeviceJoinTokenMutationError =
  * revokeDeviceJoinToken workloadIdentities
  *
  * @remarks
- * Revoke a device join token that has not been redeemed, so it can no longer enroll a device. A token that was already redeemed or revoked returns a failed precondition; revoking stops future enrollments only and leaves a device the token already enrolled in place. Only a person can revoke one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the token's agent or agent:authorize on it, as creating one does.
+ * Revoke a device join token that has not been redeemed, so it can no longer enroll a device. A token that was already redeemed or revoked returns a failed precondition; withdraw the enrolled device instead when a token was redeemed. Only a person can revoke one: a key backed by a principal rather than a user is refused with 403 whatever its grants. Requires workload:write, and either owning the token's agent or agent:authorize on it, as creating one does.
  */
 export function useRevokeWorkloadDeviceJoinTokenMutation(
   options?: MutationHookOptions<

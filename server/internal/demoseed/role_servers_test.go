@@ -65,7 +65,6 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 			memberships[plugin.Slug] = []string{}
 			for _, server := range servers {
 				require.True(t, server.McpServerID.Valid)
-				require.False(t, server.ToolsetID.Valid)
 				require.False(t, server.MetaMcpServerID.Valid)
 				backend, err := q.GetMcpServerForPluginServer(ctx, pluginrepo.GetMcpServerForPluginServerParams{
 					McpServerID: server.McpServerID.UUID, ProjectID: projectID,

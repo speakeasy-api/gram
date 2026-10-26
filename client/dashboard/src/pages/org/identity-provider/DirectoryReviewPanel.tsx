@@ -23,6 +23,7 @@ import { useResolveDirectoryReviewItemMutation } from "@gram/client/react-query/
 
 import {
   type ReviewDecision,
+  isKnownReviewItem,
   reviewDecisionMessage,
   reviewDecisionRequest,
   reviewItemDetail,
@@ -115,7 +116,8 @@ export function DirectoryReviewPanel({
     item: DirectoryReviewItem,
     decision: ReviewDecision,
     choice?: SetupChoice,
-  ) =>
+  ) => {
+    if (!isKnownReviewItem(item)) return;
     resolve.mutate(
       {
         request: {
@@ -133,6 +135,7 @@ export function DirectoryReviewPanel({
         },
       },
     );
+  };
 
   return (
     <section
@@ -157,6 +160,7 @@ export function DirectoryReviewPanel({
             item={item}
             roles={roles}
             roleNames={roleNames}
+            onRefresh={() => void refetch()}
             disabled={resolve.isPending}
             onDecide={(decision, choice) => decide(item, decision, choice)}
           />
@@ -187,6 +191,31 @@ function currentProposal(
 }
 
 function ReviewRow({
+  onRefresh,
+  ...props
+}: Parameters<typeof KnownReviewRow>[0] & {
+  onRefresh: () => void;
+}): JSX.Element {
+  if (isKnownReviewItem(props.item)) return <KnownReviewRow {...props} />;
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 py-2 pr-1 pl-3">
+      <div>
+        <Text className="font-medium break-words">
+          {reviewItemTitle(props.item)}
+        </Text>
+        <Text muted small>
+          This directory change is not supported yet. Refresh the page before
+          reviewing it.
+        </Text>
+      </div>
+      <Button variant="secondary" size="sm" onClick={onRefresh}>
+        <Button.Text>Refresh</Button.Text>
+      </Button>
+    </li>
+  );
+}
+
+function KnownReviewRow({
   item,
   roles,
   roleNames,

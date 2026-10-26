@@ -1,3 +1,6 @@
+import { isKnownEnumValue } from "@/lib/enum";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { useMcpMetadataMetadataForm } from "@/components/mcp_install_page/useMcpMetadataForm";
 import { RequireScope } from "@/components/require-scope";
 import {
@@ -9,8 +12,6 @@ import {
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { mcpServerRouteParam } from "@/lib/sources";
-import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
@@ -20,7 +21,6 @@ import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpSe
 import { useQueryClient } from "@tanstack/react-query";
 import { Network, Pencil } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { VerifyRemoteMcpUrlButton } from "@/pages/sources/remote-mcp/VerifyRemoteMcpUrlButton";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
@@ -97,8 +97,7 @@ function GeneralSectionContent({
 
   const queryClient = useQueryClient();
   const update = useUpdateMcpServerMutation();
-  const navigate = useNavigate();
-  const routes = useRoutes();
+  const followRenamedServer = useFollowRenamedServer();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const metadataResult = useGetMcpMetadata(
@@ -138,7 +137,12 @@ function GeneralSectionContent({
   const dirty = nameDirty || metadataForm.brandingDirty || upstreamDirty;
   const saving =
     update.isPending || metadataForm.isLoading || !!upstream?.pending;
+  const supportsEditing = isKnownEnumValue(
+    KnownUpdateMcpServerFormVisibility,
+    mcpServer.visibility,
+  );
   const saveDisabled =
+    !supportsEditing ||
     !dirty ||
     trimmedDraft === "" ||
     nameTooLong ||
@@ -147,6 +151,13 @@ function GeneralSectionContent({
     (!!upstream?.dirty && upstream.invalid);
 
   const handleSave = async () => {
+    if (
+      !isKnownEnumValue(
+        KnownUpdateMcpServerFormVisibility,
+        mcpServer.visibility,
+      )
+    )
+      return;
     try {
       if (metadataForm.brandingDirty) {
         await metadataForm.saveAsync();
@@ -180,10 +191,7 @@ function GeneralSectionContent({
         // *before* invalidating queries so the refetch uses the new lookup
         // args and the page-level not-found guard doesn't bounce the user
         // back to /mcp.
-        const nextParam = mcpServerRouteParam(updated);
-        void navigate(routes.mcp.x.settings.href(nextParam), {
-          replace: true,
-        });
+        followRenamedServer(updated);
         await Promise.all([
           invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
           invalidateAllMcpServers(queryClient, { refetchType: "all" }),
@@ -272,6 +280,11 @@ function GeneralSectionContent({
               {upstream ? <UpstreamUrlField upstream={upstream} /> : null}
             </div>
           </div>
+          {!supportsEditing && (
+            <FieldDescription>
+              Refresh the page before changing this server’s settings.
+            </FieldDescription>
+          )}
           {metadataUnresolved && !metadataResult.isLoading && (
             <FieldDescription className="text-destructive text-xs">
               Couldn't load current branding settings. Refresh the page before

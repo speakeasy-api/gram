@@ -2546,6 +2546,7 @@ func DecodeListDeviceJoinTokensRequest(mux goahttp.Muxer, decoder func(*http.Req
 	return func(r *http.Request) (*workloadidentities.ListDeviceJoinTokensPayload, error) {
 		var payload *workloadidentities.ListDeviceJoinTokensPayload
 		var (
+			tokenID          *string
 			agentID          *string
 			cursor           *string
 			limit            int
@@ -2555,6 +2556,13 @@ func DecodeListDeviceJoinTokensRequest(mux goahttp.Muxer, decoder func(*http.Req
 			err              error
 		)
 		qp := r.URL.Query()
+		tokenIDRaw := qp.Get("token_id")
+		if tokenIDRaw != "" {
+			tokenID = &tokenIDRaw
+		}
+		if tokenID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("token_id", *tokenID, goa.FormatUUID))
+		}
 		agentIDRaw := qp.Get("agent_id")
 		if agentIDRaw != "" {
 			agentID = &agentIDRaw
@@ -2599,7 +2607,7 @@ func DecodeListDeviceJoinTokensRequest(mux goahttp.Muxer, decoder func(*http.Req
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListDeviceJoinTokensPayload(agentID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListDeviceJoinTokensPayload(tokenID, agentID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3218,6 +3226,7 @@ func marshalTypesWorkloadIssuerToWorkloadIssuerResponseBody(v *types.WorkloadIss
 		Issuer:                 v.Issuer,
 		JwksURI:                v.JwksURI,
 		Description:            v.Description,
+		AllowAssertionReuse:    v.AllowAssertionReuse,
 		AllowWildcardAdmission: v.AllowWildcardAdmission,
 		CreatedAt:              v.CreatedAt,
 		UpdatedAt:              v.UpdatedAt,

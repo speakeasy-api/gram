@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/workload_identities/server"
@@ -24,6 +27,7 @@ import (
 func listJoinTokens(t *testing.T, ctx context.Context, ti *testInstance, agentID *string, cursor *string, limit int) *gen.WorkloadDeviceJoinTokenList {
 	t.Helper()
 	res, err := ti.service.ListDeviceJoinTokens(ctx, &gen.ListDeviceJoinTokensPayload{
+		TokenID:          nil,
 		AgentID:          agentID,
 		Cursor:           cursor,
 		Limit:            limit,
@@ -49,7 +53,7 @@ func revokeJoinToken(ctx context.Context, ti *testInstance, id string) (*gen.Wor
 }
 
 // onlyJoinTokenID returns the id of the one token the organization holds for
-// an agent, since creation returns the token but not its id.
+// an agent in fixtures with exactly one issuance.
 func onlyJoinTokenID(t *testing.T, ctx context.Context, ti *testInstance, agentID uuid.UUID) string {
 	t.Helper()
 	res := listJoinTokens(t, ctx, ti, new(agentID.String()), nil, 50)
@@ -73,8 +77,16 @@ func TestListDeviceJoinTokens_NewestFirstAndFilteredByAgent(t *testing.T) {
 	require.Equal(t, first.String(), all.Items[0].AgentID)
 	require.Equal(t, second.String(), all.Items[1].AgentID)
 	require.Equal(t, first.String(), all.Items[2].AgentID)
-	require.Greater(t, all.Items[0].ID, all.Items[1].ID)
-	require.Greater(t, all.Items[1].ID, all.Items[2].ID)
+	for i := 1; i < len(all.Items); i++ {
+		previous, err := time.Parse(time.RFC3339Nano, all.Items[i-1].CreatedAt)
+		require.NoError(t, err)
+		current, err := time.Parse(time.RFC3339Nano, all.Items[i].CreatedAt)
+		require.NoError(t, err)
+		require.False(t, previous.Before(current))
+		if previous.Equal(current) {
+			require.Greater(t, all.Items[i-1].ID, all.Items[i].ID)
+		}
+	}
 	for _, item := range all.Items {
 		require.Equal(t, "active", item.Status)
 		require.Equal(t, ti.userID, item.CreatedByUserID)
@@ -97,7 +109,7 @@ func TestListDeviceJoinTokens_Paginates(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	agentID := newAgent(t, ctx, ti, "paged")
-	for range 5 {
+	for range 4 {
 		createJoinToken(t, ctx, ti, agentID)
 	}
 
@@ -116,10 +128,11 @@ func TestListDeviceJoinTokens_Paginates(t *testing.T) {
 		}
 		cursor = page.NextCursor
 	}
-	require.Len(t, seen, 5)
-	require.Equal(t, 3, pages)
+	require.Len(t, seen, 4)
+	require.Equal(t, 2, pages, "an exact final page must not advertise another page")
 
 	_, err := ti.service.ListDeviceJoinTokens(ctx, &gen.ListDeviceJoinTokensPayload{
+		TokenID:          nil,
 		AgentID:          nil,
 		Cursor:           new("not-a-uuid"),
 		Limit:            2,
@@ -198,7 +211,7 @@ func TestListDeviceJoinTokens_RequiresWorkloadRead(t *testing.T) {
 	ctx, ti := newTestService(t)
 	createJoinToken(t, ctx, ti, newAgent(t, ctx, ti, "listed"))
 
-	payload := &gen.ListDeviceJoinTokensPayload{AgentID: nil, Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}
+	payload := &gen.ListDeviceJoinTokensPayload{TokenID: nil, AgentID: nil, Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}
 
 	_, err := ti.service.ListDeviceJoinTokens(withScopes(t, ctx, ti, authz.ScopeAgentAuthorize), payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -356,4 +369,71 @@ func TestRevokeDeviceJoinToken_RequiresAPerson(t *testing.T) {
 	noPerson.UserID = ""
 	_, err := revokeJoinToken(contextvalues.SetAuthContext(ctx, &noPerson), ti, id)
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestCreateDeviceJoinToken_ReturnsExactIssuanceID(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	agentID := newAgent(t, ctx, ti, "exact-issuance")
+	created, err := ti.service.CreateDeviceJoinToken(ctx, &gen.CreateDeviceJoinTokenPayload{AgentID: agentID.String(), ExpiresInSeconds: 3600})
+	require.NoError(t, err)
+	require.NotEmpty(t, created.ID)
+	createJoinToken(t, ctx, ti, agentID)
+	payload := &gen.ListDeviceJoinTokensPayload{TokenID: &created.ID, AgentID: new(agentID.String()), Limit: 1}
+	page, err := ti.service.ListDeviceJoinTokens(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	require.Equal(t, created.ID, page.Items[0].ID)
+	require.Nil(t, page.NextCursor)
+	payload.AgentID = new(uuid.NewString())
+	page, err = ti.service.ListDeviceJoinTokens(ctx, payload)
+	require.NoError(t, err)
+	require.Empty(t, page.Items)
+	foreignCtx, foreign := newTestService(t)
+	payload.AgentID = nil
+	page, err = foreign.service.ListDeviceJoinTokens(foreignCtx, payload)
+	require.NoError(t, err)
+	require.Empty(t, page.Items)
+	payload.TokenID = new("not-a-token-id")
+	_, err = ti.service.ListDeviceJoinTokens(ctx, payload)
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestListDeviceJoinTokens_PagesByTimeWithMixedUUIDsAndTies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	agentID := newAgent(t, ctx, ti, "mixed-order")
+	namespace := uuid.New()
+	v7, err := uuid.NewV7()
+	require.NoError(t, err)
+	ids := []string{uuid.NewSHA1(namespace, []byte("first")).String(), uuid.NewSHA1(namespace, []byte("second")).String(), v7.String()}
+	sort.Strings(ids)
+	newest := time.Now().UTC().Truncate(time.Microsecond)
+	for i, id := range ids {
+		created, err := ti.service.CreateDeviceJoinToken(ctx, &gen.CreateDeviceJoinTokenPayload{AgentID: agentID.String(), ExpiresInSeconds: 3600})
+		require.NoError(t, err)
+		createdAt := newest.Add(-time.Minute)
+		if i == 0 {
+			createdAt = newest
+		}
+		affected, err := testrepo.New(ti.conn).SetDeviceJoinTokenOrderingFixture(ctx, testrepo.SetDeviceJoinTokenOrderingFixtureParams{
+			OrganizationID: ti.orgID, ID: uuid.MustParse(created.ID), ReplacementID: uuid.MustParse(id), CreatedAt: pgtype.Timestamptz{Time: createdAt, Valid: true},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, affected)
+	}
+	// The lowest ID is newest; the two older tokens share an exact timestamp.
+	expected := []string{ids[0], ids[2], ids[1]}
+	var cursor *string
+	for i, id := range expected {
+		page := listJoinTokens(t, ctx, ti, nil, cursor, 1)
+		require.Len(t, page.Items, 1)
+		require.Equal(t, id, page.Items[0].ID)
+		if i == len(expected)-1 {
+			require.Nil(t, page.NextCursor)
+		} else {
+			require.NotNil(t, page.NextCursor)
+		}
+		cursor = page.NextCursor
+	}
 }

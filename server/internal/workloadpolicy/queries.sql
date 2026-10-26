@@ -45,8 +45,8 @@ WHERE organization_id = @organization_id
 ORDER BY (project_id IS NULL) DESC, name;
 
 -- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
-VALUES (@organization_id, @project_id, @name, sqlc.narg(description), @tags, @issuer, @jwks_uri, @allow_wildcard_admission)
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse)
+VALUES (@organization_id, @project_id, @name, sqlc.narg(description), @tags, @issuer, @jwks_uri, @allow_wildcard_admission, sqlc.narg(allow_assertion_reuse))
 RETURNING *;
 
 -- name: UpdateWorkloadIssuer :one
@@ -59,6 +59,7 @@ SET name = @name,
     description = sqlc.narg(description),
     tags = @tags,
     jwks_uri = @jwks_uri,
+    allow_assertion_reuse = sqlc.narg(allow_assertion_reuse),
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND (project_id IS NULL OR project_id = @project_id)
@@ -279,16 +280,22 @@ RETURNING *;
 
 -- name: ListWorkloadDeviceJoinTokens :many
 -- An organization's join tokens, newest first, revoked ones included so an
--- administrator can see what was withdrawn. Ids are UUIDv7, so id order is
--- creation order and the cursor is the last id of the previous page. Never
+-- administrator can see what was withdrawn. Creation time and id break ties;
+-- the cursor id resolves both values within the same organization. Never
 -- selects token_hash. Filtering by agent uses
 -- workload_device_join_tokens_agent_idx.
-SELECT id, agent_id, created_by_user_id, created_at, expires_at, consumed_at, consumed_by_subject, deleted_at
-FROM workload_device_join_tokens
-WHERE organization_id = @organization_id
-  AND (sqlc.narg('agent_id')::uuid IS NULL OR agent_id = sqlc.narg('agent_id')::uuid)
-  AND (sqlc.narg('cursor_id')::uuid IS NULL OR id < sqlc.narg('cursor_id')::uuid)
-ORDER BY id DESC
+SELECT token.id, token.agent_id, token.created_by_user_id, token.created_at, token.expires_at, token.consumed_at, token.consumed_by_subject, token.deleted_at
+FROM workload_device_join_tokens AS token
+WHERE token.organization_id = @organization_id
+  AND (sqlc.narg('agent_id')::uuid IS NULL OR token.agent_id = sqlc.narg('agent_id')::uuid)
+  AND (sqlc.narg('token_id')::uuid IS NULL OR token.id = sqlc.narg('token_id')::uuid)
+  AND (sqlc.narg('cursor_id')::uuid IS NULL OR (token.created_at, token.id) < (
+    SELECT cursor_token.created_at, cursor_token.id
+    FROM workload_device_join_tokens AS cursor_token
+    WHERE cursor_token.organization_id = @organization_id
+      AND cursor_token.id = sqlc.narg('cursor_id')::uuid
+  ))
+ORDER BY token.created_at DESC, token.id DESC
 LIMIT @page_limit;
 
 -- name: GetWorkloadDeviceJoinToken :one

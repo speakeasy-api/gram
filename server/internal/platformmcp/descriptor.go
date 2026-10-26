@@ -599,6 +599,7 @@ var wireTypeSchemas = map[reflect.Type]*jsonschema.Schema{
 			string(MCPBackendRemote),
 			string(MCPBackendTunneled),
 			string(MCPBackendUnproxied),
+			string(MCPBackendBuiltin),
 			string(MCPBackendLegacy),
 		},
 	},

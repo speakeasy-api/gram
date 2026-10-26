@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -190,6 +191,8 @@ func insertListedUser(ctx context.Context, dbtx database.DBTX, organizationID st
 		WorkosDirectoryUserID: user.ID,
 		DirectoryID:           conv.ToPGTextEmpty(user.DirectoryID),
 		Email:                 conv.ToPGTextEmpty(email),
+		FirstName:             conv.ToPGTextEmpty(strings.TrimSpace(user.FirstName)),
+		LastName:              conv.ToPGTextEmpty(strings.TrimSpace(user.LastName)),
 		Attributes:            attributes,
 		WorkosCreatedAt:       conv.ToPGTimestamptz(listedTimeOr(user.CreatedAt, asOf)),
 		WorkosUpdatedAt:       conv.ToPGTimestamptz(listedTimeOr(user.UpdatedAt, asOf)),

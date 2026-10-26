@@ -446,11 +446,10 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+	requireProjectWrite := func() error {
+		return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	}
 
 	endpointID, err := uuid.Parse(payload.ID)
 	if err != nil {
@@ -478,10 +477,14 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			if authErr := requireProjectWrite(); authErr != nil {
+				return nil, authErr
+			}
 			return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp endpoint").LogError(ctx, logger)
 	}
+	// The hosted writer checks mcp:write on the server itself, as toolsets.update did.
 	if preexisting.McpServerID.Valid {
 		server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: preexisting.McpServerID.UUID, ProjectID: *authCtx.ProjectID})
 		switch {
@@ -490,6 +493,9 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		case err != nil && !errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.E(oops.CodeUnexpected, err, "get endpoint backing server").LogError(ctx, logger)
 		}
+	}
+	if err := requireProjectWrite(); err != nil {
+		return nil, err
 	}
 
 	dbtx, err := s.db.Begin(ctx)

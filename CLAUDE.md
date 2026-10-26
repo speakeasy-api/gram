@@ -100,6 +100,10 @@ Use the `gram-playwright-cli` skill and `mise run playwright` for routine dashbo
 
 Use `pull-request-demo` when a user-visible change needs a shareable PR screenshot, GIF recording, or PR comment. It builds on the same `mise run playwright` workflow and adds the capture and publishing steps. Do not use `npm`, `npx`, or `yarn` for either workflow.
 
+### Testing Code Mode locally
+
+Gateway Code Mode runs as a native Pitchfork daemon. `./zero` includes `mise run zero:code-mode`, which writes missing local provider/token settings and builds the pinned OSS runtime. Start or restart it with `mise exec -- pitchfork start code-runtime` or `mise exec -- pitchfork restart code-runtime`. Normal stack start/wake includes it when `GRAM_CODE_RUNTIME_PROVIDER=local`, and pause stops it. The runner Docker image is only needed for the restricted-Linux smoke test. Runtime logs are available through `pitchfork logs code-runtime`. Use `mise run test:code-mode -race` for the actual interpreter/gateway integration tests.
+
 ### Testing assistants locally
 
 `./zero` (and `mise run zero:assistants`) writes `GRAM_ASSISTANT_RUNTIME_PROVIDER` and `GRAM_ASSISTANT_RUNTIME_OCI_IMAGE` into `mise.local.toml` when those keys are missing there — persisting a value already in the environment, or `local` / `gram-assistant-runtime` if unset — and builds `gram-assistant-runtime:dev` if that image is missing.
@@ -123,6 +127,10 @@ Background-work rules live in the `gram-temporal` skill (`.agents/skills/gram-te
 ### Platform MCP
 
 The Platform MCP is a first-party product surface under `server/internal/platformmcp/`. When adding or changing backend APIs, dashboard workflows, permissions, or user-facing product capabilities, explicitly assess whether an existing Platform MCP tool must change or a new outcome-oriented tool should be added. Keep tool schemas, descriptions, authorization, audiences, server instructions, tests, and shipped Platform MCP skills in sync with the product behavior. Activate the `maintaining-platform-mcp` skill (`.agents/skills/maintaining-platform-mcp/SKILL.md`) for this assessment and any Platform MCP implementation. Use `authoring-platform-mcp-skills` as well when changing workflows under `server/internal/plugins/platform_mcp_skills/`.
+
+### Command K discoverability
+
+When adding or changing dashboard pages, navigation, named resource lists/details, resource names, permissions, feature gates, or Command K search candidates/ranking/registration, assess Command K page actions and individual resource candidates separately. Sidebar links and overview routes do not automatically index resources by name. Add/update and register the appropriate candidates, or record a justified exclusion with test evidence. Activate `.agents/skills/maintaining-command-palette/SKILL.md`; Cubic's `cubic.yaml` rule and `REVIEW.md` use the same checklist.
 
 ### Staff Admin MCP
 
