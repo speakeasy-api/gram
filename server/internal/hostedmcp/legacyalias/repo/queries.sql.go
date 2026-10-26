@@ -152,6 +152,8 @@ FROM toolsets
 WHERE mcp_slug = $1
   AND project_id = $2
   AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC, created_at, id
+LIMIT 1
 `
 
 type FindToolsetByProjectAliasParams struct {
@@ -166,6 +168,7 @@ type FindToolsetByProjectAliasRow struct {
 	CustomDomainID uuid.NullUUID
 }
 
+// A platform alias wins over custom-domain aliases with the same slug.
 func (q *Queries) FindToolsetByProjectAlias(ctx context.Context, arg FindToolsetByProjectAliasParams) (FindToolsetByProjectAliasRow, error) {
 	row := q.db.QueryRow(ctx, findToolsetByProjectAlias, arg.McpSlug, arg.ProjectID)
 	var i FindToolsetByProjectAliasRow

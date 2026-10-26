@@ -26,11 +26,14 @@ WHERE mcp_slug = @mcp_slug
   AND deleted IS FALSE;
 
 -- name: FindToolsetByProjectAlias :one
+-- A platform alias wins over custom-domain aliases with the same slug.
 SELECT id, project_id, mcp_slug, custom_domain_id
 FROM toolsets
 WHERE mcp_slug = @mcp_slug
   AND project_id = @project_id
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC, created_at, id
+LIMIT 1;
 
 -- name: GetAlias :one
 SELECT mcp_slug, custom_domain_id
