@@ -13,8 +13,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -234,6 +236,9 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 			scopeProjectID = gate.projectID
 		}
 		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer, scopeProjectID)
+	}
+	if err == nil && gate.userID != "" {
+		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)
 	}
 	if err == nil && gate.catalog != nil {
 		members, gate.unapprovedMembers = gate.catalog.approvedMembers(members)
@@ -513,4 +518,28 @@ func findMetaMember(members []metaMember, serverSlug string) (metaMember, bool) 
 	}
 	var none metaMember
 	return none, false
+}
+
+// splitHiddenMembers separates the servers the user hid from those served.
+// Hiding is a preference, so a failed lookup serves every member rather than
+// failing the request.
+func (s *Service) splitHiddenMembers(ctx context.Context, logger *slog.Logger, organizationID, userID string, members []metaMember) ([]metaMember, []metaMember) {
+	hidden, err := hiddenmcpservers.HiddenServerIDs(ctx, s.db, organizationID, userID)
+	if err != nil {
+		logger.WarnContext(ctx, "load hidden gateway members", attr.SlogError(err))
+		return members, nil
+	}
+	if len(hidden) == 0 {
+		return members, nil
+	}
+	served := make([]metaMember, 0, len(members))
+	var removed []metaMember
+	for _, member := range members {
+		if hidden[member.serverID] {
+			removed = append(removed, member)
+		} else {
+			served = append(served, member)
+		}
+	}
+	return served, removed
 }

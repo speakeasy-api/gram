@@ -807,6 +807,8 @@ tags:
     description: External MCP registry operations
   - name: functions
     description: Endpoints for working with functions.
+  - name: hiddenMcpServers
+    description: MCP servers the signed-in user hid. Gateways leave hidden servers out of the user's tools and list them last on the consent page. Each user manages only their own list.
   - name: hooksServerNames
     description: Manages display name overrides for hooks servers.
   - name: hooks

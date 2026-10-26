@@ -81,8 +81,13 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 	if len(members) > codePrefixLimit {
 		description.WriteString("Additional prefixes are available through tools.servers().\n")
 	}
-	if len(members) == 0 {
+	switch {
+	case len(members) == 0 && len(gate.hiddenMembers) > 0 && gate.connectURL != "":
+		fmt.Fprintf(&description, "The person hid every server on this gateway. They can show one again at %s.\n", gate.connectURL)
+	case len(members) == 0:
 		description.WriteString("No tool prefixes are currently permitted.\n")
+	case len(gate.hiddenMembers) > 0:
+		fmt.Fprintf(&description, "The person hid %d more servers, which are not available.\n", len(gate.hiddenMembers))
 	}
 	body, err := json.Marshal(&result[toolsListResultTools]{ID: req.ID, Result: toolsListResultTools{Tools: []*toolListEntry{{Name: metamcp.ToolCodeExecute, Description: description.String(), InputSchema: codeExecuteSchema, Annotations: nil, Meta: nil}}}, serverIdentity: serverInfoMetaServer, cacheHints: cacheHintsCallerVarying})
 	if err != nil {

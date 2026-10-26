@@ -10,17 +10,21 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // consentActionFormMaxBytes caps a consent card action's form body. The form
@@ -110,6 +114,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return s.retryFederatedDelegation(w, r, endpoint, challengeState)
 	case "identity_chaining_check":
 		return s.serveIdentityChainingCheck(w, r, endpoint, challengeState)
+	case "hide_server", "show_server":
+		return s.serveConsentHideServer(w, r, endpoint, challengeState, stateID)
 	}
 
 	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
@@ -406,5 +412,48 @@ func findConsentClient(clients []remotesessions.Client, id uuid.UUID) *remoteses
 			return &clients[i]
 		}
 	}
+	return nil
+}
+
+// serveConsentHideServer hides or shows one of the gateway's servers for the
+// subject. Hiding is limited to servers the subject is admitted to, so a
+// crafted form cannot probe for servers outside the gateway.
+func (s *Service) serveConsentHideServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, stateID string) error {
+	ctx := r.Context()
+	logger := endpoint.LogWith(s.logger).With(attr.SlogOAuthFlowID(challengeState.FlowID))
+	if !endpoint.MetaMcpServerID.Valid {
+		return oops.E(oops.CodeBadRequest, nil, "only gateway servers can be hidden").LogWarn(ctx, logger)
+	}
+	subject := *challengeState.Subject
+	if subject.Kind != urn.SessionSubjectKindUser {
+		return oops.E(oops.CodeBadRequest, nil, "only a signed-in person can hide servers").LogWarn(ctx, logger)
+	}
+	serverID, err := uuid.Parse(r.PostForm.Get("server_id"))
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid server_id").LogWarn(ctx, logger)
+	}
+	members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve gateway members").LogError(ctx, logger)
+	}
+	if !slices.ContainsFunc(members, func(member metaMember) bool { return member.serverID == serverID }) {
+		return oops.E(oops.CodeBadRequest, nil, "unknown server for this gateway").LogWarn(ctx, logger)
+	}
+	if r.PostForm.Get("action") == "hide_server" {
+		err = hiddenmcpservers.Hide(ctx, s.db, endpoint.OrganizationID, subject.ID, serverID)
+	} else {
+		err = hiddenmcpservers.Unhide(ctx, s.db, endpoint.OrganizationID, subject.ID, serverID)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "update hidden server").LogError(ctx, logger)
+	}
+	// The page script updates the list in place; a plain form post returns
+	// to the page.
+	if strings.Contains(r.Header.Get("Accept"), "application/json") {
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+	http.Redirect(w, r, endpoint.consentPath()+"?state="+url.QueryEscape(stateID), http.StatusSeeOther)
 	return nil
 }

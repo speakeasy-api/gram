@@ -33,6 +33,7 @@ import { External } from "./external.js";
 import { ExternalCredentials } from "./externalcredentials.js";
 import { ExternalKeys } from "./externalkeys.js";
 import { Features } from "./features.js";
+import { HiddenMcpServers } from "./hiddenmcpservers.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
 import { Identity } from "./identity.js";
@@ -254,6 +255,11 @@ export class Gram extends ClientSDK {
   private _externalKeys?: ExternalKeys;
   get externalKeys(): ExternalKeys {
     return (this._externalKeys ??= new ExternalKeys(this._options));
+  }
+
+  private _hiddenMcpServers?: HiddenMcpServers;
+  get hiddenMcpServers(): HiddenMcpServers {
+    return (this._hiddenMcpServers ??= new HiddenMcpServers(this._options));
   }
 
   private _hooks?: Hooks;

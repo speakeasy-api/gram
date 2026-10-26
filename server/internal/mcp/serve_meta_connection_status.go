@@ -24,7 +24,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 	members []metaMember,
 	req *rawRequest,
 ) (json.RawMessage, error) {
-	servers := make([]metamcp.ConnectionStatusServer, 0, len(members)+len(gate.unapprovedMembers))
+	servers := make([]metamcp.ConnectionStatusServer, 0, len(members)+len(gate.unapprovedMembers)+len(gate.hiddenMembers))
 	for _, member := range members {
 		status, detail := s.memberSignInStatus(ctx, logger, gate, member)
 		servers = append(servers, metamcp.ConnectionStatusServer{
@@ -46,6 +46,15 @@ func (s *Service) handleMetaConnectionStatusCall(
 				Detail: catalogMemberNotApproved,
 			})
 		}
+	}
+
+	for _, member := range gate.hiddenMembers {
+		servers = append(servers, metamcp.ConnectionStatusServer{
+			Slug:   member.slug,
+			Name:   member.name,
+			Status: metamcp.SignInHidden,
+			Detail: "",
+		})
 	}
 
 	payload := metamcp.ConnectionStatusResult{ConnectURL: gate.connectURL, Servers: servers}

@@ -18,7 +18,21 @@ type ListedServer struct {
 	Status    string `json:"status"`
 }
 
+// HiddenServer is a member the caller hid. Its tools are not served until
+// the caller shows it again.
+type HiddenServer struct {
+	Slug string `json:"slug"`
+	Name string `json:"name,omitempty"`
+}
+
+// HiddenNote tells the model why hidden servers are missing and where the
+// person can show them again.
+const HiddenNote = "You hid these servers, so their tools are unavailable. Show one again at manageUrl to use it."
+
 // ListServersResult is the structuredContent payload of a list_servers call.
 type ListServersResult struct {
-	Servers []ListedServer `json:"servers"`
+	Servers   []ListedServer `json:"servers"`
+	Hidden    []HiddenServer `json:"hidden,omitempty"`
+	ManageURL string         `json:"manageUrl,omitempty"`
+	Note      string         `json:"note,omitempty"`
 }

@@ -15,6 +15,9 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // gatewayListOpenLimit is the most servers a gateway's page lists open by
@@ -68,6 +71,11 @@ type gatewayServer struct {
 	// needs connecting. A server with several services connects on its own
 	// page instead, where each is named.
 	ConnectClientID string
+	// ServerID is the member's mcp_servers id, which Hide and Show post.
+	ServerID string
+	// Hidden marks a server the person hid: listed last and left out of
+	// their tools.
+	Hidden bool
 	// cardIDs are the services the server signs in through.
 	cardIDs []string
 }
@@ -148,6 +156,80 @@ type gatewayConsentView struct {
 	FocusUnavailable bool
 }
 
+// gatewayServerRow is one server row with the page's form fields, so the
+// visible and hidden lists render the same row template, which the page
+// script moves between them in place.
+type gatewayServerRow struct {
+	gatewayServer
+	ConsentPath string
+	State       string
+	CSRFToken   string
+}
+
+// VisibleGatewayRows are the rows of the servers the person has not hidden.
+func (d consentTemplateData) VisibleGatewayRows() []gatewayServerRow {
+	return d.gatewayRows(d.Gateway.VisibleServers())
+}
+
+// HiddenGatewayRows are the rows of the servers the person hid.
+func (d consentTemplateData) HiddenGatewayRows() []gatewayServerRow {
+	return d.gatewayRows(d.Gateway.HiddenServers())
+}
+
+func (d consentTemplateData) gatewayRows(servers []gatewayServer) []gatewayServerRow {
+	rows := make([]gatewayServerRow, 0, len(servers))
+	for _, server := range servers {
+		rows = append(rows, gatewayServerRow{gatewayServer: server, ConsentPath: d.ConsentPath(), State: d.State, CSRFToken: d.CSRFToken})
+	}
+	return rows
+}
+
+// VisibleServers are the servers the person has not hidden.
+func (v *gatewayConsentView) VisibleServers() []gatewayServer {
+	return slices.DeleteFunc(slices.Clone(v.Servers), func(g gatewayServer) bool { return g.Hidden })
+}
+
+// HiddenServers are the servers the person hid.
+func (v *gatewayConsentView) HiddenServers() []gatewayServer {
+	return slices.DeleteFunc(slices.Clone(v.Servers), func(g gatewayServer) bool { return !g.Hidden })
+}
+
+// markHidden flags the servers the person hid, which then count as neither
+// ready nor pending and sort last.
+func (v *gatewayConsentView) markHidden(hidden map[uuid.UUID]bool) {
+	if len(hidden) == 0 {
+		return
+	}
+	for i := range v.Servers {
+		server := &v.Servers[i]
+		id, err := uuid.Parse(server.ServerID)
+		if err != nil || !hidden[id] {
+			continue
+		}
+		server.Hidden = true
+		if server.Ready() {
+			v.ReadyCount--
+		}
+	}
+	sortGatewayServers(v.Servers)
+}
+
+func sortGatewayServers(servers []gatewayServer) {
+	slices.SortStableFunc(servers, func(a, b gatewayServer) int {
+		return cmp.Or(compareBool(a.Hidden, b.Hidden), cmp.Compare(statusOrder(a.Status), statusOrder(b.Status)), cmp.Compare(a.Name, b.Name), cmp.Compare(a.Slug, b.Slug))
+	})
+}
+
+func compareBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return 1
+	}
+	return -1
+}
+
 // gatewayConsent builds the gateway consent view for the challenge's
 // subject. focus names the server whose connect page is requested, empty for
 // the gateway's own page. It returns the cards the page renders: those of the
@@ -165,7 +247,14 @@ func (s *Service) gatewayConsent(
 		return nil, nil, err
 	}
 	view := gatewayServersView(members, cards)
-	view.ListOpen = challengeState.FirstParty || len(view.Servers) <= gatewayListOpenLimit
+	if challengeState.Subject != nil && challengeState.Subject.Kind == urn.SessionSubjectKindUser {
+		hidden, herr := hiddenmcpservers.HiddenServerIDs(ctx, s.db, endpoint.OrganizationID, challengeState.Subject.ID)
+		if herr != nil {
+			return nil, nil, fmt.Errorf("load hidden gateway servers: %w", herr)
+		}
+		view.markHidden(hidden)
+	}
+	view.ListOpen = challengeState.FirstParty || len(view.VisibleServers()) <= gatewayListOpenLimit
 	if focus == "" {
 		return view, nil, nil
 	}
@@ -188,7 +277,7 @@ func (s *Service) gatewayConsent(
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, members: members, cards: cards}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", cardIDs: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
@@ -206,9 +295,7 @@ func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewa
 		}
 		view.Servers = append(view.Servers, server)
 	}
-	slices.SortStableFunc(view.Servers, func(a, b gatewayServer) int {
-		return cmp.Or(cmp.Compare(statusOrder(a.Status), statusOrder(b.Status)), cmp.Compare(a.Name, b.Name), cmp.Compare(a.Slug, b.Slug))
-	})
+	sortGatewayServers(view.Servers)
 	return view
 }
 
@@ -228,14 +315,13 @@ func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 		if len(server.cardIDs) == 1 && (server.Status == gatewayServerReconnect || server.Status == gatewayServerNotConnected) {
 			server.ConnectClientID = server.cardIDs[0]
 		}
-		if server.Ready() {
+		if server.Ready() && !server.Hidden {
 			v.ReadyCount++
 		}
 	}
-	slices.SortStableFunc(v.Servers, func(a, b gatewayServer) int {
-		return cmp.Or(cmp.Compare(statusOrder(a.Status), statusOrder(b.Status)), cmp.Compare(a.Name, b.Name), cmp.Compare(a.Slug, b.Slug))
-	})
-	v.ListOpen = len(v.Servers) <= gatewayListOpenLimit || v.ReadyCount < len(v.Servers)
+	sortGatewayServers(v.Servers)
+	visible := len(v.VisibleServers())
+	v.ListOpen = visible <= gatewayListOpenLimit || v.ReadyCount < visible
 }
 
 func cardServesMember(card remoteSessionCard, member metaMember) bool {
