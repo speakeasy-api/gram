@@ -59,6 +59,10 @@ func TestKitCompositionRequiresExplicitAttachedResource(t *testing.T) {
 	origin, _ := url.Parse("https://mcp.example")
 	a := assistantRecord{MCPServers: []assistantMCPServerRow{{EndpointSlug: "attached", Visibility: "private"}}}
 	require.True(t, kitResourceAttached(a, origin, resource))
+	constructed := a.MCPServers[0].endpointURL(origin)
+	require.Equal(t, "mcp/attached", constructed.Path)
+	require.Equal(t, resource.String(), constructed.String())
+	require.True(t, kitResourceAttached(a, origin, constructed))
 	for _, raw := range []string{
 		"https://other.example/mcp/attached",
 		"https://mcp.example:8443/mcp/attached",
@@ -72,11 +76,14 @@ func TestKitCompositionRequiresExplicitAttachedResource(t *testing.T) {
 		require.False(t, kitResourceAttached(a, origin, other), raw)
 	}
 	require.False(t, kitResourceAttached(a, nil, resource))
+	require.False(t, kitResourceAttached(a, origin, nil))
 	a.MCPServers[0].Visibility = "disabled"
 	require.False(t, kitResourceAttached(a, origin, resource))
 	a.MCPServers[0].Visibility = "private"
 	a.MCPServers[0].EndpointSlug = "other"
 	require.False(t, kitResourceAttached(a, origin, resource))
+	a.MCPServers[0].EndpointSlug = ""
+	require.False(t, kitResourceAttached(a, origin, a.MCPServers[0].endpointURL(origin)))
 	_, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource, MCPIssuer: resource}, nil)
 	require.Error(t, err)
 }
@@ -88,6 +95,10 @@ func TestKitCompositionCustomDomainResource(t *testing.T) {
 	a := assistantRecord{MCPServers: []assistantMCPServerRow{{EndpointSlug: "attached", EndpointDomain: "mcp.customer.example", Visibility: "private"}}}
 	onDomain, _ := url.Parse("https://mcp.customer.example/mcp/attached")
 	require.True(t, kitResourceAttached(a, origin, onDomain))
+	constructed := a.MCPServers[0].endpointURL(origin)
+	require.Equal(t, "mcp/attached", constructed.Path)
+	require.Equal(t, onDomain.String(), constructed.String())
+	require.True(t, kitResourceAttached(a, origin, constructed))
 	onPlatform, _ := url.Parse("https://platform.example/mcp/attached")
 	require.False(t, kitResourceAttached(a, origin, onPlatform))
 }
