@@ -10,8 +10,10 @@ import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { clientTypeLabel } from "@/lib/auth-clients";
 import type { AssistantExecutionProfile } from "@gram/client/models/components/assistantexecutionprofile.js";
 import type { ExecutionProfileServer } from "@gram/client/models/components/executionprofileserver.js";
+import type { ListExecutionProfilesResult } from "@gram/client/models/components/listexecutionprofilesresult.js";
 import {
   invalidateAllAssistantExecutionProfiles,
+  queryKeyAssistantExecutionProfiles,
   useAssistantExecutionProfiles,
 } from "@gram/client/react-query/assistantExecutionProfiles.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
@@ -114,70 +116,37 @@ function ProfileCard({
   serverName: (id: string) => string;
   canWrite: boolean;
 }): JSX.Element {
-  return (
-    <div className="border-border border">
-      <div className="border-border border-b px-3 py-2">
-        <span className="block text-sm font-medium">{profile.triggerName}</span>
-        <Text small muted className="block">
-          {CONTEXT_LABELS[profile.executionContext] ?? profile.executionContext}
-        </Text>
-      </div>
-      <ul className="divide-border divide-y">
-        {profile.servers.map((server) => (
-          <ServerChoice
-            key={server.mcpServerId}
-            assistantId={assistantId}
-            profile={profile}
-            server={server}
-            name={serverName(server.mcpServerId)}
-            canWrite={canWrite}
-          />
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function choiceValue(server: ExecutionProfileServer): string {
-  if (!server.chosen || server.executionProfileChoiceSource === AUTOMATIC)
-    return AUTOMATIC;
-  return server.authClientId ?? NO_AUTH;
-}
-
-function ServerChoice({
-  assistantId,
-  profile,
-  server,
-  name,
-  canWrite,
-}: {
-  assistantId: string;
-  profile: AssistantExecutionProfile;
-  server: ExecutionProfileServer;
-  name: string;
-  canWrite: boolean;
-}): JSX.Element {
   const gramProject = useProjectSlugForRequests();
   const queryClient = useQueryClient();
+  // One save at a time per profile: every server's change names the version
+  // it was read at, so a second change waits for the version the first one
+  // made.
   const save = useSetAssistantExecutionProfileChoiceMutation({
-    onSuccess: () => {
+    onSuccess: async (saved) => {
       toast.success("Saved");
-      void invalidateAllAssistantExecutionProfiles(queryClient);
+      queryClient.setQueryData<ListExecutionProfilesResult>(
+        queryKeyAssistantExecutionProfiles({ assistantId, gramProject }),
+        (current) =>
+          current && {
+            ...current,
+            profiles: current.profiles.map((p) =>
+              p.triggerInstanceId === saved.triggerInstanceId &&
+              p.executionContext === saved.executionContext
+                ? saved
+                : p,
+            ),
+          },
+      );
+      await invalidateAllAssistantExecutionProfiles(queryClient);
     },
-    onError: (error) => {
+    onError: async (error) => {
       toast.error(error.message || "The change could not be saved. Try again.");
       // A conflict means the profile moved on; reload it so a retry uses the
       // current version.
-      void invalidateAllAssistantExecutionProfiles(queryClient);
+      await invalidateAllAssistantExecutionProfiles(queryClient);
     },
   });
-  const automaticLabel = server.gapReason
-    ? "Not chosen"
-    : server.executionProfileChoiceSource === AUTOMATIC
-      ? `Automatic (${server.authClientId ? (server.options.find((o) => o.authClientId === server.authClientId)?.name ?? "one credential") : "no sign-in"})`
-      : "Automatic";
-
-  const onChange = (value: string) => {
+  const choose = (server: ExecutionProfileServer, value: string) => {
     save.mutate({
       request: {
         gramProject,
@@ -198,14 +167,59 @@ function ServerChoice({
       },
     });
   };
+  return (
+    <div className="border-border border">
+      <div className="border-border border-b px-3 py-2">
+        <span className="block text-sm font-medium">{profile.triggerName}</span>
+        <Text small muted className="block">
+          {CONTEXT_LABELS[profile.executionContext] ?? profile.executionContext}
+        </Text>
+      </div>
+      <ul className="divide-border divide-y">
+        {profile.servers.map((server) => (
+          <ServerChoice
+            key={server.mcpServerId}
+            server={server}
+            name={serverName(server.mcpServerId)}
+            disabled={!canWrite || save.isPending}
+            onChoose={(value) => choose(server, value)}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function choiceValue(server: ExecutionProfileServer): string {
+  if (!server.chosen || server.executionProfileChoiceSource === AUTOMATIC)
+    return AUTOMATIC;
+  return server.authClientId ?? NO_AUTH;
+}
+
+function ServerChoice({
+  server,
+  name,
+  disabled,
+  onChoose,
+}: {
+  server: ExecutionProfileServer;
+  name: string;
+  disabled: boolean;
+  onChoose: (value: string) => void;
+}): JSX.Element {
+  const automaticLabel = server.gapReason
+    ? "Not chosen"
+    : server.executionProfileChoiceSource === AUTOMATIC
+      ? `Automatic (${server.authClientId ? (server.options.find((o) => o.authClientId === server.authClientId)?.name ?? "one credential") : "no sign-in"})`
+      : "Automatic";
 
   return (
     <li className="space-y-1.5 px-3 py-2">
       <span className="block truncate text-sm">{name}</span>
       <Select
         value={choiceValue(server)}
-        onValueChange={onChange}
-        disabled={!canWrite || save.isPending}
+        onValueChange={onChoose}
+        disabled={disabled}
       >
         <SelectTrigger
           aria-label={`Credential for ${name}`}

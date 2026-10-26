@@ -1,5 +1,16 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useMutation,
+  useQuery,
+} from "@tanstack/react-query";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AssistantUpstreamCredentials } from "./AssistantUpstreamCredentials";
 
@@ -9,22 +20,26 @@ const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
 }));
 
-vi.mock("@gram/client/react-query/assistantExecutionProfiles.js", () => ({
-  invalidateAllAssistantExecutionProfiles: () => Promise.resolve(),
-  useAssistantExecutionProfiles: () => ({
-    data: { profiles: mocks.profiles },
-    isLoading: false,
-    isError: false,
-  }),
-}));
+vi.mock("@gram/client/react-query/assistantExecutionProfiles.js", () => {
+  const key = (parameters: object) => ["profiles", parameters];
+  return {
+    queryKeyAssistantExecutionProfiles: key,
+    invalidateAllAssistantExecutionProfiles: () => Promise.resolve(),
+    useAssistantExecutionProfiles: (request: object) =>
+      useQuery({
+        queryKey: key(request),
+        queryFn: () => ({ profiles: mocks.profiles }),
+        initialData: { profiles: mocks.profiles },
+        staleTime: Infinity,
+      }),
+  };
+});
 
 vi.mock(
   "@gram/client/react-query/setAssistantExecutionProfileChoice.js",
   () => ({
-    useSetAssistantExecutionProfileChoiceMutation: () => ({
-      mutate: mocks.mutate,
-      isPending: false,
-    }),
+    useSetAssistantExecutionProfileChoiceMutation: (options: object) =>
+      useMutation({ mutationFn: mocks.mutate, ...options }),
   }),
 );
 
@@ -55,6 +70,12 @@ afterEach(() => {
   mocks.canWrite = true;
   mocks.mutate.mockReset();
 });
+
+const sharedToken = {
+  authClientId: "ac-1",
+  name: "Shared token",
+  clientType: "static_credential",
+};
 
 describe("AssistantUpstreamCredentials", () => {
   it("says why a server has no credential yet", () => {
@@ -137,7 +158,7 @@ describe("AssistantUpstreamCredentials", () => {
     ).toBeTruthy();
   });
 
-  it("sends the picked credential with the version it was read at", () => {
+  it("sends the picked credential with the version it was read at", async () => {
     mocks.profiles = [
       {
         triggerInstanceId: "t-1",
@@ -161,6 +182,7 @@ describe("AssistantUpstreamCredentials", () => {
         ],
       },
     ];
+    mocks.mutate.mockResolvedValue(mocks.profiles[0]);
     renderSection();
 
     fireEvent.click(
@@ -170,7 +192,8 @@ describe("AssistantUpstreamCredentials", () => {
       screen.getByRole("option", { name: /Shared token · Static credential/ }),
     );
 
-    expect(mocks.mutate).toHaveBeenCalledWith({
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalled());
+    expect(mocks.mutate.mock.calls[0]?.[0]).toEqual({
       request: {
         gramProject: "default",
         setExecutionProfileChoiceRequestBody: {
@@ -185,5 +208,64 @@ describe("AssistantUpstreamCredentials", () => {
         },
       },
     });
+  });
+
+  it("waits for one save before the next and sends the version it made", async () => {
+    const server = (id: string) => ({
+      mcpServerId: id,
+      chosen: false,
+      gapReason: "selection_required",
+      noAuthAllowed: false,
+      options: [sharedToken],
+    });
+    mocks.profiles = [
+      {
+        triggerInstanceId: "t-1",
+        triggerName: "Dashboard",
+        executionContext: "userless",
+        version: 3,
+        servers: [server("server-1"), server("server-2")],
+      },
+    ];
+    let finish: (profile: unknown) => void = () => {};
+    mocks.mutate.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    renderSection();
+
+    const [first, second] = screen.getAllByRole("combobox");
+    fireEvent.click(first!);
+    fireEvent.click(
+      screen.getByRole("option", { name: /Shared token · Static credential/ }),
+    );
+    await waitFor(() => expect(second!.hasAttribute("disabled")).toBe(true));
+
+    finish({
+      ...(mocks.profiles[0] as object),
+      version: 4,
+      servers: [
+        {
+          ...server("server-1"),
+          chosen: true,
+          gapReason: undefined,
+          authClientId: "ac-1",
+        },
+        server("server-2"),
+      ],
+    });
+    await waitFor(() => expect(second!.hasAttribute("disabled")).toBe(false));
+    mocks.mutate.mockResolvedValueOnce(mocks.profiles[0]);
+    fireEvent.click(second!);
+    fireEvent.click(
+      screen.getByRole("option", { name: /Shared token · Static credential/ }),
+    );
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalledTimes(2));
+    expect(
+      mocks.mutate.mock.calls[1]?.[0].request
+        .setExecutionProfileChoiceRequestBody.expectedVersion,
+    ).toBe(4);
   });
 });
