@@ -123,6 +123,68 @@ func TestCodeBridgeDiscoversHostedRemoteAndTunnelMembers(t *testing.T) {
 	require.Contains(t, string(result.Content), "tool not found")
 }
 
+func TestCodeBridgeSearchListsWorkingMembersWhenOneFails(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	hosted := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted", 0, "public", "list")
+	upstream := newScriptedUpstream(t, scriptedTools("tool", 3), 100)
+	upstream.fail(http.StatusServiceUnavailable, "", "", -1)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Failing", "failing", 1, upstream.url)
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service.Service, gateway.ID)
+	page, err := host.Search(ctx, codemode.SearchArgs{})
+	require.NoError(t, err)
+	paths := make([]string, 0, len(page.Items))
+	for _, item := range page.Items {
+		paths = append(paths, item.Path)
+	}
+	require.Equal(t, []string{hosted.slug + "--list"}, paths)
+	require.True(t, page.Incomplete)
+	require.Equal(t, []codemode.FailedMember{{Server: "failing", Reason: "catalog_unavailable"}}, page.FailedMembers)
+	// A persistent transient failure is tried again, at most three times in all.
+	require.GreaterOrEqual(t, upstream.failures.Load(), int32(2))
+	require.LessOrEqual(t, upstream.failures.Load(), int32(3))
+	_, err = host.Describe(ctx, "failing--tool_000")
+	require.ErrorIs(t, err, codemode.ErrToolUnavailable)
+}
+
+func TestCodeBridgeSearchRetriesARateLimitedMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	upstream := newScriptedUpstream(t, scriptedTools("tool", 3), 100)
+	upstream.fail(http.StatusTooManyRequests, "1", "rate limited", 1)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Limited", "limited", 0, upstream.url)
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service.Service, gateway.ID)
+	started := time.Now()
+	page, err := host.Search(ctx, codemode.SearchArgs{})
+	require.NoError(t, err)
+	require.False(t, page.Incomplete, "%+v", page.FailedMembers)
+	require.Len(t, page.Items, 3)
+	require.GreaterOrEqual(t, time.Since(started), time.Second)
+	require.Equal(t, int32(1), upstream.failures.Load())
+}
+
+func TestCodeBridgeDescribeRetriesARateLimitedMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	upstream := newScriptedUpstream(t, scriptedTools("tool", 3), 100)
+	upstream.fail(http.StatusTooManyRequests, "", "rate limited", 1)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Limited", "limited", 0, upstream.url)
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service.Service, gateway.ID)
+	description, err := host.Describe(ctx, "limited--tool_001")
+	require.NoError(t, err)
+	require.Contains(t, string(description.Definition), "inputSchema")
+	require.Equal(t, int32(1), upstream.failures.Load())
+}
+
 func TestCodeBridgeObservesEndpointAndGrantRevocation(t *testing.T) {
 	t.Parallel()
 	for _, change := range []string{"endpoint", "issuer", "grant"} {

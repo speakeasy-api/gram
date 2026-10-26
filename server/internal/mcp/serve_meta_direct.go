@@ -64,11 +64,9 @@ type memberDescribeResult struct {
 	err     error
 }
 
-// describeMetaMembers describes members concurrently and returns results in
-// member order. Every describe and retry shares one listing deadline, and each
-// attempt is also bounded by the member call timeout. A retryable failure is
-// described again after its Retry-After, or a jittered backoff, when that
-// retry can still start before the deadline.
+// describeMetaMembers describes members concurrently, retrying transient
+// failures, and returns results in member order. Every describe and retry
+// shares one listing deadline.
 func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) []memberDescribeResult {
 	ctx, cancelAll := context.WithTimeout(ctx, min(memberDescribeBudget*s.metaRuntime.MemberCallTimeout, maxGatewayListingTime))
 	defer cancelAll()
@@ -77,34 +75,7 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 	var group sync.WaitGroup
 	for i, member := range members {
 		group.Go(func() {
-			for attempt := 1; ; attempt++ {
-				if slots.Acquire(ctx, 1) != nil {
-					break
-				}
-				memberCtx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
-				results[i].catalog, results[i].err = s.describeMetaMember(memberCtx, logger, gate, member)
-				cancel()
-				slots.Release(1)
-				failure, ok := errors.AsType[memberDiscoveryError](results[i].err)
-				if !ok || !failure.retryable || attempt == maxMemberDescribeAttempts {
-					break
-				}
-				delay := failure.retryAfter
-				if delay == 0 {
-					delay = memberRetryBaseDelay << (attempt - 1)
-				}
-				delay += randomDuration(delay / memberRetryJitterDivisor)
-				if deadline, _ := ctx.Deadline(); time.Now().Add(delay).After(deadline) {
-					break
-				}
-				logger.InfoContext(ctx, "retrying gateway member tool listing", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(failure))
-				timer := time.NewTimer(delay)
-				select {
-				case <-ctx.Done():
-				case <-timer.C:
-				}
-				timer.Stop()
-			}
+			results[i] = s.describeMetaMemberWithRetry(ctx, logger, gate, member, slots)
 			if ctx.Err() != nil {
 				results[i] = expiredListingResult(member, results[i])
 			}
@@ -112,6 +83,45 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 	}
 	group.Wait()
 	return results
+}
+
+// describeMetaMemberWithRetry describes a member, and describes it again after
+// a retryable failure once its Retry-After, or a jittered backoff, has passed,
+// up to maxMemberDescribeAttempts in all. A retry that could not start before
+// ctx's deadline is not attempted, so the last failure is returned instead.
+// Each attempt holds one of slots and is bounded by the member call timeout;
+// a member waiting to retry holds no slot. The result is empty when ctx ended
+// before the first attempt got a slot.
+func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, slots *semaphore.Weighted) memberDescribeResult {
+	var result memberDescribeResult
+	for attempt := 1; ; attempt++ {
+		if slots.Acquire(ctx, 1) != nil {
+			return result
+		}
+		memberCtx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
+		result.catalog, result.err = s.describeMetaMember(memberCtx, logger, gate, member)
+		cancel()
+		slots.Release(1)
+		failure, ok := errors.AsType[memberDiscoveryError](result.err)
+		if !ok || !failure.retryable || attempt == maxMemberDescribeAttempts {
+			return result
+		}
+		delay := failure.retryAfter
+		if delay == 0 {
+			delay = memberRetryBaseDelay << (attempt - 1)
+		}
+		delay += randomDuration(delay / memberRetryJitterDivisor)
+		if deadline, bounded := ctx.Deadline(); bounded && time.Now().Add(delay).After(deadline) {
+			return result
+		}
+		logger.InfoContext(ctx, "retrying gateway member tool listing", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(failure))
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+		case <-timer.C:
+		}
+		timer.Stop()
+	}
 }
 
 // expiredListingResult classifies a member's result once the listing time ran
