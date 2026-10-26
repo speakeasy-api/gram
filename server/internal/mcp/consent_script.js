@@ -77,9 +77,7 @@
   var visibleServers = document.querySelector("[data-gateway-visible-list]");
   var hiddenServers = document.querySelector("[data-gateway-hidden-list]");
   if (visibleServers && hiddenServers) {
-    var hiddenSection = document.querySelector(
-      "[data-gateway-hidden-section]",
-    );
+    var hiddenSection = document.querySelector("[data-gateway-hidden-section]");
     var allHidden = document.querySelector("[data-gateway-all-hidden]");
     var gatewaySummary = document.querySelector("[data-gateway-summary]");
     var hiddenCount = document.querySelector("[data-gateway-hidden-count]");
