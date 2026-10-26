@@ -102,6 +102,53 @@ func TestListAgentsUsesOwnershipOrExplicitRead(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+func TestListAgentsKeepsLiveVisibilityWhileOverrideNarrowsPermissions(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "caller")
+	seedOrganizationUser(t, conn, "org-a", "other")
+	owned := createAgent(t, conn, "org-a", "caller", "Owned")
+	visible := createAgent(t, conn, "org-a", "other", "Visible")
+	createAgent(t, conn, "org-a", "other", "Hidden")
+	seedGrant(t, t.Context(), conn, "org-a", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, visible.ID.String())
+	seedGrant(t, t.Context(), conn, "org-a", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentRead, visible.ID.String())
+	service := newTestService(conn, &fakeAuthorizationEngine{loadedGrantsOnly: true})
+	authCtx := *mustAuthContext(t, validatedHumanContext(t, "org-a", "caller"))
+	authCtx.IsAdmin = true
+	ctx := contextvalues.WithValidatedGramSession(contextvalues.SetAuthContext(t.Context(), &authCtx), &authCtx, false)
+	narrowed := contextvalues.SetRBACScopeOverride(ctx, "rbac-override:none")
+
+	listed, err := service.List(narrowed, &gen.ListPayload{Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 1)
+	require.Equal(t, owned.ID.String(), listed.Items[0].ID)
+	require.True(t, listed.Items[0].Permissions.Write, "ownership remains intrinsic")
+	require.NotNil(t, listed.NextCursor)
+	next, err := service.List(narrowed, &gen.ListPayload{Limit: 1, Cursor: listed.NextCursor})
+	require.NoError(t, err)
+	require.Len(t, next.Items, 1)
+	require.Equal(t, visible.ID.String(), next.Items[0].ID)
+	require.False(t, next.Items[0].Permissions.Read)
+	require.False(t, next.Items[0].Permissions.Write)
+	require.False(t, next.Items[0].Permissions.Authorize)
+	require.False(t, next.Items[0].Permissions.Transfer)
+	require.Nil(t, next.NextCursor)
+	_, _, err = service.authorizer.RequireAgent(narrowed, conn, visible.ID, OwnedAgentRead)
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	listed, err = service.List(contextvalues.SetRBACScopeOverride(ctx, "root"), &gen.ListPayload{})
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 2, "an override cannot expose an agent outside live grants")
+	require.True(t, listed.Items[1].Permissions.Read)
+	require.True(t, listed.Items[1].Permissions.Write)
+	require.False(t, listed.Items[1].Permissions.Authorize)
+	listed, err = service.List(ctx, &gen.ListPayload{})
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 2)
+	require.True(t, listed.Items[1].Permissions.Write)
+}
+
 func TestListAgentsPagesByNameWithoutRepeatingOrSkipping(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)

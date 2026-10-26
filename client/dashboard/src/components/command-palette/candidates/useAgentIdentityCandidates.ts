@@ -5,6 +5,7 @@ import {
   useSlugs,
 } from "@/contexts/Sdk";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { useRBACScopeOverride } from "@/hooks/useRBACScopeOverride";
 import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { fetchRegisteredAgents } from "@/pages/identities/identityRoster";
 import { useRoutes } from "@/routes";
@@ -25,6 +26,7 @@ export function useAgentIdentityCandidates({
 }): LauncherCandidate[] {
   const organization = useOrganization();
   const session = useSession();
+  const scopeOverride = useRBACScopeOverride();
   const sdk = useSdkClient();
   const projectSlug = useProjectSlugForRequests();
   const { projectSlug: routeProjectSlug } = useSlugs();
@@ -60,6 +62,7 @@ export function useAgentIdentityCandidates({
       "[]",
       "[]",
       "",
+      scopeOverride,
     ],
     queryFn: ({ pageParam, signal }) =>
       fetchRegisteredAgents(

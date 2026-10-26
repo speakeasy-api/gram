@@ -24,6 +24,7 @@ import { AgentOwner } from "@/pages/agents/agent-admin";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useRBACScopeOverride } from "@/hooks/useRBACScopeOverride";
 import { Badge } from "@/components/ui/Badge";
 import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
@@ -554,6 +555,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const client = useGramContext();
   const sdk = useSdkClient();
   const session = useSession();
+  const scopeOverride = useRBACScopeOverride();
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
   const canAdminOrganization = hasScope("org:admin", organization.id);
@@ -609,6 +611,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       lifecycleKey,
       ownerKey,
       registered,
+      scopeOverride,
     ],
     queryFn: ({ pageParam, signal }) =>
       fetchRegisteredAgents(

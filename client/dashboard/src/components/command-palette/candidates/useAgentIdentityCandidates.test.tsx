@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   sdk: { name: "sdk" },
   projectSlug: "project-one",
   routeProjectSlug: "project-one" as string | undefined,
+  scopeOverride: null as string | null,
   search: "?range=30d&from=2025-01-01&to=2025-01-31&tab=ignored",
   navigate: vi.fn(),
   href: vi.fn((urn: string) => `/identities/${urn}/overview`),
@@ -36,6 +37,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => mocks.organization,
   useSession: () => mocks.session,
+}));
+vi.mock("@/hooks/useRBACScopeOverride", () => ({
+  useRBACScopeOverride: () => mocks.scopeOverride,
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mocks.sdk,
@@ -92,6 +96,7 @@ describe("useAgentIdentityCandidates", () => {
     mocks.session.impersonatorEmail = undefined;
     mocks.projectSlug = "project-one";
     mocks.routeProjectSlug = "project-one";
+    mocks.scopeOverride = null;
     mocks.queryData = undefined;
     mocks.hasNextPage = false;
     mocks.isFetchingNextPage = false;
@@ -120,6 +125,7 @@ describe("useAgentIdentityCandidates", () => {
         "[]",
         "[]",
         "",
+        null,
       ],
       enabled: false,
       retry: false,
@@ -165,6 +171,31 @@ describe("useAgentIdentityCandidates", () => {
 
     expect(queryEnabled()).toBe(false);
     expect(result.current).toEqual([]);
+  });
+
+  it("keeps registered agents discoverable under a narrowed override", () => {
+    mocks.scopeOverride = "rbac-override:none";
+    mocks.queryData = {
+      pages: [
+        {
+          items: [
+            {
+              id: "agent-one",
+              name: "Build bot",
+              permissions: { write: false },
+            },
+          ],
+        },
+      ],
+    };
+    const { result } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    expect(queryEnabled()).toBe(true);
+    expect(result.current.map((candidate) => candidate.id)).toEqual([
+      "agent-identity:agent-one",
+    ]);
+    expect(mocks.queryOptions?.queryKey).toContain("rbac-override:none");
   });
 
   it("maps names and canonical URNs without exposing them to intent ranking", () => {
