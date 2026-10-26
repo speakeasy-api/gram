@@ -3096,6 +3096,79 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 	require.True(t, third.Skipped, "republishing with the same settings must skip again")
 }
 
+// An organization that never configured hooks_fail_open publishes bootstraps
+// that exit 0 on install failures, so a blocked download on a new machine does
+// not stop agent tool calls. Turning the setting off is an explicit fail-closed
+// choice the next publish bakes in.
+func TestPluginsService_PublishProject_InstallFailOpenByDefault(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	features := &feature.InMemory{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	features.SetFlagPayload(feature.FlagHooksRollout, authCtx.ActiveOrganizationID, []byte(`{"version": 9999}`))
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Install Policy"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "install-policy-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Install Policy Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	input := plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	}
+	bootstrapExits := func() []string {
+		var exits []string
+		for p, c := range mock.lastPushedFiles {
+			if !strings.HasSuffix(p, "/hooks/bootstrap.sh") {
+				continue
+			}
+			for line := range strings.SplitSeq(string(c), "\n") {
+				if strings.HasPrefix(line, "install_failure_exit=") {
+					exits = append(exits, line)
+				}
+			}
+		}
+		return exits
+	}
+
+	first, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, first.Skipped)
+	exits := bootstrapExits()
+	require.NotEmpty(t, exits)
+	for _, exit := range exits {
+		require.Equal(t, "install_failure_exit=0", exit, "an unconfigured org must fail open on install failures")
+	}
+
+	q := productfeaturesrepo.New(ti.conn)
+	flag := productfeaturesrepo.EnableFeatureParams{OrganizationID: authCtx.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)}
+	_, err = q.EnableFeature(ctx, flag)
+	require.NoError(t, err)
+	_, err = q.DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{OrganizationID: flag.OrganizationID, FeatureName: flag.FeatureName})
+	require.NoError(t, err)
+
+	second, err := ti.service.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, second.Skipped, "an explicit fail-closed choice must republish")
+	exits = bootstrapExits()
+	require.NotEmpty(t, exits)
+	for _, exit := range exits {
+		require.Equal(t, "install_failure_exit=1", exit, "an explicit fail-closed choice must fail closed on install failures")
+	}
+}
+
 // A dashboard publish (PublishPlugins, which never skips) must still record the
 // fingerprint, so a subsequent automated rollout sees the project as unchanged.
 func TestPluginsService_PublishProject_SkipsAfterDashboardPublish(t *testing.T) {

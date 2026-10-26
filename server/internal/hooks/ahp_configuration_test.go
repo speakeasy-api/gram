@@ -89,23 +89,28 @@ func TestAHPConfigurationDynamicPosture(t *testing.T) {
 	ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
 	h, err := ti.service.ahpHandler()
 	require.NoError(t, err)
-	requireAHPConfiguration(t, h, "fail-closed")
+	// An organization that never configured the setting fails open.
+	requireAHPConfiguration(t, h, "fail-open")
 	features := featuresrepo.New(ti.conn)
-	_, err = features.EnableFeature(ctx, featuresrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)})
+	flag := featuresrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)}
+	_, err = features.EnableFeature(ctx, flag)
 	require.NoError(t, err)
 	requireAHPConfiguration(t, h, "fail-open")
-	// Fail-open belongs to the authenticated organization, not server state.
+	_, err = features.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams{OrganizationID: flag.OrganizationID, FeatureName: flag.FeatureName})
+	require.NoError(t, err)
+	requireAHPConfiguration(t, h, "fail-closed")
+	// The posture belongs to the authenticated organization, not server state.
 	other := *auth
 	otherProject := uuid.New()
 	other.ProjectID = &otherProject
 	other.ActiveOrganizationID = "org_other"
 	ti.service.auth = &ahpTestAuthorizer{authCtx: &other}
-	requireAHPConfiguration(t, h, "fail-closed")
-	ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
 	requireAHPConfiguration(t, h, "fail-open")
-	_, err = features.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)})
-	require.NoError(t, err)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
 	requireAHPConfiguration(t, h, "fail-closed")
+	_, err = features.EnableFeature(ctx, flag)
+	require.NoError(t, err)
+	requireAHPConfiguration(t, h, "fail-open")
 }
 
 func TestAHPConfigurationAuthentication(t *testing.T) {
@@ -126,7 +131,7 @@ func TestAHPConfigurationAuthentication(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, ahpConfigurationRequest(h, headers).Code)
 	}
 	require.Equal(t, http.StatusOK, ahpConfigurationRequest(h, map[string]string{"Gram-Key": "example", "Gram-Project": "chosen"}).Code)
-	requireAHPConfiguration(t, h, "fail-closed")
+	requireAHPConfiguration(t, h, "fail-open")
 	r := httptest.NewRequest(http.MethodPost, "/ahp", strings.NewReader(strings.Repeat("x", (1<<20)+1)))
 	r.Header.Set("Content-Type", "application/json")
 	for key, value := range ahpAuthHeaders {

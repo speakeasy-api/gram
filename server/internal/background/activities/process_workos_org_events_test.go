@@ -280,6 +280,16 @@ func requireOrganizationDefaultFeatures(t *testing.T, ctx context.Context, conn 
 
 	q := featurerepo.New(conn)
 	for _, feature := range productfeatures.OrganizationDefaultFeatures {
+		if !enabled && feature.EnabledUntilConfigured() {
+			// Reads as enabled without a row, so assert nothing was seeded.
+			var seeded bool
+			require.NoError(t, conn.QueryRow(ctx,
+				`SELECT EXISTS (SELECT 1 FROM organization_features WHERE organization_id = $1 AND feature_name = $2)`,
+				organizationID, string(feature),
+			).Scan(&seeded))
+			require.Falsef(t, seeded, "feature %s", feature)
+			continue
+		}
 		got, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
 			OrganizationID: organizationID,
 			FeatureName:    string(feature),

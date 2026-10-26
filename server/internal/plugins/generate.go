@@ -123,8 +123,10 @@ type GenerateConfig struct {
 	// InstallFailOpen selects the org's binary install-failure policy. When
 	// set, a bootstrap distribution failure (unreachable download origin,
 	// missing tooling, lock-wait timeout, checksum mismatch) exits 0 so the
-	// provider treats the hook as passed; off keeps the fail-closed default
-	// where decision-capable hooks fail per provider semantics. It only covers
+	// provider treats the hook as passed; off (the org explicitly chose to
+	// block) fails closed, so decision-capable hooks fail per provider
+	// semantics. The publish path sets it from hooks_fail_open, which is on
+	// for organizations that never configured it. It only covers
 	// installation — a verified installed binary always runs, and a checksum
 	// mismatch never executes the artifact under either policy.
 	InstallFailOpen bool

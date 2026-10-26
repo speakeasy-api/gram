@@ -198,16 +198,16 @@ func setFeatureEnabled(ctx context.Context, queries *repo.Queries, organizationI
 		return nil
 	}
 
-	if feature == FeatureOrganizationGatewayDisabled {
+	if feature.EnabledUntilConfigured() {
 		current, err := queries.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(feature)})
 		if err != nil {
-			return fmt.Errorf("read gateway opt-in: %w", err)
+			return fmt.Errorf("read %s default: %w", feature, err)
 		}
 		if !current {
 			return nil
 		}
 		if _, err := queries.EnableFeature(ctx, repo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)}); err != nil {
-			return fmt.Errorf("record gateway opt-in: %w", err)
+			return fmt.Errorf("record explicit %s choice: %w", feature, err)
 		}
 	}
 	_, err := queries.DeleteFeature(ctx, repo.DeleteFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)})

@@ -97,26 +97,40 @@ func TestSetProductFeatureHooksFailOpenNoOpSkipsAudit(t *testing.T) {
 	require.Equal(t, count, again, "a no-op set must not record a duplicate audit event")
 }
 
-// TestSetProductFeatureDisableWhenNeverEnabledIsNoOp: disabling a feature
-// that was never enabled succeeds without recording an audit event, mirroring
-// how enabling an already-enabled feature is a no-op.
-func TestSetProductFeatureDisableWhenNeverEnabledIsNoOp(t *testing.T) {
+// TestSetProductFeatureHooksFailOpenDisableFromDefault: an organization that
+// never configured fail-open reads as fail-open, so turning it off is a real
+// transition. It records the explicit fail-closed choice and one audit event;
+// repeating it is a no-op.
+func TestSetProductFeatureHooksFailOpenDisableFromDefault(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestProductFeaturesService(t)
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationHooksFailOpenDisabled)
 	require.NoError(t, err)
 
-	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    "hooks_fail_open",
-		Enabled:        false,
-	})
-	require.NoError(t, err)
+	disable := func() {
+		err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+			OrganizationID: requestedOrganizationID(ctx),
+			FeatureName:    "hooks_fail_open",
+			Enabled:        false,
+		})
+		require.NoError(t, err)
+	}
+	disable()
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationHooksFailOpenDisabled)
 	require.NoError(t, err)
-	require.Equal(t, before, after)
+	require.Equal(t, before+1, after)
+
+	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
+	require.NoError(t, err)
+	require.False(t, result.HooksFailOpenEnabled, "an explicit fail-closed choice must persist")
+
+	disable()
+	again, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationHooksFailOpenDisabled)
+	require.NoError(t, err)
+	require.Equal(t, after, again, "disabling an already-disabled setting must not record another event")
 }
 
 func TestSetProductFeatureOtherFeatureSkipsHooksFailOpenAudit(t *testing.T) {
@@ -145,7 +159,19 @@ func TestGetProductFeaturesHooksFailOpen(t *testing.T) {
 	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
 		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)
-	require.False(t, result.HooksFailOpenEnabled, "fail open must default to off")
+	require.True(t, result.HooksFailOpenEnabled, "fail open must default to on for an unconfigured organization")
+
+	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    "hooks_fail_open",
+		Enabled:        false,
+	})
+	require.NoError(t, err)
+
+	result, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
+	require.NoError(t, err)
+	require.False(t, result.HooksFailOpenEnabled)
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),

@@ -1160,13 +1160,24 @@ func (q *Queries) IsDefaultProject(ctx context.Context, arg IsDefaultProjectPara
 }
 
 const isOrganizationFeatureEnabled = `-- name: IsOrganizationFeatureEnabled :one
-SELECT EXISTS (
-  SELECT 1
-  FROM organization_features
-  WHERE organization_id = $1
-    AND feature_name = $2
-    AND deleted IS FALSE
-) AS enabled
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM organization_features AS active_feature
+    WHERE active_feature.organization_id = $1
+      AND active_feature.feature_name = $2
+      AND active_feature.deleted IS FALSE
+  )
+  OR (
+    $2::text IN ('organization_gateway_disabled', 'hooks_fail_open')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM organization_features AS configured_feature
+      WHERE configured_feature.organization_id = $1
+        AND configured_feature.feature_name = $2
+    )
+  )
+)::boolean AS enabled
 `
 
 type IsOrganizationFeatureEnabledParams struct {
@@ -1176,7 +1187,9 @@ type IsOrganizationFeatureEnabledParams struct {
 
 // Reports whether an organization feature flag is enabled. Mirrors the
 // productfeatures service's read against organization_features so the generator
-// can honour org-level toggles (e.g. hooks_fail_open) at generation time.
+// can honour org-level toggles (e.g. hooks_fail_open) at generation time,
+// including the features that read as enabled until an administrator turns
+// them off (Feature.EnabledUntilConfigured).
 func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrganizationFeatureEnabledParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isOrganizationFeatureEnabled, arg.OrganizationID, arg.FeatureName)
 	var enabled bool

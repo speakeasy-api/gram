@@ -787,14 +787,27 @@ SELECT name FROM organization_metadata WHERE id = @id;
 -- name: IsOrganizationFeatureEnabled :one
 -- Reports whether an organization feature flag is enabled. Mirrors the
 -- productfeatures service's read against organization_features so the generator
--- can honour org-level toggles (e.g. hooks_fail_open) at generation time.
-SELECT EXISTS (
-  SELECT 1
-  FROM organization_features
-  WHERE organization_id = @organization_id
-    AND feature_name = @feature_name
-    AND deleted IS FALSE
-) AS enabled;
+-- can honour org-level toggles (e.g. hooks_fail_open) at generation time,
+-- including the features that read as enabled until an administrator turns
+-- them off (Feature.EnabledUntilConfigured).
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM organization_features AS active_feature
+    WHERE active_feature.organization_id = @organization_id
+      AND active_feature.feature_name = @feature_name
+      AND active_feature.deleted IS FALSE
+  )
+  OR (
+    @feature_name::text IN ('organization_gateway_disabled', 'hooks_fail_open')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM organization_features AS configured_feature
+      WHERE configured_feature.organization_id = @organization_id
+        AND configured_feature.feature_name = @feature_name
+    )
+  )
+)::boolean AS enabled;
 
 -- name: GetGitHubConnection :one
 SELECT *

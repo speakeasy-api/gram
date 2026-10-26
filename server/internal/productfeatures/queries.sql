@@ -25,15 +25,17 @@ SELECT pg_advisory_lock(hashtextextended('product-feature:' || @organization_id:
 SELECT pg_advisory_unlock(hashtextextended('product-feature:' || @organization_id::text || ':' || @feature_name::text, 0)) AS unlocked;
 
 -- name: IsFeatureEnabled :one
--- The inverted gateway setting defaults to disabled until a soft-deleted
--- flag records an administrator's explicit opt-in.
+-- Features listed here read as enabled until a soft-deleted flag records an
+-- administrator's explicit choice to turn them off: the inverted gateway
+-- setting (gateway off until opted in) and hooks fail-open. Keep the list in
+-- sync with Feature.EnabledUntilConfigured.
 SELECT COALESCE(EXISTS (
     SELECT 1 FROM organization_features AS active_feature
     WHERE active_feature.organization_id = @organization_id
       AND active_feature.feature_name = @feature_name
       AND active_feature.deleted IS FALSE
 ) OR (
-    @feature_name::text = 'organization_gateway_disabled'
+    @feature_name::text IN ('organization_gateway_disabled', 'hooks_fail_open')
     AND NOT EXISTS (
         SELECT 1 FROM organization_features AS configured_feature
         WHERE configured_feature.organization_id = @organization_id

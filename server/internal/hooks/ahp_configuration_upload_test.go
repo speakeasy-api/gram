@@ -38,6 +38,12 @@ func TestAHPConfigurationNativeUpload(t *testing.T) {
 			ctx, ti := newTestHooksService(t)
 			auth := hookAuthContext(t, ctx)
 			ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+			// Hooks fail open by default; record the explicit fail-closed choice.
+			failOpenFlag := featuresrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)}
+			_, err := featuresrepo.New(ti.conn).EnableFeature(ctx, failOpenFlag)
+			require.NoError(t, err)
+			_, err = featuresrepo.New(ti.conn).DeleteFeature(ctx, featuresrepo.DeleteFeatureParams{OrganizationID: failOpenFlag.OrganizationID, FeatureName: failOpenFlag.FeatureName})
+			require.NoError(t, err)
 			handler, err := ti.service.ahpHandler()
 			require.NoError(t, err)
 			uploadHandler := ti.service.ahpUploadHandler()

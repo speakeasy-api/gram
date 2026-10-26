@@ -1130,13 +1130,24 @@ WHERE project_id = @project_id
   AND deleted IS FALSE;
 
 -- name: IsOrganizationHooksFailOpenEnabled :one
-SELECT EXISTS (
-  SELECT 1
-  FROM organization_features
-  WHERE organization_id = @organization_id
-    AND feature_name = 'hooks_fail_open'
-    AND deleted IS FALSE
-) AS enabled;
+-- Hooks fail-open defaults on: an organization that never configured it reads
+-- as enabled, and only a soft-deleted row (an administrator turning it off)
+-- fails closed. Mirrors productfeatures' IsFeatureEnabled.
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM organization_features AS active_feature
+    WHERE active_feature.organization_id = @organization_id
+      AND active_feature.feature_name = 'hooks_fail_open'
+      AND active_feature.deleted IS FALSE
+  )
+  OR NOT EXISTS (
+    SELECT 1
+    FROM organization_features AS configured_feature
+    WHERE configured_feature.organization_id = @organization_id
+      AND configured_feature.feature_name = 'hooks_fail_open'
+  )
+)::boolean AS enabled;
 
 -- name: CreateSessionQuarantine :one
 INSERT INTO session_quarantines (

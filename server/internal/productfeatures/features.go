@@ -18,11 +18,16 @@ const (
 	// service endpoints backing it (getSessionMeta, reportSessionMoved).
 	// Sibling of FeatureSessionCapture — capture records sessions, portability
 	// moves them.
-	FeatureSessionPortability         Feature = "session_portability"
-	FeatureAuthzChallengeLogging      Feature = "authz_challenge_logging"
-	FeatureSSO                        Feature = "sso"
-	FeatureSCIM                       Feature = "scim"
-	FeatureHooksBrowserLogin          Feature = "hooks_browser_login"
+	FeatureSessionPortability    Feature = "session_portability"
+	FeatureAuthzChallengeLogging Feature = "authz_challenge_logging"
+	FeatureSSO                   Feature = "sso"
+	FeatureSCIM                  Feature = "scim"
+	FeatureHooksBrowserLogin     Feature = "hooks_browser_login"
+	// FeatureHooksFailOpen is the organization's single "when Speakeasy hooks
+	// can't run" posture. It covers control-plane outages and timeouts, and the
+	// hooks binary install-failure exit code baked at publish time.
+	// Organizations that never configured it fail open; an administrator who
+	// turns it off is recorded as a soft-deleted flag and fails closed.
 	FeatureHooksFailOpen              Feature = "hooks_fail_open"
 	FeatureCustomModelKeys            Feature = "custom_model_keys"
 	FeatureSkills                     Feature = "skills"
@@ -93,6 +98,20 @@ func (f Feature) RequiresPlatformAdmin() bool {
 	}
 }
 
+// EnabledUntilConfigured reports whether f reads as enabled for an
+// organization that has no row for it, active or soft-deleted. Turning such a
+// feature off must persist a soft-deleted row so the explicit choice survives;
+// the IsFeatureEnabled queries in productfeatures, plugins, and risk encode the
+// same list.
+func (f Feature) EnabledUntilConfigured() bool {
+	switch f {
+	case FeatureOrganizationGatewayDisabled, FeatureHooksFailOpen:
+		return true
+	default:
+		return false
+	}
+}
+
 type FeatureCache struct {
 	OrganizationID string
 	Feature        Feature
@@ -106,7 +125,8 @@ func (f FeatureCache) CacheKey() string {
 }
 
 func FeatureCacheKey(organizationID string, feature Feature) string {
-	if feature == FeatureOrganizationGatewayDisabled {
+	// Versioned so entries cached before the default changed are never read.
+	if feature.EnabledUntilConfigured() {
 		return fmt.Sprintf("feature:v2:%s:%s", organizationID, string(feature))
 	}
 	return fmt.Sprintf("feature:%s:%s", organizationID, string(feature))

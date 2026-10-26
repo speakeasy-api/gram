@@ -3501,8 +3501,10 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 	// cached org settings) to consult, so only the baked exit code can honor
 	// the org's outage tolerance. It refreshes on the next publish after a
 	// toggle; the installed binary tracks the live value via ingest effects.
-	// Off (or unreadable), a distribution failure fails closed — the same
-	// posture as every other unobtainable verdict.
+	// An org that never configured the setting fails open, so a missing tool
+	// or blocked download on a new machine does not stop agent tool calls.
+	// Explicitly turned off (or unreadable), a distribution failure fails
+	// closed — the same posture as every other unobtainable verdict.
 	installFailOpen, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
 		OrganizationID: orgID,
 		FeatureName:    string(productfeatures.FeatureHooksFailOpen),

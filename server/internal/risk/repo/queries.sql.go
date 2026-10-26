@@ -2595,15 +2595,26 @@ type InsertRiskResultsParams struct {
 }
 
 const isOrganizationHooksFailOpenEnabled = `-- name: IsOrganizationHooksFailOpenEnabled :one
-SELECT EXISTS (
-  SELECT 1
-  FROM organization_features
-  WHERE organization_id = $1
-    AND feature_name = 'hooks_fail_open'
-    AND deleted IS FALSE
-) AS enabled
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM organization_features AS active_feature
+    WHERE active_feature.organization_id = $1
+      AND active_feature.feature_name = 'hooks_fail_open'
+      AND active_feature.deleted IS FALSE
+  )
+  OR NOT EXISTS (
+    SELECT 1
+    FROM organization_features AS configured_feature
+    WHERE configured_feature.organization_id = $1
+      AND configured_feature.feature_name = 'hooks_fail_open'
+  )
+)::boolean AS enabled
 `
 
+// Hooks fail-open defaults on: an organization that never configured it reads
+// as enabled, and only a soft-deleted row (an administrator turning it off)
+// fails closed. Mirrors productfeatures' IsFeatureEnabled.
 func (q *Queries) IsOrganizationHooksFailOpenEnabled(ctx context.Context, organizationID string) (bool, error) {
 	row := q.db.QueryRow(ctx, isOrganizationHooksFailOpenEnabled, organizationID)
 	var enabled bool

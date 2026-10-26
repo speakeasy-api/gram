@@ -67,7 +67,7 @@ func TestClientSnapshot_ReturnsCompleteProductFeatureState(t *testing.T) {
 		SsoEnabled:                              true,
 		ScimEnabled:                             false,
 		HooksBrowserLoginEnabled:                false,
-		HooksFailOpenEnabled:                    false,
+		HooksFailOpenEnabled:                    true,
 		CustomModelKeysEnabled:                  false,
 		SkillsEnabled:                           true,
 		SkillCaptureMetadataOnly:                false,

@@ -225,16 +225,18 @@ function OrgLogsInner({
               <Stack direction="horizontal" align="center" gap={2}>
                 <Unplug className="text-muted-foreground h-4 w-4" />
                 <Text variant="body" className="font-medium">
-                  Fail Open on Connection Failures and Timeouts
+                  Fail open when hooks can't run
                 </Text>
               </Stack>
               <Text
                 variant="body"
                 className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
               >
-                Let hooks proceed through outages, slow or unreliable networks,
-                and timeouts. Explicit policy denials and invalid credentials
-                still block.
+                Let agent tool calls proceed when the hooks binary can't be
+                installed on a machine, and through outages, slow or unreliable
+                networks, and timeouts. On by default; turn off to block
+                instead. A download that fails its checksum never runs, and
+                explicit policy denials and invalid credentials still block.
               </Text>
             </Stack>
             {featuresData && (
@@ -243,7 +245,7 @@ function OrgLogsInner({
                   checked={effectiveHooksFailOpenEnabled}
                   onCheckedChange={handleSetHooksFailOpen}
                   disabled={isMutatingLogs}
-                  aria-label="Fail open on connection failures and timeouts"
+                  aria-label="Fail open when hooks can't run"
                 />
               </RequireScope>
             )}

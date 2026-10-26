@@ -136,7 +136,7 @@ SELECT COALESCE(EXISTS (
       AND active_feature.feature_name = $2
       AND active_feature.deleted IS FALSE
 ) OR (
-    $2::text = 'organization_gateway_disabled'
+    $2::text IN ('organization_gateway_disabled', 'hooks_fail_open')
     AND NOT EXISTS (
         SELECT 1 FROM organization_features AS configured_feature
         WHERE configured_feature.organization_id = $1
@@ -150,8 +150,10 @@ type IsFeatureEnabledParams struct {
 	FeatureName    string
 }
 
-// The inverted gateway setting defaults to disabled until a soft-deleted
-// flag records an administrator's explicit opt-in.
+// Features listed here read as enabled until a soft-deleted flag records an
+// administrator's explicit choice to turn them off: the inverted gateway
+// setting (gateway off until opted in) and hooks fail-open. Keep the list in
+// sync with Feature.EnabledUntilConfigured.
 func (q *Queries) IsFeatureEnabled(ctx context.Context, arg IsFeatureEnabledParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isFeatureEnabled, arg.OrganizationID, arg.FeatureName)
 	var enabled bool
