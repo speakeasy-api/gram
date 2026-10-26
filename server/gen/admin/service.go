@@ -2965,14 +2965,16 @@ type ProductFeatures struct {
 // PromoteRegistryCandidatePayload is the payload type of the admin service
 // promoteRegistryCandidate method.
 type PromoteRegistryCandidatePayload struct {
-	AdminSessionToken       *string
-	OrganizationID          string
-	ProjectID               string
-	McpServerID             string
-	SourceRevision          string
-	CurationRevision        string
-	PublicName              string
-	PublicTitle             string
+	AdminSessionToken *string
+	OrganizationID    string
+	ProjectID         string
+	McpServerID       string
+	SourceRevision    string
+	CurationRevision  string
+	PublicName        string
+	// Public title, at most 100 Unicode code points.
+	PublicTitle string
+	// Public description, at most 100 Unicode code points.
 	PublicDescription       string
 	PublicURL               string
 	DocumentationURL        string
