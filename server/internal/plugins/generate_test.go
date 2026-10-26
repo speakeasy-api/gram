@@ -3164,8 +3164,10 @@ func TestGenerateReadmeIncludesOpenClawInstallation(t *testing.T) {
 	readme := string(files["README.md"])
 	require.Contains(t, readme, "### OpenClaw")
 	require.Contains(t, readme, "openclaw plugins install --force --accept-capabilities ./"+OpenClawObservabilitySlug(GenerateConfig{OrgName: "Acme"}))
+	require.Contains(t, readme, "openclaw plugins install --force ./"+OpenClawObservabilitySlug(GenerateConfig{OrgName: "Acme"}))
+	require.Contains(t, readme, "openclaw plugins install ./"+OpenClawObservabilitySlug(GenerateConfig{OrgName: "Acme"}))
 	require.Contains(t, readme, "openclaw plugins install --help")
-	require.Contains(t, readme, "omit any flag not listed")
+	require.Contains(t, readme, "openclaw gateway restart")
 	// The install is inert without this: the conversation hooks never fire and
 	// prompts, responses and usage go uncaptured with no error.
 	require.Contains(t, readme, `"allowConversationAccess": true`)

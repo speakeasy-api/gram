@@ -1,3 +1,4 @@
+import { CodeBlock } from "@/components/code";
 import { InstallSteps } from "@/components/install-steps";
 import {
   Sheet,
@@ -15,6 +16,8 @@ export function OpenClawInstallSheet({
   archiveName: string;
   onClose: () => void;
 }): JSX.Element {
+  const archivePath = shellQuote(`./${archiveName}`);
+
   return (
     <Sheet
       open
@@ -42,8 +45,29 @@ export function OpenClawInstallSheet({
               {
                 title: "Install the downloaded plugin",
                 description:
-                  "If help does not list --accept-capabilities, omit it. Omit --force too if it is not listed. These flags confirm the local source and its declared capabilities; --force also replaces an existing installation.",
-                code: `openclaw plugins install --force --accept-capabilities ${shellQuote(`./${archiveName}`)}`,
+                  "Run the command matching your help output. These flags confirm the local source and its declared capabilities; --force also replaces an existing installation.",
+                children: (
+                  <div className="space-y-3">
+                    {[
+                      {
+                        label: "Both flags listed (2026.8.1 and later)",
+                        flags: "--force --accept-capabilities ",
+                      },
+                      {
+                        label: "Only --force listed (older backports)",
+                        flags: "--force ",
+                      },
+                      { label: "Neither flag listed", flags: "" },
+                    ].map(({ label, flags }) => (
+                      <div key={label} className="space-y-1">
+                        <p className="text-muted-foreground text-sm">{label}</p>
+                        <CodeBlock language="bash" className="bg-background">
+                          {`openclaw plugins install ${flags}${archivePath}`}
+                        </CodeBlock>
+                      </div>
+                    ))}
+                  </div>
+                ),
               },
               {
                 title: "Enable conversation access",
@@ -52,10 +76,10 @@ export function OpenClawInstallSheet({
                 code: "openclaw config set plugins.entries.speakeasy-observability.hooks.allowConversationAccess true",
               },
               {
-                title: "Verify the installation",
+                title: "Restart and verify the installation",
                 description:
-                  "Follow the install command’s restart instructions. Restart the Gateway after the current turn if requested, so the agent can finish reporting the install result. Then run a tool-using turn and check Agent Sessions in Speakeasy. Models routed through the Claude CLI need Claude Code hooks installed separately.",
-                code: "openclaw plugins inspect speakeasy-observability\nopenclaw plugins doctor",
+                  "Restart the Gateway after installing the plugin. If an agent is installing it, wait until its current turn finishes. Then run a tool-using turn and check Agent Sessions in Speakeasy. Models routed through the Claude CLI need Claude Code hooks installed separately.",
+                code: "openclaw gateway restart\nopenclaw plugins inspect speakeasy-observability\nopenclaw plugins doctor",
               },
             ]}
           />

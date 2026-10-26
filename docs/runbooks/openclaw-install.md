@@ -44,19 +44,32 @@ customer whose models all route through the Claude CLI.
 
    OpenClaw 2026.8.1 and later require `--force` to confirm a local source and
    `--accept-capabilities` to accept the plugin's declared capabilities.
-   Older releases differ, including backports: omit each flag that is absent
-   from your command's help. Do not infer support from the version alone.
+   Older releases differ, including backports: choose the command matching
+   your help output below. Do not infer support from the version alone.
    OpenClaw's own [compatibility helper](https://github.com/openclaw/openclaw/blob/v2026.10.6/scripts/e2e/lib/package-compat.mjs)
    also probes help for capability-consent support.
 
-   Install the ZIP directly; no extraction tool is needed:
+   Install the ZIP directly; no extraction tool is needed. Run only the
+   command matching your help output.
+
+   Both flags listed (2026.8.1 and later):
 
    ```sh
    openclaw plugins install --force --accept-capabilities './<org>-observability-openclaw.zip'
    ```
 
-   For a release whose help lists neither flag, use
-   `openclaw plugins install './<org>-observability-openclaw.zip'`.
+   Only `--force` listed (older backports):
+
+   ```sh
+   openclaw plugins install --force './<org>-observability-openclaw.zip'
+   ```
+
+   Neither flag listed:
+
+   ```sh
+   openclaw plugins install './<org>-observability-openclaw.zip'
+   ```
+
    A directory path works too, with the same supported flags. `--force` also
    replaces an existing installation. The package is copied to
    `<profile>/extensions/speakeasy-observability`. Check the actual download
@@ -88,11 +101,16 @@ customer whose models all route through the Claude CLI.
    and `before_agent_finalize` among them), but the plugin does not subscribe
    those and never reports them.
 
-4. Follow the install command’s restart instructions. Restart the Gateway
-   after the current turn if requested, so the agent can finish reporting the
-   installation result. On 2026.10.6, changing conversation access reports
-   that it applies without a restart; a fresh install with no running Gateway
-   is saved for the next start.
+4. Restart the Gateway after installing the plugin:
+
+   ```sh
+   openclaw gateway restart
+   ```
+
+   If an agent is installing it, wait until its current turn finishes so it
+   can report the result. If no Gateway is running, start it after installation.
+   On 2026.10.6, a conversation-access-only config change can apply without a
+   restart; that does not replace the restart after installing the plugin.
 
 5. Verify — see below.
 
