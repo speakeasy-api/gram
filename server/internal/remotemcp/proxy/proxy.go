@@ -960,6 +960,20 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			p.cancelUpstreamRequest(ctx, r, userReqID, answeredBy(upstreamResp))
 			return nil
 		case StreamEndUpstreamClosed:
+			// An upstream that closes a request's stream without responding
+			// leaves the client waiting out its own timeout, so answer for
+			// it. Two clean closes are left alone: a stream that carried
+			// event ids may be closed on purpose for the client to resume
+			// with Last-Event-ID (MCP 2025-11-25 polling), and a
+			// subscriptions/listen stream that drops is the client's signal
+			// to reconnect, which an error response would turn into a
+			// failed subscription.
+			if !responseRelayed && userReqID.IsValid() && !relay.resumable && !listen {
+				observation.finish("incomplete")
+				failure = oops.E(oops.CodeGatewayError, nil, "remote MCP server closed its response stream before responding").
+					LogWarn(ctx, p.Logger)
+				responseBytes += p.writeStreamFailure(ctx, w, userReqID, "The MCP server closed its response stream before responding.")
+			}
 			return nil
 		case StreamEndIdleTimeout:
 			// Unlike the standalone GET stream, a POST response stream going

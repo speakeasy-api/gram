@@ -1,6 +1,7 @@
 package proxy_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -405,10 +406,14 @@ func TestProxy_Post_InterruptAnswersPendingStreamAndCancelsUpstream(t *testing.T
 	p.Drain = drain
 	p.Metrics = proxy.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
 	p.ToolsCallFailureInterceptors = []proxy.ToolsCallFailureInterceptor{failures}
+	// Interrupt only once the proxy is relaying the stream, so the error is
+	// answered on the open stream rather than before its headers.
+	relaying := &relayingInterceptor{relaying: make(chan struct{}), once: sync.Once{}}
+	p.RemoteMessageInterceptors = []proxy.RemoteMessageInterceptor{relaying}
 
 	rr := httptest.NewRecorder()
 	done := runAsync(func() error { return p.Post(rr, newToolsCallPost(t, "tools/call")) })
-	waitFor(t, upstream.opened, "the upstream stream to open")
+	waitFor(t, relaying.relaying, "the proxy to relay the upstream stream")
 	drain.Start(time.Millisecond)
 	require.NoError(t, waitForHandler(t, done))
 
@@ -480,4 +485,87 @@ func TestProxy_Post_InterruptSkipsUpstreamCancelUnder20260728(t *testing.T) {
 	// The upstream cancel is sent before Post returns, so none arriving by
 	// now means none was sent: closing the stream is the cancellation.
 	require.Equal(t, int64(1), upstream.requests.Load())
+}
+
+// newClosingUpstream answers every POST with an SSE stream that carries
+// prelude and then closes without a JSON-RPC response.
+func newClosingUpstream(t *testing.T, prelude string) *httptest.Server {
+	t.Helper()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, prelude)
+	}))
+	t.Cleanup(upstream.Close)
+	return upstream
+}
+
+func TestProxy_Post_StreamClosedBeforeResponseAnswersWithError(t *testing.T) {
+	t.Parallel()
+
+	upstream := newClosingUpstream(t, "data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progressToken\":1,\"progress\":1}}\n\n")
+	failures := &mockToolsCallFailureInterceptor{}
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsCallFailureInterceptors = []proxy.ToolsCallFailureInterceptor{failures}
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, newToolsCallPost(t, "tools/call")))
+
+	events := sseDataEvents(t, rr.Body.String())
+	require.NotEmpty(t, events)
+	var reply interruptedReply
+	require.NoError(t, json.Unmarshal([]byte(events[len(events)-1]), &reply))
+	require.Equal(t, 3, reply.ID)
+	require.Equal(t, -32603, reply.Error.Code)
+
+	require.Len(t, failures.failures, 1)
+	var serr *oops.ShareableError
+	require.ErrorAs(t, failures.failures[0].Err, &serr)
+	require.Equal(t, oops.CodeGatewayError, serr.Code, "the upstream ended the stream, so the failure is the upstream's")
+}
+
+func TestProxy_Post_ResumableStreamClosedBeforeResponseIsLeftForResume(t *testing.T) {
+	t.Parallel()
+
+	// A priming event with an id lets the client resume with Last-Event-ID
+	// after the upstream closes the connection.
+	upstream := newClosingUpstream(t, "id: evt-1\ndata: \n\n")
+	p := newProxyForTest(t, upstream.URL)
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, newToolsCallPost(t, "tools/call")))
+	require.NotContains(t, rr.Body.String(), `"error"`)
+}
+
+func TestProxy_Post_ListenStreamClosedBeforeResponseIsLeftForReconnect(t *testing.T) {
+	t.Parallel()
+
+	upstream := newClosingUpstream(t, "data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/tools/list_changed\"}\n\n")
+	p := newProxyForTest(t, upstream.URL)
+
+	body := `{"jsonrpc":"2.0","id":7,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true}}}`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.NotContains(t, rr.Body.String(), `"error"`)
+	require.NotContains(t, rr.Body.String(), `"resultType"`)
+}
+
+// relayingInterceptor closes relaying when the proxy relays its first message
+// from the remote MCP server.
+type relayingInterceptor struct {
+	relaying chan struct{}
+	once     sync.Once
+}
+
+func (r *relayingInterceptor) Name() string { return "relaying" }
+
+func (r *relayingInterceptor) InterceptRemoteMessage(_ context.Context, _ *proxy.RemoteMessage) error {
+	r.once.Do(func() { close(r.relaying) })
+	return nil
 }
