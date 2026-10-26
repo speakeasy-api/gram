@@ -20,6 +20,7 @@ const candidate: AdminRegistryPromotionCandidate = {
   curationRevision: "00000000-0000-4000-8000-000000000004",
   createdAt: new Date("2026-01-02T12:00:00Z"),
   eligible: false,
+  canOverrideEligibility: false,
   reason: "already_promoted",
   status: "promoted",
   observedSuccesses: 30,

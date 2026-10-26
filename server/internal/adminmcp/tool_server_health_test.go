@@ -205,13 +205,13 @@ func TestDescribeMCPServerHealthLegacyAndLoggingDisabled(t *testing.T) {
 	t.Parallel()
 	reads := testServerHealthReads()
 	reads.health.UserSessionIssuer = nil
-	reads.health.LegacyAuth = new("oauth_proxy")
+	reads.health.LegacyAuth = new("external_oauth")
 	reads.calls = &gen.AdminMcpServerToolCalls{Type: "logging:disabled"}
 	body, data, isError := callServerHealthTool(t, reads, nil, healthArgs(""))
 	require.False(t, isError, body)
 	var output MCPServerHealth
 	require.NoError(t, json.Unmarshal(data, &output))
-	require.Equal(t, "oauth_proxy", *output.LegacyAuth)
+	require.Equal(t, "external_oauth", *output.LegacyAuth)
 	require.Nil(t, output.UserSessionIssuer)
 	require.Equal(t, MCPServerHealthToolCalls{Type: "logging:disabled"}, output.ToolCalls)
 }
