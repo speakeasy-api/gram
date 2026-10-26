@@ -1524,15 +1524,18 @@ func (p *Proxy) writeListenCompletion(w http.ResponseWriter, id jsonrpc.ID) (int
 	return writeSSEBytes(w, event)
 }
 
-// streamEndReason classifies how a relayed SSE stream ended.
+// streamEndReason classifies how a relayed SSE stream ended. A stream that
+// reached a clean EOF ended on its own even if the drain or idle bound fired
+// as it did: both end a stream by cancelling its read, which fails rather
+// than returning EOF.
 func streamEndReason(r *http.Request, body io.ReadCloser, streamErr error) StreamEndReason {
 	switch {
+	case streamErr == nil:
+		return StreamEndUpstreamClosed
 	case streamDrained(body):
 		return StreamEndShutdown
 	case streamIdledOut(body):
 		return StreamEndIdleTimeout
-	case streamErr == nil:
-		return StreamEndUpstreamClosed
 	case r.Context().Err() != nil:
 		return StreamEndRequestCanceled
 	default:

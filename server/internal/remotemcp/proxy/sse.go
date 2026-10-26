@@ -124,10 +124,18 @@ func forEachSSEEvent(r io.Reader, maxEventBytes int64, fn func(rawEvent []byte, 
 }
 
 // sseEventHasID reports whether an event's non-data lines, as produced by
-// [forEachSSEEvent], include an "id" field.
+// [forEachSSEEvent], set a non-empty event id, the value a client resumes
+// from with Last-Event-ID. An "id" field with no value, written "id" or
+// "id:", clears the client's last event id instead, so it does not count.
 func sseEventHasID(nonData []byte) bool {
 	for line := range bytes.Lines(nonData) {
-		if bytes.HasPrefix(line, []byte("id:")) {
+		value, ok := bytes.CutPrefix(bytes.TrimRight(line, "\n"), []byte("id:"))
+		if !ok {
+			continue
+		}
+		// The SSE format strips a single leading space from a field value.
+		value = bytes.TrimPrefix(value, []byte(" "))
+		if len(value) > 0 {
 			return true
 		}
 	}

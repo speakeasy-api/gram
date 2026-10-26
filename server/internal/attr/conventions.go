@@ -2994,6 +2994,10 @@ func RemoteMCPProxyStreamResumeRequested(v bool) attribute.KeyValue {
 	return RemoteMCPProxyStreamResumeRequestedKey.Bool(v)
 }
 
+func SlogRemoteMCPProxyStreamResumeRequested(v bool) slog.Attr {
+	return slog.Bool(string(RemoteMCPProxyStreamResumeRequestedKey), v)
+}
+
 func RiskPolicyCount(v int) attribute.KeyValue { return RiskPolicyCountKey.Int(v) }
 func SlogRiskPolicyCount(v int) slog.Attr      { return slog.Int(string(RiskPolicyCountKey), v) }
 
