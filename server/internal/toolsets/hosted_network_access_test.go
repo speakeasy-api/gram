@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
@@ -210,6 +211,23 @@ func TestSetHostedNetworkAccessInTransaction(t *testing.T) {
 	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(created.Slug)})
 	require.NoError(t, err)
 	require.Equal(t, types.NetworkAccessMode("dual"), *stored.NetworkAccessMode)
+}
+
+func TestSetHostedNetworkAccessInTransactionRequiresActorPrincipal(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	created := createMinimalPublicToolset(t, ctx, ti, "Hosted Anonymous Policy")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	anonymous := &contextvalues.AuthContext{ActiveOrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID}
+
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, audit.NewLogger(), anonymous, uuid.MustParse(created.ID), networkaccess.ModePublicOnly)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
 func TestHostedNetworkAccessRejectsPrivateModeWithoutIngress(t *testing.T) {

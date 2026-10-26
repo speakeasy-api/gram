@@ -101,3 +101,21 @@ func TestHostedServerWithoutAddressCannotBeEnabled(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "no address")
 }
+
+func TestHostedEndpointCreateChecksServerScopedWrite(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedAddressFixture(t, "pro")
+	before := len(f.endpoints(t, ctx))
+
+	payload := &gen.CreateMcpEndpointPayload{McpServerID: new(f.toolset.ID.String()), Slug: types.McpEndpointSlug(f.authCtx.OrganizationSlug + "-scoped")}
+	projectOnly := withExactAuthzGrants(t, ctx, f.ti.conn, authz.NewGrant(authz.ScopeMCPWrite, f.projectID.String()))
+	_, err := f.ti.service.CreateMcpEndpoint(projectOnly, payload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Len(t, f.endpoints(t, ctx), before)
+
+	scoped := withExactAuthzGrants(t, ctx, f.ti.conn, authz.NewGrant(authz.ScopeMCPWrite, f.toolset.ID.String()))
+	created, err := f.ti.service.CreateMcpEndpoint(scoped, payload)
+	require.NoError(t, err)
+	require.Equal(t, payload.Slug, created.Slug)
+	require.Len(t, f.endpoints(t, ctx), before+1)
+}

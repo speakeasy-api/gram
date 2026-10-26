@@ -120,10 +120,6 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	customDomainID, err := conv.PtrToNullUUID(payload.CustomDomainID)
@@ -132,6 +128,12 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	}
 
 	mcpServerID, metaMcpServerID, err := s.parseEndpointBackendIDs(ctx, logger, payload.McpServerID, payload.MetaMcpServerID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Like updates, a hosted endpoint create checks mcp:write on its server instead of the project.
+	authorizedHosted, err := s.requireEndpointCreateWrite(ctx, logger, authCtx, mcpServerID)
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +196,9 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
 	hosted := mcpServerID.Valid && isCanonicalHosted(mcpServer)
+	if hosted != authorizedHosted {
+		return nil, oops.E(oops.CodeConflict, nil, "mcp server changed while creating its endpoint").LogWarn(ctx, logger)
+	}
 	if hosted {
 		if err := checkHostedNewAddress(ctx, dbtx, logger, authCtx, mcpServer, slug, customDomainID); err != nil {
 			return nil, err
