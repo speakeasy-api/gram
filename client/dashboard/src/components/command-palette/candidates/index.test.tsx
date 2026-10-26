@@ -472,6 +472,17 @@ describe("useGatewayCandidates", () => {
     }
   });
 
+  it("checks MCP access on the active project, not on any resource", () => {
+    mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];
+    renderCandidates();
+
+    expect(mocks.rbacCalls).toContainEqual({
+      fn: "hasAnyScope",
+      scopes: ["mcp:read", "mcp:write"],
+      resourceId: "project-default",
+    });
+  });
+
   it("is absent outside a project", () => {
     mocks.inProject = false;
     mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];

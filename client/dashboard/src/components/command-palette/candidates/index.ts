@@ -66,6 +66,10 @@ export function useLauncherCandidates({
   // Sources are a tab of that section and their detail page gates on
   // mcp:read, so they share it.
   const canListMcp = hasAnyScope(["mcp:read", "mcp:write"]);
+  // Listing gateways requires mcp:read on the project itself
+  // (server/internal/metamcp/impl.go), so a grant in another project must not
+  // fire the forbidden list call here or keep its cached names visible.
+  const canListGateways = hasAnyScope(["mcp:read", "mcp:write"], project.id);
   // Plugins list for whoever can edit them (org admins and plugin:write on
   // this project, per usePluginWriteAccess) or read the organization; the
   // same gate the Plugins page renders behind.
@@ -94,9 +98,8 @@ export function useLauncherCandidates({
   const mcpServers = useMcpServerCandidates({
     enabled: projectEnabled && canListMcp,
   });
-  // Gateways list on the same MCP page, behind the same gate.
   const gateways = useGatewayCandidates({
-    enabled: projectEnabled && canListMcp,
+    enabled: projectEnabled && canListGateways,
   });
   const catalog = useCatalogCandidates({
     enabled: projectEnabled && canBrowseCatalog,
@@ -138,7 +141,7 @@ export function useLauncherCandidates({
       ...recents,
       ...marketplace,
       ...(inProject && canListMcp ? mcpServers : []),
-      ...(inProject && canListMcp ? gateways : []),
+      ...(inProject && canListGateways ? gateways : []),
       // Directly below the project's own servers: when a name matches both,
       // what you already run should read first and the catalog offer second.
       ...(inProject && canBrowseCatalog ? catalog : []),
@@ -162,6 +165,7 @@ export function useLauncherCandidates({
     canReadApprovals,
     canReadPeople,
     canListMcp,
+    canListGateways,
     canListPlugins,
     canBrowseCatalog,
     canReadAssistants,
