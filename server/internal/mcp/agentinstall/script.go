@@ -34,7 +34,7 @@ type Params struct {
 	OrganizationID string
 
 	// ProjectSlug is the project the agent's hooks are recorded in. Empty when
-	// the agent belongs to no project, which leaves OpenClaw without hooks.
+	// the agent has no live project, which leaves OpenClaw without hooks.
 	ProjectSlug string
 
 	// InstallFailOpen is the organization's hooks install-failure policy, as
@@ -55,9 +55,12 @@ type openClawMCPServer struct {
 	// Transport selects the MCP transport; the gateway speaks Streamable HTTP.
 	Transport string `json:"transport"`
 
-	// Headers are sent with every request. OpenClaw has no secret reference
-	// for MCP headers, so the bearer is stored as written, in OpenClaw's
-	// owner-only config file.
+	// Headers are sent with every request. The bearer is stored as written,
+	// in OpenClaw's owner-only config file. Newer OpenClaw releases accept a
+	// SecretRef here, but each ref source (the Gateway's environment, or a
+	// file, exec or store provider) needs setup this script cannot do on
+	// every supported release, and the plugin's speakeasy.json, which has no
+	// SecretRef, holds the same key in plaintext regardless.
 	Headers map[string]string `json:"headers"`
 }
 
@@ -65,9 +68,10 @@ type openClawMCPServer struct {
 // stays readable in a pager and every decoder accepts it.
 const base64LineWidth = 76
 
-// noProjectReason is printed when the agent has no project: the hooks API
-// records sessions per project, so there is nowhere to send them.
-const noProjectReason = "this agent belongs to no project, so Speakeasy has nowhere to record its sessions. " +
+// noProjectReason is printed when the agent has no live project, either none
+// at all or a deleted one: the hooks API records sessions per project, so
+// there is nowhere to send them.
+const noProjectReason = "this agent has no project, or its project was deleted, so Speakeasy has nowhere to record its sessions. " +
 	"OpenClaw can use the gateway, but its sessions are not recorded."
 
 // shellSingleQuote renders a value as a POSIX single-quoted word. The values
@@ -202,9 +206,16 @@ configure_codex() {
 }
 
 configure_openclaw() {
+  openclaw_changed=0
   add_openclaw_gateway
   # Hooks are independent of the gateway entry, so install them either way.
   install_openclaw_hooks
+  if [ "$openclaw_changed" -eq 1 ]; then
+    # Not done here: when OpenClaw runs this script itself, restarting its
+    # Gateway would end the turn before it reports the line above.
+    echo "Next: restart the OpenClaw Gateway. It does not hot-load plugins, so"
+    echo "these changes take effect after the restart."
+  fi
 }
 
 add_openclaw_gateway() {
@@ -217,6 +228,7 @@ add_openclaw_gateway() {
   fi
   echo "Configured OpenClaw."
   configured=$((configured + 1))
+  openclaw_changed=1
 }
 
 # The agent that runs this script reports this line back, so it always
@@ -251,6 +263,13 @@ install_openclaw_hooks() {
     hooks_fail "openclaw plugins install did not succeed (see its output above)."
     return 0
   fi
+  openclaw_changed=1
+  # The installer may not keep the archive's owner-only mode on the file that
+  # carries the key.
+  installed_config="$(openclaw_plugin_dir)/speakeasy.json"
+  if [ -f "$installed_config" ]; then
+    chmod 600 "$installed_config" 2>/dev/null || true
+  fi
 
   # Without this OpenClaw never hands the plugin prompts or replies.
   if ! openclaw config set plugins.entries.speakeasy-observability.hooks.allowConversationAccess true >/dev/null; then
@@ -268,6 +287,13 @@ decode_base64() {
   base64 -D <"$1" >"$2" 2>/dev/null && return 0
   python3 -c 'import base64, sys; sys.stdout.buffer.write(base64.b64decode(sys.stdin.read()))' <"$1" >"$2" 2>/dev/null && return 0
   node -e 'let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => process.stdout.write(Buffer.from(s, "base64")))' <"$1" >"$2" 2>/dev/null
+}
+
+# extract_zip ZIP DIR. Minimal OpenClaw images may lack unzip but carry
+# python3, which the base64 fallback above already relies on.
+extract_zip() {
+  unzip -q "$1" -d "$2" >/dev/null 2>&1 && return 0
+  python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$1" "$2" >/dev/null 2>&1
 }
 
 # Where OpenClaw keeps an installed plugin: the extensions directory of its
@@ -291,8 +317,8 @@ check_openclaw_hooks() {
   if [ ! -r "$plugin_dir/speakeasy.json" ]; then
     # Not where this release keeps plugins: test the archive's own copy.
     plugin_dir="$1/plugin"
-    if ! unzip -q "$2" -d "$plugin_dir" >/dev/null 2>&1; then
-      hooks_fail "the plugin is installed, but this script could not find it to test it."
+    if ! extract_zip "$2" "$plugin_dir"; then
+      hooks_fail "the plugin is installed, but this script could not find it to test it. Install unzip or python3 to test the archive instead."
       return 0
     fi
   fi
