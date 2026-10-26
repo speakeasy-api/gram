@@ -101,6 +101,7 @@ func TestCatalogRegistrationToolReAddsBrowserCatalogServerAfterDashboardDelete(t
 		"idempotency_key": "browser-catalog-second-add",
 	})
 	require.NoError(t, err)
+	require.NotEqual(t, first.RegistrationID, second.RegistrationID, "the stale registration must be replaced, not reused")
 	require.Equal(t, "continue_dashboard_setup", second.NextAction)
 	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings#authentication$`, second.DashboardSetupURL)
 }

@@ -415,6 +415,14 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 		})
 		switch {
 		case errors.Is(serverErr, pgx.ErrNoRows):
+			// Only the registration's owner may retire it, matching every other
+			// lifecycle action; anyone else falls through to the ownership check
+			// below and is refused as before.
+			if _, ownerErr := lifecycleRegistration(ctx, q, principal, project.ID, registration.ID); errors.Is(ownerErr, pgx.ErrNoRows) {
+				break
+			} else if ownerErr != nil {
+				return OperationReceipt{}, fmt.Errorf("authorize retiring platform mcp catalog registration: %w", ownerErr)
+			}
 			if err := q.RetirePlatformMCPCatalogRegistration(ctx, platformrepo.RetirePlatformMCPCatalogRegistrationParams{
 				ID:             registration.ID,
 				OrganizationID: principal.OrganizationID,
