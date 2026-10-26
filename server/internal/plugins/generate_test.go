@@ -2428,6 +2428,26 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	}
 }
 
+// The hooks binary prefers an agent's key to a cached personal sign-in only
+// when speakeasy.json says the baked key is the agent's.
+func TestGenerateObservabilityPluginMarksAgentKey(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgID:           "org_123",
+		ServerURL:       "https://app.getgram.ai",
+		HooksAPIKey:     "gram_local_agent_key",
+		HooksKeyIsAgent: true,
+		ProjectSlug:     "agents",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "openclaw")
+	require.NoError(t, err)
+
+	var config relay.FileConfig
+	require.NoError(t, json.Unmarshal(files["speakeasy.json"], &config))
+	require.Equal(t, "gram_local_agent_key", config.HooksAPIKey)
+	require.True(t, config.AgentKey)
+}
+
 type codexOTLPHTTPExporter struct {
 	Endpoint string            `toml:"endpoint"`
 	Protocol string            `toml:"protocol"`

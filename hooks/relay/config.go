@@ -39,6 +39,11 @@ type Config struct {
 	// plugin. It is a fallback behind explicit and cached per-user keys and is
 	// never persisted locally.
 	HooksAPIKey string
+	// AgentKey marks HooksAPIKey as an agent identity's own key rather than
+	// the shared org key. It then outranks a cached personal sign-in, so an
+	// agent installed on a machine where a person has signed in still records
+	// its events under the agent.
+	AgentKey bool
 	// BrowserLogin controls whether fresh machines may mint a per-user hooks
 	// key through the dashboard. Published plugins default this off and use the
 	// shared org key unless the organization opts in.
@@ -76,6 +81,7 @@ type FileConfig struct {
 	Project      string `json:"project"`
 	Org          string `json:"org,omitempty"`
 	HooksAPIKey  string `json:"hooks_api_key,omitempty"`
+	AgentKey     bool   `json:"agent_key,omitempty"`
 	BrowserLogin bool   `json:"browser_login,omitempty"`
 	Nonblocking  bool   `json:"nonblocking,omitempty"`
 }
@@ -89,7 +95,7 @@ type FileConfig struct {
 // manual overrides layered on top of the file.
 func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	cfg := defaults
-	overrides := Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	overrides := Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	rest := make([]string, 0, len(args))
 	for _, a := range args {
 		switch {
@@ -102,6 +108,7 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 				cfg.ProjectSlug = fc.Project
 				cfg.OrgID = fc.Org
 				cfg.HooksAPIKey = fc.HooksAPIKey
+				cfg.AgentKey = fc.AgentKey
 				cfg.BrowserLogin = fc.BrowserLogin
 				cfg.Nonblocking = fc.Nonblocking
 			} else {
@@ -189,6 +196,7 @@ func LoadConfig(defaults Config) Config {
 	}
 	if v := Env("HOOKS_ORG_KEY"); v != "" {
 		cfg.HooksAPIKey = v
+		cfg.AgentKey = false
 	}
 	if v := Env("HOOKS_BROWSER_LOGIN"); v != "" {
 		cfg.BrowserLogin = v == "1" || strings.EqualFold(v, "true")

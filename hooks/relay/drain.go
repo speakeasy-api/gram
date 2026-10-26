@@ -347,8 +347,9 @@ func drainAuthKey(entry spoolEntry) string {
 // resolveDrainAuth resolves the credential for one entry's deployment,
 // memoized per identity. The entry's recorded identity is the routing truth;
 // the config file it points at (when still present and still describing the
-// same deployment) contributes only the shared org-key fallback. The disk
-// auth cache resolves exactly as a live send would; an env key is pinned to
+// same deployment) contributes only its baked key: the shared org-key
+// fallback, or an agent's key that outranks the cache. The disk auth cache
+// resolves exactly as a live send would; an env key is pinned to
 // the env-configured deployment when one is named, because the drain —
 // unlike a live send — batches entries recorded by other sessions and must
 // not post one deployment's key to another deployment's server.
@@ -358,11 +359,12 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 	}
 	a := drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, ok: false, orgKey: ""}
 	if !insecureServerURL(entry.ServerURL) {
-		cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: entry.ConfigPath, ConfigError: ""}
+		cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: entry.ConfigPath, ConfigError: ""}
 		if entry.ConfigPath != "" {
 			if fc, err := readFileConfig(entry.ConfigPath); err == nil &&
 				sameDeployment(fc.ServerURL, fc.Org, entry.ServerURL, entry.OrgID) {
 				cfg.HooksAPIKey = fc.HooksAPIKey
+				cfg.AgentKey = fc.AgentKey
 			}
 		}
 		a.orgKey = cfg.HooksAPIKey
@@ -370,11 +372,9 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 		if a.ok && a.c.Source == credEnv {
 			if envURL := strings.TrimRight(Env("HOOKS_SERVER_URL"), "/"); envURL != "" && envURL != entry.ServerURL {
 				// The env key belongs to the env-named deployment; resolve
-				// this entry from the cache or org key instead.
-				if cached, ok := readCachedAuth(cfg); ok {
-					a.c, a.ok = cached, true
-				} else if cfg.HooksAPIKey != "" {
-					a.c, a.ok = creds{ServerURL: cfg.ServerURL, APIKey: cfg.HooksAPIKey, Project: cfg.ProjectSlug, Email: "", Org: cfg.OrgID, Source: credOrg}, true
+				// this entry from the cache or the plugin's key instead.
+				if stored, ok := resolveStoredAuth(cfg); ok {
+					a.c, a.ok = stored, true
 				} else {
 					a.c, a.ok = creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, false
 				}

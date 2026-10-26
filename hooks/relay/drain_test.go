@@ -298,6 +298,30 @@ func TestDrainUsesConfigOrgKeyFallback(t *testing.T) {
 	require.Equal(t, "org-key-1", fs.headers[0].Get("Gram-Key"))
 }
 
+// TestDrainAgentKeyOutranksDiskCache: replayed events from an agent's plugin
+// keep the agent's key, as a live send does, even with a person's sign-in
+// cached for the same deployment.
+func TestDrainAgentKeyOutranksDiskCache(t *testing.T) {
+	setSpoolStateHome(t)
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	fs := newFakeServer(t, nil)
+
+	require.NoError(t, os.WriteFile(authFile, []byte(
+		"server_url="+fs.URL+"\napi_key=cached-personal-key\nproject=default\nemail=\norg=\n"), 0o600))
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"`+fs.URL+`","project":"default","hooks_api_key":"agent-key","agent_key":true}`), 0o600))
+	seedSpoolEntryWithConfig(t, fs.URL, time.Hour, "sess-1", cfgPath)
+
+	s := Drain(t.Context())
+	require.Equal(t, 1, s.Replayed)
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.Equal(t, "agent-key", fs.headers[0].Get("Gram-Key"))
+}
+
 // TestMaybeSpawnDrainAfterRecovery drives the real provider path: sends fail
 // against a dead server (payloads spool), the server comes back, and the
 // next successful send spawns exactly one detached drain — debounced across

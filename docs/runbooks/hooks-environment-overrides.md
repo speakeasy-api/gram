@@ -47,6 +47,20 @@ path stays in use until the new file exists.
 | `SPEAKEASY_AI_HOOKS_DEBUG_LOG`              | Path the binary appends diagnostics to. Unset means no diagnostics.                                                               |
 | `SPEAKEASY_AI_HOOKS_HOME`                   | Directory the plugin's bootstrap script caches the downloaded binary in. Read by the bootstrap, not the binary.                   |
 
+## Credential order
+
+Each event uses the first credential that resolves:
+
+1. `SPEAKEASY_AI_HOOKS_API_KEY`.
+2. The key baked into the plugin, when `speakeasy.json` marks it as an
+   agent's key (`"agent_key": true`). Plugins generated for an agent identity
+   set this flag, so the agent's events stay under the agent on a machine
+   where a person has also signed in.
+3. The cached `speakeasy-hooks login` sign-in, when it was minted for this
+   server and org.
+4. The shared org key baked into the plugin, or `SPEAKEASY_AI_HOOKS_ORG_KEY`.
+   An org key from the environment is never treated as an agent's key.
+
 ## Collecting a debug log
 
 `SPEAKEASY_AI_HOOKS_DEBUG_LOG` is the support channel for an intermittent hook
