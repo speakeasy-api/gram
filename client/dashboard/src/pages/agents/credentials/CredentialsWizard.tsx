@@ -27,8 +27,17 @@ import {
   agentGatewayURL,
   isCredentialSafe,
   mintInstallCommand,
+  type InstallRequest,
 } from "./gateway";
+import {
+  DEVICE_AGENT_SCOPES,
+  deviceAgentPolicyGrants,
+  selectDeviceAgentKeyGrants,
+  undelegableScopesMessage,
+  type DeviceAgentRunMode,
+} from "./device-agent";
 import { StepInstall } from "./StepInstall";
+import { StepInstallDeviceAgent } from "./StepInstallDeviceAgent";
 import { StepServers, type ServerSelection } from "./StepServers";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
@@ -49,6 +58,7 @@ import { useAgentsDeletePolicyGrantMutation } from "@gram/client/react-query/age
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
+import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import { useCatalogEntries, valuesFromSubject } from "./workloadCatalog";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -75,13 +85,17 @@ import {
 const STEPS = [
   { label: "Name", short: "Name" },
   { label: "Server selection", short: "Servers" },
-  { label: "Credential", short: "Credential" },
+  { label: "Target platform", short: "Platform" },
   { label: "Install", short: "Install" },
   { label: "Verify", short: "Verify" },
 ];
 
-/** How the agent proves who it is. */
-type Credential = "api-key" | "workload";
+/**
+ * How the agent proves who it is. A device agent signs in with an API key
+ * too, but one scoped to running the device agent instead of reaching MCP
+ * servers, so it is its own choice.
+ */
+type Credential = "api-key" | "device-agent" | "workload";
 
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
@@ -241,6 +255,18 @@ export function CredentialsWizard({
   const [platformKey, setPlatformKey] = useState<string | null>(
     initialPlatformKey ?? null,
   );
+  const deviceAgent = credential === "device-agent";
+  const [mode, setMode] = useState<DeviceAgentRunMode>("ephemeral");
+  // Only for a new agent: one that exists already reaches what its policy
+  // says, and a device agent key must not double as a gateway credential.
+  // Only an org admin can delegate the device agent's organization scopes.
+  const deviceAgentOffer = existing
+    ? undefined
+    : {
+        blocked: hasAllScopes(["org:admin"])
+          ? null
+          : "Provisioning a device agent requires org:admin.",
+      };
   // Applied once the catalog and the admission have both arrived, and only
   // while the reader has not chosen something else.
   const adopted = useRef(false);
@@ -419,7 +445,15 @@ export function CredentialsWizard({
     };
   }, [step, agentID, verify, sdk, verifyPollMs]);
 
-  const regenerate = (key: string, url: string) => {
+  /** The script an install code renders, which follows the credential. */
+  const installRequest = (runMode: DeviceAgentRunMode): InstallRequest =>
+    deviceAgent ? { flavor: "device_agent", mode: runMode } : { flavor: "mcp" };
+
+  const regenerate = (
+    key: string,
+    url: string,
+    request: InstallRequest = installRequest(mode),
+  ) => {
     // Minting authenticates with the key, so a plaintext endpoint would hand
     // it to anyone on the path. Loopback is exempt: it never reaches a
     // network. The same rule withholds the instructions on the step itself.
@@ -432,7 +466,7 @@ export function CredentialsWizard({
     setMinting(true);
     setCommandError(null);
     lastSelfUse.current = Date.now();
-    mintInstallCommand(url, key)
+    mintInstallCommand(url, key, request)
       .then((next) => {
         lastSelfUse.current = Date.now();
         setCommand(next);
@@ -485,7 +519,11 @@ export function CredentialsWizard({
       createAgentForm: {
         name: name.trim(),
         projectId: projectID,
-        policyGrants: agentPolicyGrantsFromDraft(draft),
+        // A device agent reaches no MCP servers: its key is written to disk
+        // on the host, so it must not double as a gateway credential.
+        policyGrants: deviceAgent
+          ? deviceAgentPolicyGrants(projectID)
+          : agentPolicyGrantsFromDraft(draft),
       },
     });
     setAgentID(created.id);
@@ -731,6 +769,107 @@ export function CredentialsWizard({
   }, [existing, step, defaultStep, lastStep, setStep]);
 
   /**
+   * An MCP key carries everything delegable on the chosen servers, and is
+   * refused while any of them would be left out.
+   */
+  const mcpKeyGrants = async (
+    targetID: string,
+  ): Promise<AgentPolicyGrantForm[]> => {
+    const controller = new AbortController();
+    // A key names servers one by one — there is no wildcard in a key, only
+    // in the agent's policy. So "all servers" is issued as every server in
+    // the agent's reach today, and the agent's own wildcard grant is what
+    // carries the ones added after this key was cut.
+    //
+    // Without this the key asks for nothing: `selected` is empty under
+    // "all servers", and discovery rightly answers that nothing can be
+    // delegated.
+    const reach = allServers
+      ? inventory.servers
+          .filter((server) =>
+            reachCoversProject(allServersProjectIDs, server.projectId),
+          )
+          // Each of these needs an account attached to the agent before a
+          // key can call it, which this flow has no step for.
+          .filter((server) => !server.issuerId)
+      : selected.map((entry) => entry.server);
+    const delegable = await discoverKeyServerGrants(
+      sdk.agents,
+      targetID,
+      reach.map((server) => ({
+        resourceId: server.resourceId,
+        projectId: server.projectId,
+        kind: server.kind,
+      })),
+      controller.signal,
+    );
+    const requestedGrants = buildRequestedGrants(
+      delegable.map((grant) => ({ grant, narrowing: {} })),
+    );
+    // Discovery answers per server, so it can come back covering only some
+    // of them. A key issued on that answer reaches the servers it covers
+    // and silently fails on the rest, while every selected server is still
+    // listed as provisioned — so none of it is issued until the gap is
+    // named.
+    const reachable = new Set(
+      delegable.map(
+        (grant) =>
+          `${grant.selector.projectId ?? ""}:${grant.selector.resourceId}`,
+      ),
+    );
+    const excluded = reach.filter(
+      (server) => !reachable.has(`${server.projectId}:${server.resourceId}`),
+    );
+    if (excluded.length > 0 || requestedGrants.length === 0) {
+      // A key is the overlap of three permissions: the agent's, its
+      // owner's, and the caller's. The owner's are what a reader never
+      // thinks to check — the agent's own page looks right up until the
+      // moment its owner loses the server.
+      //
+      // The caller is almost always the owner, so naming all three as
+      // equals would send people looking for a difference that is not
+      // there. It is said last, and only as the case where it applies.
+      const because =
+        "A key cannot give more access than the agent's owner has, so check the agent's permissions and that its owner can still reach them." +
+        (agent && agent.ownerUserId !== user.id
+          ? " You do not own this agent, so it is limited by your own access too."
+          : "");
+      throw new Error(
+        excluded.length === reach.length
+          ? existing
+            ? `This key would reach none of these servers. ${because}`
+            : `The agent was created, but a key for it would reach none of these servers. ${because}`
+          : `This key would not reach ${excluded.map((server) => server.name).join(", ")}. ${because} Deselect ${excluded.length === 1 ? "that server" : "those servers"} to issue a key for the rest.`,
+      );
+    }
+    return requestedGrants;
+  };
+
+  /**
+   * A device agent key carries exactly sync, hooks, and read on the project,
+   * each narrowed from what the agent may delegate.
+   */
+  const deviceAgentKeyGrants = async (
+    targetID: string,
+  ): Promise<AgentPolicyGrantForm[]> => {
+    const projectID = project.id;
+    if (!projectID) {
+      throw new Error("This project is still loading. Try again in a moment.");
+    }
+    const delegable = await sdk.agents.listDelegableGrants({
+      agentId: targetID,
+    });
+    const { selections, missingScopes } = selectDeviceAgentKeyGrants(
+      delegable,
+      deviceAgentPolicyGrants(projectID),
+    );
+    if (missingScopes.length > 0) {
+      throw new Error(undelegableScopesMessage(missingScopes));
+    }
+    return buildRequestedGrants(selections);
+  };
+
+  /**
    * Create the agent, discover what it may delegate, issue its first key, and
    * mint the setup command. Each step depends on the one before it, so a
    * failure stops here and says which part did not happen.
@@ -742,73 +881,9 @@ export function CredentialsWizard({
     try {
       const target = { id: await ensureAgent() };
 
-      const controller = new AbortController();
-      // A key names servers one by one — there is no wildcard in a key, only
-      // in the agent's policy. So "all servers" is issued as every server in
-      // the agent's reach today, and the agent's own wildcard grant is what
-      // carries the ones added after this key was cut.
-      //
-      // Without this the key asks for nothing: `selected` is empty under
-      // "all servers", and discovery rightly answers that nothing can be
-      // delegated.
-      const reach = allServers
-        ? inventory.servers
-            .filter((server) =>
-              reachCoversProject(allServersProjectIDs, server.projectId),
-            )
-            // Each of these needs an account attached to the agent before a
-            // key can call it, which this flow has no step for.
-            .filter((server) => !server.issuerId)
-        : selected.map((entry) => entry.server);
-      const delegable = await discoverKeyServerGrants(
-        sdk.agents,
-        target.id,
-        reach.map((server) => ({
-          resourceId: server.resourceId,
-          projectId: server.projectId,
-          kind: server.kind,
-        })),
-        controller.signal,
-      );
-      const requestedGrants = buildRequestedGrants(
-        delegable.map((grant) => ({ grant, narrowing: {} })),
-      );
-      // Discovery answers per server, so it can come back covering only some
-      // of them. A key issued on that answer reaches the servers it covers
-      // and silently fails on the rest, while every selected server is still
-      // listed as provisioned — so none of it is issued until the gap is
-      // named.
-      const reachable = new Set(
-        delegable.map(
-          (grant) =>
-            `${grant.selector.projectId ?? ""}:${grant.selector.resourceId}`,
-        ),
-      );
-      const excluded = reach.filter(
-        (server) => !reachable.has(`${server.projectId}:${server.resourceId}`),
-      );
-      if (excluded.length > 0 || requestedGrants.length === 0) {
-        // A key is the overlap of three permissions: the agent's, its
-        // owner's, and the caller's. The owner's are what a reader never
-        // thinks to check — the agent's own page looks right up until the
-        // moment its owner loses the server.
-        //
-        // The caller is almost always the owner, so naming all three as
-        // equals would send people looking for a difference that is not
-        // there. It is said last, and only as the case where it applies.
-        const because =
-          "A key cannot give more access than the agent's owner has, so check the agent's permissions and that its owner can still reach them." +
-          (agent && agent.ownerUserId !== user.id
-            ? " You do not own this agent, so it is limited by your own access too."
-            : "");
-        throw new Error(
-          excluded.length === reach.length
-            ? existing
-              ? `This key would reach none of these servers. ${because}`
-              : `The agent was created, but a key for it would reach none of these servers. ${because}`
-            : `This key would not reach ${excluded.map((server) => server.name).join(", ")}. ${because} Deselect ${excluded.length === 1 ? "that server" : "those servers"} to issue a key for the rest.`,
-        );
-      }
+      const requestedGrants = deviceAgent
+        ? await deviceAgentKeyGrants(target.id)
+        : await mcpKeyGrants(target.id);
 
       const expiresAt = new Date(Date.now() + KEY_LIFETIME_DAYS * 86_400_000);
       const issued = await sdk.keys.create({
@@ -857,11 +932,26 @@ export function CredentialsWizard({
         },
         {
           label: "Grants",
-          value: <code className="text-xs">mcp:connect</code>,
+          value: deviceAgent ? (
+            <span className="flex flex-col items-end">
+              {DEVICE_AGENT_SCOPES.map((scope) => (
+                <code key={scope} className="text-xs">
+                  {scope}
+                </code>
+              ))}
+            </span>
+          ) : (
+            <code className="text-xs">mcp:connect</code>
+          ),
         },
         {
-          label: "Credential",
-          value: credential === "api-key" ? "API key" : "Workload identity",
+          label: "Target platform",
+          value:
+            credential === "api-key"
+              ? "API key"
+              : deviceAgent
+                ? "Device agent"
+                : "Workload identity",
         },
         // The platform, and what it was pinned to, are decisions like the
         // others: they belong on the rail rather than only on the step that
@@ -909,13 +999,21 @@ export function CredentialsWizard({
       // One line rather than every server listed: the rail would otherwise
       // name today's inventory for a choice that is deliberately not a list.
       servers={
-        allServers
-          ? [{ id: "all", name: "All servers", detail: "and ones added later" }]
-          : selected.map((entry) => ({
-              id: entry.server.id,
-              name: entry.server.name,
-              detail: "all tools",
-            }))
+        deviceAgent
+          ? undefined
+          : allServers
+            ? [
+                {
+                  id: "all",
+                  name: "All servers",
+                  detail: "and ones added later",
+                },
+              ]
+            : selected.map((entry) => ({
+                id: entry.server.id,
+                name: entry.server.name,
+                detail: "all tools",
+              }))
       }
     />
   );
@@ -1000,8 +1098,8 @@ export function CredentialsWizard({
         return (
           <div className="space-y-6">
             <WizardStepHeader
-              title="Credential"
-              description="How the agent proves who it is when it connects."
+              title="Target platform"
+              description="Where the agent runs. This sets how it proves who it is when it connects."
             />
             <CredentialPicker
               credential={credential}
@@ -1017,9 +1115,14 @@ export function CredentialsWizard({
               // decided when it was registered, and changing it here would
               // mean removing a credential rather than editing one.
               disabled={editing}
+              deviceAgent={deviceAgentOffer}
               onChooseApiKey={() => {
                 setCredential("api-key");
-                setHighlight("Credential");
+                setHighlight("Target platform");
+              }}
+              onChooseDeviceAgent={() => {
+                setCredential("device-agent");
+                setHighlight("Target platform");
               }}
               onChoosePlatform={(key) => {
                 setCredential("workload");
@@ -1027,9 +1130,35 @@ export function CredentialsWizard({
                 setHighlight("Platform");
               }}
             />
+            {deviceAgent && (allServers || selected.length > 0) && (
+              <Text muted small>
+                A device agent reaches no MCP servers, so the servers selected
+                in the previous step are not granted.
+              </Text>
+            )}
           </div>
         );
       case 3:
+        if (deviceAgent) {
+          return (
+            <StepInstallDeviceAgent
+              command={command}
+              commandError={commandError}
+              minting={minting}
+              mode={mode}
+              canRegenerate={!!secret}
+              onModeChange={(next) => {
+                setMode(next);
+                // Each code renders one script, so a new mode needs a new code.
+                if (secret && gatewayURL)
+                  regenerate(secret, gatewayURL, installRequest(next));
+              }}
+              onRegenerate={() => {
+                if (secret && gatewayURL) regenerate(secret, gatewayURL);
+              }}
+            />
+          );
+        }
         return (
           <StepInstall
             command={command}
@@ -1051,6 +1180,7 @@ export function CredentialsWizard({
             state={verify}
             firstCallAt={firstCallAt}
             gatewayURL={gatewayURL}
+            deviceAgent={deviceAgent}
           />
         );
     }
@@ -1062,19 +1192,26 @@ export function CredentialsWizard({
         ? "Name this agent."
         : null
       : step === 1
-        ? !allServers && selected.length === 0
-          ? "Select at least one MCP server."
-          : // A key names servers one by one, and a server that authorizes
-            // each person separately is not one a key can name. So "all
-            // servers" with none of them left is a key that would reach
-            // nothing — said here rather than after the agent is created.
-            allServers &&
-              !inventory.isLoading &&
-              !inventory.isError &&
-              listedServers.every((server) => server.issuerId)
-            ? "No server here can be reached with a key yet."
-            : null
+        ? // A key names servers one by one, and a server that authorizes
+          // each person separately is not one a key can name. So "all
+          // servers" with none of them left is a key that would reach
+          // nothing — said here rather than after the agent is created.
+          allServers &&
+          !inventory.isLoading &&
+          !inventory.isError &&
+          listedServers.every((server) => server.issuerId)
+          ? "No server here can be reached with a key yet."
+          : null
         : null;
+  // Servers are optional until the credential is chosen: a device agent
+  // reaches none, and every other credential needs at least one.
+  const noServers = !allServers && selected.length === 0;
+  const needsServers =
+    noServers && !deviceAgent
+      ? deviceAgentOffer === undefined
+        ? "Go back and select at least one MCP server."
+        : "Go back and select at least one MCP server, or choose Device agent."
+      : null;
 
   const footer = () => {
     // Editing writes on the second step. Past it the flow is the ordinary
@@ -1178,13 +1315,18 @@ export function CredentialsWizard({
             note =
               "Using a platform's tokens needs permission to manage workload identities. Choose an API key instead.";
           }
+          if (!editing && needsServers !== null) note = needsServers;
           return (
             <WizardFooter
               note={note}
               onBack={() => setStep(1)}
               primary={
                 <Button
-                  disabled={refused || workload.steps.length === 0}
+                  disabled={
+                    refused ||
+                    workload.steps.length === 0 ||
+                    (!editing && needsServers !== null)
+                  }
                   onClick={() => setStep(3)}
                 >
                   Continue
@@ -1196,18 +1338,23 @@ export function CredentialsWizard({
         return (
           <WizardFooter
             note={
-              existing
+              needsServers ??
+              (existing
                 ? "Issuing a key is recorded in the organization audit log."
                 : !project.id
                   ? "Reading the project this agent will belong to…"
-                  : "Creating the agent is recorded in the organization audit log."
+                  : "Creating the agent is recorded in the organization audit log.")
             }
             onBack={() => setStep(1)}
             primary={
               <Button
                 // An agent belongs to the project it is made in, so there is
                 // nothing to create until that project has resolved.
-                disabled={provisioning || (!existing && !project.id)}
+                disabled={
+                  provisioning ||
+                  needsServers !== null ||
+                  (!existing && !project.id)
+                }
                 onClick={() => void provision()}
               >
                 {provisioning
@@ -1237,7 +1384,9 @@ export function CredentialsWizard({
           <WizardFooter
             note={
               verify === "connected"
-                ? "The agent has called the gateway."
+                ? deviceAgent
+                  ? "The device agent has checked in."
+                  : "The agent has called the gateway."
                 : "Run the setup from the previous step, then wait for the first call."
             }
             onBack={() => setStep(3)}
@@ -1261,7 +1410,9 @@ export function CredentialsWizard({
                   ? // Not a count: the choice is deliberately not a list, and
                     // naming today's would be a number that changes behind it.
                     "All servers selected."
-                  : `${selected.length} of ${listedServers.length} servers selected.`)
+                  : noServers && deviceAgentOffer !== undefined
+                    ? "No servers selected. A device agent needs none; choose it on the next step."
+                    : `${selected.length} of ${listedServers.length} servers selected.`)
             }
             onBack={step > 0 ? () => setStep(step - 1) : undefined}
             primary={

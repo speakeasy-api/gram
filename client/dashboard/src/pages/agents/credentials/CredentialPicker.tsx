@@ -1,3 +1,4 @@
+import { GramLogo } from "@/components/gram-logo";
 import { isRelativePath } from "@/components/setup-steps/origin";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -9,7 +10,7 @@ import {
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { ChevronRight, KeyRound, Waypoints } from "lucide-react";
+import { ChevronRight, Waypoints } from "lucide-react";
 import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
@@ -17,6 +18,7 @@ import { hasPlatformSetup } from "./platformSetups";
 import type { CatalogEntry } from "./workloadCatalog";
 
 const API_KEY_VALUE = "api-key";
+const DEVICE_AGENT_VALUE = "device-agent";
 // Prefixed so a catalog key can never be mistaken for the API key option.
 const PLATFORM_PREFIX = "platform:";
 
@@ -29,32 +31,81 @@ const PLANNED = [
 ];
 
 function selectedValue(
-  credential: "api-key" | "workload",
+  credential: "api-key" | "device-agent" | "workload",
   platformKey: string | null,
 ): string | null {
   if (credential === "api-key") return API_KEY_VALUE;
+  if (credential === "device-agent") return DEVICE_AGENT_VALUE;
   if (platformKey === null) return null;
   return PLATFORM_PREFIX + platformKey;
 }
 
-/** The short trade-off line under each option. */
-function CredentialMeta({ children }: { children: ReactNode }): JSX.Element {
+/**
+ * An option's mark in a hairline square, the tile the MDM rollout table gives
+ * each vendor logo. Logos keep their own colors.
+ */
+function MarkTile({ children }: { children: ReactNode }): JSX.Element {
   return (
-    <span className="text-muted-foreground mt-1 block font-mono text-xs">
+    <span className="bg-card flex size-8 shrink-0 items-center justify-center border">
       {children}
     </span>
   );
 }
 
 /**
- * A platform's logo in grayscale, so presets read as options in the
- * dashboard's own palette rather than as a row of brand colors.
+ * The operating systems the device agent installs on, as a triangle of logos
+ * inside one tile. The Apple mark is monochrome black, so it alone flips in
+ * dark mode.
  */
-function PlatformLogo({ icon }: { icon?: string }): JSX.Element {
-  if (icon !== undefined && isRelativePath(icon)) {
-    return <img src={icon} alt="" className="size-5 shrink-0 grayscale" />;
-  }
-  return <Waypoints aria-hidden="true" className="text-foreground size-5" />;
+const DEVICE_AGENT_OS_LOGOS = [
+  {
+    src: "/icons/platforms/linux.svg",
+    invertInDark: false,
+    position: "top-1 left-1/2 -translate-x-1/2",
+  },
+  {
+    src: "/icons/platforms/windows.svg",
+    invertInDark: false,
+    position: "bottom-1 left-1",
+  },
+  {
+    src: "/icons/platforms/macos.svg",
+    invertInDark: true,
+    position: "right-1 bottom-1",
+  },
+];
+
+/** One tile like the other options, so the title lines up with the rest. */
+function DeviceAgentMark(): JSX.Element {
+  return (
+    <span className="bg-card relative size-8 shrink-0 border">
+      {DEVICE_AGENT_OS_LOGOS.map((logo) => (
+        <img
+          key={logo.src}
+          src={logo.src}
+          alt=""
+          className={cn(
+            "absolute size-2.5 object-contain",
+            logo.position,
+            logo.invertInDark && "dark:invert",
+          )}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** A catalog platform's logo, or a generic mark when it ships none. */
+function PlatformMark({ icon }: { icon?: string }): JSX.Element {
+  return (
+    <MarkTile>
+      {icon !== undefined && isRelativePath(icon) ? (
+        <img src={icon} alt="" className="size-5 object-contain" />
+      ) : (
+        <Waypoints aria-hidden="true" className="size-4" />
+      )}
+    </MarkTile>
+  );
 }
 
 /**
@@ -83,11 +134,11 @@ function UnavailablePreset({ entry }: { entry: CatalogEntry }): JSX.Element {
   return (
     <div
       aria-disabled="true"
-      className="border-border flex items-start gap-3 border border-dashed p-3 opacity-60"
+      className="border-border flex items-center gap-3 border border-dashed px-4 py-3 opacity-60"
     >
-      <PlatformLogo icon={entry.icon} />
+      <PlatformMark icon={entry.icon} />
       <div className="min-w-0 flex-1">
-        <div className="font-medium">
+        <div className="text-sm font-medium">
           <TaggedTitle title={entry.displayName} tag="Unavailable" />
         </div>
         <Text muted small className="block">
@@ -140,18 +191,13 @@ function PlatformPresets({
             key={entry.key}
             value={PLATFORM_PREFIX + entry.key}
             title={entry.displayName}
-            leading={<PlatformLogo icon={entry.icon} />}
+            leading={<PlatformMark icon={entry.icon} />}
+            leadingAlign="card"
             // Trusting a platform and admitting a subject are writes against
             // the organization's workload identities.
             disabled={!canFederate}
-            className="p-3"
           >
-            <Text muted small>
-              {entry.description}
-            </Text>
-            <CredentialMeta>
-              No key minted · the platform's own token
-            </CredentialMeta>
+            {entry.description}
           </RadioCard>
         );
       })}
@@ -160,10 +206,10 @@ function PlatformPresets({
 }
 
 /**
- * How the agent proves who it is, in order of how often each is the right
- * answer: an API key works anywhere, a preset needs no key on a platform
- * Speakeasy already knows, and a custom issuer is for a platform that mints
- * its own tokens but has no preset.
+ * How the agent proves who it is: a preset needs no key on a platform
+ * Speakeasy already knows, an API key works anywhere, and a custom issuer is for a platform that mints
+ * its own tokens but has no preset. The device agent is an API key too, but
+ * one scoped to running the device agent rather than reaching MCP servers.
  */
 export function CredentialPicker({
   credential,
@@ -174,10 +220,12 @@ export function CredentialPicker({
   onRetry,
   canFederate,
   disabled,
+  deviceAgent,
   onChooseApiKey,
+  onChooseDeviceAgent,
   onChoosePlatform,
 }: {
-  credential: "api-key" | "workload";
+  credential: "api-key" | "device-agent" | "workload";
   platformKey: string | null;
   entries: CatalogEntry[];
   isPending: boolean;
@@ -186,7 +234,13 @@ export function CredentialPicker({
   canFederate: boolean;
   /** Settled: the agent already signs in with one of these. */
   disabled: boolean;
+  /**
+   * Whether the device agent is offered, and why it cannot be chosen when it
+   * is offered but refused. Undefined hides the option.
+   */
+  deviceAgent?: { blocked: string | null };
   onChooseApiKey: () => void;
+  onChooseDeviceAgent: () => void;
   onChoosePlatform: (key: string) => void;
 }): JSX.Element {
   const customChosen =
@@ -214,27 +268,19 @@ export function CredentialPicker({
           onChooseApiKey();
           return;
         }
+        if (next === DEVICE_AGENT_VALUE) {
+          onChooseDeviceAgent();
+          return;
+        }
         onChoosePlatform(next.slice(PLATFORM_PREFIX.length));
       }}
       disabled={disabled}
-      aria-label="Credential"
+      aria-label="Target platform"
+      size="sm"
+      showIndicator={false}
       className="gap-4"
     >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <RadioCard
-          value={API_KEY_VALUE}
-          title={<TaggedTitle title="API key" tag="Default" />}
-          leading={<KeyRound aria-hidden="true" className="size-5" />}
-          className="p-3"
-        >
-          <Text muted small>
-            Speakeasy mints a key for this agent, delivered by a one-line setup
-            script or copied by hand. Works in any runtime.
-          </Text>
-          <CredentialMeta>
-            Minted by Speakeasy · long-lived · revocable
-          </CredentialMeta>
-        </RadioCard>
+      <div className="grid gap-2">
         <PlatformPresets
           entries={entries}
           isPending={isPending}
@@ -242,6 +288,31 @@ export function CredentialPicker({
           onRetry={onRetry}
           canFederate={canFederate}
         />
+        <RadioCard
+          value={API_KEY_VALUE}
+          title="API key"
+          leading={
+            <MarkTile>
+              <GramLogo variant="icon" className="w-4" />
+            </MarkTile>
+          }
+          leadingAlign="card"
+        >
+          Speakeasy mints a key you install with one command or paste by hand.
+          Works in any runtime.
+        </RadioCard>
+        {deviceAgent !== undefined && (
+          <RadioCard
+            value={DEVICE_AGENT_VALUE}
+            title="Device agent"
+            leading={<DeviceAgentMark />}
+            leadingAlign="card"
+            disabled={deviceAgent.blocked !== null}
+          >
+            {deviceAgent.blocked ??
+              "Runs on a Windows, macOS or Linux machine no person uses. Syncs plugins and sends hook events; reaches no MCP servers."}
+          </RadioCard>
+        )}
       </div>
       <Text muted small>
         <span className="text-foreground font-medium">
@@ -270,23 +341,16 @@ export function CredentialPicker({
           />
           Advanced: trust another platform's tokens
         </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3 sm:w-1/2 sm:pr-1.5">
+        <CollapsibleContent className="mt-3">
           <RadioCard
             value={PLATFORM_PREFIX + CUSTOM_PLATFORM_KEY}
-            title={<TaggedTitle title="Custom OIDC issuer" tag="Advanced" />}
-            leading={<Waypoints aria-hidden="true" className="size-5" />}
+            title="Custom OIDC issuer"
+            leading={<PlatformMark />}
+            leadingAlign="card"
             disabled={!canFederate}
-            className="p-3"
           >
-            <Text muted small>
-              Only when your platform already mints signed OIDC tokens for its
-              workloads, such as a CI provider, a cluster or your own identity
-              service. Reuse an issuer you already trust or register a new one.
-              If it mints none, use an API key.
-            </Text>
-            <CredentialMeta>
-              No key minted · reuse or register an issuer
-            </CredentialMeta>
+            For a platform that already mints signed OIDC tokens, such as a CI
+            provider or a cluster. If yours mints none, use an API key.
           </RadioCard>
         </CollapsibleContent>
       </Collapsible>

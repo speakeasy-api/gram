@@ -110,6 +110,47 @@ export const WithoutIndicators: Story = {
   },
 };
 
+export const WithLogoTile: Story = {
+  render: function Render() {
+    const [value, setValue] = useState("person");
+
+    return (
+      <RadioCardGroup
+        aria-label="Owner"
+        value={value}
+        onValueChange={setValue}
+        showIndicator={false}
+        size="sm"
+      >
+        <RadioCard
+          value="person"
+          title="A person"
+          leadingAlign="card"
+          leading={
+            <span className="bg-card flex size-8 items-center justify-center border">
+              <UserRound aria-hidden="true" className="size-4" />
+            </span>
+          }
+        >
+          Signs in with their own account.
+        </RadioCard>
+        <RadioCard
+          value="agent"
+          title="An agent"
+          leadingAlign="card"
+          leading={
+            <span className="bg-card flex size-8 items-center justify-center border">
+              <Bot aria-hidden="true" className="size-4" />
+            </span>
+          }
+        >
+          Signs in with a key or its platform's token.
+        </RadioCard>
+      </RadioCardGroup>
+    );
+  },
+};
+
 export const Horizontal: Story = {
   render: function Render() {
     const [value, setValue] = useState("grid");

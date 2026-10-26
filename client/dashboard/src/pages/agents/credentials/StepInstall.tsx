@@ -34,7 +34,7 @@ const KEY_ENV = "SPEAKEASY_AGENT_KEY";
  * code is the point. The design system's snippet follows the app theme, so
  * the theme it reads is overridden here rather than forked.
  */
-function CodeBlock({
+export function CodeBlock({
   value,
   label,
   language,

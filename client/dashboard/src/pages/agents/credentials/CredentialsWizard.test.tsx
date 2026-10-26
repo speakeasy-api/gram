@@ -284,7 +284,7 @@ describe("Provisioning a new agent", () => {
     expect(mocks.createAgent).not.toHaveBeenCalled();
   });
 
-  it("will not move on without a name or a server", async () => {
+  it("will not create an MCP agent without a name or a server", async () => {
     setup();
     expect(
       (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
@@ -297,12 +297,24 @@ describe("Provisioning a new agent", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
+    // Servers are optional here: a device agent, chosen next, reaches none.
     await screen.findByRole("heading", { name: "Server selection" });
     expect(
-      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-    expect(screen.getByText("Select at least one MCP server.")).toBeTruthy();
+      screen.getByText(
+        "No servers selected. A device agent needs none; choose it on the next step.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    const create = (await screen.findByRole("button", {
+      name: "Create agent",
+    })) as HTMLButtonElement;
+    expect(create.disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Go back and select at least one MCP server, or choose Device agent.",
+      ),
+    ).toBeTruthy();
   });
 
   it("creates the agent, issues its first key and mints one setup command", async () => {
@@ -800,7 +812,7 @@ describe("Editing an agent that already exists", () => {
     // Marked done rather than ahead: an agent that exists has settled what
     // it signs in with. The state is asserted, not merely the label: a cell
     // carries its state in its own accessible name.
-    const credential = screen.getByRole("button", { name: /Credential/ });
+    const credential = screen.getByRole("button", { name: /Target platform/ });
     expect(credential.textContent).toContain("Done");
     expect(credential.textContent).not.toContain("Current");
     // The step the reader is on keeps its place even though everything from
@@ -814,8 +826,8 @@ describe("Editing an agent that already exists", () => {
     editing();
     // Settled steps are still destinations, and a reader standing on one has
     // to be able to see where they are.
-    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
-    const credential = screen.getByRole("button", { name: /Credential/ });
+    fireEvent.click(screen.getByRole("button", { name: /Target platform/ }));
+    const credential = screen.getByRole("button", { name: /Target platform/ });
     expect(credential.getAttribute("aria-current")).toBe("step");
     expect(credential.textContent).toContain("Current");
   });
@@ -1072,7 +1084,7 @@ describe("Editing an agent that already exists", () => {
     // "All servers" names the reach it actually has, not the agent's project.
     expect(screen.getByText(/Every server in Example Org/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Target platform/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
 
     await waitFor(() =>
@@ -1252,5 +1264,86 @@ describe("Editing an agent that already exists", () => {
 
     expect(await screen.findByText("Grant is locked")).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
+describe("Provisioning a device agent", () => {
+  const deviceGrants = [
+    {
+      effect: "allow",
+      scope: "org:device_agent_sync",
+      selector: { resourceKind: "org", resourceId: "*" },
+    },
+    {
+      effect: "allow",
+      scope: "org:hooks_ingest",
+      selector: { resourceKind: "org", resourceId: "*" },
+    },
+    {
+      effect: "allow",
+      scope: "project:read",
+      selector: { resourceKind: "project", resourceId: "project_one" },
+    },
+  ];
+
+  async function reachDeviceAgentTile() {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Build Host" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Server selection" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    return screen.findByRole("radio", { name: /Device agent/ });
+  }
+
+  it("creates an agent that reaches no servers and mints a device agent install", async () => {
+    mocks.listDelegableGrants.mockResolvedValue(deviceGrants);
+    fireEvent.click(await reachDeviceAgentTile());
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+
+    await screen.findByRole("heading", { name: "Install the device agent" });
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toEqual(deviceGrants);
+    expect(
+      mocks.createKey.mock.calls[0]?.[0]?.createKeyForm?.requestedGrants?.map(
+        (requested: { scope: string }) => requested.scope,
+      ),
+    ).toEqual(["org:device_agent_sync", "org:hooks_ingest", "project:read"]);
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(mocks.fetch.mock.calls[0]?.[1]?.body as string)).toEqual({
+      flavor: "device_agent",
+      mode: "ephemeral",
+    });
+
+    // Each code renders one script, so switching the mode mints a new one.
+    fireEvent.click(screen.getByRole("button", { name: "Persistent" }));
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(mocks.fetch.mock.calls[1]?.[1]?.body as string)).toEqual({
+      flavor: "device_agent",
+      mode: "service",
+    });
+  });
+
+  it("names the scopes the key cannot carry", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([deviceGrants[2]]);
+    fireEvent.click(await reachDeviceAgentTile());
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "org:admin",
+    );
+    expect(mocks.createKey).not.toHaveBeenCalled();
+  });
+
+  it("is refused to someone who is not an org admin", async () => {
+    mocks.canFederate = false;
+    const tile = await reachDeviceAgentTile();
+
+    expect((tile as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText("Provisioning a device agent requires org:admin."),
+    ).toBeTruthy();
   });
 });

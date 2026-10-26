@@ -36,6 +36,12 @@ export type RadioCardProps = RadioCardContent & {
   onSelect?: () => void;
   leading?: React.ReactNode;
   /**
+   * "title" (the default) centers `leading` on the title's line, for an
+   * icon the size of the text. "card" centers it on the whole card, for a
+   * mark taller than one line, such as a logo tile.
+   */
+  leadingAlign?: "title" | "card";
+  /**
    * Content under the label that is not part of the radio's accessible
    * description, such as the fields or snippet a selected option reveals.
    * Clicks inside it never change the selection.
@@ -107,6 +113,7 @@ export function RadioCard({
   disabled = false,
   onSelect,
   leading,
+  leadingAlign = "title",
   detail,
   trailing,
   className,
@@ -188,7 +195,10 @@ export function RadioCard({
         // enough to read as misaligned. Matches the mt-0.5 the radio uses.
         <div
           data-slot="radio-card-leading"
-          className={cn("flex shrink-0 items-center", compact ? "h-5" : "h-6")}
+          className={cn(
+            "flex shrink-0 items-center",
+            leadingAlign === "card" ? "self-center" : compact ? "h-5" : "h-6",
+          )}
         >
           {leading}
         </div>
