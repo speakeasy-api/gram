@@ -26,9 +26,15 @@ export type PromoteRegistryCandidateRequestBody = {
    */
   overrideEligibility?: boolean | undefined;
   projectId: string;
+  /**
+   * Public description, at most 100 Unicode code points.
+   */
   publicDescription: string;
   publicMetadataConfirmed: boolean;
   publicName: string;
+  /**
+   * Public title, at most 100 Unicode code points.
+   */
   publicTitle: string;
   publicUrl: string;
   retryKey: string;

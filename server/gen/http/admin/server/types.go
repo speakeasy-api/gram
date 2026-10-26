@@ -424,13 +424,15 @@ type GetRegistryPromotionCandidateRequestBody struct {
 // PromoteRegistryCandidateRequestBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP request body.
 type PromoteRegistryCandidateRequestBody struct {
-	OrganizationID          *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID               *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID             *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	SourceRevision          *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	CurationRevision        *string `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	PublicName              *string `form:"public_name,omitempty" json:"public_name,omitempty" xml:"public_name,omitempty"`
-	PublicTitle             *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	OrganizationID   *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID      *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	SourceRevision   *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	CurationRevision *string `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	PublicName       *string `form:"public_name,omitempty" json:"public_name,omitempty" xml:"public_name,omitempty"`
+	// Public title, at most 100 Unicode code points.
+	PublicTitle *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	// Public description, at most 100 Unicode code points.
 	PublicDescription       *string `form:"public_description,omitempty" json:"public_description,omitempty" xml:"public_description,omitempty"`
 	PublicURL               *string `form:"public_url,omitempty" json:"public_url,omitempty" xml:"public_url,omitempty"`
 	DocumentationURL        *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`

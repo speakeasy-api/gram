@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { expect, test } from "vitest";
+import { promoteRegistryCandidateRequestBodyToJSON } from "../sdk/src/models/components/promoteregistrycandidaterequestbody";
 import { GramCore } from "../sdk/src/core";
 import { HTTPClient } from "../sdk/src/lib/http";
 import { adminGetRegistryPromotionCandidate } from "../sdk/src/funcs/adminGetRegistryPromotionCandidate";
@@ -150,5 +151,30 @@ test("eligibility refresh uses POST with a canonical target and decodes timestam
     organization_id: "org-example",
     project_id: id,
     mcp_server_id: id,
+  });
+});
+
+test("promotion SDK preserves 100 supplementary Unicode code points", () => {
+  const text = "🌍".repeat(100);
+  const encoded = promoteRegistryCandidateRequestBodyToJSON({
+    organizationId: "org-example",
+    projectId: id,
+    mcpServerId: id,
+    sourceRevision: "aabb",
+    curationRevision: id,
+    publicName: "com.example/mcp",
+    publicTitle: text,
+    publicDescription: text,
+    publicUrl: "https://mcp.example.com/mcp",
+    documentationUrl: "https://example.com/docs",
+    docsSlug: "example",
+    authMode: "none",
+    publicMetadataConfirmed: true,
+    overrideEligibility: true,
+    retryKey: "synthetic-once",
+  });
+  expect(JSON.parse(encoded)).toMatchObject({
+    public_title: text,
+    public_description: text,
   });
 });
