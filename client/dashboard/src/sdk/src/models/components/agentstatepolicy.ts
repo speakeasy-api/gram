@@ -15,7 +15,7 @@ import {
  */
 export type AgentStatePolicy = {
   /**
-   * When the last reconcile applied it.
+   * When the agent first applied this etag. Later reconciles of the same etag keep this time.
    */
   appliedAt?: Date | undefined;
   /**

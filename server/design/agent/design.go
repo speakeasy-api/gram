@@ -809,7 +809,7 @@ var AgentStatePolicyModel = Type("AgentStatePolicy", func() {
 	Attribute("applied_etag", String, "Etag of the getPlugins snapshot the last reconcile applied. Omitted before the agent has applied one.", func() {
 		MaxLength(128)
 	})
-	Attribute("applied_at", String, "When the last reconcile applied it.", func() {
+	Attribute("applied_at", String, "When the agent first applied this etag. Later reconciles of the same etag keep this time.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("withheld_plugins", ArrayOf(AgentStateWithheldPluginModel), "Optional plugins the agent left out of the applied set because of a user choice. Required plugins are never withheld.", func() {

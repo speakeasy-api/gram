@@ -2974,7 +2974,8 @@ type AgentStatePolicyRequestBody struct {
 	// Etag of the getPlugins snapshot the last reconcile applied. Omitted before
 	// the agent has applied one.
 	AppliedEtag *string `form:"applied_etag,omitempty" json:"applied_etag,omitempty" xml:"applied_etag,omitempty"`
-	// When the last reconcile applied it.
+	// When the agent first applied this etag. Later reconciles of the same etag
+	// keep this time.
 	AppliedAt *string `form:"applied_at,omitempty" json:"applied_at,omitempty" xml:"applied_at,omitempty"`
 	// Optional plugins the agent left out of the applied set because of a user
 	// choice. Required plugins are never withheld.

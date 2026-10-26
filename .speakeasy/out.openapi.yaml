@@ -84961,7 +84961,7 @@ components:
       properties:
         applied_at:
           type: string
-          description: When the last reconcile applied it.
+          description: When the agent first applied this etag. Later reconciles of the same etag keep this time.
           format: date-time
         applied_etag:
           type: string
