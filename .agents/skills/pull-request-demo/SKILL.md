@@ -5,7 +5,9 @@ description: Always use after creating a pull request that proposes user-visible
 
 # Demos for frontend PRs
 
-Capture only the changed dashboard behavior and post it as a PR comment. Use one or two PNGs for a static visual change; use a 10-20 second WebM recording for an interaction.
+Capture the changed dashboard behavior in the context of the page it lives on, mark where the new UI is, and post it as a PR comment. Use one or two PNGs for a static visual change; use a 10-20 second WebM recording for an interaction.
+
+Reviewers judge a change by how it fits its page: its position next to the existing UI, how much space it takes, and whether it matches what surrounds it. A tight crop hides all of that. Frame the whole viewport, with the sidebar and page header in view, and use a marker to point at the new UI so that the wider frame stays easy to read.
 
 **REQUIRED SUB-SKILL:** Use `gram-playwright-cli` for browser commands.
 
@@ -56,18 +58,43 @@ Navigate to the feature and rehearse the exact interaction using snapshot refs. 
 
 Return to the intended starting state before capture. Hide the fixed development dock with `eval` before every capture, whether or not it obscures the change: it is dev-only chrome and reads as a product bug to a reviewer. Page navigation removes DOM-only adjustments, so re-apply it after navigating.
 
+Keep the sidebar expanded and scroll only as far as needed to bring the new UI into view. The page header should stay visible when the new UI fits below it. The frame should answer "where on which page is this?" without the PR description.
+
+### Mark the new UI
+
+Tag each new element with `data-demo-new`, using a snapshot ref. The attribute's value becomes the label, so keep it to a word or two. Then draw the markers:
+
+```bash
+mise run playwright -s=pr-demo-$PR eval "el => el.setAttribute('data-demo-new', 'New')" <element-ref>
+mise run playwright -s=pr-demo-$PR run-code --filename=.agents/skills/pull-request-demo/mark-new-ui.js
+```
+
+`mark-new-ui.js` draws a red ring around each tagged element, with its label on the ring's top edge. The ring ignores pointer events, so clicks still reach the page. Rules:
+
+- Tag the smallest element that contains the new UI: the new button, column, or card, not its whole section. When a change spans a whole page or dialog, tag the region that changed and label it (for example `New dialog`).
+- Use a short, specific label when several elements are new (`New filter`, `New column`). Mark changed behavior on an existing element too (`Now sortable`).
+- The ring is drawn at the element's position when the script runs. Re-run the script after any layout change, scroll, or new content. Client-side navigation can keep old tags, so after navigating remove stale `data-demo-new` tags, tag the new target, and re-run the script.
+- Do not use `highlight`: it adds a selector tooltip to the frame.
+
 ## 2. Capture
 
 ### Static change
 
-Prepare the exact frame, then capture a viewport or element screenshot:
+Prepare the exact frame, mark the new UI, then capture the viewport:
 
 ```bash
 mise run playwright -s=pr-demo-$PR screenshot --hires --filename="$DIR/demo.png"
+```
+
+The shared config keeps the CSS viewport at 1440x900 and uses a 2x device scale factor, so `--hires` produces a crisp 2880x1800 viewport image. Use `--full-page` only when the page context cannot fit in the viewport.
+
+The marked viewport screenshot is the demo. Add an element screenshot only as a second image, when the new UI has detail too small to read at full width:
+
+```bash
 mise run playwright -s=pr-demo-$PR screenshot <element-ref> --hires --filename="$DIR/demo-detail.png"
 ```
 
-The shared config keeps the CSS viewport at 1440x900 and uses a 2x device scale factor, so `--hires` produces a crisp 2880x1800 viewport image. Use `--full-page` only when the changed layout cannot fit in the viewport.
+Never publish the element screenshot by itself.
 
 ### Interaction change
 
@@ -78,7 +105,7 @@ mise run playwright -s=pr-demo-$PR video-start "$DIR/demo.webm" --size=1440x900
 mise run playwright -s=pr-demo-$PR video-show-actions --duration=700 --position=top-right --cursor=pointer
 ```
 
-Perform the rehearsed clicks, fills, and navigation with normal CLI commands. The action overlay supplies the pointer, target highlight, and action label; do not inject a fake cursor. Let each important state remain visible long enough to read. When a longer hold is needed:
+Perform the rehearsed clicks, fills, and navigation with normal CLI commands. The action overlay supplies the pointer, target highlight, and action label; do not inject a fake cursor. Record the full viewport, not a region. As soon as the new UI appears, tag it and run `mark-new-ui.js` (see [Mark the new UI](#mark-the-new-ui)), then hold so the marker is on screen for at least two seconds. If the new UI is on screen when recording starts, mark it before `video-start`. Let each important state remain visible long enough to read. When a longer hold is needed:
 
 ```bash
 mise run playwright -s=pr-demo-$PR run-code "async page => await page.waitForTimeout(1000)"
@@ -116,7 +143,7 @@ Convert only when the reviewer needs the demo inline where a player will not ren
   "$DIR/demo.gif"
 ```
 
-A GIF is hard-refused over 10 MB. Increase the scale toward 1440 for small text, or crop to the relevant region before `fps=` instead of shrinking the whole frame.
+A GIF is hard-refused over 10 MB. Increase the scale toward 1440 for small text. Do not crop the frame to fit under the limit, because the crop removes the page context. Lower `fps` or shorten the trim instead.
 
 ## 3. Inspect before uploading
 
@@ -129,10 +156,11 @@ You cannot watch a WebM. Extract frames first, then look at them:
 One frame every two seconds gives eight to ten frames for a trimmed 15 to 20 second take. Raise the interval on anything longer, because reading twenty near-identical frames is the slowest step in this workflow. Read every extracted frame, or the PNG or GIF for the other paths, and confirm all of the following before running any `--attach` command:
 
 1. It shows the changed behavior, and nothing before or after it.
-2. No real identity: the user menu, avatar, and member columns show no real name or email. Dev-idp signs you in as `dev@example.com` in `Local Dev Org`, so this is normally satisfied already. If your stack points at a real identity provider and the sidebar shows your actual name, collapse the sidebar and recapture rather than editing the DOM.
-3. No **customer** organization: check the org switcher, breadcrumbs, and URL bar. Your own dev org and Speakeasy's own name are fine; a customer's is not. `mise run seed` retargets the demo seed at **your own org**, so the rows are synthetic but the chrome around them is not.
-4. No secrets: no API keys, tokens, or environment variable values in view.
-5. Within limits: images and GIFs under 10 MB, video under 100 MB.
+2. It shows the page around the change: the sidebar and page header are in view, and the marker sits on the new UI and covers nothing that matters. If the marker is offset from its element, the layout moved after it was drawn: re-run `mark-new-ui.js` and capture again.
+3. No real identity: the user menu, avatar, and member columns show no real name or email. Dev-idp signs you in as `dev@example.com` in `Local Dev Org`, so this is normally satisfied already. If your stack points at a real identity provider and the sidebar shows your actual name, collapse the sidebar and recapture rather than editing the DOM. This is the one case where the sidebar may be hidden.
+4. No **customer** organization: check the org switcher, breadcrumbs, and URL bar. Your own dev org and Speakeasy's own name are fine; a customer's is not. `mise run seed` retargets the demo seed at **your own org**, so the rows are synthetic but the chrome around them is not.
+5. No secrets: no API keys, tokens, or environment variable values in view.
+6. Within limits: images and GIFs under 10 MB, video under 100 MB.
 
 A recording crosses far more of these surfaces than a deliberately framed screenshot. Recapture rather than publishing a frame you are unsure about.
 
@@ -150,6 +178,8 @@ cat > "$DIR/comment.md" <<EOF
 ### Demo
 
 ![<alt text>]($DEMO)
+
+The red ring marks the new UI.
 
 What it shows:
 1. <starting state>
@@ -176,6 +206,8 @@ Keep the numbered list short and aligned with the visible steps.
 
 ## Common mistakes
 
+- **Cropping to the new UI.** An element-only screenshot or a cropped recording hides where the change sits on the page. Capture the viewport and mark the change instead.
+- **A wide frame with no marker.** Without the ring, a reviewer has to guess which part of the page is new.
 - **`HTTP 404` from `--attach`** means you lack write access, not that the PR is missing. Attachments need ADMIN, MAINTAIN, or WRITE; READ and TRIAGE both 404. Fine-grained PATs are per-repo, so one minted elsewhere fails on a repo you can otherwise push to. From a fork, fall back to a secret gist: write any text file into `$DIR`, run `gh gist create` on it (binaries passed directly are silently dropped), clone the returned gist repo, copy `$DEMO` in (or `$DIR/demo-trimmed.webm` for a recording, which the video path never assigns to `$DEMO`), commit, push with `git -c credential.helper='!gh auth git-credential' push`, then reference the raw URL.
 - **Uploads stop at the first failure** and the body is written only if at least one file uploaded, so a partial failure posts a comment containing unresolved local paths. Attach one file at a time unless you need them in a single comment.
 - Attaching the demo to the PR body with `gh pr edit` instead of a comment. Use a comment, so the demo sits in the timeline next to the change it describes.

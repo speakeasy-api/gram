@@ -50,7 +50,7 @@ func registerCatalogPromotionTools(server *mcp.Server, reader catalogPromotionRe
 	mcp.AddTool(server, &mcp.Tool{
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name: "list_registry_promotion_candidates", Title: "List Catalogue Promotion Candidates",
-		Description: "List newest-first remote MCP promotion candidates, defaulting to active unpublished candidates; status filters include all, candidate, rejected, archived, and promoted. Returns a bounded staff-only page with aggregate health evidence and setup documentation delivery status. Source URLs, credentials, headers, tool arguments and customer text are omitted. Eligibility does not authorize publication.",
+		Description: "List newest-first remote MCP promotion candidates, defaulting to active unpublished candidates excluding endpoints already in the catalogue; status filters include all, candidate, rejected, archived, and promoted. Returns a bounded staff-only page with aggregate health evidence and setup documentation delivery status. Source URLs, credentials, headers, tool arguments and customer text are omitted. Eligibility does not authorize publication.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListCatalogPromotionInput) (*mcp.CallToolResult, CatalogPromotionPage, error) {
 		out := CatalogPromotionPage{Candidates: []CatalogPromotionCandidate{}, NextCursor: ""}
@@ -131,6 +131,8 @@ type CatalogPromotionCandidate struct {
 	SourceRevision string `json:"source_revision"`
 	// Eligible reports current qualification.
 	Eligible bool `json:"eligible"`
+	// CanOverrideEligibility reports whether staff may explicitly accept the health evidence.
+	CanOverrideEligibility bool `json:"can_override_eligibility"`
 	// Reason is a fixed qualification category.
 	Reason string `json:"reason"`
 	// Status distinguishes candidates from published entries.
@@ -242,7 +244,7 @@ func projectCatalogPromotion(candidate catalogpromotion.Candidate) (CatalogPromo
 	}
 	return CatalogPromotionCandidate{
 		ID: candidate.ID, OrganizationID: candidate.OrganizationID, ProjectID: candidate.ProjectID, MCPServerID: candidate.MCPServerID, RemoteMCPServerID: candidate.RemoteMCPServerID,
-		CreatedAt: candidate.CreatedAt, CurationRevision: candidate.CurationRevision, SourceRevision: candidate.SourceRevision, Eligible: candidate.Eligible, Reason: candidate.Reason, Status: candidate.Status,
+		CreatedAt: candidate.CreatedAt, CurationRevision: candidate.CurationRevision, SourceRevision: candidate.SourceRevision, Eligible: candidate.Eligible, CanOverrideEligibility: candidate.CanOverrideEligibility(), Reason: candidate.Reason, Status: candidate.Status,
 		ObservedSuccesses: candidate.ObservedSuccesses, ObservedFailures: candidate.ObservedFailures, ObservedDays: candidate.ObservedDays, CheckedAt: candidate.CheckedAt,
 		DocsRevision: candidate.DocsRevision, DocsRetryAllowed: candidate.DocsRetryAllowed, DocsAttempts: candidate.DocsAttempts,
 		DocsLastAttemptAt: candidate.DocsLastAttemptAt, DocsNextAttemptAt: candidate.DocsNextAttemptAt, DocsQueuedAt: candidate.DocsQueuedAt, PromotedAt: candidate.PromotedAt, PublicTitle: candidate.PublicTitle,
