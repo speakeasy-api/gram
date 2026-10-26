@@ -1668,6 +1668,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				ServerURL:        "",
 				APIKey:           "",
 				HooksAPIKey:      "",
+				HooksKeyIsAgent:  false,
 				ProjectSlug:      "",
 				IsDefaultProject: false,
 				Version:          "",
@@ -3442,13 +3443,14 @@ func (s *Service) resolveAgentPluginCompatibility(ctx context.Context, projectID
 // projectServerURL, so server_url matches the plugins' MCP addresses.
 func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlug string, projectID uuid.UUID, serverURL string, publishedHooksConfig []byte) GenerateConfig {
 	cfg := GenerateConfig{
-		OrgName:     orgSlug,
-		OrgEmail:    "",
-		OrgID:       orgID,
-		ServerURL:   serverURL,
-		APIKey:      "",
-		HooksAPIKey: "",
-		ProjectSlug: projectSlug,
+		OrgName:         orgSlug,
+		OrgEmail:        "",
+		OrgID:           orgID,
+		ServerURL:       serverURL,
+		APIKey:          "",
+		HooksAPIKey:     "",
+		HooksKeyIsAgent: false,
+		ProjectSlug:     projectSlug,
 		// Milliseconds rather than seconds so publishes close together (e.g. a
 		// settings flip right after a publish) still mint distinct manifest
 		// versions; the 13-digit patch also sorts numerically above the

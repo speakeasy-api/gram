@@ -425,10 +425,11 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 // holds no usable credential — never authenticated, key lost or rejected, or a
 // shared cache minted for a different server or org — then relays the
 // session.started telemetry. Viability guards and the attempt cooldown keep
-// the browser from nagging.
+// the browser from nagging. An agent's plugin never opens one: its key
+// outranks any cache a sign-in would write.
 func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEvent) (agenthooks.SessionStartDecision, error) {
 	_, cached := readCachedAuth(r.cfg)
-	if r.cfg.BrowserLogin && Env("HOOKS_API_KEY") == "" && !cached {
+	if r.cfg.BrowserLogin && !r.cfg.AgentKey && Env("HOOKS_API_KEY") == "" && !cached {
 		r.login.tryInteractive(ctx)
 	}
 	r.deliver(ctx, e)

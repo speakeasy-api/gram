@@ -210,6 +210,7 @@ func writeConfigFile(dir string, cfg PluginConfig) error {
 		Project:      cfg.ProjectSlug,
 		Org:          cfg.OrgID,
 		HooksAPIKey:  cfg.HooksAPIKey,
+		AgentKey:     false,
 		BrowserLogin: cfg.BrowserLogin,
 		Nonblocking:  false,
 	})

@@ -161,12 +161,21 @@ When `openclaw` is on `PATH` the script:
    `Speakeasy hooks: PASS` or `FAIL: <reason>`. A permission denial can mean
    the agent lacks `org:hooks_ingest` on its project or `project:read`.
    PASS tests the embedded key; it does not prove runtime attribution:
-   Gateway-level `SPEAKEASY_AI_HOOKS_API_KEY` or a cached sign-in for this org
-   can take precedence. Remove those overrides to use the agent credential.
+   Gateway-level `SPEAKEASY_AI_HOOKS_API_KEY` or `SPEAKEASY_AI_HOOKS_ORG_KEY`
+   (including their `GRAM_*` aliases) can take precedence. Remove those explicit
+   overrides to use the agent credential. The generated plugin marks its key
+   as an agent key. With a hooks binary that supports this mode, a cached
+   personal sign-in no longer takes precedence.
    If the installed plugin cannot be located, the check tests the archive
    copy instead, requiring `unzip`, `bsdtar` or `python3`.
 5. Prints a reminder to restart the OpenClaw Gateway. Until restart the
    plugin is not loaded. The installer never restarts a running Gateway.
+
+**Release dependency:** agent-key precedence requires a published hooks binary
+containing the credential-order change and an updated server release pin. The
+current `hooksBinaryVersion` is `0.3.37`, which predates that change; its runtime
+can still prefer a cached sign-in. Do not claim agent attribution from an
+installer PASS until the release and pin are updated.
 
 The key is stored in plaintext in the plugin's `speakeasy.json` and in
 OpenClaw's MCP configuration. Plugin ZIPs mark the key file `0600`; the
