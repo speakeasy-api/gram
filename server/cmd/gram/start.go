@@ -2162,6 +2162,7 @@ func newStartCommand() *cli.Command {
 
 					piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
 
+					slackSigningSecret := c.String("slack-signing-secret")
 					var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
 					if id, secret := c.String("slack-client-id"), c.String("slack-client-secret"); id != "" && id != "unset" && secret != "" && secret != "unset" {
 						slackDirectoryRefresher = slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient("", guardianPolicy.PooledClient()), id, secret, "")
@@ -2178,6 +2179,7 @@ func newStartCommand() *cli.Command {
 						AssetStorage:                   assetStorage,
 						SlackClient:                    slackClient,
 						SlackDirectoryTokenRefresher:   slackDirectoryRefresher,
+						SlackApprovalButtons:           slackSigningSecret != "" && slackSigningSecret != "unset",
 						ChatMessageWriter:              chatWriter,
 						ChatClient:                     chatClient,
 						OpenRouter:                     openRouter,

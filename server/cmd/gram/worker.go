@@ -195,6 +195,7 @@ func newWorkerCommand() *cli.Command {
 		},
 		&cli.StringFlag{Name: "slack-client-id", EnvVars: []string{"SLACK_CLIENT_ID"}, Usage: "OAuth client ID for the Slack directory app, used to refresh workspace tokens"},
 		&cli.StringFlag{Name: "slack-client-secret", EnvVars: []string{"SLACK_CLIENT_SECRET"}, Usage: "OAuth client secret for the Slack directory app, used to refresh workspace tokens"},
+		&cli.StringFlag{Name: "slack-signing-secret", EnvVars: []string{"SLACK_SIGNING_SECRET"}, Usage: "Signing secret of the Speakeasy Slack app. Approval request DMs get Approve and Deny buttons only when it is set, since the server needs it to verify clicks"},
 		&cli.StringFlag{
 			Name:    "openrouter-dev-key",
 			Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
@@ -887,6 +888,7 @@ func newWorkerCommand() *cli.Command {
 				enableIssuerKeyAutoActivation(issuerProvisioner, issuerSigner)
 			}
 
+			slackSigningSecret := c.String("slack-signing-secret")
 			var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
 			if id, secret := c.String("slack-client-id"), c.String("slack-client-secret"); id != "" && id != "unset" && secret != "" && secret != "unset" {
 				slackDirectoryRefresher = slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient("", guardianPolicy.PooledClient()), id, secret, "")
@@ -903,6 +905,7 @@ func newWorkerCommand() *cli.Command {
 				AssetStorage:                   assetStorage,
 				SlackClient:                    slackClient,
 				SlackDirectoryTokenRefresher:   slackDirectoryRefresher,
+				SlackApprovalButtons:           slackSigningSecret != "" && slackSigningSecret != "unset",
 				ChatMessageWriter:              chatWriter,
 				ChatClient:                     chatClient,
 				OpenRouter:                     openRouter,

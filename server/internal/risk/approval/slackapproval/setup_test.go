@@ -134,7 +134,7 @@ func newFixture(t *testing.T) *fixture {
 		db:             conn,
 		approvals:      approvals,
 		cards:          cards,
-		notifier:       slackapproval.NewNotifier(logger, cards, workspaces, slackapi.NewClient(slack.server.URL, slack.server.Client())),
+		notifier:       slackapproval.NewNotifier(logger, cards, workspaces, slackapi.NewClient(slack.server.URL, slack.server.Client()), true),
 		slack:          slack,
 		workspaces:     workspaces,
 		organizationID: authCtx.ActiveOrganizationID,

@@ -108,6 +108,11 @@ type WorkerOptions struct {
 	// records at; used alongside ExpectedTargetCNAME for verification/health.
 	ExpectedARecords []netip.Addr
 
+	// SlackApprovalButtons puts Approve and Deny buttons on approval request
+	// DMs. Set it only when the server has the Slack app's signing secret,
+	// which verifies the clicks. Without it, DMs link to the dashboard.
+	SlackApprovalButtons bool
+
 	// GitHubEvidenceToken authenticates the recheck sweep's repository
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
 	GitHubEvidenceToken string
@@ -230,6 +235,7 @@ func ForDeploymentProcessing(
 		StartupSeeds:                   nil,
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
+		SlackApprovalButtons:           false,
 		ChatMessageWriter:              nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
@@ -327,6 +333,7 @@ func NewTemporalWorker(
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
+		SlackApprovalButtons:           false,
 		ChatMessageWriter:              nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
@@ -389,6 +396,7 @@ func NewTemporalWorker(
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
 			SlackDirectoryTokenRefresher:   conv.Default(o.SlackDirectoryTokenRefresher, opts.SlackDirectoryTokenRefresher),
+			SlackApprovalButtons:           o.SlackApprovalButtons || opts.SlackApprovalButtons,
 			ChatMessageWriter:              conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
 			OpenRouter:                     conv.Default(o.OpenRouter, opts.OpenRouter),
 			OpenRouterSpend:                conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
@@ -744,9 +752,10 @@ func NewTemporalWorker(
 		if opts.ServerURL != nil {
 			approvals := approval.NewService(logger, opts.DB, opts.ServerURL, opts.AuditLogger)
 			cards := slackapproval.NewCards(opts.DB, approvals, opts.OrgHosts)
-			notifier := slackapproval.NewNotifier(logger, cards, slackDirectory.sync, slackapi.NewClient("", opts.GuardianPolicy.PooledClient()))
-			riskApprovalSlack := &riskApprovalSlackActivities{logger: logger, notifier: notifier}
+			notifier := slackapproval.NewNotifier(logger, cards, slackDirectory.sync, slackapi.NewClient("", opts.GuardianPolicy.PooledClient()), opts.SlackApprovalButtons)
+			riskApprovalSlack := &riskApprovalSlackActivities{notifier: notifier}
 			temporalWorker.RegisterActivity(riskApprovalSlack.NotifyRiskApprovalApprovers)
+			temporalWorker.RegisterActivity(riskApprovalSlack.CountRiskApprovalDMs)
 			temporalWorker.RegisterActivity(riskApprovalSlack.FinishRiskApprovalCards)
 		}
 	}
