@@ -386,29 +386,44 @@ it("uses the server override capability for unfamiliar health reasons", async ()
 });
 
 it.each([
-  ["publicTitle", "Public title"],
-  ["publicDescription", "Public description"],
+  ["publicTitle", "Public title", true],
+  ["publicTitle", "Public title", false],
+  ["publicDescription", "Public description", true],
+  ["publicDescription", "Public description", false],
 ] as const)(
-  "validates %s by Unicode code points without truncating suggestions",
-  async (field, label) => {
+  "validates %s (%s, eligible=%s) without truncating suggestions",
+  async (field, label, eligible) => {
     const value = "a".repeat(126);
     api.candidate.mockResolvedValue({
       ...candidate,
+      eligible,
+      reason: eligible ? "eligible" : "errors_observed",
+      canOverrideEligibility: !eligible,
       suggestedMetadata: { ...metadata, authMode: "none", [field]: value },
     });
     await renderWithApp(
       <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
     );
+    if (!eligible) {
+      fireEvent.click(
+        await screen.findByRole("checkbox", { name: /Promote anyway/ }),
+      );
+    }
     const input = (await screen.findByRole("textbox", {
       name: label,
     })) as HTMLInputElement;
     expect(input.value).toBe(value);
-    expect(screen.getByRole("alert").textContent).toContain(
-      `${label} must be 100 characters or fewer`,
-    );
-    fireEvent.click(screen.getByRole("checkbox"));
+    const alert = screen.getByRole("alert");
+    const errorText = `${label} must be 100 characters or fewer.`;
+    expect(alert.textContent).toBe(errorText);
+    expect(
+      document
+        .getElementById(input.getAttribute("aria-describedby")!)
+        ?.contains(alert),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /I verified/ }));
     const publish = screen.getByRole("button", {
-      name: "Publish catalog entry",
+      name: eligible ? "Publish catalog entry" : "Promote anyway",
     }) as HTMLButtonElement;
     expect(publish.disabled).toBe(true);
     fireEvent.submit(input.closest("form")!);
@@ -418,6 +433,11 @@ it.each([
       expect(input.value).toBe(oversized);
       expect(input.getAttribute("aria-invalid")).toBe("true");
       expect(publish.disabled).toBe(true);
+      expect(screen.getByRole("alert")).toBe(alert);
+      expect(alert.textContent).toBe(errorText);
+      expect(screen.getByText("101 / 100 characters.")).toBeTruthy();
+      fireEvent.submit(input.closest("form")!);
+      expect(api.promote).not.toHaveBeenCalled();
     }
     for (const valid of ["a".repeat(100), "🌍".repeat(100)]) {
       fireEvent.change(input, { target: { value: valid } });
@@ -427,12 +447,17 @@ it.each([
       expect(screen.getByText("100 / 100 characters.")).toBeTruthy();
     }
     expect(publish.disabled).toBe(true);
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.submit(input.closest("form")!);
+    expect(api.promote).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /I verified/ }));
     expect(publish.disabled).toBe(false);
     fireEvent.click(publish);
     await screen.findByText("Catalog entry published");
     expect(api.promote.mock.calls[0]?.[0].request[field]).toBe(
       "🌍".repeat(100),
+    );
+    expect(api.promote.mock.calls[0]?.[0].request.overrideEligibility).toBe(
+      !eligible,
     );
   },
 );

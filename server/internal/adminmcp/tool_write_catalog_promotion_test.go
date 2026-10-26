@@ -329,3 +329,58 @@ func TestCatalogPromotionLengthErrorsGiveSafeFieldGuidance(t *testing.T) {
 		})
 	}
 }
+
+func TestCatalogPromotionLengthErrorsInvalidateStoredProposals(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{catalogpromotion.ErrPublicTitleTooLong, catalogpromotion.ErrPublicDescriptionTooLong} {
+		for _, atExecution := range []bool{false, true} {
+			stage := "approval"
+			if atExecution {
+				stage = "execution"
+			}
+			t.Run(stage+"/"+cause.Error(), func(t *testing.T) {
+				t.Parallel()
+				f := newProposalFixture(t, "catalog_promotion_length")
+				project, err := projectrepo.New(f.db).CreateProject(t.Context(), projectrepo.CreateProjectParams{OrganizationID: f.orgA, Name: "Example", Slug: "example"})
+				require.NoError(t, err)
+				mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: uuid.NewString(), SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: true}}
+				writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+				w := &catalogPromotionWriter{store: f.store, writes: writes, mutator: mutator, now: time.Now}
+				ctx := writeContext(t, f)
+				input := PrepareCatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project.ID.String(), MCPServerID: mutator.candidate.MCPServerID, SourceRevision: "source-v1", CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, RetryKey: "length-validation"}
+				mutator.validationErr = errors.Join(catalogpromotion.ErrInvalid, cause, errors.New("private rejected value"))
+				_, err = w.prepare(ctx, input)
+				require.EqualError(t, err, cause.Error())
+
+				// A stored proposal may have passed validation under an earlier metadata policy.
+				mutator.validationErr = nil
+				prepared, err := w.prepare(ctx, input)
+				require.NoError(t, err)
+				proposal, err := f.store.GetForOwner(ctx, uuid.MustParse(prepared.ProposalID), f.owner)
+				require.NoError(t, err)
+				tools := newWriteTools(f.store, writes, "", map[WriteOperation]operationWriter{OperationPromoteRegistryCandidate: w}) //nolint:exhaustive // Only this operation is enabled.
+				if atExecution {
+					_, err = f.store.Approve(ctx, proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+					require.NoError(t, err)
+				}
+				mutator.validationErr = errors.Join(catalogpromotion.ErrInvalid, cause, errors.New("private rejected value"))
+				if atExecution {
+					_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+				} else {
+					_, err = f.store.Approve(ctx, proposal.ID, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, w.revalidate)
+				}
+				require.ErrorIs(t, err, ErrStaleState)
+				require.NotContains(t, err.Error(), "private rejected value")
+				persisted, err := f.store.GetForOwner(ctx, proposal.ID, f.owner)
+				require.NoError(t, err)
+				require.Equal(t, ProposalInvalidated, persisted.Status)
+				require.Equal(t, reasonStaleState, persisted.InvalidationReason)
+				require.Zero(t, mutator.calls.Load())
+				mutator.validationErr = nil
+				_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+				require.ErrorIs(t, err, ErrProposalInvalidated)
+				require.Zero(t, mutator.calls.Load())
+			})
+		}
+	}
+}

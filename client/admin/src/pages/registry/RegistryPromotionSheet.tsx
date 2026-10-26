@@ -365,15 +365,19 @@ export function RegistryPromotionSheet({
                     />
                   </label>
                   {field === "publicTitle" && (
-                    <p
+                    <div
                       id="promotion-title-length"
                       className="text-muted-foreground text-xs"
-                      role={titleTooLong ? "alert" : undefined}
                     >
-                      {titleLength} / {MAX_PUBLIC_TEXT_CHARACTERS} characters.
-                      {titleTooLong &&
-                        " Public title must be 100 characters or fewer."}
-                    </p>
+                      <p>
+                        {titleLength} / {MAX_PUBLIC_TEXT_CHARACTERS} characters.
+                      </p>
+                      {titleTooLong && (
+                        <p role="alert">
+                          Public title must be 100 characters or fewer.
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               ))}
@@ -391,15 +395,20 @@ export function RegistryPromotionSheet({
                     }
                   />
                 </label>
-                <p
+                <div
                   id="promotion-description-length"
                   className="text-muted-foreground text-xs"
-                  role={descriptionTooLong ? "alert" : undefined}
                 >
-                  {descriptionLength} / {MAX_PUBLIC_TEXT_CHARACTERS} characters.
-                  {descriptionTooLong &&
-                    " Public description must be 100 characters or fewer."}
-                </p>
+                  <p>
+                    {descriptionLength} / {MAX_PUBLIC_TEXT_CHARACTERS}{" "}
+                    characters.
+                  </p>
+                  {descriptionTooLong && (
+                    <p role="alert">
+                      Public description must be 100 characters or fewer.
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="space-y-1 text-sm">
                 <span id="promotion-auth-label">Public authentication</span>

@@ -144,6 +144,9 @@ func (w *catalogPromotionWriter) revalidate(ctx context.Context, tx pgx.Tx, prop
 		return err
 	}
 	_, err = w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public, request.OverrideEligibility)
+	if errors.Is(err, catalogpromotion.ErrPublicTitleTooLong) || errors.Is(err, catalogpromotion.ErrPublicDescriptionTooLong) {
+		return ErrStaleState
+	}
 	if err != nil {
 		return catalogPromotionValidationError(err)
 	}
