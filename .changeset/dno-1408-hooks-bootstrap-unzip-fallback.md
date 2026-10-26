@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-The hooks bootstrap script now installs the hooks binary on machines without `unzip` or `busybox`, such as slim container images like the official OpenClaw image. It falls back to extracting the archive with `python3`, then `bsdtar`, before reporting that no extraction tool is available.
+The hooks bootstrap extracts archives with Python in isolated mode so local modules and Python environment overrides cannot replace its standard-library extractor.

@@ -55,7 +55,7 @@ const (
 
 // Okta-operated org domains; deep links are only built for these because a
 // custom domain has no derivable admin host.
-var oktaOrgHostSuffixes = []string{"okta.com", "oktapreview.com", "okta-emea.com", "okta.mil"}
+var oktaOrgHostSuffixes = []string{"okta.com", "oktapreview.com", "okta-emea.com", "okta-gov.com", "okta.mil", "trexcloud.com"}
 
 // Okta application instance ids.
 var oktaAppIDPattern = regexp.MustCompile(`^0oa[A-Za-z0-9]{10,40}$`)

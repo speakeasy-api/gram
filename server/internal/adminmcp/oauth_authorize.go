@@ -362,6 +362,9 @@ func staffBrowserProofMatches(r *http.Request, challenge staffChallenge) bool {
 
 var errMissingStaffCookie = errors.New("missing admin session cookie")
 
+// errStaffIdentityMismatch identifies a verified session with an unusable staff identity.
+var errStaffIdentityMismatch = errors.New("staff session identity mismatch")
+
 func (s *StaffOAuthAuthorization) staffSession(r *http.Request) (*contextvalues.AdminAuthContext, string, error) {
 	cookie, err := r.Cookie(constants.AdminSessionCookie)
 	if err != nil || cookie.Value == "" {
@@ -373,7 +376,7 @@ func (s *StaffOAuthAuthorization) staffSession(r *http.Request) (*contextvalues.
 	}
 	staff, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || staff == nil || staff.SessionID != cookie.Value || staff.OIDCSubject == "" || staff.Email == "" {
-		return nil, "", errors.New("staff session identity mismatch")
+		return nil, "", errStaffIdentityMismatch
 	}
 	return staff, cookie.Value, nil
 }

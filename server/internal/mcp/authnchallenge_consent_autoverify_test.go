@@ -3,7 +3,6 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
