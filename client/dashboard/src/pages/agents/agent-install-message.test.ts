@@ -17,4 +17,9 @@ describe("openClawInstallMessage", () => {
     expect(message).toContain('"Speakeasy hooks:"');
     expect(message).toContain("PASS or FAIL");
   });
+
+  it("leaves the Gateway restart to the user", () => {
+    // A restart from inside the turn would end it before OpenClaw reports.
+    expect(openClawInstallMessage(command)).toContain("tell me to restart it");
+  });
 });
