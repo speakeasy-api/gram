@@ -13,9 +13,10 @@ import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { fetchRegisteredAgents } from "@/pages/identities/identityRoster";
 import { useRoutes } from "@/routes";
-import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { fetchAgentKeyNames } from "./agentKeySearch";
 import type { LauncherCandidate } from "./types";
 
 /**
@@ -23,11 +24,11 @@ import type { LauncherCandidate } from "./types";
  * roster. Agent names are identities too, so these candidates remain fuzzy-only
  * and are never sent to the intent service.
  */
-export function useAgentIdentityCandidates({
-  enabled,
-}: {
-  enabled: boolean;
-}): LauncherCandidate[] {
+export function useAgentIdentityCandidates({ enabled }: { enabled: boolean }): {
+  candidates: LauncherCandidate[];
+  keySearchFailed: boolean;
+  retryKeySearch: () => void;
+} {
   const organization = useOrganization();
   const session = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
@@ -110,31 +111,42 @@ export function useAgentIdentityCandidates({
         : [],
     [data, queryEnabled, routeProjectSlug, isError],
   );
-  const keyQueries = useQueries({
-    queries: credentialAgents.map((agent) => ({
-      queryKey: [
-        "agent-key-search",
-        organization.id,
-        session.user.id,
-        agent.id,
-      ],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        sdk.keys.list(
-          { agentId: agent.id },
-          { sessionHeaderGramSession: "" },
-          { signal },
-        ),
-      enabled: queryEnabled,
-      retry: false,
-      throwOnError: false,
-    })),
+  const keyQuery = useQuery({
+    queryKey: [
+      "agent-key-search",
+      organization.id,
+      session.user.id,
+      credentialAgents.map((agent) => agent.id),
+    ],
+    queryFn: ({ signal }) =>
+      fetchAgentKeyNames(
+        credentialAgents.map((agent) => agent.id),
+        (agentId) =>
+          sdk.keys.list(
+            { agentId },
+            { sessionHeaderGramSession: "" },
+            { signal },
+          ),
+        signal,
+      ),
+    // Wait for the roster before starting a bounded scan, avoiding repeated
+    // first-page lookups while more agents arrive.
+    enabled: queryEnabled && credentialAgents.length > 0 && !hasNextPage,
+    staleTime: 30_000,
+    retry: false,
+    throwOnError: false,
   });
 
-  return useMemo(() => {
+  const candidates = useMemo(() => {
     if (!queryEnabled) return [];
-    const keysByAgent = new Map(
-      credentialAgents.map((agent, index) => [agent.id, keyQueries[index]]),
-    );
+    const keysByAgent = new Map<string, Array<{ id: string; name: string }>>();
+    if (keyQuery.isSuccess) {
+      for (const key of keyQuery.data) {
+        const rows = keysByAgent.get(key.agentId) ?? [];
+        rows.push(key);
+        keysByAgent.set(key.agentId, rows);
+      }
+    }
     return (data?.pages ?? [])
       .flatMap((page) => page.items)
       .flatMap((agent): LauncherCandidate[] => {
@@ -182,9 +194,9 @@ export function useAgentIdentityCandidates({
             keywords: [...identity.keywords, "credentials", "keys", "reissue"],
             run: openCredentials,
           });
-          const keyQuery = keysByAgent.get(agent.id);
-          if (keyQuery?.isSuccess) {
-            for (const key of keyQuery.data.keys) {
+          const keyRows = keysByAgent.get(agent.id);
+          if (keyRows) {
+            for (const key of keyRows) {
               candidates.push({
                 ...identity,
                 id: `agent-key:${key.id}`,
@@ -229,7 +241,19 @@ export function useAgentIdentityCandidates({
     routeProjectSlug,
     search,
     isError,
-    keyQueries,
-    credentialAgents,
+    keyQuery.data,
+    keyQuery.isSuccess,
   ]);
+  return {
+    candidates,
+    keySearchFailed:
+      queryEnabled &&
+      routeProjectSlug !== undefined &&
+      (isFetchNextPageError ||
+        (credentialAgents.length > 0 && keyQuery.isError)),
+    retryKeySearch: () => {
+      if (isFetchNextPageError) void fetchNextPage().catch(() => undefined);
+      else void keyQuery.refetch();
+    },
+  };
 }

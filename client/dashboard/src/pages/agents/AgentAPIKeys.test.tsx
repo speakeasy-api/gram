@@ -1126,6 +1126,49 @@ describe("what each key can do", () => {
     ).toBeTruthy();
   });
 
+  it("hides policy-derived warnings when a key refresh fails with cached rows", async () => {
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    mocks.listPolicyGrants.mockResolvedValue([
+      policyGrant("project:read", new Date("2026-02-01")),
+    ]);
+    const { client } = setup(manager);
+    await screen.findByText(/Missing:/);
+    mocks.list.mockRejectedValue(new Error("read refused"));
+    await client.invalidateQueries({
+      queryKey: ["@gram/client", "keys", "list"],
+    });
+    await waitFor(() => expect(screen.queryByText(/Missing:/)).toBeNull());
+    expect(
+      screen.queryByRole("button", { name: "Reissue API key Example key" }),
+    ).toBeNull();
+  });
+
+  it("invalidates named-key search when revocation finishes after unmount", async () => {
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    let finish!: () => void;
+    mocks.revoke.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { client, unmount } = setup(manager);
+    const searchKey = ["agent-key-search", mocks.org, mocks.user, [manager.id]];
+    client.setQueryData(searchKey, [
+      { id: issuedKey.id, name: issuedKey.name },
+    ]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Revoke API key Example key" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm revoke" }));
+    await waitFor(() => expect(mocks.revoke).toHaveBeenCalledOnce());
+    unmount();
+    finish();
+    await waitFor(() =>
+      expect(client.getQueryState(searchKey)?.isInvalidated).toBe(true),
+    );
+  });
+
   it("does not flag a later permission the key already holds", async () => {
     mocks.list.mockResolvedValue({ keys: [issuedKey] });
     mocks.listPolicyGrants.mockResolvedValue([

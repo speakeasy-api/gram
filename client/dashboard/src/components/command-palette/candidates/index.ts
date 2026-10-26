@@ -46,7 +46,11 @@ export function useLauncherCandidates({
   recentsUserId: string | null;
   orgSlug: string | undefined;
   projectSlug: string | undefined;
-}): LauncherCandidate[] {
+}): {
+  candidates: LauncherCandidate[];
+  keySearchFailed: boolean;
+  retryKeySearch: () => void;
+} {
   const organization = useOrganization();
   const project = useProject();
   const { hasAnyScope, hasScope } = useRBAC();
@@ -132,7 +136,7 @@ export function useLauncherCandidates({
   // project is the palette's main job, inside a project it is a switcher.
   const projects = useProjectCandidates({ enabled });
 
-  return useMemo(() => {
+  const candidates = useMemo(() => {
     const projectOnly = (list: LauncherCandidate[]) => (inProject ? list : []);
     const adminOnly = (list: LauncherCandidate[]) =>
       inProject && isAdmin ? list : [];
@@ -148,7 +152,7 @@ export function useLauncherCandidates({
       ...(inProject && canListPlugins ? plugins : []),
       ...(inProject && canReadAssistants ? assistants : []),
       ...(inProject && canReadSkills ? skills : []),
-      ...agentIdentities,
+      ...agentIdentities.candidates,
       ...inferenceSetup,
       ...projectOnly(environments),
       ...(inProject && canListMcp ? sources : []),
@@ -171,7 +175,7 @@ export function useLauncherCandidates({
     canReadAssistants,
     canReadSkills,
     skills,
-    agentIdentities,
+    agentIdentities.candidates,
     inferenceSetup,
     actions,
     recents,
@@ -190,4 +194,9 @@ export function useLauncherCandidates({
     people,
     projects,
   ]);
+  return {
+    candidates,
+    keySearchFailed: agentIdentities.keySearchFailed,
+    retryKeySearch: agentIdentities.retryKeySearch,
+  };
 }

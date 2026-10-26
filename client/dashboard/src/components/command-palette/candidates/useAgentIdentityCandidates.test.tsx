@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
   isPlatformAdmin: false,
   scopeOverride: null as string | null,
   sdk: { name: "sdk", keys: { list: vi.fn() } },
-  keyQueryOptions: [] as Array<Record<string, unknown>>,
+  keyQueryOptions: undefined as Record<string, unknown> | undefined,
+  retryKeySearch: vi.fn(),
   keyRows: [] as Array<{ id: string; name: string; key?: string }>,
   keyError: false,
   projectSlug: "project-one",
@@ -74,12 +75,14 @@ vi.mock("react-router", () => ({
   useNavigate: () => mocks.navigate,
 }));
 vi.mock("@tanstack/react-query", () => ({
-  useQueries: ({ queries }: { queries: Array<Record<string, unknown>> }) => {
-    mocks.keyQueryOptions = queries;
-    return queries.map(() => ({
+  useQuery: (options: Record<string, unknown>) => {
+    mocks.keyQueryOptions = options;
+    return {
       isSuccess: !mocks.keyError,
-      data: { keys: mocks.keyRows },
-    }));
+      isError: mocks.keyError,
+      refetch: mocks.retryKeySearch,
+      data: mocks.keyRows.map((key) => ({ ...key, agentId: "agent-one" })),
+    };
   },
   useInfiniteQuery: (options: Record<string, unknown>) => {
     mocks.queryOptions = options;
@@ -116,7 +119,8 @@ describe("useAgentIdentityCandidates", () => {
     mocks.queryData = undefined;
     mocks.keyRows = [];
     mocks.keyError = false;
-    mocks.keyQueryOptions = [];
+    mocks.keyQueryOptions = undefined;
+    mocks.retryKeySearch.mockReset();
     mocks.hasNextPage = false;
     mocks.isFetchingNextPage = false;
     mocks.isFetchNextPageError = false;
@@ -128,8 +132,8 @@ describe("useAgentIdentityCandidates", () => {
   });
 
   it("shares the identity roster cache and stays disabled while closed", async () => {
-    const { result } = renderHook(() =>
-      useAgentIdentityCandidates({ enabled: false }),
+    const { result } = renderHook(
+      () => useAgentIdentityCandidates({ enabled: false }).candidates,
     );
 
     expect(result.current).toEqual([]);
@@ -184,8 +188,8 @@ describe("useAgentIdentityCandidates", () => {
     };
     restrict();
 
-    const { result } = renderHook(() =>
-      useAgentIdentityCandidates({ enabled: true }),
+    const { result } = renderHook(
+      () => useAgentIdentityCandidates({ enabled: true }).candidates,
     );
 
     expect(queryEnabled()).toBe(false);
@@ -197,8 +201,8 @@ describe("useAgentIdentityCandidates", () => {
       pages: [{ items: [{ id: "agent/one", name: "Release Agent" }] }],
     };
 
-    const { result } = renderHook(() =>
-      useAgentIdentityCandidates({ enabled: true }),
+    const { result } = renderHook(
+      () => useAgentIdentityCandidates({ enabled: true }).candidates,
     );
 
     expect(queryEnabled()).toBe(true);
@@ -232,7 +236,7 @@ describe("useAgentIdentityCandidates", () => {
     mocks.isFetchNextPageError = false;
     mocks.fetchNextPage.mockClear();
     const { result, rerender } = renderHook(
-      ({ enabled }) => useAgentIdentityCandidates({ enabled }),
+      ({ enabled }) => useAgentIdentityCandidates({ enabled }).candidates,
       { initialProps: { enabled: true } },
     );
     expect(result.current.map((candidate) => candidate.title)).toEqual([
@@ -264,8 +268,8 @@ describe("useAgentIdentityCandidates", () => {
         },
       ],
     };
-    const { result, rerender } = renderHook(() =>
-      useAgentIdentityCandidates({ enabled: true }),
+    const { result, rerender } = renderHook(
+      () => useAgentIdentityCandidates({ enabled: true }).candidates,
     );
     expect(result.current.map((candidate) => candidate.id)).toEqual([
       "agent-identity:editable",
@@ -293,8 +297,8 @@ describe("useAgentIdentityCandidates", () => {
         },
       ],
     };
-    const { result } = renderHook(() =>
-      useAgentIdentityCandidates({ enabled: true }),
+    const { result } = renderHook(
+      () => useAgentIdentityCandidates({ enabled: true }).candidates,
     );
     const aliases = result.current.filter((candidate) =>
       candidate.id.startsWith("agent-inference-access:"),
@@ -328,8 +332,8 @@ describe("useAgentIdentityCandidates", () => {
     mocks.keyRows = [
       { id: "key-one", name: "Deploy key", key: "secret-never-index" },
     ];
-    const { result, rerender } = renderHook(() =>
-      useAgentIdentityCandidates({ enabled: true }),
+    const { result, rerender } = renderHook(
+      () => useAgentIdentityCandidates({ enabled: true }).candidates,
     );
     const credential = result.current.find(
       (item) => item.id === "agent-credentials:agent-one",
@@ -346,11 +350,11 @@ describe("useAgentIdentityCandidates", () => {
     expect(mocks.navigate).toHaveBeenCalledWith(
       expect.stringContaining("/identities/agent%3Aagent-one/credentials"),
     );
-    expect(mocks.keyQueryOptions[0]?.queryKey).toEqual([
+    expect(mocks.keyQueryOptions?.queryKey).toEqual([
       "agent-key-search",
       "org-one",
       "user-one",
-      "agent-one",
+      ["agent-one"],
     ]);
     mocks.queryData = {
       pages: [
@@ -373,7 +377,7 @@ describe("useAgentIdentityCandidates", () => {
           item.id.startsWith("agent-credentials:"),
       ),
     ).toBe(false);
-    expect(mocks.keyQueryOptions).toHaveLength(0);
+    expect(mocks.keyQueryOptions?.enabled).toBe(false);
   });
 
   it("keeps stale key names hidden after a failed refresh and while closed", () => {
@@ -393,7 +397,7 @@ describe("useAgentIdentityCandidates", () => {
     mocks.keyRows = [{ id: "key-one", name: "Deploy key" }];
     mocks.keyError = true;
     const { result, rerender } = renderHook(
-      ({ enabled }) => useAgentIdentityCandidates({ enabled }),
+      ({ enabled }) => useAgentIdentityCandidates({ enabled }).candidates,
       { initialProps: { enabled: true } },
     );
     expect(
@@ -401,6 +405,33 @@ describe("useAgentIdentityCandidates", () => {
     ).toBe(false);
     rerender({ enabled: false });
     expect(result.current).toEqual([]);
-    expect(mocks.keyQueryOptions).toHaveLength(0);
+    expect(mocks.keyQueryOptions?.enabled).toBe(false);
+  });
+  it("waits for the complete roster and exposes a retry for a failed page", () => {
+    mocks.queryData = {
+      pages: [
+        {
+          items: [
+            {
+              id: "agent-one",
+              name: "Build bot",
+              permissions: { write: false, authorize: true },
+            },
+          ],
+        },
+      ],
+    };
+    mocks.hasNextPage = true;
+    mocks.isFetchingNextPage = true;
+    const { result, rerender } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    expect(mocks.keyQueryOptions?.enabled).toBe(false);
+    mocks.isFetchingNextPage = false;
+    mocks.isFetchNextPageError = true;
+    rerender();
+    expect(result.current.keySearchFailed).toBe(true);
+    result.current.retryKeySearch();
+    expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
   });
 });

@@ -1,4 +1,5 @@
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import {
   CommandDialog,
@@ -378,13 +379,15 @@ export function CommandPalette(): JSX.Element {
   // every page (it 401s when unauthenticated).
   const recentsUserId = useRecentsUserId(isOpen);
 
-  const candidates = useLauncherCandidates({
-    enabled: isOpen,
-    inProject,
-    recentsUserId: recentsUserId ?? null,
-    orgSlug,
-    projectSlug,
-  });
+  const { candidates, keySearchFailed, retryKeySearch } = useLauncherCandidates(
+    {
+      enabled: isOpen,
+      inProject,
+      recentsUserId: recentsUserId ?? null,
+      orgSlug,
+      projectSlug,
+    },
+  );
   // The intent service is keyed per organization and project, so the "no
   // service" latch is too: moving to a tenant that has one asks again.
   const { state, judge, reset } = useLauncherJudge(
@@ -663,6 +666,17 @@ export function CommandPalette(): JSX.Element {
           }
         }}
       >
+        {mode.mode === "list" && keySearchFailed && (
+          <div
+            role="status"
+            className="border-border border-b px-4 py-3 text-sm"
+          >
+            API key names could not be loaded.{" "}
+            <Button variant="secondary" size="xs" onClick={retryKeySearch}>
+              Retry key search
+            </Button>
+          </div>
+        )}
         {mode.mode !== "list" && (
           <RankedRows rows={[mode.row]} {...rowGroupProps} />
         )}

@@ -181,7 +181,9 @@ function AgentAPIKeysContent({
   const policy = useAgentPolicyGrants(agent);
   const canReadPolicy = agent.permissions.write;
   const agentGrants =
-    canReadPolicy && policy.data && !policy.isError ? policy.data : [];
+    canReadPolicy && policy.data && !policy.isError && !keys.isError
+      ? policy.data
+      : [];
   // Discovery is authorize-gated and already intersects the live agent, owner
   // and caller, so credential issuance never depends on reading agent policy.
   const resources = inventory.map((server) => ({
@@ -240,8 +242,26 @@ function AgentAPIKeysContent({
     setReviewAccounts([]);
     setStep((current) => (current === 3 ? 2 : current));
   }, [discoveryComplete, delegable.dataUpdatedAt]);
-  const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
-  const rotate = useKeysRotateMutation({ gcTime: 0, retry: false });
+  const refresh = () => {
+    // Mutation-level callbacks still run after this view unmounts.
+    void queryClient.invalidateQueries({
+      queryKey: ["@gram/client", "keys", "list"],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["agent-key-search", organizationId],
+    });
+    if (mounted.current) void keys.refetch();
+  };
+  const create = useCreateAPIKeyMutation({
+    gcTime: 0,
+    retry: false,
+    onSuccess: refresh,
+  });
+  const rotate = useKeysRotateMutation({
+    gcTime: 0,
+    retry: false,
+    onSuccess: refresh,
+  });
   const isIssuing = create.isPending || rotate.isPending;
   // Read once the list has loaded: a key revoked or expired since the reissue
   // link was followed is no longer there to replace, and issuance then
@@ -272,17 +292,10 @@ function AgentAPIKeysContent({
   const knownKeys = keys.data?.keys.filter(
     (key) => !revokedIds.includes(key.id),
   );
-  const revocation = useRevokeAPIKeyMutation({ retry: false });
-  const refresh = () => {
-    if (!mounted.current) return;
-    void keys.refetch();
-    void queryClient.invalidateQueries({
-      queryKey: ["@gram/client", "keys", "list"],
-    });
-    void queryClient.invalidateQueries({
-      queryKey: ["agent-key-search", organizationId],
-    });
-  };
+  const revocation = useRevokeAPIKeyMutation({
+    retry: false,
+    onSuccess: refresh,
+  });
   const close = () => {
     setOpen(false);
     setSecret(null);
@@ -522,7 +535,6 @@ function AgentAPIKeysContent({
           setSecret(key.key ?? null);
         }
         issuance.reset();
-        refresh();
       },
       onError: (failure: unknown) => {
         // A failed issuance may reflect a live policy change. Withdraw the
@@ -985,7 +997,6 @@ function AgentAPIKeysContent({
                       setRevokedIds((ids) => [...ids, revoke.id]);
                       setRevoke(null);
                       setError(null);
-                      refresh();
                     },
                     onError: () =>
                       setError("Could not revoke API key. Try again."),
