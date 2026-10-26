@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/chat"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -235,6 +236,52 @@ func TestLoadChat_LegacyImpersonationAllowedForDemoOrg(t *testing.T) {
 	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after, "demo transcript opens must record an access audit event")
+}
+
+// An agent's session has no user owner; the agent's owner stands in for one,
+// so a member without chat:read can open what their agent did — but not
+// another owner's agent's session.
+func TestLoadChat_RBAC_AgentOwnerReadsAgentSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	owned := seedAgentChat(t, ctx, ti, seedAgent(t, ctx, ti, authCtx.UserID, "My Agent"), "my agent's session")
+	foreign := seedAgentChat(t, ctx, ti, seedAgent(t, ctx, ti, "other-owner", "Their Agent"), "their agent's session")
+	selfCtx := authztest.WithExactGrants(t, ctx)
+
+	res, err := ti.service.LoadChat(selfCtx, loadPayload(owned.String()))
+	require.NoError(t, err)
+	require.Equal(t, owned.String(), res.ID)
+
+	overview, err := ti.service.LoadChatOverview(selfCtx, &gen.LoadChatOverviewPayload{ID: owned.String()})
+	require.NoError(t, err)
+	require.Equal(t, owned.String(), overview.ID)
+
+	_, err = ti.service.LoadChat(selfCtx, loadPayload(foreign.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// Standing in for the owner covers reading only: deleting an agent's session
+// still needs chat:write.
+func TestDeleteChat_RBAC_AgentOwnerCannotDeleteAgentSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	owned := seedAgentChat(t, ctx, ti, seedAgent(t, ctx, ti, authCtx.UserID, "My Agent"), "my agent's session")
+	selfCtx := authztest.WithExactGrants(t, ctx)
+
+	err := ti.service.DeleteChat(selfCtx, &gen.DeleteChatPayload{ID: owned.String()})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	res, err := ti.service.LoadChat(selfCtx, loadPayload(owned.String()))
+	require.NoError(t, err)
+	require.Equal(t, owned.String(), res.ID)
 }
 
 // A non-admin can load their own chat with the ordinary user grant.

@@ -59,6 +59,39 @@ func seedChat(t *testing.T, ctx context.Context, ti *chatTestInstance, userID, e
 	return id
 }
 
+// seedAgent creates an agent owned by ownerUserID in the test organization.
+func seedAgent(t *testing.T, ctx context.Context, ti *chatTestInstance, ownerUserID, name string) uuid.UUID {
+	t.Helper()
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: ti.orgID,
+		UserID:         conv.ToPGText(ownerUserID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    ownerUserID,
+		ProjectID:      uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Name:           name,
+	})
+	require.NoError(t, err)
+	return agent.ID
+}
+
+// seedAgentChat inserts a session the way agent-actor capture records one: no
+// user owner, with the producing agent stamped on the chat.
+func seedAgentChat(t *testing.T, ctx context.Context, ti *chatTestInstance, agentID uuid.UUID, title string) uuid.UUID {
+	t.Helper()
+	chatID := seedChat(t, ctx, ti, "", "", title)
+	linked, err := hooksrepo.New(ti.conn).LinkChatActingAgent(ctx, hooksrepo.LinkChatActingAgentParams{
+		AgentID:   uuid.NullUUID{UUID: agentID, Valid: true},
+		ID:        chatID,
+		ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), linked)
+	return chatID
+}
+
 // seedChatAtTime inserts a chat at a specific timestamp for date-range tests.
 func seedChatAtTime(t *testing.T, ctx context.Context, ti *chatTestInstance, externalUserID string, at time.Time) uuid.UUID {
 	t.Helper()
@@ -557,6 +590,116 @@ func TestListChats_Member_SeesOnlyOwnChats(t *testing.T) {
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
 	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
+}
+
+// An agent's session has no user owner, so without chat:read it belonged to
+// nobody and its owner could not see what the agent did. Own-session
+// visibility includes the sessions of agents the caller owns — and only those.
+func TestListChats_Member_SeesOwnedAgentSessions(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	owned := seedAgent(t, ctx, ti, authCtx.UserID, "My Agent")
+	foreign := seedAgent(t, ctx, ti, "other-owner", "Their Agent")
+	own := seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
+	ownedAgentChat := seedAgentChat(t, ctx, ti, owned, "my agent's session")
+	seedAgentChat(t, ctx, ti, foreign, "their agent's session")
+	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	ids := make([]string, 0, len(result.Chats))
+	for _, chat := range result.Chats {
+		ids = append(ids, chat.ID)
+	}
+	require.ElementsMatch(t, []string{own.String(), ownedAgentChat.String()}, ids)
+
+	// The fallback count, read when the page is past the end, scopes the same way.
+	payload := defaultPayload()
+	payload.Offset = 10
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Empty(t, result.Chats)
+	require.Equal(t, 2, result.Total)
+}
+
+// An owner whose agent is latched for reassignment no longer answers for it,
+// so its sessions stop being theirs.
+func TestListChats_Member_LatchedAgentSessionsHidden(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	agentID := seedAgent(t, ctx, ti, authCtx.UserID, "Latched Agent")
+	seedAgentChat(t, ctx, ti, agentID, "latched agent's session")
+	_, err := agentrepo.New(ti.conn).LatchAgentsForOwnerLossByMembership(ctx, agentrepo.LatchAgentsForOwnerLossByMembershipParams{
+		OwnerReassignmentReason: conv.ToPGText("membership_loss"),
+		OrganizationID:          ti.orgID,
+		OwnerUserID:             authCtx.UserID,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Total)
+	require.Empty(t, result.Chats)
+}
+
+// The agent_id filter narrows a listing to one agent's sessions, inside the
+// caller's visibility: naming an agent someone else owns shows a member nothing.
+func TestListChats_Filter_AgentID(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	memberCtx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(memberCtx)
+	require.True(t, ok)
+
+	owned := seedAgent(t, memberCtx, ti, authCtx.UserID, "My Agent")
+	foreign := seedAgent(t, memberCtx, ti, "other-owner", "Their Agent")
+	ownedAgentChat := seedAgentChat(t, memberCtx, ti, owned, "my agent's session")
+	foreignAgentChat := seedAgentChat(t, memberCtx, ti, foreign, "their agent's session")
+	seedChat(t, memberCtx, ti, authCtx.UserID, "", "own chat")
+
+	payload := defaultPayload()
+	payload.AgentID = new(owned.String())
+	result, err := ti.service.ListChats(memberCtx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, ownedAgentChat.String(), result.Chats[0].ID)
+	require.Equal(t, owned.String(), conv.PtrValOr(result.Chats[0].AgentID, ""))
+	require.Equal(t, "My Agent", conv.PtrValOr(result.Chats[0].AgentName, ""))
+
+	payload.AgentID = new(foreign.String())
+	result, err = ti.service.ListChats(memberCtx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Total)
+	require.Empty(t, result.Chats)
+
+	// A chat:read holder may narrow to any agent.
+	readerCtx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	result, err = ti.service.ListChats(readerCtx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, foreignAgentChat.String(), result.Chats[0].ID)
+}
+
+func TestListChats_Filter_AgentID_Invalid(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	payload := defaultPayload()
+	payload.AgentID = new("not-a-uuid")
+	_, err := ti.service.ListChats(ctx, payload)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 // TestListChats_ManagedAssistant_SeesAllChats verifies that the managed

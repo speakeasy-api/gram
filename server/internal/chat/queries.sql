@@ -578,6 +578,28 @@ SELECT EXISTS (
     AND project_id = @project_id::uuid
 );
 
+-- name: ListOwnedAgentIDs :many
+-- The agents whose sessions count as the user's own. Ownership follows the
+-- agent-management rule: an owner whose agent is latched for reassignment no
+-- longer answers for it, so its sessions stop being theirs.
+SELECT a.id
+FROM agents a
+WHERE a.organization_id = @organization_id
+  AND a.owner_user_id = @owner_user_id
+  AND a.owner_reassignment_required_at IS NULL
+  AND a.deleted IS FALSE;
+
+-- name: IsAgentOwner :one
+SELECT EXISTS (
+  SELECT 1
+  FROM agents a
+  WHERE a.id = @agent_id
+    AND a.organization_id = @organization_id
+    AND a.owner_user_id = @owner_user_id
+    AND a.owner_reassignment_required_at IS NULL
+    AND a.deleted IS FALSE
+);
+
 -- name: CountChats :one
 -- Fallback for chats.list pagination: ListChats returns the total alongside
 -- each page via a window count, so this only runs when a requested page is
@@ -596,7 +618,11 @@ WITH candidate_chats AS (
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
-    AND (@user_id = '' OR c.user_id = @user_id)
+    -- @owned_agent_ids widens a @user_id scope to the sessions of agents that
+    -- user owns: agent-actor capture leaves user_id NULL, so an agent's
+    -- sessions would otherwise belong to nobody.
+    AND (@user_id = '' OR c.user_id = @user_id OR c.agent_id = ANY(@owned_agent_ids::uuid[]))
+    AND (sqlc.narg(agent_id)::uuid IS NULL OR c.agent_id = sqlc.narg(agent_id)::uuid)
     AND (
       @pinned::text = ''
       OR (@pinned::text = 'true' AND c.pinned_at IS NOT NULL)
@@ -737,7 +763,11 @@ WITH candidate_chats AS (
     AND (sqlc.narg(chat_id)::uuid IS NULL OR c.id = sqlc.narg(chat_id)::uuid)
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
-    AND (@user_id = '' OR c.user_id = @user_id)
+    -- @owned_agent_ids widens a @user_id scope to the sessions of agents that
+    -- user owns: agent-actor capture leaves user_id NULL, so an agent's
+    -- sessions would otherwise belong to nobody.
+    AND (@user_id = '' OR c.user_id = @user_id OR c.agent_id = ANY(@owned_agent_ids::uuid[]))
+    AND (sqlc.narg(agent_id)::uuid IS NULL OR c.agent_id = sqlc.narg(agent_id)::uuid)
     AND (
       @pinned::text = ''
       OR (@pinned::text = 'true' AND c.pinned_at IS NOT NULL)
@@ -1124,7 +1154,7 @@ WHERE c.project_id = @project_id
   AND (latest.source IS NOT NULL OR c.session_surface IS NOT NULL OR EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag'))
   AND c.deleted IS FALSE
   AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
-  AND (@user_id::text = '' OR c.user_id = @user_id::text)
+  AND (@user_id::text = '' OR c.user_id = @user_id::text OR c.agent_id = ANY(@owned_agent_ids::uuid[]))
 UNION
 -- Natively captured proxied sessions carry no litellm message rows (they are
 -- suppressed as duplicates), so the LiteLLM filter option must also be offered
@@ -1137,7 +1167,7 @@ WHERE EXISTS (
     AND pc.deleted IS FALSE
     AND pc.litellm_proxied
     AND (@external_user_id::text = '' OR pc.external_user_id = @external_user_id::text)
-    AND (@user_id::text = '' OR pc.user_id = @user_id::text)
+    AND (@user_id::text = '' OR pc.user_id = @user_id::text OR pc.agent_id = ANY(@owned_agent_ids::uuid[]))
 )
 ORDER BY source;
 
@@ -1965,10 +1995,10 @@ FROM chat_session_links l
 -- not-captured — indistinguishable from a not-yet-captured end by design.
 LEFT JOIN chats pc ON pc.id = l.parent_chat_id AND pc.project_id = l.project_id AND pc.deleted IS FALSE
   AND (@external_user_id::text = '' OR pc.external_user_id = @external_user_id::text)
-  AND (@user_id::text = '' OR pc.user_id = @user_id::text)
+  AND (@user_id::text = '' OR pc.user_id = @user_id::text OR pc.agent_id = ANY(@owned_agent_ids::uuid[]))
 LEFT JOIN chats cc ON l.child_chat_id IS NOT NULL AND cc.id = l.child_chat_id AND cc.project_id = l.project_id AND cc.deleted IS FALSE
   AND (@external_user_id::text = '' OR cc.external_user_id = @external_user_id::text)
-  AND (@user_id::text = '' OR cc.user_id = @user_id::text)
+  AND (@user_id::text = '' OR cc.user_id = @user_id::text OR cc.agent_id = ANY(@owned_agent_ids::uuid[]))
 WHERE l.project_id = @project_id
   AND (l.parent_chat_id = ANY (@chat_ids::uuid[]) OR l.child_chat_id = ANY (@chat_ids::uuid[]))
   AND (
@@ -2146,7 +2176,7 @@ WITH RECURSIVE ancestry AS (
  JOIN chats parent ON parent.id = l.parent_chat_id AND parent.project_id = @project_id AND parent.deleted IS FALSE
  WHERE a.slack_channel_id IS NULL AND NOT parent.id = ANY(a.visited)
   AND (@external_user_id::text = '' OR parent.external_user_id = @external_user_id::text)
-  AND (@user_id::text = '' OR parent.user_id = @user_id::text)
+  AND (@user_id::text = '' OR parent.user_id = @user_id::text OR parent.agent_id = ANY(@owned_agent_ids::uuid[]))
 )
 SELECT DISTINCT ON (root_id) root_id AS id,
  coalesce(slack_team_id, '')::text AS slack_team_id,

@@ -295,10 +295,19 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	// Visibility scoping: callers holding an unrestricted chat:read grant and the
 	// managed-assistant runtime see all project sessions (optionally narrowed by
 	// the external user id and user id filters); everyone else is restricted to
-	// their own sessions.
-	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, payload.ExternalUserID, payload.UserID)
+	// their own sessions and those of the agents they own.
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, payload.ExternalUserID, payload.UserID)
 	if err != nil {
 		return nil, err
+	}
+
+	agentID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if payload.AgentID != nil && *payload.AgentID != "" {
+		parsed, err := uuid.Parse(*payload.AgentID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid agent id").LogWarn(ctx, s.logger)
+		}
+		agentID = uuid.NullUUID{UUID: parsed, Valid: true}
 	}
 
 	pinned := conv.PtrValOr(payload.Pinned, "")
@@ -349,8 +358,10 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	rows, err := querier.ListChats(ctx, repo.ListChatsParams{
 		ChatID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ProjectID:         *authCtx.ProjectID,
-		ExternalUserID:    externalUserID,
-		UserID:            userID,
+		ExternalUserID:    visibility.ExternalUserID,
+		UserID:            visibility.UserID,
+		OwnedAgentIds:     visibility.OwnedAgentIDs,
+		AgentID:           agentID,
 		FromTime:          fromTime,
 		ToTime:            toTime,
 		Search:            search,
@@ -382,8 +393,10 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	case payload.Offset > 0:
 		total, err = querier.CountChats(ctx, repo.CountChatsParams{
 			ProjectID:         *authCtx.ProjectID,
-			ExternalUserID:    externalUserID,
-			UserID:            userID,
+			ExternalUserID:    visibility.ExternalUserID,
+			UserID:            visibility.UserID,
+			OwnedAgentIds:     visibility.OwnedAgentIDs,
+			AgentID:           agentID,
 			FromTime:          fromTime,
 			ToTime:            toTime,
 			Search:            search,
@@ -408,7 +421,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 	}
 
-	result, err := s.chatOverviews(ctx, authCtx, findingsProject, rows, externalUserID, userID)
+	result, err := s.chatOverviews(ctx, authCtx, findingsProject, rows, visibility)
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +429,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 }
 
 // chatOverviews enriches authorized session metadata without reading transcripts.
-func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.AuthContext, findingsProject *chatfindings.Project, rows []repo.ListChatsRow, externalUserID, userID string) ([]*gen.ChatOverview, error) {
+func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.AuthContext, findingsProject *chatfindings.Project, rows []repo.ListChatsRow, visibility chatVisibility) ([]*gen.ChatOverview, error) {
 	ids := make([]uuid.UUID, len(rows))
 	for i := range rows {
 		ids[i] = rows[i].ID
@@ -482,7 +495,7 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat participants").LogError(ctx, s.logger)
 	}
-	channels, err := s.repo.ListChatSlackChannels(ctx, repo.ListChatSlackChannelsParams{ProjectID: *authCtx.ProjectID, ChatIds: ids, ExternalUserID: externalUserID, UserID: userID})
+	channels, err := s.repo.ListChatSlackChannels(ctx, repo.ListChatSlackChannelsParams{ProjectID: *authCtx.ProjectID, ChatIds: ids, ExternalUserID: visibility.ExternalUserID, UserID: visibility.UserID, OwnedAgentIds: visibility.OwnedAgentIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat channels").LogError(ctx, s.logger)
 	}
@@ -532,15 +545,15 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 		return nil, oops.E(oops.CodeBadRequest, nil, "from must be at or before to")
 	}
 
-	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 	projection, err := s.repo.GetAssistantSessionSummaryProjection(ctx, repo.GetAssistantSessionSummaryProjectionParams{
 		AssistantID:    assistantID,
 		ProjectID:      *authCtx.ProjectID,
-		ExternalUserID: externalUserID,
-		UserID:         userID,
+		ExternalUserID: visibility.ExternalUserID,
+		UserID:         visibility.UserID,
 		FromTime:       pgtype.Timestamptz{Time: from, InfinityModifier: pgtype.Finite, Valid: true},
 		ToTime:         pgtype.Timestamptz{Time: to, InfinityModifier: pgtype.Finite, Valid: true},
 	})
@@ -562,8 +575,8 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 				AssistantID:        assistantID,
 				ProjectID:          *authCtx.ProjectID,
 				AfterCorrelationID: afterCorrelationID,
-				ExternalUserID:     externalUserID,
-				UserID:             userID,
+				ExternalUserID:     visibility.ExternalUserID,
+				UserID:             visibility.UserID,
 				PageLimit:          assistantSessionSummaryMetricsBatch,
 			})
 			if err != nil {
@@ -791,15 +804,16 @@ func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := s.repo.ListChatSources(ctx, repo.ListChatSourcesParams{
 		ProjectID:      *authCtx.ProjectID,
-		ExternalUserID: externalUserID,
-		UserID:         userID,
+		ExternalUserID: visibility.ExternalUserID,
+		UserID:         visibility.UserID,
+		OwnedAgentIds:  visibility.OwnedAgentIDs,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list chat sources").LogError(ctx, s.logger)
@@ -825,7 +839,7 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -842,8 +856,9 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 	rows, err := s.repo.ListChatSessionLinks(ctx, repo.ListChatSessionLinksParams{
 		ProjectID:      *authCtx.ProjectID,
 		ChatIds:        chatIDs,
-		ExternalUserID: externalUserID,
-		UserID:         userID,
+		ExternalUserID: visibility.ExternalUserID,
+		UserID:         visibility.UserID,
+		OwnedAgentIds:  visibility.OwnedAgentIDs,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list session links").LogError(ctx, s.logger)
@@ -853,7 +868,7 @@ func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSession
 	// chat id is only revealed when that end is visible to them (captured and
 	// in scope), so a foreign continuation stays indistinguishable from a
 	// not-yet-captured one. Unrestricted callers see raw ids even pre-capture.
-	unrestricted := externalUserID == "" && userID == ""
+	unrestricted := visibility.ExternalUserID == "" && visibility.UserID == ""
 	links := make([]*gen.ChatSessionLink, 0, len(rows))
 	for _, row := range rows {
 		link := &gen.ChatSessionLink{
@@ -906,15 +921,31 @@ func parseSourceFilter(source string) []string {
 	return expandSourceAliases(sources)
 }
 
-// chatVisibilityScope resolves the (external_user_id, user_id) scoping shared by
-// the chat listing endpoints. Callers holding an unrestricted chat:read grant
-// (only admins do) and the managed-assistant runtime see all project sessions
-// (optionally narrowed by the payload's external user id and user id filters);
-// everyone else is restricted to their own sessions. Both empty means "all
-// chats in the project". Visibility is never a hard gate on the route — when
-// the chat:read check can't be made we fall back to own-sessions rather than
-// failing.
-func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID, payloadUserID *string) (string, string, error) {
+// chatVisibility is the slice of a project's sessions a caller may list.
+// ExternalUserID and UserID both empty means "all chats in the project".
+type chatVisibility struct {
+	// ExternalUserID restricts the listing to one external user's sessions.
+	ExternalUserID string
+
+	// UserID restricts the listing to one Speakeasy user's sessions.
+	UserID string
+
+	// OwnedAgentIDs widens a UserID restriction to the sessions of the agents
+	// that user owns. Agent-actor capture leaves a session's user_id empty, so
+	// without this an agent's owner could not see what their agent did. Only
+	// set when UserID is the caller's own-session scope, never for a filter an
+	// unrestricted caller chose.
+	OwnedAgentIDs []uuid.UUID
+}
+
+// chatVisibilityScope resolves the scoping shared by the chat listing
+// endpoints. Callers holding an unrestricted chat:read grant (only admins do)
+// and the managed-assistant runtime see all project sessions (optionally
+// narrowed by the payload's external user id and user id filters); everyone
+// else is restricted to their own sessions and those of the agents they own.
+// Visibility is never a hard gate on the route — when the chat:read check
+// can't be made we fall back to own-sessions rather than failing.
+func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID, payloadUserID *string) (chatVisibility, error) {
 	// An assistant principal is set only on the assistant runtime path and only
 	// the managed-assistant platform toolset surfaces chat tools, so treat it as
 	// admin-equivalent for project-wide visibility.
@@ -955,14 +986,25 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 
 	switch {
 	case authCtx.ExternalUserID != "":
-		return authCtx.ExternalUserID, "", nil
+		return chatVisibility{ExternalUserID: authCtx.ExternalUserID, UserID: "", OwnedAgentIDs: nil}, nil
 	case canReadAllSessions, isAssistantCall:
-		return conv.PtrValOr(payloadExternalUserID, ""), conv.PtrValOr(payloadUserID, ""), nil
+		return chatVisibility{
+			ExternalUserID: conv.PtrValOr(payloadExternalUserID, ""),
+			UserID:         conv.PtrValOr(payloadUserID, ""),
+			OwnedAgentIDs:  nil,
+		}, nil
 	default:
 		if authCtx.UserID == "" {
-			return "", "", oops.C(oops.CodeUnauthorized)
+			return chatVisibility{}, oops.C(oops.CodeUnauthorized)
 		}
-		return "", authCtx.UserID, nil
+		ownedAgentIDs, err := s.repo.ListOwnedAgentIDs(ctx, repo.ListOwnedAgentIDsParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			OwnerUserID:    authCtx.UserID,
+		})
+		if err != nil {
+			return chatVisibility{}, oops.E(oops.CodeUnexpected, err, "resolve owned agents").LogError(ctx, s.logger)
+		}
+		return chatVisibility{ExternalUserID: "", UserID: authCtx.UserID, OwnedAgentIDs: ownedAgentIDs}, nil
 	}
 }
 
@@ -1055,6 +1097,20 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// holds. The managed-assistant runtime is exempt — it consumes transcripts
 	// programmatically, not as a reviewer.
 	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
+	// An agent's session has no user owner, so the agent's owner stands in for
+	// one — for reading only. Deleting or otherwise mutating what the agent did
+	// still needs chat:write.
+	if !isAssistantCall && !isOwner && access == chatAccessRead && authCtx.UserID != "" && chat.AgentID.Valid {
+		owns, err := s.repo.IsAgentOwner(ctx, repo.IsAgentOwnerParams{
+			AgentID:        chat.AgentID.UUID,
+			OrganizationID: chat.OrganizationID,
+			OwnerUserID:    authCtx.UserID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "resolve agent owner").LogError(ctx, s.logger)
+		}
+		isOwner = owns
+	}
 	if !isAssistantCall && !isOwner {
 		if filteredGrant != nil {
 			if !*filteredGrant {
@@ -1124,7 +1180,7 @@ func (s *Service) LoadChatOverview(ctx context.Context, payload *gen.LoadChatOve
 	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
 		ChatID:         uuid.NullUUID{UUID: chatID, Valid: true},
 		ProjectID:      *authCtx.ProjectID,
-		ExternalUserID: "", UserID: "",
+		ExternalUserID: "", UserID: "", OwnedAgentIds: nil, AgentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		FromTime: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		ToTime:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		Search:   "", AssistantID: "", SourceKind: "", ExcludeSourceKind: "", HasRiskFilter: "",
@@ -1136,11 +1192,11 @@ func (s *Service) LoadChatOverview(ctx context.Context, payload *gen.LoadChatOve
 	if len(rows) == 0 {
 		return nil, oops.C(oops.CodeNotFound)
 	}
-	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	chats, err := s.chatOverviews(ctx, authCtx, findingsProject, rows, externalUserID, userID)
+	chats, err := s.chatOverviews(ctx, authCtx, findingsProject, rows, visibility)
 	if err != nil {
 		return nil, err
 	}
@@ -1517,11 +1573,11 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	for _, message := range resultMessages {
 		message.Participants = messageParticipants[message.ID]
 	}
-	channelExternalUserID, channelUserID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
+	channelVisibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	channels, err := s.repo.ListChatSlackChannels(ctx, repo.ListChatSlackChannelsParams{ProjectID: *authCtx.ProjectID, ChatIds: []uuid.UUID{chat.ID}, ExternalUserID: channelExternalUserID, UserID: channelUserID})
+	channels, err := s.repo.ListChatSlackChannels(ctx, repo.ListChatSlackChannelsParams{ProjectID: *authCtx.ProjectID, ChatIds: []uuid.UUID{chat.ID}, ExternalUserID: channelVisibility.ExternalUserID, UserID: channelVisibility.UserID, OwnedAgentIds: channelVisibility.OwnedAgentIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat channel").LogError(ctx, s.logger)
 	}

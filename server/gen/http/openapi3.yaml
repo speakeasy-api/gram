@@ -25464,6 +25464,14 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
+                  description: Filter to chats produced by this agent (the agent principal recorded on the session at capture)
+                  in: query
+                  name: agent_id
+                  schema:
+                    description: Filter to chats produced by this agent (the agent principal recorded on the session at capture)
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: When set with assistant_id, list only that assistant's threads whose source_kind matches this value (e.g. 'setup' for onboarding threads). Empty for no filter.
                   in: query
                   name: source_kind
