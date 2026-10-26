@@ -1,0 +1,56 @@
+server/internal/risk/enforcereply/dispatch.go
+  h_e404c1a6a54184 190,205-206,366,374-375,380-382,384
+  s_20283d10d6aa21::t_82f700000db68c 55-56,59-61,193-194,368,370-373,376,383
+server/internal/risk/enforcereply/dispatch_test.go
+  h_e404c1a6a54184 847,856-858,860,862-865,876-880
+  s_20283d10d6aa21::t_0e277facd5d4f8 800-805,811-818,820,823-846
+  s_dc89ea5159cdcf::t_be7b160446ab35 457-459
+pystreams/src/pystreams/risk/presidio_enforce_handler.py
+  s_ad2d0c24ceb8da::t_a74e6f641d9204 46-48,188,192,193-195,215,255-256
+pystreams/tests/test_risk_enforce.py
+  s_ad2d0c24ceb8da::t_133ea7767eb68e 669,671,673-675,679,687
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_ad2d0c24ceb8da::t_6fdbcedf4d1d40 22,41-43,48-52,54-57,81-83,93-97,99-102,122,128-129,132,134,178-179
+  s_dc89ea5159cdcf::t_bc80a0532f2f02 29
+server/internal/scanners/promptinjection/enforce_handler.go
+  s_dc89ea5159cdcf::t_6741c33033d701 31
+server/internal/scanners/promptpolicy/enforce_handler.go
+  s_dc89ea5159cdcf::t_962996fd998b9c 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8c9a04747be89a27fddc89d6b96580b76aebbf87",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_20283d10d6aa21": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c404e67-472e-45bb-9c72-3542f703d4e8",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_dc89ea5159cdcf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "104c7732-7201-4b08-b421-6c1ef3104d36",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "15cfb8f6c0adf4bf77b73719356ac96b508acf06",
+  "prompts": {},
+  "sessions": {
+    "s_20283d10d6aa21": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c404e67-472e-45bb-9c72-3542f703d4e8",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_76c3405050eb46": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fe58aad0-7dc7-4ef8-86b5-4c74def17a2e",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
