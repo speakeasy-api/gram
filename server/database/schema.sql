@@ -8648,7 +8648,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_registry_entries_name_key
   ON mcp_registry_entries ((data #>> '{server,name}'));
 
 -- Public/external MCP registries (e.g. PulseMCP) — seeded into the DB.
--- These are distinct from org-level collection registries in organization_mcp_collection_registries.
 CREATE TABLE IF NOT EXISTS mcp_registries (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
@@ -8727,75 +8726,10 @@ CREATE INDEX IF NOT EXISTS toolset_origins_origin_registry_specifier_idx
 ON toolset_origins (origin_registry_specifier)
 WHERE deleted IS FALSE;
 
--- Organization MCP collections: named groups of toolsets published within an org
-CREATE TABLE IF NOT EXISTS organization_mcp_collections (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
-  description TEXT,
-  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
-  visibility TEXT NOT NULL CHECK (visibility <> '' AND CHAR_LENGTH(visibility) <= 20),
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT organization_mcp_collections_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_mcp_collections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
-);
-
-COMMENT ON COLUMN organization_mcp_collections.id IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collections.organization_id IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collections.name IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collections.description IS '@access: opaque-restricted';
-COMMENT ON COLUMN organization_mcp_collections.slug IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collections.visibility IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collections.created_at IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collections.updated_at IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collections.deleted_at IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collections.deleted IS '@access: confidential';
-
-CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collections_slug_organization_id_key
-  ON organization_mcp_collections (slug, organization_id)
-  WHERE deleted IS FALSE;
-
--- MCP registry details for collections that are published as registries
-CREATE TABLE IF NOT EXISTS organization_mcp_collection_registries (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  collection_id uuid NOT NULL,
-  namespace TEXT NOT NULL CHECK (namespace <> '' AND CHAR_LENGTH(namespace) <= 200),
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT organization_mcp_collection_registries_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_mcp_collection_registries_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE
-);
-
-COMMENT ON COLUMN organization_mcp_collection_registries.id IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_registries.collection_id IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_registries.namespace IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_registries.created_at IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_registries.updated_at IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_registries.deleted_at IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_registries.deleted IS '@access: confidential';
-
-CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_registries_namespace_key
-  ON organization_mcp_collection_registries (namespace)
-  WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_registries_collection_id_key
-  ON organization_mcp_collection_registries (collection_id)
-  WHERE deleted IS FALSE;
-
 CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
   registry_id uuid,
-  organization_mcp_collection_registry_id uuid,
   name TEXT NOT NULL CHECK (name <> ''),
   slug TEXT NOT NULL CHECK (slug <> ''),
   registry_server_specifier TEXT NOT NULL CHECK (registry_server_specifier <> ''),
@@ -8808,14 +8742,12 @@ CREATE TABLE IF NOT EXISTS external_mcp_attachments (
 
   CONSTRAINT external_mcp_attachments_pkey PRIMARY KEY (id),
   CONSTRAINT external_mcp_attachments_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments(id) ON DELETE CASCADE,
-  CONSTRAINT external_mcp_attachments_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries(id) ON DELETE CASCADE,
-  CONSTRAINT external_mcp_attachments_collection_registry_id_fkey FOREIGN KEY (organization_mcp_collection_registry_id) REFERENCES organization_mcp_collection_registries(id) ON DELETE CASCADE
+  CONSTRAINT external_mcp_attachments_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries(id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN external_mcp_attachments.id IS '@access: confidential';
 COMMENT ON COLUMN external_mcp_attachments.deployment_id IS '@access: confidential';
 COMMENT ON COLUMN external_mcp_attachments.registry_id IS '@access: confidential';
-COMMENT ON COLUMN external_mcp_attachments.organization_mcp_collection_registry_id IS '@access: confidential';
 COMMENT ON COLUMN external_mcp_attachments.name IS '@access: confidential';
 COMMENT ON COLUMN external_mcp_attachments.slug IS '@access: confidential';
 COMMENT ON COLUMN external_mcp_attachments.registry_server_specifier IS '@access: confidential';
@@ -10488,46 +10420,6 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_server_members_meta_mcp_server_id_mcp_server_id_key
 ON meta_mcp_server_members (meta_mcp_server_id, mcp_server_id)
 WHERE deleted IS FALSE;
-
--- Join table linking servers to collections (for catalog publishing)
-CREATE TABLE IF NOT EXISTS organization_mcp_collection_server_attachments (
-  published_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  published_by TEXT,
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  collection_id uuid NOT NULL,
-  toolset_id uuid,
-  mcp_server_id uuid,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT organization_mcp_collection_server_attachments_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_mcp_collection_server_attachments_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE,
-  CONSTRAINT organization_mcp_collection_server_attachments_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
-  CONSTRAINT organization_mcp_collection_server_attachments_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
-  -- Exactly one backend must be set: either a toolset or an mcp_server.
-  CONSTRAINT organization_mcp_collection_server_attachments_backend_exclusivity_check CHECK ((toolset_id IS NULL) != (mcp_server_id IS NULL))
-);
-
-COMMENT ON COLUMN organization_mcp_collection_server_attachments.published_at IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_server_attachments.created_at IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_server_attachments.updated_at IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_server_attachments.deleted_at IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_server_attachments.published_by IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_server_attachments.id IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_server_attachments.collection_id IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_server_attachments.toolset_id IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_server_attachments.mcp_server_id IS '@access: confidential';
-COMMENT ON COLUMN organization_mcp_collection_server_attachments.deleted IS '@access: confidential';
-
-CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments_collection_toolset_key
-  ON organization_mcp_collection_server_attachments (collection_id, toolset_id)
-  WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments_collection_mcp_server_key
-  ON organization_mcp_collection_server_attachments (collection_id, mcp_server_id)
-  WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS mcp_metadata (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
