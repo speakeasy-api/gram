@@ -4,6 +4,7 @@ import { HTTPClient } from "@gram/client/lib/http.js";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import {
   DISCOVERY_BATCH_SIZE,
+  discoverKeyGrants,
   discoverKeyServerGrants,
 } from "./agent-key-discovery";
 
@@ -188,5 +189,54 @@ describe("scoped credential discovery", () => {
       undefined,
       expect.anything(),
     );
+  });
+});
+
+describe("credential discovery beyond servers", () => {
+  const projectRead: AgentPolicyGrantForm = {
+    effect: "allow",
+    scope: "project:read",
+    selector: { resourceKind: "project", resourceId: "*" },
+  };
+  it("adds every non-server permission from one unscoped request after the server batches", async () => {
+    const listDelegableGrants = vi.fn(
+      async (request: { toolsetIds?: string[] }) =>
+        request.toolsetIds
+          ? [pinned(first.resourceId, first.projectId)]
+          : [
+              projectRead,
+              // Server access only ever comes from the scoped batches.
+              pinned("*", first.projectId),
+              { ...projectRead, scope: "project:blocked_read" },
+            ],
+    );
+    expect(
+      await discoverKeyGrants(
+        { listDelegableGrants },
+        "agent_example",
+        [first],
+        signal(),
+      ),
+    ).toEqual([pinned(first.resourceId, first.projectId), projectRead]);
+    expect(listDelegableGrants.mock.calls.map(([request]) => request)).toEqual([
+      { agentId: "agent_example", toolsetIds: [first.resourceId] },
+      { agentId: "agent_example" },
+    ]);
+  });
+  it("publishes nothing when the unscoped request fails", async () => {
+    const listDelegableGrants = vi.fn(
+      async (request: { toolsetIds?: string[] }) => {
+        if (!request.toolsetIds) throw new Error("unavailable");
+        return [pinned(first.resourceId, first.projectId)];
+      },
+    );
+    await expect(
+      discoverKeyGrants(
+        { listDelegableGrants },
+        "agent_example",
+        [first],
+        signal(),
+      ),
+    ).rejects.toThrow("unavailable");
   });
 });

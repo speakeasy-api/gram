@@ -1,6 +1,7 @@
 import type { Agents } from "@gram/client/sdk/agents.js";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { ANY_RESOURCE, delegableGrantKey } from "./agent-api-key-grants";
+import { isAgentWidePermission, uniqueGrants } from "./agent-key-permissions";
 import {
   narrowGrantsToServers,
   type CredentialServerResource,
@@ -58,4 +59,33 @@ export async function discoverKeyServerGrants(
       results.map((grant) => [delegableGrantKey(grant), grant]),
     ).values(),
   ];
+}
+
+/**
+ * Server candidates plus every other permission the agent may delegate.
+ * Unscoped discovery runs after the server batches, not beside them, for the
+ * same agent-lock reason. A failure in either throws, so no partial
+ * inventory is published.
+ */
+export async function discoverKeyGrants(
+  agents: Pick<Agents, "listDelegableGrants">,
+  agentId: string,
+  inventory: CredentialServerResource[],
+  signal: AbortSignal,
+): Promise<AgentPolicyGrantForm[]> {
+  const servers = await discoverKeyServerGrants(
+    agents,
+    agentId,
+    inventory,
+    signal,
+  );
+  const unscoped = await agents.listDelegableGrants({ agentId }, undefined, {
+    signal,
+  });
+  if (!Array.isArray(unscoped))
+    throw new Error("Invalid delegable permission response");
+  return uniqueGrants([
+    ...servers,
+    ...unscoped.filter((grant) => isAgentWidePermission(grant)),
+  ]);
 }

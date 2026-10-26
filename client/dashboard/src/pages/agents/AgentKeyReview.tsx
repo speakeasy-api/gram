@@ -3,6 +3,8 @@ import { Text } from "@/components/ui/Text";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import type { KeyServer } from "./AgentKeyServers";
 import { reviewLabel, summarizeKeyReview } from "./agent-key-review";
+import { summarizePermissions } from "./agent-key-permissions";
+import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
 
 /** Supply only stored upstream identities from the canonical session view, never dashboard user data. */
 export interface KeyReviewAccount {
@@ -17,6 +19,8 @@ export interface AgentKeyReviewProps {
   name: string;
   servers: KeyServer[];
   grants: AgentPolicyGrantForm[];
+  /** Permissions not tied to a server, such as viewing projects. */
+  otherGrants?: AgentPolicyGrantForm[];
   accounts?: KeyReviewAccount[];
   onEditServers: () => void;
   onEditAccounts: () => void;
@@ -28,6 +32,7 @@ export function AgentKeyReview({
   name,
   servers,
   grants,
+  otherGrants = [],
   accounts,
   onEditServers,
   onEditAccounts,
@@ -190,6 +195,13 @@ export function AgentKeyReview({
           );
         })}
       </div>
+      {otherGrants.length > 0 && (
+        <OtherPermissions
+          grants={otherGrants}
+          onEditAccess={onEditAccess}
+          disabled={disabled}
+        />
+      )}
       {review.hasBroadAccess ? (
         <Text small role="alert">
           Some access applies beyond these servers or projects. Edit access to
@@ -202,11 +214,51 @@ export function AgentKeyReview({
           creating this key.
         </Text>
       ) : null}
-      {!grants.length ? (
+      {!grants.length && !otherGrants.length ? (
         <Text small role="alert">
           No access selected. Choose allowed tools before creating this key.
         </Text>
       ) : null}
+    </section>
+  );
+}
+
+function OtherPermissions({
+  grants,
+  onEditAccess,
+  disabled,
+}: {
+  grants: AgentPolicyGrantForm[];
+  onEditAccess: () => void;
+  disabled?: boolean;
+}): JSX.Element {
+  const maps = useResourceLinkMaps(
+    grants.some(
+      ({ selector }) =>
+        selector.resourceKind === "mcp" && selector.resourceId !== "*",
+    ),
+  );
+  return (
+    <section aria-label="Other permissions" className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-medium">Other permissions</h3>
+        <Button
+          type="button"
+          variant="tertiary"
+          size="sm"
+          onClick={onEditAccess}
+          disabled={disabled}
+        >
+          Edit access
+        </Button>
+      </div>
+      <ul className="divide-y rounded-lg border text-sm">
+        {summarizePermissions(grants, maps).map((line) => (
+          <li key={line} className="px-4 py-3">
+            {line}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

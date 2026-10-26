@@ -90,10 +90,14 @@ export function AgentIdentityProfile({
         admission.matchKind !== "wildcard" || admission.wildcardActive,
     );
   const issuing = params.get("credential") === "new";
-  const setIssuing = (open: boolean) => {
+  // `&replace=<key id>` makes issuance a reissue of that key.
+  const replacing = params.get("replace") ?? undefined;
+  const setIssuing = (open: boolean, replaceKeyId?: string) => {
     const next = new URLSearchParams(params);
     if (open) next.set("credential", "new");
     else next.delete("credential");
+    if (open && replaceKeyId) next.set("replace", replaceKeyId);
+    else next.delete("replace");
     setParams(next, { replace: true });
   };
   switch (section) {
@@ -140,12 +144,13 @@ export function AgentIdentityProfile({
       if (issuing) {
         return (
           <IdentitySection
-            title="Issue a key"
+            title={replacing ? "Reissue a key" : "Issue a key"}
             meta="Choose what this key reaches, then install it where the agent runs"
           >
             <AgentAPIKeys
               agent={agent}
               creation
+              replaceKeyId={replacing}
               onDone={() => setIssuing(false)}
             />
           </IdentitySection>
@@ -183,7 +188,7 @@ export function AgentIdentityProfile({
           <AgentAPIKeys
             agent={agent}
             federated={credentialKnown ? federated : "unknown"}
-            onCreate={() => setIssuing(true)}
+            onCreate={(replaceKeyId) => setIssuing(true, replaceKeyId)}
           />
           {!credentialKnown ? (
             admissions.isError ? (

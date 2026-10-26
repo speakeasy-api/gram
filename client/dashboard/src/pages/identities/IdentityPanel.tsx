@@ -238,6 +238,7 @@ export function IdentityPanelRow({
   trailing,
   accent,
   leading,
+  children,
 }: {
   title: React.ReactNode;
   detail?: React.ReactNode;
@@ -246,6 +247,8 @@ export function IdentityPanelRow({
   accent?: "destructive" | "warning";
   /** A mark identifying what the row is about, e.g. a platform logo. */
   leading?: React.ReactNode;
+  /** Wrapping lines under the detail, for content too long to truncate. */
+  children?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <div className="border-border flex items-center gap-3 border-b px-4 py-3">
@@ -264,6 +267,7 @@ export function IdentityPanelRow({
         {detail && (
           <div className="text-muted-foreground truncate text-xs">{detail}</div>
         )}
+        {children && <div className="mt-1.5">{children}</div>}
       </div>
       {trailing && (
         <div className="text-muted-foreground shrink-0 font-mono text-xs">

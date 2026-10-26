@@ -12,7 +12,18 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
 import { invalidateAgentPolicy } from "@/pages/agents/agent-policy-grants";
 
-const mocks = vi.hoisted(() => ({ list: vi.fn() }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), keys: vi.fn() }));
+vi.mock("@gram/client/react-query/listAPIKeys", async () => {
+  const { useQuery } = await import("@tanstack/react-query");
+  return {
+    useListAPIKeys: (request: unknown, _security: unknown, options: object) =>
+      useQuery({
+        queryKey: ["@gram/client", "keys", "list", request],
+        queryFn: () => mocks.keys(request),
+        ...options,
+      }),
+  };
+});
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true, isLoading: false, error: null }),
 }));
@@ -48,6 +59,13 @@ vi.mock("@/pages/access/useResourceLinkMaps", () => ({
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     agents: { href: () => "/org/projects/example/agent-management" },
+    identities: {
+      detail: {
+        credentials: {
+          href: (urn: string) => `/org/identities/${urn}/credentials`,
+        },
+      },
+    },
   }),
 }));
 const agent: ManagedAgent = {
@@ -76,8 +94,83 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.list.mockResolvedValue([]);
+  mocks.keys.mockResolvedValue({ keys: [] });
 });
 describe("Agent profile permissions", () => {
+  it("names a key issued before a permission was added, and links to reissue it", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "project_grant",
+        effect: "allow",
+        scope: "project:read",
+        selector: { resourceKind: "project", resourceId: "*" },
+        createdAt: new Date("2026-02-01"),
+        updatedAt: new Date("2026-02-01"),
+      },
+    ]);
+    mocks.keys.mockResolvedValue({
+      keys: [
+        {
+          id: "key_example",
+          name: "Laptop key",
+          createdAt: new Date("2026-01-10"),
+          delegatedGrants: {
+            requested: [
+              {
+                scope: "mcp:connect",
+                selector: { resourceKind: "mcp", resourceId: "server_example" },
+              },
+            ],
+            effective: [],
+          },
+        },
+      ],
+    });
+    setup();
+    expect(
+      await screen.findByText(
+        "Laptop key can't use permissions added since it was issued",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Review keys" }).getAttribute("href"),
+    ).toContain("/credentials");
+    expect(mocks.keys).toHaveBeenCalledWith({ agentId: agent.id });
+  });
+  it("stays quiet when every key was issued after the agent's permissions", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "project_grant",
+        effect: "allow",
+        scope: "project:read",
+        selector: { resourceKind: "project", resourceId: "*" },
+        createdAt: new Date("2026-01-01"),
+        updatedAt: new Date("2026-01-01"),
+      },
+    ]);
+    mocks.keys.mockResolvedValue({
+      keys: [
+        {
+          id: "key_example",
+          name: "Laptop key",
+          createdAt: new Date("2026-01-10"),
+          delegatedGrants: {
+            requested: [
+              {
+                scope: "mcp:connect",
+                selector: { resourceKind: "mcp", resourceId: "server_example" },
+              },
+            ],
+            effective: [],
+          },
+        },
+      ],
+    });
+    setup();
+    await screen.findByText("project:read");
+    await waitFor(() => expect(mocks.keys).toHaveBeenCalled());
+    expect(screen.queryByText(/can't use permissions/)).toBeNull();
+  });
   it("opens the shared permission editor without a separate inference card", async () => {
     mocks.list.mockResolvedValue([
       {

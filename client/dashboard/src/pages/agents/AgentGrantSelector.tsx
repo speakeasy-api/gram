@@ -25,6 +25,7 @@ import {
   resourceInventoryFor,
   type GrantNarrowing,
 } from "./agent-api-key-grants";
+import { permissionLabel } from "./agent-key-permissions";
 
 /** Narrowing per selected candidate, keyed by `delegableGrantKey`. */
 export type GrantNarrowings = Record<string, GrantNarrowing>;
@@ -214,9 +215,9 @@ function GrantRow({
           onChange={(event) => onToggle(event.target.checked)}
         />
         <span className="min-w-0 font-mono text-sm">
-          {grant.scope === "mcp:connect"
-            ? "Use tools (mcp:connect)"
-            : grant.scope}
+          {permissionLabel(grant.scope) === grant.scope
+            ? grant.scope
+            : `${permissionLabel(grant.scope)} (${grant.scope})`}
         </span>
       </label>
       <div className="pl-6">

@@ -1,15 +1,21 @@
 import { AgentPermissionEditor } from "@/pages/agents/AgentPermissionEditor";
+import {
+  useAgentPolicyGrants,
+  useKeysMissingPermissions,
+} from "@/pages/agents/useAgentKeyPermissions";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { useState } from "react";
-import { useOrganization } from "@/contexts/Auth";
-import { useSdkClient, useSlugs } from "@/contexts/Sdk";
+import { Link } from "react-router";
+import { useSlugs } from "@/contexts/Sdk";
+import { useRoutes } from "@/routes";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { ResourceLink } from "@/pages/access/ResourceLink";
 import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
 import { AGENT_POLICY_SCOPES } from "@/pages/agents/agent-policy-grants";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicySelector } from "@gram/client/models/components/agentpolicyselector.js";
-import { useQuery } from "@tanstack/react-query";
 import { Text } from "@/components/ui/Text";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 
@@ -37,20 +43,14 @@ export function AgentIdentityPermissions({
 }: {
   agent: ManagedAgent;
 }): JSX.Element {
-  const organization = useOrganization();
-  const sdk = useSdkClient();
+  const routes = useRoutes();
   const [editing, setEditing] = useState(false);
   // The policy endpoint requires setup/write access, independently of agent:read.
   const canRead = agent.permissions.write;
-  const grants = useQuery({
-    // Shared with the editor: saving there invalidates this view immediately.
-    queryKey: ["agent-policy-grants", organization.id, agent.id],
-    queryFn: ({ signal }) =>
-      sdk.agents.listPolicyGrants({ agentId: agent.id }, undefined, { signal }),
-    enabled: canRead,
-    retry: false,
-    throwOnError: false,
-  });
+  const grants = useAgentPolicyGrants(agent);
+  // Saving an added permission refreshes the policy, so this names the keys
+  // left behind as soon as the editor closes.
+  const outdated = useKeysMissingPermissions(agent);
   const { orgSlug } = useSlugs();
   const rows = canRead ? (grants.data ?? []) : [];
   // Only a grant naming a specific MCP server needs the org inventories;
@@ -164,8 +164,36 @@ export function AgentIdentityPermissions({
       error={canRead && grants.isError && rows.length === 0}
       refreshFailed={canRead && grants.isError && rows.length > 0}
       onRetry={() => void grants.refetch()}
-      footer="These configured permissions limit what credentials may delegate. Actual access also depends on the credential's grants, the owner's current permissions, and the agent's status."
+      footer="A request is allowed only what the key, these permissions and the owner's current permissions all allow, while the agent is active. Each key keeps the permissions it was issued with: removing one here applies to every key at once, but adding one reaches a key only when it is reissued."
     >
+      {outdated.length > 0 && (
+        <div className="border-border border-b px-4 py-3">
+          <Alert
+            variant="warning"
+            title={
+              outdated.length === 1
+                ? `${outdated[0]!.name} can't use permissions added since it was issued`
+                : `${outdated.length} keys can't use permissions added since they were issued`
+            }
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                Keys keep the permissions they were issued with. Reissue{" "}
+                {outdated.length === 1 ? "it" : "them"} to include the new ones.
+              </span>
+              <Button asChild size="sm" variant="secondary">
+                <Link
+                  to={routes.identities.detail.credentials.href(
+                    encodeIdentityUrn(`agent:${agent.id}`),
+                  )}
+                >
+                  Review keys
+                </Link>
+              </Button>
+            </div>
+          </Alert>
+        </div>
+      )}
       {content}
       {editing && canRead && grants.data && (
         <AgentPermissionEditor
