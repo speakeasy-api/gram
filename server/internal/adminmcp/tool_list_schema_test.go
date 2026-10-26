@@ -159,3 +159,50 @@ func TestToolDefinitionCheckRejectsNonObjectPropertySchemas(t *testing.T) {
 		}
 	}
 }
+
+func TestAuditLogEntriesListedSchema(t *testing.T) {
+	t.Parallel()
+	for _, raw := range listAllAdminTools(t) {
+		var tool struct {
+			Name         string         `json:"name"`
+			InputSchema  map[string]any `json:"inputSchema"`
+			OutputSchema map[string]any `json:"outputSchema"`
+			Annotations  struct {
+				ReadOnly bool `json:"readOnlyHint"`
+			} `json:"annotations"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &tool))
+		if tool.Name != "list_audit_log_entries" {
+			continue
+		}
+		require.True(t, tool.Annotations.ReadOnly)
+		inputs, ok := tool.InputSchema["properties"].(map[string]any)
+		require.True(t, ok)
+		require.Len(t, inputs, 2)
+		require.Contains(t, inputs, "organization_id")
+		require.Contains(t, inputs, "cursor")
+		properties, ok := tool.OutputSchema["properties"].(map[string]any)
+		require.True(t, ok)
+		require.Len(t, properties, 3)
+		entries, ok := properties["entries"].(map[string]any)
+		require.True(t, ok)
+		item, ok := entries["items"].(map[string]any)
+		require.True(t, ok)
+		fields, ok := item["properties"].(map[string]any)
+		require.True(t, ok)
+		require.Len(t, fields, 18)
+		for _, name := range []string{"id", "project_id", "project_slug", "actor_id", "actor_type", "actor_display_name", "actor_slug", "action", "acting_surface", "acting_client_id", "subject_id", "subject_type", "subject_display_name", "subject_slug", "before_snapshot", "after_snapshot", "metadata", "created_at"} {
+			require.Contains(t, fields, name)
+		}
+		for _, name := range []string{"before_snapshot", "after_snapshot"} {
+			// An unconstrained JSON schema accepts objects, arrays and scalar JSON,
+			// unlike the byte-array/string schemas that would corrupt snapshots.
+			snapshot, ok := fields[name].(map[string]any)
+			require.True(t, ok)
+			require.NotContains(t, snapshot, "type")
+			require.NotContains(t, snapshot, "contentEncoding")
+		}
+		return
+	}
+	t.Fatal("list_audit_log_entries missing from tools/list")
+}
