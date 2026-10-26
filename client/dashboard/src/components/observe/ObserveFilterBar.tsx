@@ -96,9 +96,9 @@ const OBSERVE_FILTER_BASE = [
   },
   {
     id: "source",
-    label: "Agent",
+    label: "Harness",
     kind: "multiselect",
-    placeholder: "Filter by agent",
+    placeholder: "Filter by harness",
   },
   { id: "type", label: "Type", kind: "multiselect", hideChip: true },
 ] as const;
