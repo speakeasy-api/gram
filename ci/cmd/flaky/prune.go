@@ -65,7 +65,8 @@ func runPrune(ctx context.Context, linear *linearClient, opts pruneOptions, stdo
 
 	fsys := os.DirFS(opts.Root)
 	stateID := ""
-	pruned := 0
+	deleted := 0
+	var failed []string
 	for _, k := range keys {
 		issue := issues[k]
 
@@ -85,6 +86,7 @@ func runPrune(ctx context.Context, linear *linearClient, opts pruneOptions, stdo
 			annotate(stdout, "Flaky test removal commit not found", fmt.Sprintf("%s: %v", issue.Identifier, err))
 		}
 		body := pruneComment(k, removedBy, opts.Repo)
+		deleted++
 
 		if opts.DryRun {
 			fmt.Fprintf(stdout, "deleted   %s (%s): %s\n", k, issue.Identifier, body)
@@ -96,17 +98,31 @@ func runPrune(ctx context.Context, linear *linearClient, opts pruneOptions, stdo
 				return err
 			}
 		}
+		// One ticket failing to cancel should not keep the rest open; the
+		// failures fail the run once every ticket has been tried.
 		if err := linear.cancel(ctx, issue, stateID); err != nil {
-			return err
+			annotate(stdout, "Flaky ticket not canceled", fmt.Sprintf("%s: %v", issue.Identifier, err))
+			failed = append(failed, issue.Identifier)
+			continue
 		}
+		// Commenting after the cancel means a comment failure leaves the
+		// ticket closed without an explanation, rather than a cancel that keeps
+		// failing posting the same comment on every run.
 		if err := linear.comment(ctx, issue, body); err != nil {
 			annotate(stdout, "Flaky ticket cancellation not explained", fmt.Sprintf("%s: %v", issue.Identifier, err))
 		}
-		pruned++
 		fmt.Fprintf(stdout, "canceled  %s (%s)\n", k, issue.Identifier)
 	}
 
-	fmt.Fprintf(stdout, "checked %d open flaky tickets: %d canceled for deleted tests\n", len(keys), pruned)
+	fmt.Fprintf(stdout, "checked %d open flaky tickets: %d for deleted tests", len(keys), deleted)
+	if !opts.DryRun {
+		fmt.Fprintf(stdout, ", %d canceled", deleted-len(failed))
+	}
+	fmt.Fprintln(stdout)
+
+	if len(failed) > 0 {
+		return fmt.Errorf("could not cancel %d ticket(s) for deleted tests: %s", len(failed), strings.Join(failed, ", "))
+	}
 	return nil
 }
 
