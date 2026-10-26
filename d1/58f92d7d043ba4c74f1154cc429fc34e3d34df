@@ -1,0 +1,37 @@
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_ad2d0c24ceb8da::t_a87b086addf76f 310
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_ad2d0c24ceb8da::t_42a8871881f2a9 6,1566-1591
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_ad2d0c24ceb8da::t_acf0e20a9702e0 36-38,40-41,43-44
+server/internal/background/activities/risk_analysis/category_scopes.go
+  s_ad2d0c24ceb8da::t_49b6e186ddef45 117
+server/internal/background/activities/risk_analysis/category_scopes_test.go
+  s_ad2d0c24ceb8da::t_7cbe8ae6912040 85,178,254
+server/internal/background/activities/risk_analysis/disabled_rules.go
+  s_ad2d0c24ceb8da::t_9a4884aea90935 6-7
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_ad2d0c24ceb8da::t_0e575535e9fe01 9,168-216
+server/internal/background/activities/risk_analysis/exclusions.go
+  s_ad2d0c24ceb8da::t_c888680be1fd83 14-15
+server/internal/background/activities/risk_analysis/metrics.go
+  s_ad2d0c24ceb8da::t_ae55aac0df070d 18-22,39,48,92
+server/internal/background/activities/risk_analysis/presidio.go
+  s_ad2d0c24ceb8da::t_4da4af2c13cb29 33-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d158f92d7d043ba4c74f1154cc429fc34e3d34df",
+  "prompts": {},
+  "sessions": {
+    "s_ad2d0c24ceb8da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fcc6e428-0421-4f38-87ca-9d1950a637de",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
