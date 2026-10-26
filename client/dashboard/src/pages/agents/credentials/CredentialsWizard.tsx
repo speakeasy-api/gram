@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -36,7 +35,8 @@ import {
   type ServerSelection,
 } from "./StepServers";
 import { StepVerify, type VerifyState } from "./StepVerify";
-import { StepWorkload, WorkloadPlatformPicker } from "./StepWorkload";
+import { CredentialPicker } from "./CredentialPicker";
+import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
@@ -165,12 +165,17 @@ export function CredentialsWizard({
   const { user } = useSession();
   const queryClient = useQueryClient();
   const inventory = useServerInventory();
-  const catalog = useCatalogEntries();
   // Trusting a platform and admitting a subject are both writes against the
   // organization's workload identities, so the choice is offered only to
   // someone who could carry it out.
-  const { hasAllScopes } = useRBAC();
+  const { hasAllScopes, hasAnyScope } = useRBAC();
   const canFederate = hasAllScopes(["workload:write"]);
+  // The catalog itself needs workload read access. Without it the request is
+  // refused, so it is not made, and the step shows the API key alone rather
+  // than an error. Write satisfies read on the server, so either scope counts.
+  const catalog = useCatalogEntries(
+    hasAnyScope(["workload:read", "workload:write"]),
+  );
   const renameAgent = useRenameAgentMutation();
   // Only to keep a prefilled name from colliding, so a failure to read the
   // list leaves the field empty rather than blocking the flow.
@@ -280,6 +285,9 @@ export function CredentialsWizard({
   // The grants as the save last knew them, so a retry after a partial save
   // writes what is still missing rather than creating a grant a second time.
   const applied = useRef(new Map<string, GrantedServer>());
+  // Keep the policy originally read for every pending deletion, including
+  // grants created by a partially completed save. A rejected delete keeps it.
+  const appliedPolicies = useRef(new Map<string, AgentPolicyGrant>());
   // The wildcard as the save last knew it, for the same reason: `grants` is
   // the answer the query gave before the save started, so a retry reading it
   // would create a second wildcard or ask for an id that is already gone.
@@ -289,6 +297,7 @@ export function CredentialsWizard({
     if (inventory.isLoading || inventory.isError) return;
     const granted = grantedServers(grants);
     applied.current = granted;
+    appliedPolicies.current = new Map(grants.map((grant) => [grant.id, grant]));
     setSelected(
       inventory.servers
         .filter((server) => granted.has(server.resourceId))
@@ -481,7 +490,10 @@ export function CredentialsWizard({
   const recheck = useCallback(() => {
     if (checkedSelectors.length > 0) void refetchPolicyCheck();
   }, [checkedSelectors, refetchPolicyCheck]);
-  const wildcardAnswer = wildcardToWrite ? policyCheck.data?.[0] : undefined;
+  // A failed refetch retains React Query's last answer, which no longer
+  // establishes that the selection can be saved.
+  const checkedAnswers = policyCheck.isError ? undefined : policyCheck.data;
+  const wildcardAnswer = wildcardToWrite ? checkedAnswers?.[0] : undefined;
   const allServersRefusal = ((): AllServersRefusal | undefined => {
     if (wildcardToWrite === undefined) return undefined;
     if (wildcardAnswer?.allowed === true) return undefined;
@@ -510,7 +522,7 @@ export function CredentialsWizard({
     const refused = new Map<string, string>();
     const offset = wildcardToWrite ? 1 : 0;
     serversToCheck.forEach((server, index) => {
-      const answer = policyCheck.data?.[offset + index];
+      const answer = checkedAnswers?.[offset + index];
       if (answer === undefined || answer.allowed) return;
       refused.set(
         server.id,
@@ -520,7 +532,7 @@ export function CredentialsWizard({
       );
     });
     return refused;
-  }, [wildcardToWrite, serversToCheck, policyCheck.data]);
+  }, [wildcardToWrite, serversToCheck, checkedAnswers]);
   // A choice is saved only once the check has accepted it: one it refused
   // would be refused by the server in turn, and one it has not answered for,
   // still pending or failed, might be. "All servers" can be on while its
@@ -534,7 +546,7 @@ export function CredentialsWizard({
     ? []
     : selected.filter((entry) => refusedServers.has(entry.server.id));
   const unansweredSelection =
-    allServers || policyCheck.data !== undefined
+    allServers || checkedAnswers !== undefined
       ? []
       : selected.filter((entry) => checkedIds.has(entry.server.id));
   const refusedChoice =
@@ -740,6 +752,7 @@ export function CredentialsWizard({
         });
         // Recorded as the write lands, so a failure further down this save
         // does not make the next attempt create a second wildcard.
+        appliedPolicies.current.set(created.id, created);
         appliedWildcard.current = {
           projectIds: scopedProjectID ? [scopedProjectID] : [],
           grantIds: [created.id],
@@ -762,6 +775,7 @@ export function CredentialsWizard({
         });
         // Recorded as each write lands, so a later failure does not send the
         // whole diff again on the next attempt.
+        appliedPolicies.current.set(created.id, created);
         applied.current.set(server.resourceId, {
           grantIds: [created.id],
           resourceId: server.resourceId,
@@ -775,9 +789,24 @@ export function CredentialsWizard({
         ? changes.remove
         : [...changes.remove, ...(appliedWildcard.current?.grantIds ?? [])];
       for (const grantId of removals) {
+        const baseline = appliedPolicies.current.get(grantId);
+        if (!baseline)
+          throw new Error(
+            "The original permission could not be found. Reopen the editor before saving.",
+          );
         await deleteGrant.mutateAsync({
-          request: { agentPolicyGrantIDForm: { agentId: agent.id, grantId } },
+          request: {
+            deleteAgentPolicyGrantForm: {
+              agentId: agent.id,
+              grantId,
+              expectedPolicy: {
+                scope: baseline.scope,
+                selector: baseline.selector,
+              },
+            },
+          },
         });
+        appliedPolicies.current.delete(grantId);
         for (const [resourceId, server] of applied.current) {
           const left = server.grantIds.filter((id) => id !== grantId);
           // A server can be reached through several grants, so it is only off
@@ -1168,63 +1197,30 @@ export function CredentialsWizard({
               title="Credential"
               description="How the agent proves who it is when it connects."
             />
-            <RadioCardGroup
-              value={credential}
-              onValueChange={(next) => {
-                setCredential(next as Credential);
-                setHighlight("Credential");
-              }}
+            <CredentialPicker
+              credential={credential}
+              platformKey={platformKey}
+              entries={catalog.entries}
+              isPending={catalog.isPending}
+              isError={catalog.isError}
+              onRetry={catalog.refetch}
+              // Offered only to someone who could carry it out: a preset
+              // trusts a platform and admits a subject for the organization.
+              canFederate={canFederate}
               // Settled for an agent that exists: what it signs in with was
               // decided when it was registered, and changing it here would
               // mean removing a credential rather than editing one.
               disabled={editing}
-              className="sm:grid-cols-2"
-            >
-              <RadioCard value="api-key" title="API key" className="p-3">
-                <Text muted small>
-                  A key, delivered by a one-line setup script or copied by hand.
-                  Works in any runtime.
-                </Text>
-                <span className="text-muted-foreground mt-1 block font-mono text-xs">
-                  Long-lived · revocable
-                </span>
-              </RadioCard>
-              <RadioCard
-                value="workload"
-                // Offered only to someone who could carry it out: it trusts a
-                // platform and admits a subject for the whole organization.
-                disabled={!canFederate}
-                className="p-3"
-                title="Workload identity"
-              >
-                <Text muted small>
-                  Federate a token the platform already issues — GitHub Actions,
-                  Kubernetes, SPIFFE, GCP. No Speakeasy secret is created.
-                </Text>
-                <span className="text-muted-foreground mt-1 block font-mono text-xs">
-                  Short-lived tokens · no refresh token
-                </span>
-                {!canFederate && (
-                  <Text muted small className="mt-1 block">
-                    Needs permission to manage workload identities.
-                  </Text>
-                )}
-              </RadioCard>
-            </RadioCardGroup>
-            {credential === "workload" && (
-              <WorkloadPlatformPicker
-                entries={catalog.entries}
-                isPending={catalog.isPending}
-                isError={catalog.isError}
-                onRetry={catalog.refetch}
-                selectedKey={platformKey}
-                disabled={editing}
-                onSelect={(key) => {
-                  setPlatformKey(key);
-                  setHighlight("Platform");
-                }}
-              />
-            )}
+              onChooseApiKey={() => {
+                setCredential("api-key");
+                setHighlight("Credential");
+              }}
+              onChoosePlatform={(key) => {
+                setCredential("workload");
+                setPlatformKey(key);
+                setHighlight("Platform");
+              }}
+            />
           </div>
         );
       case 3:
@@ -1370,8 +1366,15 @@ export function CredentialsWizard({
           if (platformKey !== null) {
             note =
               workload.steps.length === 0
-                ? "Setup is unavailable. Refresh or choose another platform."
+                ? "Setup is unavailable. Refresh or choose another option."
                 : `${platform?.displayName ?? "Your platform"} issues the tokens; the next step sets it up.`;
+          }
+          // A preset opened from a link arrives chosen, even for someone who
+          // may not trust a platform. Editing only reads the setup back.
+          const refused = !editing && !canFederate;
+          if (refused) {
+            note =
+              "Using a platform's tokens needs permission to manage workload identities. Choose an API key instead.";
           }
           return (
             <WizardFooter
@@ -1379,7 +1382,7 @@ export function CredentialsWizard({
               onBack={() => setStep(1)}
               primary={
                 <Button
-                  disabled={workload.steps.length === 0}
+                  disabled={refused || workload.steps.length === 0}
                   onClick={() => setStep(3)}
                 >
                   Continue

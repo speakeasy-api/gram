@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -187,6 +188,55 @@ func TestCheckPolicyGrantsForExistingAgentMatchesCreatePolicyGrant(t *testing.T)
 			require.Contains(t, err.Error(), tc.denial)
 		})
 	}
+}
+
+func TestCheckPolicyGrantsBatchReloadsOwnerPermissions(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	f.grant(t, "caller", authz.ScopeAgentWrite, authz.NewSelector(authz.ScopeAgentWrite, authz.WildcardResource))
+	for _, server := range []string{"server-a", "server-b"} {
+		f.grant(t, "caller", authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, server))
+	}
+	ownerGrantID := f.grant(t, "owner", authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, "server-a"))
+	grants := make([]*gen.AgentPolicyGrantForm, 0, 3)
+	for _, server := range []string{"server-c", "server-b", "server-a"} {
+		grants = append(grants, &gen.AgentPolicyGrantForm{
+			Scope:    string(authz.ScopeMCPConnect),
+			Effect:   "allow",
+			Selector: policySelectorView(authz.NewSelector(authz.ScopeMCPConnect, server)),
+		})
+	}
+	ctx := validatedHumanContext(t, "org-delegable", "caller")
+	payload := &gen.CheckPolicyGrantsPayload{AgentID: new(f.agentID.String()), PolicyGrants: grants}
+
+	before, err := f.service.CheckPolicyGrants(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, []*gen.AgentPolicyGrantCheck{
+		{Allowed: false, LimitedBy: new(string(policyLimitCaller))},
+		{Allowed: false, LimitedBy: new(string(policyLimitOwner))},
+		{Allowed: true, LimitedBy: nil},
+	}, before.Results)
+
+	n, err := accessrepo.New(f.db).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{
+		ID: ownerGrantID, OrganizationID: "org-delegable",
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	after, err := f.service.CheckPolicyGrants(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, []*gen.AgentPolicyGrantCheck{
+		{Allowed: false, LimitedBy: new(string(policyLimitCaller))},
+		{Allowed: false, LimitedBy: new(string(policyLimitOwner))},
+		{Allowed: false, LimitedBy: new(string(policyLimitOwner))},
+	}, after.Results)
+
+	grant := grants[2]
+	_, err = f.service.CreatePolicyGrant(ctx, &gen.CreatePolicyGrantPayload{
+		AgentID: f.agentID.String(), Scope: grant.Scope, Effect: grant.Effect, Selector: grant.Selector,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Contains(t, err.Error(), "owner's permissions")
 }
 
 // Checking grants on an agent needs the same authority as writing them.

@@ -52,7 +52,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -139,6 +141,15 @@ type Service struct {
 	riskRecorder    *metering.RiskRecorder
 	// stokenCodec counts prepared rule-playground input.
 	stokenCodec *stokens.Codec
+
+	// approvals holds, lists and decides tool approval requests.
+	approvals *approval.Service
+	// publicationRequests records a plugin republish in the transaction that
+	// adds the approvals server to the Default plugin.
+	publicationRequests plugins.PublicationRequests
+	// pluginPublish enqueues that republish after commit. Nil when plugin
+	// publishing is not configured.
+	pluginPublish PluginPublishFunc
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
 	celEng         *celenv.Engine
@@ -193,6 +204,7 @@ func NewObserver(
 		cache:                        nil,
 		jwtSecret:                    "",
 		approvalIntake:               nil,
+		approvals:                    nil,
 		piiScanner:                   nil,
 		piScanner:                    nil,
 		gitleaksScanner:              nil,
@@ -205,6 +217,8 @@ func NewObserver(
 		findingsCH:                   nil,
 		findingEvidence:              nil,
 		assetStorage:                 nil,
+		publicationRequests:          plugins.PublicationRequests{Enabled: false},
+		pluginPublish:                nil,
 	}
 }
 
@@ -236,6 +250,7 @@ func NewService(
 	assetStorage blobio.Reader,
 	riskRecorder *metering.RiskRecorder,
 	platformToolsets map[string]platformtools.Toolset,
+	approvals *approval.Service,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -289,6 +304,9 @@ func NewService(
 		riskRecorder:                 riskRecorder,
 		platformToolsets:             platformToolsets,
 		stokenCodec:                  stokens.NewCodec(),
+		approvals:                    approvals,
+		publicationRequests:          plugins.PublicationRequests{Enabled: false},
+		pluginPublish:                nil,
 	}
 }
 
@@ -394,6 +412,10 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		// detection sources. Persist an empty (non-null) source set.
 		sources = []string{}
 	} else {
+		if sources == nil && action == policycore.ActionRequireApproval {
+			// require_approval holds calls by MCP scope alone, with no detectors.
+			sources = []string{}
+		}
 		if sources == nil {
 			sources = []string{ra.SourceGitleaks}
 		}
@@ -508,8 +530,22 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err := policycore.ValidateMCPScope(mcpScope, sources, action); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
+	if action == policycore.ActionRequireApproval && !s.toolApprovalsEnabled(ctx, authCtx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "tool approvals are not enabled for this organization")
+	}
+	approvalConfig := approvalConfigFromPayload(payload.ApprovalConfig)
+	if err := policycore.ValidateApprovalPolicy(action, policyType, sources, payload.CustomRuleIds, approvalConfig); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	if err := s.validateApprovers(ctx, authCtx.ActiveOrganizationID, approvalConfig); err != nil {
+		return nil, err
+	}
+	approvalConfigJSON, err := policycore.MarshalApprovalConfig(approvalConfig)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "encode approval config").LogError(ctx, s.logger)
+	}
 
-	result, err := s.policies.CreatePolicy(ctx, policycore.CreateMutation{
+	result, setup, err := s.createPolicy(ctx, authCtx, policycore.CreateMutation{
 		Params: repo.CreateRiskPolicyParams{
 			ID:                   id,
 			ProjectID:            *authCtx.ProjectID,
@@ -531,6 +567,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
 			Prompt:               prompt,
 			ModelConfig:          modelConfig,
+			ApprovalConfig:       approvalConfigJSON,
 			Score:                pgtype.Float8{Float64: payload.Score, Valid: true},
 		},
 		AudiencePrincipals: audiencePrincipals,
@@ -545,9 +582,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		},
 	})
 	if err != nil {
-		return nil, s.policyMutationError(ctx, err)
+		return nil, err
 	}
-	return s.policyToType(ctx, result.Row)
+	return s.policyWithSetup(ctx, result.Row, setup)
 }
 
 func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPoliciesPayload) (*gen.ListRiskPoliciesResult, error) {
@@ -959,6 +996,29 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	if err := validateSourceAction(sources, action); err != nil {
 		return nil, err
 	}
+	if action == policycore.ActionRequireApproval && current.Action != policycore.ActionRequireApproval && !s.toolApprovalsEnabled(ctx, authCtx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "tool approvals are not enabled for this organization")
+	}
+	approvalConfig := policycore.Project(current, nil).ApprovalConfig
+	if payload.ApprovalConfig != nil {
+		approvalConfig = approvalConfigFromPayload(payload.ApprovalConfig)
+	}
+	if action != policycore.ActionRequireApproval && payload.ApprovalConfig == nil {
+		// Moving off require_approval drops the approvers it no longer uses.
+		approvalConfig = nil
+	}
+	if err := policycore.ValidateApprovalPolicy(action, current.PolicyType, sources, customRuleIds, approvalConfig); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	if payload.ApprovalConfig != nil {
+		if err := s.validateApprovers(ctx, authCtx.ActiveOrganizationID, approvalConfig); err != nil {
+			return nil, err
+		}
+	}
+	approvalConfigJSON, err := policycore.MarshalApprovalConfig(approvalConfig)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "encode approval config").LogError(ctx, s.logger)
+	}
 
 	audienceType := current.AudienceType
 	if payload.AudienceType != nil {
@@ -1098,7 +1158,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, err
 	}
 
-	result, err := s.policies.UpdatePolicy(ctx, policycore.UpdateMutation{
+	result, setup, err := s.updatePolicy(ctx, authCtx, policycore.UpdateMutation{
 		Current: current,
 		Params: repo.UpdateRiskPolicyParams{
 			ID:                   id,
@@ -1118,6 +1178,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			UserMessage:          userMessage,
 			Prompt:               prompt,
 			ModelConfig:          modelConfig,
+			ApprovalConfig:       approvalConfigJSON,
 			Score:                conv.PtrToPGFloat8(payload.Score),
 		},
 		AudiencePrincipals:   audiencePrincipals,
@@ -1137,9 +1198,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		},
 	})
 	if err != nil {
-		return nil, s.policyMutationError(ctx, err)
+		return nil, err
 	}
-	return s.policyToType(ctx, result.Row)
+	return s.policyWithSetup(ctx, result.Row, setup)
 }
 
 func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskPolicyPayload) error {
@@ -3784,6 +3845,9 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 	if len(parts) > maxParts {
 		parts = parts[:maxParts]
 	}
+	if len(parts) == 0 && action == policycore.ActionRequireApproval {
+		parts = append(parts, "Tool")
+	}
 	if len(parts) == 0 {
 		parts = append(parts, "Risk")
 	}
@@ -3796,6 +3860,8 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 		actionLabel = "Warner"
 	case "quarantine":
 		actionLabel = "Quarantiner"
+	case policycore.ActionRequireApproval:
+		actionLabel = "Approval"
 	}
 
 	return strings.Join(parts, " & ") + " " + actionLabel
@@ -3964,6 +4030,37 @@ type promptModelConfig struct {
 	FailOpen    *bool    `json:"fail_open,omitempty"`
 }
 
+// validateApprovers checks that every approver names a user or role in the
+// organization, so a typo cannot hold calls for an approver nobody can be.
+func (s *Service) validateApprovers(ctx context.Context, organizationID string, config *policycore.ApprovalConfig) error {
+	if config == nil {
+		return nil
+	}
+	for _, approver := range config.Approvers {
+		principal, err := urn.ParsePrincipal(approver)
+		if err != nil {
+			return oops.E(oops.CodeInvalid, err, "invalid approver %q", approver)
+		}
+		err = authz.ValidatePrincipal(ctx, s.db, organizationID, principal)
+		if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+			return oops.E(oops.CodeInvalid, err, "approver %q is not a user or role in this organization", approver)
+		}
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check approver %q", approver).LogError(ctx, s.logger)
+		}
+	}
+	return nil
+}
+
+// approvalConfigFromPayload converts an API approval config to its domain
+// form. A nil config stays nil.
+func approvalConfigFromPayload(c *types.RiskPolicyApprovalConfig) *policycore.ApprovalConfig {
+	if c == nil {
+		return nil
+	}
+	return &policycore.ApprovalConfig{Approvers: c.Approvers}
+}
+
 // marshalModelConfig encodes an API model config into the JSONB column value.
 // Returns nil (SQL NULL) when no config was supplied.
 func marshalModelConfig(mc *types.RiskPolicyModelConfig) ([]byte, error) {
@@ -4027,6 +4124,23 @@ func promptPolicyNameFromBase(base string, existing []string) string {
 			return candidate
 		}
 	}
+}
+
+// toolApprovalsEnabled reports whether the organization may create
+// require_approval policies. Errors fail closed.
+func (s *Service) toolApprovalsEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
+	if s.flags == nil {
+		return false
+	}
+	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
+	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagToolApprovals, authCtx.ActiveOrganizationID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "tool approvals flag check failed; treating as disabled",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		)
+	}
+	return evaluation == feature.EvaluationEnabled
 }
 
 // promptPoliciesEnabled reports whether the prompt-based policy MVP is enabled

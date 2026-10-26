@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -201,6 +202,28 @@ func (s *Service) DeletePolicyGrant(ctx context.Context, payload *gen.DeletePoli
 		if err := requireNotConnectionOwnerBlock(ctx, tx, human.Auth.ActiveOrganizationID, agent.ID, existing.Scope, existing.Selectors); err != nil {
 			return err
 		}
+		if expected := payload.ExpectedPolicy; expected != nil {
+			if expected.Selector == nil || expected.Scope == "" {
+				return oops.E(oops.CodeBadRequest, nil, "expected policy scope and selector are required")
+			}
+			current, err := authz.SelectorFromRow(existing.Selectors)
+			if err != nil {
+				return fmt.Errorf("parse current agent policy selector: %w", err)
+			}
+			// These required API fields serialize absent legacy keys as empty strings.
+			// Preserve every other key and all nonempty values for exact comparison.
+			for _, key := range []string{authz.SelectorKeyResourceKind, authz.SelectorKeyResourceID} {
+				if _, ok := current[key]; !ok {
+					if current == nil {
+						current = make(authz.Selector)
+					}
+					current[key] = ""
+				}
+			}
+			if existing.Scope != expected.Scope || !maps.Equal(current, policySelector(expected.Selector)) {
+				return oops.E(oops.CodeConflict, nil, "agent policy grant changed; reload before deleting")
+			}
+		}
 		row, err := q.DeleteAgentPolicyGrant(ctx, repo.DeleteAgentPolicyGrantParams{
 			OrganizationID: human.Auth.ActiveOrganizationID, AgentID: agent.ID, GrantID: grantID,
 		})
@@ -262,8 +285,9 @@ func (s *Service) CheckPolicyGrants(ctx context.Context, payload *gen.CheckPolic
 		if err != nil {
 			return err
 		}
+		checker := policyAuthorityChecker{human: human, ownerUserID: ownerUserID, ownerGrants: nil, ownerGrantsLoaded: false}
 		for _, grant := range requested {
-			limit, err := policyAuthorityLimit(ctx, tx, human, ownerUserID, grant.scope, grant.selectorRaw)
+			limit, err := checker.limit(ctx, tx, grant.scope, grant.selectorRaw)
 			if err != nil {
 				return err
 			}
@@ -332,7 +356,8 @@ const (
 
 // requirePolicyAuthority checks that the caller may write one grant.
 func requirePolicyAuthority(ctx context.Context, tx pgx.Tx, human HumanContext, agent repo.Agent, scope authz.Scope, selectorRaw []byte) error {
-	limit, err := policyAuthorityLimit(ctx, tx, human, agent.OwnerUserID, scope, selectorRaw)
+	checker := policyAuthorityChecker{human: human, ownerUserID: agent.OwnerUserID, ownerGrants: nil, ownerGrantsLoaded: false}
+	limit, err := checker.limit(ctx, tx, scope, selectorRaw)
 	if err != nil {
 		return err
 	}
@@ -345,25 +370,34 @@ func requirePolicyAuthority(ctx context.Context, tx pgx.Tx, human HumanContext, 
 	return nil
 }
 
-// policyAuthorityLimit reports whose permissions stop the caller writing one
-// grant to an agent owned by ownerUserID. An mcp:blocked_auth restriction only
-// withdraws access, so writing one needs no containment; every other grant
-// must be contained.
-func policyAuthorityLimit(ctx context.Context, tx pgx.Tx, human HumanContext, ownerUserID string, scope authz.Scope, selectorRaw []byte) (policyLimit, error) {
-	if err := authz.RequireUpstreamSelectorWritesRaw(ctx, human.Auth.ActiveOrganizationID, selectorRaw); err != nil {
+// policyAuthorityChecker shares the owner's loaded permissions across one
+// batch. It must be created anew for each transaction after the caller and
+// owner memberships are pinned, so later checks and writes reload permissions.
+type policyAuthorityChecker struct {
+	human             HumanContext
+	ownerUserID       string
+	ownerGrants       []authz.Grant
+	ownerGrantsLoaded bool
+}
+
+// limit reports whose permissions stop a policy write. An mcp:blocked_auth
+// restriction only withdraws access, so writing one needs no containment;
+// every other grant must be contained.
+func (c *policyAuthorityChecker) limit(ctx context.Context, tx pgx.Tx, scope authz.Scope, selectorRaw []byte) (policyLimit, error) {
+	if err := authz.RequireUpstreamSelectorWritesRaw(ctx, c.human.Auth.ActiveOrganizationID, selectorRaw); err != nil {
 		return policyLimitNone, fmt.Errorf("check upstream_client write gate: %w", err)
 	}
 	if scope == authz.ScopeMCPBlockedAuth {
 		return policyLimitNone, nil
 	}
-	return policyContainmentLimit(ctx, tx, human, ownerUserID, scope, selectorRaw)
+	return c.containmentLimit(ctx, tx, scope, selectorRaw)
 }
 
-// policyContainmentLimit checks the complete authority of one allow grant,
+// containmentLimit checks the complete authority of one allow grant,
 // including implied scopes and overlapping exclusions. The caller and current
 // owner memberships must be pinned before the agent lock is acquired. No agent
 // policy is a parent here: setup may expand policy, but never human authority.
-func policyContainmentLimit(ctx context.Context, tx pgx.Tx, human HumanContext, ownerUserID string, scope authz.Scope, selectorRaw []byte) (policyLimit, error) {
+func (c *policyAuthorityChecker) containmentLimit(ctx context.Context, tx pgx.Tx, scope authz.Scope, selectorRaw []byte) (policyLimit, error) {
 	selector, err := authz.SelectorFromRow(selectorRaw)
 	if err != nil {
 		return policyLimitNone, fmt.Errorf("parse requested policy selector: %w", err)
@@ -372,25 +406,28 @@ func policyContainmentLimit(ctx context.Context, tx pgx.Tx, human HumanContext, 
 	if err != nil {
 		return policyLimitNone, fmt.Errorf("construct requested policy authority: %w", err)
 	}
-	contained, err := runtimepolicy.DelegationContained(policy, human.grants)
+	contained, err := runtimepolicy.DelegationContained(policy, c.human.grants)
 	if err != nil {
 		return policyLimitNone, fmt.Errorf("check caller policy containment: %w", err)
 	}
 	if !contained {
 		return policyLimitCaller, nil
 	}
-	if ownerUserID == human.Auth.UserID {
+	if c.ownerUserID == c.human.Auth.UserID {
 		return policyLimitNone, nil
 	}
-	principals, err := authz.ResolveUserPrincipals(ctx, tx, human.Auth.ActiveOrganizationID, ownerUserID)
-	if err != nil {
-		return policyLimitNone, fmt.Errorf("resolve policy owner principals: %w", err)
+	if !c.ownerGrantsLoaded {
+		principals, err := authz.ResolveUserPrincipals(ctx, tx, c.human.Auth.ActiveOrganizationID, c.ownerUserID)
+		if err != nil {
+			return policyLimitNone, fmt.Errorf("resolve policy owner principals: %w", err)
+		}
+		c.ownerGrants, err = authz.LoadGrants(ctx, tx, c.human.Auth.ActiveOrganizationID, principals)
+		if err != nil {
+			return policyLimitNone, fmt.Errorf("load policy owner grants: %w", err)
+		}
+		c.ownerGrantsLoaded = true
 	}
-	ownerGrants, err := authz.LoadGrants(ctx, tx, human.Auth.ActiveOrganizationID, principals)
-	if err != nil {
-		return policyLimitNone, fmt.Errorf("load policy owner grants: %w", err)
-	}
-	contained, err = runtimepolicy.DelegationContained(policy, ownerGrants)
+	contained, err = runtimepolicy.DelegationContained(policy, c.ownerGrants)
 	if err != nil {
 		return policyLimitNone, fmt.Errorf("check owner policy containment: %w", err)
 	}

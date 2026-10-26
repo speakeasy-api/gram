@@ -24,7 +24,10 @@ func BuildCreateUserSessionIssuerPayload(userSessionIssuersCreateUserSessionIssu
 	{
 		err = json.Unmarshal([]byte(userSessionIssuersCreateUserSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"authorization_server_mode\": \"shared\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }'")
+		}
+		if !(body.AuthorizationServerMode == "endpoint" || body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", body.AuthorizationServerMode, []any{"endpoint", "shared"}))
 		}
 		if !(body.AuthnChallengeMode == "chain" || body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", body.AuthnChallengeMode, []any{"chain", "interactive"}))
@@ -58,9 +61,16 @@ func BuildCreateUserSessionIssuerPayload(userSessionIssuersCreateUserSessionIssu
 		}
 	}
 	v := &usersessionissuers.CreateUserSessionIssuerPayload{
-		Slug:                 body.Slug,
-		AuthnChallengeMode:   body.AuthnChallengeMode,
-		SessionDurationHours: body.SessionDurationHours,
+		AuthorizationServerMode: body.AuthorizationServerMode,
+		Slug:                    body.Slug,
+		AuthnChallengeMode:      body.AuthnChallengeMode,
+		SessionDurationHours:    body.SessionDurationHours,
+	}
+	{
+		var zero string
+		if v.AuthorizationServerMode == zero {
+			v.AuthorizationServerMode = "endpoint"
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

@@ -61,6 +61,13 @@ const PRODUCT_FEATURES = {
     description:
       "Unlocks encryption key management for an organization, enabling external service credential, external encryption key, and asymmetric signing functionality.",
   },
+  code_mode: {
+    kind: "toggle",
+    enabledKey: "codeModeEnabled",
+    label: "Gateway Code Mode",
+    description:
+      "Allows this organization's signed-in gateways to use Code Mode, which runs Python on Speakeasy-hosted runners. Disabling it serves existing Code Mode gateways with Progressive discovery.",
+  },
   custom_model_keys: {
     kind: "toggle",
     enabledKey: "customModelKeysEnabled",

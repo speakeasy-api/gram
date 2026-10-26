@@ -404,6 +404,15 @@ func (q *Queries) OrgDeleteProjects(ctx context.Context, orgID string) error {
 	return err
 }
 
+const orgDeleteRegistryPromotionCandidates = `-- name: OrgDeleteRegistryPromotionCandidates :exec
+DELETE FROM registry_promotion_candidates WHERE organization_id = $1::text
+`
+
+func (q *Queries) OrgDeleteRegistryPromotionCandidates(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteRegistryPromotionCandidates, orgID)
+	return err
+}
+
 const orgDeleteRemoteProtectedResources = `-- name: OrgDeleteRemoteProtectedResources :exec
 DELETE FROM remote_protected_resources WHERE project_id = $1::uuid
 `

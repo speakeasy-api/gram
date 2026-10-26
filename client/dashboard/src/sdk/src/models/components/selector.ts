@@ -52,6 +52,7 @@ export const ResourceKind = {
   Assistant: "assistant",
   RiskPolicy: "risk_policy",
   Chat: "chat",
+  Inference: "inference",
   Agent: "agent",
   Workload: "workload",
   McpAuthClient: "mcp_auth_client",
@@ -79,7 +80,7 @@ export type Selector = {
    */
   disposition?: Disposition | undefined;
   /**
-   * Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
+   * Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
    */
   projectId?: string | undefined;
   /**

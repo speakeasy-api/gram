@@ -5188,6 +5188,40 @@ func unmarshalAgentPolicySelectorResponseBodyToAgentsAgentPolicySelector(v *Agen
 	return res
 }
 
+// marshalAgentsAgentExpectedPolicyToAgentExpectedPolicyRequestBodyRequestBody
+// builds a value of type *AgentExpectedPolicyRequestBodyRequestBody from a
+// value of type *agents.AgentExpectedPolicy.
+func marshalAgentsAgentExpectedPolicyToAgentExpectedPolicyRequestBodyRequestBody(v *agents.AgentExpectedPolicy) *AgentExpectedPolicyRequestBodyRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AgentExpectedPolicyRequestBodyRequestBody{
+		Scope: v.Scope,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalAgentsAgentPolicySelectorToAgentPolicySelectorRequestBodyRequestBody(v.Selector)
+	}
+
+	return res
+}
+
+// marshalAgentExpectedPolicyRequestBodyRequestBodyToAgentsAgentExpectedPolicy
+// builds a value of type *agents.AgentExpectedPolicy from a value of type
+// *AgentExpectedPolicyRequestBodyRequestBody.
+func marshalAgentExpectedPolicyRequestBodyRequestBodyToAgentsAgentExpectedPolicy(v *AgentExpectedPolicyRequestBodyRequestBody) *agents.AgentExpectedPolicy {
+	if v == nil {
+		return nil
+	}
+	res := &agents.AgentExpectedPolicy{
+		Scope: v.Scope,
+	}
+	if v.Selector != nil {
+		res.Selector = marshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector(v.Selector)
+	}
+
+	return res
+}
+
 // unmarshalAgentConnectionBlockResponseBodyToAgentsAgentConnectionBlock builds
 // a value of type *agents.AgentConnectionBlock from a value of type
 // *AgentConnectionBlockResponseBody.

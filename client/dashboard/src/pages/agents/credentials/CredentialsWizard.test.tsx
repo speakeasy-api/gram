@@ -25,10 +25,12 @@ const mocks = vi.hoisted(() => ({
   toolsets: vi.fn(),
   fetch: vi.fn(),
   platforms: vi.fn(),
+  platformsStatus: "success" as "success" | "pending" | "error",
   registerIssuer: vi.fn(),
   admitSubject: vi.fn(),
   projectId: "project_one",
   canFederate: true,
+  canReadWorkloads: true,
   renameAgent: vi.fn(),
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
@@ -72,17 +74,41 @@ vi.mock("@/contexts/Sdk", () => ({
 // The credential step offers workload identity, which reads the catalog the
 // server ships and the caller's permission to trust a platform.
 vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
-  useWorkloadPlatforms: () => ({
-    data: { platforms: mocks.platforms() },
-    isPending: false,
-    isError: false,
-    refetch: vi.fn(),
-  }),
+  // A disabled query never fetches and, like react-query, stays pending.
+  useWorkloadPlatforms: (
+    _request: unknown,
+    _security: unknown,
+    options?: { enabled?: boolean },
+  ) => {
+    if (options?.enabled === false) {
+      return {
+        data: undefined,
+        isPending: true,
+        isError: false,
+        refetch: vi.fn(),
+      };
+    }
+    return {
+      data:
+        mocks.platformsStatus === "success"
+          ? { platforms: mocks.platforms() }
+          : undefined,
+      isPending: mocks.platformsStatus === "pending",
+      isError: mocks.platformsStatus === "error",
+      refetch: vi.fn(),
+    };
+  },
 }));
+// Reading the workload catalog is its own permission; everything else this
+// flow checks follows canFederate.
+function hasScope(scope: string): boolean {
+  if (scope === "workload:read") return mocks.canReadWorkloads;
+  return mocks.canFederate;
+}
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasAllScopes: () => mocks.canFederate,
-    hasAnyScope: () => mocks.canFederate,
+    hasAllScopes: (scopes: string[]) => scopes.every(hasScope),
+    hasAnyScope: (scopes: string[]) => scopes.some(hasScope),
     isLoading: false,
   }),
 }));
@@ -226,6 +252,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.projectId = "project_one";
   mocks.canFederate = true;
+  mocks.canReadWorkloads = true;
+  mocks.platformsStatus = "success";
   mocks.platforms.mockReturnValue([]);
   mocks.agentList.mockReturnValue([]);
   mocks.renameAgent.mockResolvedValue({});
@@ -413,7 +441,7 @@ async function reachPlatformSetup() {
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-  fireEvent.click(await screen.findByRole("radio", { name: /Workload/ }));
+  // A preset sits beside the API key, so it is one choice, not two.
   fireEvent.click(await screen.findByRole("radio", { name: /Claude Tag/ }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   // The platform's own steps are steps of this wizard, so its first one is
@@ -481,8 +509,12 @@ describe("Federating a platform's own tokens", () => {
       expect(mocks.registerIssuer).not.toHaveBeenCalled();
       expect(mocks.admitSubject).not.toHaveBeenCalled();
 
-      // The independent custom flow remains an available recovery path.
-      fireEvent.click(screen.getByRole("radio", { name: /Anything else/ }));
+      // The independent custom flow remains an available recovery path,
+      // under the advanced options.
+      fireEvent.click(screen.getByRole("button", { name: /^Advanced:/ }));
+      fireEvent.click(
+        screen.getByRole("radio", { name: /Custom OIDC issuer/ }),
+      );
       expect(
         screen
           .getByRole("button", { name: "Continue" })
@@ -496,46 +528,161 @@ describe("Federating a platform's own tokens", () => {
     mocks.platforms.mockReturnValue([platform]);
     await reachCredentialStep();
 
-    // The choice is on screen but cannot be taken, so the platforms behind it
-    // are never offered either.
-    const workload = screen.getByRole("radio", { name: /Workload/ });
-    expect(workload.getAttribute("data-disabled")).not.toBeNull();
+    // The presets and the custom issuer stay on screen, so the reader learns
+    // they exist, but none of them can be taken.
+    const preset = await screen.findByRole("radio", { name: /Claude Tag/ });
+    expect(preset.getAttribute("data-disabled")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced:/ }));
+    const custom = screen.getByRole("radio", { name: /Custom OIDC issuer/ });
+    expect(custom.getAttribute("data-disabled")).not.toBeNull();
+    const apiKey = screen.getByRole("radio", { name: /API key/ });
+    expect(apiKey.getAttribute("data-disabled")).toBeNull();
+    expect(
+      screen.getByText(/need permission to manage workload identities/),
+    ).toBeTruthy();
+  });
+
+  it("offers the API key alone, with no error, to someone who cannot read the catalog", async () => {
+    // Reading the catalog is refused without workload access, so the request
+    // is never made. Before the presets moved up front this went unnoticed;
+    // shown as a load failure, it read as a broken page.
+    mocks.canFederate = false;
+    mocks.canReadWorkloads = false;
+    mocks.platforms.mockReturnValue([platform]);
+    await reachCredentialStep();
+
     expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
+    expect(screen.queryByText(/could not be loaded/)).toBeNull();
+    expect(screen.queryByText(/Loading platforms/)).toBeNull();
+    const apiKey = screen.getByRole("radio", { name: /API key/ });
+    expect(apiKey.getAttribute("data-disabled")).toBeNull();
+    expect(
+      screen.getByText(/need permission to manage workload identities/),
+    ).toBeTruthy();
   });
 
-  it("creates the agent, trusts the platform and admits the subject to it", async () => {
-    await reachPlatformSetup();
+  it("names the platforms still to come once the catalog has answered", async () => {
+    mocks.platforms.mockReturnValue([platform]);
+    await reachCredentialStep();
 
-    fireEvent.change(screen.getByLabelText("Anthropic organization ID"), {
-      target: { value: "org-123" },
-    });
-    // Saving asked only for the agent, which this wizard answers, so it is
-    // not a step of its own: it joined the step that collects.
     expect(
-      screen.queryByRole("heading", { name: "Save the access rule" }),
-    ).toBeNull();
-    expect(screen.queryByLabelText("Agent")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Connect Claude Tag" }));
-
-    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
-    // Nothing is created until the setup's own create step runs, and then the
-    // agent comes first: the access rule names it.
-    expect(mocks.createAgent).toHaveBeenCalledTimes(1);
-    expect(mocks.createKey).not.toHaveBeenCalled();
-    expect(
-      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
-    ).toEqual({
-      issuer: "https://issuer.example",
-      subject: "spiffe://example/org/org-123/agent/*",
-      matchKind: "wildcard",
-      agentId: "agent_new",
-      tags: [],
-    });
-    expect(
-      mocks.registerIssuer.mock.calls[0]?.[0]?.request
-        ?.registerWorkloadIssuerForm?.issuer,
-    ).toBe("https://issuer.example");
+      screen.getByText(
+        /Coming soon: GitHub Actions, Kubernetes, SPIFFE, Google Cloud\./,
+      ),
+    ).toBeTruthy();
   });
+
+  it("names no platform as coming soon while the catalog loads", async () => {
+    mocks.platformsStatus = "pending";
+    await reachCredentialStep();
+
+    expect(screen.getByText("Loading platforms…")).toBeTruthy();
+    expect(screen.queryByText(/Coming soon/)).toBeNull();
+  });
+
+  it("still offers the custom issuer when the presets fail to load", async () => {
+    mocks.platformsStatus = "error";
+    await reachCredentialStep();
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "A custom OIDC issuer, under Advanced, still works.",
+    );
+    expect(screen.queryByText(/Coming soon/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced:/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Custom OIDC issuer/ }));
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("keeps the advanced options open while the custom issuer is chosen", async () => {
+    await reachCredentialStep();
+    const advanced = screen.getByRole("button", { name: /^Advanced:/ });
+    expect(advanced.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(advanced);
+    fireEvent.click(screen.getByRole("radio", { name: /Custom OIDC issuer/ }));
+    // Collapsing now would hide the option that is chosen.
+    expect(advanced.hasAttribute("disabled")).toBe(true);
+    expect(advanced.getAttribute("aria-expanded")).toBe("true");
+
+    // Choosing another option leaves the section as it was, and free to
+    // fold away again.
+    fireEvent.click(screen.getByRole("radio", { name: /API key/ }));
+    expect(advanced.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(advanced);
+    expect(advanced.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("will not set up a linked preset without permission to trust a platform", async () => {
+    mocks.canFederate = false;
+    mocks.platforms.mockReturnValue([platform]);
+    setup(platform.key);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await screen.findByRole("radio", { name: /Claude Tag/ });
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(screen.getByText(/Choose an API key instead/)).toBeTruthy();
+  });
+
+  it.each([false, true])(
+    "creates the agent with issuer assertion reuse %s",
+    async (allowAssertionReuse) => {
+      await reachPlatformSetup();
+
+      fireEvent.change(screen.getByLabelText("Anthropic organization ID"), {
+        target: { value: "org-123" },
+      });
+      // Saving asked only for the agent, which this wizard answers, so it is
+      // not a step of its own: it joined the step that collects.
+      expect(
+        screen.queryByRole("heading", { name: "Save the access rule" }),
+      ).toBeNull();
+      expect(screen.queryByLabelText("Agent")).toBeNull();
+      expect(
+        (
+          screen.getByRole("checkbox", {
+            name: "Allow assertion reuse",
+          }) as HTMLInputElement
+        ).checked,
+      ).toBe(false);
+      if (allowAssertionReuse) {
+        fireEvent.click(
+          screen.getByRole("checkbox", { name: "Allow assertion reuse" }),
+        );
+      }
+      fireEvent.click(
+        screen.getByRole("button", { name: "Connect Claude Tag" }),
+      );
+
+      await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+      // Nothing is created until the setup's own create step runs, and then the
+      // agent comes first: the access rule names it.
+      expect(mocks.createAgent).toHaveBeenCalledTimes(1);
+      expect(mocks.createKey).not.toHaveBeenCalled();
+      expect(
+        mocks.admitSubject.mock.calls[0]?.[0]?.request
+          ?.admitWorkloadSubjectForm,
+      ).toEqual({
+        issuer: "https://issuer.example",
+        subject: "spiffe://example/org/org-123/agent/*",
+        matchKind: "wildcard",
+        agentId: "agent_new",
+        tags: [],
+      });
+      expect(
+        mocks.registerIssuer.mock.calls[0]?.[0]?.request
+          ?.registerWorkloadIssuerForm?.issuer,
+      ).toBe("https://issuer.example");
+      expect(
+        mocks.registerIssuer.mock.calls[0]?.[0]?.request
+          ?.registerWorkloadIssuerForm?.allowAssertionReuse,
+      ).toBe(allowAssertionReuse);
+    },
+  );
 });
 
 describe("Agent project", () => {
@@ -745,6 +892,156 @@ describe("Agent project", () => {
     await waitFor(() => expect(next.disabled).toBe(false));
   });
 
+  it.each(["All servers", "GitHub"])(
+    "blocks %s after a failed recheck until a retry succeeds",
+    async (selection) => {
+      setup();
+      fireEvent.change(screen.getByLabelText("Name"), {
+        target: { value: "Rechecked access" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await enabledAllServers();
+      fireEvent.click(screen.getByRole("checkbox", { name: selection }));
+      const next = screen.getByRole("button", {
+        name: "Continue",
+      }) as HTMLButtonElement;
+      expect(next.disabled).toBe(false);
+
+      mocks.checkPolicyGrants.mockRejectedValueOnce(new Error("network down"));
+      fireEvent(window, new Event("visibilitychange"));
+      await screen.findByText("Could not check which servers you can reach.");
+      expect(next.disabled).toBe(true);
+      fireEvent.click(next);
+      expect(mocks.createAgent).not.toHaveBeenCalled();
+
+      let resolveRetry!: (answer: { results: { allowed: boolean }[] }) => void;
+      mocks.checkPolicyGrants.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRetry = resolve;
+          }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+      await waitFor(() =>
+        expect(mocks.checkPolicyGrants).toHaveBeenCalledTimes(3),
+      );
+      expect(next.disabled).toBe(true);
+      resolveRetry({ results: [{ allowed: true }, { allowed: true }] });
+      await waitFor(() => expect(next.disabled).toBe(false));
+
+      fireEvent.click(next);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Create agent" }),
+      );
+      await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+      expect(
+        mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants?.[0]
+          ?.selector?.resourceId,
+      ).toBe(selection === "All servers" ? "*" : "toolset_one");
+    },
+  );
+
+  it("waits for pending permission checks before continuing or offering All servers", async () => {
+    let resolveCheck!: (answer: { results: { allowed: boolean }[] }) => void;
+    mocks.checkPolicyGrants.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCheck = resolve;
+        }),
+    );
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Waiting for access" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    const all = await screen.findByRole("checkbox", { name: "All servers" });
+    expect(all.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    const next = screen.getByRole("button", {
+      name: "Continue",
+    }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    fireEvent.click(next);
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+
+    await waitFor(() =>
+      expect(mocks.checkPolicyGrants).toHaveBeenCalledTimes(1),
+    );
+    resolveCheck({ results: [{ allowed: true }, { allowed: true }] });
+    await waitFor(() => expect(next.disabled).toBe(false));
+    expect(all.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(next);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps selections unsavable when a later permission batch fails and maps retried answers correctly", async () => {
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: Array.from({ length: 101 }, (_, index) => ({
+        id: `server_${index}`,
+        name: `Server ${index}`,
+        slug: `server-${index}`,
+        projectId: "project_one",
+        toolsetId: `toolset_${index}`,
+        visibility: "private",
+        networkAccessMode: "dual",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })),
+    });
+    const answer = answerChecks({ "*": "caller", toolset_100: "caller" });
+    mocks.checkPolicyGrants
+      .mockImplementation(answer)
+      .mockImplementationOnce(answer)
+      .mockRejectedValueOnce(new Error("second batch unavailable"));
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Several batches" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Could not check which servers you can reach.");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Server 100" }));
+    const next = screen.getByRole("button", {
+      name: "Continue",
+    }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await screen.findByText(/Deselect Server 100:/);
+    expect(next.disabled).toBe(true);
+    expect(
+      mocks.checkPolicyGrants.mock.calls.map(
+        (call) =>
+          (call[0] as CheckRequest).checkAgentPolicyGrantsForm.policyGrants
+            .length,
+      ),
+    ).toEqual([100, 2, 100, 2]);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Server 100" }));
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Server 100" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Server 0" }));
+    expect(next.disabled).toBe(false);
+    fireEvent.click(next);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants?.map(
+        (form: { selector: { resourceId: string } }) =>
+          form.selector.resourceId,
+      ),
+    ).toEqual(["toolset_0"]);
+  });
+
   it("holds All servers until the check answers, and retries one that failed", async () => {
     mocks.checkPolicyGrants.mockRejectedValueOnce(new Error("network down"));
     setup();
@@ -931,8 +1228,19 @@ describe("Editing an agent that already exists", () => {
 
     await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(1));
     expect(
-      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.agentPolicyGrantIDForm,
-    ).toEqual({ agentId: "agent_one", grantId: "grant_one" });
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm,
+    ).toEqual({
+      agentId: "agent_one",
+      grantId: "grant_one",
+      expectedPolicy: {
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "toolset_one",
+          projectId: "project_one",
+        },
+      },
+    });
     expect(mocks.createGrant).not.toHaveBeenCalled();
   });
 
@@ -1025,8 +1333,12 @@ describe("Editing an agent that already exists", () => {
 
     await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(1));
     expect(
-      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.agentPolicyGrantIDForm,
-    ).toEqual({ agentId: "agent_one", grantId: "grant_all" });
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm,
+    ).toEqual({
+      agentId: "agent_one",
+      grantId: "grant_all",
+      expectedPolicy: { scope: WILDCARD.scope, selector: WILDCARD.selector },
+    });
     // The chosen server is granted before the wildcard goes, so a failure
     // between the two leaves too much reach rather than too little.
     expect(mocks.createGrant).toHaveBeenCalledTimes(1);
@@ -1212,9 +1524,74 @@ describe("Editing an agent that already exists", () => {
     await waitFor(() => expect(mocks.deleteGrant).toHaveBeenCalledTimes(3));
     expect(
       mocks.deleteGrant.mock.calls.map(
-        (call) => call[0]?.request?.agentPolicyGrantIDForm?.grantId,
+        (call) => call[0]?.request?.deleteAgentPolicyGrantForm?.grantId,
       ),
     ).toEqual(["grant_all", "grant_all_two", "grant_all_two"]);
+  });
+
+  it("keeps a conflicting deletion pending with its original policy on retry", async () => {
+    mocks.deleteGrant.mockRejectedValueOnce(
+      Object.assign(new Error("Policy changed; reopen to review"), {
+        statusCode: 409,
+      }),
+    );
+    const { onDone } = editing({ grants: [WILDCARD, WILDCARD_TWO] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "All servers" }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+    await screen.findByText("Policy changed; reopen to review");
+    expect(mocks.deleteGrant).toHaveBeenCalledTimes(1);
+    expect(onDone).not.toHaveBeenCalled();
+    expect(
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm,
+    ).toEqual({
+      agentId: "agent_one",
+      grantId: WILDCARD.id,
+      expectedPolicy: { scope: WILDCARD.scope, selector: WILDCARD.selector },
+    });
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Save changes and exit",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save changes and exit" }),
+    );
+    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    expect(mocks.createGrant).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.deleteGrant.mock.calls.map(
+        (call) => call[0]?.request?.deleteAgentPolicyGrantForm,
+      ),
+    ).toEqual([
+      {
+        agentId: "agent_one",
+        grantId: WILDCARD.id,
+        expectedPolicy: { scope: WILDCARD.scope, selector: WILDCARD.selector },
+      },
+      {
+        agentId: "agent_one",
+        grantId: WILDCARD.id,
+        expectedPolicy: { scope: WILDCARD.scope, selector: WILDCARD.selector },
+      },
+      {
+        agentId: "agent_one",
+        grantId: WILDCARD_TWO.id,
+        expectedPolicy: {
+          scope: WILDCARD_TWO.scope,
+          selector: WILDCARD_TWO.selector,
+        },
+      },
+    ]);
   });
 
   it("will not save while the server list has not loaded", async () => {
