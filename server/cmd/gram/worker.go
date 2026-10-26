@@ -626,6 +626,7 @@ func newWorkerCommand() *cli.Command {
 					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 					AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
+					AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 					DevMode:                          c.String("environment") == "local",
 				})
 

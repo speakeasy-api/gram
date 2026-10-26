@@ -634,6 +634,7 @@ func buildTestMCPService(
 		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 		AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
+		AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 		DevMode:                          false,
 	})
 

@@ -658,13 +658,9 @@ func (s *Service) admitWorkloadGrantInTx(ctx context.Context, tx pgx.Tx, organiz
 	if err != nil {
 		return ctx, err
 	}
-	admission, err := runtimepolicy.AdmitWorkloadSessionInTx(ctx, tx)
+	admitted, err := s.authz.AdmitWorkloadSessionInTx(ctx, tx)
 	if err != nil {
 		return ctx, fmt.Errorf("admit workload grant in issuance transaction: %w", err)
-	}
-	admitted, err := authz.WithWorkloadSessionAdmission(ctx, admission)
-	if err != nil {
-		return ctx, fmt.Errorf("install workload grant admission: %w", err)
 	}
 	return admitted, nil
 }

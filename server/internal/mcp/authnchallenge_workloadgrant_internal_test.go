@@ -12,6 +12,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -142,7 +143,10 @@ func TestRecheckWorkloadGrantInferenceUsesFreshPoliciesWithoutChallengeLogging(t
 			case "owner":
 				admission.Owner = nil
 			}
-			fresh, err := authz.WithWorkloadSessionAdmission(ctx, admission)
+			admitter := authz.NewEngine(testenv.NewLogger(t), nil, nil, nil, authz.EngineOpts{
+				AdmitWorkloadSessionInTx: func(context.Context, pgx.Tx) (authz.WorkloadSessionAdmission, error) { return admission, nil },
+			})
+			fresh, err := admitter.AdmitWorkloadSessionInTx(ctx, nil)
 			require.NoError(t, err)
 			err = service.recheckWorkloadGrantAuthorization(fresh, grant)
 			if revoked == "none" {
