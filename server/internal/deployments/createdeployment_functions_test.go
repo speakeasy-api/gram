@@ -1,6 +1,7 @@
 package deployments_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -869,13 +870,18 @@ func createFunctionsDeploymentForManifest(t *testing.T, ctx context.Context, ti 
 	t.Helper()
 
 	fres := uploadFunctionsWithManifestBytes(t, ctx, ti.assets, manifest, "nodejs:24")
+	return createFunctionsDeploymentForAsset(t, ctx, ti, fres.Asset.ID, idempotencyKey)
+}
+
+func createFunctionsDeploymentForAsset(t *testing.T, ctx context.Context, ti *testInstance, assetID, idempotencyKey string) *gen.CreateDeploymentResult {
+	t.Helper()
 
 	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  idempotencyKey,
 		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
 		Functions: []*gen.AddFunctionsForm{
 			{
-				AssetID: fres.Asset.ID,
+				AssetID: assetID,
 				Name:    "sized-manifest-functions",
 				Slug:    "sized-manifest-functions",
 				Runtime: "nodejs:24",
@@ -943,6 +949,56 @@ func TestCreateDeployment_WithFunctions_ManifestAtSizeLimit(t *testing.T) {
 	functionTools, err := testrepo.New(ti.conn).ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
 	require.NoError(t, err, "list deployment function tools")
 	require.Len(t, functionTools, 4, "expected all tools from the padded manifest")
+}
+
+func TestCreateDeployment_WithFunctions_CorruptDeflateDoesNotRetry(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		data []byte
+	}{
+		{name: "invalid block type", data: []byte{0x07}},
+		{name: "truncated stored block", data: []byte{0x01}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
+			var buf bytes.Buffer
+			writer := zip.NewWriter(&buf)
+			entry, err := writer.CreateRaw(&zip.FileHeader{
+				Name:               "manifest.json",
+				Method:             zip.Deflate,
+				CompressedSize64:   uint64(len(tc.data)),
+				UncompressedSize64: 1,
+			})
+			require.NoError(t, err)
+			_, err = entry.Write(tc.data)
+			require.NoError(t, err)
+			_, err = writer.Create("functions.js")
+			require.NoError(t, err)
+			require.NoError(t, writer.Close())
+
+			asset, err := ti.assets.UploadFunctions(ctx, &agen.UploadFunctionsForm{
+				ContentType:   "application/zip",
+				ContentLength: int64(buf.Len()),
+			}, io.NopCloser(bytes.NewReader(buf.Bytes())))
+			require.NoError(t, err)
+			dep := createFunctionsDeploymentForAsset(t, ctx, ti, asset.Asset.ID, "corrupt-deflate")
+			require.Equal(t, "failed", dep.Deployment.Status)
+
+			logs, err := ti.service.GetDeploymentLogs(ctx, &gen.GetDeploymentLogsPayload{DeploymentID: dep.Deployment.ID})
+			require.NoError(t, err)
+			var corruptErrors int
+			for _, event := range logs.Events {
+				if strings.Contains(event.Message, "manifest.json is corrupt") {
+					corruptErrors++
+				}
+			}
+			require.Equal(t, 1, corruptErrors, "corrupt manifest should fail without retrying")
+		})
+	}
 }
 
 func TestCreateDeployment_WithFunctions_ManifestValidation(t *testing.T) {

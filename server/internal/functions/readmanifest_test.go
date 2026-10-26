@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/flate"
+	"errors"
 	"hash/crc32"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -153,4 +155,78 @@ func TestReadManifest_RejectsContentLargerThanDeclaredSize(t *testing.T) {
 			require.Nil(t, bs)
 		})
 	}
+}
+
+func TestReadManifest_DeflateFailures(t *testing.T) {
+	t.Parallel()
+
+	storageFailure := errors.New("temporary storage read failure")
+	tests := []struct {
+		name      string
+		deflate   []byte
+		sourceErr error
+		permanent bool
+	}{
+		{name: "invalid block type", deflate: []byte{0x07}, permanent: true},
+		{name: "truncated stored block", deflate: []byte{0x01}, permanent: true},
+		{name: "short storage read", deflate: []byte{0x01}, sourceErr: io.EOF},
+		{name: "storage unavailable", deflate: []byte{0x01}, sourceErr: storageFailure},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			writer := zip.NewWriter(&buf)
+			entry, err := writer.CreateRaw(&zip.FileHeader{
+				Name:               "manifest.json",
+				Method:             zip.Deflate,
+				CompressedSize64:   uint64(len(tc.deflate)),
+				UncompressedSize64: 1,
+			})
+			require.NoError(t, err)
+			_, err = entry.Write(tc.deflate)
+			require.NoError(t, err)
+			require.NoError(t, writer.Close())
+
+			source := &manifestFaultReader{ReaderAt: bytes.NewReader(buf.Bytes())}
+			archive := &manifestArchiveReader{ReaderAt: source}
+			reader, err := zip.NewReader(archive, int64(buf.Len()))
+			require.NoError(t, err)
+			file := reader.File[0]
+			offset, err := file.DataOffset()
+			require.NoError(t, err)
+			source.offset = offset
+			source.err = tc.sourceErr
+			archive.readErr = nil
+
+			data, err := readManifest(file)
+			require.Error(t, err)
+			require.Nil(t, data)
+			require.Equal(t, tc.permanent, isPermanentManifestError(err, archive.readErr))
+			if tc.sourceErr != nil {
+				require.ErrorIs(t, archive.readErr, tc.sourceErr)
+			} else if tc.name == "invalid block type" {
+				var corrupt flate.CorruptInputError
+				require.ErrorAs(t, err, &corrupt)
+			} else {
+				require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+			}
+		})
+	}
+}
+
+// manifestFaultReader injects a storage failure only when entry data is read,
+// after the ZIP central directory and local header have been loaded.
+type manifestFaultReader struct {
+	io.ReaderAt
+	offset int64
+	err    error
+}
+
+func (r *manifestFaultReader) ReadAt(p []byte, offset int64) (int, error) {
+	if r.err != nil && offset >= r.offset {
+		return 0, r.err
+	}
+	return r.ReaderAt.ReadAt(p, offset)
 }

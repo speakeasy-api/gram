@@ -2,6 +2,7 @@ package functions
 
 import (
 	"archive/zip"
+	"compress/flate"
 	"context"
 	"encoding/json"
 	"errors"
@@ -189,7 +190,8 @@ func (p *ToolExtractor) Do(
 		return rc.Close()
 	})
 
-	rdr, err := zip.NewReader(rc, size)
+	archive := &manifestArchiveReader{ReaderAt: rc, readErr: nil}
+	rdr, err := zip.NewReader(archive, size)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s: error opening functions zip file", slug).LogError(ctx, logger)
 	}
@@ -214,11 +216,12 @@ func (p *ToolExtractor) Do(
 		return nil, oops.E(oops.CodeBadRequest, errPermanent, "%s: functions zip file is missing manifest.json file", slug).LogError(ctx, logger, attrError)
 	}
 
+	archive.readErr = nil
 	manifestBs, err := readManifest(manifestFile)
 	switch {
 	case errors.Is(err, ErrManifestTooLarge):
 		return nil, oops.E(oops.CodeBadRequest, oops.Permanent(err), "%s: manifest.json exceeds the maximum size of %d bytes", slug, MaxManifestBytes).LogError(ctx, logger, attrError)
-	case errors.Is(err, zip.ErrFormat), errors.Is(err, zip.ErrChecksum), errors.Is(err, zip.ErrAlgorithm):
+	case isPermanentManifestError(err, archive.readErr):
 		return nil, oops.E(oops.CodeBadRequest, oops.Permanent(err), "%s: manifest.json is corrupt", slug).LogError(ctx, logger, attrError)
 	case err != nil:
 		return nil, oops.E(oops.CodeBadRequest, err, "%s: error reading manifest file", slug).LogError(ctx, logger, attrError)
@@ -299,6 +302,31 @@ func (p *ToolExtractor) Do(
 		ManifestVersion: manifest.Version,
 		NumTools:        numTools,
 	}, nil
+}
+
+// manifestArchiveReader preserves source errors so a truncated storage response
+// is not mistaken for a permanently truncated DEFLATE stream.
+type manifestArchiveReader struct {
+	io.ReaderAt
+
+	readErr error
+}
+
+func (r *manifestArchiveReader) ReadAt(p []byte, offset int64) (int, error) {
+	n, err := r.ReaderAt.ReadAt(p, offset)
+	if err != nil {
+		r.readErr = err
+	}
+	return n, err //nolint:wrapcheck // preserve ReaderAt error semantics for archive/zip
+}
+
+func isPermanentManifestError(err, sourceErr error) bool {
+	if sourceErr != nil {
+		return false
+	}
+	_, corrupt := errors.AsType[flate.CorruptInputError](err)
+	return corrupt || errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, zip.ErrFormat) || errors.Is(err, zip.ErrChecksum) || errors.Is(err, zip.ErrAlgorithm)
 }
 
 // readManifest decompresses f into memory, reading at most MaxManifestBytes+1
