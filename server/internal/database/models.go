@@ -7388,8 +7388,6 @@ type Toolset struct {
 	// @access: confidential
 	ExternalOauthServerID uuid.NullUUID
 	// @access: confidential
-	OauthProxyServerID uuid.NullUUID
-	// @access: confidential
 	UserSessionIssuerID uuid.NullUUID
 	// @access: confidential
 	ToolVariationsGroupID uuid.NullUUID
