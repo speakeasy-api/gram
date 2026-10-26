@@ -228,5 +228,5 @@ func (r *manifestFaultReader) ReadAt(p []byte, offset int64) (int, error) {
 	if r.err != nil && offset >= r.offset {
 		return 0, r.err
 	}
-	return r.ReaderAt.ReadAt(p, offset)
+	return r.ReaderAt.ReadAt(p, offset) //nolint:wrapcheck // preserve ReaderAt error semantics for archive/zip
 }
