@@ -214,6 +214,10 @@ func TestSetUserSessionIssuer_RejectsToolsetWithoutHostedServer(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	denied := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPRead, unwrapped.ID.String()))
+	_, err = ti.service.SetUserSessionIssuer(denied, &gen.SetUserSessionIssuerPayload{Slug: types.Slug(unwrapped.Slug), UserSessionIssuerID: nil})
+	requireShimOopsCode(t, err, oops.CodeForbidden)
+
 	_, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: types.Slug(unwrapped.Slug), UserSessionIssuerID: nil})
 	requireShimOopsCode(t, err, oops.CodeNotFound)
 	require.ErrorContains(t, err, "toolset has no hosted MCP server")
