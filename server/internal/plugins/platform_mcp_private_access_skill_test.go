@@ -16,7 +16,7 @@ func TestGeneratePlatformMCPPackageEmitsPrivateAccessTrafficCheck(t *testing.T) 
 	require.NoError(t, err)
 	claudeSkill := files["speakeasy/"+skillPath]
 	require.Equal(t, source, claudeSkill)
-	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/"+skillPath])
+	require.Equal(t, claudeSkill, files["speakeasy-codex/"+skillPath])
 	require.Contains(t, string(claudeSkill), "`get_mcp_network_traffic`")
 	require.Contains(t, string(claudeSkill), "zero does not prove a route is unused")
 }

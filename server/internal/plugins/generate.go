@@ -419,7 +419,6 @@ const (
 	platformMCPCursorPluginRoot   = cursorPluginRoot + "/" + platformMCPCursorPluginName
 	platformMCPCodexPluginRoot    = platformMCPCodexPluginName
 	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/" + platformMCPPluginName
-	platformMCPAgentPluginRoot    = agentPluginRoot + "/" + platformMCPPluginName
 )
 
 // platformMCPSkillsFS is the single source for reviewed skills distributed with
@@ -590,6 +589,10 @@ const cursorPluginRoot = "cursor-plugins"
 // syncable directory per plugin.
 const opencodePluginRoot = "opencode-plugins"
 
+// copilotPluginRoot groups the Copilot feature-plugin packages that the root
+// marketplace.json points at.
+const copilotPluginRoot = "copilot-plugins"
+
 // GeneratePluginPackages produces the complete file map for a plugin
 // distribution repository containing Claude Code, Cursor, and Codex plugins.
 // Used for GitHub push. It is the union of the three independently-generatable
@@ -698,15 +701,10 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 		if err := generateOpenCodePlugin(files, p, cfg); err != nil {
 			return nil, fmt.Errorf("generate opencode plugin %s: %w", p.Slug, err)
 		}
-		agentFiles, err := compileAgentPlugin(p, cfg, agentPluginCredentialsPackage)
-		if err != nil {
-			if errors.Is(err, ErrAgentPluginsV1Incompatible) {
-				continue
+		if classifyAgentPlugin(p).Compatible {
+			if err := generateCopilotPlugin(files, p, cfg); err != nil {
+				return nil, fmt.Errorf("generate copilot plugin %s: %w", p.Slug, err)
 			}
-			return nil, fmt.Errorf("generate Agent Plugins package %s: %w", p.Slug, err)
-		}
-		for filePath, content := range agentFiles {
-			files[path.Join(agentPluginRoot, p.Slug, filePath)] = content
 		}
 	}
 	return files, nil
@@ -786,16 +784,16 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 				Authentication: codexAuthPolicy(p, cfg),
 			},
 		})
-		// Copilot consumes feature plugins through the portable Agent Plugins 1.0
-		// package, which generateMCPFiles omits for plugins that fail the
-		// portability gate. Re-run the same classification here so the manifest
-		// never advertises a directory that was never written — Copilot resolves
-		// an entry's source eagerly and a dangling one breaks the whole catalog.
+		// generateMCPFiles writes the credential-free Copilot package only for
+		// plugins that pass the portability gate. Re-run the same classification
+		// here so the manifest never advertises a directory that was never
+		// written — Copilot resolves an entry's source eagerly and a dangling one
+		// breaks the whole catalog.
 		if classifyAgentPlugin(p).Compatible {
 			copilotPlugins = append(copilotPlugins, marketplaceEntry{
 				Name:        p.Slug,
 				DisplayName: p.Name,
-				Source:      "./" + path.Join(agentPluginRoot, p.Slug),
+				Source:      "./" + path.Join(copilotPluginRoot, p.Slug),
 				Description: p.Description,
 			})
 		}
@@ -1024,7 +1022,7 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 			return nil, fmt.Errorf("generate codex plugin: %w", err)
 		}
 	case "agent-plugin":
-		return compileAgentPlugin(plugin, cfg, agentPluginCredentialsKeyless)
+		return compileAgentPlugin(plugin, cfg)
 	// ponytail: no "opencode" case — the downloadPluginPackage enum is
 	// claude|cursor|codex, so a flat per-plugin opencode package is unreachable.
 	// OpenCode ships via downloadObservabilityPlugin only; add here if per-plugin
@@ -1064,6 +1062,41 @@ func generateCodexPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConf
 
 func generateOpenCodePlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
 	return generateOpenCodePluginInDir(files, path.Join(opencodePluginRoot, p.Slug), p, cfg)
+}
+
+func generateCopilotPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
+	return generateCopilotPluginInDir(files, path.Join(copilotPluginRoot, p.Slug), p, cfg)
+}
+
+// generateCopilotPluginInDir emits Copilot's native feature package: a root
+// plugin.json without a $schema plus .mcp.json. Declaring the Agent Plugins
+// schema would make Codex treat the same layout as a budget-limited Agent
+// Plugin, and Copilot reads mcp.json instead of .mcp.json only when that schema
+// is present. The package is credential-free, so callers must only use it for
+// plugins that pass classifyAgentPlugin.
+func generateCopilotPluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
+	pluginJSON, err := marshalJSON(copilotPluginMeta{
+		Name:        p.Slug,
+		Version:     pluginManifestVersion(cfg),
+		Description: p.Description,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal plugin.json: %w", err)
+	}
+	files[path.Join(subdir, "plugin.json")] = pluginJSON
+
+	mcpServers := make(map[string]claudeMCPServer, len(p.Servers))
+	for _, s := range p.Servers {
+		mcpServers[s.DisplayName] = claudeMCPServer{Type: "http", Command: "", Args: nil, URL: s.MCPURL, Headers: nil}
+	}
+	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
+	if err != nil {
+		return fmt.Errorf("marshal .mcp.json: %w", err)
+	}
+	files[path.Join(subdir, ".mcp.json")] = mcpJSON
+
+	emitPluginSkills(files, subdir, p)
+	return nil
 }
 
 // codexAuthPolicy picks ON_INSTALL when the user will be prompted for a
@@ -2950,7 +2983,6 @@ func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) e
 		{root: platformMCPCursorPluginRoot, platform: "cursor"},
 		{root: platformMCPCodexPluginRoot, platform: "codex"},
 		{root: platformMCPOpenCodePluginRoot, platform: "opencode"},
-		{root: platformMCPAgentPluginRoot, platform: "agent-plugin"},
 	}
 	for _, packageSpec := range packages {
 		packageFiles, err := generatePlatformMCPPackageForClient(cfg, platformURL.String(), packageSpec.platform)
@@ -3130,53 +3162,6 @@ func generatePlatformMCPOpenCodePackage(cfg GenerateConfig, platformURL string) 
 	return files, nil
 }
 
-func generatePlatformMCPAgentPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
-	manifest := agentPluginManifest{
-		Schema:      agentPluginSchemaID,
-		Name:        platformMCPPluginName,
-		Version:     platformMCPManifestVersion(cfg),
-		Description: platformMCPDescription,
-		Author:      agentPluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
-		Homepage:    "https://www.speakeasy.com/product/gram",
-	}
-	mcpConfig := agentMCPConfig{
-		Schema: agentMCPSchemaID,
-		MCPServers: map[string]agentMCPServer{
-			platformMCPServerName: {
-				Type:    "streamable-http",
-				Command: "",
-				Args:    nil,
-				Env:     nil,
-				CWD:     "",
-				URL:     platformURL,
-				Headers: nil,
-			},
-		},
-	}
-	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {
-		return nil, fmt.Errorf("validate Platform Agent Plugin manifest: %w", err)
-	}
-	if err := validateAgentPluginDocument(agentMCPSchemaID, mcpConfig); err != nil {
-		return nil, fmt.Errorf("validate Platform Agent Plugin MCP config: %w", err)
-	}
-	manifestJSON, err := marshalJSON(manifest)
-	if err != nil {
-		return nil, fmt.Errorf("marshal Platform Agent Plugin manifest: %w", err)
-	}
-	mcpJSON, err := marshalJSON(mcpConfig)
-	if err != nil {
-		return nil, fmt.Errorf("marshal Platform Agent Plugin MCP config: %w", err)
-	}
-	files := map[string][]byte{
-		"plugin.json": manifestJSON,
-		"mcp.json":    mcpJSON,
-	}
-	if err := emitPlatformMCPSkills(files); err != nil {
-		return nil, err
-	}
-	return files, nil
-}
-
 func generatePlatformMCPPackageForClient(cfg GenerateConfig, platformURL, platform string) (map[string][]byte, error) {
 	switch platform {
 	case "claude":
@@ -3187,8 +3172,6 @@ func generatePlatformMCPPackageForClient(cfg GenerateConfig, platformURL, platfo
 		return generatePlatformMCPCodexPackage(cfg, platformURL)
 	case "opencode":
 		return generatePlatformMCPOpenCodePackage(cfg, platformURL)
-	case "agent-plugin":
-		return generatePlatformMCPAgentPackage(cfg, platformURL)
 	default:
 		return nil, fmt.Errorf("unsupported Platform MCP platform: %s", platform)
 	}

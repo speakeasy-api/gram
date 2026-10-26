@@ -232,13 +232,13 @@ func platformMCPMarketplaceReadme(marketplaceRepoURL string, mode platformMCPMar
 	b.WriteString(marketplaceRepoURL + "\n")
 	b.WriteString("```\n\n")
 
-	b.WriteString("## Other agents\n\n")
-	b.WriteString("`opencode-plugins/` and `agent-plugins/` carry the same server in the OpenCode and portable ")
+	b.WriteString("## OpenCode\n\n")
+	b.WriteString("`opencode-plugins/` carries the same server in the OpenCode format. ")
 	if mode == platformMCPMarketplacePublic {
-		b.WriteString("Agent Plugins formats. Clone this repository or download an archive from GitHub and point your ")
+		b.WriteString("Clone this repository or download an archive from GitHub and copy ")
 	} else {
-		b.WriteString("Agent Plugins formats. Clone this repository and point your ")
+		b.WriteString("Clone this repository and copy ")
 	}
-	b.WriteString("agent at the directory for your format.\n")
+	b.WriteString("the contents of `opencode-plugins/" + platformMCPPluginName + "/` into `~/.config/opencode/`.\n")
 	return []byte(b.String())
 }

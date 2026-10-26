@@ -864,8 +864,8 @@ func TestGenerateCodexMarketplaceDescriptions(t *testing.T) {
 		require.LessOrEqual(t, len([]rune(manifest.Interface.ShortDescription)), 240, name)
 		require.Equal(t, manifest.Description, manifest.Interface.LongDescription, name)
 	}
-	// Native, shared Agent Plugins overlay, and observability manifests.
-	require.GreaterOrEqual(t, count, 3)
+	// Native feature and observability manifests.
+	require.Equal(t, 2, count)
 }
 
 func TestGenerateReadmeEscapesMarkdownInTableCells(t *testing.T) {
@@ -1023,7 +1023,7 @@ func TestGenerateCopilotMarketplaceManifest(t *testing.T) {
 
 	require.Equal(t, CopilotObservabilitySlug(cfg), copilot.Plugins[0].Name)
 	require.Equal(t, "engineering-tools", copilot.Plugins[1].Name)
-	require.Equal(t, "./agent-plugins/engineering-tools", copilot.Plugins[1].Source)
+	require.Equal(t, "./copilot-plugins/engineering-tools", copilot.Plugins[1].Source)
 
 	// No hooks key: no observability package is generated, so no entry for it.
 	cfg.HooksAPIKey = ""
@@ -3426,7 +3426,7 @@ func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	const skill = "skills/configure-private-mcp-access/SKILL.md"
 	content := files["speakeasy/"+skill]
 	require.NotEmpty(t, content)
-	require.Equal(t, content, files["agent-plugins/speakeasy/"+skill])
+	require.Equal(t, content, files["speakeasy-codex/"+skill])
 	workflow := string(content)
 	for _, name := range []string{"list_projects", "list_plugins", "get_plugin", "get_mcp_connection_settings", "set_mcp_address", "set_mcp_network_access", "republish_plugin"} {
 		require.Contains(t, workflow, name)
@@ -3447,7 +3447,7 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 	const path = "skills/add-mcp-from-remote-url/SKILL.md"
 	content := files["speakeasy/"+path]
 	require.NotEmpty(t, content)
-	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	require.Equal(t, content, files["speakeasy-codex/"+path])
 	workflow := string(content)
 	// Attachment obtains a client automatically, through dynamic registration
 	// or a client ID metadata document, so an upstream that answers with a
@@ -3495,7 +3495,7 @@ func TestGeneratePlatformMCPOnboardingWorkflowsOfferProjectCreation(t *testing.T
 	} {
 		content := files["speakeasy/"+path]
 		require.NotEmpty(t, content, path)
-		require.Equal(t, content, files["agent-plugins/speakeasy/"+path], path)
+		require.Equal(t, content, files["speakeasy-codex/"+path], path)
 		workflow := string(content)
 		for _, required := range append([]string{
 			"Only when `create_project` is in your tool list",
@@ -3546,7 +3546,7 @@ func TestGeneratePlatformMCPPackageGatesCatalogPluginCreation(t *testing.T) {
 	const path = "skills/add-mcp-from-catalog/SKILL.md"
 	content := files["speakeasy/"+path]
 	require.NotEmpty(t, content)
-	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	require.Equal(t, content, files["speakeasy-codex/"+path])
 	workflow := string(content)
 	for _, required := range []string{
 		"Only when `create_plugin` is in your tool list",
@@ -3572,7 +3572,7 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	const path = "skills/add-existing-mcp-servers/SKILL.md"
 	content := files["speakeasy/"+path]
 	require.NotEmpty(t, content)
-	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	require.Equal(t, content, files["speakeasy-codex/"+path])
 	workflow := string(content)
 	for _, required := range []string{
 		"name: add-existing-mcp-servers", "claude mcp list",
@@ -3625,7 +3625,7 @@ func TestGeneratePlatformMCPExistingServersClientsLocalServersAndPrivacy(t *test
 	const path = "skills/add-existing-mcp-servers/SKILL.md"
 	content := files["speakeasy/"+path]
 	require.NotEmpty(t, content)
-	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	require.Equal(t, content, files["speakeasy-codex/"+path])
 	workflow := string(content)
 	for _, scenario := range []struct {
 		name         string
@@ -3701,7 +3701,7 @@ func TestGeneratePlatformMCPExistingServersDiagnosticsAreOptIn(t *testing.T) {
 	const path = "skills/add-existing-mcp-servers/SKILL.md"
 	content := files["speakeasy/"+path]
 	require.NotEmpty(t, content)
-	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	require.Equal(t, content, files["speakeasy-codex/"+path])
 	workflow := string(content)
 	for _, required := range []string{
 		"record_workflow_run",
@@ -3731,7 +3731,7 @@ func TestGeneratePlatformMCPExistingServersCatalogPreference(t *testing.T) {
 	path := "skills/add-existing-mcp-servers/SKILL.md"
 	content := files["speakeasy/"+path]
 	require.NotEmpty(t, content)
-	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	require.Equal(t, content, files["speakeasy-codex/"+path])
 	workflow := string(content)
 	for _, scenario := range []struct {
 		name         string
@@ -3818,7 +3818,7 @@ func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 	const skillPath = "skills/review-shadow-mcp/SKILL.md"
 	claudeSkill := files["speakeasy/"+skillPath]
 	require.NotEmpty(t, claudeSkill)
-	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/"+skillPath])
+	require.Equal(t, claudeSkill, files["speakeasy-codex/"+skillPath])
 
 	workflow := string(claudeSkill)
 	cursor := 0
@@ -3889,7 +3889,7 @@ func TestGeneratePlatformMCPPackageEmitsSkillSuggestionReviewWorkflow(t *testing
 	const skillPath = "skills/review-skill-suggestions/SKILL.md"
 	claudeSkill := files["speakeasy/"+skillPath]
 	require.NotEmpty(t, claudeSkill)
-	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/"+skillPath])
+	require.Equal(t, claudeSkill, files["speakeasy-codex/"+skillPath])
 
 	workflow := string(claudeSkill)
 	cursor := 0
@@ -3951,7 +3951,7 @@ func TestGeneratePlatformMCPPackageEmitsMigrateWorkflow(t *testing.T) {
 	const skillPath = "skills/migrate-mcp-between-projects/SKILL.md"
 	claudeSkill := files["speakeasy/"+skillPath]
 	require.NotEmpty(t, claudeSkill)
-	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/"+skillPath])
+	require.Equal(t, claudeSkill, files["speakeasy-codex/"+skillPath])
 
 	workflow := string(claudeSkill)
 	cursor := 0
@@ -4041,7 +4041,7 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 	const skillPath = "skills/expose-tools-on-mcp/SKILL.md"
 	claudeSkill := files["speakeasy/"+skillPath]
 	require.NotEmpty(t, claudeSkill)
-	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/"+skillPath])
+	require.Equal(t, claudeSkill, files["speakeasy-codex/"+skillPath])
 
 	workflow := string(claudeSkill)
 	cursor := 0

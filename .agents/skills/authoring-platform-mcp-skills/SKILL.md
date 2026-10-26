@@ -23,7 +23,7 @@ Use product language in every distributed skill: **Speakeasy AI Control Plane**,
 | Generator and validation          | `server/internal/plugins/generate.go` (`loadPlatformMCPSkills`, `emitPlatformMCPSkills`) |
 | Package tests                     | `server/internal/plugins/generate_test.go`                                               |
 | Claude package output             | `speakeasy/skills/<skill-name>/SKILL.md`                                                 |
-| Portable Agent Plugin output      | `agent-plugins/speakeasy/skills/<skill-name>/SKILL.md`                                   |
+| Codex package output              | `speakeasy-codex/skills/<skill-name>/SKILL.md`                                           |
 | Contributor guidance only         | `.agents/skills/authoring-platform-mcp-skills/SKILL.md` (this file)                      |
 
 Do not put a user-facing Platform workflow under `.agents/skills/`: that directory teaches contributors and coding agents how to work on this repository. It is not copied into the customer Platform Plugin.
@@ -48,7 +48,7 @@ description: Inspect an explicit AICP project's Platform MCP state before propos
 8. Never ask for or expose API keys, passwords, tokens, OAuth codes, client secrets, secret headers, or MCP credentials. Present only server-returned non-secret setup/provider URLs.
 9. For bounded feedback, ask for consent and use `send_platform_mcp_feedback`; do not add the hooks-backed `speakeasy-skill-feedback` sidecar.
 
-Adding the directory is sufficient for distribution. Do not add another `go:embed` directive, skill-name constant, or renderer branch. The embedded registry loads every `platform_mcp_skills/*/SKILL.md` and emits the same bytes into Claude and portable Agent Plugin packages.
+Adding the directory is sufficient for distribution. Do not add another `go:embed` directive, skill-name constant, or renderer branch. The embedded registry loads every `platform_mcp_skills/*/SKILL.md` and emits the same bytes into the Claude, Cursor, Codex, and OpenCode packages.
 
 ## Review checklist
 
@@ -62,7 +62,7 @@ Adding the directory is sufficient for distribution. Do not add another `go:embe
 - [ ] OAuth and secret entry stay in the server-returned secure browser handoff.
 - [ ] Fresh readiness is checked before distribution; final live state is rechecked afterward.
 - [ ] No organization/project identifiers, customer data, credentials, fixed environment URL, or tenant configuration is embedded.
-- [ ] Claude and Agent Plugin outputs contain byte-identical skill content and no hooks runtime or skill-feedback sidecar.
+- [ ] Claude and Codex outputs contain byte-identical skill content and no hooks runtime or skill-feedback sidecar.
 - [ ] Do not bump `platformMCPGeneratorVersion` for skill text alone: embedded skill bytes already participate in the Platform package fingerprint. Bump it only for a rollout-significant generator behavior change that emitted-byte fingerprinting cannot represent.
 
 ## Validation
