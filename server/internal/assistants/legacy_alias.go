@@ -25,7 +25,7 @@ func loadAssistantMcpServers(ctx context.Context, db repo.DBTX, params repo.Load
 	}
 	aliases, err := legacyalias.List(ctx, db, params.ProjectID, ids)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // legacyalias names the failing query.
+		return nil, fmt.Errorf("load assistant MCP server aliases: %w", err)
 	}
 	for i, row := range rows {
 		if alias, ok := aliases[row.McpServerID]; ok && row.HostedToolset && row.EndpointSlug == "" {
@@ -39,7 +39,7 @@ func loadAssistantMcpServers(ctx context.Context, db repo.DBTX, params repo.Load
 func hasLegacyAlias(ctx context.Context, db repo.DBTX, projectID uuid.UUID, toolsetIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
 	aliases, err := legacyalias.List(ctx, db, projectID, toolsetIDs)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // legacyalias names the failing query.
+		return nil, fmt.Errorf("load assistant MCP server aliases: %w", err)
 	}
 	has := make(map[uuid.UUID]bool, len(aliases))
 	for id := range aliases {

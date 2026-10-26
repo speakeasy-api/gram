@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"strings"
 
 	"github.com/google/uuid"
@@ -18,8 +17,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 )
 
 // Action is what staff can do with a candidate.
@@ -40,7 +39,7 @@ type Candidate struct {
 	Row repo.ListCandidatesRow
 
 	// Alias is the toolset's legacy /mcp/<slug> address, if it has one.
-	Alias hostingstate.Address
+	Alias legacyalias.Alias
 
 	// AliasIsEndpoint reports whether the alias is also one of its server's endpoints, or it has no alias.
 	AliasIsEndpoint bool
@@ -132,7 +131,7 @@ func (m *Migrator) ListCandidates(ctx context.Context) ([]Candidate, error) {
 
 // candidateAlias is a candidate toolset's legacy alias and whether its server has an endpoint at that address.
 type candidateAlias struct {
-	address    hostingstate.Address
+	address    legacyalias.Alias
 	isEndpoint bool
 }
 
@@ -141,7 +140,7 @@ type candidateAlias struct {
 func loadCandidateAlias(ctx context.Context, db mcpendpointsrepo.DBTX, row repo.ListCandidatesRow) (candidateAlias, error) {
 	address, err := legacyalias.Get(ctx, db, row.ProjectID, row.ToolsetID)
 	if err != nil {
-		return candidateAlias{address: address, isEndpoint: false}, err //nolint:wrapcheck // legacyalias names the failing query.
+		return candidateAlias{address: address, isEndpoint: false}, fmt.Errorf("load candidate alias: %w", err)
 	}
 	if !address.Slug.Valid || address.Slug.String == "" {
 		return candidateAlias{address: address, isEndpoint: true}, nil

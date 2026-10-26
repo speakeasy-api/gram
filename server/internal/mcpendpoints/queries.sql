@@ -153,13 +153,12 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
--- name: CheckUnifiedSlugAvailability :one
+-- name: CheckEndpointSlugAvailability :one
 -- True when no live mcp_endpoints.slug holds the slug in the namespace
 -- (platform when custom_domain_id is NULL, else that domain). Callers also
 -- check the legacy toolset alias (legacyalias.Taken).
--- Not project-scoped, mirroring the partial unique indexes. Owner exclusions:
--- exclude_toolset_id discounts that toolset's row and its wrapper's endpoints;
--- exclude_mcp_server_id discounts the toolset backing that server. Unless
+-- Not project-scoped, mirroring the partial unique index. exclude_toolset_id
+-- discounts the endpoints of servers backed by that toolset. Unless
 -- skip_domain_check, a supplied domain must be live and owned by
 -- organization_id or the result is false (blocks probing foreign domains).
 SELECT (

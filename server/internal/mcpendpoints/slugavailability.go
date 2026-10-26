@@ -11,7 +11,7 @@ import (
 )
 
 // SlugAvailabilityCheck probes the unified MCP slug namespace spanning
-// mcp_endpoints.slug and the legacy toolset alias; see CheckUnifiedSlugAvailability
+// mcp_endpoints.slug and the legacy toolset alias; see CheckEndpointSlugAvailability
 // in queries.sql and legacyalias.Taken for the semantics of each field.
 type SlugAvailabilityCheck struct {
 	// Slug is the candidate address slug, already lowercased by the caller.
@@ -41,7 +41,7 @@ type SlugAvailabilityCheck struct {
 // across both mcp_endpoints.slug and the legacy toolset alias. Write paths must call
 // LockSlugScope first, in the same transaction.
 func CheckSlugAvailable(ctx context.Context, db repo.DBTX, check SlugAvailabilityCheck) (bool, error) {
-	available, err := repo.New(db).CheckUnifiedSlugAvailability(ctx, repo.CheckUnifiedSlugAvailabilityParams{
+	available, err := repo.New(db).CheckEndpointSlugAvailability(ctx, repo.CheckEndpointSlugAvailabilityParams{
 		Slug:             check.Slug,
 		CustomDomainID:   check.CustomDomainID,
 		OrganizationID:   check.OrganizationID,
@@ -58,7 +58,7 @@ func CheckSlugAvailable(ctx context.Context, db repo.DBTX, check SlugAvailabilit
 		Slug: check.Slug, CustomDomainID: check.CustomDomainID, ExcludeToolsetID: check.ExcludeToolsetID, ExcludeMcpServerID: check.ExcludeMcpServerID,
 	})
 	if err != nil {
-		return false, err //nolint:wrapcheck // legacyalias names the failing query.
+		return false, fmt.Errorf("check mcp slug alias availability: %w", err)
 	}
 	return !taken, nil
 }

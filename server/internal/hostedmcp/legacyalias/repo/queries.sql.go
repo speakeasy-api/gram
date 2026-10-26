@@ -181,7 +181,7 @@ func (q *Queries) FindToolsetByProjectAlias(ctx context.Context, arg FindToolset
 const getAlias = `-- name: GetAlias :one
 SELECT mcp_slug, custom_domain_id
 FROM toolsets
-WHERE id = $1 AND project_id = $2
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
 
 type GetAliasParams struct {
@@ -235,6 +235,40 @@ func (q *Queries) ListAliases(ctx context.Context, arg ListAliasesParams) ([]Lis
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTakenAliases = `-- name: ListTakenAliases :many
+SELECT DISTINCT (t.mcp_slug || '|' || COALESCE(t.custom_domain_id::text, ''))::text AS address_key
+FROM toolsets t
+WHERE t.mcp_slug = ANY($1::text[])
+  AND (t.mcp_slug || '|' || COALESCE(t.custom_domain_id::text, '')) = ANY($2::text[])
+  AND t.deleted IS FALSE
+`
+
+type ListTakenAliasesParams struct {
+	Slugs       []string
+	AddressKeys []string
+}
+
+// Which of the given addresses, keyed "<slug>|<custom domain id or empty for the platform>", a live toolset alias holds.
+func (q *Queries) ListTakenAliases(ctx context.Context, arg ListTakenAliasesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listTakenAliases, arg.Slugs, arg.AddressKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var address_key string
+		if err := rows.Scan(&address_key); err != nil {
+			return nil, err
+		}
+		items = append(items, address_key)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

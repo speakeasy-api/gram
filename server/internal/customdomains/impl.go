@@ -516,7 +516,7 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 			}); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, s.logger)
 			}
-			available, err := mcpendpointsrepo.New(dbtx).CheckUnifiedSlugAvailability(ctx, mcpendpointsrepo.CheckUnifiedSlugAvailabilityParams{
+			available, err := mcpendpointsrepo.New(dbtx).CheckEndpointSlugAvailability(ctx, mcpendpointsrepo.CheckEndpointSlugAvailabilityParams{
 				Slug:             server.Slug.String,
 				CustomDomainID:   uuid.NullUUID{UUID: domain.ID, Valid: true},
 				OrganizationID:   authCtx.ActiveOrganizationID,

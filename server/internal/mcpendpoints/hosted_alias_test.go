@@ -10,7 +10,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_endpoints"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -19,7 +18,7 @@ import (
 
 // mirroredAddress is a copy of the address part of the dual-write release's MirrorOf, which pods from that release
 // apply on every hosted write. It is the oracle the alias rule must agree with.
-func mirroredAddress(alias hostingstate.Address, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
+func mirroredAddress(alias legacyalias.Alias, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
 	var preferred *mcpendpointsrepo.McpEndpoint
 	for i := range endpoints {
 		candidate := &endpoints[i]
@@ -41,7 +40,7 @@ func mirroredAddress(alias hostingstate.Address, endpoints []mcpendpointsrepo.Mc
 }
 
 type aliasState struct {
-	alias     hostingstate.Address
+	alias     legacyalias.Alias
 	endpoints []mcpendpointsrepo.McpEndpoint
 }
 

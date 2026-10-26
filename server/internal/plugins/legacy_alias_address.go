@@ -39,7 +39,7 @@ func listPluginMCPServers(ctx context.Context, db repo.DBTX, params repo.ListPlu
 	}
 	aliases, err := legacyalias.List(ctx, db, params.ProjectID, ids)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // legacyalias names the failing query.
+		return nil, fmt.Errorf("load plugin MCP server aliases: %w", err)
 	}
 	none := pgtype.Text{String: "", Valid: false}
 	out := make([]pluginMCPServerRow, 0, len(rows))

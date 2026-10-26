@@ -139,8 +139,11 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 			return none, oops.E(oops.CodeUnexpected, err, "load toolset MCP server").LogError(ctx, logger)
 		}
 		if wrapper == nil {
-			// Not hosted: nothing serves it, so it previews as a server without endpoints.
-			return attachTarget{issuerID: hosting.UserSessionIssuerID, onPlatformHost: anyOnPlatformHost(nil)}, nil
+			alias, err := legacyalias.Get(ctx, s.db, projectID, toolset.ID)
+			if err != nil {
+				return none, oops.E(oops.CodeUnexpected, err, "load toolset alias").LogError(ctx, logger)
+			}
+			return attachTarget{issuerID: hosting.UserSessionIssuerID, onPlatformHost: !alias.CustomDomainID.Valid}, nil
 		}
 		return s.canonicalAttachTarget(ctx, logger, organizationID, projectID, wrapper, toolset)
 	default:

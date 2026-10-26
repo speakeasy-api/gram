@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const checkUnifiedSlugAvailability = `-- name: CheckUnifiedSlugAvailability :one
+const checkEndpointSlugAvailability = `-- name: CheckEndpointSlugAvailability :one
 SELECT (
   $1::boolean
   OR $2::uuid IS NULL
@@ -41,7 +41,7 @@ SELECT (
 )
 `
 
-type CheckUnifiedSlugAvailabilityParams struct {
+type CheckEndpointSlugAvailabilityParams struct {
 	SkipDomainCheck  bool
 	CustomDomainID   uuid.NullUUID
 	OrganizationID   string
@@ -52,13 +52,12 @@ type CheckUnifiedSlugAvailabilityParams struct {
 // True when no live mcp_endpoints.slug holds the slug in the namespace
 // (platform when custom_domain_id is NULL, else that domain). Callers also
 // check the legacy toolset alias (legacyalias.Taken).
-// Not project-scoped, mirroring the partial unique indexes. Owner exclusions:
-// exclude_toolset_id discounts that toolset's row and its wrapper's endpoints;
-// exclude_mcp_server_id discounts the toolset backing that server. Unless
+// Not project-scoped, mirroring the partial unique index. exclude_toolset_id
+// discounts the endpoints of servers backed by that toolset. Unless
 // skip_domain_check, a supplied domain must be live and owned by
 // organization_id or the result is false (blocks probing foreign domains).
-func (q *Queries) CheckUnifiedSlugAvailability(ctx context.Context, arg CheckUnifiedSlugAvailabilityParams) (pgtype.Bool, error) {
-	row := q.db.QueryRow(ctx, checkUnifiedSlugAvailability,
+func (q *Queries) CheckEndpointSlugAvailability(ctx context.Context, arg CheckEndpointSlugAvailabilityParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, checkEndpointSlugAvailability,
 		arg.SkipDomainCheck,
 		arg.CustomDomainID,
 		arg.OrganizationID,

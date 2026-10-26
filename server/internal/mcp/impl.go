@@ -1256,13 +1256,13 @@ type hostedServing struct {
 	toolsetHosting *hostingstate.Hosting
 
 	// toolsetAlias is the legacy alias the legacy path was reached through.
-	toolsetAlias hostingstate.Address
+	toolsetAlias legacyalias.Alias
 }
 
 // hostedServingFromToolset derives the hosting configuration for the legacy
 // toolsets.mcp_slug path.
 // wrapperID is the toolset's canonical mcp_servers row, when it has one.
-func hostedServingFromToolset(toolset *toolsets_repo.Toolset, hosting hostingstate.Hosting, alias hostingstate.Address, wrapperID uuid.NullUUID) *hostedServing {
+func hostedServingFromToolset(toolset *toolsets_repo.Toolset, hosting hostingstate.Hosting, alias legacyalias.Alias, wrapperID uuid.NullUUID) *hostedServing {
 	var mcpServerID *uuid.UUID
 	if wrapperID.Valid {
 		mcpServerID = &wrapperID.UUID
@@ -1835,7 +1835,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 // every legacy-routed surface (serving, well-known metadata, OAuth
 // challenges) treats them as nonexistent — mirroring how the
 // mcp_endpoints → mcp_servers path handles visibility 'disabled'.
-func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainID uuid.NullUUID, strictPlatform bool) (*toolsets_repo.Toolset, hostingstate.Hosting, hostingstate.Address, uuid.NullUUID, error) {
+func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainID uuid.NullUUID, strictPlatform bool) (*toolsets_repo.Toolset, hostingstate.Hosting, legacyalias.Alias, uuid.NullUUID, error) {
 	toolset, alias, err := legacyalias.Find(ctx, s.db, mcpSlug, customDomainID, strictPlatform)
 	noWrapper := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	switch {
@@ -1872,7 +1872,7 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 }
 
 // recordToolsetSlugFallback logs and counts one legacy toolsets.mcp_slug fallback hit.
-func (s *Service) recordToolsetSlugFallback(ctx context.Context, logger *slog.Logger, entryPoint mcpmetrics.LegacyFallbackEntryPoint, mcpSlug string, toolset *toolsets_repo.Toolset, alias hostingstate.Address, wrapperID uuid.NullUUID) {
+func (s *Service) recordToolsetSlugFallback(ctx context.Context, logger *slog.Logger, entryPoint mcpmetrics.LegacyFallbackEntryPoint, mcpSlug string, toolset *toolsets_repo.Toolset, alias legacyalias.Alias, wrapperID uuid.NullUUID) {
 	s.metrics.RecordToolsetSlugFallback(ctx, logger, mcpmetrics.ToolsetSlugFallback{
 		EntryPoint:          entryPoint,
 		Slug:                mcpSlug,

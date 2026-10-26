@@ -35,7 +35,7 @@ WHERE mcp_slug = @mcp_slug
 -- name: GetAlias :one
 SELECT mcp_slug, custom_domain_id
 FROM toolsets
-WHERE id = @id AND project_id = @project_id;
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: ListAliases :many
 -- The live toolsets in the project that carry an alias.
@@ -67,6 +67,14 @@ SELECT EXISTS (
       )
     )
 )::boolean AS taken;
+
+-- name: ListTakenAliases :many
+-- Which of the given addresses, keyed "<slug>|<custom domain id or empty for the platform>", a live toolset alias holds.
+SELECT DISTINCT (t.mcp_slug || '|' || COALESCE(t.custom_domain_id::text, ''))::text AS address_key
+FROM toolsets t
+WHERE t.mcp_slug = ANY(@slugs::text[])
+  AND (t.mcp_slug || '|' || COALESCE(t.custom_domain_id::text, '')) = ANY(@address_keys::text[])
+  AND t.deleted IS FALSE;
 
 -- name: MoveAlias :exec
 -- Moves a legacy toolset's alias to the hosted endpoint that now holds its address.

@@ -16,6 +16,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -4185,7 +4186,7 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	}
 	aliases, err := legacyalias.List(ctx, db, projectID, toolsetIDs)
 	if err != nil {
-		return nil, nil, err //nolint:wrapcheck // legacyalias names the failing query.
+		return nil, nil, fmt.Errorf("list toolset aliases: %w", err)
 	}
 
 	// Include soft-deleted servers: tool_source on telemetry rows is the
@@ -4315,21 +4316,22 @@ func LoadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	if err != nil {
 		return nil, fmt.Errorf("list project gateway endpoints: %w", err)
 	}
+	// A deleted endpoint stops matching once a legacy toolset alias holds its address.
+	var deleted []legacyalias.Alias
+	for _, endpoint := range endpoints {
+		if endpoint.Deleted {
+			deleted = append(deleted, legacyalias.Alias{Slug: pgtype.Text{String: endpoint.Slug, Valid: true}, CustomDomainID: endpoint.CustomDomainID})
+		}
+	}
+	taken, err := legacyalias.TakenAddresses(ctx, db, deleted)
+	if err != nil {
+		return nil, fmt.Errorf("check gateway endpoint addresses: %w", err)
+	}
 	anchoredMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	platformMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		if endpoint.Deleted {
-			// A deleted endpoint stops matching once a legacy toolset alias holds its address.
-			taken, err := legacyalias.Taken(ctx, db, legacyalias.TakenCheck{
-				Slug: endpoint.Slug, CustomDomainID: endpoint.CustomDomainID,
-				ExcludeToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			})
-			if err != nil {
-				return nil, err //nolint:wrapcheck // legacyalias names the failing query.
-			}
-			if taken {
-				continue
-			}
+		if endpoint.Deleted && taken[legacyalias.Alias{Slug: pgtype.Text{String: endpoint.Slug, Valid: true}, CustomDomainID: endpoint.CustomDomainID}] {
+			continue
 		}
 		matcher := repo.MetaMCPMatcher{
 			URLSuffix:    "/mcp/" + endpoint.Slug,

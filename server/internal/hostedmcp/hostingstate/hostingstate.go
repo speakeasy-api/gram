@@ -74,16 +74,15 @@ func reEnableVisibility(externalOAuthServerID uuid.NullUUID) string {
 	return visibility.Private
 }
 
-// Derive is a toolset's hosting state and preferred address given the server row holding its id and the toolset's
-// legacy alias. Only a canonical wrapper hosts the toolset; without a servable endpoint its alias, which still
-// serves, is its address.
-func Derive(alias Address, externalOAuthServerID uuid.NullUUID, row *Row) (Hosting, Address) {
+// Derive is a toolset's hosting state and its servable endpoint address given the server row holding its id. Only a
+// canonical wrapper hosts the toolset.
+func Derive(externalOAuthServerID uuid.NullUUID, row *Row) (Hosting, Address) {
 	if row == nil || !row.Canonical {
 		return NotHosted(), Address{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
 	}
 	hosting := FromServer(externalOAuthServerID, row.Visibility, row.UserSessionIssuerID)
 	if !row.HasEndpoint {
-		return hosting, alias
+		return hosting, Address{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
 	}
 	return hosting, Address{Slug: pgtype.Text{String: row.EndpointSlug, Valid: true}, CustomDomainID: row.EndpointCustomDomainID}
 }

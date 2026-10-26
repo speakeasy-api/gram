@@ -677,7 +677,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 		s.logger.WarnContext(ctx, "failed to load MCP metadata", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(metadataErr))
 	}
 
-	mcpURL, err := s.resolveMCPURLFromContext(ctx, toolset, hostingstate.Address{Slug: alias.Slug, CustomDomainID: aliasDomain}, s.serverURL.String())
+	mcpURL, err := s.resolveMCPURLFromContext(ctx, toolset, legacyalias.Alias{Slug: alias.Slug, CustomDomainID: aliasDomain}, s.serverURL.String())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve MCP URL").LogError(ctx, s.logger)
 	}
@@ -1996,7 +1996,7 @@ func (s *Service) resolveToolsetMCPURL(ctx context.Context, toolset toolsets_rep
 	if mcpSlug == "" {
 		alias, err := legacyalias.Get(ctx, s.db, toolset.ProjectID, toolset.ID)
 		if err != nil {
-			return "", err //nolint:wrapcheck // legacyalias names the failing query.
+			return "", fmt.Errorf("load toolset alias: %w", err)
 		}
 		return s.resolveMCPURLFromContext(ctx, toolset, alias, s.serverURL.String())
 	}
@@ -2100,12 +2100,12 @@ func safeTemplateURL(rawURL string, allowedScheme string) (template.URL, error) 
 // resolveMCPURLFromContext builds a toolset's MCP URL. The canonical server's address wins: its platform endpoint
 // first, else its oldest endpoint on a live custom domain; the toolset's frozen alias stands only when it has
 // neither.
-func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, alias hostingstate.Address, serverUrl string) (string, error) {
+func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, alias legacyalias.Alias, serverUrl string) (string, error) {
 	hosting, err := hostingstate.Load(ctx, s.db, toolset.OrganizationID, []uuid.UUID{toolset.ID})
 	if err != nil {
 		return "", fmt.Errorf("load hosted MCP address: %w", err)
 	}
-	address := alias
+	address := hostingstate.Address{Slug: alias.Slug, CustomDomainID: alias.CustomDomainID}
 	if row := hostingstate.For(hosting, toolset.ID); row != nil && row.Canonical && row.HasEndpoint {
 		address = hostingstate.Address{Slug: pgtype.Text{String: row.EndpointSlug, Valid: true}, CustomDomainID: row.EndpointCustomDomainID}
 	}
@@ -2148,9 +2148,9 @@ func (s *Service) resolveDomainIDFromContext(ctx context.Context) *uuid.UUID {
 }
 
 // loadToolsetFromContextAndSlug resolves a legacy toolsets.mcp_slug and reports whether a canonical wrapper governs it.
-func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, hostingstate.Hosting, hostingstate.Address, bool, error) {
+func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, hostingstate.Hosting, legacyalias.Alias, bool, error) {
 	var toolset toolsets_repo.Toolset
-	var alias hostingstate.Address
+	var alias legacyalias.Alias
 	var toolsetErr error
 	isCustomDomainRequest := customdomains.FromContext(ctx) != nil
 	domainID := s.resolveDomainIDFromContext(ctx)

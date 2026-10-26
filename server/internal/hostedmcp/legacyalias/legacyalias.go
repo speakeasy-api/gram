@@ -14,20 +14,27 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
+// Alias is a toolset's legacy /mcp/<slug> address; an invalid Slug means it has none.
+type Alias struct {
+	Slug pgtype.Text
+
+	// CustomDomainID is the custom domain Slug lives on; invalid means the platform domain.
+	CustomDomainID uuid.NullUUID
+}
+
 // None is the alias of a toolset that has none.
-func None() hostingstate.Address {
-	return hostingstate.Address{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+func None() Alias {
+	return Alias{Slug: pgtype.Text{String: "", Valid: false}, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
 }
 
 // Get returns a toolset's alias.
-func Get(ctx context.Context, db repo.DBTX, projectID, toolsetID uuid.UUID) (hostingstate.Address, error) {
+func Get(ctx context.Context, db repo.DBTX, projectID, toolsetID uuid.UUID) (Alias, error) {
 	row, err := repo.New(db).GetAlias(ctx, repo.GetAliasParams{ID: toolsetID, ProjectID: projectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -35,13 +42,13 @@ func Get(ctx context.Context, db repo.DBTX, projectID, toolsetID uuid.UUID) (hos
 	case err != nil:
 		return None(), fmt.Errorf("load legacy toolset alias: %w", err)
 	}
-	return hostingstate.Address{Slug: row.McpSlug, CustomDomainID: row.CustomDomainID}, nil
+	return Alias{Slug: row.McpSlug, CustomDomainID: row.CustomDomainID}, nil
 }
 
 // List returns the aliases of the given live toolsets in a project, keyed by toolset id; toolsets without one are
 // left out.
-func List(ctx context.Context, db repo.DBTX, projectID uuid.UUID, toolsetIDs []uuid.UUID) (map[uuid.UUID]hostingstate.Address, error) {
-	aliases := make(map[uuid.UUID]hostingstate.Address, len(toolsetIDs))
+func List(ctx context.Context, db repo.DBTX, projectID uuid.UUID, toolsetIDs []uuid.UUID) (map[uuid.UUID]Alias, error) {
+	aliases := make(map[uuid.UUID]Alias, len(toolsetIDs))
 	if len(toolsetIDs) == 0 {
 		return aliases, nil
 	}
@@ -50,7 +57,7 @@ func List(ctx context.Context, db repo.DBTX, projectID uuid.UUID, toolsetIDs []u
 		return nil, fmt.Errorf("list legacy toolset aliases: %w", err)
 	}
 	for _, row := range rows {
-		aliases[row.ID] = hostingstate.Address{Slug: row.McpSlug, CustomDomainID: row.CustomDomainID}
+		aliases[row.ID] = Alias{Slug: row.McpSlug, CustomDomainID: row.CustomDomainID}
 	}
 	return aliases, nil
 }
@@ -58,7 +65,7 @@ func List(ctx context.Context, db repo.DBTX, projectID uuid.UUID, toolsetIDs []u
 // Find returns the live toolset an alias names, with that alias. A valid customDomainID scopes the lookup to that
 // domain; otherwise strictPlatform restricts it to platform aliases, and without it a platform alias wins over a
 // custom-domain one with the same slug. It returns pgx.ErrNoRows when no toolset has the alias.
-func Find(ctx context.Context, db toolsetsrepo.DBTX, slug string, customDomainID uuid.NullUUID, strictPlatform bool) (toolsetsrepo.Toolset, hostingstate.Address, error) {
+func Find(ctx context.Context, db toolsetsrepo.DBTX, slug string, customDomainID uuid.NullUUID, strictPlatform bool) (toolsetsrepo.Toolset, Alias, error) {
 	q := repo.New(db)
 	text := pgtype.Text{String: slug, Valid: true}
 	var row repo.FindToolsetByAliasRow
@@ -78,19 +85,19 @@ func Find(ctx context.Context, db toolsetsrepo.DBTX, slug string, customDomainID
 	if err != nil {
 		return toolsetsrepo.Toolset{}, None(), err
 	}
-	return load(ctx, db, row.ID, row.ProjectID, hostingstate.Address{Slug: row.McpSlug, CustomDomainID: row.CustomDomainID})
+	return load(ctx, db, row.ID, row.ProjectID, Alias{Slug: row.McpSlug, CustomDomainID: row.CustomDomainID})
 }
 
 // FindInProject returns the live toolset in the project whose alias has the slug, or pgx.ErrNoRows.
-func FindInProject(ctx context.Context, db toolsetsrepo.DBTX, projectID uuid.UUID, slug string) (toolsetsrepo.Toolset, hostingstate.Address, error) {
+func FindInProject(ctx context.Context, db toolsetsrepo.DBTX, projectID uuid.UUID, slug string) (toolsetsrepo.Toolset, Alias, error) {
 	row, err := repo.New(db).FindToolsetByProjectAlias(ctx, repo.FindToolsetByProjectAliasParams{McpSlug: pgtype.Text{String: slug, Valid: true}, ProjectID: projectID})
 	if err != nil {
 		return toolsetsrepo.Toolset{}, None(), err
 	}
-	return load(ctx, db, row.ID, row.ProjectID, hostingstate.Address{Slug: row.McpSlug, CustomDomainID: row.CustomDomainID})
+	return load(ctx, db, row.ID, row.ProjectID, Alias{Slug: row.McpSlug, CustomDomainID: row.CustomDomainID})
 }
 
-func load(ctx context.Context, db toolsetsrepo.DBTX, id, projectID uuid.UUID, alias hostingstate.Address) (toolsetsrepo.Toolset, hostingstate.Address, error) {
+func load(ctx context.Context, db toolsetsrepo.DBTX, id, projectID uuid.UUID, alias Alias) (toolsetsrepo.Toolset, Alias, error) {
 	toolset, err := toolsetsrepo.New(db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: id, ProjectID: projectID})
 	if err != nil {
 		return toolsetsrepo.Toolset{}, None(), err
@@ -121,10 +128,42 @@ func Taken(ctx context.Context, db repo.DBTX, check TakenCheck) (bool, error) {
 	return taken, nil
 }
 
-// AliasAddress is the address a legacy toolset's alias follows among its hosted server's live endpoints: its
+// TakenAddresses reports which of the given addresses a live toolset alias holds.
+func TakenAddresses(ctx context.Context, db repo.DBTX, addresses []Alias) (map[Alias]bool, error) {
+	taken := make(map[Alias]bool)
+	if len(addresses) == 0 {
+		return taken, nil
+	}
+	slugs := make([]string, len(addresses))
+	keys := make([]string, len(addresses))
+	byKey := make(map[string]Alias, len(addresses))
+	for i, address := range addresses {
+		slugs[i] = address.Slug.String
+		keys[i] = addressKey(address)
+		byKey[keys[i]] = address
+	}
+	rows, err := repo.New(db).ListTakenAliases(ctx, repo.ListTakenAliasesParams{Slugs: slugs, AddressKeys: keys})
+	if err != nil {
+		return nil, fmt.Errorf("list taken legacy toolset aliases: %w", err)
+	}
+	for _, key := range rows {
+		taken[byKey[key]] = true
+	}
+	return taken, nil
+}
+
+func addressKey(address Alias) string {
+	domain := ""
+	if address.CustomDomainID.Valid {
+		domain = address.CustomDomainID.UUID.String()
+	}
+	return address.Slug.String + "|" + domain
+}
+
+// aliasAddress is the address a legacy toolset's alias follows among its hosted server's live endpoints: its
 // current address while an endpoint still holds it, else the platform endpoint, else the oldest one. With no live
 // endpoint the alias stays. This is the address rule pods that mirror the toolset columns apply, so both agree.
-func AliasAddress(alias hostingstate.Address, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
+func aliasAddress(alias Alias, endpoints []mcpendpointsrepo.McpEndpoint) (pgtype.Text, uuid.NullUUID) {
 	var preferred *mcpendpointsrepo.McpEndpoint
 	for i := range endpoints {
 		candidate := &endpoints[i]
@@ -145,7 +184,7 @@ func AliasAddress(alias hostingstate.Address, endpoints []mcpendpointsrepo.McpEn
 	return pgtype.Text{String: preferred.Slug, Valid: true}, preferred.CustomDomainID
 }
 
-// FollowAlias moves a legacy toolset's alias to the endpoint AliasAddress picks, after a write to its hosted
+// FollowAlias moves a legacy toolset's alias to the endpoint aliasAddress picks, after a write to its hosted
 // server's endpoints. Toolsets without an alias are left alone. The caller holds the toolset row lock.
 func FollowAlias(ctx context.Context, tx repo.DBTX, organizationID string, projectID, toolsetID uuid.UUID) error {
 	alias, err := Get(ctx, tx, projectID, toolsetID)
@@ -165,7 +204,7 @@ func FollowAlias(ctx context.Context, tx repo.DBTX, organizationID string, proje
 	for _, row := range rows {
 		live = append(live, row.McpEndpoint)
 	}
-	slug, domainID := AliasAddress(alias, live)
+	slug, domainID := aliasAddress(alias, live)
 	if slug == alias.Slug && domainID == alias.CustomDomainID {
 		return nil
 	}
@@ -180,7 +219,7 @@ func FollowAlias(ctx context.Context, tx repo.DBTX, organizationID string, proje
 }
 
 // SetFixture sets or clears a toolset's alias, for tests and seeds of legacy toolsets.
-func SetFixture(ctx context.Context, db repo.DBTX, projectID, toolsetID uuid.UUID, alias hostingstate.Address) error {
+func SetFixture(ctx context.Context, db repo.DBTX, projectID, toolsetID uuid.UUID, alias Alias) error {
 	if err := repo.New(db).SetAliasFixture(ctx, repo.SetAliasFixtureParams{McpSlug: alias.Slug, CustomDomainID: alias.CustomDomainID, ID: toolsetID, ProjectID: projectID}); err != nil {
 		return fmt.Errorf("set legacy toolset alias: %w", err)
 	}

@@ -554,6 +554,7 @@ SELECT
     ms.id AS meta_mcp_server_id,
     ms.name,
     e.slug,
+    -- legacyalias: the caller checks deleted rows against aliases; drop with AIM-670.
     e.custom_domain_id,
     e.deleted,
     e.is_domain_root,

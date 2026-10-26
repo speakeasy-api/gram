@@ -3155,6 +3155,7 @@ SELECT
   t.slug AS toolset_slug,
   ms.visibility::text AS visibility,
   COALESCE(ep.slug, '')::text AS endpoint_slug,
+  -- legacyalias: drop with AIM-670.
   (t.id IS NOT NULL)::bool AS hosted_toolset,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
   t.default_environment_slug,
@@ -4576,6 +4577,7 @@ type ResolveToolsetsForWriteRow struct {
 // Also locks the toolsets behind canonical wrappers named by slug, so server
 // attachments take the toolset lock before the server lock, as deletion does.
 // enables_mcp needs an endpoint; disabled_wrapper lets the caller count the legacy alias instead.
+// legacyalias: drop disabled_wrapper with AIM-670.
 // Serialize MCP-enable writes and deletion without blocking FK KEY SHARE
 // locks when an MCP server concurrently switches to this toolset backend.
 func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolsetsForWriteParams) ([]ResolveToolsetsForWriteRow, error) {
