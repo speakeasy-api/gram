@@ -185,6 +185,23 @@ func TestCodeBridgeDescribeRetriesARateLimitedMember(t *testing.T) {
 	require.Equal(t, int32(1), upstream.failures.Load())
 }
 
+func TestCodeBridgeDescribeDoesNotRetryBeforeALongRetryAfter(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	upstream := newScriptedUpstream(t, scriptedTools("tool", 3), 100)
+	upstream.fail(http.StatusTooManyRequests, "60", "rate limited", -1)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Limited", "limited", 0, upstream.url)
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service.Service, gateway.ID)
+	started := time.Now()
+	_, err := host.Describe(ctx, "limited--tool_001")
+	require.ErrorIs(t, err, codemode.ErrToolUnavailable)
+	require.Less(t, time.Since(started), time.Second)
+	require.Equal(t, int32(1), upstream.failures.Load())
+}
+
 func TestCodeBridgeObservesEndpointAndGrantRevocation(t *testing.T) {
 	t.Parallel()
 	for _, change := range []string{"endpoint", "issuer", "grant"} {

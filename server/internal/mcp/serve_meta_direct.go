@@ -117,6 +117,11 @@ func (s *Service) describeMetaMemberWithRetry(ctx context.Context, logger *slog.
 		if !ok || !failure.retryable || attempt == maxMemberDescribeAttempts {
 			return result
 		}
+		// An upstream asking to wait a whole listing's time or longer is not
+		// retried early, even when ctx has no deadline, as in a Code Mode describe.
+		if failure.retryAfter >= maxGatewayListingTime {
+			return result
+		}
 		delay := failure.retryAfter
 		if delay == 0 {
 			delay = memberRetryBaseDelay << (attempt - 1)
