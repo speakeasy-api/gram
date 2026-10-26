@@ -103,6 +103,7 @@ it("publishes only explicitly reviewed public metadata against the canonical tar
       sourceRevision: "revision-1",
       curationRevision: "curation-1",
       publicMetadataConfirmed: true,
+      overrideEligibility: false,
       retryKey: expect.any(String),
     },
   });
@@ -332,4 +333,45 @@ it("requires staff to choose authentication when the source has no known auth mo
       }) as HTMLButtonElement
     ).disabled,
   ).toBe(false);
+});
+
+it("requires a separate override and public review before promoting despite failed health", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    eligible: false,
+    reason: "errors_observed",
+    suggestedMetadata: { ...metadata, authMode: "none" },
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  await screen.findByText("Recent failures need investigation");
+  expect(screen.queryByRole("button", { name: "Promote anyway" })).toBeNull();
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Promote anyway despite the health criteria",
+    }),
+  );
+  const publish = screen.getByRole("button", {
+    name: "Promote anyway",
+  }) as HTMLButtonElement;
+  expect(publish.disabled).toBe(true);
+  fireEvent.click(screen.getByRole("checkbox", { name: /I verified/ }));
+  expect(publish.disabled).toBe(false);
+  fireEvent.click(publish);
+  await screen.findByText("Catalog entry published");
+  expect(api.promote.mock.calls[0]?.[0].request.overrideEligibility).toBe(true);
+});
+it.each([
+  "unsupported_configuration",
+  "disabled",
+  "already_catalogued",
+  "source_changed",
+])("does not offer a health override for %s", async (reason) => {
+  api.candidate.mockResolvedValue({ ...candidate, eligible: false, reason });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  await screen.findByText("30 successful calls", { exact: false });
+  expect(screen.queryByRole("checkbox", { name: /Promote anyway/ })).toBeNull();
 });

@@ -438,6 +438,9 @@ type PromoteRegistryCandidateRequestBody struct {
 	AuthMode                *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
 	RetryKey                *string `form:"retry_key,omitempty" json:"retry_key,omitempty" xml:"retry_key,omitempty"`
 	PublicMetadataConfirmed *bool   `form:"public_metadata_confirmed,omitempty" json:"public_metadata_confirmed,omitempty" xml:"public_metadata_confirmed,omitempty"`
+	// Explicitly accept insufficient, failed, or unavailable health evidence.
+	// Source safety checks still apply.
+	OverrideEligibility *bool `form:"override_eligibility,omitempty" json:"override_eligibility,omitempty" xml:"override_eligibility,omitempty"`
 }
 
 // CurateRegistryPromotionCandidateRequestBody is the type of the "admin"
@@ -42583,6 +42586,12 @@ func NewPromoteRegistryCandidatePayload(body *PromoteRegistryCandidateRequestBod
 		AuthMode:                *body.AuthMode,
 		RetryKey:                *body.RetryKey,
 		PublicMetadataConfirmed: *body.PublicMetadataConfirmed,
+	}
+	if body.OverrideEligibility != nil {
+		v.OverrideEligibility = *body.OverrideEligibility
+	}
+	if body.OverrideEligibility == nil {
+		v.OverrideEligibility = false
 	}
 	v.AdminSessionToken = adminSessionToken
 

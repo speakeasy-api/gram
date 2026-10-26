@@ -247,7 +247,8 @@ type Service interface {
 	// the upstream.
 	MigrateExternalMcpServers(context.Context, *MigrateExternalMcpServersPayload) (res *AdminExternalMcpMigrationResult, err error)
 	// List observed remote MCP candidates and durable promotion delivery status.
-	// No source URLs or credentials are returned.
+	// Active excludes endpoints already in the catalogue; candidate includes all
+	// unpublished active entries. No source URLs or credentials are returned.
 	ListRegistryPromotionCandidates(context.Context, *ListRegistryPromotionCandidatesPayload) (res *AdminRegistryPromotionCandidates, err error)
 	// Refresh health evidence for one exact remote MCP deployment before staff
 	// review.
@@ -2977,6 +2978,9 @@ type PromoteRegistryCandidatePayload struct {
 	AuthMode                string
 	RetryKey                string
 	PublicMetadataConfirmed bool
+	// Explicitly accept insufficient, failed, or unavailable health evidence.
+	// Source safety checks still apply.
+	OverrideEligibility bool
 }
 
 // RearmTrialPayload is the payload type of the admin service rearmTrial method.

@@ -80,7 +80,8 @@ WHERE (c.promoted_at IS NOT NULL OR EXISTS (
 ))
 AND (
  @status_filter::text='all'
- OR (@status_filter::text IN ('active','candidate') AND c.promoted_at IS NULL AND c.curation_status='active')
+ OR (@status_filter::text IN ('active','candidate') AND c.promoted_at IS NULL AND c.curation_status='active'
+ AND (@status_filter::text='candidate' OR c.reason <> 'already_catalogued'))
  OR (@status_filter::text IN ('rejected','archived') AND c.promoted_at IS NULL AND c.curation_status= @status_filter::text)
  OR (@status_filter::text='promoted' AND c.promoted_at IS NOT NULL)
 )

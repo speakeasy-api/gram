@@ -64,7 +64,7 @@ func promotionTarget() {
 
 func registryPromotionDesign() {
 	Method("listRegistryPromotionCandidates", func() {
-		Description("List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.")
+		Description("List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.")
 		Payload(func() {
 			security.AdminAuthPayload()
 			Attribute("cursor", String)
@@ -109,6 +109,7 @@ func registryPromotionDesign() {
 			Attribute("auth_mode", String, func() { Enum("none", "oauth") })
 			Attribute("retry_key", String)
 			Attribute("public_metadata_confirmed", Boolean)
+			Attribute("override_eligibility", Boolean, "Explicitly accept insufficient, failed, or unavailable health evidence. Source safety checks still apply.", func() { Default(false) })
 			Required("curation_revision", "source_revision", "public_name", "public_title", "public_description", "public_url", "documentation_url", "docs_slug", "auth_mode", "retry_key", "public_metadata_confirmed")
 		})
 		Result(AdminRegistryPromotionCandidate)

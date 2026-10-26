@@ -60,6 +60,8 @@ type Request struct {
 	Public PublicMetadata `json:"public"`
 	// PublicMetadataConfirmed records explicit staff review of public suitability.
 	PublicMetadataConfirmed bool `json:"public_metadata_confirmed"`
+	// OverrideEligibility explicitly accepts insufficient or unhealthy usage evidence.
+	OverrideEligibility bool `json:"override_eligibility,omitempty"`
 	// RetryKey identifies one exact requested change.
 	RetryKey string `json:"retry_key"`
 }

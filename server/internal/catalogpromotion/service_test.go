@@ -373,7 +373,7 @@ func TestPromotionDNSOutagesRemainOperationalErrors(t *testing.T) {
 				return []net.IP{net.ParseIP(tc.ip)}, nil
 			}})))
 			tx := testenv.BeginTx(t, t.Context(), f.db)
-			_, err := f.service.ValidateTx(t.Context(), tx, f.target, f.request.SourceRevision, f.request.CurationRevision, f.request.Public)
+			_, err := f.service.ValidateTx(t.Context(), tx, f.target, f.request.SourceRevision, f.request.CurationRevision, f.request.Public, false)
 			require.ErrorIs(t, err, tc.expected)
 			if errors.Is(tc.expected, ErrUnavailable) {
 				require.ErrorIs(t, err, tc.lookupErr)
@@ -404,4 +404,75 @@ func TestCandidateListRetainsPublishedDeletedSources(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, published.ID, rows[0].ID)
+}
+
+func TestPromotionHealthOverrideRequiresExplicitConsentAndAudits(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{"insufficient_evidence", "errors_observed", "logging_disabled", "telemetry_unavailable"} {
+		t.Run(reason, func(t *testing.T) {
+			t.Parallel()
+			f := newPromotionFixture(t)
+			source, err := repo.New(f.db).GetSource(t.Context(), repo.GetSourceParams{OrganizationID: f.target.OrganizationID, ProjectID: f.target.ProjectID, McpServerID: f.target.MCPServerID})
+			require.NoError(t, err)
+			_, err = repo.New(f.db).StoreEvidence(t.Context(), repo.StoreEvidenceParams{OrganizationID: f.target.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.target.ProjectID, Valid: true}, McpServerID: uuid.NullUUID{UUID: f.target.MCPServerID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: source.RemoteMcpServerID, Valid: true}, SourceRevision: f.request.SourceRevision, Reason: reason, Eligible: false, CheckedAt: conv.ToPGTimestamptz(f.health.now.Add(time.Second))})
+			require.NoError(t, err)
+			_, err = f.promote(t)
+			require.ErrorIs(t, err, ErrIneligible)
+			f.request.OverrideEligibility = true
+			published, err := f.promote(t)
+			require.NoError(t, err)
+			require.Equal(t, "promoted", published.Status)
+			event, err := audittest.LatestAuditLogByAction(t.Context(), f.db, audit.ActionMcpServerPromoteCatalogue)
+			require.NoError(t, err)
+			var metadata struct {
+				EligibilityOverridden bool   `json:"eligibility_overridden"`
+				EligibilityReason     string `json:"eligibility_reason"`
+			}
+			require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
+			require.True(t, metadata.EligibilityOverridden)
+			require.Equal(t, reason, metadata.EligibilityReason)
+			_, err = f.promote(t)
+			require.NoError(t, err, "identical override retry is idempotent")
+			f.request.OverrideEligibility = false
+			_, err = f.promote(t)
+			require.ErrorIs(t, err, ErrConflict, "retry key is bound to override decision")
+		})
+	}
+}
+
+func TestPromotionOverrideDoesNotBypassSourceChecks(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{"unsupported_configuration", "disabled", "already_catalogued", "source_changed", "authentication_required", "unknown_future_reason"} {
+		t.Run(reason, func(t *testing.T) {
+			t.Parallel()
+			f := newPromotionFixture(t)
+			candidate, err := f.service.GetCandidate(t.Context(), f.target)
+			require.NoError(t, err)
+			_, err = repo.New(f.db).StoreEvidence(t.Context(), repo.StoreEvidenceParams{OrganizationID: f.target.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.target.ProjectID, Valid: true}, McpServerID: uuid.NullUUID{UUID: f.target.MCPServerID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: uuid.MustParse(candidate.RemoteMCPServerID), Valid: true}, SourceRevision: f.request.SourceRevision, Reason: reason, CheckedAt: conv.ToPGTimestamptz(f.health.now.Add(time.Second))})
+			require.NoError(t, err)
+			f.request.OverrideEligibility = true
+			_, err = f.promote(t)
+			require.ErrorIs(t, err, ErrIneligible)
+		})
+	}
+}
+
+func TestAlreadyCataloguedCandidatesHiddenByDefault(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	candidate, err := f.service.GetCandidate(t.Context(), f.target)
+	require.NoError(t, err)
+	_, err = repo.New(f.db).StoreEvidence(t.Context(), repo.StoreEvidenceParams{OrganizationID: f.target.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.target.ProjectID, Valid: true}, McpServerID: uuid.NullUUID{UUID: f.target.MCPServerID, Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: uuid.MustParse(candidate.RemoteMCPServerID), Valid: true}, SourceRevision: f.request.SourceRevision, Reason: "already_catalogued", CheckedAt: conv.ToPGTimestamptz(f.health.now.Add(time.Second))})
+	require.NoError(t, err)
+	for _, status := range []string{"", "active", "candidate", "all"} {
+		rows, next, err := f.service.ListCandidates(t.Context(), "", 1, status)
+		require.NoError(t, err)
+		require.Empty(t, next)
+		if status == "" || status == "active" {
+			require.Empty(t, rows)
+		} else {
+			require.Len(t, rows, 1)
+			require.Equal(t, candidate.ID, rows[0].ID)
+		}
+	}
 }

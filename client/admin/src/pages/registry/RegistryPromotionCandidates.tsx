@@ -1,5 +1,6 @@
 import type { AdminRegistryPromotionCandidate } from "@gram/admin-client/models/components/adminregistrypromotioncandidate";
 import { useRef, useState, type JSX } from "react";
+import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -33,6 +34,7 @@ import { promotionTimestamp, promotionReason } from "./registryPromotionLabels";
 
 const STATUS_FILTERS = [
   ["active", "Active"],
+  ["candidate", "Active + catalogued"],
   ["all", "All statuses"],
   ["rejected", "Rejected"],
   ["archived", "Archived"],
@@ -95,7 +97,7 @@ export function RegistryPromotionCandidates({
             }
           }}
         >
-          <SelectTrigger aria-label="Candidate status" className="w-44">
+          <SelectTrigger aria-label="Candidate status" className="w-52">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -106,7 +108,10 @@ export function RegistryPromotionCandidates({
             ))}
           </SelectContent>
         </Select>
-        <span className="text-muted-foreground text-sm">Newest first</span>
+        <span className="text-muted-foreground text-sm">
+          Newest first
+          {status === "active" ? " · Already catalogued endpoints hidden" : ""}
+        </span>
       </div>
       {query.isError && (
         <p role="alert">
@@ -333,9 +338,17 @@ function CandidateCurationActions({
           retryKey: retry.current.key,
         },
       });
+      toast.success(
+        action === "reject"
+          ? "Candidate rejected"
+          : action === "archive"
+            ? "Candidate archived"
+            : "Candidate restored",
+      );
       await onUpdated();
     } catch {
-      // The mutation exposes a bounded message below; retain the exact retry key.
+      toast.error("Could not update this candidate. Refresh and try again.");
+      // Retain the exact retry key and show the bounded inline message below.
     } finally {
       inFlight.current = false;
     }

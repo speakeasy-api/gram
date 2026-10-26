@@ -114,7 +114,7 @@ func (s *Service) PromoteRegistryCandidate(ctx context.Context, p *gen.PromoteRe
 	})
 	result, err := s.catalogPromotion.PromoteTx(ctx, tx, catalogpromotion.Request{Target: target, SourceRevision: p.SourceRevision, CurationRevision: p.CurationRevision,
 		Public:                  catalogpromotion.PublicMetadata{Name: p.PublicName, Title: p.PublicTitle, Description: p.PublicDescription, URL: p.PublicURL, DocumentationURL: p.DocumentationURL, DocsSlug: p.DocsSlug, AuthMode: p.AuthMode},
-		PublicMetadataConfirmed: p.PublicMetadataConfirmed, RetryKey: p.RetryKey}, actor.String())
+		PublicMetadataConfirmed: p.PublicMetadataConfirmed, OverrideEligibility: p.OverrideEligibility, RetryKey: p.RetryKey}, actor.String())
 	if err != nil {
 		return nil, promotionError(err)
 	}

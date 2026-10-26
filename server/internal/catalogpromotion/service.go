@@ -335,8 +335,18 @@ func lockSource(ctx context.Context, tx pgx.Tx, target Target) (repo.GetSourceRo
 	return source, nil
 }
 
-// ValidateTx locks the source and candidate and rejects stale or insufficient evidence.
-func (s *Service) ValidateTx(ctx context.Context, tx pgx.Tx, target Target, revision, curationRevision string, public PublicMetadata) (Candidate, error) {
+// CanOverrideEligibility limits staff overrides to health evidence, never source safety or lifecycle checks.
+func CanOverrideEligibility(reason string) bool {
+	switch reason {
+	case "insufficient_evidence", "errors_observed", "logging_disabled", "telemetry_unavailable":
+		return true
+	default:
+		return false
+	}
+}
+
+// ValidateTx locks the source and candidate and requires explicit acceptance of insufficient evidence.
+func (s *Service) ValidateTx(ctx context.Context, tx pgx.Tx, target Target, revision, curationRevision string, public PublicMetadata, overrideEligibility bool) (Candidate, error) {
 	source, err := lockSource(ctx, tx, target)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Candidate{}, ErrNotFound
@@ -357,7 +367,7 @@ func (s *Service) ValidateTx(ctx context.Context, tx pgx.Tx, target Target, revi
 	if row.CurationRevision.String() != curationRevision || revision != source.SourceRevision || revision != row.SourceRevision || !row.CheckedAt.Valid || s.now().Sub(row.CheckedAt.Time) > evidenceLifetime {
 		return Candidate{}, ErrStale
 	}
-	if !row.Eligible || source.Visibility == "disabled" || source.HeaderCount != 0 {
+	if (!row.Eligible && (!overrideEligibility || !CanOverrideEligibility(row.Reason))) || source.Visibility == "disabled" || source.HeaderCount != 0 {
 		return Candidate{}, ErrIneligible
 	}
 	if err := validatePublic(public); err != nil {
@@ -428,7 +438,7 @@ func (s *Service) PromoteTx(ctx context.Context, tx pgx.Tx, request Request, act
 		}
 		return Candidate{}, ErrConflict
 	}
-	if _, err := s.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public); err != nil {
+	if _, err := s.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public, request.OverrideEligibility); err != nil {
 		return Candidate{}, err
 	}
 	principal, err := urn.ParsePrincipal(actor)
@@ -482,6 +492,7 @@ func (s *Service) PromoteTx(ctx context.Context, tx pgx.Tx, request Request, act
 	}
 	if err := audit.NewLogger().LogMcpServerPromoteCatalogue(ctx, tx, audit.LogMcpServerPromoteCatalogueEvent{
 		OrganizationID: request.Target.OrganizationID, ProjectID: request.Target.ProjectID, Actor: principal, McpServerURN: urn.NewMcpServer(request.Target.MCPServerID),
+		EligibilityOverridden: request.OverrideEligibility && !prior.Eligible, EligibilityReason: prior.Reason,
 	}); err != nil {
 		return Candidate{}, fmt.Errorf("audit catalogue promotion: %w", err)
 	}

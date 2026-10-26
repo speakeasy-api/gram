@@ -794,7 +794,8 @@ WHERE (c.promoted_at IS NOT NULL OR EXISTS (
 ))
 AND (
  $1::text='all'
- OR ($1::text IN ('active','candidate') AND c.promoted_at IS NULL AND c.curation_status='active')
+ OR ($1::text IN ('active','candidate') AND c.promoted_at IS NULL AND c.curation_status='active'
+ AND ($1::text='candidate' OR c.reason <> 'already_catalogued'))
  OR ($1::text IN ('rejected','archived') AND c.promoted_at IS NULL AND c.curation_status= $1::text)
  OR ($1::text='promoted' AND c.promoted_at IS NOT NULL)
 )

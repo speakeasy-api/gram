@@ -21,6 +21,15 @@ export function promotionReason(reason: string): string {
   );
 }
 
+export function canOverridePromotionEligibility(reason: string): boolean {
+  return [
+    "insufficient_evidence",
+    "errors_observed",
+    "logging_disabled",
+    "telemetry_unavailable",
+  ].includes(reason);
+}
+
 const DELIVERY_STATUSES = new Map(
   Object.entries({
     pending: "Pending",

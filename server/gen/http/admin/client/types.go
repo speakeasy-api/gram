@@ -438,6 +438,9 @@ type PromoteRegistryCandidateRequestBody struct {
 	AuthMode                string `form:"auth_mode" json:"auth_mode" xml:"auth_mode"`
 	RetryKey                string `form:"retry_key" json:"retry_key" xml:"retry_key"`
 	PublicMetadataConfirmed bool   `form:"public_metadata_confirmed" json:"public_metadata_confirmed" xml:"public_metadata_confirmed"`
+	// Explicitly accept insufficient, failed, or unavailable health evidence.
+	// Source safety checks still apply.
+	OverrideEligibility bool `form:"override_eligibility" json:"override_eligibility" xml:"override_eligibility"`
 }
 
 // CurateRegistryPromotionCandidateRequestBody is the type of the "admin"
@@ -24258,6 +24261,13 @@ func NewPromoteRegistryCandidateRequestBody(p *admin.PromoteRegistryCandidatePay
 		AuthMode:                p.AuthMode,
 		RetryKey:                p.RetryKey,
 		PublicMetadataConfirmed: p.PublicMetadataConfirmed,
+		OverrideEligibility:     p.OverrideEligibility,
+	}
+	{
+		var zero bool
+		if body.OverrideEligibility == zero {
+			body.OverrideEligibility = false
+		}
 	}
 	return body
 }
