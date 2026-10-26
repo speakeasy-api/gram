@@ -2307,3 +2307,10 @@ SELECT EXISTS (
       AND wait_event_type = 'Lock'
       AND query LIKE '%LockWorkloadIssuerForWrite%'
 )::boolean;
+
+-- name: LockMCPServerForUpdateFixture :one
+-- Test-only synchronization: holds an MCP server's row lock.
+SELECT id
+FROM mcp_servers
+WHERE id = @id
+FOR UPDATE;

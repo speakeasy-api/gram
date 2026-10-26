@@ -1,6 +1,7 @@
 package authclients_test
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestCreateStaticCredentialEncryptsSecretAndOffersIt(t *testing.T) {
@@ -302,4 +304,49 @@ func TestSetAuthClientHeadersLeavesBackfilledClientsToServerSettings(t *testing.
 		Headers: []*gen.AuthClientHeaderInput{{Name: "Authorization", IsSecret: true, Value: new("Bearer new")}},
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestCreateAuthClientLocksServersInOneOrder(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	first := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
+	second := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
+	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
+	low, high := first.id, second.id
+	if bytes.Compare(low[:], high[:]) > 0 {
+		low, high = high, low
+	}
+
+	// A competing transaction holds the server that sorts first, then reaches
+	// for the other once the create waits on it.
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: the competing row lock is the behavior under test.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	holder := testrepo.New(tx)
+	_, err = holder.LockMCPServerForUpdateFixture(ctx, low)
+	require.NoError(t, err)
+	holderPID, err := holder.BackendPIDFixture(ctx)
+	require.NoError(t, err)
+
+	created := make(chan error, 1)
+	go func() {
+		_, err := ti.service.CreateAuthClient(ctx, &gen.CreateAuthClientPayload{
+			ClientType:   authz.AuthClientTypeStaticCredential,
+			Name:         "Ordered",
+			Headers:      []*gen.AuthClientHeaderInput{{Name: "X-Api-Key", IsSecret: true, Value: new("sk-value")}},
+			McpServerIds: []string{high.String(), low.String()},
+		})
+		created <- err
+	}()
+
+	require.Eventually(t, func() bool {
+		blocked, err := testrepo.New(ti.conn).CountBackendsBlockedByFixture(ctx, holderPID)
+		return err == nil && blocked > 0
+	}, 10*time.Second, 20*time.Millisecond, "the create waits on the held server")
+
+	_, err = holder.LockMCPServerForUpdateFixture(ctx, high)
+	require.NoError(t, err, "the create holds no server while it waits, so nothing deadlocks")
+	require.NoError(t, tx.Commit(ctx))
+	require.NoError(t, <-created)
 }
