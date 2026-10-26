@@ -182,8 +182,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	authzEngine := authz.NewEngine(logger, db, authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging)), roleClient, authz.EngineOpts{
 		AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
-		AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession,
-		DevMode:              c.String("environment") == "local",
+		AdmitWorkloadSession:     runtimepolicy.AdmitWorkloadSession,
+		AdmitWorkloadSessionInTx: runtimepolicy.AdmitWorkloadSessionInTx,
+		DevMode:                  c.String("environment") == "local",
 	})
 	_, broker, stop, err := newPubSubClient(ctx, c, logger)
 	if err != nil {
@@ -225,6 +226,10 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
+		// The approval routes are not served behind private ingress, so
+		// require_approval policies deny here with a clear message instead of
+		// pointing agents at a server they may not reach.
+		nil,
 	)
 	if err != nil {
 		return nil, err

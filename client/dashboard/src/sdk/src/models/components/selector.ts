@@ -52,6 +52,7 @@ export const ResourceKind = {
   Assistant: "assistant",
   RiskPolicy: "risk_policy",
   Chat: "chat",
+  Inference: "inference",
   Agent: "agent",
   Workload: "workload",
   McpAuthClient: "mcp_auth_client",
@@ -79,7 +80,7 @@ export type Selector = {
    */
   disposition?: Disposition | undefined;
   /**
-   * Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
+   * Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
    */
   projectId?: string | undefined;
   /**
@@ -98,6 +99,10 @@ export type Selector = {
    * Specific tool name filter (MCP scopes only).
    */
   tool?: string | undefined;
+  /**
+   * Upstream OAuth client filter (mcp:auth and mcp:blocked_auth on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.
+   */
+  upstreamClient?: string | undefined;
 };
 
 /** @internal */
@@ -132,6 +137,7 @@ export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
     resource_kind: ResourceKind$inboundSchema,
     server_url: z.optional(z.string()),
     tool: z.optional(z.string()),
+    upstream_client: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -141,6 +147,7 @@ export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
       "resource_id": "resourceId",
       "resource_kind": "resourceKind",
       "server_url": "serverUrl",
+      "upstream_client": "upstreamClient",
     });
   }),
 );
@@ -154,6 +161,7 @@ export type Selector$Outbound = {
   resource_kind: string;
   server_url?: string | undefined;
   tool?: string | undefined;
+  upstream_client?: string | undefined;
 };
 
 /** @internal */
@@ -170,6 +178,7 @@ export const Selector$outboundSchema: z.ZodMiniType<
     resourceKind: ResourceKind$outboundSchema,
     serverUrl: z.optional(z.string()),
     tool: z.optional(z.string()),
+    upstreamClient: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -179,6 +188,7 @@ export const Selector$outboundSchema: z.ZodMiniType<
       resourceId: "resource_id",
       resourceKind: "resource_kind",
       serverUrl: "server_url",
+      upstreamClient: "upstream_client",
     });
   }),
 );

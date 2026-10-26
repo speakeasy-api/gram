@@ -14,6 +14,7 @@ import (
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	packagesrepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -53,6 +54,43 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 	createHTTPToolDefinition(t, db, project.ID, deploymentID, validToolURN)
 
 	validToolset := createMCPToolset(t, db, organizationID, project.ID, "valid", []urn.Tool{validToolURN})
+	// A canonical wrapper that disagrees with its private toolset is denied when served, so it is not indexed.
+	driftedToolset := createMCPToolset(t, db, organizationID, project.ID, "drifted", []urn.Tool{validToolURN})
+	_, err = mcpserversrepo.New(db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    driftedToolset.ID,
+		ProjectID:             project.ID,
+		Name:                  pgtype.Text{String: "drifted", Valid: true},
+		Slug:                  pgtype.Text{String: "drifted", Valid: true},
+		EnvironmentID:         uuid.NullUUID{},
+		UserSessionIssuerID:   uuid.NullUUID{},
+		RemoteMcpServerID:     uuid.NullUUID{},
+		TunneledMcpServerID:   uuid.NullUUID{},
+		ToolsetID:             uuid.NullUUID{UUID: driftedToolset.ID, Valid: true},
+		UnproxiedMcpServerID:  uuid.NullUUID{},
+		ToolVariationsGroupID: uuid.NullUUID{},
+		Visibility:            "public",
+		NetworkAccessMode:     pgtype.Text{},
+	})
+	require.NoError(t, err)
+	// A server that kept a toolset's id after leaving it leaves the toolset unserved.
+	keptToolset := createMCPToolset(t, db, organizationID, project.ID, "kept", []urn.Tool{validToolURN})
+	keptTarget := createMCPToolset(t, db, organizationID, project.ID, "kept-target", []urn.Tool{})
+	_, err = mcpserversrepo.New(db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    keptToolset.ID,
+		ProjectID:             project.ID,
+		Name:                  pgtype.Text{String: "kept", Valid: true},
+		Slug:                  pgtype.Text{String: "kept", Valid: true},
+		EnvironmentID:         uuid.NullUUID{},
+		UserSessionIssuerID:   uuid.NullUUID{},
+		RemoteMcpServerID:     uuid.NullUUID{},
+		TunneledMcpServerID:   uuid.NullUUID{},
+		ToolsetID:             uuid.NullUUID{UUID: keptTarget.ID, Valid: true},
+		UnproxiedMcpServerID:  uuid.NullUUID{},
+		ToolVariationsGroupID: uuid.NullUUID{},
+		Visibility:            "private",
+		NetworkAccessMode:     pgtype.Text{},
+	})
+	require.NoError(t, err)
 	packageProject, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{
 		Name:           "Package Project",
 		Slug:           "package-project-" + uuid.NewString()[:8],

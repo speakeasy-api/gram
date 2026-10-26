@@ -1,6 +1,16 @@
 package chat_test
 
 import (
+	"context"
+	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"goa.design/goa/v3/security"
 	"net/http"
 	"net/http/httptest"
@@ -17,14 +27,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCompletionKitAPIKeyAdmission(t *testing.T) {
+func TestCompletionKitWorkloadAdmission(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := t.Context()
@@ -55,55 +64,127 @@ func TestCompletionKitAPIKeyAdmission(t *testing.T) {
 	err = chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3, EndedAt: pgtype.Timestamptz{}})
 	require.NoError(t, err)
 	tokens := ti.service.TestingCompletionTokens()
-	key, err := tokens.IssueKitAPIKey(ctx, assistanttokens.InferenceIssueInput{Identity: *resolved.Identity, RuntimeID: runtimeID, Lifetime: time.Hour}, "test")
+	// Historical credentials must never survive as ordinary consumer API keys.
+	for _, revoked := range []bool{false, true} {
+		raw, hash, prefix, err := auth.GenerateAPIKeyMaterial(auth.APIKeyPrefix("test"))
+		require.NoError(t, err)
+		key, err := keysrepo.New(ti.conn).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{OrganizationID: ti.orgID, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}, CreatedByUserID: "test-owner", Name: "historical-runtime-" + uuid.NewString(), KeyPrefix: prefix, KeyHash: hash, Scopes: []string{"consumer"}})
+		require.NoError(t, err)
+		scheme := &security.APIKeyScheme{Name: "gram-key", RequiredScopes: []string{"consumer"}}
+		// Use the actual shared key boundary, not completion-specific auth.
+		boundary := auth.NewKeyAuth(ti.conn, testenv.NewLogger(t), billing.NewStubClient(testenv.NewLogger(t), testenv.NewTracerProvider(t)))
+		_, err = boundary.KeyBasedAuth(ctx, raw, scheme.RequiredScopes)
+		require.NoError(t, err, "ordinary keys remain supported")
+		policy, err := runtimepolicy.NewDelegatedPolicy(runtimepolicy.AssistantIssuedPolicyVersion, nil)
+		require.NoError(t, err)
+		policyJSON, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.AssistantIssuedPolicyVersion, policy)
+		require.NoError(t, err)
+		require.NoError(t, chatrepo.New(ti.conn).SetHistoricalKitKeyProfileFixture(ctx, chatrepo.SetHistoricalKitKeyProfileFixtureParams{ApiKeyID: key.ID, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true}, SubjectUrn: conv.ToPGText(urn.NewPrincipal(urn.PrincipalTypeAgent, resolved.Identity.AgentID.String()).String()), DelegatedGrants: policyJSON, DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.AssistantIssuedPolicyVersion), Valid: true}}))
+		_, err = boundary.KeyBasedAuth(ctx, raw, scheme.RequiredScopes)
+		require.NoError(t, err, "the former Kit principal profile is valid until identified as superseded")
+
+		revokedAt := pgtype.Timestamptz{}
+		if revoked {
+			revokedAt = now
+		}
+		require.NoError(t, chatrepo.New(ti.conn).InsertSupersededKitKeyFixture(ctx, chatrepo.InsertSupersededKitKeyFixtureParams{ApiKeyID: key.ID, ProjectID: ti.projectID, AssistantID: assistantID, RuntimeID: runtimeID, RevokedAt: revokedAt}))
+		for _, ended := range []pgtype.Timestamptz{{}, now} {
+			require.NoError(t, chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3, EndedAt: ended}))
+			_, err = boundary.KeyBasedAuth(ctx, raw, scheme.RequiredScopes)
+			var denied *oops.ShareableError
+			require.ErrorAs(t, err, &denied)
+			require.Equal(t, oops.CodeUnauthorized, denied.Code, "active and retired legacy runtime keys fail closed")
+		}
+	}
+	require.NoError(t, chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3}))
+
+	issuerID := uuid.New()
+	subject := "projected-runtime-generation"
+	metadata, err := json.Marshal(map[string]any{"workload": map[string]any{"issuer_id": issuerID, "subject": subject, "identity": resolved.Identity}})
 	require.NoError(t, err)
-	request := func(project string) *http.Request {
+	require.NoError(t, assistantsrepo.New(ti.conn).UpdateAssistantRuntimeMetadata(ctx, assistantsrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: ti.projectID, RuntimeID: runtimeID, BackendMetadataJson: metadata}))
+	effectiveAgent := resolved.Identity.AgentID
+	ti.service.WithWorkloadInference(kitWorkloadAuthorizer(func(ctx context.Context, token string) (context.Context, bool, error) {
+		require.Equal(t, "verified-workload", token)
+		ac := &contextvalues.AuthContext{ActiveOrganizationID: ti.orgID, ProjectID: &ti.projectID}
+		ctx = contextvalues.WithAuthenticatedActor(ctx, ac, urn.NewWorkloadPrincipal(issuerID, subject))
+		ctx = contextvalues.WithWorkloadAgent(ctx, urn.NewPrincipal(urn.PrincipalTypeAgent, effectiveAgent.String()))
+		return ctx, true, nil
+	}))
+	request := func() *http.Request {
 		r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/chat/completions", nil)
-		r.Header.Set(constants.APIKeyHeader, key.Key)
-		r.Header.Set(constants.ProjectHeader, project)
+		r.Header.Set("Authorization", "Bearer verified-workload")
 		return r
 	}
-	_, err = ti.service.APIKeyAuth(ctx, key.Key, &security.APIKeyScheme{Name: constants.KeySecurityScheme, RequiredScopes: []string{"consumer"}})
+	authorized, ac, source, err := ti.service.TestingAuthorizeCompletion(request(), true)
 	require.NoError(t, err)
-	authorized, ac, source, err := ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
-	require.NoError(t, err)
-	require.Equal(t, key.ID.String(), ac.APIKeyID)
+	require.Equal(t, ti.projectID, *ac.ProjectID)
 	require.Equal(t, billing.ModelUsageSourceAssistants, source)
 	require.True(t, assistanttokens.InferenceTranscriptOwned(authorized))
-	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), false)
-	require.Error(t, err, "runtime key must not enter transcript authentication")
-	_, _, _, err = ti.service.TestingAuthorizeCompletion(request("wrong-project"), true)
-	require.Error(t, err)
-	for _, state := range []string{"failed", "expiring", "stopped"} {
-		require.NoError(t, assistantsrepo.New(ti.conn).SetAssistantRuntimeStateForTest(ctx, assistantsrepo.SetAssistantRuntimeStateForTestParams{ProjectID: ti.projectID, RuntimeID: runtimeID, State: state, UpdatedAt: now}))
-		_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
-		require.Error(t, err, "non-live runtime %s must reject its key", state)
+	_, bound := assistanttokens.RuntimeChatID(authorized)
+	require.False(t, bound, "the request body must select a persisted ACP session")
+	effectiveAgent = uuid.New()
+	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(), true)
+	requireKitAuthError(t, err, oops.CodeUnauthorized)
+	effectiveAgent = resolved.Identity.AgentID
+	for _, mismatch := range []string{"issuer", "subject"} {
+		savedIssuer, savedSubject := issuerID, subject
+		if mismatch == "issuer" {
+			issuerID = uuid.New()
+		} else {
+			subject = "unrelated-workload"
+		}
+		ordinary, _, slot, err := ti.service.TestingAuthorizeCompletion(request(), true)
+		require.NoError(t, err)
+		require.Equal(t, billing.ModelUsageSourcePlayground, slot)
+		require.False(t, assistanttokens.InferenceTranscriptOwned(ordinary), "unrelated workload cannot claim managed attribution")
+		issuerID, subject = savedIssuer, savedSubject
 	}
-	require.NoError(t, assistantsrepo.New(ti.conn).SetAssistantRuntimeStateForTest(ctx, assistantsrepo.SetAssistantRuntimeStateForTestParams{ProjectID: ti.projectID, RuntimeID: runtimeID, State: "active", UpdatedAt: now}))
-	err = chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3, EndedAt: now})
-	require.NoError(t, err)
-	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
-	require.Error(t, err, "ended runtime must fail even while its API key is live")
-	err = chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3, EndedAt: pgtype.Timestamptz{}})
-	require.NoError(t, err)
+
+	for _, field := range []string{"identity project", "identity assistant", "identity subject"} {
+		changed := *resolved.Identity
+		switch field {
+		case "identity project":
+			changed.ProjectID = uuid.New()
+		case "identity assistant":
+			changed.AssistantID = uuid.New()
+		case "identity subject":
+			changed.Subject = "retired-assistant-generation"
+		}
+		invalid, err := json.Marshal(map[string]any{"workload": map[string]any{"issuer_id": issuerID, "subject": subject, "identity": changed}})
+		require.NoError(t, err)
+		require.NoError(t, assistantsrepo.New(ti.conn).UpdateAssistantRuntimeMetadata(ctx, assistantsrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: ti.projectID, RuntimeID: runtimeID, BackendMetadataJson: invalid}))
+		_, _, _, err = ti.service.TestingAuthorizeCompletion(request(), true)
+		requireKitAuthError(t, err, oops.CodeUnauthorized)
+	}
+	require.NoError(t, assistantsrepo.New(ti.conn).UpdateAssistantRuntimeMetadata(ctx, assistantsrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: ti.projectID, RuntimeID: runtimeID, BackendMetadataJson: metadata}))
+	_, err = tokens.BindKitSession(authorized, uuid.New())
+	requireKitAuthError(t, err, oops.CodeForbidden)
+	for _, header := range []string{"Gram-Chat-ID", "Gram-Assistant-ID"} {
+		r := request()
+		r.Header.Set(header, uuid.NewString())
+		_, _, _, err = ti.service.TestingAuthorizeCompletion(r, true)
+		requireKitAuthError(t, err, oops.CodeForbidden)
+	}
+	require.NoError(t, chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3, EndedAt: now}))
+	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(), true)
+	requireKitAuthError(t, err, oops.CodeUnauthorized)
+	require.NoError(t, chatrepo.New(ti.conn).SetKitCompletionRuntimeFixture(ctx, chatrepo.SetKitCompletionRuntimeFixtureParams{RuntimeID: runtimeID, ProjectID: ti.projectID, RuntimeVersion: 3}))
 	_, err = agentrepo.New(ti.conn).SuspendAgent(ctx, agentrepo.SuspendAgentParams{OrganizationID: ti.orgID, ID: resolved.Identity.AgentID})
 	require.NoError(t, err)
-	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
-	require.Error(t, err, "live actor suspension must reject the runtime key")
-	_, err = agentrepo.New(ti.conn).ResumeAgent(ctx, agentrepo.ResumeAgentParams{OrganizationID: ti.orgID, ID: resolved.Identity.AgentID})
-	require.NoError(t, err)
-	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
-	require.NoError(t, err)
-	err = chatrepo.New(ti.conn).RevokeKitCompletionBindingFixture(ctx, chatrepo.RevokeKitCompletionBindingFixtureParams{ID: key.ID, ProjectID: ti.projectID})
-	require.NoError(t, err)
-	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
-	require.Error(t, err, "revoked binding must not fall back to ordinary chat")
-	err = chatrepo.New(ti.conn).DeleteKitCompletionBindingFixture(ctx, chatrepo.DeleteKitCompletionBindingFixtureParams{ID: key.ID, ProjectID: ti.projectID})
-	require.NoError(t, err)
-	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(key.ProjectSlug), true)
-	require.Error(t, err, "unbound principal key must not enter completion authentication")
-	_, err = ti.service.APIKeyAuth(ctx, key.Key, &security.APIKeyScheme{Name: constants.KeySecurityScheme, RequiredScopes: []string{"consumer"}})
-	require.NoError(t, err, "unbound key remains a valid principal credential")
-	_, err = ti.service.APIKeyAuth(ctx, key.Key, &security.APIKeyScheme{Name: constants.KeySecurityScheme, RequiredScopes: []string{"chat"}})
-	require.Error(t, err, "principal keys remain forbidden on transcript transport")
+	_, _, _, err = ti.service.TestingAuthorizeCompletion(request(), true)
+	requireKitAuthError(t, err, oops.CodeUnauthorized)
+}
+
+type kitWorkloadAuthorizer func(context.Context, string) (context.Context, bool, error)
+
+func (f kitWorkloadAuthorizer) AuthorizeWorkloadInference(ctx context.Context, token string) (context.Context, bool, error) {
+	return f(ctx, token)
+}
+
+func requireKitAuthError(t *testing.T, err error, code oops.Code) {
+	t.Helper()
+	var denied *oops.ShareableError
+	require.ErrorAs(t, err, &denied)
+	require.Equal(t, code, denied.Code)
 }

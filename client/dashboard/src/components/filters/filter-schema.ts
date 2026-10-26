@@ -113,10 +113,14 @@ interface BaseDimension<K extends FilterKind> {
 type MultiselectDimension = BaseDimension<"multiselect">;
 type SelectDimension = BaseDimension<"select">;
 interface TextDimension extends BaseDimension<"text"> {
+  /** Zero for builders that submit explicitly; otherwise debounce live filtering. */
+  debounceMs?: number;
   /** Operator applied server-side; defaults to `contains`. */
   operator?: Operator;
 }
 interface NumberDimension extends BaseDimension<"number"> {
+  /** Zero for builders that submit explicitly; otherwise debounce live filtering. */
+  debounceMs?: number;
   /** Optional bounds / granularity forwarded to the numeric input. */
   min?: number;
   max?: number;

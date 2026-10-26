@@ -111,7 +111,7 @@ const shadowedEndpointSlug = "gateway"
 // own error shape: OAuth errors for the endpoint's routes, JSON-RPC errors
 // for the gateway.
 func (s *Service) shadowedEndpointHandler(name string, serve func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
-	endpointRoute := oops.ErrHandle(s.logger, serve)
+	endpointRoute := oauthRouteHandler(s.logger, http.MethodPost, "/"+name, serve)
 	gatewayRoute := oops.MCPErrHandle(s.logger, s.ServeOrganizationGateway)
 	return func(w http.ResponseWriter, r *http.Request) {
 		rctx := chi.RouteContext(r.Context())
@@ -193,7 +193,7 @@ func attachOrganizationGateway(mux goahttp.Muxer, service *Service) {
 		o11y.AttachHandler(mux, http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
-		o11y.AttachHandler(mux, route.method, route.path, oops.ErrHandle(service.logger, service.withOrganizationGateway(route.serve)).ServeHTTP)
+		o11y.AttachHandler(mux, route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, service.withOrganizationGateway(route.serve, isOAuthTokenRoute(route.method, route.path))).ServeHTTP)
 	}
 }
 
@@ -207,17 +207,20 @@ func attachOrganizationGatewayAuthenticationHost(host *AuthenticationHost, servi
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
 		if route.onAuthenticationHost {
-			host.Handle(route.method, route.path, oops.ErrHandle(service.logger, service.withOrganizationGateway(route.serve)).ServeHTTP)
+			host.Handle(route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, service.withOrganizationGateway(route.serve, isOAuthTokenRoute(route.method, route.path))).ServeHTTP)
 		}
 	}
 }
 
 // withOrganizationGateway adapts an endpoint handler to a route addressed by
 // organization slug.
-func (s *Service) withOrganizationGateway(serve func(http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint) error) func(http.ResponseWriter, *http.Request) error {
+func (s *Service) withOrganizationGateway(serve func(http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint) error, tokenEndpoint bool) func(http.ResponseWriter, *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		gateway, err := s.loadOrganizationGateway(r.Context(), organizationGatewayRequestSlug(r))
 		if err != nil {
+			if tokenEndpoint {
+				return tokenEndpointResolutionError(err)
+			}
 			return err
 		}
 		return serve(w, r, gateway.resolved)
@@ -356,11 +359,10 @@ func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[u
 // so a member whose provider is not connected degrades on its own. A stored
 // gateway uses it too, for its hosted members, so the issuer's clients
 // resolve only when one needs them.
-func (s *Service) newOrganizationGatewayTokens(authentication *issuerGateAuthentication) *projectTokenCache {
-	endpoint := authentication.endpoint
+func (s *Service) newOrganizationGatewayTokens(endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) *projectTokenCache {
 	return &projectTokenCache{
 		resolve: func(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-			tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+			tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 			}

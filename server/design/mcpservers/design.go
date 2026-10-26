@@ -488,6 +488,9 @@ var McpServer = Type("McpServer", func() {
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server, if any.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("builtin_backend", String, "A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.", func() {
+		Enum("approvals")
+	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
 	Attribute("toolset", McpServerToolsetSummary, "A summary of the backing toolset. Present only for toolset-backed (hosted) servers whose toolset is live.")
@@ -527,6 +530,9 @@ var McpServerToolsetSummary = Type("McpServerToolsetSummary", func() {
 		Format(FormatUUID)
 	})
 	Attribute("registry_specifier", String, "The registry specifier the toolset originated from, if any")
+	Attribute("hosting_mcp_server_id", String, "The ID of the MCP server that stands in for the toolset: its canonical server, whose ID is the toolset's, or when it has none, its oldest live server with a live endpoint. Absent when it has neither.", func() {
+		Format(FormatUUID)
+	})
 
 	Required("id", "slug", "name", "tool_count", "tool_selection_mode", "external_mcp_slugs", "external_mcp_proxy_only")
 })

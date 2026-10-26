@@ -72,8 +72,8 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
    status.
 6. **Isolation spot-check** — switch back out of the demo org: your own org's
    pages show no `*@demo.getgram.ai` data anywhere.
-7. **Policy Center** — nine policies listed; Action column shows a mix of
-   Flag / Warn / Block / Quarantine; Severity shows Medium through Critical;
+7. **Policy Center** — 11 policies listed; Action column shows a mix of
+   Flag / Warn / Block / Quarantine / Require approval; Severity shows Medium through Critical;
    "Applies To" varies (All types, Tool Requests, ...); no row renders an
    empty summary. Open the **Quarantines** tab and confirm one active row for
    `gram-demo-quarantine-session-1`, attributed to **Acme session quarantine
@@ -576,7 +576,42 @@ open their effective assignments; the dropdown always offers compact member sear
     - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
     - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
     - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
-    - Connect a client to the organization gateway (`<server>/mcp/gateway/<org>`), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
+    - Connect a client to the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it), choose Direct under Configuration on the consent page, and confirm tools/list shows `server--tool` names from every project you can reach. Reconnect: Direct is pre-selected. A connection that keeps the default lists the Progressive tools.
+
+32. **Gateway tool picker**
+    - Confirm All tools (live), All tools (frozen), and Specific tools are offered. The server list and picker must agree on connected, reconnect, setup, no-access, and unavailable states, including row actions. A failed discovery never enables an unrestricted fallback.
+    - Check an identity-provider-managed server: consent performs its exchange and discovers its tools before marking it connected. A failed exchange must not produce a misleading reconnect action.
+    - With a custom-domain allowlist enabled, the platform-host consent page must refuse approval, link to the custom domain, and make no upstream discovery or identity-provider exchanges. Approval from the admitted custom domain may capture tools. The page must show usable connection status before JavaScript loads.
+    - Choose All tools (frozen), approve, then reconnect the MCP client without new browser consent: listing and schema discovery must work without contacting upstream servers. Calls still reach the upstream and enforce current access.
+    - Choose All tools (live), approve, then add a new gateway member or connect one that was unavailable. Neither may appear or execute until the person consents again. New tools on an already approved member may appear in live mode.
+    - Connect an MCP client to the Acme Agent Gateway. On the consent screen, choose Specific tools: tools are grouped under each member server and show their tool names without the server prefix.
+    - Select one server's heading, then a single tool from another server, and approve. The connection's tools list, Progressive `describe_tools`, and `execute_tool` only reach the chosen tools; calls to the others are refused.
+    - Reconnect: the consent screen opens with the previous choice selected.
+    - Repeat on the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it): its picker groups tools from every project you can reach, and the chosen tools are the only ones listed, described or callable.
+
+33. **Python Code Gateway** (local seed with the local code runner; the shared demo org stores it as Progressive)
+    - Open Inspect: confirm exactly one execute tool, Python helper documentation,
+      and the two permitted member prefixes. Execute `await tools.search("health")`.
+    - Describe a returned path, then call a local read-only fixture tool and inspect
+      its return value and completed nested-call outcome. Print a value and confirm
+      the submitted source remains visible after editing the next snippet.
+    - Select Progressive/Direct overrides and reconnect; return to the gateway
+      default and confirm execute returns. Reconnect through the consent screen
+      with Specific tools and a Code Mode override: search and calls only reach the
+      chosen tools.
+    - In Settings select Code Mode, save, and verify a new default connection. A missing
+      runtime must prevent new Code selections with a visible error or
+      unavailable option; stored Code defaults and connections are served in
+      Progressive mode until the runtime returns.
+    - Run the seed twice and the demoseed safety test: the third gateway, its two
+      members and endpoint must survive, with no rows changed in other tenants.
+    - Connect to the organization gateway (`/mcp/gateway/acme-demo` on the demo
+      org, or `/mcp/gateway/speakeasy` after `mise run seed`), choose
+      Code Mode on the consent page ("Gateway default (Progressive)" stays the
+      default), and confirm one execute tool whose search and calls reach
+      servers from every project you can reach.
+    - Command K: search "Python Code Gateway". It is listed under Gateways and
+      opens the gateway's overview.
 
 ## On failure
 

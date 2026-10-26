@@ -20,13 +20,20 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -137,7 +144,10 @@ func TestDecideAuthClient(t *testing.T) {
 			res := decideAuthClient(tc.row)
 			require.Equal(t, tc.outcome, res.outcome)
 			require.Equal(t, tc.reason, res.reason)
-			if res.outcome == authClientResolved && (res.clientType == authClientTypeRemoteSession || res.clientType == authClientTypeServiceAccount) {
+			oauthBacked := res.clientType == authClientTypeRemoteSession || res.clientType == authClientTypeServiceAccount
+			mappedFallback := res.outcome == authClientLegacy && (res.reason == authClientReasonHeadersStale || res.reason == authClientReasonLegacyMayChain)
+			// A mapped fallback keeps its validated registration for the permit.
+			if oauthBacked && (res.outcome == authClientResolved || mappedFallback) {
 				require.Equal(t, validUUID(registrationID), res.choice.clientID)
 				require.Equal(t, validUUID(issuerID), res.choice.remoteSessionIssuerID)
 			} else {
@@ -680,9 +690,11 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		f.serve(selector)
 		require.Equal(t, []authClientPermitRequest{{
 			OrganizationID: f.orgID,
+			ProjectID:      f.projectID,
 			ServerID:       f.serverID,
 			ClientID:       id,
 			ClientType:     authClientTypeServiceAccount,
+			RegistrationID: validUUID(f.registration),
 			CredentialKind: "user_session",
 			CredentialID:   selector.credentialID,
 			Subject:        urn.NewUserSubject("user_1"),
@@ -749,7 +761,8 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.NoError(t, err)
 		f.copyHeader(id, "Authorization", true, true, text(sealed), pgtype.Text{})
 		f.copyHeader(id, "X-Tenant", false, false, pgtype.Text{}, text("X-Caller-Tenant"))
-		headers, err := f.service.loadAuthClientHeaders(ctx, f.orgID, id)
+		byClient, err := f.service.loadAuthClientHeaders(ctx, f.orgID, []uuid.UUID{id})
+		headers := byClient[id].headers
 		require.NoError(t, err)
 		require.Len(t, headers, 2)
 		require.Equal(t, "Authorization", headers[0].Name)
@@ -757,7 +770,7 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.True(t, headers[0].IsRequired)
 		require.Equal(t, "X-Caller-Tenant", headers[1].ValueFromRequestHeader)
 
-		other, err := f.service.loadAuthClientHeaders(ctx, "org_"+uuid.NewString(), id)
+		other, err := f.service.loadAuthClientHeaders(ctx, "org_"+uuid.NewString(), []uuid.UUID{id})
 		require.NoError(t, err)
 		require.Empty(t, other, "headers are read only within the client's organization")
 	})
@@ -920,11 +933,17 @@ func TestShadowAuthClientCountsResolverFailures(t *testing.T) {
 func TestAuthClientModeIsOffWithoutFlags(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, feature.AuthClientResolverOff, (&Service{}).authClientMode(t.Context(), "org_a"), "no flag provider keeps the upstream client choice")
+	mode := func(s *Service, org string) feature.AuthClientResolverMode {
+		t.Helper()
+		m, err := s.authClientMode(t.Context(), org)
+		require.NoError(t, err)
+		return m
+	}
+	require.Equal(t, feature.AuthClientResolverOff, mode(&Service{}, "org_a"), "no flag provider keeps the upstream client choice")
 	flags := new(feature.InMemory)
 	flags.SetFlag(feature.FlagAuthClientResolverShadow, "org_a", true)
-	require.Equal(t, feature.AuthClientResolverShadow, (&Service{features: flags}).authClientMode(t.Context(), "org_a"))
-	require.Equal(t, feature.AuthClientResolverOff, (&Service{features: flags}).authClientMode(t.Context(), "org_b"))
+	require.Equal(t, feature.AuthClientResolverShadow, mode(&Service{features: flags}, "org_a"))
+	require.Equal(t, feature.AuthClientResolverOff, mode(&Service{features: flags}, "org_b"))
 }
 
 func TestUpstreamClientChoiceServesMappedHeadersOnlyClients(t *testing.T) {
@@ -1082,6 +1101,7 @@ func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
 	flags := new(feature.InMemory)
 	flags.SetFlag(feature.FlagAuthClientResolver, f.orgID, true)
 	f.service.features = flags
+	f.enforce()
 	f.service.sessionPolicyCache = cache.NewTypedObjectCache[sessionPolicyEntry](testenv.NewLogger(t), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone)
 
 	consentedUnder, serverSignIn := uuid.New(), uuid.New()
@@ -1120,4 +1140,258 @@ func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
 	require.ErrorIs(t, err, remotesessions.ErrInvalidAuthorizationRequest)
 	require.False(t, decided)
 	require.False(t, f.service.refreshNeedsUpstreamReconnect(ctx, testenv.NewLogger(t), endpoint, workload, "jti"), "a failed check fails open")
+}
+
+func TestResolveAuthClientsBatchesMemberChoices(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_batch")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	id := f.oauthClient(authClientTypeRemoteSession)
+	secondID := f.client(authClientTypeRemoteSession, validUUID(f.registration), false)
+	selector := f.choose(validUUID(id))
+	expected := map[uuid.UUID]uuid.UUID{f.serverID: id}
+	ids := []uuid.UUID{f.serverID}
+	for i := range 3 {
+		server, _ := f.server()
+		clientID := id
+		if i%2 == 0 {
+			clientID = secondID
+		}
+		expected[server] = clientID
+		require.NoError(t, f.q.SeedServerAuthClientLinkFixture(t.Context(), authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server, AuthClientID: clientID}))
+		_, err := f.q.SeedAssociationFixture(t.Context(), authclientbackfill.SeedAssociationFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server, RemoteSessionClientID: f.registration})
+		require.NoError(t, err)
+		require.NoError(t, f.q.SeedUpstreamSelectionFixture(t.Context(), authclientbackfill.SeedUpstreamSelectionFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, CredentialID: selector.credentialID, McpServerID: server, AuthClientID: validUUID(clientID)}))
+		ids = append(ids, server)
+	}
+	before := pool.Stat().AcquireCount()
+	resolved, err := selector.resolveAuthClients(t.Context(), ids)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, pool.Stat().AcquireCount()-before, "one shared resolver query for every member")
+	require.Len(t, resolved, len(ids))
+	for serverID, res := range resolved {
+		require.Equal(t, authClientResolved, res.outcome)
+		require.Equal(t, expected[serverID], res.clientID)
+	}
+	permitter := &recordingPermitter{}
+	f.service.authClientPermitter = permitter
+	members := make([]metaMember, len(ids))
+	for i, id := range ids {
+		members[i] = metaMember{serverID: id, backend: metaMemberBackendProxied}
+	}
+	choices := &memberChoices{selector: selector, subject: urn.NewUserSubject("test-user")}
+	before = pool.Stat().AcquireCount()
+	choices.apply(t.Context(), testenv.NewLogger(t), members, true)
+	require.EqualValues(t, 2, pool.Stat().AcquireCount()-before, "full application batches choices and headers; the connect permitter performs no database reads")
+	require.Len(t, permitter.asked, len(ids), "every member still checks its client's permit")
+	for _, member := range members {
+		require.NoError(t, member.upstreamUnavailable)
+		require.NotNil(t, member.authClient)
+		require.Equal(t, authClientResolved, member.authClient.outcome)
+	}
+
+}
+
+func TestAuthClientHeaderBatchIsolatesInvalidSecret(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_headers")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	good := f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
+	bad := f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
+	f.copyHeader(good, "X-Key", true, false, text("fixture-value"), pgtype.Text{})
+	f.copyHeader(bad, "X-Bad-Key", true, true, text("invalid-ciphertext"), pgtype.Text{})
+	before := pool.Stat().AcquireCount()
+	loaded, err := f.service.loadAuthClientHeaders(t.Context(), f.orgID, []uuid.UUID{good, bad})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, pool.Stat().AcquireCount()-before)
+	require.NoError(t, loaded[good].err)
+	require.Len(t, loaded[good].headers, 1)
+	require.Equal(t, "fixture-value", loaded[good].headers[0].StaticValue)
+	require.Error(t, loaded[bad].err)
+	require.Empty(t, loaded[bad].headers)
+}
+
+func TestAuthClientConsentUsesSharedResolver(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_consent")
+	require.NoError(t, err)
+	t.Run("a mapped legacy fallback keeps the client's permit", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		clientID := f.oauthClient(authClientTypeRemoteSession)
+		f.sourceHeader("X-Version", false, text("current"), pgtype.Text{})
+		f.copyHeader(clientID, "X-Version", false, false, text("stale"), pgtype.Text{})
+		selector := f.choose(validUUID(clientID))
+		permitter := &recordingPermitter{asked: nil}
+		f.service.authClientPermitter = permitter
+		allowed := f.serve(selector)
+		require.Equal(t, authClientLegacy, allowed.outcome)
+		require.Equal(t, authClientReasonHeadersStale, allowed.reason)
+		require.Len(t, permitter.asked, 1)
+		require.Equal(t, validUUID(f.registration), permitter.asked[0].RegistrationID, "the fallback is permitted on the validated registration")
+
+		gateway := &recordingPermitter{asked: nil}
+		f.service.authClientPermitter = gateway
+		members := []metaMember{{serverID: f.serverID, backend: metaMemberBackendProxied}}
+		choices := &memberChoices{selector: selector, subject: urn.NewUserSubject("user_1")}
+		choices.apply(t.Context(), testenv.NewLogger(t), members, true)
+		require.Len(t, gateway.asked, 1)
+		require.Equal(t, validUUID(f.registration), gateway.asked[0].RegistrationID, "a gateway member's fallback is permitted on it too")
+		require.NotNil(t, members[0].authClient)
+		require.Equal(t, authClientLegacy, members[0].authClient.outcome, "the fallback is still served the old way")
+		require.Equal(t, authClientReasonHeadersStale, members[0].authClient.reason)
+
+		f.service.authClientPermitter = denyPermitter{}
+		require.Equal(t, authClientNoAccess, f.serve(selector).outcome)
+		denied, err := f.service.resolveAuthClientForConsent(t.Context(), f.orgID, f.serverID, f.projectID, validUUID(f.registration), urn.NewUserSubject("user_1"))
+		require.NoError(t, err)
+		require.Equal(t, authClientNoAccess, denied.outcome)
+	})
+	t.Run("a proposed OAuth client resolves before a credential exists", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		clientID := f.oauthClient(authClientTypeRemoteSession)
+		res, err := f.service.resolveAuthClientForConsent(t.Context(), f.orgID, f.serverID, f.projectID, validUUID(f.registration), urn.NewUserSubject("test-user"))
+		require.NoError(t, err)
+		require.Equal(t, authClientResolved, res.outcome)
+		require.Equal(t, clientID, res.clientID)
+		require.Equal(t, validUUID(f.registration), res.choice.clientID)
+		f.service.authClientPermitter = denyPermitter{}
+		denied, err := f.service.resolveAuthClientForConsent(t.Context(), f.orgID, f.serverID, f.projectID, validUUID(f.registration), urn.NewUserSubject("test-user"))
+		require.NoError(t, err)
+		require.Equal(t, authClientNoAccess, denied.outcome)
+		member := metaMember{serverID: f.serverID}
+		f.service.applyMemberAuthClient(t.Context(), &member, denied, nil)
+		var forbidden *oops.ShareableError
+		require.ErrorAs(t, member.upstreamUnavailable, &forbidden)
+		require.Equal(t, oops.CodeForbidden, forbidden.Code)
+	})
+	t.Run("ambiguous proposed typed choices require setup", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.oauthClient(authClientTypeRemoteSession)
+		f.client(authClientTypeRemoteSession, validUUID(f.registration), true)
+		res, err := f.service.resolveAuthClientForConsent(t.Context(), f.orgID, f.serverID, f.projectID, validUUID(f.registration), urn.NewUserSubject("test-user"))
+		require.NoError(t, err)
+		require.Equal(t, authClientGap, res.outcome)
+		require.Equal(t, authClientReasonAmbiguous, res.reason)
+		require.False(t, res.choice.clientID.Valid)
+		f.service.authClientPermitter = denyPermitter{}
+		denied, err := f.service.resolveAuthClientForConsent(t.Context(), f.orgID, f.serverID, f.projectID, validUUID(f.registration), urn.NewUserSubject("test-user"))
+		require.NoError(t, err)
+		require.Equal(t, authClientGap, denied.outcome)
+	})
+	t.Run("a disabled header client cannot become anonymous", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		id := f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
+		f.copyHeader(id, "X-Api-Key", true, false, text("test-value"), pgtype.Text{})
+		require.NoError(t, f.q.SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: id}))
+		res, err := f.service.resolveAuthClientForConsent(t.Context(), f.orgID, f.serverID, f.projectID, uuid.NullUUID{}, urn.NewUserSubject("test-user"))
+		require.NoError(t, err)
+		require.Equal(t, authClientGap, res.outcome)
+		require.Equal(t, authClientReasonClientDisabled, res.reason)
+	})
+}
+
+// enforce enables upstream auth enforcement for the fixture's organization.
+func (f *authClientFixture) enforce() {
+	f.t.Helper()
+	_, err := productfeaturesrepo.New(f.service.db).EnableFeature(f.t.Context(), productfeaturesrepo.EnableFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(f.t, err)
+	f.service.authEnforcement = authenforcement.NewGate(f.service.db)
+}
+
+func TestAuthClientModeEnforcesOnlyEnabledOrganizations(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_enforcement")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	ctx := t.Context()
+	flags := new(feature.InMemory)
+	f.service.features = flags
+	f.service.authEnforcement = authenforcement.NewGate(pool)
+	mode := func() feature.AuthClientResolverMode {
+		t.Helper()
+		m, err := f.service.authClientMode(ctx, f.orgID)
+		require.NoError(t, err)
+		return m
+	}
+
+	require.Equal(t, feature.AuthClientResolverOff, mode())
+	flags.SetFlag(feature.FlagAuthClientResolver, f.orgID, true)
+	require.Equal(t, feature.AuthClientResolverShadow, mode(), "the flag alone only shadows")
+
+	flags.SetFlag(feature.FlagAuthClientResolver, f.orgID, false)
+	f.enforce()
+	require.Equal(t, feature.AuthClientResolverEnforced, mode(), "enabled enforcement needs no flag, so a flag change never skips its readiness check")
+
+	_, err = productfeaturesrepo.New(pool).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	f.service.authEnforcement = authenforcement.NewGate(pool)
+	require.Equal(t, feature.AuthClientResolverOff, mode(), "disabling enforcement rolls back")
+}
+
+func TestAuthClientModeRefusesWhenEnforcementCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_enforcement_error")
+	require.NoError(t, err)
+	gate := authenforcement.NewGate(pool)
+	pool.Close()
+	_, err = (&Service{authEnforcement: gate}).authClientMode(t.Context(), "org_a")
+	require.Error(t, err, "an unreadable enforcement state is never served as shadow")
+}
+
+func TestProfileSelectorReadsOnlyATurnCredentialsOwnProfile(t *testing.T) {
+	t.Parallel()
+
+	projectID, version := uuid.New(), uuid.New()
+	endpoint := &ResolvedMcpEndpoint{ProjectID: projectID, OrganizationID: "org_a"}
+	s := &Service{}
+	credential := func(org string, project uuid.UUID, profile uuid.NullUUID) principalcredential.Credential {
+		return principalcredential.Credential{
+			OrganizationID:            org,
+			ProjectID:                 project,
+			Principal:                 urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()),
+			AuthorizerUserID:          "user_a",
+			SelectionProfileVersionID: profile,
+		}
+	}
+
+	selector := s.profileSelector(credential("org_a", projectID, uuid.NullUUID{UUID: version, Valid: true}), endpoint)
+	require.NotNil(t, selector)
+	require.Equal(t, upstreamclients.CredentialKindExecutionProfileVersion, selector.credentialKindOrDefault())
+	require.Equal(t, version, selector.credentialID)
+
+	require.Nil(t, s.profileSelector(credential("org_a", projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}), endpoint), "an unbound credential keeps the issuer-derived path")
+	require.Nil(t, s.profileSelector(credential("org_b", projectID, uuid.NullUUID{UUID: version, Valid: true}), endpoint), "a profile never serves another organization")
+	require.Nil(t, s.profileSelector(credential("org_a", uuid.New(), uuid.NullUUID{UUID: version, Valid: true}), endpoint), "a profile never serves another project")
+	require.Nil(t, s.profileSelectorFor(t.Context(), endpoint), "a request without a principal credential has none")
+}
+
+func TestRefuseForeignPublicCallerOnlyUnderEnforcement(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_foreign_public_caller")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	f.service.authEnforcement = authenforcement.NewGate(pool)
+	foreign := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_other"})
+	own := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID})
+
+	require.NoError(t, f.service.refuseForeignCaller(foreign, f.orgID), "before enforcement a foreign caller is served as today")
+
+	f.enforce()
+	err = f.service.refuseForeignCaller(foreign, f.orgID)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
+	require.NoError(t, f.service.refuseForeignCaller(own, f.orgID))
+	require.NoError(t, f.service.refuseForeignCaller(t.Context(), f.orgID), "an anonymous caller is unaffected")
+	orgless := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: ""})
+	require.NoError(t, f.service.refuseForeignCaller(orgless, f.orgID), "a caller with no organization is served as anonymous")
 }

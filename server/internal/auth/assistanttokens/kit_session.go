@@ -13,19 +13,24 @@ import (
 
 // BindKitSession resolves Kit's existing provider attribution to the control
 // plane's chat. The guest does not receive or persist a control-plane chat ID.
-// The native key authorizes a runtime generation, not an individual invocation.
+// The verified workload authorizes a runtime generation, not an individual invocation.
 // Session attribution selects only a persisted binding inside that authority;
 // it neither grants cross-runtime access nor asserts per-turn isolation.
 func (m *Manager) BindKitSession(ctx context.Context, providerID uuid.UUID) (context.Context, error) {
 	identity, ok := ctx.Value(inferenceContextKey{}).(assistantidentity.Identity)
 	runtimeID, hasRuntime := ctx.Value(inferenceRuntimeContextKey{}).(uuid.UUID)
-	if !ok || !hasRuntime || runtimeID == uuid.Nil || providerID == uuid.Nil {
+	workload, hasWorkload := ctx.Value(inferenceWorkloadContextKey{}).([]byte)
+	if !hasWorkload || !ok || !hasRuntime || runtimeID == uuid.Nil || providerID == uuid.Nil {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
+	if err := new(assistantidentity.Service).Validate(ctx, m.db, identity); err != nil {
+		return ctx, kitIdentityValidationError(err)
+	}
 	bindings, err := m.tokens.ListKitInferenceSessionBindings(ctx, tokenrepo.ListKitInferenceSessionBindingsParams{
-		RuntimeID:   uuid.NullUUID{UUID: runtimeID, Valid: true},
-		ProjectID:   uuid.NullUUID{UUID: identity.ProjectID, Valid: true},
-		AssistantID: uuid.NullUUID{UUID: identity.AssistantID, Valid: true},
+		WorkloadBinding: workload,
+		RuntimeID:       uuid.NullUUID{UUID: runtimeID, Valid: true},
+		ProjectID:       uuid.NullUUID{UUID: identity.ProjectID, Valid: true},
+		AssistantID:     uuid.NullUUID{UUID: identity.AssistantID, Valid: true},
 	})
 	if err != nil {
 		return ctx, fmt.Errorf("resolve Kit inference session: %w", err)

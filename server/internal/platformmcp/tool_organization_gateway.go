@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
@@ -26,8 +27,14 @@ import (
 const getMyOrganizationGatewayName = "get_my_organization_gateway"
 
 const getMyOrganizationGatewayDescription = "Get the one MCP URL that gives you every MCP server in your organization you are allowed to reach, across all projects, signed in with your organization account. " +
-	"Returns available=true with the url to add to an MCP client, or available=false with unavailable_reason and the next action. It names no servers: once connected, the gateway's list_servers tool lists the servers your access reaches by slug, prefixed with the project only when two projects share a slug. A connection that chooses Direct at sign-in lists each tool as server--tool instead. " +
+	"Returns available=true with the url to add to an MCP client, or available=false with unavailable_reason and the next action. It names no servers: once connected, the tool discovery mode chosen at sign-in decides how the gateway exposes the servers your access reaches. " +
+	"Progressive offers list_servers, which lists those servers by slug, prefixed with the project only when two projects share a slug, then describe_server, describe_tools and execute_tool. Direct lists each tool in tools/list as server--tool. Code Mode offers a single execute tool that runs Python to search, describe and call those tools. " +
 	"For a connection limited to one project, use get_my_project_gateway instead. No token, credential, or other member's access is returned."
+
+// organizationGatewayNextAction gives each tool discovery mode its own first
+// step: only Progressive exposes list_servers.
+const organizationGatewayNextAction = "Add url to your MCP client as a remote server and sign in with your organization account when prompted, choosing a tool discovery mode. " +
+	"Then follow the mode you chose. Progressive: call list_servers, then describe_server, describe_tools and execute_tool. Direct: call the server--tool tools listed by tools/list. Code Mode: run Python with the execute tool."
 
 // getMyOrganizationGatewayMeta is shared by the live and unavailable
 // registrations. The gateway is the caller's own connection target, so only
@@ -57,12 +64,25 @@ type GetMyOrganizationGatewayOutput struct {
 type OrganizationGatewayService struct {
 	db        *pgxpool.Pool
 	serverURL *url.URL
+
+	// orgHosts resolves the platform host stored as an organization's default
+	// host. Nil URLs follow the request's platform origin.
+	orgHosts *orghost.Resolver
 }
 
 // NewOrganizationGatewayService returns a service that builds gateway URLs
 // under serverURL.
 func NewOrganizationGatewayService(db *pgxpool.Pool, serverURL *url.URL) *OrganizationGatewayService {
-	return &OrganizationGatewayService{db: db, serverURL: serverURL}
+	return &OrganizationGatewayService{db: db, serverURL: serverURL, orgHosts: nil}
+}
+
+// WithOrganizationHosts makes gateway URLs use the platform host stored as the
+// organization's default host, the host the dashboard serves it on.
+func (s *OrganizationGatewayService) WithOrganizationHosts(resolver *orghost.Resolver) *OrganizationGatewayService {
+	if s != nil {
+		s.orgHosts = resolver
+	}
+	return s
 }
 
 func (s *OrganizationGatewayService) valid() bool {
@@ -85,11 +105,12 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 	}
 	switch unavailable {
 	case orggateway.UnavailabilityNone:
+		baseURL, _ := organizationBaseURLs(ctx, s.orgHosts, organization.DefaultHost, s.serverURL, nil)
 		return GetMyOrganizationGatewayOutput{
 			Available:         true,
-			URL:               orggateway.URL(platformBaseURL(ctx, s.serverURL), organization.Slug),
+			URL:               orggateway.URL(baseURL, organization.Slug),
 			UnavailableReason: "",
-			NextAction:        "Add url to your MCP client as a remote server and sign in with your organization account when prompted. Then call list_servers through it.",
+			NextAction:        organizationGatewayNextAction,
 		}, nil
 	case orggateway.UnavailabilityNoOrganizationIssuer:
 		return unavailableOrganizationGateway(unavailable, "Ask an organization administrator to set up an organization-wide authorization server."), nil

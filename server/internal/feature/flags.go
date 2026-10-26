@@ -11,6 +11,13 @@ const (
 	// create or update nl-type risk policies and have them enforced. The
 	// dashboard gates the matching UI behind the same key.
 	FlagPromptPolicies Flag = "gram-prompt-policies"
+	// FlagToolApprovals gates creating require_approval risk policies (tool
+	// approvals) and the dashboard's approval wizard and Tool approvals tab.
+	// Evaluated server-side on policy create and update and in the dashboard;
+	// targeted by PostHog organization group (org slug). Fails closed. Existing
+	// approval policies keep enforcing and their requests stay decidable when
+	// the flag is off. Removed once tool approvals are GA.
+	FlagToolApprovals Flag = "risk-tool-approvals"
 	// FlagBudgets gates the Budgets (spend control) rollout end to end with
 	// one key: the dashboard hides the Budgets tab on the Costs page behind
 	// it, and the background spend-rule evaluator skips organizations
@@ -19,7 +26,7 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
+	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
 	// truncation limit globally. Evaluated server-side with no targeting. The
@@ -36,11 +43,6 @@ const (
 	// Targeted by PostHog organization group (org slug), like FlagBudgets.
 	// Removed once device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
-
-	// FlagRiskFindingsClickHouseCutover means the organization is on the ClickHouse findings path:
-	// batch judges run in the analysis handlers, and finding reads and webhooks use ClickHouse.
-	// Server-side org-group targeting fails closed to the Postgres path.
-	FlagRiskFindingsClickHouseCutover Flag = "risk-findings-clickhouse-cutover"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
@@ -215,6 +217,17 @@ const (
 	// are only evaluated where FlagAuthClientResolver or its shadow is on.
 	// Targeted the same way as FlagAuthClientResolver.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
+
+	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
+	// whose selector names upstream_client: such grants, connection owner
+	// blocks, agent keys copying them and the attachment backfill. Replicas
+	// older than the dimension drop these restrictions and their policy edits
+	// do not protect owner blocks, so enable it only once every replica reads
+	// them; that release is then the rollback floor. Off, unavailable or
+	// failing, no such grant is written; reading and enforcing existing ones,
+	// and protecting existing blocks, never depend on it. Targeted the same
+	// way as FlagAuthClientResolver.
+	FlagAuthClientUpstreamSelectorWrites Flag = "auth-client-upstream-selector-writes"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

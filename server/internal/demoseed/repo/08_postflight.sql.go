@@ -52,6 +52,52 @@ func (q *Queries) PostflightCountAgentAttributedChats(ctx context.Context, arg P
 	return count, err
 }
 
+const postflightCountApprovals = `-- name: PostflightCountApprovals :one
+SELECT count(*) FROM risk_policy_approvals
+WHERE organization_id = $1::text AND deleted IS FALSE
+`
+
+// The Tool approvals tab needs its four seeded approval requests: pending,
+// used, denied and expired.
+func (q *Queries) PostflightCountApprovals(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountApprovals, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountApprovalsServers = `-- name: PostflightCountApprovalsServers :one
+
+SELECT count(*)
+FROM mcp_servers s
+JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
+JOIN plugin_servers ps ON ps.mcp_server_id = s.id AND ps.deleted IS FALSE
+JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_default IS TRUE AND p.deleted IS FALSE
+WHERE s.project_id = $1::uuid AND s.builtin_backend = 'approvals'
+  AND s.deleted IS FALSE
+`
+
+// The approval policy is only usable when the approvals server it points
+// agents at has an endpoint and sits in the Default plugin.
+func (q *Queries) PostflightCountApprovalsServers(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountApprovalsServers, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountAuthClientAssociations = `-- name: PostflightCountAuthClientAssociations :one
+SELECT count(*) FROM mcp_server_auth_clients
+WHERE organization_id = $1::text AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightCountAuthClientAssociations(ctx context.Context, orgID string) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAuthClientAssociations, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountChats = `-- name: PostflightCountChats :one
 SELECT count(*) FROM chats WHERE organization_id = $1::text
 `
@@ -759,6 +805,24 @@ type PostflightCountQuarantineOpenAuditsParams struct {
 
 func (q *Queries) PostflightCountQuarantineOpenAudits(ctx context.Context, arg PostflightCountQuarantineOpenAuditsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountQuarantineOpenAudits, arg.OrgID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightCountRegistryPromotionCandidates = `-- name: PostflightCountRegistryPromotionCandidates :one
+SELECT count(*) FROM registry_promotion_candidates
+WHERE organization_id = $1::text AND project_id = $2::uuid
+ AND eligible IS FALSE AND promoted_at IS NULL
+`
+
+type PostflightCountRegistryPromotionCandidatesParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) PostflightCountRegistryPromotionCandidates(ctx context.Context, arg PostflightCountRegistryPromotionCandidatesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountRegistryPromotionCandidates, arg.OrgID, arg.ProjectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

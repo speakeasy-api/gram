@@ -119,6 +119,22 @@ func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.
 	return s.organizationCustomDomainLockdown(ctx, logger, project.OrganizationID)
 }
 
+// endpointCustomDomainLockdown is customDomainLockdownApplies for a resolved
+// endpoint. The organization gateway has no project, so it asks at its
+// organization's scope with the exemptions the agent gateway applies.
+func (s *Service) endpointCustomDomainLockdown(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (bool, error) {
+	if !endpoint.IsOrganizationGateway() {
+		return s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
+	}
+	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
+		return false, nil
+	}
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil && domainCtx.OrganizationID == endpoint.OrganizationID {
+		return false, nil
+	}
+	return s.organizationCustomDomainLockdown(ctx, logger, endpoint.OrganizationID)
+}
+
 // organizationCustomDomainLockdown is the lockdown rule itself: whether the
 // organization's custom domain carries an IP allowlist. The policy is owned by
 // the organization, not the project — enforceCustomDomainLockdown takes a
@@ -154,6 +170,13 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, mcpServer.ID, uuid.Nil, "")
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
+
+	// A first-party backend authorizes each call itself and is never
+	// risk-scanned, so it is dispatched before the issuer gate and the scan,
+	// and authenticates its callers on its own path.
+	if mcpServer.BuiltinBackend.Valid {
+		return s.serveBuiltinBackend(w, r, logger, mcpEndpoint, mcpServer, mcpRouteBase)
+	}
 
 	var prepared *preparedMCPRequest
 	if mcpServer.ToolsetID.Valid {
@@ -714,6 +737,12 @@ func (s *Service) serveRemoteBackend(
 		return err
 	}
 
+	// Identity auth above stamps an AuthContext for every caller that
+	// presented a Speakeasy credential, so its absence marks an anonymous caller.
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
+		buildOptions = append(buildOptions, remotemcp.WithAnonymousCaller())
+	}
+
 	build, err := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, organizationID, mcpServer, upstream.Token, wwwAuthenticate, selection, buildOptions...)
 	if err != nil {
 		return err
@@ -937,6 +966,9 @@ func (s *Service) prepareProxyBackendContext(
 			ctx, err = s.TryPublicIdentityAuth(ctx, r, false, mcpServer.ID)
 			if err != nil {
 				return denied(fmt.Errorf("public identity auth: %w", err))
+			}
+			if err := s.refuseForeignCaller(ctx, organizationID); err != nil {
+				return denied(err)
 			}
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			if ok && authCtx != nil && authCtx.ProjectID == nil && projectWithOrganization.ID == authCtx.ActiveOrganizationID {

@@ -17,7 +17,9 @@ const (
 	RuntimeScopeRegistryVersion4 RuntimeScopeRegistryVersion = 4
 	RuntimeScopeRegistryVersion5 RuntimeScopeRegistryVersion = 5
 
-	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion5
+	RuntimeScopeRegistryVersion6 RuntimeScopeRegistryVersion = 6
+
+	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion6
 )
 
 // RuntimeScopeLifecycle distinguishes active scope registrations from retained
@@ -107,6 +109,7 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeRiskPolicyBlock:         activeRuntimeScope(),
 	authz.ScopeChatRead:                activeRuntimeScope(),
 	authz.ScopeChatWrite:               activeRuntimeScope(),
+	authz.ScopeInferenceExecute:        safeRuntimeScopeSince(RuntimeScopeRegistryVersion6),
 	authz.ScopeLogRead:                 activeRuntimeScope(),
 	authz.ScopeAgentRead:               activeRuntimeScope(),
 	authz.ScopeAgentWrite:              activeRuntimeScope(),

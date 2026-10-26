@@ -22,10 +22,17 @@ const (
 	SelectorKeyProjectID      = "project_id"
 	SelectorKeyServerURL      = "server_url"
 	SelectorKeyServerIdentity = "server_identity"
-	// SelectorKeyClientType and SelectorKeyConnectionOwner narrow mcp:auth
-	// grants to an auth client type and to the owner of a personal connection.
+	// SelectorKeyClientType and SelectorKeyConnectionOwner narrow mcp:auth and
+	// mcp:blocked_auth grants to an auth client type and to the owner of a
+	// personal connection.
 	SelectorKeyClientType      = "client_type"
 	SelectorKeyConnectionOwner = "connection_owner"
+	// SelectorKeyUpstreamClient narrows mcp:auth and mcp:blocked_auth grants
+	// on personal clients to one upstream OAuth client, the
+	// remote_session_clients id behind it. With a connection owner it names one
+	// logical connection across every auth client sharing that upstream
+	// client, which is what a connection owner's block names.
+	SelectorKeyUpstreamClient = "upstream_client"
 )
 
 // SelectorValueRepresentedUser is the connection_owner value naming the user a
@@ -139,6 +146,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindAssistant
 	case "risk_policy":
 		return ResourceKindRiskPolicy
+	case "inference":
+		return ResourceKindInference
 	case "chat":
 		return ResourceKindChat
 	case "agent":
@@ -171,6 +180,9 @@ var validDispositions = map[string]bool{
 // allow no extra keys, except where scopeAllowsSelectorKey admits one for a
 // single scope.
 var allowedSelectorKeys = map[string]map[string]bool{
+	ResourceKindInference: {
+		SelectorKeyProjectID: true,
+	},
 	ResourceKindMCP: {
 		SelectorKeyTool:        true,
 		SelectorKeyDisposition: true,
@@ -190,6 +202,7 @@ var allowedSelectorKeys = map[string]map[string]bool{
 		SelectorKeyClientType:      true,
 		SelectorKeyProjectID:       true,
 		SelectorKeyConnectionOwner: true,
+		SelectorKeyUpstreamClient:  true,
 	},
 }
 
@@ -231,6 +244,15 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		return fmt.Errorf("scope %q requires resource_kind=%q, got %q", scope, expectedKind, kind)
 	}
 
+	if scope == ScopeInferenceExecute {
+		if sel[SelectorKeyResourceID] != WildcardResource {
+			return fmt.Errorf("scope %q requires resource_id=%q", scope, WildcardResource)
+		}
+		if projectID, ok := sel[SelectorKeyProjectID]; ok && projectID == "" {
+			return fmt.Errorf("selector key %q must not be empty", SelectorKeyProjectID)
+		}
+	}
+
 	allowed := allowedSelectorKeys[expectedKind]
 	for k, v := range sel {
 		if v == SelectorValueRepresentedUser && k != SelectorKeyConnectionOwner {
@@ -253,7 +275,7 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		if k == SelectorKeyClientType && v != WildcardResource && !validAuthClientTypes[v] {
 			return fmt.Errorf("invalid client_type value %q", v)
 		}
-		if k == SelectorKeyConnectionOwner {
+		if k == SelectorKeyConnectionOwner || k == SelectorKeyUpstreamClient {
 			if clientType, ok := sel[SelectorKeyClientType]; ok && clientType != WildcardResource && clientType != AuthClientTypeRemoteSession {
 				return fmt.Errorf("selector key %q requires client_type %q", k, AuthClientTypeRemoteSession)
 			}
@@ -283,6 +305,7 @@ func NewGrant(scope Scope, resourceID string) Grant {
 		PrincipalUrn: "",
 		Scope:        scope,
 		Selector:     NewSelector(scope, resourceID),
+		Inferred:     false,
 	}
 }
 
@@ -292,6 +315,7 @@ func NewGrantWithSelector(scope Scope, selector Selector) Grant {
 		PrincipalUrn: "",
 		Scope:        scope,
 		Selector:     selector,
+		Inferred:     false,
 	}
 }
 

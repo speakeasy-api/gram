@@ -277,6 +277,8 @@ VALUES (
 -- Materialize resolved departments so repeated identities share one lookup.
 WITH messages AS MATERIALIZED (
   SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model, m.seq,
+    m.generation, m.original_message_id,
+    COALESCE(m.capture_kind, CASE WHEN m.generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind,
     COALESCE(m.user_id, '') AS actor_id, COALESCE(input.email, '') AS email
   FROM ROWS FROM (UNNEST(@ids::uuid[]), UNNEST(@observed_user_emails::text[])) AS input(id, email)
   JOIN chat_messages m ON m.id = input.id AND m.project_id = @project_id::uuid
@@ -317,7 +319,8 @@ WITH messages AS MATERIALIZED (
       AND (identity.actor_id = '' OR email_candidate.user_id IS NULL OR email_candidate.user_id = identity.actor_id)
   ) fallback ON TRUE
 )
-SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model, d.department
+SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed, m.model,
+  m.generation, m.seq, m.original_message_id, m.capture_kind, d.department
 FROM messages m
 JOIN departments d ON d.actor_id = m.actor_id AND d.email = m.email
 ORDER BY m.seq;
@@ -484,23 +487,7 @@ SELECT
   , ccp.updated_at
   , ccp.deleted_at
   , ccp.deleted
-  , CASE
-      WHEN @risk_findings_clickhouse::boolean
-        THEN ccp.id = ANY(@risk_content_part_ids::uuid[])
-      ELSE EXISTS (
-        SELECT 1
-        FROM risk_results rr
-        JOIN risk_policies rp
-          ON rp.id = rr.risk_policy_id
-         AND rp.enabled IS TRUE
-         AND rp.deleted IS FALSE
-        WHERE rr.project_id = @project_id::uuid
-          AND rr.chat_content_part_id = ccp.id
-          AND rr.found IS TRUE
-          AND rr.excluded_at IS NULL
-          AND rr.false_positive_at IS NULL
-      )
-    END::boolean AS is_risk
+  , COALESCE(ccp.id = ANY(@risk_content_part_ids::uuid[]), FALSE)::boolean AS is_risk
 FROM chat_content_parts ccp
 WHERE ccp.chat_id = @chat_id
   AND ccp.project_id = @project_id::uuid
@@ -598,31 +585,11 @@ SELECT EXISTS (
 -- runs it in the same repeatable-read transaction as the ListChats page read,
 -- so the total reflects the same snapshot the empty page came from.
 --
--- risk_counts pre-aggregates active findings per chat once for the whole
--- project (one pass over risk_results), so the risk presence + threshold
--- filters become a cheap join instead of a correlated subquery per chat. The
--- parameter-only gate makes it a one-time filter that skips the scan entirely
--- when neither risk filter is active.
-WITH risk_counts AS (
-  SELECT cm.chat_id, COUNT(*)::integer AS cnt
-  FROM risk_results rr
-  JOIN chat_messages cm ON cm.id = rr.chat_message_id
-  -- A finding only counts while its policy is still enabled and not deleted, so
-  -- disabling/deleting a policy retires its findings everywhere (keeps this
-  -- count in sync with the risk.results.list detail view).
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE NOT @risk_findings_clickhouse::boolean
-    AND (@has_risk_filter::text <> '' OR @min_risk_score::int >= 0)
-    AND rr.project_id = @project_id
-    AND rr.found IS TRUE
-    AND rr.excluded_at IS NULL
-    AND rr.false_positive_at IS NULL
-  GROUP BY cm.chat_id
-),
-candidate_chats AS (
+-- @risk_chat_ids carries the chats that pass the risk presence and threshold
+-- filters, resolved from ClickHouse findings by the caller.
+WITH candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
-  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
   -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
@@ -674,17 +641,11 @@ candidate_chats AS (
       @has_risk_filter::text = ''
       OR (
         @has_risk_filter::text = 'true'
-        AND CASE
-          WHEN @risk_findings_clickhouse::boolean THEN c.id = ANY(@risk_chat_ids::uuid[])
-          ELSE COALESCE(rc.cnt, 0) > 0
-        END
+        AND c.id = ANY(@risk_chat_ids::uuid[])
       )
       OR (
         @has_risk_filter::text = 'false'
-        AND CASE
-          WHEN @risk_findings_clickhouse::boolean THEN NOT (c.id = ANY(@risk_chat_ids::uuid[]))
-          ELSE COALESCE(rc.cnt, 0) = 0
-        END
+        AND NOT COALESCE(c.id = ANY(@risk_chat_ids::uuid[]), FALSE)
       )
     )
     AND (
@@ -699,10 +660,7 @@ candidate_chats AS (
     )
     AND (
       @min_risk_score::int < 0
-      OR CASE
-        WHEN @risk_findings_clickhouse::boolean THEN c.id = ANY(@risk_chat_ids::uuid[])
-        ELSE COALESCE(rc.cnt, 0) >= @min_risk_score::int
-      END
+      OR c.id = ANY(@risk_chat_ids::uuid[])
     )
     AND (
       coalesce(cardinality(@sources::text[]), 0) = 0
@@ -752,28 +710,10 @@ WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_tim
 -- handler only needs a separate CountChats round trip when the requested page
 -- is past the end of the result set.
 --
--- risk_counts pre-aggregates active findings per chat once for the whole
--- project (one pass over risk_results) to serve the risk presence + threshold
--- filters. The parameter-only gate makes it a one-time filter that skips the
--- scan entirely when neither risk filter is active; the displayed
--- risk_findings_count is computed per returned page row in the final SELECT.
-WITH risk_counts AS (
-  SELECT cm.chat_id, COUNT(*)::integer AS cnt
-  FROM risk_results rr
-  JOIN chat_messages cm ON cm.id = rr.chat_message_id
-  -- A finding only counts while its policy is still enabled and not deleted, so
-  -- disabling/deleting a policy retires its findings everywhere (keeps this
-  -- count in sync with the risk.results.list detail view).
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE NOT @risk_findings_clickhouse::boolean
-    AND (@has_risk_filter::text <> '' OR @min_risk_score::int >= 0)
-    AND rr.project_id = @project_id
-    AND rr.found IS TRUE
-    AND rr.excluded_at IS NULL
-    AND rr.false_positive_at IS NULL
-  GROUP BY cm.chat_id
-),
-candidate_chats AS (
+-- @risk_chat_ids carries the chats that pass the risk presence and threshold
+-- filters, resolved from ClickHouse findings by the caller, which also counts
+-- each returned chat's findings there.
+WITH candidate_chats AS (
   SELECT
     c.id,
     c.title,
@@ -788,7 +728,6 @@ candidate_chats AS (
     COALESCE(ua.account_type, '')::text AS account_type,
     COALESCE(ua.email, '')::text AS account_email
   FROM chats c
-  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
   -- matching chats.user_id) to expose its team/personal classification.
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
@@ -843,17 +782,11 @@ candidate_chats AS (
       @has_risk_filter::text = ''
       OR (
         @has_risk_filter::text = 'true'
-        AND CASE
-          WHEN @risk_findings_clickhouse::boolean THEN c.id = ANY(@risk_chat_ids::uuid[])
-          ELSE COALESCE(rc.cnt, 0) > 0
-        END
+        AND c.id = ANY(@risk_chat_ids::uuid[])
       )
       OR (
         @has_risk_filter::text = 'false'
-        AND CASE
-          WHEN @risk_findings_clickhouse::boolean THEN NOT (c.id = ANY(@risk_chat_ids::uuid[]))
-          ELSE COALESCE(rc.cnt, 0) = 0
-        END
+        AND NOT COALESCE(c.id = ANY(@risk_chat_ids::uuid[]), FALSE)
       )
     )
     AND (
@@ -868,10 +801,7 @@ candidate_chats AS (
     )
     AND (
       @min_risk_score::int < 0
-      OR CASE
-        WHEN @risk_findings_clickhouse::boolean THEN c.id = ANY(@risk_chat_ids::uuid[])
-        ELSE COALESCE(rc.cnt, 0) >= @min_risk_score::int
-      END
+      OR c.id = ANY(@risk_chat_ids::uuid[])
     )
     AND (
       coalesce(cardinality(@sources::text[]), 0) = 0
@@ -1081,20 +1011,6 @@ SELECT
   lc.pinned_at,
   lc.num_messages,
   lc.last_message_timestamp,
-  CASE
-    WHEN @risk_findings_clickhouse::boolean THEN 0
-    ELSE (
-      SELECT COUNT(*)::integer
-      FROM risk_results rr
-      JOIN chat_messages cm ON cm.id = rr.chat_message_id
-      JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-      WHERE rr.project_id = @project_id
-        AND cm.chat_id = lc.id
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
-    )
-  END::integer AS risk_findings_count,
   lc.account_type,
   lc.account_email,
   lc.assistant_id,
@@ -1272,8 +1188,8 @@ WHERE project_id = @project_id
 -- name: SumMessageTokenStatsByDay :many
 -- Daily message-level token stats for the billing details table
 -- (telemetry.queryTumDetails): tokens in messages carrying at least one
--- active risk finding (same active-finding semantics as ListChats'
--- risk_counts), and tokens in tool-call messages — tool results (role 'tool')
+-- active risk_results finding (found, not excluded or dismissed, under an
+-- enabled policy), and tokens in tool-call messages: tool results (role 'tool')
 -- plus messages carrying a non-empty tool_calls array, mirroring the
 -- getTraceEntryType classification in GetChatEntryTotals. Bucketed by the
 -- message's UTC day so the series lines up with the ClickHouse daily
@@ -1394,8 +1310,9 @@ WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
 -- is in view. Each message maps to exactly one entry, mirroring the client's
 -- getTraceEntryType precedence: a message carrying a non-empty tool_calls array
 -- is a tool call regardless of role, otherwise the role decides. risk_findings
--- counts messages with an active (found, non-suppressed) risk result on the
--- message or on an attachment hanging off it.
+-- counts messages the caller's ClickHouse finding anchors flag
+-- (@risk_message_ids), directly or through an attachment hanging off them
+-- (@risk_content_part_ids).
 WITH ordered AS (
   SELECT
     cm.id,
@@ -1424,25 +1341,7 @@ attachment_risk_prompts AS (
     AND ccp.project_id = @project_id::uuid
     AND ccp.deleted IS FALSE
     AND ccp.parent_chat_message_id IS NOT NULL
-    AND (
-      (
-        @risk_findings_clickhouse::boolean
-        AND ccp.id = ANY(@risk_content_part_ids::uuid[])
-      )
-      OR (
-        NOT @risk_findings_clickhouse::boolean
-        AND EXISTS (
-          SELECT 1
-          FROM risk_results rr
-          JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-          WHERE rr.chat_content_part_id = ccp.id
-            AND rr.project_id = @project_id::uuid
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-    )
+    AND ccp.id = ANY(@risk_content_part_ids::uuid[])
 )
 SELECT
   COUNT(*) FILTER (WHERE has_tool_calls OR role IN ('user', 'assistant', 'tool'))::bigint AS total,
@@ -1452,22 +1351,7 @@ SELECT
   COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'tool')::bigint AS tool_results,
   (
     SELECT COUNT(*)::bigint FROM ordered o
-    WHERE (
-      @risk_findings_clickhouse::boolean
-      AND o.id = ANY(@risk_message_ids::uuid[])
-    )
-    OR (
-      NOT @risk_findings_clickhouse::boolean
-      AND EXISTS (
-        SELECT 1 FROM risk_results rr
-        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-        WHERE rr.chat_message_id = o.id
-          AND rr.project_id = @project_id::uuid
-          AND rr.found IS TRUE
-          AND rr.excluded_at IS NULL
-          AND rr.false_positive_at IS NULL
-      )
-    )
+    WHERE o.id = ANY(@risk_message_ids::uuid[])
     OR o.id IN (SELECT id FROM attachment_risk_prompts)
   )::bigint AS risk_findings
 FROM ordered;
@@ -1592,44 +1476,11 @@ attachment_risk_prompts AS (
     AND ccp.project_id = @project_id::uuid
     AND ccp.deleted IS FALSE
     AND ccp.parent_chat_message_id IS NOT NULL
-    AND (
-      (
-        @risk_findings_clickhouse::boolean
-        AND ccp.id = ANY(@risk_content_part_ids::uuid[])
-      )
-      OR (
-        NOT @risk_findings_clickhouse::boolean
-        AND EXISTS (
-          SELECT 1
-          FROM risk_results rr
-          JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-          WHERE rr.chat_content_part_id = ccp.id
-            AND rr.project_id = @project_id::uuid
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-    )
+    AND ccp.id = ANY(@risk_content_part_ids::uuid[])
 ),
 risk_rns AS (
   SELECT o.rn FROM ordered o
-  WHERE (
-    @risk_findings_clickhouse::boolean
-    AND o.id = ANY(@risk_message_ids::uuid[])
-  )
-  OR (
-    NOT @risk_findings_clickhouse::boolean
-    AND EXISTS (
-      SELECT 1 FROM risk_results rr
-      JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-      WHERE rr.chat_message_id = o.id
-        AND rr.project_id = @project_id::uuid
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
-    )
-  )
+  WHERE o.id = ANY(@risk_message_ids::uuid[])
   OR o.id IN (SELECT id FROM attachment_risk_prompts)
 )
 SELECT
@@ -1682,12 +1533,21 @@ WHERE EXISTS (
 ORDER BY o.created_at ASC, o.seq ASC;
 
 -- name: ListChatMessagesForMatch :many
-SELECT id, role, content, tool_call_id, tool_calls
+SELECT id, role, content, tool_call_id, tool_calls, original_message_id,
+  COALESCE(capture_kind, CASE WHEN generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind
 FROM chat_messages
 WHERE chat_id = @chat_id
   AND project_id = @project_id::uuid
   AND generation = @generation
 ORDER BY created_at ASC, seq ASC;
+
+-- name: SetMessageCaptureLineage :exec
+UPDATE chat_messages m
+SET capture_kind = (@kinds::text[])[input.ordinality],
+    original_message_id = NULLIF((@original_ids::uuid[])[input.ordinality], '00000000-0000-0000-0000-000000000000'::uuid)
+FROM UNNEST(@ids::uuid[]) WITH ORDINALITY AS input(id, ordinality)
+WHERE m.project_id = @project_id::uuid AND m.id = input.id
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = m.project_id AND p.organization_id = @organization_id::text);
 
 -- name: UpdateChatTitle :exec
 -- Auto-generated title write. Guarded on title_manually_set so a manual rename
@@ -2059,28 +1919,6 @@ INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, 
 VALUES (@project_id, @organization_id, 'test-policy-disabled', '{}', FALSE, 'flag', TRUE, 1)
 RETURNING id;
 
--- name: SeedRiskResult :exec
--- Test fixture: insert a risk result linking a chat message to a risk policy.
-INSERT INTO risk_results (
-    project_id, organization_id, risk_policy_id, risk_policy_version,
-    chat_message_id, source, found
-)
-VALUES (
-    @project_id, @organization_id, @risk_policy_id, 1,
-    @chat_message_id, 'test', @found
-);
-
--- name: SeedContentPartRiskResult :exec
--- Test fixture: insert a risk result linking a chat content part to a risk policy.
-INSERT INTO risk_results (
-    project_id, organization_id, risk_policy_id, risk_policy_version,
-    chat_content_part_id, source, found
-)
-VALUES (
-    @project_id, @organization_id, @risk_policy_id, 1,
-    @chat_content_part_id, 'test', TRUE
-);
-
 -- name: SeedAssistant :one
 -- Test fixture: insert a minimal assistant and return its id.
 INSERT INTO assistants (project_id, organization_id, name, model, instructions)
@@ -2340,16 +2178,19 @@ AND r.id = @runtime_id AND r.runtime_version = 3 AND NOT r.deleted AND NOT r.end
 AND NOT t.deleted AND NOT c.deleted AND NOT a.deleted AND a.status = 'active';
 
 -- name: SetKitCompletionRuntimeFixture :exec
--- Test fixture: exercise live runtime admission independently of key validity.
+-- Test fixture: exercise live runtime admission independently of workload verification.
 UPDATE assistant_runtimes
 SET runtime_version = @runtime_version, ended_at = sqlc.narg(ended_at)::timestamptz
 WHERE id = @runtime_id AND project_id = @project_id;
 
--- name: RevokeKitCompletionBindingFixture :exec
--- Test fixture: revoke only the binding, keeping the principal API key live.
-UPDATE assistant_inference_credentials SET revoked_at = clock_timestamp()
-WHERE api_key_id = @id::uuid AND project_id = @project_id;
+-- name: InsertSupersededKitKeyFixture :exec
+-- Historical credential fixture for permanent rejection at the shared auth boundary.
+INSERT INTO assistant_inference_credentials (api_key_id, project_id, assistant_id, runtime_id, identity_json, revoked_at)
+VALUES (@api_key_id, @project_id, @assistant_id, @runtime_id, '{}'::jsonb, sqlc.narg(revoked_at)::timestamptz);
 
--- name: DeleteKitCompletionBindingFixture :exec
--- Test fixture: remove only the binding, keeping the principal API key live.
-DELETE FROM assistant_inference_credentials WHERE api_key_id = @id::uuid AND project_id = @project_id;
+-- name: SetHistoricalKitKeyProfileFixture :exec
+-- Reproduce the former project's native principal-key profile without an issuer.
+UPDATE api_keys SET scopes = ARRAY[]::text[], subject_urn = @subject_urn,
+  delegated_grants = @delegated_grants::jsonb, delegated_grants_version = @delegated_grants_version,
+  expires_at = clock_timestamp() + interval '1 hour'
+WHERE id = @api_key_id AND project_id = @project_id;

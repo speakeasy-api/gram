@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -117,7 +118,7 @@ func TestAuthorize_CustomDomainIssSurvivesPlatformOriginConsent(t *testing.T) {
 	// consent, keeping this test on the origin question rather than the IDP
 	// round-trip. The local copy is updated too because attachCustomDomainToToolset
 	// writes the whole row back from the struct it is handed.
-	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -249,7 +250,7 @@ func TestAuthorize_PublicToolset_IgnoresAmbientSessionCredentials(t *testing.T) 
 
 	slug := "auth-public-anon-" + uuid.New().String()[:8]
 	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
-	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, testrepo.SetToolsetMCPPublicByIDParams{
 		McpIsPublic: true,
 		ID:          toolset.ID,
 		ProjectID:   toolset.ProjectID,
@@ -307,9 +308,8 @@ func TestAuthorize_PostRedirectErrorEmitsIss(t *testing.T) {
 
 	advertisedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, mcpSlug)
 
-	// redirect_uri is registered, so validation moves past the inline-error
-	// phase; response_type=token then fails ValidatePostRedirect and must be
-	// reported by redirect rather than inline.
+	// The registered loopback callback is eligible for automatic error redirects;
+	// response_type=token fails ValidatePostRedirect and still carries iss.
 	q := url.Values{}
 	q.Set("response_type", "token")
 	q.Set("client_id", client.ClientID)
@@ -380,9 +380,8 @@ func createPrivateIssuerGatedToolset(
 	return toolset, issuer
 }
 
-// RFC 8707 §2 rejection is a post-redirect outcome: the redirect_uri has
-// already been matched against the registered set, so the client learns about
-// it by 302 carrying invalid_target, never inline.
+// A registered loopback callback receives RFC 8707 §2 rejections by automatic
+// redirect, carrying invalid_target and the advertised issuer.
 func TestAuthorize_MismatchedResourceRejectedByRedirect(t *testing.T) {
 	t.Parallel()
 

@@ -853,3 +853,62 @@ JOIN projects p
 WHERE e.project_id = ANY(@project_ids::uuid[])
   AND e.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND e.deleted IS FALSE;
+
+-- name: ListToolsetHostingMCPServerIDs :many
+-- A toolset's host is its canonical wrapper (id = toolset id); without one, its
+-- oldest server with an endpoint. Visibility is ignored so a toggle never moves it.
+SELECT DISTINCT ON (ms.toolset_id)
+    ms.toolset_id::uuid AS toolset_id
+  , ms.id AS mcp_server_id
+FROM mcp_servers ms
+JOIN projects p
+  ON p.id = ms.project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+WHERE ms.toolset_id = ANY(@toolset_ids::uuid[])
+  AND ms.project_id = ANY(@project_ids::uuid[])
+  AND ms.deleted IS FALSE
+  AND (
+    ms.id = ms.toolset_id
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM mcp_servers c
+        WHERE c.id = ms.toolset_id AND c.project_id = ms.project_id AND c.deleted IS FALSE
+      )
+      AND EXISTS (
+        SELECT 1 FROM mcp_endpoints e
+        WHERE e.mcp_server_id = ms.id AND e.project_id = ms.project_id AND e.deleted IS FALSE
+      )
+    )
+  )
+ORDER BY ms.toolset_id, (ms.id = ms.toolset_id) DESC, ms.created_at, ms.id;
+
+-- name: ListMCPServerConsentConfigurations :many
+-- Hash stored routing configuration in one tenant-scoped read. Header secrets
+-- remain ciphertext; tool definitions are deliberately outside this boundary.
+SELECT m.id, m.project_id,
+       encode(sha256(convert_to(jsonb_build_object(
+           'remote', m.remote_mcp_server_id, 'url', r.url,
+           'transport', r.transport_type,
+           'tunnel', m.tunneled_mcp_server_id, 'resource', t.resource_identifier,
+           'toolset', m.toolset_id, 'environment', m.environment_id,
+           'variation', m.tool_variations_group_id,
+           'issuer', m.remote_session_issuer_id,
+           'visibility', m.visibility, 'network', m.network_access_mode,
+           'requires_auth', m.requires_upstream_auth,
+           'headers', COALESCE((
+               SELECT jsonb_agg(jsonb_build_array(h.name, h.value,
+                          h.value_from_request_header, h.is_required, h.is_secret)
+                                ORDER BY h.name, h.id)
+               FROM remote_mcp_server_headers AS h
+               WHERE h.remote_mcp_server_id = r.id AND h.deleted IS FALSE
+           ), '[]'::jsonb)
+       )::text, 'UTF8')), 'hex')::text AS configuration_hash
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+ AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS r ON r.id = m.remote_mcp_server_id
+ AND r.project_id = m.project_id AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers AS t ON t.id = m.tunneled_mcp_server_id
+ AND t.project_id = m.project_id AND t.deleted IS FALSE
+WHERE m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE;

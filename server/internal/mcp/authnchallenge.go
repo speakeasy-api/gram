@@ -30,11 +30,11 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
@@ -301,9 +301,13 @@ const agentAuthorizationCodePrefix = "agent-v1."
 
 const gatewayAuthorizationCodePrefix = "gateway-v1."
 
-// CacheKey implements cache.CacheableObject. Agent authorization grants use a
-// namespace that older binaries do not read, so a mixed-version deployment
-// cannot silently redeem one as a human session.
+const catalogAuthorizationCodePrefix = "gateway-v2."
+
+// userSessionGrantTTL bounds authorization-code redemption.
+const userSessionGrantTTL = 10 * time.Minute
+
+// CacheKey implements cache.CacheableObject. Agent and catalogue grants use
+// namespaces that older binaries cannot redeem without their restrictions.
 func (g UserSessionGrant) CacheKey() string {
 	return userSessionGrantCacheKey(g.UserSessionIssuerID, g.Code, g.AgentAuthorization != nil)
 }
@@ -312,6 +316,8 @@ func userSessionGrantCacheKey(issuerID uuid.UUID, code string, agentAuthorizatio
 	prefix := "userSessionGrant:"
 	if strings.HasPrefix(code, gatewayAuthorizationCodePrefix) {
 		prefix = "gatewayUserSessionGrant:"
+	} else if strings.HasPrefix(code, catalogAuthorizationCodePrefix) {
+		prefix = "gatewayCatalogGrant:"
 	}
 	if agentAuthorization {
 		prefix = "agentUserSessionGrant:"
@@ -322,7 +328,7 @@ func userSessionGrantCacheKey(issuerID uuid.UUID, code string, agentAuthorizatio
 // TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code
 // lifetime — enough for a slow round trip from the MCP client to /token, short
 // enough to limit exposure if the code leaks.
-func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
+func (g UserSessionGrant) TTL() time.Duration { return userSessionGrantTTL }
 
 // errIssuerGateOrgLookup marks the post-validation operational path in
 // validateUserSessionToken: the bearer token itself was accepted but the
@@ -461,6 +467,10 @@ const issuerGateReasonWorkloadSessionOutOfReach = "workload_session_out_of_reach
 // unusable — bad signature, expired, revoked, wrong audience, or its principal
 // is no longer admitted.
 const issuerGateReasonInvalidBearerToken = "invalid_bearer_token"
+
+// issuerGateReasonOrganizationMismatch: an organization that enforces upstream
+// auth refused a caller authenticated to another organization.
+const issuerGateReasonOrganizationMismatch = "organization_mismatch"
 
 // userSessionLastUsedCutoff coalesces the last_used_at stamp: a session records
 // at most one write per window regardless of request volume. Every other
@@ -644,21 +654,8 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 			if clientErr != nil && !errors.Is(clientErr, pgx.ErrNoRows) {
 				return ctx, nil, nil, false, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, clientErr)
 			}
-			if clientErr != nil || client.UserSessionIssuerID != endpoint.UserSessionIssuerID {
+			if clientErr != nil || client.UserSessionIssuerID != endpoint.UserSessionIssuerID || obsoleteRuntimeOAuthClient(&client) {
 				return ctx, nil, nil, false, fmt.Errorf("%w: workload client registration is no longer eligible", errCredentialRejected)
-			}
-			// A client reference alone does not identify an assistant credential:
-			// existing workload sessions can belong to ordinary OAuth clients.
-			// Either assistant binding marker requires the complete live binding;
-			// missing, revoked or retired bindings must still fail closed.
-			if strings.HasPrefix(client.ClientID, assistantWorkloadClientPrefix) || client.AssistantRuntimeID.Valid || client.AssistantTriggerWorkloadBindingID.Valid {
-				identity, bindingErr := s.loadAssistantWorkloadClientIdentity(ctx, endpoint, row.UserSessionClientID.UUID)
-				if bindingErr != nil && !errors.Is(bindingErr, pgx.ErrNoRows) && !errors.Is(bindingErr, assistantidentity.ErrInvalidIdentity) {
-					return ctx, nil, nil, false, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, bindingErr)
-				}
-				if bindingErr != nil || urn.NewWorkloadSubject(identity.IssuerID, identity.Subject).String() != subject.String() {
-					return ctx, nil, nil, false, fmt.Errorf("%w: assistant workload registration is no longer eligible", errCredentialRejected)
-				}
 			}
 		}
 		reach := workloadSessionReachResource
@@ -1140,6 +1137,10 @@ func (s *Service) authenticateIssuerGate(
 		}
 		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, message)
 	}
+	if err := s.refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
+		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
+		return ctx, nil, nil, err
+	}
 
 	return newCtx, &issuerGateAuthentication{
 		endpoint:             endpoint,
@@ -1303,8 +1304,12 @@ func oauthAuthorityError(err error) *oops.ShareableError {
 	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 		return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable")
 	}
-	return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server")
+	return oops.E(oops.CodeBadRequest, err, "authn challenge state does not match this MCP server")
 }
+
+// errUserSessionIssuerRetired identifies a resolved endpoint whose issuer is
+// no longer live, independently of an unknown endpoint or an unserved host.
+var errUserSessionIssuerRetired = errors.New("user session issuer is no longer live")
 
 // RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id
 // FK still resolves to a live row, and stamps the issuer configuration the
@@ -1332,7 +1337,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+			return oops.E(oops.CodeNotFound, fmt.Errorf("%w: %w", errUserSessionIssuerRetired, err), "user_session_issuer not found")
 		}
 		return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").LogError(ctx, s.logger)
 	}
@@ -1403,4 +1408,13 @@ func generateOpaqueToken() (string, error) {
 		return "", fmt.Errorf("read random bytes: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// consentChallengeCacheError distinguishes expired consent state from a
+// dependency outage and logs each with its corresponding severity.
+func consentChallengeCacheError(ctx context.Context, logger *slog.Logger, err error) *oops.ShareableError {
+	if errors.Is(err, redisCache.ErrCacheMiss) {
+		return oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
+	}
+	return oops.E(oops.CodeUnavailable, err, "authn challenge state is temporarily unavailable").LogError(ctx, logger)
 }

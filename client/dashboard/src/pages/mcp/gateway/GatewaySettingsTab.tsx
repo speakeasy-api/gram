@@ -23,6 +23,7 @@ import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/Netwo
 import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
 import { Textarea } from "@/components/moon/textarea";
+import codeInstructions from "./builtin-gateway-code-instructions.txt?raw";
 import directInstructions from "./builtin-gateway-direct-instructions.txt?raw";
 import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
 import { cn } from "@/lib/utils";
@@ -208,12 +209,19 @@ export function GatewayInstructionsSection({
 }): JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
+  const servedMode =
+    metaMcpServer.discoveryMode === "code_mode" &&
+    !metaMcpServer.codeModeEnabled
+      ? "progressive"
+      : metaMcpServer.discoveryMode;
   const defaultInstructions =
-    metaMcpServer.discoveryMode === "direct"
+    servedMode === "direct"
       ? directInstructions.trimEnd()
-      : metaMcpServer.discoveryMode === "progressive"
+      : servedMode === "progressive"
         ? builtInInstructions
-        : undefined;
+        : servedMode === "code_mode"
+          ? codeInstructions.trimEnd()
+          : undefined;
   const supportsEditing =
     defaultInstructions !== undefined || !!metaMcpServer.instructions;
   const stored = metaMcpServer.instructions || defaultInstructions || "";

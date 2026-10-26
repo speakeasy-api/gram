@@ -16,7 +16,7 @@ import {
 } from "@/components/observe/ObserveFilterBar";
 import {
   encodeGatewayServerFilter,
-  encodeHostedServerFilter,
+  hostedServerFilterValue,
   encodeShadowServerFilter,
   parseTargetFilter,
   isDefaultToolUsageTypeSelection,
@@ -88,7 +88,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Settings } from "lucide-react";
+import { Bot, Settings } from "lucide-react";
 import { DateGroupHeader } from "@/components/auditlogs/feed";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -188,6 +188,27 @@ export function LogsTools(): JSX.Element {
     },
     [setSearchParams],
   );
+  const selectedAgentIds = useMemo(
+    () => (searchParams.get("agent") ?? "").split(",").filter(Boolean),
+    [searchParams],
+  );
+  const setAgentIds = useCallback(
+    (values: string[]) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (values.length > 0) {
+            next.set("agent", values.join(","));
+          } else {
+            next.delete("agent");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const { summaryPayload, sharedQueryKey } = useToolUsagePayload({
     activeFilters,
@@ -195,6 +216,7 @@ export function LogsTools(): JSX.Element {
     selectedHookTypes,
     accountType,
     clientKeys: selectedClientKeys,
+    agentIds: selectedAgentIds,
     from,
     to,
   });
@@ -302,17 +324,38 @@ export function LogsTools(): JSX.Element {
     () => selectedHookSources(activeFilters),
     [activeFilters],
   );
+  const agentOptions = useMemo(
+    () =>
+      (filterOptionsData?.users ?? []).filter(
+        (user) => user.userKind === "agent_id",
+      ),
+    [filterOptionsData],
+  );
+  // Same query the table's rows read, so the names resolve once for both.
+  const readableAgents = useReadableAgents(
+    agentOptions.length > 0 || selectedAgentIds.length > 0,
+  );
+  const agentNamesById = useMemo(
+    () =>
+      new Map(
+        (readableAgents.isError ? [] : (readableAgents.data ?? [])).map(
+          (agent) => [agent.id, agent.name],
+        ),
+      ),
+    [readableAgents.data, readableAgents.isError],
+  );
 
   const facetGroups = useMemo<FacetGroup[]>(() => {
     const serverValues: FacetValue[] = [
-      ...(filterOptionsData?.hostedServers ?? []).map((server) => ({
-        value: encodeHostedServerFilter(server.toolsetSlug),
-        label: server.toolsetName || server.toolsetSlug,
-        count: Number(server.eventCount),
-        selected: selectedServerValues.includes(
-          encodeHostedServerFilter(server.toolsetSlug),
-        ),
-      })),
+      ...(filterOptionsData?.hostedServers ?? []).map((server) => {
+        const value = hostedServerFilterValue(server, selectedServerValues);
+        return {
+          value,
+          label: server.toolsetName || server.toolsetSlug,
+          count: Number(server.eventCount),
+          selected: selectedServerValues.includes(value),
+        };
+      }),
       ...(filterOptionsData?.gateways ?? []).map((gateway) => ({
         value: encodeGatewayServerFilter(gateway.metaMcpServerId),
         label: gateway.name,
@@ -413,7 +456,7 @@ export function LogsTools(): JSX.Element {
       },
       {
         id: "source",
-        label: "Agent",
+        label: "Harness",
         values: hookSourceOptions.map((source) => ({
           value: source,
           label: formatPlatform(source),
@@ -467,12 +510,32 @@ export function LogsTools(): JSX.Element {
           selectedEmails,
         ),
       },
+      {
+        id: "agent",
+        label: "Agent",
+        // Combined with User by AND on the server: an agent and a person
+        // select the calls that agent made on that person's behalf.
+        values: withSelected(
+          agentOptions.map((user) => ({
+            value: user.userKey,
+            label: agentNamesById.get(user.userKey) ?? user.userLabel,
+            count: Number(user.eventCount),
+            icon: <Bot className="text-muted-foreground size-4" />,
+            selected: selectedAgentIds.includes(user.userKey),
+          })),
+          selectedAgentIds,
+          (id) => agentNamesById.get(id) ?? id,
+        ),
+      },
     ];
   }, [
     accountType,
+    agentNamesById,
+    agentOptions,
     filterOptionsData,
     hookSourceOptions,
     roleOptions,
+    selectedAgentIds,
     selectedClientKeys,
     selectedRoleIds,
     selectedEmails,
@@ -519,6 +582,9 @@ export function LogsTools(): JSX.Element {
         case "user":
           handleUserEmailSelectionChange(next(selectedEmails));
           break;
+        case "agent":
+          setAgentIds(next(selectedAgentIds));
+          break;
       }
     },
     [
@@ -536,6 +602,8 @@ export function LogsTools(): JSX.Element {
       selectedServerValues,
       selectedSources,
       selectedStatuses,
+      selectedAgentIds,
+      setAgentIds,
       setClientKeys,
     ],
   );
@@ -567,6 +635,9 @@ export function LogsTools(): JSX.Element {
         case "user":
           handleUserEmailSelectionChange([]);
           break;
+        case "agent":
+          setAgentIds([]);
+          break;
       }
     },
     [
@@ -577,6 +648,7 @@ export function LogsTools(): JSX.Element {
       handleServerSelectionChange,
       handleStatusesChange,
       handleUserEmailSelectionChange,
+      setAgentIds,
       setClientKeys,
     ],
   );
@@ -781,7 +853,9 @@ export function LogsTools(): JSX.Element {
         mcpConfig={mcpConfig}
         title="Explore Tool Logs"
         subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
-        hideTrigger={isLogsDisabled}
+        // Hide the docked assistant on this page — it floats over the last
+        // rows of the table, which is the primary surface here.
+        hideTrigger
         suggestions={INSIGHTS_SUGGESTIONS["logs/tools"]}
       />
       {isLogsDisabled ? (
@@ -823,6 +897,7 @@ export function LogsTools(): JSX.Element {
             selectedStatuses={selectedStatuses}
             selectedRoleIds={selectedRoleIds}
             selectedClientKeys={selectedClientKeys}
+            selectedAgentIds={selectedAgentIds}
             expandedTraceId={expandedTraceId}
             openingTraceId={openingTraceId}
             toggleExpand={toggleExpand}
@@ -887,11 +962,11 @@ const RAIL_WIDTH_STORAGE_KEY = "gram.observe.logs.railWidth";
 // address without truncation — past that the rail is just eating the table.
 const RAIL_WIDTH_MIN = 180;
 const RAIL_WIDTH_MAX = 340;
-const RAIL_WIDTH_DEFAULT = 280;
+const RAIL_WIDTH_DEFAULT = 220;
 // The rail may not take more than this share of the window. The table needs
 // six columns and the rail needs one, so a fixed width that reads as generous
 // at 1600px is most of the reader's tool names at 1000px.
-const RAIL_WIDTH_VIEWPORT_SHARE = 0.22;
+const RAIL_WIDTH_VIEWPORT_SHARE = 0.15;
 
 /** The widest the rail may be in this window, whatever the reader last chose. */
 function railWidthCeiling(): number {
@@ -1021,6 +1096,7 @@ function LogsToolsContent({
   selectedStatuses,
   selectedRoleIds,
   selectedClientKeys,
+  selectedAgentIds,
   expandedTraceId,
   openingTraceId,
   toggleExpand,
@@ -1072,6 +1148,7 @@ function LogsToolsContent({
   selectedStatuses: ObserveStatusFilterValue[];
   selectedRoleIds: string[];
   selectedClientKeys: string[];
+  selectedAgentIds: string[];
   expandedTraceId: string | null;
   openingTraceId: string | null;
   toggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
@@ -1380,7 +1457,9 @@ function LogsToolsContent({
                     <div className="min-w-0 flex-1">Server</div>
                     <div className="min-w-0 flex-1">Tool</div>
                     <div className="w-20 shrink-0">Type</div>
-                    <div className="min-w-[180px] flex-1 text-left">User</div>
+                    <div className="min-w-[180px] flex-1 text-left">
+                      Identity
+                    </div>
                     <div className="w-32 shrink-0">Client</div>
                   </div>
 
@@ -1410,6 +1489,7 @@ function LogsToolsContent({
                         selectedStatuses.length > 0 ||
                         selectedRoleIds.length > 0 ||
                         selectedClientKeys.length > 0 ||
+                        selectedAgentIds.length > 0 ||
                         attributeFilters.length > 0 ||
                         accountType !== "" ||
                         Boolean(attributeSearchQuery)
@@ -1839,6 +1919,14 @@ function LogsToolsTraceRow({
               identityKey={trace.userKey}
               label={userLabel}
               agent={agent}
+              authorizer={
+                trace.authorizerUserId
+                  ? {
+                      userId: trace.authorizerUserId,
+                      label: trace.authorizerLabel,
+                    }
+                  : undefined
+              }
             />
           ) : (
             <>
