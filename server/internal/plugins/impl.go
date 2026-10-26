@@ -1443,14 +1443,9 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID, s.projectServerURL(ctx, *ac.ProjectID), publishedHooksConfig)
 	cfg.HooksAPIKey = candidate.fullKey
 
-	files, err := GenerateObservabilityPluginPackage(cfg, payload.Platform)
+	archive, err := ObservabilityPluginZip(cfg, payload.Platform)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate observability plugin package").LogError(ctx, s.logger)
-	}
-
-	var buf bytes.Buffer
-	if err := writePluginZip(&buf, files); err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "build plugin zip").LogError(ctx, s.logger)
 	}
 
 	filename := "observability"
@@ -1471,7 +1466,7 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
 		ContentDisposition: fmt.Sprintf(`attachment; filename="%s.zip"`, filename),
-	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+	}, io.NopCloser(bytes.NewReader(archive)), nil
 }
 
 func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.DownloadCodexInstallScriptPayload) (*gen.DownloadCodexInstallScriptResult, io.ReadCloser, error) {

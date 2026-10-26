@@ -2357,12 +2357,15 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	var manifest struct {
 		ID         string `json:"id"`
 		Activation struct {
-			OnStartup bool `json:"onStartup"`
+			OnStartup      bool     `json:"onStartup"`
+			OnCapabilities []string `json:"onCapabilities"`
 		} `json:"activation"`
 	}
 	require.NoError(t, json.Unmarshal(files["openclaw.plugin.json"], &manifest))
 	require.Equal(t, "speakeasy-observability", manifest.ID)
 	require.True(t, manifest.Activation.OnStartup)
+	// OpenClaw 2026.9.3 and later may not start a hook-only plugin without it.
+	require.Contains(t, manifest.Activation.OnCapabilities, "hook")
 
 	var pkg struct {
 		OpenClaw struct {
