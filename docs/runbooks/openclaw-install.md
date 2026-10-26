@@ -164,7 +164,7 @@ When `openclaw` is on `PATH` the script:
    Gateway-level `SPEAKEASY_AI_HOOKS_API_KEY` or a cached sign-in for this org
    can take precedence. Remove those overrides to use the agent credential.
    If the installed plugin cannot be located, the check tests the archive
-   copy instead, requiring `unzip` or `python3`.
+   copy instead, requiring `unzip`, `bsdtar` or `python3`.
 5. Prints a reminder to restart the OpenClaw Gateway. Until restart the
    plugin is not loaded. The installer never restarts a running Gateway.
 
@@ -182,7 +182,11 @@ For supported credential surfaces, see the upstream
 [SecretRef contract](https://docs.openclaw.ai/gateway/secrets/secretref-contract).
 The installer uses the CLI's private batch-file input to keep the key out of
 process arguments. Claude Code and Codex use `SPEAKEASY_AGENT_KEY` from their
-launch environment; export the saved key when starting either client.
+launch environment. The installer only exports it for its own process; it
+does not save a key file for these clients. Store the key yourself when the
+dashboard shows it, and supply it when launching either client. If a client
+rejects a gateway update, the installer keeps its existing entry; review that
+entry in the client before retrying.
 
 The coverage caveat in [Before you start](#before-you-start) applies: models
 routed through the Claude CLI harness bypass these hooks, so the PASS line

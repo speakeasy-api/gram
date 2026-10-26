@@ -80,8 +80,8 @@ func shellSingleQuote(value string) string {
 }
 
 // Script renders the install script. It configures what it finds and says
-// what it did; it never installs a client, and it is idempotent, so re-running
-// after a grant change is safe.
+// what it did; it never installs a client. A rejected client update keeps
+// the existing gateway configuration in place.
 func Script(p Params) (string, error) {
 	for name, raw := range map[string]string{"gateway": p.GatewayURL, "hooks server": p.ServerURL} {
 		u, err := url.Parse(raw)
@@ -197,10 +197,9 @@ configured=0
 found=0
 configure_claude_code() {
   # Keep the bearer out of argv and let Claude expand it when launched.
-  claude mcp remove gram >/dev/null 2>&1 || true
   if ! claude mcp add --transport http gram "$GRAM_AGENT_URL" \
     --header 'Authorization: Bearer ${SPEAKEASY_AGENT_KEY}'; then
-    echo "Could not configure Claude Code. Continuing with the other clients."
+    echo "Could not configure Claude Code. Its existing entry was kept; review it in the client before retrying. Continuing with the other clients."
     return 0
   fi
   echo "Configured Claude Code. Launch it with SPEAKEASY_AGENT_KEY set."
@@ -208,10 +207,9 @@ configure_claude_code() {
 }
 
 configure_codex() {
-  codex mcp remove gram >/dev/null 2>&1 || true
   if ! codex mcp add gram --url "$GRAM_AGENT_URL" \
     --bearer-token-env-var SPEAKEASY_AGENT_KEY; then
-    echo "Could not configure Codex. Continuing with the other clients."
+    echo "Could not configure Codex. Its existing entry was kept; review it in the client before retrying. Continuing with the other clients."
     return 0
   fi
   echo "Configured Codex."
@@ -314,9 +312,11 @@ decode_base64() {
 }
 
 # extract_zip ZIP DIR. Minimal OpenClaw images may lack unzip but carry
-# python3, which the base64 fallback above already relies on.
+# bsdtar or python3 can extract the same ZIP on those systems.
 extract_zip() {
+  mkdir -p "$2"
   unzip -q "$1" -d "$2" >/dev/null 2>&1 && return 0
+  bsdtar -xf "$1" -C "$2" >/dev/null 2>&1 && return 0
   python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$1" "$2" >/dev/null 2>&1
 }
 
@@ -346,7 +346,7 @@ check_openclaw_hooks() {
     # Not where this release keeps plugins: test the archive's own copy.
     plugin_dir="$1/plugin"
     if ! extract_zip "$2" "$plugin_dir"; then
-      hooks_fail "the plugin is installed, but this script could not find it to test it. Install unzip or python3 to test the archive instead."
+      hooks_fail "the plugin is installed, but this script could not find it to test it. Install unzip, bsdtar or python3 to test the archive instead."
       return 0
     fi
   fi
