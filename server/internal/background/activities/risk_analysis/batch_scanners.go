@@ -2,41 +2,40 @@ package risk_analysis
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/codes"
-	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
-	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 const (
-	inlineBatchExecutionPath        = "inline_batch"
-	shadowStreamExecutionPath       = "shadow_stream"
+	// shadowStreamExecutionPath labels the per-source analysis handlers' scans
+	// (gitleaks, presidio, custom rules, tool calls) on metering readings and
+	// spans. The value is kept stable for existing metric queries.
+	shadowStreamExecutionPath = "shadow_stream"
+
+	// judgeHandlerStreamExecutionPath labels the prompt-injection and
+	// prompt-policy handlers' judge scans.
 	judgeHandlerStreamExecutionPath = "judge_handler_stream"
+
 	// llmAnalyzerStreamExecutionPath marks analysis requests the fine-tuned
 	// LLM analyzer's streams consumer evaluates as the only engine for the
-	// policy's sources, as opposed to the shadow stream that runs alongside
-	// an inline scan.
+	// policy's sources.
 	llmAnalyzerStreamExecutionPath = "llm_analyzer_stream"
+
 	// llmShadowStreamExecutionPath marks analysis requests the fine-tuned LLM
-	// analyzer evaluates in the shadow engine mode: the legacy engines scan
-	// the same batch inline and enforce, and the model's verdict is recorded
-	// for comparison only.
+	// analyzer evaluates in the shadow engine mode: the per-source handlers
+	// scan the same batch and enforce, and the model's verdict is recorded for
+	// comparison only.
 	llmShadowStreamExecutionPath = "llm_shadow_stream"
 )
 
@@ -145,38 +144,6 @@ func batchRiskProvenance(args AnalyzeBatchArgs, msg batchMessage, executionPath,
 	}
 }
 
-func (a *AnalyzeBatch) recordBatchResults(
-	ctx context.Context,
-	definition metering.Definition,
-	args AnalyzeBatchArgs,
-	messages []batchMessage,
-	results []scanners.Result,
-	startedAt time.Time,
-) {
-	for i := range min(len(messages), len(results)) {
-		if !results[i].Completed {
-			continue
-		}
-		if err := a.riskRecorder.Record(
-			ctx,
-			definition,
-			batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, messageScanRequestID(args, scanLaneStandard, messages[i])),
-			results[i].STokens,
-			startedAt,
-		); err != nil {
-			a.logger.ErrorContext(ctx, "record batch risk scan usage", attr.SlogError(err))
-		}
-	}
-}
-
-func findingsFromResults(results []scanners.Result) [][]scanners.Finding {
-	findings := make([][]scanners.Finding, len(results))
-	for i := range results {
-		findings[i] = results[i].Findings
-	}
-	return findings
-}
-
 // llmLane is the fine-tuned LLM analyzer lane a standard-policy batch uses.
 type llmLane struct {
 	// enforcing means the lane replaces the per-source engines for the sources the
@@ -268,263 +235,4 @@ func (a *AnalyzeBatch) publishLLMLane(ctx context.Context, args AnalyzeBatchArgs
 		return fmt.Errorf("llm analyzer scan dispatch: %w", err)
 	}
 	return nil
-}
-
-func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
-	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
-	defer scanSpan.End()
-	activity.RecordHeartbeat(ctx, 0)
-
-	contents := messageContents(messages)
-
-	sources := newSourceSet(args.Sources)
-	n := len(messages)
-	gitleaksFindings := make([][]scanners.Finding, n)
-	presidioFindings := make([][]scanners.Finding, n)
-	shadowMCPFindings := make([][]scanners.Finding, n)
-	destructiveToolFindings := make([][]scanners.Finding, n)
-	cliDestructiveFindings := make([][]scanners.Finding, n)
-	promptInjectionFindings := make([][]scanners.Finding, n)
-	customFindings := make([][]scanners.Finding, n)
-
-	lane := a.resolveLLMLane(ctx, args)
-
-	var wg sync.WaitGroup
-	var gitleaksErr error
-	var presidioPublishErr error
-	var presidioErr error
-	var llmPublishErr error
-	var promptInjectionErr error
-	var customErr error
-	var toolCallPublishErr error
-
-	wg.Go(func() {
-		llmPublishErr = a.publishLLMLane(ctx, args, messages, lane, sources, masks)
-	})
-
-	if sources.Has(shadowmcp.SourceShadowMCP) ||
-		lane.runs(sources, shadowmcp.SourceDestructiveTool) ||
-		lane.runs(sources, SourceCLIDestructive) {
-		wg.Go(func() {
-			toolCallPublishErr = a.publishToolCallScanRequests(
-				ctx,
-				args,
-				messages,
-				sources,
-				masks,
-				lane.ownEngineRuns(shadowmcp.SourceDestructiveTool),
-				lane.ownEngineRuns(SourceCLIDestructive),
-			)
-		})
-	}
-
-	if lane.runs(sources, SourceGitleaks) {
-		wg.Go(func() {
-			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourceGitleaks])
-			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourceGitleaks, masks.RecommendedPrefilteredCount(sourceCategories[SourceGitleaks]))
-			findings, err := a.scanGitleaks(ctx, args, subMessages, subContents)
-			if err != nil {
-				gitleaksErr = err
-				return
-			}
-			gitleaksFindings = scatterFindings(n, indices, findings)
-		})
-	}
-
-	if lane.runs(sources, SourcePresidio) {
-		wg.Go(func() {
-			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
-			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePresidio, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
-			// The publish must succeed for the activity to succeed (the async
-			// analyzer feeds the ClickHouse findings store), while the inline
-			// scan below tolerates partial results.
-			scoreThreshold := resolvePresidioScoreThreshold(args.PresidioScoreThreshold)
-			if err := a.publishPresidioScanRequests(ctx, args, subMessages, scoreThreshold); err != nil {
-				presidioPublishErr = err
-				return
-			}
-			startedAt := time.Now().UTC()
-			results, err := a.scanPresidio(ctx, args, scoreThreshold, subMessages, subContents)
-			a.recordBatchResults(ctx, metering.RiskPresidio(), args, subMessages, results, startedAt)
-			presidioFindings = scatterFindings(n, indices, findingsFromResults(results))
-			if err != nil {
-				presidioErr = err
-			}
-		})
-	}
-
-	if lane.runs(sources, SourcePromptInjection) {
-		wg.Go(func() {
-			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
-			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
-			findings, err := a.scanPromptInjection(ctx, args, subMessages, subContents)
-			if err != nil {
-				promptInjectionErr = err
-				return
-			}
-			promptInjectionFindings = scatterFindings(n, indices, findings)
-		})
-	}
-
-	if len(customRuleIDs) > 0 {
-		wg.Go(func() {
-			subMessages, _, indices := masks.Subset(messages, contents, sourceCategories[SourceCustom])
-			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourceCustom, masks.RecommendedPrefilteredCount(sourceCategories[SourceCustom]))
-			findings, err := a.scanCustomRules(ctx, args, subMessages, customRuleIDs)
-			if err != nil {
-				customErr = err
-				return
-			}
-			customFindings = scatterFindings(n, indices, findings)
-		})
-	}
-
-	wg.Wait()
-
-	if gitleaksErr != nil {
-		scanSpan.SetStatus(codes.Error, gitleaksErr.Error())
-		return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
-	}
-	if presidioPublishErr != nil {
-		scanSpan.SetStatus(codes.Error, presidioPublishErr.Error())
-		return nil, fmt.Errorf("presidio scan dispatch: %w", presidioPublishErr)
-	}
-	if llmPublishErr != nil {
-		scanSpan.SetStatus(codes.Error, llmPublishErr.Error())
-		return nil, llmPublishErr
-	}
-	if promptInjectionErr != nil {
-		scanSpan.SetStatus(codes.Error, promptInjectionErr.Error())
-		return nil, fmt.Errorf("prompt injection scan dispatch: %w", promptInjectionErr)
-	}
-	if customErr != nil {
-		scanSpan.SetStatus(codes.Error, customErr.Error())
-		return nil, fmt.Errorf("custom rule scan: %w", customErr)
-	}
-	if toolCallPublishErr != nil {
-		scanSpan.SetStatus(codes.Error, toolCallPublishErr.Error())
-		return nil, fmt.Errorf("tool call scan dispatch: %w", toolCallPublishErr)
-	}
-	if ctx.Err() != nil {
-		err := fmt.Errorf("scan canceled: %w", ctx.Err())
-		if presidioErr != nil {
-			err = errors.Join(err, fmt.Errorf("presidio: %w", presidioErr))
-		}
-		scanSpan.SetStatus(codes.Error, err.Error())
-		return nil, err
-	}
-
-	if sources.Has(shadowmcp.SourceShadowMCP) {
-		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, args.ProjectID, args.RiskPolicyID, messages)
-		activity.RecordHeartbeat(ctx, shadowmcp.SourceShadowMCP)
-	}
-	if lane.runs(sources, shadowmcp.SourceDestructiveTool) {
-		destructiveToolFindings = a.scanDestructiveToolAnnotations(ctx, args.OrganizationID, messages)
-		activity.RecordHeartbeat(ctx, shadowmcp.SourceDestructiveTool)
-	}
-	if lane.runs(sources, SourceCLIDestructive) {
-		findings, err := a.scanDestructiveCLICommands(ctx, args, messages)
-		if err != nil {
-			scanSpan.SetStatus(codes.Error, err.Error())
-			return nil, err
-		}
-		cliDestructiveFindings = findings
-		activity.RecordHeartbeat(ctx, SourceCLIDestructive)
-	}
-
-	// Note: SourceAccountIdentity is deliberately absent here — it is
-	// session-scoped and evaluated in Do over the batch's full message-id set,
-	// bypassing the message-type filter and CEL scope that shape `messages`.
-
-	return mergeFindings(mergeFindingsInput{
-		orgID:                   args.OrganizationID,
-		metrics:                 a.metrics,
-		masks:                   masks,
-		exclusions:              exclusions,
-		builtinEnabled:          args.BuiltinPresetsEnabled,
-		builtinPresets:          a.builtinPresets,
-		gitleaksFindings:        gitleaksFindings,
-		presidioFindings:        presidioFindings,
-		shadowMCPFindings:       shadowMCPFindings,
-		destructiveToolFindings: destructiveToolFindings,
-		cliDestructiveFindings:  cliDestructiveFindings,
-		promptInjectionFindings: promptInjectionFindings,
-		customFindings:          customFindings,
-	}, ctx), nil
-}
-
-type mergeFindingsInput struct {
-	orgID                   string
-	metrics                 *riskMetrics
-	masks                   CategoryScopeMasks
-	exclusions              ExclusionSet
-	builtinEnabled          bool
-	builtinPresets          *presetlib.Library
-	gitleaksFindings        [][]scanners.Finding
-	presidioFindings        [][]scanners.Finding
-	shadowMCPFindings       [][]scanners.Finding
-	destructiveToolFindings [][]scanners.Finding
-	cliDestructiveFindings  [][]scanners.Finding
-	promptInjectionFindings [][]scanners.Finding
-	customFindings          [][]scanners.Finding
-}
-
-func mergeFindings(in mergeFindingsInput, ctx context.Context) [][]scanners.Finding {
-	merged := make([][]scanners.Finding, len(in.gitleaksFindings))
-	for i := range merged {
-		combined := concatFindings(
-			in.gitleaksFindings[i],
-			in.presidioFindings[i],
-			in.shadowMCPFindings[i],
-			in.destructiveToolFindings[i],
-			in.cliDestructiveFindings[i],
-			in.promptInjectionFindings[i],
-			in.customFindings[i],
-		)
-		combined = filterByCategoryScopes(ctx, in.orgID, in.metrics, in.masks, i, combined)
-		if !in.exclusions.Empty() {
-			combined = in.exclusions.FilterFindings(combined)
-		}
-		if in.builtinEnabled {
-			combined = dropBuiltinFalsePositives(in.builtinPresets, combined)
-		}
-		merged[i] = dedup(combined)
-	}
-	return merged
-}
-
-func filterByCategoryScopes(ctx context.Context, orgID string, metrics *riskMetrics, masks CategoryScopeMasks, i int, in []scanners.Finding) []scanners.Finding {
-	if len(in) == 0 {
-		return in
-	}
-	out := make([]scanners.Finding, 0, len(in))
-	for _, finding := range in {
-		cat := categoryForFinding(finding)
-		if masks.InScope(i, cat) {
-			out = append(out, finding)
-			continue
-		}
-		metrics.RecordRecommendedScopeSuppressed(ctx, orgID, cat)
-	}
-	return out
-}
-
-func messageContents(messages []batchMessage) []string {
-	contents := make([]string, len(messages))
-	for i, msg := range messages {
-		contents[i] = msg.scanSurface()
-	}
-	return contents
-}
-
-func concatFindings(groups ...[]scanners.Finding) []scanners.Finding {
-	total := 0
-	for _, group := range groups {
-		total += len(group)
-	}
-	out := make([]scanners.Finding, 0, total)
-	for _, group := range groups {
-		out = append(out, group...)
-	}
-	return out
 }

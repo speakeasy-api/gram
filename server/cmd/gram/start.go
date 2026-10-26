@@ -2158,11 +2158,6 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
-					var piiScanner risk_analysis.PIIScanner = &risk_analysis.StubPIIScanner{}
-					if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
-						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
-					}
-
 					piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
 
 					var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
@@ -2215,11 +2210,7 @@ func newStartCommand() *cli.Command {
 						EmailService:                   emailService,
 						AssistantsCore:                 assistantsCore,
 						TemporalEnv:                    temporalEnv,
-						PIIScanner:                     piiScanner,
 						PIScanner:                      piScanner,
-						CustomRuleScanner:              customRulesScanner,
-						BuiltinPresets:                 builtinPresets,
-						ShadowMCPClient:                shadowMCPClient,
 						AuditLogger:                    auditLogger,
 						WorkOSClient:                   backgroundWorkOSClient,
 						ProductFeatures:                productFeatures,

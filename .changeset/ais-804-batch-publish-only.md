@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Batch risk analysis only publishes scan requests for organizations on ClickHouse risk findings, so each message is scanned and metered once by the analysis handlers.
+Batch risk analysis only publishes scan requests, so the analysis handlers scan and meter each message once.

@@ -2,28 +2,11 @@ package risk_analysis
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/metering"
-	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
-
-func (a *AnalyzeBatch) scanGitleaks(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, contents []string) ([][]scanners.Finding, error) {
-	if err := a.publishGitleaksScanRequests(ctx, args, messages); err != nil {
-		return nil, err
-	}
-
-	startedAt := time.Now().UTC()
-	results, err := a.gitleaksScanner.ScanBatch(ctx, contents)
-	a.recordBatchResults(ctx, metering.RiskGitleaks(), args, messages, results, startedAt)
-	if err != nil {
-		return findingsFromResults(results), fmt.Errorf("scan gitleaks batch: %w", err)
-	}
-	return findingsFromResults(results), nil
-}
 
 func (a *AnalyzeBatch) publishGitleaksScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)

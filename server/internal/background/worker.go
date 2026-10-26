@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	activitiespkg "github.com/speakeasy-api/gram/server/internal/background/activities"
-	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -60,10 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
-	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
-	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -137,11 +133,7 @@ type WorkerOptions struct {
 	TriggersApp         *bgtriggers.App
 	AssistantsCore      *assistants.ServiceCore
 	TemporalEnv         *tenv.Environment
-	PIIScanner          risk_analysis.PIIScanner
 	PIScanner           *promptinjection.Scanner
-	CustomRuleScanner   *customruleanalyzer.Scanner
-	BuiltinPresets      *presetlib.Library
-	ShadowMCPClient     *shadowmcp.Client
 	AuditLogger         *audit.Logger
 	WorkOSClient        activitiespkg.WorkOSClient
 	ProductFeatures     *productfeatures.Client
@@ -256,11 +248,7 @@ func ForDeploymentProcessing(
 		EmailService:                   nil,
 		AssistantsCore:                 nil,
 		TemporalEnv:                    nil,
-		PIIScanner:                     nil,
 		PIScanner:                      nil,
-		CustomRuleScanner:              nil,
-		BuiltinPresets:                 nil,
-		ShadowMCPClient:                nil,
 		WorkOSClient:                   workos.NewStubClient(),
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
@@ -359,11 +347,7 @@ func NewTemporalWorker(
 		EmailService:                   nil,
 		AssistantsCore:                 nil,
 		TemporalEnv:                    env,
-		PIIScanner:                     nil,
 		PIScanner:                      nil,
-		CustomRuleScanner:              nil,
-		BuiltinPresets:                 nil,
-		ShadowMCPClient:                nil,
 		AuditLogger:                    nil,
 		WorkOSClient:                   workos.NewStubClient(),
 		ProductFeatures:                nil,
@@ -422,11 +406,7 @@ func NewTemporalWorker(
 			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:                 conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:                    conv.Default(o.TemporalEnv, opts.TemporalEnv),
-			PIIScanner:                     conv.Default(o.PIIScanner, opts.PIIScanner),
 			PIScanner:                      conv.Default(o.PIScanner, opts.PIScanner),
-			CustomRuleScanner:              conv.Default(o.CustomRuleScanner, opts.CustomRuleScanner),
-			BuiltinPresets:                 conv.Default(o.BuiltinPresets, opts.BuiltinPresets),
-			ShadowMCPClient:                conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
 			AuditLogger:                    conv.Default(o.AuditLogger, opts.AuditLogger),
 			WorkOSClient:                   conv.Default(o.WorkOSClient, opts.WorkOSClient),
 			ProductFeatures:                conv.Default(o.ProductFeatures, opts.ProductFeatures),
@@ -533,10 +513,7 @@ func NewTemporalWorker(
 		opts.CacheAdapter,
 		opts.EmailService,
 		opts.AssistantsCore,
-		opts.PIIScanner,
 		opts.PIScanner,
-		opts.CustomRuleScanner,
-		opts.ShadowMCPClient,
 		opts.AuditLogger,
 		opts.WorkOSClient,
 		opts.ProductFeatures,
@@ -545,7 +522,6 @@ func NewTemporalWorker(
 		opts.Publishers,
 		celEng,
 		judgeRateLimiter,
-		opts.BuiltinPresets,
 		opts.TrialEmailsService,
 		opts.TrialFixtureHandler,
 		opts.GitHubEvidenceToken,

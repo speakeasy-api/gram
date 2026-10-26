@@ -5,35 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/sdk/activity"
 	"google.golang.org/protobuf/proto"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
-
-// scanPresidio runs the inline Presidio scan. The async scan-request publish
-// lives with the caller (scanStandardPolicy), which fails the activity on a
-// publish error while tolerating this scan's partial results.
-func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, scoreThreshold float64, messages []batchMessage, contents []string) ([]scanners.Result, error) {
-	results, err := a.piiScanner.AnalyzeBatch(ctx, contents, args.PresidioEntities, scoreThreshold, func() {
-		activity.RecordHeartbeat(ctx, SourcePresidio)
-	})
-	if results == nil {
-		results = make([]scanners.Result, len(messages))
-	}
-	if err != nil {
-		a.logger.WarnContext(ctx, "presidio scan returned errors, using partial results", attr.SlogError(err))
-		if a.metrics.presidioScanSkipped != nil {
-			a.metrics.presidioScanSkipped.Add(ctx, 1)
-		}
-		err = fmt.Errorf("analyze batch: %w", err)
-	}
-	return results, err
-}
 
 func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, scoreThreshold float64) error {
 	createdAt := time.Now().UTC()
