@@ -45,7 +45,9 @@ const (
 	recentActivityWindow = 48 * time.Hour
 	// evidenceLifetime keeps staff approval tied to a recently refreshed health check.
 	evidenceLifetime = 15 * time.Minute
-	// maxPublicText bounds staff-submitted descriptions sent to public systems.
+	// maxPublicDisplayCharacters matches the pinned catalogue title and description schema, in Unicode code points.
+	maxPublicDisplayCharacters = 100
+	// maxPublicText bounds metadata bytes before catalogue schema validation.
 	maxPublicText = 2000
 	// maxPublicURL bounds both reviewed public endpoint and documentation URLs.
 	maxPublicURL = 2048
@@ -501,7 +503,13 @@ func (s *Service) PromoteTx(ctx context.Context, tx pgx.Tx, request Request, act
 }
 
 func validatePublic(public PublicMetadata) error {
-	if len(public.Title) > 200 || strings.ContainsAny(public.Title, "\r\n") {
+	if utf8.RuneCountInString(public.Title) > maxPublicDisplayCharacters {
+		return errors.Join(ErrInvalid, ErrPublicTitleTooLong)
+	}
+	if utf8.RuneCountInString(public.Description) > maxPublicDisplayCharacters {
+		return errors.Join(ErrInvalid, ErrPublicDescriptionTooLong)
+	}
+	if strings.ContainsAny(public.Title, "\r\n") {
 		return ErrInvalid
 	}
 	if public.Name != strings.TrimSpace(public.Name) || public.Title != strings.TrimSpace(public.Title) || public.Description != strings.TrimSpace(public.Description) {

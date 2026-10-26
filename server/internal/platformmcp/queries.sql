@@ -1155,6 +1155,18 @@ INSERT INTO platform_mcp_catalog_registrations (
 )
 RETURNING *;
 
+-- name: RetirePlatformMCPCatalogRegistration :exec
+-- Retires a registration whose MCP server was deleted outside Platform MCP, so
+-- adding the same catalogue server again creates a fresh registration instead
+-- of reusing one that points at a deleted server.
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
 -- name: UpdatePlatformMCPCatalogRegistrationComponents :one
 UPDATE platform_mcp_catalog_registrations
 SET status = @status,

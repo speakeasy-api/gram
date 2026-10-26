@@ -1,6 +1,7 @@
 package catalog_test
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -57,6 +58,35 @@ func TestEmbeddedClaudeTagPinsOneOrganization(t *testing.T) {
 	require.Equal(t, catalog.VisibilityHidden, claudeTag.Issuer.Visibility)
 	require.Equal(t, "wimse://identity.anthropic.com/org/{org_id}/agent/", claudeTag.Subject.Template)
 	require.True(t, claudeTag.Subject.Wildcard)
+}
+
+func TestEmbeddedGKEPinsOneClusterAndServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	platforms, err := catalog.Embedded().Platforms(t.Context())
+	require.NoError(t, err)
+
+	var gke *catalog.Platform
+	for i := range platforms {
+		if platforms[i].Key == "gke" {
+			gke = &platforms[i]
+		}
+	}
+	require.NotNil(t, gke)
+	cluster := "https://container.googleapis.com/v1/projects/{project}/locations/{location}/clusters/{cluster}"
+	require.Equal(t, cluster, gke.Issuer.Value)
+	require.Equal(t, cluster+"/jwks", gke.JWKSURI.Value)
+	require.Equal(t, "system:serviceaccount:{namespace}:{service_account}", gke.Subject.Template)
+	require.False(t, gke.Subject.Wildcard)
+
+	// A value holding a delimiter could reach into a neighboring segment, such
+	// as a namespace of "prod:admin" naming another namespace's account.
+	for _, variable := range gke.Variables {
+		pattern := regexp.MustCompile("^(?:" + variable.Pattern + ")$")
+		for _, delimiter := range []string{":", "/", "*"} {
+			require.False(t, pattern.MatchString("ab"+delimiter+"cd"), "%s admits %q", variable.Key, delimiter)
+		}
+	}
 }
 
 func TestParseAcceptsAValidPlatform(t *testing.T) {

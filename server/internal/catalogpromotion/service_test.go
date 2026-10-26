@@ -626,3 +626,49 @@ func TestPromotionUnusedHealthOverrideAudit(t *testing.T) {
 	require.False(t, metadata.EligibilityOverridden)
 	require.Equal(t, "eligible", metadata.EligibilityReason)
 }
+
+func TestPromotionPublicTextMatchesCatalogueSchema(t *testing.T) {
+	t.Parallel()
+	for _, field := range []string{"title", "description"} {
+		for _, tc := range []struct {
+			name, value string
+			valid       bool
+		}{
+			{name: "short", value: "Public example service", valid: true},
+			{name: "100 ASCII", value: strings.Repeat("a", 100), valid: true},
+			{name: "101 ASCII", value: strings.Repeat("a", 101)},
+			{name: "126 ASCII", value: strings.Repeat("a", 126)},
+			{name: "100 Unicode", value: strings.Repeat("界", 100), valid: true},
+			{name: "100 supplementary", value: strings.Repeat("🌍", 100), valid: true},
+			{name: "101 supplementary", value: strings.Repeat("🌍", 101)},
+		} {
+			t.Run(field+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				f := newPromotionFixture(t)
+				f.health.failures = 1
+				candidate, err := f.service.GetCandidate(t.Context(), f.target)
+				require.NoError(t, err)
+				require.True(t, candidate.CanOverrideEligibility())
+				f.request.OverrideEligibility = true
+				expected := ErrPublicDescriptionTooLong
+				if field == "title" {
+					f.request.Public.Title = tc.value
+					expected = ErrPublicTitleTooLong
+				} else {
+					f.request.Public.Description = tc.value
+				}
+				record, err := buildRecord(f.request.Public, "streamable-http")
+				require.NoError(t, err)
+				require.Equal(t, tc.valid, len(f.service.registry.Validate(record)) == 0, "promotion validation must match the pinned catalogue schema")
+				_, err = f.promote(t)
+				if tc.valid {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, expected)
+					require.ErrorIs(t, err, ErrInvalid)
+					require.NotContains(t, err.Error(), tc.value)
+				}
+			})
+		}
+	}
+}
