@@ -27,6 +27,7 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
 
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { narrowGrantsToServers } from "./agent-key-server-grants";
+import { KeyCredentialChoice } from "./credentials/KeyCredentialChoice";
 export interface KeyServer {
   id: string;
   resourceId: string;
@@ -39,6 +40,8 @@ export interface KeyServer {
   endpoints?: string[];
   connectUrl?: string;
   unavailable?: boolean;
+  /** The shared credential the key uses on a server that offers several. */
+  authClientId?: string;
 }
 
 export function AgentKeyServers({
@@ -285,42 +288,62 @@ export function AgentKeyServers({
           const checked = selected.some((s) => s.id === server.id);
           const unavailable = !server.projectSlug || server.unavailable;
           return (
-            <label
-              key={server.id}
-              className={cn(
-                "flex items-center gap-4 p-4 transition-colors",
-                checked ? "bg-accent/50" : "hover:bg-muted/40",
-                unavailable || pending
-                  ? "cursor-not-allowed"
-                  : "cursor-pointer",
-              )}
-            >
-              <Checkbox
-                aria-label={server.name}
-                checked={checked}
-                disabled={pending || unavailable}
-                onCheckedChange={() => void toggle(server)}
-              />
-              <Server
-                aria-hidden="true"
-                className="text-muted-foreground size-5 shrink-0"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">
-                  {server.name}
-                </span>
-                <Text as="span" small muted>
-                  {projects.get(server.projectId)?.name ??
-                    "Project unavailable"}
-                </Text>
-                {server.kind === "Unproxied" && (
-                  <Text as="span" small muted className="block">
-                    This server doesn’t accept Speakeasy API keys.
-                  </Text>
+            <div key={server.id} className={cn(checked && "bg-accent/50")}>
+              <label
+                className={cn(
+                  "flex items-center gap-4 p-4 transition-colors",
+                  !checked && "hover:bg-muted/40",
+                  unavailable || pending
+                    ? "cursor-not-allowed"
+                    : "cursor-pointer",
                 )}
-              </span>
-              {unavailable && <Badge variant="neutral">Unavailable</Badge>}
-            </label>
+              >
+                <Checkbox
+                  aria-label={server.name}
+                  checked={checked}
+                  disabled={pending || unavailable}
+                  onCheckedChange={() => void toggle(server)}
+                />
+                <Server
+                  aria-hidden="true"
+                  className="text-muted-foreground size-5 shrink-0"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">
+                    {server.name}
+                  </span>
+                  <Text as="span" small muted>
+                    {projects.get(server.projectId)?.name ??
+                      "Project unavailable"}
+                  </Text>
+                  {server.kind === "Unproxied" && (
+                    <Text as="span" small muted className="block">
+                      This server doesn’t accept Speakeasy API keys.
+                    </Text>
+                  )}
+                </span>
+                {unavailable && <Badge variant="neutral">Unavailable</Badge>}
+              </label>
+              {checked &&
+                (server.kind === "Remote" || server.kind === "Tunneled") && (
+                  <div className="px-4 pb-4 pl-[4.25rem]">
+                    <KeyCredentialChoice
+                      serverId={server.id}
+                      serverName={server.name}
+                      value={
+                        selected.find((s) => s.id === server.id)?.authClientId
+                      }
+                      onChange={(authClientId) =>
+                        onChange(
+                          selected.map((s) =>
+                            s.id === server.id ? { ...s, authClientId } : s,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                )}
+            </div>
           );
         })}
         {visibleServers.length === 0 && (
