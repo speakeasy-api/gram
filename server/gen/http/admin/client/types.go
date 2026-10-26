@@ -438,6 +438,9 @@ type PromoteRegistryCandidateRequestBody struct {
 	AuthMode                string `form:"auth_mode" json:"auth_mode" xml:"auth_mode"`
 	RetryKey                string `form:"retry_key" json:"retry_key" xml:"retry_key"`
 	PublicMetadataConfirmed bool   `form:"public_metadata_confirmed" json:"public_metadata_confirmed" xml:"public_metadata_confirmed"`
+	// Explicitly accept insufficient, failed, or unavailable health evidence.
+	// Source safety checks still apply.
+	OverrideEligibility bool `form:"override_eligibility" json:"override_eligibility" xml:"override_eligibility"`
 }
 
 // CurateRegistryPromotionCandidateRequestBody is the type of the "admin"
@@ -2104,24 +2107,26 @@ type GetRegistryPromotionCandidateResponseBody struct {
 	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
 	SourceRevision    *string                                        `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                          `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
-	Reason            *string                                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Status            *string                                        `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	ObservedSuccesses *int64                                         `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
-	ObservedFailures  *int64                                         `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
-	ObservedDays      *int                                           `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
-	CheckedAt         *string                                        `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
-	RegistryEntryID   *string                                        `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
-	DocsStatus        *string                                        `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
-	DocsURL           *string                                        `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
-	DocsRevision      *string                                        `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
-	DocsRetryAllowed  *bool                                          `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
-	DocsAttempts      *int                                           `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
-	DocsLastAttemptAt *string                                        `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
-	DocsNextAttemptAt *string                                        `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
-	DocsQueuedAt      *string                                        `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
-	PromotedAt        *string                                        `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
-	PublicTitle       *string                                        `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
-	DeliveryError     *string                                        `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses      *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures       *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays           *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed       *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts           *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
 }
 
 // PromoteRegistryCandidateResponseBody is the type of the "admin" service
@@ -2138,24 +2143,26 @@ type PromoteRegistryCandidateResponseBody struct {
 	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
 	SourceRevision    *string                                        `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                          `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
-	Reason            *string                                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Status            *string                                        `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	ObservedSuccesses *int64                                         `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
-	ObservedFailures  *int64                                         `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
-	ObservedDays      *int                                           `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
-	CheckedAt         *string                                        `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
-	RegistryEntryID   *string                                        `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
-	DocsStatus        *string                                        `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
-	DocsURL           *string                                        `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
-	DocsRevision      *string                                        `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
-	DocsRetryAllowed  *bool                                          `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
-	DocsAttempts      *int                                           `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
-	DocsLastAttemptAt *string                                        `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
-	DocsNextAttemptAt *string                                        `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
-	DocsQueuedAt      *string                                        `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
-	PromotedAt        *string                                        `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
-	PublicTitle       *string                                        `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
-	DeliveryError     *string                                        `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses      *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures       *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays           *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed       *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts           *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
 }
 
 // CurateRegistryPromotionCandidateResponseBody is the type of the "admin"
@@ -2172,24 +2179,26 @@ type CurateRegistryPromotionCandidateResponseBody struct {
 	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
 	SourceRevision    *string                                        `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                          `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
-	Reason            *string                                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Status            *string                                        `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	ObservedSuccesses *int64                                         `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
-	ObservedFailures  *int64                                         `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
-	ObservedDays      *int                                           `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
-	CheckedAt         *string                                        `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
-	RegistryEntryID   *string                                        `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
-	DocsStatus        *string                                        `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
-	DocsURL           *string                                        `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
-	DocsRevision      *string                                        `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
-	DocsRetryAllowed  *bool                                          `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
-	DocsAttempts      *int                                           `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
-	DocsLastAttemptAt *string                                        `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
-	DocsNextAttemptAt *string                                        `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
-	DocsQueuedAt      *string                                        `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
-	PromotedAt        *string                                        `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
-	PublicTitle       *string                                        `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
-	DeliveryError     *string                                        `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses      *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures       *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays           *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed       *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts           *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
 }
 
 // RetryRegistryPromotionDocsResponseBody is the type of the "admin" service
@@ -2206,24 +2215,26 @@ type RetryRegistryPromotionDocsResponseBody struct {
 	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
 	SourceRevision    *string                                        `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                          `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
-	Reason            *string                                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Status            *string                                        `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	ObservedSuccesses *int64                                         `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
-	ObservedFailures  *int64                                         `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
-	ObservedDays      *int                                           `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
-	CheckedAt         *string                                        `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
-	RegistryEntryID   *string                                        `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
-	DocsStatus        *string                                        `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
-	DocsURL           *string                                        `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
-	DocsRevision      *string                                        `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
-	DocsRetryAllowed  *bool                                          `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
-	DocsAttempts      *int                                           `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
-	DocsLastAttemptAt *string                                        `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
-	DocsNextAttemptAt *string                                        `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
-	DocsQueuedAt      *string                                        `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
-	PromotedAt        *string                                        `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
-	PublicTitle       *string                                        `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
-	DeliveryError     *string                                        `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses      *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures       *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays           *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed       *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts           *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
 }
 
 // GetRegistryOktaCandidatesResponseBody is the type of the "admin" service
@@ -23259,24 +23270,26 @@ type AdminRegistryPromotionCandidateResponseBody struct {
 	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
 	SourceRevision    *string                                        `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
 	Eligible          *bool                                          `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
-	Reason            *string                                        `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	Status            *string                                        `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	ObservedSuccesses *int64                                         `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
-	ObservedFailures  *int64                                         `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
-	ObservedDays      *int                                           `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
-	CheckedAt         *string                                        `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
-	RegistryEntryID   *string                                        `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
-	DocsStatus        *string                                        `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
-	DocsURL           *string                                        `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
-	DocsRevision      *string                                        `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
-	DocsRetryAllowed  *bool                                          `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
-	DocsAttempts      *int                                           `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
-	DocsLastAttemptAt *string                                        `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
-	DocsNextAttemptAt *string                                        `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
-	DocsQueuedAt      *string                                        `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
-	PromotedAt        *string                                        `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
-	PublicTitle       *string                                        `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
-	DeliveryError     *string                                        `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+	// Whether staff may explicitly accept this candidate's health evidence.
+	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	ObservedSuccesses      *int64  `form:"observed_successes,omitempty" json:"observed_successes,omitempty" xml:"observed_successes,omitempty"`
+	ObservedFailures       *int64  `form:"observed_failures,omitempty" json:"observed_failures,omitempty" xml:"observed_failures,omitempty"`
+	ObservedDays           *int    `form:"observed_days,omitempty" json:"observed_days,omitempty" xml:"observed_days,omitempty"`
+	CheckedAt              *string `form:"checked_at,omitempty" json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	RegistryEntryID        *string `form:"registry_entry_id,omitempty" json:"registry_entry_id,omitempty" xml:"registry_entry_id,omitempty"`
+	DocsStatus             *string `form:"docs_status,omitempty" json:"docs_status,omitempty" xml:"docs_status,omitempty"`
+	DocsURL                *string `form:"docs_url,omitempty" json:"docs_url,omitempty" xml:"docs_url,omitempty"`
+	DocsRevision           *string `form:"docs_revision,omitempty" json:"docs_revision,omitempty" xml:"docs_revision,omitempty"`
+	DocsRetryAllowed       *bool   `form:"docs_retry_allowed,omitempty" json:"docs_retry_allowed,omitempty" xml:"docs_retry_allowed,omitempty"`
+	DocsAttempts           *int    `form:"docs_attempts,omitempty" json:"docs_attempts,omitempty" xml:"docs_attempts,omitempty"`
+	DocsLastAttemptAt      *string `form:"docs_last_attempt_at,omitempty" json:"docs_last_attempt_at,omitempty" xml:"docs_last_attempt_at,omitempty"`
+	DocsNextAttemptAt      *string `form:"docs_next_attempt_at,omitempty" json:"docs_next_attempt_at,omitempty" xml:"docs_next_attempt_at,omitempty"`
+	DocsQueuedAt           *string `form:"docs_queued_at,omitempty" json:"docs_queued_at,omitempty" xml:"docs_queued_at,omitempty"`
+	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
+	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
 }
 
 // AdminRegistryPromotionSuggestionsResponseBody is used to define fields on
@@ -24258,6 +24271,13 @@ func NewPromoteRegistryCandidateRequestBody(p *admin.PromoteRegistryCandidatePay
 		AuthMode:                p.AuthMode,
 		RetryKey:                p.RetryKey,
 		PublicMetadataConfirmed: p.PublicMetadataConfirmed,
+		OverrideEligibility:     p.OverrideEligibility,
+	}
+	{
+		var zero bool
+		if body.OverrideEligibility == zero {
+			body.OverrideEligibility = false
+		}
 	}
 	return body
 }
@@ -36166,34 +36186,35 @@ func NewListRegistryPromotionCandidatesGatewayError(body *ListRegistryPromotionC
 // "OK" response.
 func NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *GetRegistryPromotionCandidateResponseBody) *admin.AdminRegistryPromotionCandidate {
 	v := &admin.AdminRegistryPromotionCandidate{
-		ID:                *body.ID,
-		OrganizationID:    *body.OrganizationID,
-		ProjectID:         *body.ProjectID,
-		McpServerID:       *body.McpServerID,
-		RemoteMcpServerID: *body.RemoteMcpServerID,
-		SourceName:        body.SourceName,
-		CreatedAt:         *body.CreatedAt,
-		CurationRevision:  *body.CurationRevision,
-		SourceRevision:    *body.SourceRevision,
-		Eligible:          *body.Eligible,
-		Reason:            *body.Reason,
-		Status:            *body.Status,
-		ObservedSuccesses: *body.ObservedSuccesses,
-		ObservedFailures:  *body.ObservedFailures,
-		ObservedDays:      *body.ObservedDays,
-		CheckedAt:         body.CheckedAt,
-		RegistryEntryID:   body.RegistryEntryID,
-		DocsStatus:        body.DocsStatus,
-		DocsURL:           body.DocsURL,
-		DocsRevision:      *body.DocsRevision,
-		DocsRetryAllowed:  *body.DocsRetryAllowed,
-		DocsAttempts:      *body.DocsAttempts,
-		DocsLastAttemptAt: body.DocsLastAttemptAt,
-		DocsNextAttemptAt: body.DocsNextAttemptAt,
-		DocsQueuedAt:      body.DocsQueuedAt,
-		PromotedAt:        body.PromotedAt,
-		PublicTitle:       body.PublicTitle,
-		DeliveryError:     body.DeliveryError,
+		ID:                     *body.ID,
+		OrganizationID:         *body.OrganizationID,
+		ProjectID:              *body.ProjectID,
+		McpServerID:            *body.McpServerID,
+		RemoteMcpServerID:      *body.RemoteMcpServerID,
+		SourceName:             body.SourceName,
+		CreatedAt:              *body.CreatedAt,
+		CurationRevision:       *body.CurationRevision,
+		SourceRevision:         *body.SourceRevision,
+		Eligible:               *body.Eligible,
+		CanOverrideEligibility: *body.CanOverrideEligibility,
+		Reason:                 *body.Reason,
+		Status:                 *body.Status,
+		ObservedSuccesses:      *body.ObservedSuccesses,
+		ObservedFailures:       *body.ObservedFailures,
+		ObservedDays:           *body.ObservedDays,
+		CheckedAt:              body.CheckedAt,
+		RegistryEntryID:        body.RegistryEntryID,
+		DocsStatus:             body.DocsStatus,
+		DocsURL:                body.DocsURL,
+		DocsRevision:           *body.DocsRevision,
+		DocsRetryAllowed:       *body.DocsRetryAllowed,
+		DocsAttempts:           *body.DocsAttempts,
+		DocsLastAttemptAt:      body.DocsLastAttemptAt,
+		DocsNextAttemptAt:      body.DocsNextAttemptAt,
+		DocsQueuedAt:           body.DocsQueuedAt,
+		PromotedAt:             body.PromotedAt,
+		PublicTitle:            body.PublicTitle,
+		DeliveryError:          body.DeliveryError,
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
@@ -36357,34 +36378,35 @@ func NewGetRegistryPromotionCandidateGatewayError(body *GetRegistryPromotionCand
 // response.
 func NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK(body *PromoteRegistryCandidateResponseBody) *admin.AdminRegistryPromotionCandidate {
 	v := &admin.AdminRegistryPromotionCandidate{
-		ID:                *body.ID,
-		OrganizationID:    *body.OrganizationID,
-		ProjectID:         *body.ProjectID,
-		McpServerID:       *body.McpServerID,
-		RemoteMcpServerID: *body.RemoteMcpServerID,
-		SourceName:        body.SourceName,
-		CreatedAt:         *body.CreatedAt,
-		CurationRevision:  *body.CurationRevision,
-		SourceRevision:    *body.SourceRevision,
-		Eligible:          *body.Eligible,
-		Reason:            *body.Reason,
-		Status:            *body.Status,
-		ObservedSuccesses: *body.ObservedSuccesses,
-		ObservedFailures:  *body.ObservedFailures,
-		ObservedDays:      *body.ObservedDays,
-		CheckedAt:         body.CheckedAt,
-		RegistryEntryID:   body.RegistryEntryID,
-		DocsStatus:        body.DocsStatus,
-		DocsURL:           body.DocsURL,
-		DocsRevision:      *body.DocsRevision,
-		DocsRetryAllowed:  *body.DocsRetryAllowed,
-		DocsAttempts:      *body.DocsAttempts,
-		DocsLastAttemptAt: body.DocsLastAttemptAt,
-		DocsNextAttemptAt: body.DocsNextAttemptAt,
-		DocsQueuedAt:      body.DocsQueuedAt,
-		PromotedAt:        body.PromotedAt,
-		PublicTitle:       body.PublicTitle,
-		DeliveryError:     body.DeliveryError,
+		ID:                     *body.ID,
+		OrganizationID:         *body.OrganizationID,
+		ProjectID:              *body.ProjectID,
+		McpServerID:            *body.McpServerID,
+		RemoteMcpServerID:      *body.RemoteMcpServerID,
+		SourceName:             body.SourceName,
+		CreatedAt:              *body.CreatedAt,
+		CurationRevision:       *body.CurationRevision,
+		SourceRevision:         *body.SourceRevision,
+		Eligible:               *body.Eligible,
+		CanOverrideEligibility: *body.CanOverrideEligibility,
+		Reason:                 *body.Reason,
+		Status:                 *body.Status,
+		ObservedSuccesses:      *body.ObservedSuccesses,
+		ObservedFailures:       *body.ObservedFailures,
+		ObservedDays:           *body.ObservedDays,
+		CheckedAt:              body.CheckedAt,
+		RegistryEntryID:        body.RegistryEntryID,
+		DocsStatus:             body.DocsStatus,
+		DocsURL:                body.DocsURL,
+		DocsRevision:           *body.DocsRevision,
+		DocsRetryAllowed:       *body.DocsRetryAllowed,
+		DocsAttempts:           *body.DocsAttempts,
+		DocsLastAttemptAt:      body.DocsLastAttemptAt,
+		DocsNextAttemptAt:      body.DocsNextAttemptAt,
+		DocsQueuedAt:           body.DocsQueuedAt,
+		PromotedAt:             body.PromotedAt,
+		PublicTitle:            body.PublicTitle,
+		DeliveryError:          body.DeliveryError,
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
@@ -36548,34 +36570,35 @@ func NewPromoteRegistryCandidateGatewayError(body *PromoteRegistryCandidateGatew
 // HTTP "OK" response.
 func NewCurateRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *CurateRegistryPromotionCandidateResponseBody) *admin.AdminRegistryPromotionCandidate {
 	v := &admin.AdminRegistryPromotionCandidate{
-		ID:                *body.ID,
-		OrganizationID:    *body.OrganizationID,
-		ProjectID:         *body.ProjectID,
-		McpServerID:       *body.McpServerID,
-		RemoteMcpServerID: *body.RemoteMcpServerID,
-		SourceName:        body.SourceName,
-		CreatedAt:         *body.CreatedAt,
-		CurationRevision:  *body.CurationRevision,
-		SourceRevision:    *body.SourceRevision,
-		Eligible:          *body.Eligible,
-		Reason:            *body.Reason,
-		Status:            *body.Status,
-		ObservedSuccesses: *body.ObservedSuccesses,
-		ObservedFailures:  *body.ObservedFailures,
-		ObservedDays:      *body.ObservedDays,
-		CheckedAt:         body.CheckedAt,
-		RegistryEntryID:   body.RegistryEntryID,
-		DocsStatus:        body.DocsStatus,
-		DocsURL:           body.DocsURL,
-		DocsRevision:      *body.DocsRevision,
-		DocsRetryAllowed:  *body.DocsRetryAllowed,
-		DocsAttempts:      *body.DocsAttempts,
-		DocsLastAttemptAt: body.DocsLastAttemptAt,
-		DocsNextAttemptAt: body.DocsNextAttemptAt,
-		DocsQueuedAt:      body.DocsQueuedAt,
-		PromotedAt:        body.PromotedAt,
-		PublicTitle:       body.PublicTitle,
-		DeliveryError:     body.DeliveryError,
+		ID:                     *body.ID,
+		OrganizationID:         *body.OrganizationID,
+		ProjectID:              *body.ProjectID,
+		McpServerID:            *body.McpServerID,
+		RemoteMcpServerID:      *body.RemoteMcpServerID,
+		SourceName:             body.SourceName,
+		CreatedAt:              *body.CreatedAt,
+		CurationRevision:       *body.CurationRevision,
+		SourceRevision:         *body.SourceRevision,
+		Eligible:               *body.Eligible,
+		CanOverrideEligibility: *body.CanOverrideEligibility,
+		Reason:                 *body.Reason,
+		Status:                 *body.Status,
+		ObservedSuccesses:      *body.ObservedSuccesses,
+		ObservedFailures:       *body.ObservedFailures,
+		ObservedDays:           *body.ObservedDays,
+		CheckedAt:              body.CheckedAt,
+		RegistryEntryID:        body.RegistryEntryID,
+		DocsStatus:             body.DocsStatus,
+		DocsURL:                body.DocsURL,
+		DocsRevision:           *body.DocsRevision,
+		DocsRetryAllowed:       *body.DocsRetryAllowed,
+		DocsAttempts:           *body.DocsAttempts,
+		DocsLastAttemptAt:      body.DocsLastAttemptAt,
+		DocsNextAttemptAt:      body.DocsNextAttemptAt,
+		DocsQueuedAt:           body.DocsQueuedAt,
+		PromotedAt:             body.PromotedAt,
+		PublicTitle:            body.PublicTitle,
+		DeliveryError:          body.DeliveryError,
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
@@ -36739,34 +36762,35 @@ func NewCurateRegistryPromotionCandidateGatewayError(body *CurateRegistryPromoti
 // "OK" response.
 func NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK(body *RetryRegistryPromotionDocsResponseBody) *admin.AdminRegistryPromotionCandidate {
 	v := &admin.AdminRegistryPromotionCandidate{
-		ID:                *body.ID,
-		OrganizationID:    *body.OrganizationID,
-		ProjectID:         *body.ProjectID,
-		McpServerID:       *body.McpServerID,
-		RemoteMcpServerID: *body.RemoteMcpServerID,
-		SourceName:        body.SourceName,
-		CreatedAt:         *body.CreatedAt,
-		CurationRevision:  *body.CurationRevision,
-		SourceRevision:    *body.SourceRevision,
-		Eligible:          *body.Eligible,
-		Reason:            *body.Reason,
-		Status:            *body.Status,
-		ObservedSuccesses: *body.ObservedSuccesses,
-		ObservedFailures:  *body.ObservedFailures,
-		ObservedDays:      *body.ObservedDays,
-		CheckedAt:         body.CheckedAt,
-		RegistryEntryID:   body.RegistryEntryID,
-		DocsStatus:        body.DocsStatus,
-		DocsURL:           body.DocsURL,
-		DocsRevision:      *body.DocsRevision,
-		DocsRetryAllowed:  *body.DocsRetryAllowed,
-		DocsAttempts:      *body.DocsAttempts,
-		DocsLastAttemptAt: body.DocsLastAttemptAt,
-		DocsNextAttemptAt: body.DocsNextAttemptAt,
-		DocsQueuedAt:      body.DocsQueuedAt,
-		PromotedAt:        body.PromotedAt,
-		PublicTitle:       body.PublicTitle,
-		DeliveryError:     body.DeliveryError,
+		ID:                     *body.ID,
+		OrganizationID:         *body.OrganizationID,
+		ProjectID:              *body.ProjectID,
+		McpServerID:            *body.McpServerID,
+		RemoteMcpServerID:      *body.RemoteMcpServerID,
+		SourceName:             body.SourceName,
+		CreatedAt:              *body.CreatedAt,
+		CurationRevision:       *body.CurationRevision,
+		SourceRevision:         *body.SourceRevision,
+		Eligible:               *body.Eligible,
+		CanOverrideEligibility: *body.CanOverrideEligibility,
+		Reason:                 *body.Reason,
+		Status:                 *body.Status,
+		ObservedSuccesses:      *body.ObservedSuccesses,
+		ObservedFailures:       *body.ObservedFailures,
+		ObservedDays:           *body.ObservedDays,
+		CheckedAt:              body.CheckedAt,
+		RegistryEntryID:        body.RegistryEntryID,
+		DocsStatus:             body.DocsStatus,
+		DocsURL:                body.DocsURL,
+		DocsRevision:           *body.DocsRevision,
+		DocsRetryAllowed:       *body.DocsRetryAllowed,
+		DocsAttempts:           *body.DocsAttempts,
+		DocsLastAttemptAt:      body.DocsLastAttemptAt,
+		DocsNextAttemptAt:      body.DocsNextAttemptAt,
+		DocsQueuedAt:           body.DocsQueuedAt,
+		PromotedAt:             body.PromotedAt,
+		PublicTitle:            body.PublicTitle,
+		DeliveryError:          body.DeliveryError,
 	}
 	if body.SuggestedMetadata != nil {
 		v.SuggestedMetadata = unmarshalAdminRegistryPromotionSuggestionsResponseBodyToAdminAdminRegistryPromotionSuggestions(body.SuggestedMetadata)
@@ -44534,6 +44558,9 @@ func ValidateGetRegistryPromotionCandidateResponseBody(body *GetRegistryPromotio
 	if body.Eligible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
 	}
+	if body.CanOverrideEligibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
+	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -44616,6 +44643,9 @@ func ValidatePromoteRegistryCandidateResponseBody(body *PromoteRegistryCandidate
 	}
 	if body.Eligible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.CanOverrideEligibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
@@ -44700,6 +44730,9 @@ func ValidateCurateRegistryPromotionCandidateResponseBody(body *CurateRegistryPr
 	if body.Eligible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
 	}
+	if body.CanOverrideEligibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
+	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -44782,6 +44815,9 @@ func ValidateRetryRegistryPromotionDocsResponseBody(body *RetryRegistryPromotion
 	}
 	if body.Eligible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.CanOverrideEligibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
@@ -72704,6 +72740,9 @@ func ValidateAdminRegistryPromotionCandidateResponseBody(body *AdminRegistryProm
 	}
 	if body.Eligible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("eligible", "body"))
+	}
+	if body.CanOverrideEligibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))

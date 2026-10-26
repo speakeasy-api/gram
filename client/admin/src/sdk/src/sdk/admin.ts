@@ -1346,7 +1346,7 @@ export class Admin extends ClientSDK {
    * listRegistryPromotionCandidates admin
    *
    * @remarks
-   * List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.
+   * List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.
    */
   async listRegistryPromotionCandidates(
     request?: AdminListRegistryPromotionCandidatesRequest | undefined,

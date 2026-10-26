@@ -60,6 +60,8 @@ type Request struct {
 	Public PublicMetadata `json:"public"`
 	// PublicMetadataConfirmed records explicit staff review of public suitability.
 	PublicMetadataConfirmed bool `json:"public_metadata_confirmed"`
+	// OverrideEligibility explicitly accepts insufficient or unhealthy usage evidence.
+	OverrideEligibility bool `json:"override_eligibility,omitempty"`
 	// RetryKey identifies one exact requested change.
 	RetryKey string `json:"retry_key"`
 }
@@ -126,6 +128,11 @@ type Candidate struct {
 	PublicTitle string `json:"public_title,omitempty"`
 	// DeliveryError is a bounded delivery failure or configuration code.
 	DeliveryError string `json:"delivery_error,omitempty"`
+}
+
+// CanOverrideEligibility reports whether staff may explicitly accept this candidate's health evidence.
+func (c Candidate) CanOverrideEligibility() bool {
+	return c.Status == "candidate" && !c.Eligible && CanOverrideEligibility(c.Reason)
 }
 
 // HealthReader supplies the existing server-specific outcomes and direct-call series.

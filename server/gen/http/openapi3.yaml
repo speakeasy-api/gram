@@ -5710,7 +5710,7 @@ paths:
             x-speakeasy-name-override: getRegistryPromotionCandidate
     /admin/registry.promotionCandidates:
         get:
-            description: List observed remote MCP candidates and durable promotion delivery status. No source URLs or credentials are returned.
+            description: List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.
             operationId: adminListRegistryPromotionCandidates
             parameters:
                 - allowEmptyValue: true
@@ -94185,6 +94185,9 @@ components:
         AdminRegistryPromotionCandidate:
             type: object
             properties:
+                can_override_eligibility:
+                    type: boolean
+                    description: Whether staff may explicitly accept this candidate's health evidence.
                 checked_at:
                     type: string
                     format: date-time
@@ -94264,6 +94267,7 @@ components:
                 - remote_mcp_server_id
                 - source_revision
                 - eligible
+                - can_override_eligibility
                 - reason
                 - status
                 - observed_successes
@@ -115296,6 +115300,10 @@ components:
                     format: uuid
                 organization_id:
                     type: string
+                override_eligibility:
+                    type: boolean
+                    description: Explicitly accept insufficient, failed, or unavailable health evidence. Source safety checks still apply.
+                    default: false
                 project_id:
                     type: string
                     format: uuid

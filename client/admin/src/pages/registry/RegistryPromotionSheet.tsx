@@ -81,6 +81,13 @@ export function RegistryPromotionSheet({
     setAuthMode(initialAuth);
   }
   const [confirmed, setConfirmed] = useState(false);
+  const [overrideEligibility, setOverrideEligibility] = useState(false);
+  const canOverride =
+    candidate?.status === "candidate" &&
+    !candidate.eligible &&
+    candidate.canOverrideEligibility;
+  const canPromote =
+    candidate?.eligible || (canOverride && overrideEligibility);
   const [reviewedRevision, setReviewedRevision] = useState("");
   const [reviewedCurationRevision, setReviewedCurationRevision] = useState("");
   const [failure, setFailure] = useState(false);
@@ -114,7 +121,8 @@ export function RegistryPromotionSheet({
   };
   const submit = async (): Promise<void> => {
     if (
-      !candidate?.eligible ||
+      !candidate ||
+      !canPromote ||
       candidate.status !== "candidate" ||
       !authMode ||
       !confirmed ||
@@ -133,6 +141,7 @@ export function RegistryPromotionSheet({
           sourceRevision: reviewedRevision,
           curationRevision: reviewedCurationRevision,
           publicMetadataConfirmed: true,
+          overrideEligibility: canOverride && overrideEligibility,
           retryKey: retryKey.current,
         },
       });
@@ -166,6 +175,7 @@ export function RegistryPromotionSheet({
     const fresh = await query.refetch();
     if (!fresh.error) {
       setRefreshRequired(false);
+      setOverrideEligibility(false);
       setConfirmed(false);
       retryKey.current = crypto.randomUUID();
     }
@@ -254,6 +264,27 @@ export function RegistryPromotionSheet({
               promotion queue before reviewing it for publication.
             </p>
           )}
+          {canOverride && (
+            <div className="space-y-2 rounded-md border border-amber-500/40 p-3 text-sm">
+              <p>
+                This server does not meet the health criteria. You can promote
+                it anyway after reviewing the evidence and verifying the public
+                listing. This override is recorded in the audit log.
+              </p>
+              <label className="flex items-start gap-2">
+                <Checkbox
+                  checked={overrideEligibility}
+                  disabled={mutation.isPending || query.isFetching}
+                  onCheckedChange={(value) => {
+                    setOverrideEligibility(value === true);
+                    setConfirmed(false);
+                    retryKey.current = crypto.randomUUID();
+                  }}
+                />
+                <span>Promote anyway despite the health criteria</span>
+              </label>
+            </div>
+          )}
           {candidate?.status === "promoted" ? (
             <div className="space-y-2">
               <div className="space-y-1">
@@ -281,7 +312,7 @@ export function RegistryPromotionSheet({
                 Refresh delivery status
               </Button>
             </div>
-          ) : candidate?.status === "candidate" && candidate.eligible ? (
+          ) : candidate?.status === "candidate" && canPromote ? (
             <form
               className="space-y-3"
               onSubmit={(event) => {
@@ -396,7 +427,11 @@ export function RegistryPromotionSheet({
                   query.isFetching
                 }
               >
-                {mutation.isPending ? "Promoting…" : "Publish catalog entry"}
+                {mutation.isPending
+                  ? "Promoting…"
+                  : canOverride
+                    ? "Promote anyway"
+                    : "Publish catalog entry"}
               </Button>
             </form>
           ) : null}

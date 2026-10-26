@@ -76,13 +76,14 @@ type MCPUpstreamAuthentication struct {
 }
 
 type MCPConnectionSettings struct {
-	// DiscoveryMode is a gateway's stored default discovery mode.
+	// DiscoveryMode is a gateway's stored default discovery mode. A connection
+	// records the default at consent and keeps it until it reconnects.
 	DiscoveryMode string `json:"discovery_mode,omitempty"`
 
-	// EffectiveDiscoveryMode is the mode a gateway serves now: a stored
-	// code_mode serves progressive while Code Mode is unavailable to the
-	// organization or the gateway does not require sign-in, and a mode this
-	// build does not support serves progressive.
+	// EffectiveDiscoveryMode is the mode the gateway default serves now: a
+	// stored code_mode serves progressive while Code Mode is unavailable to
+	// the organization or the gateway does not require sign-in, and a mode
+	// this build does not support serves progressive.
 	EffectiveDiscoveryMode string `json:"effective_discovery_mode,omitempty"`
 
 	// CodeModeAvailable reports, for a gateway, whether the code runtime is
