@@ -383,7 +383,7 @@ JOIN mcp_servers w
  AND w.deleted IS FALSE
 WHERE t.organization_id = $1
   AND t.deleted IS FALSE
-  AND w.visibility <> 'disabled'
+  AND w.visibility IN ('public', 'private')
 `
 
 // Hosted servers count via their canonical wrapper.

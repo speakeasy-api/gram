@@ -9,7 +9,7 @@ JOIN mcp_servers w
  AND w.deleted IS FALSE
 WHERE t.organization_id = @organization_id
   AND t.deleted IS FALSE
-  AND w.visibility <> 'disabled';
+  AND w.visibility IN ('public', 'private');
 
 -- name: GetBillingMetadata :one
 SELECT *

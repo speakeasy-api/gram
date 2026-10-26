@@ -414,6 +414,7 @@ func TestToolUsage_DisabledToolsetKeepsServerIDForPastCalls(t *testing.T) {
 	require.NoError(t, err)
 	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-retired", uuid.NullUUID{})
 	serverID := addToolsetWrapper(t, ctx, ti, toolset.ID, toolset.ID, "acme-retired")
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "disabled", UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{}})
 
 	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
 		projectID:   authCtx.ProjectID.String(),
