@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -18,7 +19,7 @@ export const Kind = {
 /**
  * What was requested.
  */
-export type Kind = ClosedEnum<typeof Kind>;
+export type Kind = OpenEnum<typeof Kind>;
 
 /**
  * Requested work runs after the response and is never reported as done.
@@ -29,7 +30,7 @@ export const RequestStatus = {
 /**
  * Requested work runs after the response and is never reported as done.
  */
-export type RequestStatus = ClosedEnum<typeof RequestStatus>;
+export type RequestStatus = OpenEnum<typeof RequestStatus>;
 
 export type DirectoryRoleSetupSideEffect = {
   /**
@@ -47,11 +48,14 @@ export type DirectoryRoleSetupSideEffect = {
 };
 
 /** @internal */
-export const Kind$inboundSchema: z.ZodMiniEnum<typeof Kind> = z.enum(Kind);
+export const Kind$inboundSchema: z.ZodMiniType<Kind, unknown> = openEnums
+  .inboundSchema(Kind);
 
 /** @internal */
-export const RequestStatus$inboundSchema: z.ZodMiniEnum<typeof RequestStatus> =
-  z.enum(RequestStatus);
+export const RequestStatus$inboundSchema: z.ZodMiniType<
+  RequestStatus,
+  unknown
+> = openEnums.inboundSchema(RequestStatus);
 
 /** @internal */
 export const DirectoryRoleSetupSideEffect$inboundSchema: z.ZodMiniType<

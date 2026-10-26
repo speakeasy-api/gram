@@ -26,12 +26,6 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\",\n      \"trusted_remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"trusted_remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
-		if body.TrustedRemoteSessionIssuerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
-		}
-		if body.TrustedRemoteSessionClientID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
-		}
 		if !(body.AuthnChallengeMode == "chain" || body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", body.AuthnChallengeMode, []any{"chain", "interactive"}))
 		}
@@ -40,6 +34,12 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 		}
 		if body.SessionDurationHours > 2.562047e+06 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", body.SessionDurationHours, 2.562047e+06, false))
+		}
+		if body.TrustedRemoteSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_issuer_id", *body.TrustedRemoteSessionIssuerID, goa.FormatUUID))
+		}
+		if body.TrustedRemoteSessionClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -52,11 +52,11 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 		}
 	}
 	v := &organizationusersessionissuers.CreateIssuerPayload{
-		TrustedRemoteSessionIssuerID: body.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID: body.TrustedRemoteSessionClientID,
 		Slug:                         body.Slug,
 		AuthnChallengeMode:           body.AuthnChallengeMode,
 		SessionDurationHours:         body.SessionDurationHours,
+		TrustedRemoteSessionIssuerID: body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID: body.TrustedRemoteSessionClientID,
 	}
 	v.SessionToken = sessionToken
 

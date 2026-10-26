@@ -23,6 +23,7 @@ import { useState } from "react";
 import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { CreateRemoteSessionClientSheet } from "../../CreateRemoteSessionClientSheet";
 import { DeleteClientDialog } from "../../clientDialogs";
+import { DuplicateClientFlow } from "../../DuplicateClient";
 
 export function ClientsTab({
   issuer,
@@ -36,6 +37,8 @@ export function ClientsTab({
     issuerId: issuer.id,
   });
   const [deleteTarget, setDeleteTarget] =
+    useState<OrganizationRemoteSessionClient | null>(null);
+  const [duplicateTarget, setDuplicateTarget] =
     useState<OrganizationRemoteSessionClient | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -66,6 +69,10 @@ export function ClientsTab({
       >
         {items.map((item) => {
           const actions: Action[] = [
+            {
+              label: "Duplicate",
+              onClick: () => setDuplicateTarget(item),
+            },
             {
               label: "Delete client",
               destructive: true,
@@ -172,6 +179,15 @@ export function ClientsTab({
           clientId={deleteTarget.client.id}
           clientLabel={remoteSessionClientDisplayName(deleteTarget.client)}
           onClose={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {duplicateTarget && (
+        <DuplicateClientFlow
+          client={duplicateTarget.client}
+          issuer={issuer}
+          issuerId={issuer.id}
+          onClose={() => setDuplicateTarget(null)}
         />
       )}
 

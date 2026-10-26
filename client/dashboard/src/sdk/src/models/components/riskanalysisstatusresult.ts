@@ -5,7 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
@@ -20,7 +21,7 @@ export const RiskAnalysisStatusResultState = {
 /**
  * Coarse run state of the project's risk analysis coordinator. never: no run is visible, either because the project has never been analyzed or because its last run is older than Temporal's retention window. idle: the latest run has closed and the coordinator is waiting for the next chat write to wake it. running: a run is in flight right now.
  */
-export type RiskAnalysisStatusResultState = ClosedEnum<
+export type RiskAnalysisStatusResultState = OpenEnum<
   typeof RiskAnalysisStatusResultState
 >;
 
@@ -48,9 +49,10 @@ export type RiskAnalysisStatusResult = {
 };
 
 /** @internal */
-export const RiskAnalysisStatusResultState$inboundSchema: z.ZodMiniEnum<
-  typeof RiskAnalysisStatusResultState
-> = z.enum(RiskAnalysisStatusResultState);
+export const RiskAnalysisStatusResultState$inboundSchema: z.ZodMiniType<
+  RiskAnalysisStatusResultState,
+  unknown
+> = openEnums.inboundSchema(RiskAnalysisStatusResultState);
 
 /** @internal */
 export const RiskAnalysisStatusResult$inboundSchema: z.ZodMiniType<

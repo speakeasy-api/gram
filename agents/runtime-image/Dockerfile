@@ -14,9 +14,31 @@ RUN cargo build --locked --manifest-path ./agents/runner/Cargo.toml --release --
 
 FROM ${RUNNER_SOURCE} AS runner-artifact
 
-FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun
+FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS bun
 
-FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS sandbox-deps
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS runtime-base
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    bash ca-certificates curl libcurl4 libssl3 mount procps util-linux \
+  && sed -i \
+    -e 's|^mozilla/emSign_ECC_Root_CA_-_G3.crt|!&|' \
+    -e 's|^mozilla/Comodo_AAA_Services_root.crt|!&|' \
+    /etc/ca-certificates.conf \
+  && update-ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+COPY agents/runtime-image/ca-bundle.mjs /usr/local/share/gram/ca-bundle.mjs
+# Fail closed if distro certificate filenames change. Bun needs explicit
+# OpenSSL rejection entries in addition to the filtered system store.
+RUN bun /usr/local/share/gram/ca-bundle.mjs \
+    /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs /usr/local/share/gram/bun-ca-certificates.pem
+ENV SSL_CERT_FILE=/usr/local/share/gram/bun-ca-certificates.pem
+RUN --mount=type=bind,source=agents/runtime-image,target=/ca-tests \
+    bun test /ca-tests/ca-bundle.test.mjs
+
+FROM runtime-base AS sandbox-deps
 WORKDIR /sandbox
 COPY agents/runtime-image/sandbox/package.json agents/runtime-image/sandbox/bun.lock ./
 RUN bun install --production --frozen-lockfile
@@ -39,14 +61,11 @@ RUN target=node_modules/playwright-core/lib/utilsBundle.js \
  && sed -i "s|const ws = exports.ws = require('./utilsBundleImpl').ws;|const ws = exports.ws = 'Bun' in globalThis ? require('ws') : require('./utilsBundleImpl').ws;|" "$target" \
  && grep -q "'Bun' in globalThis ? require('ws')" "$target"
 
-FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS lightpanda
+FROM runtime-base AS lightpanda
 ARG TARGETARCH
 ARG LIGHTPANDA_VERSION=0.2.8
 ARG LIGHTPANDA_SHA256_AMD64=8e3a5e04cf508699990a78a0a8686ea3398912cd9891fda90513429b89230300
 ARG LIGHTPANDA_SHA256_ARM64=9f54f2cc31b0dadd867ba06ecce59f8aa59f7876394798e97882aea680b5ad19
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl \
-  && rm -rf /var/lib/apt/lists/*
 RUN case "${TARGETARCH:-amd64}" in \
       amd64) asset=lightpanda-x86_64-linux; sha=$LIGHTPANDA_SHA256_AMD64 ;; \
       arm64) asset=lightpanda-aarch64-linux; sha=$LIGHTPANDA_SHA256_ARM64 ;; \
@@ -56,22 +75,9 @@ RUN case "${TARGETARCH:-amd64}" in \
  && echo "${sha}  /lightpanda" | sha256sum -c - \
  && chmod 0755 /lightpanda
 
-FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    bash \
-    ca-certificates \
-    curl \
-    libcurl4 \
-    libssl3 \
-    mount \
-    procps \
-    util-linux \
-  && rm -rf /var/lib/apt/lists/*
+FROM runtime-base
 
 COPY --from=runner-artifact /gram-assistant-runner /usr/local/bin/gram-assistant-runner
-COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=lightpanda /lightpanda /usr/local/bin/lightpanda
 COPY agents/runtime-image/lightpanda-supervise.sh /usr/local/bin/lightpanda-supervise
 COPY agents/runtime-image/init.sh /init

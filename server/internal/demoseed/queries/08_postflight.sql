@@ -350,6 +350,17 @@ SELECT count(*)
 FROM chats WHERE organization_id = @org_id::text
   AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL);
 
+-- name: PostflightCountAgentAttributedChats :one
+-- Channel sessions carry the agent that produced them; without that stamp the
+-- session list cannot name an actor for them at all, because they have no
+-- assistant record. The join to agents is what proves the stamp still resolves:
+-- an id pointing at an agent the seed no longer creates renders as a bare id.
+SELECT count(*)
+FROM chats c
+JOIN agents a ON a.id = c.agent_id AND a.organization_id = c.organization_id
+  AND a.deleted IS FALSE
+WHERE c.project_id = @project_id::uuid AND c.organization_id = @org_id::text;
+
 -- Every table that carries both the demo org id and a project id must agree
 -- with the demo constants: a mismatch means an insert escaped its scoping.
 
@@ -383,6 +394,18 @@ WHERE m.project_id = @project_id::uuid AND m.deleted IS FALSE;
 SELECT count(*)
 FROM meta_mcp_server_members m
 WHERE m.project_id = @project_id::uuid AND m.deleted IS TRUE;
+
+-- The approval policy is only usable when the approvals server it points
+-- agents at has an endpoint and sits in the Default plugin.
+
+-- name: PostflightCountApprovalsServers :one
+SELECT count(*)
+FROM mcp_servers s
+JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
+JOIN plugin_servers ps ON ps.mcp_server_id = s.id AND ps.deleted IS FALSE
+JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_default IS TRUE AND p.deleted IS FALSE
+WHERE s.project_id = @project_id::uuid AND s.builtin_backend = 'approvals'
+  AND s.deleted IS FALSE;
 
 -- name: PostflightCountUnwrappedToolsets :one
 SELECT count(*)
@@ -422,6 +445,13 @@ WHERE m.project_id = @project_id::uuid AND m.deleted IS FALSE
   AND (s.deleted IS TRUE OR s.slug IS NULL
        OR num_nonnulls(s.toolset_id, s.remote_mcp_server_id,
                        s.tunneled_mcp_server_id, s.unproxied_mcp_server_id) <> 1);
+
+-- name: PostflightCountTunnelEndpoints :one
+SELECT count(*)
+FROM mcp_endpoints e
+JOIN mcp_servers s ON s.id = e.mcp_server_id
+WHERE e.project_id = @project_id::uuid AND e.deleted IS FALSE
+  AND s.tunneled_mcp_server_id IS NOT NULL;
 
 -- name: PostflightCountActiveQuarantines :one
 SELECT count(*) FROM session_quarantines
@@ -483,3 +513,18 @@ WHERE organization_id = @org_id::text AND deleted IS FALSE;
 -- name: PostflightCountPersonalAccounts :one
 SELECT count(*) FROM user_accounts
 WHERE organization_id = @org_id::text AND account_type = 'personal';
+
+-- name: PostflightCountRegistryPromotionCandidates :one
+SELECT count(*) FROM registry_promotion_candidates
+WHERE organization_id = @org_id::text AND project_id = @project_id::uuid
+ AND eligible IS FALSE AND promoted_at IS NULL ;
+
+-- name: PostflightCountAuthClientAssociations :one
+SELECT count(*) FROM mcp_server_auth_clients
+WHERE organization_id = @org_id::text AND deleted IS FALSE;
+
+-- name: PostflightCountApprovals :one
+-- The Tool approvals tab needs its four seeded approval requests: pending,
+-- used, denied and expired.
+SELECT count(*) FROM risk_policy_approvals
+WHERE organization_id = @org_id::text AND deleted IS FALSE;

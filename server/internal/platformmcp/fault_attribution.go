@@ -58,6 +58,7 @@ const (
 	reasonUnauthorizedDominant = "unauthorized_dominant"
 	reasonServerErrorDominant  = "server_error_dominant"
 	reasonClientErrorDominant  = "client_error_dominant"
+	reasonToolErrorDominant    = "tool_error_dominant"
 	reasonMixedFailures        = "mixed_failures"
 	reasonReadinessNotReady    = "readiness_not_ready"
 )
@@ -105,9 +106,15 @@ func (t outcomeTotals) without(other outcomeTotals) outcomeTotals {
 // dominant reports whether one failure class accounts for most of the failures.
 // A single class carrying the majority is a signal; an even spread is not, and
 // resolves to indeterminate rather than to whichever class happened to lead.
+//
+// Tool errors (Failed) are the tool's own verdict, not a status that names a
+// party, so they only decide when no status-classified failure exists.
 func (t outcomeTotals) dominant() (string, bool) {
-	failures := t.failures()
+	failures := t.Unauthorized + t.ClientError + t.ServerError
 	if failures == 0 {
+		if t.Failed > 0 {
+			return reasonToolErrorDominant, true
+		}
 		return "", false
 	}
 	majority := failures/2 + 1

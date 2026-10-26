@@ -112,7 +112,7 @@ func requireNoLeaks(t *testing.T, body any) {
 
 	rendered, err := json.Marshal(body)
 	require.NoError(t, err)
-	for _, leaked := range []string{"secret-ciphertext", "token-ciphertext", "upstream said no", "alice", "user:"} {
+	for _, leaked := range []string{"secret-ciphertext", "token-ciphertext", "never-returned", "upstream said no", "alice", "user:"} {
 		require.NotContains(t, string(rendered), leaked)
 	}
 }
@@ -506,13 +506,6 @@ func TestDescribeMcpServerHealth_LegacyModes(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	proxied := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "proxied", true)
-	//nolint:glint // notestingrawsql: oauth_proxy_servers is retired and has no writer left; this models an existing legacy toolset.
-	_, err = f.conn.Exec(ctx, `
-		WITH proxy AS (INSERT INTO oauth_proxy_servers (project_id, slug) VALUES ($1, 'proxy') RETURNING id)
-		UPDATE toolsets SET oauth_proxy_server_id = (SELECT id FROM proxy) WHERE id = $2`, f.projectID, proxied)
-	require.NoError(t, err)
-
 	private := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "private", true)
 	public := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "public", true)
 	_, err = toolsetsRepo.New(f.conn).UpdateToolset(ctx, toolsetsRepo.UpdateToolsetParams{
@@ -531,7 +524,6 @@ func TestDescribeMcpServerHealth_LegacyModes(t *testing.T) {
 
 	cases := map[uuid.UUID]*string{
 		external: new("external_oauth"),
-		proxied:  new("oauth_proxy"),
 		private:  new("gram_private"),
 		public:   nil,
 	}
@@ -782,4 +774,40 @@ func TestDescribeMcpServerHealth_SharedAuthorizationServer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "shared", got.UserSessionIssuer.AuthorizationServerMode)
 	require.True(t, got.UserSessionIssuer.IssuerURLPinned)
+}
+
+func TestDescribeMcpServerHealth_ReportsUpstreamAuthClients(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "upstream-auth", false)
+	serverID := f.seedServerWithIssuer(t, toolsetID, uuid.Nil, "upstream-auth")
+
+	got, err := f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.NotNil(t, got.UpstreamAuth)
+	require.Equal(t, "undecided", got.UpstreamAuth.Status)
+	require.Empty(t, got.UpstreamAuth.AuthClients)
+
+	fixtures := testrepo.New(f.conn)
+	clientID, err := fixtures.CreateAuthClientFixture(t.Context(), testrepo.CreateAuthClientFixtureParams{
+		OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ClientType: "static_credential", Name: "Shared credential",
+	})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.CreateAuthClientHeaderFixture(t.Context(), testrepo.CreateAuthClientHeaderFixtureParams{
+		AuthClientID: clientID, OrganizationID: f.orgID, Name: "Authorization", IsSecret: true, Value: conv.ToPGText("Bearer never-returned"),
+	}))
+	require.NoError(t, fixtures.AssociateAuthClientFixture(t.Context(), testrepo.AssociateAuthClientFixtureParams{
+		ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: serverID, AuthClientID: clientID,
+	}))
+
+	got, err = f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.Len(t, got.UpstreamAuth.AuthClients, 1)
+	client := got.UpstreamAuth.AuthClients[0]
+	require.Equal(t, clientID.String(), client.ID)
+	require.Equal(t, "static_credential", client.ClientType)
+	require.Equal(t, 1, client.ServerCount)
+	require.Equal(t, 1, client.HeaderCount)
+	requireNoLeaks(t, got)
 }

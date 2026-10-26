@@ -118,7 +118,8 @@ type Guard func(ctx context.Context, tx pgx.Tx, plugin pluginsrepo.Plugin, curre
 
 // BeforeReplace remains separate from authorization. Platform MCP uses it for
 // optimistic concurrency after the guard has accepted the desired audience.
-type BeforeReplace func(ctx context.Context, plugin pluginsrepo.Plugin, current, desired []string) error
+// currentModes holds the stored install mode of each principal in current.
+type BeforeReplace func(ctx context.Context, plugin pluginsrepo.Plugin, current, desired []string, currentModes map[string]installmode.Mode) error
 
 type Dependencies struct {
 	DeliveryGuard *admission.Guard
@@ -210,7 +211,7 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 		return Result{}, err
 	}
 	if dependencies.BeforeReplace != nil {
-		if err := dependencies.BeforeReplace(ctx, plugin, current, desired); err != nil {
+		if err := dependencies.BeforeReplace(ctx, plugin, current, desired, previousModes); err != nil {
 			return Result{}, err
 		}
 	}
@@ -363,6 +364,9 @@ func normalizePrincipal(ctx context.Context, db pluginsrepo.DBTX, organizationID
 		}
 		if principal.Type == urn.PrincipalTypeWorkload {
 			return normalizedPrincipal{}, fmt.Errorf("%w: workload principals are not assignable", ErrInvalid)
+		}
+		if principal.Type == urn.PrincipalTypeAPIKey {
+			return normalizedPrincipal{}, fmt.Errorf("%w: api key principals are not assignable", ErrInvalid)
 		}
 		if principal.Type == urn.PrincipalTypeRole {
 			if err := authz.ValidatePrincipal(ctx, db, organizationID, principal); err != nil {

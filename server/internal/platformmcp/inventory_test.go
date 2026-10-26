@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -74,6 +75,58 @@ func TestMCPFromInventoryLabelsOwnershipAndNeverProbesLegacy(t *testing.T) {
 	require.Equal(t, "legacy", legacy.Model)
 	require.Equal(t, "unsupported", legacy.Readiness.State, "legacy rows never use readiness evidence or trigger egress")
 	require.False(t, legacy.EffectiveEnabled)
+}
+
+func TestInventoryEnabledStatePreservesUnknownVisibility(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		visibility string
+		state      string
+		enabled    bool
+		readiness  string
+	}{
+		{visibility: "private", state: "enabled", enabled: true, readiness: "ready"},
+		{visibility: "public", state: "enabled", enabled: true, readiness: "ready"},
+		{visibility: "disabled", state: "disabled", enabled: false, readiness: "unknown"},
+		{visibility: "future_visibility", state: "unknown", enabled: false, readiness: "unknown"},
+		{visibility: "", state: "unknown", enabled: false, readiness: "unknown"},
+	} {
+		t.Run(tc.visibility, func(t *testing.T) {
+			t.Parallel()
+
+			for _, item := range []MCP{
+				mcpFromInventoryRow(platformrepo.ListPlatformMCPInventoryRow{
+					McpServerID: uuid.New(), ProjectID: uuid.New(), RegistrationID: uuid.New(),
+					Visibility: tc.visibility, ReadinessState: "ready",
+					ReadinessCheckedAt: pgtype.Timestamptz{Time: time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+					ReadinessExpiresAt: pgtype.Timestamptz{Time: time.Date(2026, time.October, 2, 0, 0, 0, 0, time.UTC), Valid: true},
+				}, nil),
+				mcpFromInventoryItem(platformrepo.GetPlatformMCPInventoryItemRow{
+					McpServerID: uuid.New(), ProjectID: uuid.New(), RegistrationID: uuid.New(),
+					Visibility: tc.visibility, ReadinessState: "ready",
+					ReadinessCheckedAt: pgtype.Timestamptz{Time: time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+					ReadinessExpiresAt: pgtype.Timestamptz{Time: time.Date(2026, time.October, 2, 0, 0, 0, 0, time.UTC), Valid: true},
+				}, nil),
+			} {
+				require.Equal(t, tc.visibility, item.Visibility)
+				require.Equal(t, tc.state, item.EnabledState)
+				require.Equal(t, tc.enabled, item.EffectiveEnabled)
+				require.Equal(t, tc.readiness, item.Readiness.State)
+				if tc.enabled {
+					require.NotEmpty(t, item.Readiness.CheckedAt)
+					require.NotEmpty(t, item.Readiness.ExpiresAt)
+				} else {
+					require.Empty(t, item.Readiness.CheckedAt)
+					require.Empty(t, item.Readiness.ExpiresAt)
+				}
+				if tc.state == "unknown" {
+					require.NotContains(t, item.Operations, "enable_mcp")
+					require.NotContains(t, item.Operations, "disable_mcp")
+				}
+			}
+		})
+	}
 }
 
 func TestLifecycleMetadataVersionChangesOnlyWithMutableInventoryState(t *testing.T) {
@@ -204,12 +257,14 @@ func TestInventoryBackendKindRecognizesEveryConfiguredBackend(t *testing.T) {
 
 	backend := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	empty := uuid.NullUUID{}
-	require.Equal(t, MCPBackendRemote, inventoryBackendKind(backend, empty, empty, empty))
-	require.Equal(t, MCPBackendTunneled, inventoryBackendKind(empty, backend, empty, empty))
-	require.Equal(t, MCPBackendHosted, inventoryBackendKind(empty, empty, backend, empty))
-	require.Equal(t, MCPBackendUnproxied, inventoryBackendKind(empty, empty, empty, backend))
-	require.Equal(t, MCPBackendLegacy, inventoryBackendKind(empty, empty, empty, empty))
-	require.Equal(t, MCPBackendLegacy, inventoryBackendKind(uuid.NullUUID{UUID: uuid.Nil, Valid: true}, empty, empty, empty))
+	none := pgtype.Text{}
+	require.Equal(t, MCPBackendRemote, inventoryBackendKind(backend, empty, empty, empty, none))
+	require.Equal(t, MCPBackendTunneled, inventoryBackendKind(empty, backend, empty, empty, none))
+	require.Equal(t, MCPBackendHosted, inventoryBackendKind(empty, empty, backend, empty, none))
+	require.Equal(t, MCPBackendUnproxied, inventoryBackendKind(empty, empty, empty, backend, none))
+	require.Equal(t, MCPBackendBuiltin, inventoryBackendKind(empty, empty, empty, empty, pgtype.Text{String: "approvals", Valid: true}))
+	require.Equal(t, MCPBackendLegacy, inventoryBackendKind(empty, empty, empty, empty, none))
+	require.Equal(t, MCPBackendLegacy, inventoryBackendKind(uuid.NullUUID{UUID: uuid.Nil, Valid: true}, empty, empty, empty, none))
 }
 
 func TestMCPInventoryOutputProjectsOnlyAllowlistedFields(t *testing.T) {
@@ -225,6 +280,7 @@ func TestMCPInventoryOutputProjectsOnlyAllowlistedFields(t *testing.T) {
 		Version:          "version",
 		Visibility:       "private",
 		EffectiveEnabled: true,
+		EnabledState:     "enabled",
 		Model:            "platform_managed",
 		BackendKind:      MCPBackendRemote,
 		UpstreamURL:      "https://mcp.example.test/upstream",
@@ -238,7 +294,7 @@ func TestMCPInventoryOutputProjectsOnlyAllowlistedFields(t *testing.T) {
 
 	require.ElementsMatch(t, []string{
 		"mcps", "next_cursor",
-		"id", "project_id", "project_name", "project_slug", "name", "slug", "version", "visibility", "effective_enabled", "model", "backend_kind", "upstream_url",
+		"id", "project_id", "project_name", "project_slug", "name", "slug", "version", "visibility", "effective_enabled", "enabled_state", "model", "backend_kind", "upstream_url",
 		"source", "kind", "provider", "reference",
 		"registration", "id", "status", "components_complete",
 		"readiness", "state", "checked_at", "expires_at",

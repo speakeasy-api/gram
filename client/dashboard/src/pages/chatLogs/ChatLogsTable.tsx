@@ -2,11 +2,12 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildLoadChatOverviewQuery } from "@gram/client/react-query/loadChatOverview.js";
 import { buildListChatSessionLinksQuery } from "@gram/client/react-query/listChatSessionLinks.js";
 import { SlackChannelLink } from "@/components/slack-channel-link";
-import { IdentityAvatar } from "@/components/identity-avatar";
-import { AccountTypeIcon } from "@/components/account-type-icon";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
 import { AssistantActorLink } from "@/components/assistant-actor-link";
+import { ActingPrincipal, PersonFace } from "@/components/ui/ActingPrincipal";
+import type { Principal } from "@/components/ui/ActingPrincipal/text";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Dialog } from "@/components/ui/Dialog";
@@ -23,6 +24,8 @@ import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessio
 import { useMembers } from "@gram/client/react-query/members.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { Table, type Column, type SortDescriptor } from "@/components/ui/Table";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -32,7 +35,14 @@ import {
   History,
   Pin,
 } from "lucide-react";
-import { useCallback, useMemo, useState, type MouseEvent } from "react";
+import {
+  cloneElement,
+  useCallback,
+  useMemo,
+  useState,
+  type MouseEvent,
+  type ReactElement,
+} from "react";
 import { toast } from "sonner";
 import { formatPlatform } from "@/lib/formatPlatform";
 import {
@@ -52,34 +62,349 @@ interface ChatLogsTableProps {
     title: string;
     description: string;
   };
+  /**
+   * Which column the server ordered by, and which way.
+   *
+   * Owned by the page, not by this table: the ordering is a query parameter
+   * the API sorted on, so only the component that issues the query can honour
+   * a change to it. A table that sorted its own rows would reorder the page
+   * it happens to be showing and leave the rest of the result set behind it.
+   */
+  sort?: SortDescriptor | null;
+  onSortChange?: (sort: SortDescriptor | null) => void;
 }
+
+/** One table row: a session and how deeply it is nested under its parent. */
+type SessionRow = { session: ChatOverview; depth: number };
 
 function getTraceId(chatId: string): string {
   return chatId.slice(0, 8);
 }
 
-function RiskIndicator({ count }: { count: number }) {
-  const hasRisk = count > 0;
+/**
+ * Who ran the session. Three shapes share the column: a conversation with
+ * several people (the facepile), an assistant acting under one person's
+ * authority (the two-line relation), and a person on their own.
+ */
+/**
+ * A channel session's agent, linked only once it resolves through an agent
+ * inventory the reader may read: an id on a chat row is not permission to open
+ * the agent, and an agent deleted since capture has no name to resolve.
+ */
+function ChannelAgentPrincipal({
+  agentId,
+  agentName,
+  participants,
+}: {
+  agentId: string;
+  agentName: string | undefined;
+  participants: Principal[];
+}): JSX.Element {
+  const agents = useReadableAgents(true);
+  const readable =
+    !agents.isError &&
+    (agents.data ?? []).some((agent) => agent.id === agentId);
   return (
-    <SimpleTooltip
-      tooltip={
-        hasRisk
-          ? `${count} risk finding${count === 1 ? "" : "s"} on this session`
-          : "No risk findings on this session"
-      }
-    >
-      <div className="flex w-11 flex-col items-center gap-0.5">
-        <span className="text-eyebrow">Risk</span>
-        <span
-          className={cn(
-            "font-display text-2xl leading-none font-thin tabular-nums",
-            hasRisk ? "text-destructive" : "text-muted-foreground/70",
-          )}
-        >
-          {count}
-        </span>
+    <ActingPrincipal
+      agent={{ id: agentId, name: agentName }}
+      linked={Boolean(agentName) && readable}
+      authorizer={participants}
+    />
+  );
+}
+
+function ActingPrincipalCell({
+  chat,
+  members,
+  currentUser,
+}: {
+  chat: ChatOverview;
+  members: AccessMember[] | undefined;
+  currentUser: { id: string; email: string };
+}): JSX.Element {
+  // Participants are authorizers: a channel session is an agent acting for
+  // the room it is in. ActingPrincipal takes the whole list and overlaps the
+  // faces, so this cell no longer has a facepile branch of its own that
+  // short-circuited before the agent was ever named.
+  const participants = (chat.participants ?? []).map((participant) => ({
+    // The mapped Speakeasy person when capture resolved one — that is the id
+    // an identity link can key on. Without one the whole provider identity
+    // stands in: `provider:user` alone collides between workspaces, which a
+    // shared channel puts in the same conversation.
+    id:
+      participant.userId ??
+      `${participant.provider}:${participant.providerTeamId ?? ""}:${participant.providerUserId}`,
+    name: participant.displayName ?? participant.providerUserId,
+    // Only a participant capture resolved to a person has an identity page;
+    // the rest are provider handles the resolver cannot address, and they
+    // render as a named face rather than a link to nothing.
+    identity: participant.userId ? { userId: participant.userId } : undefined,
+  }));
+
+  if (chat.assistantName && participants.length > 0) {
+    return (
+      <ActingPrincipal
+        agent={{ id: chat.assistantAgentId ?? "", name: chat.assistantName }}
+        linked={Boolean(chat.assistantAgentId)}
+        authorizer={participants}
+      />
+    );
+  }
+
+  // A channel session has no assistant record; the agent principal that
+  // produced it stands in, acting for the room.
+  if (!chat.assistantName && chat.agentId && participants.length > 0) {
+    return (
+      <ChannelAgentPrincipal
+        agentId={chat.agentId}
+        agentName={chat.agentName}
+        participants={participants}
+      />
+    );
+  }
+
+  // A channel session with neither an assistant nor an agent: the people are
+  // all there is to name.
+  if (participants.length > 0) {
+    return <ParticipantFacepile people={participants} />;
+  }
+
+  // The person an assistant acted for, by whichever id the session carries.
+  // An assistant reached over a federated surface reports only the external
+  // id, and guarding on `userId` alone dropped the person from those rows
+  // entirely rather than naming them.
+  const authorizerId = chat.userId ?? chat.externalUserId;
+
+  if (chat.assistantName && authorizerId) {
+    return (
+      // No account-type icon: ActingPrincipal draws the agent's own face,
+      // and the two marks side by side read as two actors.
+      <div className="flex min-w-0 items-start gap-1.5">
+        <ActingPrincipal
+          agent={{
+            id: chat.assistantAgentId ?? "",
+            name: chat.assistantName,
+          }}
+          // Linked only when the assistant actually has an agent identity:
+          // without one the urn resolves to nothing.
+          linked={Boolean(chat.assistantAgentId)}
+          authorizer={{
+            id: authorizerId,
+            name: chatOwnerLabel(
+              members,
+              chat,
+              currentUser,
+              personalAccountEmail(chat),
+            ),
+            // Keyed on whichever id the session holds: an external id is a
+            // reference of its own kind, and sending it as a member id would
+            // link to a person who does not exist.
+            identity: chat.userId
+              ? { userId: chat.userId }
+              : { externalUserId: authorizerId },
+          }}
+        />
       </div>
+    );
+  }
+
+  // An assistant (or a channel session's agent) with nobody behind it: named
+  // on its own, because there is no person whose authority it borrowed.
+  if (chat.assistantName || chat.agentId) {
+    return <AssistantActorLink chat={chat} className="min-w-0" />;
+  }
+
+  // The same face ActingPrincipal gives the person on an agent row, so a
+  // column holding both does not switch between a tinted initial and a
+  // generic outline icon halfway down.
+  const ownerLabel = chatOwnerLabel(
+    members,
+    chat,
+    currentUser,
+    personalAccountEmail(chat),
+  );
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <PersonFace
+        person={{ id: chat.userId ?? ownerLabel, name: ownerLabel }}
+      />
+      <span className="min-w-0 truncate">
+        <ChatOwnerLabel
+          members={members}
+          chat={chat}
+          currentUser={currentUser}
+          accountEmail={personalAccountEmail(chat)}
+        />
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Everyone in a conversation, as overlapped faces.
+ *
+ * Each face carries its own name: `PersonFace` is `aria-hidden`, so a bare
+ * row of them says nothing to a screen reader and nothing to a mouse either.
+ * The people past the fifth are counted rather than dropped — five faces and
+ * no marker reads as the whole room.
+ */
+function ParticipantFacepile({
+  people,
+}: {
+  people: { id: string; name: string }[];
+}): JSX.Element {
+  const overflow = people.slice(5);
+  return (
+    <span
+      role="list"
+      aria-label="Conversation participants"
+      className="flex shrink-0 -space-x-1"
+    >
+      {people.slice(0, 5).map((person) => (
+        <SimpleTooltip key={person.id} tooltip={person.name}>
+          <span role="listitem" className="flex">
+            <PersonFace person={person} />
+            <span className="sr-only">{person.name}</span>
+          </span>
+        </SimpleTooltip>
+      ))}
+      {overflow.length > 0 && (
+        <SimpleTooltip
+          tooltip={overflow.map((person) => person.name).join(", ")}
+        >
+          <span
+            role="listitem"
+            className="bg-card text-muted-foreground flex size-4 shrink-0 items-center justify-center rounded-full text-[8px]"
+          >
+            +{overflow.length}
+            <span className="sr-only">{overflow.length} more participants</span>
+          </span>
+        </SimpleTooltip>
+      )}
+    </span>
+  );
+}
+
+/**
+ * How many risk findings a session has, beside its title.
+ *
+ * Beside the title rather than in a column of its own: every column is
+ * already at its minimum width, and a risk column stands empty on every row
+ * of an organization that runs no policies. Drawn only when the count is
+ * non-zero — the fact worth seeing on a scan is that a session has any, and
+ * a column of zeroes buries it.
+ */
+function SessionRiskMarker({ count }: { count: number }): JSX.Element {
+  const label = `${count} risk finding${count === 1 ? "" : "s"} on this session`;
+  return (
+    <SimpleTooltip tooltip={label}>
+      <span
+        role="img"
+        aria-label={label}
+        className="text-destructive inline-flex shrink-0 items-center gap-0.5 tabular-nums"
+      >
+        <Icon name="triangle-alert" className="size-3.5" />
+        {count}
+      </span>
     </SimpleTooltip>
+  );
+}
+
+/** The product the session ran in, and the Slack channel when it had one. */
+function SurfaceCell({ chat }: { chat: ChatOverview }): JSX.Element | null {
+  const source = chat.source;
+  if (!source && !chat.slackChannelId) return null;
+
+  return (
+    <Cell
+      primary={
+        source ? (
+          <>
+            <AgentProviderIcon source={source} className="size-3.5 shrink-0" />
+            <span className="min-w-0 truncate">
+              {formatChatSource(source, chat)}
+            </span>
+          </>
+        ) : null
+      }
+      secondary={
+        chat.slackChannelId ? (
+          <SlackChannelLink
+            channelId={chat.slackChannelId}
+            channelName={chat.slackChannelName}
+            teamId={chat.slackTeamId}
+          />
+        ) : undefined
+      }
+    />
+  );
+}
+
+/**
+ * One cell of the session table: a first line every column shares a baseline
+ * on, and an optional second line under it.
+ *
+ * Without a fixed first-line height the columns drifted apart — a `text-sm`
+ * title, a `text-xs` mono timestamp and a 20px agent face each set their own
+ * line box, so no two cells in a row lined up and the table read as a pile.
+ */
+function Cell({
+  primary,
+  secondary,
+  className,
+}: {
+  primary: React.ReactNode;
+  secondary?: React.ReactNode;
+  className?: string;
+}): JSX.Element {
+  // Every column starts at its own left edge, numbers included, so a value
+  // begins under the first letter of its header. Right-aligning the numeric
+  // columns put the digits against the next column's border instead, which
+  // read as belonging to it.
+  //
+  // `flex-1`, not `w-full`: the table's own `<td>` is itself a flex row with
+  // an indentation sibling, so a width percentage only shrink-wrapped.
+  return (
+    <div className={cn("flex min-w-0 flex-1 flex-col gap-0.5", className)}>
+      {/* One size throughout: the rows mixed `text-sm` titles with `text-xs`
+          everything-else, which made most of the table look like a footnote
+          beside its own first column. The second line is distinguished by
+          colour, not by shrinking it. */}
+      <div className="flex min-h-5 min-w-0 items-center gap-1.5 text-sm">
+        {primary}
+      </div>
+      {secondary !== undefined && (
+        <div className="text-muted-foreground flex h-5 min-w-0 items-center gap-1 text-sm">
+          {secondary}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** When the session started, when it last moved, and how long that spanned. */
+function ActivityCell({ chat }: { chat: ChatOverview }): JSX.Element {
+  const lastActivityTimestamp = chat.lastMessageTimestamp ?? chat.createdAt;
+  // One date, not two. Both timestamps are nearly always the same minute of
+  // the same day, so printing each in full wrapped the column mid-date and
+  // read as four facts where there are two: when it started, and how long it
+  // ran. The exact pair stays in the title attribute.
+  return (
+    <Cell
+      className="font-mono whitespace-nowrap"
+      primary={
+        <span
+          className="text-muted-foreground"
+          title={`Created ${format(chat.createdAt, "MMM d, HH:mm")} · Last activity ${format(
+            lastActivityTimestamp,
+            "MMM d, HH:mm",
+          )}`}
+        >
+          {format(chat.createdAt, "MMM d, HH:mm")}
+        </span>
+      }
+      secondary={<span className="tabular-nums">{formatDuration(chat)}</span>}
+    />
   );
 }
 
@@ -94,9 +419,9 @@ function listHarnesses(harnesses: string[]): string {
 // SessionLineageIcons is the at-a-glance lineage cluster on a session row:
 // one icon per state — continued elsewhere (navigable continuation exists),
 // derived from an earlier session, and moved with no captured continuation.
-// The cluster sits above the row's stretched select button (tooltips need
-// pointer events), so clicking it forwards to the same row selection; the
-// stretched button remains the tab stop, hence tabIndex={-1}.
+// A button is needed for the tooltips, and the table row does not treat a
+// click that started on a control as its own, so the cluster forwards to the
+// same row selection itself; the row is the tab stop, hence tabIndex={-1}.
 function SessionLineageIcons({
   summary,
   onActivate,
@@ -111,7 +436,7 @@ function SessionLineageIcons({
       tabIndex={-1}
       onClick={onActivate}
       aria-label="Open session details"
-      className="text-muted-foreground pointer-events-auto mt-0.5 inline-flex shrink-0 cursor-pointer items-center gap-1"
+      className="text-muted-foreground inline-flex shrink-0 cursor-pointer items-center gap-1"
     >
       {summary.continuedIn.length > 0 && (
         <SimpleTooltip
@@ -274,6 +599,8 @@ export function ChatLogsTable({
   isLoading,
   error,
   emptyState,
+  sort,
+  onSortChange,
 }: ChatLogsTableProps): JSX.Element {
   const { user } = useSession();
   const { data: membersData } = useMembers();
@@ -362,6 +689,151 @@ export function ChatLogsTable({
     [chats, linksData, ancestors],
   );
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const columns: Column<SessionRow>[] = [
+    {
+      key: "session",
+      header: "Session",
+      // Capped. Without a width this column was the only flexible track, so
+      // every pixel of a wide display landed between the title and the next
+      // column instead of being shared out.
+      width: "30fr",
+      render: ({ session: chat, depth }) => (
+        // No indent for depth. Nesting only reads as nesting while the child
+        // sits directly under its parent, and any sort breaks that, leaving a
+        // row shifted right for no reason the reader can see. The "Subagent"
+        // marker beside the title says it instead, wherever the row ends up.
+        <div className="flex min-w-0 items-center gap-3">
+          <Cell
+            primary={
+              <>
+                <span className="text-foreground line-clamp-3 min-w-0 text-sm font-medium">
+                  {chat.title}
+                </span>
+                {(chat.riskFindingsCount ?? 0) > 0 && (
+                  <SessionRiskMarker count={chat.riskFindingsCount!} />
+                )}
+                {depth > 0 && (
+                  <span className="text-muted-foreground inline-flex shrink-0 items-center gap-1">
+                    <GitBranch className="size-3" aria-hidden />
+                    Subagent
+                  </span>
+                )}
+                <SessionLineageIcons
+                  summary={lineageByChat.get(chat.id)}
+                  onActivate={() => onSelectChat(chat)}
+                />
+              </>
+            }
+            secondary={
+              <span className="flex items-center gap-1 font-mono">
+                {getTraceId(chat.id)}
+                <CopyButton value={chat.id} label="Chat ID" />
+              </span>
+            }
+          />
+        </div>
+      ),
+    },
+    {
+      key: "principal",
+      header: "Acting principal",
+      // Takes the slack now: it holds two names on an agent row, and is the
+      // column most likely to need the room.
+      width: "26fr",
+      render: ({ session: chat }) => (
+        <ActingPrincipalCell
+          chat={chat}
+          members={membersData?.members}
+          currentUser={user}
+        />
+      ),
+    },
+    {
+      key: "surface",
+      header: "Surface",
+      width: "20fr",
+      render: ({ session: chat }) => <SurfaceCell chat={chat} />,
+    },
+    {
+      key: "activity",
+      // `id` is what the sort descriptor carries, and this page puts that
+      // straight into `?sort=`, so it has to be the value the API already
+      // knows rather than the column's own key.
+      id: "chronological",
+      header: "Activity",
+      sortable: true,
+      // Ordered by the server, over the whole result set. `sortValue` is only
+      // here because the type demands it: the rows arrive already in order,
+      // and sorting this page in the browser would reorder 25 rows while
+      // claiming to have ordered all of them.
+      sortValue: ({ session: chat }) =>
+        chat.lastMessageTimestamp ?? chat.createdAt,
+      width: "170px",
+      render: ({ session: chat }) => <ActivityCell chat={chat} />,
+    },
+    {
+      key: "numMessages",
+      id: "messageCount",
+      header: "Messages",
+      sortable: true,
+      sortValue: ({ session: chat }) => chat.numMessages,
+      // Wide enough for the header itself: at 80px the uppercase label and
+      // its sort control truncated to "MES…", which names no column.
+      width: "120px",
+      render: ({ session: chat }) => (
+        <Cell
+          primary={<span className="tabular-nums">{chat.numMessages}</span>}
+        />
+      ),
+    },
+    {
+      key: "totalCost",
+      header: "Cost",
+      width: "110px",
+      render: ({ session: chat }) => (
+        <Cell
+          primary={
+            chat.totalCost !== undefined && chat.totalCost > 0 ? (
+              <span className="tabular-nums">${chat.totalCost.toFixed(4)}</span>
+            ) : null
+          }
+          // Work analysis is spend per unit of work delivered, so it reads
+          // against the cost rather than in a column of its own that is
+          // empty for every organization not running the analysis.
+          secondary={<WorkUnitsRowMetrics chat={chat} />}
+        />
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "90px",
+      render: ({ session: chat }) => (
+        <div className="flex w-full items-center justify-end gap-1">
+          <SessionPinButton chatId={chat.id} pinned={Boolean(chat.pinned)} />
+          <button
+            type="button"
+            onClick={() => setDeleteConfirmId(chat.id)}
+            className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive p-1 opacity-0 transition-all group-hover:opacity-100 focus-visible:opacity-100"
+            aria-label="Delete chat"
+          >
+            <Icon name="trash-2" className="size-4" />
+          </button>
+          <Icon
+            name="chevron-right"
+            className={cn(
+              "size-4 transition-colors",
+              selectedChatId === chat.id
+                ? "text-foreground/60"
+                : "text-muted-foreground/40",
+            )}
+          />
+        </div>
+      ),
+    },
+  ];
+
   if (isLoading && chats.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -414,257 +886,47 @@ export function ChatLogsTable({
 
   return (
     <>
-      <div className="divide-border bg-card divide-y">
-        {groupedChats.map(({ session: chat, depth }) => {
-          const isSelected = selectedChatId === chat.id;
-          const source = chat.source;
-          const riskCount = chat.riskFindingsCount ?? 0;
-          const lastActivityTimestamp =
-            chat.lastMessageTimestamp ?? chat.createdAt;
-
-          return (
-            <TableRowContextMenu
-              key={chat.id}
-              actions={[
-                {
-                  label: "Delete chat",
-                  destructive: true,
-                  onClick: () => setDeleteConfirmId(chat.id),
-                },
-              ]}
-            >
-              {/* Stretched select control under content; pin/delete/copy sit above
-                  it (z-20) so interactive controls are never nested in a button. */}
-              <div
-                className={cn(
-                  "group relative w-full px-5 py-4 transition-colors duration-150",
-                  "hover:bg-muted/50",
-                  depth > 0 && "bg-muted/20",
-                  isSelected && "bg-primary/5",
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => onSelectChat(chat)}
-                  aria-label={`Open session ${getTraceId(chat.id)}`}
-                  className="absolute inset-0 z-10 focus:outline-none"
-                />
-                <div
-                  className="pointer-events-none relative z-20 flex items-center gap-5"
-                  style={{ paddingLeft: Math.min(depth, 8) * 24 }}
-                >
-                  {/* Left: Risk findings indicator */}
-                  <div className="shrink-0">
-                    <RiskIndicator count={riskCount} />
-                  </div>
-
-                  {/* Center: Main content */}
-                  <div className="min-w-0 flex-1">
-                    {/* Title — the scan target — with the lineage cluster */}
-                    <div className="flex items-start gap-1.5">
-                      <h3 className="text-foreground line-clamp-2 text-sm leading-snug font-medium">
-                        {chat.title}
-                      </h3>
-                      {depth > 0 && (
-                        <span className="text-muted-foreground inline-flex shrink-0 items-center gap-1 self-center text-xs">
-                          <GitBranch className="size-3" aria-hidden />
-                          Subagent
-                        </span>
-                      )}
-                      <SessionLineageIcons
-                        summary={lineageByChat.get(chat.id)}
-                        onActivate={() => onSelectChat(chat)}
-                      />
-                    </div>
-
-                    {/* Meta row — muted mono */}
-                    <div className="text-muted-foreground mt-1.5 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs">
-                      <span className="inline-flex items-center gap-1">
-                        {getTraceId(chat.id)}
-                        <span className="pointer-events-auto">
-                          <CopyButton value={chat.id} label="Chat ID" />
-                        </span>
-                      </span>
-                      <span className="text-muted-foreground/40">·</span>
-                      <span className="inline-flex items-center gap-1.5">
-                        {chat.assistantName && (
-                          <AssistantActorLink
-                            chat={chat}
-                            className="pointer-events-auto max-w-[200px]"
-                          />
-                        )}
-                        {(chat.participants?.length ?? 0) > 0 && (
-                          <span
-                            className="flex shrink-0 -space-x-1"
-                            aria-label="Conversation participants"
-                          >
-                            {chat.participants
-                              ?.slice(0, 5)
-                              .map((participant) => {
-                                const label =
-                                  participant.displayName ??
-                                  participant.providerUserId;
-                                return (
-                                  <SimpleTooltip
-                                    key={`${participant.provider}:${participant.providerTeamId ?? ""}:${participant.providerUserId}:${participant.userId ?? ""}`}
-                                    tooltip={
-                                      <div>
-                                        <div>{label}</div>
-                                        <div className="text-xs opacity-75">
-                                          Slack · {participant.providerUserId}
-                                          {participant.providerTeamId
-                                            ? ` · ${participant.providerTeamId}`
-                                            : ""}
-                                        </div>
-                                      </div>
-                                    }
-                                  >
-                                    <span
-                                      className="pointer-events-auto"
-                                      aria-label={label}
-                                    >
-                                      <IdentityAvatar
-                                        label={label}
-                                        className="border-card size-5 border"
-                                        textClassName="text-[10px]"
-                                      />
-                                    </span>
-                                  </SimpleTooltip>
-                                );
-                              })}
-                            {(chat.participants?.length ?? 0) > 5 && (
-                              <span
-                                className="bg-card text-muted-foreground flex size-4 items-center justify-center rounded-full text-[8px]"
-                                title={`${chat.participants?.length ?? 0} participants`}
-                              >
-                                +{(chat.participants?.length ?? 0) - 5}
-                              </span>
-                            )}
-                          </span>
-                        )}
-                        {(chat.participants?.length ?? 0) === 0 &&
-                          (chat.assistantName ? (
-                            (chat.userId || chat.externalUserId) && (
-                              <>
-                                <span className="text-muted-foreground/70">
-                                  for
-                                </span>
-                                <AccountTypeIcon
-                                  accountType={chat.accountType}
-                                />
-                                <span
-                                  className="pointer-events-auto max-w-[120px] truncate"
-                                  title={`Acting on behalf of ${chatOwnerLabel(
-                                    membersData?.members,
-                                    chat,
-                                    user,
-                                    personalAccountEmail(chat),
-                                  )}`}
-                                >
-                                  <ChatOwnerLabel
-                                    members={membersData?.members}
-                                    chat={chat}
-                                    currentUser={user}
-                                    accountEmail={personalAccountEmail(chat)}
-                                  />
-                                </span>
-                              </>
-                            )
-                          ) : (
-                            <>
-                              <AccountTypeIcon accountType={chat.accountType} />
-                              <span className="pointer-events-auto max-w-[120px] truncate">
-                                <ChatOwnerLabel
-                                  members={membersData?.members}
-                                  chat={chat}
-                                  currentUser={user}
-                                  accountEmail={personalAccountEmail(chat)}
-                                />
-                              </span>
-                            </>
-                          ))}
-                      </span>
-                      {source && (
-                        <>
-                          <span className="text-muted-foreground/40">·</span>
-                          <span className="inline-flex items-center gap-1.5">
-                            <AgentProviderIcon
-                              source={source}
-                              className="size-3.5"
-                            />
-                            {formatChatSource(source, chat)}
-                          </span>
-                        </>
-                      )}
-                      {chat.slackChannelId && (
-                        <>
-                          <span className="text-muted-foreground/40">·</span>
-                          <SlackChannelLink
-                            channelId={chat.slackChannelId}
-                            channelName={chat.slackChannelName}
-                            teamId={chat.slackTeamId}
-                          />
-                        </>
-                      )}
-                      <span className="text-muted-foreground/40">·</span>
-                      <span>
-                        Created {format(chat.createdAt, "MMM d, HH:mm")}
-                      </span>
-                      <span className="text-muted-foreground/40">·</span>
-                      <span>
-                        Last activity{" "}
-                        {format(lastActivityTimestamp, "MMM d, HH:mm")}
-                      </span>
-                      <span className="text-muted-foreground/40">·</span>
-                      <span className="tabular-nums">
-                        {formatDuration(chat)}
-                      </span>
-                      <span className="text-muted-foreground/40">·</span>
-                      <span className="tabular-nums">
-                        {chat.numMessages} messages
-                      </span>
-                      {chat.totalCost !== undefined && chat.totalCost > 0 && (
-                        <>
-                          <span className="text-muted-foreground/40">·</span>
-                          <span className="tabular-nums">
-                            ${chat.totalCost.toFixed(4)}
-                          </span>
-                        </>
-                      )}
-                      <WorkUnitsRowMetrics chat={chat} />
-                    </div>
-                  </div>
-
-                  {/* Right: Pin + Delete + Chevron */}
-                  <div className="pointer-events-auto flex shrink-0 items-center gap-1">
-                    <SessionPinButton
-                      chatId={chat.id}
-                      pinned={Boolean(chat.pinned)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirmId(chat.id)}
-                      className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive p-1 opacity-0 transition-all group-hover:opacity-100 focus-visible:opacity-100"
-                      aria-label="Delete chat"
-                    >
-                      <Icon name="trash-2" className="size-4" />
-                    </button>
-                    <Icon
-                      name="chevron-right"
-                      className={cn(
-                        "size-4 transition-colors",
-                        isSelected
-                          ? "text-foreground/60"
-                          : "text-muted-foreground/40",
-                      )}
-                    />
-                  </div>
-                </div>
-              </div>
-            </TableRowContextMenu>
-          );
-        })}
-      </div>
+      <Table
+        // No border of its own: the list template already draws one around
+        // this region, and the two together read as a frame inside a frame.
+        className="bg-card border-none"
+        columns={columns}
+        // Sorted here, not by the table: `Table` renders the sortable headers
+        // and reports the choice, and leaves the ordering to the caller.
+        //
+        // Only the rows already loaded. A subagent also stops sitting under
+        // its parent once any other column leads, which is why the row says
+        // "Subagent" beside the title instead of relying on its position.
+        data={groupedChats}
+        rowKey={(row) => row.session.id}
+        sort={sort}
+        onSortChange={onSortChange}
+        onRowClick={(row) => onSelectChat(row.session)}
+        renderRow={(row, rowElement) => (
+          // The context menu needs one element that forwards refs, which the
+          // row element is. Tinting happens here too, because a per-row class
+          // is the one thing a column cannot express.
+          <TableRowContextMenu
+            actions={[
+              {
+                label: "Delete chat",
+                destructive: true,
+                onClick: () => setDeleteConfirmId(row.session.id),
+              },
+            ]}
+          >
+            {cloneElement(rowElement as ReactElement<{ className?: string }>, {
+              className: cn(
+                // "group" is what reveals the pin and delete controls on
+                // hover; they are invisible until the row is pointed at.
+                "group",
+                row.depth > 0 && "bg-muted/20",
+                selectedChatId === row.session.id && "bg-primary/5",
+              ),
+            })}
+          </TableRowContextMenu>
+        )}
+      />
 
       <Dialog
         open={deleteConfirmId !== null}

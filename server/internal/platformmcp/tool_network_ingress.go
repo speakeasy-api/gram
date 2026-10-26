@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -26,13 +27,14 @@ const getNetworkIngressToolName = "get_network_ingress"
 // stands between the organization and private MCP access; every step except
 // waiting happens in the dashboard or with Speakeasy, never through this server.
 const (
-	networkIngressNextNone               = "none"
-	networkIngressNextRequestEntitlement = "request_private_networking"
-	networkIngressNextConfigure          = "configure_ingress_in_dashboard"
-	networkIngressNextAddCredentials     = "add_credentials_in_dashboard"
-	networkIngressNextEnable             = "enable_ingress_in_dashboard"
-	networkIngressNextWait               = "wait_for_ingress"
-	networkIngressNextRepair             = "repair_ingress_in_dashboard"
+	networkIngressNextNone                = "none"
+	networkIngressNextRequestEntitlement  = "request_private_networking"
+	networkIngressNextConfigure           = "configure_ingress_in_dashboard"
+	networkIngressNextAddCredentials      = "add_credentials_in_dashboard"
+	networkIngressNextEnable              = "enable_ingress_in_dashboard"
+	networkIngressNextWait                = "wait_for_ingress"
+	networkIngressNextRepair              = "repair_ingress_in_dashboard"
+	networkIngressNextUnsupportedProvider = "contact_support_for_unsupported_provider"
 )
 
 // networkIngressErrorCodePattern admits only the short reconcile codes the
@@ -77,9 +79,10 @@ type GetNetworkIngressOutput struct {
 	// organization. Without it no MCP can leave public_only.
 	Entitled   bool `json:"entitled"`
 	Configured bool `json:"configured"`
-	// ReadyForPrivateAccess mirrors the dashboard: an enabled, online ingress
-	// with an observed private DNS name. It is a precondition for dual or
-	// private_only, not proof that any client can reach the tailnet.
+	// ReadyForPrivateAccess mirrors the dashboard: a supported provider with an
+	// enabled, online ingress and an observed private DNS name. It is a
+	// precondition for dual or private_only, not proof that any client can reach
+	// the tailnet.
 	ReadyForPrivateAccess bool                   `json:"ready_for_private_access"`
 	Ingress               *NetworkIngressSummary `json:"ingress,omitempty"`
 	NextAction            string                 `json:"next_action"`
@@ -147,6 +150,8 @@ func networkIngressNextAction(output GetNetworkIngressOutput) string {
 		return networkIngressNextRequestEntitlement
 	case ingress == nil:
 		return networkIngressNextConfigure
+	case ingress.Provider != networkingress.ProviderTailscale:
+		return networkIngressNextUnsupportedProvider
 	case !ingress.CredentialsConfigured:
 		return networkIngressNextAddCredentials
 	case !ingress.Enabled:
@@ -162,6 +167,8 @@ func networkIngressNextAction(output GetNetworkIngressOutput) string {
 
 const getNetworkIngressDescription = "Read the organization's private network (Tailscale) ingress: whether private networking is switched on for the organization, whether an ingress is configured and enabled, its latest observed status and private DNS name, and the single next_action that stands between the organization and private MCP access. " +
 	"ready_for_private_access is required before any MCP can use dual or private_only network access; it is not proof that a tailnet client can connect. " +
+	"For wait_for_ingress, wait and call this tool again. Present setup_url only for configure_ingress_in_dashboard, add_credentials_in_dashboard, enable_ingress_in_dashboard, or repair_ingress_in_dashboard; request_private_networking and contact_support_for_unsupported_provider require Speakeasy support instead. " +
+	"An unsupported provider is never ready: contact_support_for_unsupported_provider means contact Speakeasy support, not attempt dashboard setup or repair. " +
 	"Creating, enabling, repairing, or supplying credentials for the ingress happens only in the dashboard at setup_url, because it requires Tailscale OAuth client credentials. Never returns credentials or provider resources."
 
 func registerNetworkIngressTool(reg *Registrar, service *NetworkIngressStatusService) {

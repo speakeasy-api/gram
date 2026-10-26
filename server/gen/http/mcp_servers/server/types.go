@@ -143,6 +143,10 @@ type CreateMcpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
@@ -198,6 +202,10 @@ type GetMcpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
@@ -265,6 +273,10 @@ type UpdateMcpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
@@ -2841,9 +2853,10 @@ type McpServerToolsetSummaryResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The toolset's description, if any
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The number of distinct configured tools in the latest toolset version,
-	// excluding external MCP proxy tools. Counts configured tool URNs, so it may
-	// differ from the number of tools that resolve against the active deployment.
+	// Number of tools the toolset serves: deployment-backed tools (HTTP, function,
+	// external MCP) that resolve in the project's latest completed deployment,
+	// plus its prompt templates and registered platform tools. External MCP proxy
+	// tools are excluded.
 	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
 	// The toolset's tool selection mode
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
@@ -2857,6 +2870,10 @@ type McpServerToolsetSummaryResponseBody struct {
 	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
 	// The registry specifier the toolset originated from, if any
 	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
+	// The ID of the MCP server that stands in for the toolset: its canonical
+	// server, whose ID is the toolset's, or when it has none, its oldest live
+	// server with a live endpoint. Absent when it has neither.
+	HostingMcpServerID *string `form:"hosting_mcp_server_id,omitempty" json:"hosting_mcp_server_id,omitempty" xml:"hosting_mcp_server_id,omitempty"`
 }
 
 // McpServerResponseBody is used to define fields on response body types.
@@ -2889,6 +2906,10 @@ type McpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// A first-party backend Speakeasy serves itself, if any. approvals is the
+	// server agents call request_approval on; Speakeasy creates it with a
+	// project's first approval policy and manages its backend.
+	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
@@ -2991,6 +3012,7 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 		ToolsetID:             res.ToolsetID,
 		UnproxiedMcpServerID:  res.UnproxiedMcpServerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
+		BuiltinBackend:        res.BuiltinBackend,
 		Visibility:            string(res.Visibility),
 		NetworkAccessMode:     string(res.NetworkAccessMode),
 		PrimaryEndpointID:     res.PrimaryEndpointID,
@@ -3021,6 +3043,7 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 		ToolsetID:             res.ToolsetID,
 		UnproxiedMcpServerID:  res.UnproxiedMcpServerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
+		BuiltinBackend:        res.BuiltinBackend,
 		Visibility:            string(res.Visibility),
 		NetworkAccessMode:     string(res.NetworkAccessMode),
 		PrimaryEndpointID:     res.PrimaryEndpointID,
@@ -3089,6 +3112,7 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 		ToolsetID:             res.ToolsetID,
 		UnproxiedMcpServerID:  res.UnproxiedMcpServerID,
 		ToolVariationsGroupID: res.ToolVariationsGroupID,
+		BuiltinBackend:        res.BuiltinBackend,
 		Visibility:            string(res.Visibility),
 		NetworkAccessMode:     string(res.NetworkAccessMode),
 		PrimaryEndpointID:     res.PrimaryEndpointID,

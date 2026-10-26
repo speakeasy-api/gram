@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { QueryParamStatus as ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
+import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
 import {
   invalidateAllUserSessionClients,
   useUserSessionClientsInfinite,

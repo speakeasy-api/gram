@@ -1,3 +1,4 @@
+import { isKnownEnumValue } from "@/lib/enum";
 import type { FacepileMember } from "@/components/member-facepile";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { PluginAudience } from "@gram/client/models/components/pluginaudience.js";
@@ -32,44 +33,6 @@ export type PrincipalKind =
 
 export function isEveryoneAssignmentPrincipal(urn: string): boolean {
   return urn === WILDCARD_PRINCIPAL || urn === "user:all";
-}
-
-function isMemberScopedAssignmentPrincipal(urn: string): boolean {
-  return isIndividualMemberPrincipal(urn) || urn.startsWith(ROLE_PREFIX);
-}
-
-// The wildcard reaches every synced identity and therefore subsumes every
-// targeted audience. `user:all` reaches only organization members, so it
-// subsumes member and role assignments but can coexist with an email or a
-// directory audience that may reach a non-member synced identity.
-export function selectMutuallyExclusivePluginAudiences(
-  previous: string[],
-  next: string[],
-): string[] {
-  const previousValues = new Set(previous);
-  const addedValues = next.filter((value) => !previousValues.has(value));
-  const addedWildcard = addedValues.includes(WILDCARD_PRINCIPAL);
-  const addedAllMembers = addedValues.includes("user:all");
-
-  if (addedWildcard) return [WILDCARD_PRINCIPAL];
-
-  if (addedAllMembers) {
-    return next.filter(
-      (value) =>
-        value !== WILDCARD_PRINCIPAL &&
-        !isMemberScopedAssignmentPrincipal(value),
-    );
-  }
-
-  if (addedValues.some((value) => value !== WILDCARD_PRINCIPAL)) {
-    if (addedValues.some(isMemberScopedAssignmentPrincipal)) {
-      return next.filter(
-        (value) => value !== WILDCARD_PRINCIPAL && value !== "user:all",
-      );
-    }
-    return next.filter((value) => value !== WILDCARD_PRINCIPAL);
-  }
-  return next;
 }
 
 const principalKindIcon: Record<
@@ -108,7 +71,23 @@ export function describePrincipal(
   }
   const audience = audienceByUrn.get(urn);
   if (audience) {
-    return { kind: audience.kind, label: audience.displayName };
+    return {
+      kind: isKnownEnumValue(
+        {
+          everyone: "everyone",
+          email: "email",
+          role: "role",
+          user: "user",
+          directory_group: "directory_group",
+          directory_attribute: "directory_attribute",
+          unknown: "unknown",
+        } as const,
+        audience.kind,
+      )
+        ? audience.kind
+        : "unknown",
+      label: audience.displayName,
+    };
   }
   if (urn.startsWith(DIRECTORY_GROUP_PREFIX)) {
     return {

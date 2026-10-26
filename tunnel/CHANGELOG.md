@@ -1,5 +1,11 @@
 # tunnel
 
+## 0.2.0
+
+### Minor Changes
+
+- b772e91: Show connected tunnel agents, target network checks, and MCP request history in the dashboard. Agents report aggregate HTTP progress when a gateway with diagnostics enabled polls them without collecting payloads or making MCP calls. Existing agents continue forwarding traffic.
+
 ## 0.1.1
 
 ### Patch Changes

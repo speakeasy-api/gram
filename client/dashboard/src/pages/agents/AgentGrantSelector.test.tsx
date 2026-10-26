@@ -1,3 +1,4 @@
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
@@ -123,6 +124,27 @@ describe("AgentGrantSelector fine-tuning", () => {
       buildRequestedGrants([{ grant, narrowing: selection() }]),
     ).toThrow(/at least one/);
   });
+  it.each(["future_annotation", "__proto__", "constructor"])(
+    "renders an unsupported pinned annotation safely: %s",
+    (disposition) => {
+      render(
+        <Editor
+          candidate={{
+            ...grant,
+            selector: {
+              ...grant.selector,
+              disposition: unrecognized(disposition),
+            },
+          }}
+        />,
+      );
+      expect(screen.getByText("Unknown annotation")).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: /By annotation/ }),
+      ).toBeNull();
+    },
+  );
+
   it("does not offer replacing a disposition pinned by the candidate", () => {
     render(
       <Editor
