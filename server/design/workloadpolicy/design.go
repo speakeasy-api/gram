@@ -320,9 +320,7 @@ var _ = Service("workloadIdentities", func() {
 			Attribute("agent_id", String, "The agent the enrolled device inherits its policy from.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("hooks_project_slug", String, "The project the device's hooks and telemetry are sent to. Must be a project in the caller's organization.", func() {
-				Pattern(`^[a-z0-9_-]{1,128}$`)
-			})
+			Attribute("hooks_project_slug", shared.Slug, "The project the device's hooks and telemetry are sent to. Must be a project in the caller's organization.")
 			Attribute("expires_in_seconds", Int, "How long the join token behind the command stays redeemable. Defaults to one hour.", func() {
 				Minimum(60)
 				Maximum(86400)

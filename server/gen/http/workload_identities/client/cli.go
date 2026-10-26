@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"unicode/utf8"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	workloadidentities "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -538,10 +539,13 @@ func BuildCreateDeviceInstallCommandPayload(workloadIdentitiesCreateDeviceInstal
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesCreateDeviceInstallCommandBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61,\n      \"hooks_project_slug\": \"0\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61,\n      \"hooks_project_slug\": \"aaa\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.hooks_project_slug", body.HooksProjectSlug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(body.HooksProjectSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.hooks_project_slug", body.HooksProjectSlug, utf8.RuneCountInString(body.HooksProjectSlug), 40, false))
+		}
 		if body.ExpiresInSeconds < 60 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expires_in_seconds", body.ExpiresInSeconds, 60, true))
 		}
@@ -572,7 +576,7 @@ func BuildCreateDeviceInstallCommandPayload(workloadIdentitiesCreateDeviceInstal
 	}
 	v := &workloadidentities.CreateDeviceInstallCommandPayload{
 		AgentID:          body.AgentID,
-		HooksProjectSlug: body.HooksProjectSlug,
+		HooksProjectSlug: types.Slug(body.HooksProjectSlug),
 		ExpiresInSeconds: body.ExpiresInSeconds,
 	}
 	{

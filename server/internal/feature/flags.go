@@ -46,8 +46,8 @@ const (
 
 	// FlagDeviceBootstrapInstall gates workloadIdentities.createDeviceInstallCommand,
 	// the one-command install of a headless device enrolled with a bootstrap
-	// (device join) token. Evaluated server-side; the dashboard gates its UI
-	// behind the same key. Targeted by PostHog organization group (org slug),
+	// (device join) token. Evaluated server-side. Targeted by PostHog organization
+	// group (org slug),
 	// like FlagBudgets. Fails closed: the RPC returns 404. Held closed until a
 	// device agent that reads workload_identity from managed config is
 	// released, since the script it serves needs one. Removed once GA.

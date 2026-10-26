@@ -89018,6 +89018,7 @@ components:
           type: string
           description: The project the device's hooks and telemetry are sent to. Must be a project in the caller's organization.
           pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
       required:
         - agent_id
         - hooks_project_slug

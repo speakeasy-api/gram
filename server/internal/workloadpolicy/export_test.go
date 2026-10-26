@@ -1,6 +1,10 @@
 package workloadpolicy
 
-import "github.com/speakeasy-api/gram/server/internal/ratelimit"
+import (
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"log/slog"
+)
 
 // SetRegisterLimitersForTest swaps the enrollment limiters so a test can
 // observe which buckets a request consumes.
@@ -18,4 +22,11 @@ func RenderDeviceInstallScriptForTest(controlPlaneURL, hooksProjectSlug, joinTok
 		HooksProjectSlug: hooksProjectSlug,
 		ttl:              0,
 	})
+}
+
+// SetDeviceInstallLoggerForTest captures service and typed-cache diagnostics at
+// the same level so privacy tests include debug messages from cache cleanup.
+func SetDeviceInstallLoggerForTest(s *Service, logger *slog.Logger, storage cache.Cache) {
+	s.logger = logger
+	s.deviceInstallCache = cache.NewTypedObjectCache[deviceInstallRecord](logger, storage, cache.SuffixNone)
 }

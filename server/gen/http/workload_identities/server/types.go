@@ -6136,7 +6136,7 @@ func NewCreateDeviceJoinTokenPayload(body *CreateDeviceJoinTokenRequestBody, ses
 func NewCreateDeviceInstallCommandPayload(body *CreateDeviceInstallCommandRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.CreateDeviceInstallCommandPayload {
 	v := &workloadidentities.CreateDeviceInstallCommandPayload{
 		AgentID:          *body.AgentID,
-		HooksProjectSlug: *body.HooksProjectSlug,
+		HooksProjectSlug: types.Slug(*body.HooksProjectSlug),
 	}
 	if body.ExpiresInSeconds != nil {
 		v.ExpiresInSeconds = *body.ExpiresInSeconds
@@ -6334,6 +6334,11 @@ func ValidateCreateDeviceInstallCommandRequestBody(body *CreateDeviceInstallComm
 	}
 	if body.HooksProjectSlug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.hooks_project_slug", *body.HooksProjectSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.HooksProjectSlug != nil {
+		if utf8.RuneCountInString(*body.HooksProjectSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.hooks_project_slug", *body.HooksProjectSlug, utf8.RuneCountInString(*body.HooksProjectSlug), 40, false))
+		}
 	}
 	if body.ExpiresInSeconds != nil {
 		if *body.ExpiresInSeconds < 60 {

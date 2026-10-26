@@ -3493,7 +3493,7 @@ func NewCreateDeviceJoinTokenRequestBody(p *workloadidentities.CreateDeviceJoinT
 func NewCreateDeviceInstallCommandRequestBody(p *workloadidentities.CreateDeviceInstallCommandPayload) *CreateDeviceInstallCommandRequestBody {
 	body := &CreateDeviceInstallCommandRequestBody{
 		AgentID:          p.AgentID,
-		HooksProjectSlug: p.HooksProjectSlug,
+		HooksProjectSlug: string(p.HooksProjectSlug),
 		ExpiresInSeconds: p.ExpiresInSeconds,
 	}
 	{

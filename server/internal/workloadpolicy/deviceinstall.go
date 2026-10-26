@@ -13,6 +13,7 @@ package workloadpolicy
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -48,6 +49,10 @@ const (
 	// for the person who just asked for the command, on the box in front of
 	// them, so it does not need to outlive a short setup session.
 	deviceInstallCodeMaxTTL = 15 * time.Minute
+
+	// deviceInstallCleanupTimeout bounds compensating cache cleanup after a failed
+	// issuance, including when the request has already been canceled.
+	deviceInstallCleanupTimeout = 5 * time.Second
 
 	// deviceInstallCodeBytes sizes the install code. It bears a join token for
 	// its lifetime, so it carries as much entropy as one: 256 bits.
@@ -85,7 +90,11 @@ var _ cache.CacheableObject[deviceInstallRecord] = (*deviceInstallRecord)(nil)
 func (r deviceInstallRecord) CacheKey() string   { return deviceInstallCacheKey(r.Code) }
 func (r deviceInstallRecord) TTL() time.Duration { return r.ttl }
 
-func deviceInstallCacheKey(code string) string { return "deviceInstall:" + code }
+func deviceInstallCacheKey(code string) string {
+	// Typed-cache diagnostics include keys, so only a digest may identify this
+	// credential-bearing record outside its stored value.
+	return fmt.Sprintf("deviceInstall:%x", sha256.Sum256([]byte(code)))
+}
 
 // deviceInstallCodeExpiry is when an install code issued at now stops working:
 // deviceInstallCodeMaxTTL later, or when its join token expires if sooner, since
@@ -116,7 +125,7 @@ func (s *Service) CreateDeviceInstallCommand(ctx context.Context, payload *gen.C
 	}
 
 	if _, err := projectsrepo.New(s.db).GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{
-		Slug:           payload.HooksProjectSlug,
+		Slug:           string(payload.HooksProjectSlug),
 		OrganizationID: issuer.tenancy.organizationID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -132,9 +141,9 @@ func (s *Service) CreateDeviceInstallCommand(ctx context.Context, payload *gen.C
 	baseURL := strings.TrimRight(requestorigin.BaseURL(ctx, s.sharedHosts.ServerURL), "/")
 
 	var codeExpiresAt time.Time
-	// The record is stored inside the token's transaction, so a cache failure
-	// leaves no token behind, and a token is never committed without a way to
-	// reach it.
+	// Publish before commit so cache failures roll back token issuance. Any
+	// issuance failure also removes a possibly accepted cache write, even when
+	// Redis returned an error after applying it or the request was canceled.
 	issued, err := s.issueDeviceJoinToken(ctx, issuer, payload.ExpiresInSeconds, func(issued issuedDeviceJoinToken) error {
 		now := time.Now()
 		codeExpiresAt = deviceInstallCodeExpiry(now, issued.expiresAt)
@@ -142,22 +151,30 @@ func (s *Service) CreateDeviceInstallCommand(ctx context.Context, payload *gen.C
 			Code:             code,
 			JoinToken:        issued.token,
 			ControlPlaneURL:  baseURL,
-			HooksProjectSlug: payload.HooksProjectSlug,
+			HooksProjectSlug: string(payload.HooksProjectSlug),
 			ttl:              codeExpiresAt.Sub(now),
 		}
 		if err := s.deviceInstallCache.Store(ctx, record); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "error storing install command").LogError(ctx, s.logger)
+			// Backend errors may contain the credential-bearing record. Do not
+			// attach them to the response, logs, or trace span.
+			return oops.E(oops.CodeUnexpected, nil, "error storing install command").LogError(ctx, s.logger)
 		}
 		return nil
 	})
 	if err != nil {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deviceInstallCleanupTimeout)
+		defer cancel()
+		if cleanupErr := s.deviceInstallCache.DeleteByKey(cleanupCtx, deviceInstallCacheKey(code)); cleanupErr != nil {
+			// Backend errors may contain credentials from the cached value.
+			s.logger.ErrorContext(cleanupCtx, "remove install command after issuance failure", attr.SlogError(errors.New("install command cache cleanup failed")))
+		}
 		return nil, err
 	}
 
 	scriptURL := shellSingleQuote(baseURL + deviceInstallScriptPathPrefix + code)
 	return &gen.WorkloadDeviceInstallCommand{
-		Command:         "curl -fsSL " + scriptURL + " | sudo sh",
-		DownloadCommand: "curl -fsSL " + scriptURL + " -o " + deviceInstallScriptFile + "\nsudo sh " + deviceInstallScriptFile,
+		Command:         `(umask 077; script=$(mktemp) && trap 'rm -f "$script"' 0 && curl -fsSL ` + scriptURL + ` -o "$script" && sudo sh "$script")`,
+		DownloadCommand: `(umask 077; script=$(mktemp) && trap 'rm -f "$script"' 0 && curl -fsSL ` + scriptURL + ` -o "$script" && mv "$script" ` + deviceInstallScriptFile + ` && sudo sh ` + deviceInstallScriptFile + `)`,
 		CodeExpiresAt:   codeExpiresAt.UTC().Format(time.RFC3339),
 		JoinTokenID:     issued.id.String(),
 		TokenExpiresAt:  issued.expiresAt.UTC().Format(time.RFC3339),
@@ -300,7 +317,6 @@ const deviceInstallScriptTemplate = `#!/bin/sh
 #
 # Usage:
 #   sudo sh speakeasy-device-install.sh [--user NAME] [--force]
-#   curl -fsSL <url> | sudo sh -s -- [--user NAME] [--force]
 #
 #   --user NAME  The account that runs this machine's AI tools. Defaults to
 #                the account that ran sudo.
@@ -384,19 +400,23 @@ fi
 
 # 3. Install speakeasyd.
 echo "Installing speakeasyd to /usr/local/bin..."
-curl -fsSL "$installer_url" | sh -s -- --install-dir /usr/local/bin
+umask 077
+work_dir="$(mktemp -d)"
+trap 'rm -rf "$work_dir"' 0
+trap 'exit 130' INT
+trap 'exit 143' TERM
+curl -fsSL "$installer_url" -o "$work_dir/install.sh"
+sh "$work_dir/install.sh" --install-dir /usr/local/bin
 
 # 4. Managed config. Written with a private umask to a temporary file, then
 # installed with its final owner and mode in one step.
-umask 077
-managed_tmp="$(mktemp)"
-trap 'rm -f "$managed_tmp"' EXIT
+managed_tmp="$work_dir/managed.json"
 cat >"$managed_tmp" <<'@@DELIMITER@@'
 @@MANAGED_CONFIG@@
 @@DELIMITER@@
 if [ -e "$managed_config" ]; then
 	backup="$managed_config.bak.$(date +%Y%m%d%H%M%S)"
-	cp -p "$managed_config" "$backup"
+	install -m 0600 "$managed_config" "$backup"
 	echo "Backed up the existing managed config to $backup."
 fi
 install -d -o root -g root -m 0755 /etc/speakeasy

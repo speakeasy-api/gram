@@ -35831,7 +35831,7 @@ func workloadIdentitiesCreateDeviceInstallCommandUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities create-device-install-command --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61,\n      \"hooks_project_slug\": \"0\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities create-device-install-command --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61,\n      \"hooks_project_slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesListDeviceJoinTokensUsage() {

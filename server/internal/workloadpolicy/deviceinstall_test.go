@@ -1,24 +1,36 @@
 package workloadpolicy_test
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	rediscache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	srv "github.com/speakeasy-api/gram/server/gen/http/workload_identities/server"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -43,7 +55,7 @@ func callerProjectSlug(t *testing.T, ctx context.Context) string {
 func installCommandPayload(agentID uuid.UUID, slug string, expiresIn int) *gen.CreateDeviceInstallCommandPayload {
 	return &gen.CreateDeviceInstallCommandPayload{
 		AgentID:          agentID.String(),
-		HooksProjectSlug: slug,
+		HooksProjectSlug: types.Slug(slug),
 		ExpiresInSeconds: expiresIn,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -104,10 +116,7 @@ func TestCreateDeviceInstallCommand_ServesTheScriptOnceAndTheTokenEnrolls(t *tes
 	require.Equal(t, beforeCreate+1, afterCreate)
 
 	code := installCode(t, res.Command)
-	require.Equal(t, "curl -fsSL '"+testServerURL+deviceInstallPathPrefix+code+"' | sudo sh", res.Command)
-	require.Equal(t,
-		"curl -fsSL '"+testServerURL+deviceInstallPathPrefix+code+"' -o speakeasy-device-install.sh\nsudo sh speakeasy-device-install.sh",
-		res.DownloadCommand)
+	require.Equal(t, code, installCode(t, res.DownloadCommand))
 
 	rec := fetchInstallScript(t, ti, code)
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -160,7 +169,7 @@ func TestCreateDeviceInstallCommand_CodeLifetimeIsCappedByTheToken(t *testing.T)
 	codeExpiry, err := time.Parse(time.RFC3339, long.CodeExpiresAt)
 	require.NoError(t, err)
 	require.WithinDuration(t, time.Now().Add(15*time.Minute), codeExpiry, 5*time.Second)
-	ttl, err := ti.redis.TTL(ctx, "deviceInstall:"+installCode(t, long.Command)+":").Result()
+	ttl, err := ti.redis.TTL(ctx, fmt.Sprintf("deviceInstall:%x:", sha256.Sum256([]byte(installCode(t, long.Command))))).Result()
 	require.NoError(t, err)
 	require.InDelta(t, (15 * time.Minute).Seconds(), ttl.Seconds(), 5)
 
@@ -168,7 +177,7 @@ func TestCreateDeviceInstallCommand_CodeLifetimeIsCappedByTheToken(t *testing.T)
 	short, err := ti.service.CreateDeviceInstallCommand(ctx, installCommandPayload(agentID, slug, 60))
 	require.NoError(t, err)
 	require.Equal(t, short.TokenExpiresAt, short.CodeExpiresAt)
-	ttl, err = ti.redis.TTL(ctx, "deviceInstall:"+installCode(t, short.Command)+":").Result()
+	ttl, err = ti.redis.TTL(ctx, fmt.Sprintf("deviceInstall:%x:", sha256.Sum256([]byte(installCode(t, short.Command))))).Result()
 	require.NoError(t, err)
 	require.Greater(t, ttl, time.Duration(0))
 	require.LessOrEqual(t, ttl, time.Minute)
@@ -319,4 +328,225 @@ func TestRenderDeviceInstallScript_IsValidShell(t *testing.T) {
 	cmd.Stdin = strings.NewReader(script)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
+}
+
+// installPublicationFailure simulates an accepted Redis SET whose response is
+// lost, or request cancellation between publication and the database commit.
+type installPublicationFailure struct {
+	cancel         context.CancelFunc
+	storeError     bool
+	key            string
+	code           string
+	token          string
+	cleanupLive    bool
+	cleanupBounded bool
+}
+
+func (h *installPublicationFailure) DialHook(next redis.DialHook) redis.DialHook { return next }
+func (h *installPublicationFailure) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return next
+}
+func (h *installPublicationFailure) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		if cmd.Name() == "set" {
+			key, _ := cmd.Args()[1].(string)
+			if strings.HasPrefix(key, "deviceInstall:") {
+				if err := next(ctx, cmd); err != nil {
+					return err
+				}
+				h.key = key
+				var record struct {
+					Code      string `json:"code"`
+					JoinToken string `json:"join_token"`
+				}
+				raw, ok := cmd.Args()[2].([]byte)
+				if !ok {
+					return errors.New("unexpected cache encoding")
+				}
+				if err := rediscache.New(&rediscache.Options{}).Unmarshal(raw, &record); err != nil {
+					return fmt.Errorf("decode published install record: %w", err)
+				}
+				h.code, h.token = record.Code, record.JoinToken
+				h.cancel()
+				if h.storeError {
+					return fmt.Errorf("lost cache write response: %s %s", h.code, h.token)
+				}
+				return nil
+			}
+		}
+		if cmd.Name() == "del" && cmd.Args()[1] == h.key {
+			h.cleanupLive = ctx.Err() == nil
+			_, h.cleanupBounded = ctx.Deadline()
+		}
+		return next(ctx, cmd)
+	}
+}
+
+func TestCreateDeviceInstallCommand_CleansPublicationOnIssuanceFailure(t *testing.T) {
+	t.Parallel()
+	for _, storeError := range []bool{false, true} {
+		t.Run(map[bool]string{false: "commit cancellation", true: "ambiguous cache failure"}[storeError], func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			withDeviceInstallFlag(ti)
+			agentID := newAgent(t, ctx, ti, "install-agent")
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+			workloadpolicy.SetDeviceInstallLoggerForTest(ti.service, logger, cache.NewRedisCacheAdapter(ti.redis))
+			requestCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			hook := &installPublicationFailure{cancel: cancel, storeError: storeError}
+			ti.redis.AddHook(hook)
+			_, err := ti.service.CreateDeviceInstallCommand(requestCtx, installCommandPayload(agentID, callerProjectSlug(t, ctx), 3600))
+			require.Error(t, err)
+			require.NotEmpty(t, hook.key)
+			require.NotEmpty(t, hook.code)
+			require.NotEmpty(t, hook.token)
+			require.NotContains(t, hook.key, hook.code)
+			for _, secret := range []string{hook.code, hook.token} {
+				require.NotContains(t, err.Error(), secret)
+				require.NotContains(t, logs.String(), secret)
+			}
+			require.True(t, hook.cleanupLive, "cleanup must survive request cancellation")
+			require.True(t, hook.cleanupBounded, "cleanup must have a deadline")
+			remaining, err := ti.redis.Exists(ctx, hook.key).Result()
+			require.NoError(t, err)
+			require.Zero(t, remaining)
+			count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWorkloadDeviceJoinTokenCreate)
+			require.NoError(t, err)
+			require.Zero(t, count, "failed issuance must roll back its audit record")
+		})
+	}
+}
+
+func TestCreateDeviceInstallCommand_ValidatesSharedProjectSlugLimit(t *testing.T) {
+	t.Parallel()
+	for _, size := range []int{40, 41} {
+		t.Run(strings.Repeat("a", size), func(t *testing.T) {
+			t.Parallel()
+			err := srv.ValidateCreateDeviceInstallCommandRequestBody(&srv.CreateDeviceInstallCommandRequestBody{
+				AgentID: new(uuid.NewString()), HooksProjectSlug: new(strings.Repeat("a", size)),
+			})
+			if size == 40 {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, "40")
+			}
+		})
+	}
+}
+
+func writeInstallTestTool(t *testing.T, dir, name, script string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+script), 0o700))
+}
+
+func TestCreateDeviceInstallCommand_CheckedDownloads(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	withDeviceInstallFlag(ti)
+	agentID := newAgent(t, ctx, ti, "install-agent")
+	result, err := ti.service.CreateDeviceInstallCommand(ctx, installCommandPayload(agentID, callerProjectSlug(t, ctx), 3600))
+	require.NoError(t, err)
+	for name, command := range map[string]string{"command": result.Command, "download": result.DownloadCommand} {
+		for _, curlStatus := range []string{"0", "22"} {
+			t.Run(name+"/curl-"+curlStatus, func(t *testing.T) {
+				t.Parallel()
+				root := t.TempDir()
+				tmp := filepath.Join(root, "tmp")
+				require.NoError(t, os.Mkdir(tmp, 0o700))
+				writeInstallTestTool(t, root, "curl", `while [ "$1" != -o ]; do shift; done
+printf 'touch "$INSTALL_TEST_EXECUTED"\n' >"$2"
+exit "$INSTALL_TEST_CURL_STATUS"
+`)
+				writeInstallTestTool(t, root, "sudo", `exec "$@"`)
+				oldScript := filepath.Join(root, "speakeasy-device-install.sh")
+				require.NoError(t, os.WriteFile(oldScript, []byte(`touch "$INSTALL_TEST_EXECUTED"`), 0o600))
+				cmd := exec.CommandContext(t.Context(), "sh", "-c", command)
+				cmd.Dir = root
+				cmd.Env = append(os.Environ(), "PATH="+root+":"+os.Getenv("PATH"), "TMPDIR="+tmp, "INSTALL_TEST_EXECUTED="+filepath.Join(root, "executed"), "INSTALL_TEST_CURL_STATUS="+curlStatus)
+				out, err := cmd.CombinedOutput()
+				if curlStatus == "0" {
+					require.NoError(t, err, string(out))
+					require.FileExists(t, filepath.Join(root, "executed"))
+					if name == "download" {
+						info, err := os.Stat(oldScript)
+						require.NoError(t, err)
+						require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+					}
+				} else {
+					require.Error(t, err, string(out))
+					require.NoFileExists(t, filepath.Join(root, "executed"))
+				}
+				files, err := os.ReadDir(tmp)
+				require.NoError(t, err)
+				require.Empty(t, files, "partial credential-bearing downloads must be removed")
+			})
+		}
+	}
+}
+
+func TestRenderDeviceInstallScript_CheckedReleaseDownloadAndPrivateBackup(t *testing.T) {
+	t.Parallel()
+	for _, downloadFails := range []bool{false, true} {
+		t.Run(map[bool]string{false: "private backup", true: "failed release download"}[downloadFails], func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			toolsDir := filepath.Join(root, "tools")
+			require.NoError(t, os.Mkdir(toolsDir, 0o700))
+			configDir := filepath.Join(root, "config")
+			require.NoError(t, os.Mkdir(configDir, 0o700))
+			config := filepath.Join(configDir, "managed.json")
+			require.NoError(t, os.WriteFile(config, []byte("old credential"), 0o644))
+			require.NoError(t, os.Chmod(config, 0o644))
+			realInstall, err := exec.LookPath("install")
+			require.NoError(t, err)
+			writeInstallTestTool(t, toolsDir, "uname", "echo Linux")
+			writeInstallTestTool(t, toolsDir, "id", `if [ "$#" -eq 1 ]; then echo 0; else echo 1000; fi`)
+			writeInstallTestTool(t, toolsDir, "getent", `printf 'example:x:1000:1000::%s:/bin/sh\n' "$INSTALL_TEST_HOME"`)
+			// Stop at service setup: this test must never alter a host service.
+			writeInstallTestTool(t, toolsDir, "loginctl", "exit 23")
+			writeInstallTestTool(t, toolsDir, "install", `if [ "$1" = -d ]; then shift; mode=directory; else mode=file; fi
+if [ "$1" = -D ]; then shift; fi
+while [ "$1" = -o ] || [ "$1" = -g ]; do shift 2; done
+if [ "$mode" = directory ]; then exec "$INSTALL_TEST_INSTALL" -d "$@"; fi
+exec "$INSTALL_TEST_INSTALL" "$@"
+`)
+			writeInstallTestTool(t, toolsDir, "curl", `while [ "$1" != -o ]; do shift; done
+printf 'touch "$INSTALL_TEST_EXECUTED"\n' >"$2"
+exit "$INSTALL_TEST_CURL_STATUS"
+`)
+			script, err := workloadpolicy.RenderDeviceInstallScriptForTest("https://cp.example", "hooks-project", sampleJoinToken)
+			require.NoError(t, err)
+			script = strings.ReplaceAll(script, "/etc/speakeasy", configDir)
+			script = strings.ReplaceAll(script, "/usr/local/bin", filepath.Join(root, "bin"))
+			cmd := exec.CommandContext(t.Context(), "sh", "-s", "--", "--force")
+			cmd.Stdin = strings.NewReader(script)
+			status := "0"
+			if downloadFails {
+				status = "22"
+			}
+			cmd.Env = append(os.Environ(), "PATH="+toolsDir+":"+os.Getenv("PATH"), "SUDO_USER=example", "INSTALL_TEST_HOME="+root, "INSTALL_TEST_INSTALL="+realInstall, "INSTALL_TEST_EXECUTED="+filepath.Join(root, "executed"), "INSTALL_TEST_CURL_STATUS="+status)
+			out, err := cmd.CombinedOutput()
+			require.Error(t, err, string(out))
+			backups, err := filepath.Glob(config + ".bak.*")
+			require.NoError(t, err)
+			if downloadFails {
+				require.NoFileExists(t, filepath.Join(root, "executed"))
+				require.Empty(t, backups)
+				content, err := os.ReadFile(config)
+				require.NoError(t, err)
+				require.Equal(t, "old credential", string(content))
+				return
+			}
+			require.FileExists(t, filepath.Join(root, "executed"))
+			require.Len(t, backups, 1)
+			info, err := os.Stat(backups[0])
+			require.NoError(t, err)
+			require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+			content, err := os.ReadFile(config)
+			require.NoError(t, err)
+			require.Contains(t, string(content), sampleJoinToken)
+		})
+	}
 }

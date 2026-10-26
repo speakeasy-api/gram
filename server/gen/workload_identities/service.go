@@ -170,7 +170,7 @@ type CreateDeviceInstallCommandPayload struct {
 	AgentID string
 	// The project the device's hooks and telemetry are sent to. Must be a project
 	// in the caller's organization.
-	HooksProjectSlug string
+	HooksProjectSlug types.Slug
 	// How long the join token behind the command stays redeemable. Defaults to one
 	// hour.
 	ExpiresInSeconds int
