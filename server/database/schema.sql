@@ -4638,6 +4638,10 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- absent from the registration UI.
   allow_wildcard_admission boolean NOT NULL DEFAULT true,
 
+  -- Explicitly allow repeated exchanges of valid assertions for this issuer.
+  -- NULL and false retain single-use assertion identifier enforcement.
+  allow_assertion_reuse boolean DEFAULT false,
+
   -- Where assertions' signing keys come from. NULL is the remote jwks_uri;
   -- 'device_keys' verifies each assertion against the key registered for its
   -- own subject in workload_device_keys, so one device cannot sign as another.
@@ -4672,6 +4676,8 @@ COMMENT ON COLUMN workload_issuers.issuer IS '@access: restricted';
 COMMENT ON COLUMN workload_issuers.jwks_uri IS '@access: restricted';
 COMMENT ON COLUMN workload_issuers.key_source IS '@access: confidential';
 COMMENT ON COLUMN workload_issuers.allow_wildcard_admission IS '@access: confidential';
+COMMENT ON COLUMN workload_issuers.allow_assertion_reuse IS 'Whether assertions carrying a jti or uti may be exchanged repeatedly until expiry. NULL is false.
+@access: confidential';
 COMMENT ON COLUMN workload_issuers.metadata IS '@access: opaque-restricted';
 COMMENT ON COLUMN workload_issuers.created_at IS '@access: confidential';
 COMMENT ON COLUMN workload_issuers.updated_at IS '@access: confidential';
