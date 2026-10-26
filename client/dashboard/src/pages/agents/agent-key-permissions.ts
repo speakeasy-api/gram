@@ -41,16 +41,18 @@ function isBlock(scope: string): boolean {
 
 /**
  * A delegable candidate that is not tied to the servers picked in the key
- * wizard. Server discovery only ever yields `mcp:connect`, so everything else
+ * wizard. MCP grants must come from the selected-server inventory; everything else
  * the agent may delegate (viewing projects, running inference…) comes from
  * unscoped discovery and is offered alongside the servers.
  */
 export function isAgentWidePermission(grant: {
   scope: string;
+  selector: AgentPolicySelector;
   effect?: string;
 }): boolean {
   return (
-    grant.scope !== "mcp:connect" &&
+    !grant.scope.startsWith("mcp:") &&
+    !grant.selector.resourceKind.startsWith("mcp") &&
     !isBlock(grant.scope) &&
     (grant.effect === undefined || grant.effect === "allow")
   );
@@ -66,14 +68,17 @@ function holds(grants: ScopedGrant[], wanted: ScopedGrant): boolean {
   return grants.some(
     ({ scope, selector }) =>
       scope === wanted.scope &&
-      selector.resourceKind === wanted.selector.resourceKind &&
-      (selector.resourceId === ANY_RESOURCE ||
-        selector.resourceId === wanted.selector.resourceId),
+      Object.entries(selector).every(
+        ([dimension, value]) =>
+          value === undefined ||
+          value === ANY_RESOURCE ||
+          value === wanted.selector[dimension as keyof AgentPolicySelector],
+      ),
   );
 }
 
 /**
- * Agent permissions added after the key was issued that it does not carry.
+ * Agent permissions added or broadened after the key was issued that it does not carry.
  * A key stores its own grants at issuance and every request is limited to
  * what the key, the agent and its owner all allow, so these never reach the
  * key until it is reissued. Permissions the agent already had when the key
@@ -89,7 +94,8 @@ export function permissionsMissingFromKey(
     (grant) =>
       grant.effect === "allow" &&
       !isBlock(grant.scope) &&
-      grant.createdAt.getTime() > key.createdAt.getTime() &&
+      Math.max(grant.createdAt.getTime(), grant.updatedAt.getTime()) >
+        key.createdAt.getTime() &&
       !holds(issued, grant),
   );
 }

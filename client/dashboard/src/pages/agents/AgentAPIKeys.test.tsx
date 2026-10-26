@@ -1129,7 +1129,14 @@ describe("what each key can do", () => {
   it("does not flag a later permission the key already holds", async () => {
     mocks.list.mockResolvedValue({ keys: [issuedKey] });
     mocks.listPolicyGrants.mockResolvedValue([
-      policyGrant("mcp:connect", new Date("2026-02-01"), "server_one"),
+      {
+        ...policyGrant("mcp:connect", new Date("2026-02-01"), "server_one"),
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_one",
+          projectId: "project_one",
+        },
+      },
     ]);
     setup(manager);
     await screen.findByText("Use tools on Server one", { exact: false });
@@ -1194,6 +1201,48 @@ describe("what each key can do", () => {
     expect(form.requestedGrants).toEqual(
       expect.arrayContaining([agentWideGrant, creationGrant]),
     );
+  });
+
+  it("hides cached missing permissions and Reissue after policy access is removed", async () => {
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    mocks.listPolicyGrants.mockResolvedValue([
+      policyGrant("project:read", new Date("2026-02-01")),
+    ]);
+    const { change } = setup(manager);
+    await screen.findByText(/Missing:/);
+    change(agent);
+    expect(screen.queryByText(/Missing:/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Reissue API key/ }),
+    ).toBeNull();
+    expect(screen.getByText("Issued grants:")).toBeTruthy();
+  });
+
+  it("blocks replacement issuance when the key lookup fails until a successful retry", async () => {
+    mocks.list.mockRejectedValue(new Error("unavailable"));
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <AgentAPIKeys agent={agent} creation replaceKeyId={issuedKey.id} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("button", { name: "Retry key" });
+    expect(screen.queryByText(/has been revoked or has expired/)).toBeNull();
+    const next = screen.getByRole("button", {
+      name: "Continue",
+    }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    fireEvent.click(next);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.rotate).not.toHaveBeenCalled();
+    mocks.list.mockResolvedValue({ keys: [issuedKey] });
+    fireEvent.click(screen.getByRole("button", { name: "Retry key" }));
+    expect(await screen.findByText("Replacing Example key")).toBeTruthy();
+    expect(screen.queryByText(/has been revoked or has expired/)).toBeNull();
   });
 
   it("issues a new key when the key to reissue is gone", async () => {

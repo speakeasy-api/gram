@@ -179,7 +179,9 @@ function AgentAPIKeysContent({
   const [revoke, setRevoke] = useState<Key | null>(null);
   const keys = useAgentKeys(agent);
   const policy = useAgentPolicyGrants(agent);
-  const agentGrants = policy.data && !policy.isError ? policy.data : [];
+  const canReadPolicy = agent.permissions.write;
+  const agentGrants =
+    canReadPolicy && policy.data && !policy.isError ? policy.data : [];
   // Discovery is authorize-gated and already intersects the live agent, owner
   // and caller, so credential issuance never depends on reading agent policy.
   const resources = inventory.map((server) => ({
@@ -240,18 +242,21 @@ function AgentAPIKeysContent({
   }, [discoveryComplete, delegable.dataUpdatedAt]);
   const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
   const rotate = useKeysRotateMutation({ gcTime: 0, retry: false });
+  const isIssuing = create.isPending || rotate.isPending;
   // Read once the list has loaded: a key revoked or expired since the reissue
   // link was followed is no longer there to replace, and issuance then
   // creates a new key instead of failing at the last step.
+  const replacementReady =
+    !replaceKeyId || (keys.isSuccess && !keys.isFetching);
   const replacing = replaceKeyId
     ? keys.data?.keys.find((key) => key.id === replaceKeyId)
     : undefined;
   const replacementGone =
-    !!replaceKeyId && !!keys.data && !replacing && !issued;
+    !!replaceKeyId && replacementReady && !replacing && !issued;
   const issuance = replacing ? rotate : create;
   // Resetting mutation state after issuance must not unlock header navigation
   // while the post-issue inventory refresh is still in flight.
-  const navigationBusy = issuance.isPending || (issued && keys.isFetching);
+  const navigationBusy = isIssuing || (issued && keys.isFetching);
   useEffect(() => {
     onBusy?.(navigationBusy);
   }, [navigationBusy, onBusy]);
@@ -273,6 +278,9 @@ function AgentAPIKeysContent({
     void keys.refetch();
     void queryClient.invalidateQueries({
       queryKey: ["@gram/client", "keys", "list"],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["agent-key-search", organizationId],
     });
   };
   const close = () => {
@@ -313,8 +321,10 @@ function AgentAPIKeysContent({
   // to grant) to the ones they can (pick a server, name the key).
   const blockedReason: string | null = !canIssue
     ? "You cannot issue keys for this agent."
-    : replaceKeyId && keys.isPending
-      ? "Loading the key you are replacing…"
+    : !replacementReady
+      ? keys.isError
+        ? "Could not load the key you are replacing. Retry before continuing."
+        : "Loading the key you are replacing…"
       : !discoveryComplete
         ? "Loading what this agent can be delegated…"
         : serversBusy
@@ -365,7 +375,8 @@ function AgentAPIKeysContent({
   const issue = (review = false) => {
     if (
       !canIssue ||
-      issuance.isPending ||
+      !replacementReady ||
+      isIssuing ||
       issued ||
       !accountsReady ||
       !servers.length ||
@@ -621,7 +632,7 @@ function AgentAPIKeysContent({
                   }
                   trailing={
                     <span className="flex items-center gap-2">
-                      {missing.length > 0 && canIssue && (
+                      {canReadPolicy && missing.length > 0 && canIssue && (
                         <Button
                           size="sm"
                           variant="secondary"
@@ -645,7 +656,11 @@ function AgentAPIKeysContent({
                     </span>
                   }
                 >
-                  <AgentKeyPermissions apiKey={key} missing={missing} />
+                  <AgentKeyPermissions
+                    apiKey={key}
+                    missing={missing}
+                    canReadPolicy={canReadPolicy}
+                  />
                 </IdentityPanelRow>
               );
             })
@@ -685,11 +700,22 @@ function AgentAPIKeysContent({
               {error}
             </p>
           )}
+          {replaceKeyId && keys.isError && !issued && (
+            <Alert
+              variant="warning"
+              title="Could not load the key you are replacing"
+            >
+              <Button variant="secondary" onClick={() => void keys.refetch()}>
+                Retry key
+              </Button>
+            </Alert>
+          )}
           {replacing && !issued && (
             <Alert variant="warning" title={`Replacing ${replacing.name}`}>
               <div className="space-y-2">
                 <AgentKeyPermissions
                   apiKey={replacing}
+                  canReadPolicy={canReadPolicy}
                   missing={permissionsMissingFromKey(replacing, agentGrants)}
                 />
                 <p>
@@ -717,7 +743,7 @@ function AgentAPIKeysContent({
                     <button
                       type="button"
                       aria-current={step === index ? "step" : undefined}
-                      disabled={index >= step || issuance.isPending}
+                      disabled={index >= step || isIssuing}
                       onClick={() => {
                         returnToStep(index);
                         setError(null);
@@ -810,7 +836,7 @@ function AgentAPIKeysContent({
                     <Select
                       value={expiryDays}
                       onValueChange={setExpiryDays}
-                      disabled={issuance.isPending}
+                      disabled={isIssuing}
                     >
                       <SelectTrigger id="agent-key-expiry">
                         <SelectValue />
@@ -831,7 +857,7 @@ function AgentAPIKeysContent({
                           type="date"
                           value={customExpiry}
                           onChange={setCustomExpiry}
-                          disabled={issuance.isPending}
+                          disabled={isIssuing}
                         />
                       </label>
                     )}
@@ -846,7 +872,7 @@ function AgentAPIKeysContent({
                     grants={scopedGrants}
                     narrowings={narrowings}
                     onChangeNarrowings={setNarrowings}
-                    disabled={issuance.isPending}
+                    disabled={isIssuing}
                     onRetry={() => void delegable.refetch()}
                   />
                 </>
@@ -864,7 +890,7 @@ function AgentAPIKeysContent({
                   onEditServers={() => returnToStep(0)}
                   onEditAccounts={() => returnToStep(1)}
                   onEditAccess={() => returnToStep(2)}
-                  disabled={issuance.isPending}
+                  disabled={isIssuing}
                 />
               )}
             </form>
@@ -875,7 +901,7 @@ function AgentAPIKeysContent({
                 {step > 0 && (
                   <Button
                     variant="secondary"
-                    disabled={issuance.isPending}
+                    disabled={isIssuing}
                     onClick={() => {
                       returnToStep(step - 1);
                       setError(null);
@@ -884,11 +910,7 @@ function AgentAPIKeysContent({
                     Back
                   </Button>
                 )}
-                <Button
-                  variant="tertiary"
-                  disabled={issuance.isPending}
-                  onClick={close}
-                >
+                <Button variant="tertiary" disabled={isIssuing} onClick={close}>
                   Cancel
                 </Button>
               </div>
@@ -896,19 +918,19 @@ function AgentAPIKeysContent({
                 {/* A disabled primary with no stated reason is the wizard's
                     commonest dead end, so the gate says what it is waiting
                     for rather than leaving the button silently inert. */}
-                {blockedReason && !issuance.isPending && (
+                {blockedReason && !isIssuing && (
                   <Text muted small>
                     {blockedReason}
                   </Text>
                 )}
                 <Button
                   title={blockedReason ?? undefined}
-                  disabled={!!blockedReason || issuance.isPending}
+                  disabled={!!blockedReason || isIssuing}
                   onClick={() =>
                     step < 2 ? setStep(step + 1) : issue(step === 2)
                   }
                 >
-                  {issuance.isPending
+                  {isIssuing
                     ? replacing
                       ? "Reissuing…"
                       : "Creating…"

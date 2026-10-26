@@ -252,7 +252,7 @@ function OtherPermissions({
           Edit access
         </Button>
       </div>
-      <ul className="divide-y rounded-lg border text-sm">
+      <ul className="divide-y border text-sm">
         {summarizePermissions(grants, maps).map((line) => (
           <li key={line} className="px-4 py-3">
             {line}

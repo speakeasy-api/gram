@@ -55,7 +55,15 @@ export function useAgentKeys(
 export function useKeysMissingPermissions(agent: ManagedAgent): Key[] {
   const policy = useAgentPolicyGrants(agent);
   const keys = useAgentKeys(agent);
-  if (!policy.data || policy.isError || !keys.data) return [];
+  if (
+    !agent.permissions.write ||
+    !agent.permissions.authorize ||
+    !policy.data ||
+    policy.isError ||
+    !keys.data ||
+    keys.isError
+  )
+    return [];
   return keys.data.keys.filter(
     (key) => permissionsMissingFromKey(key, policy.data).length > 0,
   );

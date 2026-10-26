@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
+import type { AgentPolicySelector } from "@gram/client/models/components/agentpolicyselector.js";
 import type { Key } from "@gram/client/models/components/key.js";
 import type { ResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
 import {
@@ -69,7 +70,9 @@ describe("summarizePermissions", () => {
 
 describe("permissionsMissingFromKey", () => {
   const issuedAt = new Date("2026-01-10T00:00:00Z");
-  const key = (requested: ReturnType<typeof mcp>[]): Key =>
+  const key = (
+    requested: { scope: string; selector: AgentPolicySelector }[],
+  ): Key =>
     ({
       id: "key_example",
       name: "Example key",
@@ -116,6 +119,54 @@ describe("permissionsMissingFromKey", () => {
       ]),
     ).toEqual([]);
   });
+  it.each([
+    { tool: "read-file" },
+    { disposition: "read_only" },
+    { projectId: "project_one" },
+    { clientType: "remote_session" },
+    { connectionOwner: "owner" },
+    { upstreamClient: "client" },
+    { serverIdentity: "server" },
+    { serverUrl: "https://example.test/mcp" },
+  ] satisfies Partial<AgentPolicySelector>[])(
+    "does not mistake a narrowed selector %j for a broader grant",
+    (selector) => {
+      const wanted = grant("mcp:connect", "server_a", later);
+      const issued = {
+        ...mcp("server_a"),
+        selector: { ...mcp("server_a").selector, ...selector },
+      };
+      expect(permissionsMissingFromKey(key([issued]), [wanted])).toEqual([
+        wanted,
+      ]);
+    },
+  );
+  it("recognizes wildcard dimensions as covering a narrower grant", () => {
+    const wanted = grant("mcp:connect", "server_a", later);
+    wanted.selector = {
+      ...wanted.selector,
+      tool: "read-file",
+      projectId: "project_one",
+    };
+    expect(
+      permissionsMissingFromKey(
+        key([
+          {
+            ...mcp("*"),
+            selector: { ...mcp("*").selector, tool: "*", projectId: "*" },
+          },
+        ]),
+        [wanted],
+      ),
+    ).toEqual([]);
+  });
+  it("reports a grant broadened after issuance even when it was created earlier", () => {
+    const wanted = grant("mcp:connect", "*", earlier);
+    wanted.updatedAt = later;
+    expect(permissionsMissingFromKey(key([mcp("server_a")]), [wanted])).toEqual(
+      [wanted],
+    );
+  });
   it("never flags a key that follows the agent's live permissions", () => {
     expect(
       permissionsMissingFromKey(key([]), [grant("project:read", "*", later)]),
@@ -125,14 +176,45 @@ describe("permissionsMissingFromKey", () => {
 
 describe("isAgentWidePermission", () => {
   it("leaves server access and blocks to the server step", () => {
-    expect(isAgentWidePermission({ scope: "mcp:connect" })).toBe(false);
-    expect(isAgentWidePermission({ scope: "project:blocked_read" })).toBe(
-      false,
-    );
     expect(
-      isAgentWidePermission({ scope: "project:read", effect: "deny" }),
+      isAgentWidePermission({
+        selector: { resourceKind: "project", resourceId: "*" },
+        scope: "mcp:connect",
+      }),
     ).toBe(false);
-    expect(isAgentWidePermission({ scope: "project:read" })).toBe(true);
+    expect(
+      isAgentWidePermission({
+        selector: { resourceKind: "project", resourceId: "*" },
+        scope: "project:blocked_read",
+      }),
+    ).toBe(false);
+    expect(
+      isAgentWidePermission({
+        selector: { resourceKind: "project", resourceId: "*" },
+        scope: "project:read",
+        effect: "deny",
+      }),
+    ).toBe(false);
+    expect(
+      isAgentWidePermission({
+        selector: { resourceKind: "project", resourceId: "*" },
+        scope: "project:read",
+      }),
+    ).toBe(true);
+    for (const scope of ["mcp:read", "mcp:write", "mcp:auth"]) {
+      expect(
+        isAgentWidePermission({
+          scope,
+          selector: { resourceKind: "mcp", resourceId: "*" },
+        }),
+      ).toBe(false);
+    }
+    expect(
+      isAgentWidePermission({
+        scope: "project:read",
+        selector: { resourceKind: "mcp", resourceId: "*" },
+      }),
+    ).toBe(false);
     expect(permissionLabel("project:read")).toBe("View projects");
     expect(permissionLabel("future:scope")).toBe("future:scope");
   });

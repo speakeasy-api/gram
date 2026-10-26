@@ -12,12 +12,15 @@ import { keyGrants, summarizePermissions } from "./agent-key-permissions";
 export function AgentKeyPermissions({
   apiKey,
   missing,
+  canReadPolicy,
 }: {
   apiKey: Key;
   missing: AgentPolicyGrant[];
+  canReadPolicy: boolean;
 }): JSX.Element {
   const grants = keyGrants(apiKey);
-  const names = [...(grants ?? []), ...missing];
+  const visibleMissing = canReadPolicy ? missing : [];
+  const names = [...(grants ?? []), ...visibleMissing];
   const maps = useResourceLinkMaps(
     names.some(
       ({ selector }) =>
@@ -33,15 +36,16 @@ export function AgentKeyPermissions({
   return (
     <div className="space-y-1 text-xs">
       <p className="text-muted-foreground break-words">
-        <span className="text-foreground">Can:</span>{" "}
+        <span className="text-foreground">Issued grants:</span>{" "}
         {summarizePermissions(grants, maps).join(" · ")}
       </p>
-      {missing.length > 0 && (
+      {visibleMissing.length > 0 && (
         <p className="text-default-warning break-words">
           <span className="font-medium">Missing:</span>{" "}
-          {summarizePermissions(missing, maps).join(" · ")}. Added to the agent
-          after this key was issued, so the key cannot use{" "}
-          {missing.length === 1 ? "it" : "them"} until you reissue it.
+          {summarizePermissions(visibleMissing, maps).join(" · ")}. Added or
+          broadened on the agent after this key was issued, so the key cannot
+          use {visibleMissing.length === 1 ? "it" : "them"} until you reissue
+          it.
         </p>
       )}
     </div>

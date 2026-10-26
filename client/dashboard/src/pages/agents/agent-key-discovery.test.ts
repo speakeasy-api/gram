@@ -207,6 +207,8 @@ describe("credential discovery beyond servers", () => {
               projectRead,
               // Server access only ever comes from the scoped batches.
               pinned("*", first.projectId),
+              { ...pinned("*", first.projectId), scope: "mcp:read" },
+              { ...pinned("*", first.projectId), scope: "mcp:write" },
               { ...projectRead, scope: "project:blocked_read" },
             ],
     );

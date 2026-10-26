@@ -164,9 +164,9 @@ export function AgentIdentityPermissions({
       error={canRead && grants.isError && rows.length === 0}
       refreshFailed={canRead && grants.isError && rows.length > 0}
       onRetry={() => void grants.refetch()}
-      footer="A request is allowed only what the key, these permissions and the owner's current permissions all allow, while the agent is active. Each key keeps the permissions it was issued with: removing one here applies to every key at once, but adding one reaches a key only when it is reissued."
+      footer="A request is allowed only what the key, these permissions and the owner's current permissions all allow, while the agent is active. Keys with stored grants keep their issuance permissions: removing one here applies at once, but adding one requires reissuing those keys. Keys without stored grants follow the agent’s current permissions."
     >
-      {outdated.length > 0 && (
+      {canRead && outdated.length > 0 && (
         <div className="border-border border-b px-4 py-3">
           <Alert
             variant="warning"
