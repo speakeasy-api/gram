@@ -307,7 +307,7 @@ func (a *AnalyzeBatch) categoryScopeMasks(ctx context.Context, args AnalyzeBatch
 	if err != nil {
 		return CategoryScopeMasks{}, fmt.Errorf("compile detection scopes: %w", err)
 	}
-	return NewCategoryScopes(a.recommended, specified, a.metrics).Masks(ctx, messages), nil
+	return NewCategoryScopes(a.recommended, specified).Masks(ctx, messages), nil
 }
 
 func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) ([]batchMessage, error) {

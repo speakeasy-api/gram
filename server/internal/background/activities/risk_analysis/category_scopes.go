@@ -107,7 +107,6 @@ func effectiveScope(rec RecommendedSet, specified map[categories.Category]Compil
 type CategoryScopes struct {
 	rec       RecommendedSet
 	specified map[categories.Category]CompiledScope
-	metrics   *riskMetrics
 }
 
 // CategoryScopeMasks contains the per-message category scope exclusions.
@@ -115,11 +114,10 @@ type CategoryScopeMasks struct {
 	categoryOut map[categories.Category][]bool
 }
 
-func NewCategoryScopes(rec RecommendedSet, specified map[categories.Category]CompiledScope, metrics *riskMetrics) CategoryScopes {
+func NewCategoryScopes(rec RecommendedSet, specified map[categories.Category]CompiledScope) CategoryScopes {
 	return CategoryScopes{
 		rec:       rec,
 		specified: specified,
-		metrics:   metrics,
 	}
 }
 

@@ -3,6 +3,7 @@ package risk_analysis_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -1561,4 +1562,30 @@ func TestAnalyzeBatch_RequestIDsIgnoreBatchComposition(t *testing.T) {
 	require.Len(t, requestIDs[msgIDs[0].String()], 2)
 	require.Equal(t, requestIDs[msgIDs[0].String()][0], requestIDs[msgIDs[0].String()][1], "a rebatched anchor keeps its request id, so handler finding ids converge")
 	require.NotEqual(t, requestIDs[msgIDs[0].String()][0], requestIDs[msgIDs[1].String()][0])
+}
+
+func TestAnalyzeBatch_PublishFailureFailsActivity(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgIDs := seedMessages(t, conn, td, 1)
+
+	gitleaksPub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
+	gitleaksPub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("topic unavailable")))
+	ab := gitleaksAnalyzer(t, conn, nil, gitleaksPub)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+	_, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       msgIDs,
+		Sources:          []string{risk_analysis.SourceGitleaks},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.ErrorContains(t, err, "topic unavailable", "an unacknowledged publish must fail the batch so it is redriven, not marked analyzed")
 }

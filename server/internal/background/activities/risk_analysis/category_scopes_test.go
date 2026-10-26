@@ -82,7 +82,7 @@ func masksFor(t *testing.T, specified []DetectionScopeConfig, messages []batchMe
 	require.NoError(t, err)
 	compiled, err := CompileDetectionScopes(eng, specified)
 	require.NoError(t, err)
-	return NewCategoryScopes(mustRecommendedSet(t), compiled, nil).Masks(t.Context(), messages)
+	return NewCategoryScopes(mustRecommendedSet(t), compiled).Masks(t.Context(), messages)
 }
 
 func TestRecommendedCategoryScopesPromptInjectionBehavior(t *testing.T) {
@@ -175,7 +175,7 @@ func TestSubsetWithoutCategoryMasksScansEverything(t *testing.T) {
 
 	messages := []batchMessage{msg(message.Assistant), msg(message.User)}
 	// No recommendation and no specified scope, so there is no mask at all.
-	masks := NewCategoryScopes(RecommendedSet{scopes: nil}, nil, nil).Masks(t.Context(), messages)
+	masks := NewCategoryScopes(RecommendedSet{scopes: nil}, nil).Masks(t.Context(), messages)
 
 	require.Equal(t, messages, masks.Admitted(messages, sourceCategories[SourcePresidio]), "no category mask for presidio: every message is published")
 	require.Equal(t, 0, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
@@ -251,7 +251,7 @@ func TestCategoryScopesApplyTheRecommendation(t *testing.T) {
 	t.Parallel()
 
 	messages := []batchMessage{msg(message.Assistant), msg(message.User)}
-	masks := NewCategoryScopes(mustRecommendedSet(t), nil, nil).Masks(t.Context(), messages)
+	masks := NewCategoryScopes(mustRecommendedSet(t), nil).Masks(t.Context(), messages)
 	// The secrets recommendation exempts assistant messages.
 	require.False(t, masks.InScope(0, categories.CategorySecrets))
 	require.True(t, masks.InScope(1, categories.CategorySecrets))
