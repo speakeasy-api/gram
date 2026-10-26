@@ -43,7 +43,8 @@ type connectionCatalogMember struct {
 	ServerID uuid.UUID `json:"server_id"`
 	// ProjectID scopes route and credential resolution to the member's project.
 	ProjectID uuid.UUID `json:"project_id"`
-	// BackendHash detects changes to destinations, headers, and server settings.
+	// BackendHash detects changes to the member's route and credential
+	// configuration; see ListMCPServerConsentConfigurations for what it covers.
 	BackendHash string `json:"backend_hash"`
 	// Auth binds a proxied member's shared-runtime choice; hosted members use
 	// their toolset's authentication and leave this nil.
