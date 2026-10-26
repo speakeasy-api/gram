@@ -2213,6 +2213,24 @@ func TestHooksBootstrapEmbedsPinnedReleaseMetadata(t *testing.T) {
 	require.NotContains(t, string(renderHooksPowerShellBootstrap(cfg)), "github.com")
 }
 
+func TestHooksConfigHashTracksAgentKeyIdentity(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Example"}
+	shared := hooksConfigSnapshot(cfg)
+	sharedJSON, err := marshalHooksConfig(shared)
+	require.NoError(t, err)
+	require.NotContains(t, string(sharedJSON), "hooks_key_is_agent", "preserve snapshots from before the flag existed")
+
+	cfg.HooksKeyIsAgent = true
+	agent := hooksConfigSnapshot(cfg)
+	require.True(t, agent.HooksKeyIsAgent)
+	require.NotEqual(t, hooksConfigHash(shared), hooksConfigHash(agent))
+	agentJSON, err := marshalHooksConfig(agent)
+	require.NoError(t, err)
+	require.Contains(t, string(agentJSON), `"hooks_key_is_agent":true`)
+	require.Equal(t, hooksConfigHash(agent), storedHooksConfigHash(agentJSON))
+}
+
 func TestHooksConfigHashTracksBinaryReleaseMetadata(t *testing.T) {
 	t.Parallel()
 	current := hooksConfigSnapshot(GenerateConfig{OrgName: "Acme"})

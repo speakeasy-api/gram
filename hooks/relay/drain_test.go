@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -320,6 +321,78 @@ func TestDrainAgentKeyOutranksDiskCache(t *testing.T) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	require.Equal(t, "agent-key", fs.headers[0].Get("Gram-Key"))
+}
+
+func TestDrainOrgKeyOverrideReplacesAgentKey(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		cached      bool
+		rejectCache bool
+		wantKey     string
+	}{
+		{name: "no cached login", wantKey: "env-org-key"},
+		{name: "cached login wins", cached: true, wantKey: "cached-personal-key"},
+		{name: "rejected cache falls back", cached: true, rejectCache: true, wantKey: "env-org-key"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			setSpoolStateHome(t)
+			authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+			t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+			t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+			t.Setenv("GRAM_HOOKS_API_KEY", "")
+			t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "env-org-key")
+			var attempts atomic.Int32
+			fs := newFakeServer(t, func(_ components.IngestRequestBody) (int, decision) {
+				if attempt := attempts.Add(1); tt.rejectCache && attempt == 1 {
+					return http.StatusUnauthorized, decision{}
+				}
+				return http.StatusOK, decision{}
+			})
+			t.Setenv("SPEAKEASY_AI_HOOKS_SERVER_URL", fs.URL)
+			if tt.cached {
+				require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=cached-personal-key\nproject=default\n"), 0o600))
+			}
+			cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+			require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"`+fs.URL+`","hooks_api_key":"agent-key","agent_key":true}`), 0o600))
+			seedSpoolEntryWithConfig(t, fs.URL, time.Hour, "session-example", cfgPath)
+
+			s := Drain(t.Context())
+			require.Equal(t, 1, s.Replayed)
+			fs.mu.Lock()
+			defer fs.mu.Unlock()
+			require.Equal(t, tt.wantKey, fs.headers[len(fs.headers)-1].Get("Gram-Key"))
+		})
+	}
+}
+
+func TestDrainEnvironmentKeysStayWithinDeployment(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		url     string
+		org     string
+		wantKey string
+	}{
+		{name: "matching deployment", url: "https://example.test/", org: "org-example", wantKey: "env-api-key"},
+		{name: "different server", url: "https://other.example.test", org: "org-example", wantKey: "agent-key"},
+		{name: "different org", url: "https://example.test", org: "org-other", wantKey: "agent-key"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+			t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "env-api-key")
+			t.Setenv("SPEAKEASY_AI_HOOKS_ORG_KEY", "env-org-key")
+			t.Setenv("SPEAKEASY_AI_HOOKS_SERVER_URL", tt.url)
+			t.Setenv("SPEAKEASY_AI_HOOKS_ORG_ID", tt.org)
+			cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+			require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://example.test","org":"org-example","hooks_api_key":"agent-key","agent_key":true}`), 0o600))
+			entry := spoolEntry{ServerURL: "https://example.test", OrgID: "org-example", ConfigPath: cfgPath}
+			auth := resolveDrainAuth(entry, drainAuthKey(entry), make(map[string]drainAuth))
+			require.True(t, auth.ok)
+			require.Equal(t, tt.wantKey, auth.c.APIKey)
+			if tt.wantKey == "agent-key" {
+				require.Equal(t, "agent-key", auth.orgKey, "the fallback must also stay within its deployment")
+			}
+		})
+	}
 }
 
 // TestMaybeSpawnDrainAfterRecovery drives the real provider path: sends fail

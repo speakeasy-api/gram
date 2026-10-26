@@ -367,18 +367,21 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 				cfg.AgentKey = fc.AgentKey
 			}
 		}
+		envURL := strings.TrimRight(Env("HOOKS_SERVER_URL"), "/")
+		if envURL == "" {
+			envURL = entry.ServerURL
+		}
+		envMatchesDeployment := sameDeployment(envURL, Env("HOOKS_ORG_ID"), entry.ServerURL, entry.OrgID)
+		if orgKey := Env("HOOKS_ORG_KEY"); orgKey != "" && envMatchesDeployment {
+			cfg.HooksAPIKey = orgKey
+			cfg.AgentKey = false
+		}
 		a.orgKey = cfg.HooksAPIKey
-		a.c, a.ok = resolveAuth(cfg)
-		if a.ok && a.c.Source == credEnv {
-			if envURL := strings.TrimRight(Env("HOOKS_SERVER_URL"), "/"); envURL != "" && envURL != entry.ServerURL {
-				// The env key belongs to the env-named deployment; resolve
-				// this entry from the cache or the plugin's key instead.
-				if stored, ok := resolveStoredAuth(cfg); ok {
-					a.c, a.ok = stored, true
-				} else {
-					a.c, a.ok = creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, false
-				}
-			}
+		if envMatchesDeployment {
+			a.c, a.ok = resolveAuth(cfg)
+		} else {
+			// Neither environment key may cross the deployment boundary.
+			a.c, a.ok = resolveStoredAuth(cfg)
 		}
 		if a.ok && entry.ProjectSlug != "" {
 			// The stored deployment identity is the replay routing truth: a

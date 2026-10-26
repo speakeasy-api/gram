@@ -10,8 +10,10 @@ no edit to the generated package. The detached `speakeasy-hooks drain` that
 replays the offline spool is the exception: it takes its deployment identity
 (server, project, org) from the spooled events, not from `speakeasy.json` or
 the environment. It still resolves credentials through `SPEAKEASY_AI_HOOKS_AUTH_FILE`
-and `SPEAKEASY_AI_HOOKS_API_KEY` (the env key only for the deployment
-`SPEAKEASY_AI_HOOKS_SERVER_URL` names, when it names one), and honours
+and the `SPEAKEASY_AI_HOOKS_API_KEY` and `SPEAKEASY_AI_HOOKS_ORG_KEY`
+overrides. Environment keys apply only when the recorded deployment matches
+`SPEAKEASY_AI_HOOKS_SERVER_URL` and `SPEAKEASY_AI_HOOKS_ORG_ID`, when set
+(an unknown recorded org remains compatible). The drain also honours
 `SPEAKEASY_AI_HOOKS_DEBUG_LOG`.
 
 The environment is not a universal channel. Some providers scrub the hook
@@ -53,13 +55,19 @@ Each event uses the first credential that resolves:
 
 1. `SPEAKEASY_AI_HOOKS_API_KEY`.
 2. The key baked into the plugin, when `speakeasy.json` marks it as an
-   agent's key (`"agent_key": true`). Plugins generated for an agent identity
-   set this flag, so the agent's events stay under the agent on a machine
-   where a person has also signed in.
+   agent's key (`"agent_key": true`). This requires a generator to set
+   `HooksKeyIsAgent: true`; no production generator currently does so.
+   Once set, the agent's events stay under the agent on a machine where a
+   person has also signed in.
 3. The cached `speakeasy-hooks login` sign-in, when it was minted for this
    server and org.
 4. The shared org key baked into the plugin, or `SPEAKEASY_AI_HOOKS_ORG_KEY`.
-   An org key from the environment is never treated as an agent's key.
+
+`SPEAKEASY_AI_HOOKS_ORG_KEY` replaces the baked key and clears `agent_key`
+before this order is applied, for live events and offline replay alike.
+A matching cached sign-in then wins, so events can be attributed to the
+signed-in person instead of the agent. Use `SPEAKEASY_AI_HOOKS_API_KEY` when
+an explicit credential must win over the cache.
 
 ## Collecting a debug log
 
