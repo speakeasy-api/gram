@@ -1,25 +1,31 @@
-package telemetry_test
+package repo_test
 
 import (
 	"encoding/json"
-	"maps"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
-	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 // Hook rows as withAgentActor leaves them: an agent key stamps the trusted
 // actor and drops self-reported identity, other keys carry no actor at all.
-func TestListToolUsageTraces_HookEventsFilterByAgentIdentity(t *testing.T) {
+func TestToolUsageHookEventsFilterByAgentIdentity(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestLogsService(t)
+
+	ctx := t.Context()
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	queries := repo.New(conn)
+
+	projectID := uuid.NewString()
 	now := time.Now().UTC().Add(-time.Minute)
+	timeStart := now.Add(-time.Hour).UnixNano()
+	timeEnd := now.Add(time.Hour).UnixNano()
 
 	agentID := uuid.NewString()
 	otherAgentID := uuid.NewString()
@@ -67,8 +73,8 @@ func TestListToolUsageTraces_HookEventsFilterByAgentIdentity(t *testing.T) {
 			}
 			encoded, err := json.Marshal(attrs)
 			require.NoError(t, err)
-			err = ti.chClient.InsertTelemetryLogsSync(ctx, []telemetryRepo.InsertTelemetryLogParams{{
-				ID: uuid.NewString(), GramProjectID: ti.projectID,
+			err = queries.InsertTelemetryLogsSync(ctx, []repo.InsertTelemetryLogParams{{
+				ID: uuid.NewString(), GramProjectID: projectID,
 				TimeUnixNano: now.UnixNano(), ObservedTimeUnixNano: now.UnixNano(),
 				TraceID: &row.traceID, GramURN: "hooks:Bash", ServiceName: "gram-hooks",
 				Body: "hook tool event", Attributes: string(encoded), ResourceAttributes: "{}",
@@ -77,12 +83,8 @@ func TestListToolUsageTraces_HookEventsFilterByAgentIdentity(t *testing.T) {
 		}
 	}
 
-	from := now.Add(-time.Hour).Format(time.RFC3339)
-	to := now.Add(time.Hour).Format(time.RFC3339)
-	rawQuery := ":"
-
 	type attribution struct {
-		kind  gen.ToolUsageUserKind
+		kind  string
 		key   string
 		label string
 	}
@@ -103,40 +105,41 @@ func TestListToolUsageTraces_HookEventsFilterByAgentIdentity(t *testing.T) {
 		{"it matches several agents' hook calls", []string{agentID, otherAgentID}, []string{claudeTraceID, cursorTraceID, otherAgentTraceID}},
 	}
 	for _, tt := range tests {
-		for _, query := range []*string{nil, &rawQuery} {
-			path := "summary"
-			if query != nil {
-				path = "raw"
-			}
+		for path, query := range map[string]string{"summary": "", "raw": ":"} {
 			t.Run(tt.name+" ("+path+" path)", func(t *testing.T) {
 				t.Parallel()
-				res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
-					From: from, To: to, Limit: 10, AgentIds: tt.agents, Query: query,
+				traces, err := queries.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
+					GramProjectID: projectID,
+					TimeStart:     timeStart,
+					TimeEnd:       timeEnd,
+					AgentIDs:      tt.agents,
+					Query:         query,
+					SortOrder:     "desc",
+					Limit:         10,
 				})
 				require.NoError(t, err)
-				got := make(map[string]*gen.ToolUsageTraceSummary, len(res.Traces))
-				for _, trace := range res.Traces {
-					require.NotNil(t, trace.TraceID)
-					got[*trace.TraceID] = trace
-				}
-				require.ElementsMatch(t, tt.wantTrace, slices.Collect(maps.Keys(got)))
-				for traceID, trace := range got {
+				got := make([]string, 0, len(traces))
+				for _, trace := range traces {
+					got = append(got, trace.TraceID)
 					gotAttribution := attribution{trace.UserKind, trace.UserKey, trace.UserLabel}
-					require.Equal(t, wantAttribution[traceID], gotAttribution, traceID)
-					require.Nil(t, trace.AuthorizerUserID, traceID)
+					require.Equal(t, wantAttribution[trace.TraceID], gotAttribution, trace.TraceID)
+					require.Empty(t, trace.AuthorizerUserID, trace.TraceID)
 				}
+				require.ElementsMatch(t, tt.wantTrace, got)
 			})
 		}
 	}
 
 	t.Run("it offers each agent as one option however many harnesses it used", func(t *testing.T) {
 		t.Parallel()
-		res, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
-			From: from, To: to, OptionTypes: []gen.ToolUsageFilterOptionType{"users"},
+		options, err := queries.GetToolUsageFilterOptions(ctx, repo.GetToolUsageFilterOptionsParams{
+			GramProjectID: projectID,
+			TimeStart:     timeStart,
+			TimeEnd:       timeEnd,
 		})
 		require.NoError(t, err)
-		agents := make(map[string]int64)
-		for _, user := range res.Users {
+		agents := make(map[string]uint64)
+		for _, user := range options.Users {
 			if user.UserKind != "agent_id" {
 				continue
 			}
@@ -144,15 +147,19 @@ func TestListToolUsageTraces_HookEventsFilterByAgentIdentity(t *testing.T) {
 			require.False(t, dup, user.UserKey)
 			agents[user.UserKey] = user.EventCount
 		}
-		require.Equal(t, map[string]int64{agentID: 2, otherAgentID: 1}, agents)
+		require.Equal(t, map[string]uint64{agentID: 2, otherAgentID: 1}, agents)
+		require.Empty(t, options.Authorizers)
 	})
 
 	t.Run("it counts one agent's hook calls in the totals", func(t *testing.T) {
 		t.Parallel()
-		res, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
-			From: from, To: to, AgentIds: []string{agentID},
+		totals, err := queries.GetToolUsageTotals(ctx, repo.GetToolUsageSummaryParams{
+			GramProjectID: projectID,
+			TimeStart:     timeStart,
+			TimeEnd:       timeEnd,
+			AgentIDs:      []string{agentID},
 		})
 		require.NoError(t, err)
-		require.EqualValues(t, 2, res.Totals.EventCount)
+		require.EqualValues(t, 2, totals.EventCount)
 	})
 }
