@@ -66,6 +66,8 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	join(ambiguous)
 
 	noAuth, _ := f.server()
+	f.serverID = noAuth
+	staticClient()
 	require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: noAuth, RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}}))
 	join(noAuth)
 
@@ -104,6 +106,15 @@ func TestRecordNewMemberChoices(t *testing.T) {
 	row, err = selection(single)
 	require.NoError(t, err)
 	require.Equal(t, validUUID(singleClient), row.AuthClientID)
+
+	// The recorded no-auth choice serves on every request, though the server
+	// still has a header client attached.
+	for range 2 {
+		served := []metaMember{member(noAuth)}
+		choices.apply(ctx, testenv.NewLogger(t), served, true)
+		require.Nil(t, served[0].upstreamUnavailable)
+		require.True(t, served[0].upstreamNoAuth)
+	}
 }
 
 func TestAgentKeySelectorReadsOnlyTheKeysOwnChoices(t *testing.T) {
