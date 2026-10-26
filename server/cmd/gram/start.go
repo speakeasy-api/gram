@@ -1258,7 +1258,7 @@ func newStartCommand() *cli.Command {
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger).
 				WithWorkloadInference(mcpService).
 				WithTurnStream(turnStream).
-				WithRiskFindingsClickHouse(chatRiskFindings, featureFlags)
+				WithRiskFindings(chatRiskFindings)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)

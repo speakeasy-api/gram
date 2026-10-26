@@ -2877,34 +2877,6 @@ WHERE cm.chat_id = @chat_id
 ORDER BY cm.created_at DESC, cm.seq DESC
 LIMIT @row_limit;
 
--- name: ListRiskFindingSpansForRecall :many
--- Findings that drive inline masking of the recall digest. Message-anchored
--- rows only (the digest does not render content parts): found, not excluded,
--- not swept as false positive, policy still enabled and not deleted.
--- Latest generation only, matching the transcript read: findings on
--- superseded generations mask nothing the digest renders, so loading them
--- would only let long, repeatedly compacted sessions inflate the scan.
-SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
-FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-JOIN chats c ON c.id = cm.chat_id
-LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-WHERE cm.chat_id = @chat_id
-  AND rr.project_id = @project_id
-  AND c.organization_id = @organization_id
-  AND c.user_id = @user_id::text
-  AND c.deleted IS FALSE
-  AND (ua.id IS NULL OR ua.account_type <> 'personal')
-  AND cm.generation = (
-    SELECT COALESCE(MAX(generation), 0)
-    FROM chat_messages
-    WHERE chat_id = @chat_id
-      AND project_id = @project_id
-  )
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC;
-
 -- name: InsertChatSessionRecallLink :exec
 -- Sibling of agent's InsertChatSessionLink with kind='recall'. A v1 recall
 -- edge always has a NULL child: the OAuth principal carries no harness

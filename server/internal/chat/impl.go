@@ -50,7 +50,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -83,7 +82,6 @@ type Service struct {
 	telemetryService *telemetry.Service
 	billingRepo      billing.Repository
 	audit            *audit.Logger
-	featureFlags     feature.Provider
 	riskFindings     *chatfindings.Reader
 	// turnStream carries assistant turn frames to dashboard subscribers. Nil
 	// disables streaming — turns still complete and the dashboard falls back
@@ -99,24 +97,10 @@ func (s *Service) WithTurnStream(stream *TurnStream) *Service {
 	return s
 }
 
-// WithRiskFindingsClickHouse enables the flagged ClickHouse chat enrichment path.
-func (s *Service) WithRiskFindingsClickHouse(findings *chatfindings.Reader, flags feature.Provider) *Service {
+// WithRiskFindings sets the ClickHouse reader behind chat risk counts, filters and highlights.
+func (s *Service) WithRiskFindings(findings *chatfindings.Reader) *Service {
 	s.riskFindings = findings
-	s.featureFlags = flags
 	return s
-}
-
-func (s *Service) riskFindingsClickHouseEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	projectSlug := ""
-	if authCtx.ProjectSlug != nil {
-		projectSlug = *authCtx.ProjectSlug
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.featureFlags, feature.FlagRiskFindingsClickHouseCutover, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, projectSlug))
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate risk findings ClickHouse cutover", attr.SlogError(err))
-		return false
-	}
-	return evaluation == feature.EvaluationEnabled
 }
 
 func (s *Service) chatFindingsProject(ctx context.Context, authCtx *contextvalues.AuthContext) (*chatfindings.Project, error) {
@@ -170,7 +154,6 @@ func NewService(
 		telemetryService: telemetryService,
 		billingRepo:      billingRepo,
 		audit:            auditLogger,
-		featureFlags:     nil,
 		riskFindings:     nil,
 		turnStream:       nil, // opt in via WithTurnStream
 
@@ -322,23 +305,19 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	sources := parseSourceFilter(conv.PtrValOr(payload.Source, ""))
 	accountType := conv.PtrValOr(payload.AccountType, "")
 
-	riskFindingsClickHouse := s.riskFindingsClickHouseEnabled(ctx, authCtx)
-	var findingsProject *chatfindings.Project
+	findingsProject, err := s.chatFindingsProject(ctx, authCtx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare chat findings").LogError(ctx, s.logger)
+	}
 	var riskChatIDs []uuid.UUID
-	if riskFindingsClickHouse {
-		findingsProject, err = s.chatFindingsProject(ctx, authCtx)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "prepare chat findings").LogError(ctx, s.logger)
+	if hasRiskFilter != "" || minRiskScore > 0 {
+		var minCount uint64
+		if minRiskScore > 0 {
+			minCount = uint64(minRiskScore)
 		}
-		if hasRiskFilter != "" || minRiskScore > 0 {
-			var minCount uint64
-			if minRiskScore > 0 {
-				minCount = uint64(minRiskScore)
-			}
-			riskChatIDs, err = findingsProject.QualifyingChatIDs(ctx, minCount)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "filter chats by findings").LogError(ctx, s.logger)
-			}
+		riskChatIDs, err = findingsProject.QualifyingChatIDs(ctx, minCount)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "filter chats by findings").LogError(ctx, s.logger)
 		}
 	}
 
@@ -368,27 +347,26 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	rows, err := querier.ListChats(ctx, repo.ListChatsParams{
-		ChatID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ProjectID:              *authCtx.ProjectID,
-		ExternalUserID:         externalUserID,
-		UserID:                 userID,
-		FromTime:               fromTime,
-		ToTime:                 toTime,
-		Search:                 search,
-		AssistantID:            assistantID,
-		SourceKind:             sourceKind,
-		ExcludeSourceKind:      excludeSourceKind,
-		HasRiskFilter:          hasRiskFilter,
-		MinRiskScore:           minRiskScore,
-		RiskFindingsClickhouse: riskFindingsClickHouse,
-		RiskChatIds:            riskChatIDs,
-		Pinned:                 pinned,
-		Sources:                sources,
-		AccountType:            accountType,
-		SortBy:                 payload.SortBy,
-		SortOrder:              payload.SortOrder,
-		PageLimit:              conv.SafeInt32(payload.Limit),
-		PageOffset:             conv.SafeInt32(payload.Offset),
+		ChatID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ProjectID:         *authCtx.ProjectID,
+		ExternalUserID:    externalUserID,
+		UserID:            userID,
+		FromTime:          fromTime,
+		ToTime:            toTime,
+		Search:            search,
+		AssistantID:       assistantID,
+		SourceKind:        sourceKind,
+		ExcludeSourceKind: excludeSourceKind,
+		HasRiskFilter:     hasRiskFilter,
+		MinRiskScore:      minRiskScore,
+		RiskChatIds:       riskChatIDs,
+		Pinned:            pinned,
+		Sources:           sources,
+		AccountType:       accountType,
+		SortBy:            payload.SortBy,
+		SortOrder:         payload.SortOrder,
+		PageLimit:         conv.SafeInt32(payload.Limit),
+		PageOffset:        conv.SafeInt32(payload.Offset),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list chats").LogError(ctx, s.logger)
@@ -403,22 +381,21 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		total = rows[0].TotalCount
 	case payload.Offset > 0:
 		total, err = querier.CountChats(ctx, repo.CountChatsParams{
-			ProjectID:              *authCtx.ProjectID,
-			ExternalUserID:         externalUserID,
-			UserID:                 userID,
-			FromTime:               fromTime,
-			ToTime:                 toTime,
-			Search:                 search,
-			AssistantID:            assistantID,
-			SourceKind:             sourceKind,
-			ExcludeSourceKind:      excludeSourceKind,
-			HasRiskFilter:          hasRiskFilter,
-			MinRiskScore:           minRiskScore,
-			RiskFindingsClickhouse: riskFindingsClickHouse,
-			RiskChatIds:            riskChatIDs,
-			Pinned:                 pinned,
-			Sources:                sources,
-			AccountType:            accountType,
+			ProjectID:         *authCtx.ProjectID,
+			ExternalUserID:    externalUserID,
+			UserID:            userID,
+			FromTime:          fromTime,
+			ToTime:            toTime,
+			Search:            search,
+			AssistantID:       assistantID,
+			SourceKind:        sourceKind,
+			ExcludeSourceKind: excludeSourceKind,
+			HasRiskFilter:     hasRiskFilter,
+			MinRiskScore:      minRiskScore,
+			RiskChatIds:       riskChatIDs,
+			Pinned:            pinned,
+			Sources:           sources,
+			AccountType:       accountType,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "count chats").LogError(ctx, s.logger)
@@ -431,21 +408,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 	}
 
-	if riskFindingsClickHouse {
-		chatIDs := make([]uuid.UUID, len(rows))
-		for i := range rows {
-			chatIDs[i] = rows[i].ID
-		}
-		counts, err := findingsProject.Counts(ctx, chatIDs)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "count chat findings").LogError(ctx, s.logger)
-		}
-		for i := range rows {
-			rows[i].RiskFindingsCount = conv.SafeInt32(conv.SafeInt(counts[rows[i].ID]))
-		}
-	}
-
-	result, err := s.chatOverviews(ctx, authCtx, rows, externalUserID, userID)
+	result, err := s.chatOverviews(ctx, authCtx, findingsProject, rows, externalUserID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -453,14 +416,23 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 }
 
 // chatOverviews enriches authorized session metadata without reading transcripts.
-func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.AuthContext, rows []repo.ListChatsRow, externalUserID, userID string) ([]*gen.ChatOverview, error) {
+func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.AuthContext, findingsProject *chatfindings.Project, rows []repo.ListChatsRow, externalUserID, userID string) ([]*gen.ChatOverview, error) {
+	ids := make([]uuid.UUID, len(rows))
+	for i := range rows {
+		ids[i] = rows[i].ID
+	}
+	riskCounts, err := findingsProject.Counts(ctx, ids)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count chat findings").LogError(ctx, s.logger)
+	}
+
 	result := make([]*gen.ChatOverview, 0, len(rows))
 	for _, row := range rows {
 		lastMessageTimestamp := row.CreatedAt.Time.Format(time.RFC3339)
 		if row.LastMessageTimestamp.Valid {
 			lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
 		}
-		riskCount := int(row.RiskFindingsCount)
+		riskCount := int(riskCounts[row.ID])
 		pinned := row.PinnedAt.Valid
 		result = append(result, &gen.ChatOverview{
 			SlackTeamID:          nil,
@@ -506,10 +478,6 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 		s.logger.WarnContext(ctx, "failed to enrich chats with work units", attr.SlogError(err))
 	}
 
-	ids := make([]uuid.UUID, len(rows))
-	for i := range rows {
-		ids[i] = rows[i].ID
-	}
 	participants, _, err := s.chatParticipants(ctx, *authCtx.ProjectID, ids, nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat participants").LogError(ctx, s.logger)
@@ -1149,13 +1117,9 @@ func (s *Service) LoadChatOverview(ctx context.Context, payload *gen.LoadChatOve
 	if _, err := s.loadAuthorizedChat(ctx, authCtx, chatID, chatAccessRead); err != nil {
 		return nil, err
 	}
-	riskFindingsClickHouse := s.riskFindingsClickHouseEnabled(ctx, authCtx)
-	var findingsProject *chatfindings.Project
-	if riskFindingsClickHouse {
-		findingsProject, err = s.chatFindingsProject(ctx, authCtx)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "prepare chat findings").LogError(ctx, s.logger)
-		}
+	findingsProject, err := s.chatFindingsProject(ctx, authCtx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare chat findings").LogError(ctx, s.logger)
 	}
 	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
 		ChatID:         uuid.NullUUID{UUID: chatID, Valid: true},
@@ -1164,7 +1128,7 @@ func (s *Service) LoadChatOverview(ctx context.Context, payload *gen.LoadChatOve
 		FromTime: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		ToTime:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		Search:   "", AssistantID: "", SourceKind: "", ExcludeSourceKind: "", HasRiskFilter: "",
-		MinRiskScore: -1, RiskFindingsClickhouse: riskFindingsClickHouse, RiskChatIds: nil, Pinned: "", Sources: nil, AccountType: "", SortBy: "last_message_timestamp", SortOrder: "desc", PageLimit: 1, PageOffset: 0,
+		MinRiskScore: -1, RiskChatIds: nil, Pinned: "", Sources: nil, AccountType: "", SortBy: "last_message_timestamp", SortOrder: "desc", PageLimit: 1, PageOffset: 0,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat overview").LogError(ctx, s.logger)
@@ -1172,18 +1136,11 @@ func (s *Service) LoadChatOverview(ctx context.Context, payload *gen.LoadChatOve
 	if len(rows) == 0 {
 		return nil, oops.C(oops.CodeNotFound)
 	}
-	if riskFindingsClickHouse {
-		counts, err := findingsProject.Counts(ctx, []uuid.UUID{chatID})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "count chat findings").LogError(ctx, s.logger)
-		}
-		rows[0].RiskFindingsCount = conv.SafeInt32(conv.SafeInt(counts[chatID]))
-	}
 	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	chats, err := s.chatOverviews(ctx, authCtx, rows, externalUserID, userID)
+	chats, err := s.chatOverviews(ctx, authCtx, findingsProject, rows, externalUserID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1206,17 +1163,13 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, err
 	}
 
-	riskFindingsClickHouse := s.riskFindingsClickHouseEnabled(ctx, authCtx)
-	riskAnchors := chatfindings.Anchors{MessageIDs: nil, ContentPartIDs: nil}
-	if riskFindingsClickHouse {
-		findingsProject, err := s.chatFindingsProject(ctx, authCtx)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "prepare chat findings").LogError(ctx, s.logger)
-		}
-		riskAnchors, err = findingsProject.FindingAnchors(ctx, chat.ID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load chat finding anchors").LogError(ctx, s.logger)
-		}
+	findingsProject, err := s.chatFindingsProject(ctx, authCtx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare chat findings").LogError(ctx, s.logger)
+	}
+	riskAnchors, err := findingsProject.FindingAnchors(ctx, chat.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat finding anchors").LogError(ctx, s.logger)
 	}
 
 	// Record dashboard session-opens in the audit log. Scroll pagination
@@ -1287,13 +1240,12 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	switch {
 	case payload.RiskOnly:
 		rows, err := s.repo.ListRiskWindowedMessages(ctx, repo.ListRiskWindowedMessagesParams{
-			ContextSize:            riskContextWindow,
-			ProjectID:              *authCtx.ProjectID,
-			ChatID:                 chat.ID,
-			Generation:             generation,
-			RiskFindingsClickhouse: riskFindingsClickHouse,
-			RiskMessageIds:         riskAnchors.MessageIDs,
-			RiskContentPartIds:     riskAnchors.ContentPartIDs,
+			ContextSize:        riskContextWindow,
+			ProjectID:          *authCtx.ProjectID,
+			ChatID:             chat.ID,
+			Generation:         generation,
+			RiskMessageIds:     riskAnchors.MessageIDs,
+			RiskContentPartIds: riskAnchors.ContentPartIDs,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
@@ -1475,12 +1427,11 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	// generation to stay consistent with the (also generation-scoped) transcript
 	// and risk-windowed view.
 	totals, err := s.repo.GetChatEntryTotals(ctx, repo.GetChatEntryTotalsParams{
-		ChatID:                 chat.ID,
-		ProjectID:              *authCtx.ProjectID,
-		Generation:             generation,
-		RiskFindingsClickhouse: riskFindingsClickHouse,
-		RiskMessageIds:         riskAnchors.MessageIDs,
-		RiskContentPartIds:     riskAnchors.ContentPartIDs,
+		ChatID:             chat.ID,
+		ProjectID:          *authCtx.ProjectID,
+		Generation:         generation,
+		RiskMessageIds:     riskAnchors.MessageIDs,
+		RiskContentPartIds: riskAnchors.ContentPartIDs,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat entry totals").LogError(ctx, s.logger)
@@ -1497,11 +1448,10 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	}
 
 	contentPartRows, err := s.repo.ListChatContentPartsByChatID(ctx, repo.ListChatContentPartsByChatIDParams{
-		ChatID:                 chat.ID,
-		ProjectID:              *authCtx.ProjectID,
-		ParentChatMessageIds:   pageMessageIDs,
-		RiskFindingsClickhouse: riskFindingsClickHouse,
-		RiskContentPartIds:     riskAnchors.ContentPartIDs,
+		ChatID:               chat.ID,
+		ProjectID:            *authCtx.ProjectID,
+		ParentChatMessageIds: pageMessageIDs,
+		RiskContentPartIds:   riskAnchors.ContentPartIDs,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat content parts").LogError(ctx, s.logger)

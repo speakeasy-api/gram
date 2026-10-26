@@ -44,9 +44,10 @@ const (
 	// Removed once device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
 
-	// FlagRiskFindingsClickHouseCutover means the organization is on the ClickHouse findings path:
-	// batch judges run in the analysis handlers, and finding reads and webhooks use ClickHouse.
-	// Server-side org-group targeting fails closed to the Postgres path.
+	// FlagRiskFindingsClickHouseCutover hands batch judging and finding webhooks
+	// from the batch risk analysis activity to the Pub/Sub handlers and the
+	// ClickHouse writer. Evaluated server-side by that activity only; targeted
+	// by organization group; fails closed. Removed with AIS-804.
 	FlagRiskFindingsClickHouseCutover Flag = "risk-findings-clickhouse-cutover"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk

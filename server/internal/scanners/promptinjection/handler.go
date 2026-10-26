@@ -22,24 +22,16 @@ type Handler struct {
 	logger       *slog.Logger
 	findingsPub  gcp.Publisher[*riskv1.Finding]
 	metrics      *scanners.AsyncScanHandlerMetrics
-	realScanner  *Scanner
-	stubScanner  *Scanner
+	scanner      *Scanner
 	riskRecorder *metering.RiskRecorder
 }
 
-func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, realScanner, stubScanner *Scanner, findingsPub gcp.Publisher[*riskv1.Finding], riskRecorder *metering.RiskRecorder) *Handler {
-	if stubScanner == nil {
-		stubScanner = NewScanner(logger, NoopClassifier)
-	}
-	if realScanner == nil {
-		realScanner = stubScanner
-	}
+func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, scanner *Scanner, findingsPub gcp.Publisher[*riskv1.Finding], riskRecorder *metering.RiskRecorder) *Handler {
 	return &Handler{
 		logger:       logger.With(attr.SlogComponent("prompt-injection-analyzer")),
 		findingsPub:  findingsPub,
 		metrics:      scanners.NewAsyncScanHandlerMetrics(meterProvider, logger),
-		realScanner:  realScanner,
-		stubScanner:  stubScanner,
+		scanner:      scanner,
 		riskRecorder: riskRecorder,
 	}
 }
@@ -49,18 +41,13 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 	if anchorID == "" {
 		anchorID = m.GetContentPartId()
 	}
-	selectionReason := scanners.AsyncScanEngineSelectionRequestStub
-	if m.GetRunJudge() {
-		selectionReason = scanners.AsyncScanEngineSelectionRequestReal
-	}
-	engine := selectionReason.Engine()
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
 		attr.RiskScanRequestID(m.GetRequestId()),
 		attr.MessageID(anchorID),
 		attr.AuthOrganizationID(m.GetOrganizationId()),
-		attr.RiskScanEngine(engine),
-		attr.RiskScanSelectionReason(selectionReason),
+		attr.RiskScanEngine(scanners.AsyncScanEngineReal),
+		attr.RiskScanSelectionReason(scanners.AsyncScanEngineSelectionUpstreamSelected),
 	)
 	// message.id carries whichever anchor resolved, so a part-anchored scan also
 	// gets the dedicated key: without it those spans are unsearchable by part.
@@ -68,19 +55,14 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		span.SetAttributes(attr.ChatContentPartID(partID))
 	}
 
-	scanner := h.stubScanner
-	if engine == scanners.AsyncScanEngineReal {
-		scanner = h.realScanner
-	}
-
 	jm := promptInjectionJudgeMessage(m)
 	startedAt := time.Now().UTC()
-	result, verdict, err := scanner.ScanWithVerdict(ctx, m.GetContent(), m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), jm, judgemessage.Trajectory{
+	result, verdict, err := h.scanner.ScanWithVerdict(ctx, m.GetContent(), m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), jm, judgemessage.Trajectory{
 		PriorUserRequest:       m.GetPriorUserRequest(),
 		RecentUntrustedContent: m.GetRecentUntrustedContent(),
 	})
 	if err != nil {
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomeScanError, selectionReason)
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomeScanError, scanners.AsyncScanEngineSelectionUpstreamSelected)
 		return fmt.Errorf("scan prompt injection: %w", err)
 	}
 	findings := result.Findings
@@ -115,11 +97,11 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		}
 	}
 	if err != nil {
-		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomePublishError, selectionReason)
+		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomePublishError, scanners.AsyncScanEngineSelectionUpstreamSelected)
 		return err
 	}
 
-	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomeOK, selectionReason)
+	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, scanners.AsyncScanOutcomeOK, scanners.AsyncScanEngineSelectionUpstreamSelected)
 	return nil
 }
 

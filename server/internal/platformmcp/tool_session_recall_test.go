@@ -3,7 +3,6 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -192,311 +191,6 @@ func recallMessageRow(id uuid.UUID, role, content string) platformrepo.ListOwned
 	}
 }
 
-func TestMaskFindingSpansReplacesEverySpan(t *testing.T) {
-	t.Parallel()
-
-	messageID := uuid.New()
-	content := "token AKIAIOSFODNN7EXAMPLE and email dev@acme.example end"
-	tokenStart := strings.Index(content, "AKIA")
-	emailStart := strings.Index(content, "dev@")
-	spans := `[
-		{"match":"AKIAIOSFODNN7EXAMPLE","field":"content","start_pos":` + itoa(tokenStart) + `,"end_pos":` + itoa(tokenStart+20) + `},
-		{"match":"dev@acme.example","field":"","start_pos":` + itoa(emailStart) + `,"end_pos":` + itoa(emailStart+16) + `}
-	]`
-
-	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
-		[]platformrepo.ListRiskFindingSpansForRecallRow{{
-			ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true},
-			Source:        "gitleaks",
-			RuleID:        pgtype.Text{String: "secret.aws_access_token", Valid: true},
-			Match:         pgtype.Text{String: "AKIAIOSFODNN7EXAMPLE", Valid: true},
-			Spans:         []byte(spans),
-		}},
-	)
-
-	require.Equal(t, 2, masks.neutralized)
-	require.Equal(t, 0, masks.withheld)
-	tokenMask := maskdisplay.Display("gitleaks", "secret.aws_access_token", "AKIAIOSFODNN7EXAMPLE")
-	emailMask := maskdisplay.Display("gitleaks", "secret.aws_access_token", "dev@acme.example")
-	require.Equal(t, "token "+tokenMask+" and email "+emailMask+" end", masks.content[messageID])
-	require.NotContains(t, masks.content[messageID], "AKIAIOSFODNN7EXAMPLE")
-}
-
-func TestMaskFindingSpansWithholdsOnOverlapAndHostileOffsets(t *testing.T) {
-	t.Parallel()
-
-	messageID := uuid.New()
-	content := "aaaaSECRETbbbb"
-	spans := `[
-		{"match":"SECRET","field":"content","start_pos":4,"end_pos":10},
-		{"match":"SECRETbb","field":"content","start_pos":4,"end_pos":12},
-		{"match":"out of range","field":"content","start_pos":100,"end_pos":120},
-		{"match":"negative","field":"content","start_pos":-3,"end_pos":2}
-	]`
-
-	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
-		[]platformrepo.ListRiskFindingSpansForRecallRow{{
-			ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true},
-			Source:        "gitleaks",
-			RuleID:        pgtype.Text{String: "secret.generic", Valid: true},
-			Spans:         []byte(spans),
-		}},
-	)
-
-	// Overlapping and out-of-range offsets cannot all be honored, so the
-	// whole message is withheld rather than served with a finding unmasked.
-	require.Equal(t, 1, masks.withheld)
-	require.Equal(t, 4, masks.neutralized)
-	require.Equal(t, withheldContentPlaceholder, masks.content[messageID])
-	require.NotContains(t, masks.content[messageID], "SECRET")
-}
-
-// Offsets that land in range but select different bytes than the finding's
-// recorded match mean the content drifted since the scan — masking those
-// bytes would leave the actual finding served elsewhere in the message, so
-// the whole message is withheld.
-func TestMaskFindingSpansWithholdsOnStaleOffsets(t *testing.T) {
-	t.Parallel()
-
-	messageID := uuid.New()
-	content := "aaaaDRIFTYbbbb SECRET moved here"
-	spans := `[{"match":"SECRET","field":"content","start_pos":4,"end_pos":10}]`
-
-	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
-		[]platformrepo.ListRiskFindingSpansForRecallRow{{
-			ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true},
-			Source:        "gitleaks",
-			RuleID:        pgtype.Text{String: "secret.generic", Valid: true},
-			Spans:         []byte(spans),
-		}},
-	)
-
-	require.Equal(t, 1, masks.withheld)
-	require.Equal(t, withheldContentPlaceholder, masks.content[messageID])
-	require.NotContains(t, masks.content[messageID], "SECRET")
-}
-
-// A content span with no recorded match text anywhere (neither in the span
-// entry nor the finding's primary match) cannot be verified against the
-// content, so it withholds rather than masking on trust.
-func TestMaskFindingSpansWithholdsOnMissingMatchText(t *testing.T) {
-	t.Parallel()
-
-	messageID := uuid.New()
-	content := "aaaaSECRETbbbb"
-	spans := `[{"field":"content","start_pos":4,"end_pos":10}]`
-
-	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
-		[]platformrepo.ListRiskFindingSpansForRecallRow{{
-			ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true},
-			Source:        "gitleaks",
-			RuleID:        pgtype.Text{String: "secret.generic", Valid: true},
-			Spans:         []byte(spans),
-		}},
-	)
-
-	require.Equal(t, 1, masks.withheld)
-	require.Equal(t, withheldContentPlaceholder, masks.content[messageID])
-}
-
-// A span entry that omits its per-span match still masks with the finding's
-// primary match: the display must render the partial-mask form of that
-// resolved text, never an empty replacement that silently deletes the bytes.
-func TestMaskFindingSpansUsesResolvedMatchForDisplay(t *testing.T) {
-	t.Parallel()
-
-	messageID := uuid.New()
-	content := "aaaaSECRETbbbb"
-	spans := `[{"field":"content","start_pos":4,"end_pos":10}]`
-
-	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
-		[]platformrepo.ListRiskFindingSpansForRecallRow{{
-			ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true},
-			Source:        "gitleaks",
-			RuleID:        pgtype.Text{String: "secret.generic", Valid: true},
-			Match:         pgtype.Text{String: "SECRET", Valid: true},
-			Spans:         []byte(spans),
-		}},
-	)
-
-	require.Equal(t, 0, masks.withheld)
-	expected := "aaaa" + maskdisplay.Display("gitleaks", "secret.generic", "SECRET") + "bbbb"
-	require.Equal(t, expected, masks.content[messageID], "the mask renders the resolved match's display form, not an empty replacement")
-}
-
-func TestMaskFindingSpansCollapsesIdenticalDuplicateSpans(t *testing.T) {
-	t.Parallel()
-
-	messageID := uuid.New()
-	content := "aaaaSECRETbbbb"
-	rows := []platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)}
-	span := `[{"match":"SECRET","field":"content","start_pos":4,"end_pos":10}]`
-	finding := func(rule string) platformrepo.ListRiskFindingSpansForRecallRow {
-		return platformrepo.ListRiskFindingSpansForRecallRow{
-			ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true},
-			Source:        "gitleaks",
-			RuleID:        pgtype.Text{String: rule, Valid: true},
-			Spans:         []byte(span),
-		}
-	}
-
-	// Two policies flagging the same region mask it once — never a withhold.
-	masks := maskFindingSpans(rows, []platformrepo.ListRiskFindingSpansForRecallRow{finding("secret.generic"), finding("secret.other")})
-
-	require.Equal(t, 0, masks.withheld)
-	require.Equal(t, 2, masks.neutralized)
-	require.NotContains(t, masks.content[messageID], "SECRET")
-	require.True(t, strings.HasPrefix(masks.content[messageID], "aaaa"))
-	require.True(t, strings.HasSuffix(masks.content[messageID], "bbbb"))
-}
-
-func TestMaskFindingSpansWithholdsOnUnappliableSpanData(t *testing.T) {
-	t.Parallel()
-
-	content := "prose that carries a finding somewhere"
-	cases := map[string]platformrepo.ListRiskFindingSpansForRecallRow{
-		// A .get(...) span's offsets index the extracted sub-value, not the
-		// outer content.
-		"nested path": {Spans: []byte(`[{"match":"SECRET","field":"content","path":"config.token","start_pos":0,"end_pos":6}]`)},
-		// An unrecognized field could anchor anywhere.
-		"unknown field": {Spans: []byte(`[{"match":"SECRET","field":"mystery","start_pos":0,"end_pos":6}]`)},
-		// Span data that exists but cannot be decoded.
-		"undecodable spans": {Spans: []byte(`{"not":"an array"}`)},
-		// A finding with no span data at all cannot be masked.
-		"no span data": {Spans: nil},
-	}
-	for name, finding := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			messageID := uuid.New()
-			finding.ChatMessageID = uuid.NullUUID{UUID: messageID, Valid: true}
-			finding.Source = "gitleaks"
-			finding.RuleID = pgtype.Text{String: "secret.generic", Valid: true}
-
-			masks := maskFindingSpans(
-				[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
-				[]platformrepo.ListRiskFindingSpansForRecallRow{finding},
-			)
-
-			require.Equal(t, 1, masks.withheld)
-			require.Equal(t, 1, masks.neutralized)
-			require.Equal(t, withheldContentPlaceholder, masks.content[messageID])
-		})
-	}
-}
-
-func TestMaskFindingSpansKeepsMultibyteContentIntact(t *testing.T) {
-	t.Parallel()
-
-	messageID := uuid.New()
-	prefix := "héllo wörld — "
-	secret := "SECRETVALUE123"
-	content := prefix + secret + " — döne"
-	start := strings.Index(content, secret)
-
-	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
-		[]platformrepo.ListRiskFindingSpansForRecallRow{{
-			ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true},
-			Source:        "gitleaks",
-			RuleID:        pgtype.Text{String: "secret.generic", Valid: true},
-			Spans:         []byte(`[{"match":"` + secret + `","field":"content","start_pos":` + itoa(start) + `,"end_pos":` + itoa(start+len(secret)) + `}]`),
-		}},
-	)
-
-	require.Equal(t, 1, masks.neutralized)
-	require.Equal(t, 0, masks.withheld)
-	display := maskdisplay.Display("gitleaks", "secret.generic", secret)
-	require.Equal(t, prefix+display+" — döne", masks.content[messageID])
-}
-
-func TestMaskFindingSpansFallsBackToPrimarySpan(t *testing.T) {
-	t.Parallel()
-
-	messageID := uuid.New()
-	content := "the secret is HUSH42 today"
-	start := strings.Index(content, "HUSH42")
-
-	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
-		[]platformrepo.ListRiskFindingSpansForRecallRow{{
-			ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true},
-			Source:        "gitleaks",
-			RuleID:        pgtype.Text{String: "secret.generic", Valid: true},
-			Match:         pgtype.Text{String: "HUSH42", Valid: true},
-			Spans:         nil,
-			StartPos:      pgtype.Int4{Int32: int32(start), Valid: true},
-			EndPos:        pgtype.Int4{Int32: int32(start + 6), Valid: true},
-		}},
-	)
-
-	require.Equal(t, 1, masks.neutralized)
-	require.Equal(t, 0, masks.withheld)
-	require.NotContains(t, masks.content[messageID], "HUSH42")
-}
-
-func TestMaskFindingSpansIgnoresToolFieldSpans(t *testing.T) {
-	t.Parallel()
-
-	messageID := uuid.New()
-	content := "prose without the matched value"
-
-	masks := maskFindingSpans(
-		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "assistant", content)},
-		[]platformrepo.ListRiskFindingSpansForRecallRow{{
-			ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true},
-			Source:        "gitleaks",
-			RuleID:        pgtype.Text{String: "secret.generic", Valid: true},
-			Spans: []byte(`[
-				{"match":"SECRET","field":"tool.args","start_pos":0,"end_pos":6},
-				{"match":"delete_all","field":"tool.name","start_pos":0,"end_pos":10}
-			]`),
-		}},
-	)
-
-	// A tool-field span's offsets index the tool payload, not the content
-	// column, and tool payloads are redacted unconditionally anyway.
-	require.Equal(t, 0, masks.neutralized)
-	require.Equal(t, 0, masks.withheld)
-	require.Empty(t, masks.content)
-}
-
-// Derived-source findings (a flagged tool name, an account email, a judge
-// verdict) are persisted with empty field and zero offsets: their match is
-// derived metadata, not a slice of the prose, so the prose serves unmasked —
-// same as the dashboard — rather than being withheld.
-func TestMaskFindingSpansServesDerivedFindingsUnmasked(t *testing.T) {
-	t.Parallel()
-
-	for _, source := range []string{"destructive_tool", "shadow_mcp", "llm_judge"} {
-		t.Run(source, func(t *testing.T) {
-			t.Parallel()
-
-			messageID := uuid.New()
-			masks := maskFindingSpans(
-				[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "assistant", "prose the finding does not anchor into")},
-				[]platformrepo.ListRiskFindingSpansForRecallRow{{
-					ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true},
-					Source:        source,
-					RuleID:        pgtype.Text{String: "rule.derived", Valid: true},
-					Match:         pgtype.Text{String: "derived-metadata", Valid: true},
-					Spans:         []byte(`[{"match":"derived-metadata","field":"","start_pos":0,"end_pos":0}]`),
-				}},
-			)
-
-			require.Equal(t, 0, masks.neutralized)
-			require.Equal(t, 0, masks.withheld)
-			require.Empty(t, masks.content)
-		})
-	}
-}
-
 func TestTurnsFromRowsAdaptsTranscript(t *testing.T) {
 	t.Parallel()
 
@@ -649,11 +343,7 @@ func TestTurnsFromRowsSubstitutesMaskedContent(t *testing.T) {
 	require.Equal(t, "masked content", extract.turns[0].Text)
 }
 
-func itoa(v int) string {
-	return strconv.Itoa(v)
-}
-
-func clickHouseRecallFinding(messageID uuid.UUID, surface, match string, start int) chrepo.RiskFindingUnmaskRow {
+func recallFinding(messageID uuid.UUID, surface, match string, start int) chrepo.RiskFindingUnmaskRow {
 	return chrepo.RiskFindingUnmaskRow{
 		ChatMessageID: messageID.String(),
 		Source:        "gitleaks",
@@ -668,15 +358,15 @@ func clickHouseRecallFinding(messageID uuid.UUID, surface, match string, start i
 
 // ClickHouse stores no raw match: in-range offsets over drifted content must
 // fail the ingest-time display check and withhold the message.
-func TestMaskClickHouseFindingSpansWithholdsOnStaleOffsets(t *testing.T) {
+func TestMaskFindingSpansWithholdsOnStaleOffsets(t *testing.T) {
 	t.Parallel()
 
 	messageID := uuid.New()
 	content := "aaaaDRIFTYbbbb SECRET moved here"
 
-	masks := maskClickHouseFindingSpans(
+	masks := maskFindingSpans(
 		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
-		[]chrepo.RiskFindingUnmaskRow{clickHouseRecallFinding(messageID, "content", "SECRET", 4)},
+		[]chrepo.RiskFindingUnmaskRow{recallFinding(messageID, "content", "SECRET", 4)},
 	)
 
 	require.Equal(t, 1, masks.withheld)
@@ -684,17 +374,115 @@ func TestMaskClickHouseFindingSpansWithholdsOnStaleOffsets(t *testing.T) {
 }
 
 // Rows written before the surface column derive it like the Postgres path.
-func TestMaskClickHouseFindingSpansDerivesMissingSurface(t *testing.T) {
+func TestMaskFindingSpansDerivesMissingSurface(t *testing.T) {
 	t.Parallel()
 
 	messageID := uuid.New()
 	content := "aaaaSECRETbbbb"
 
-	masks := maskClickHouseFindingSpans(
+	masks := maskFindingSpans(
 		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
-		[]chrepo.RiskFindingUnmaskRow{clickHouseRecallFinding(messageID, "", "SECRET", 4)},
+		[]chrepo.RiskFindingUnmaskRow{recallFinding(messageID, "", "SECRET", 4)},
 	)
 
 	require.Equal(t, 0, masks.withheld)
 	require.Equal(t, "aaaa"+maskdisplay.Display("gitleaks", "secret.generic", "SECRET")+"bbbb", masks.content[messageID])
+}
+
+func TestMaskFindingSpansReplacesEverySpan(t *testing.T) {
+	t.Parallel()
+
+	messageID := uuid.New()
+	content := "token AKIAIOSFODNN7EXAMPLE and key HUSH42 end"
+
+	masks := maskFindingSpans(
+		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]chrepo.RiskFindingUnmaskRow{
+			recallFinding(messageID, "content", "AKIAIOSFODNN7EXAMPLE", strings.Index(content, "AKIA")),
+			recallFinding(messageID, "content", "HUSH42", strings.Index(content, "HUSH42")),
+		},
+	)
+
+	require.Equal(t, 2, masks.neutralized)
+	require.Equal(t, 0, masks.withheld)
+	tokenMask := maskdisplay.Display("gitleaks", "secret.generic", "AKIAIOSFODNN7EXAMPLE")
+	keyMask := maskdisplay.Display("gitleaks", "secret.generic", "HUSH42")
+	require.Equal(t, "token "+tokenMask+" and key "+keyMask+" end", masks.content[messageID])
+}
+
+// Overlapping spans cannot both be honored, so the whole message is withheld
+// rather than served with a finding unmasked.
+func TestMaskFindingSpansWithholdsOnOverlap(t *testing.T) {
+	t.Parallel()
+
+	messageID := uuid.New()
+	content := "aaaaSECRETbbbb"
+
+	masks := maskFindingSpans(
+		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]chrepo.RiskFindingUnmaskRow{
+			recallFinding(messageID, "content", "SECRET", 4),
+			recallFinding(messageID, "content", "SECRETbb", 4),
+		},
+	)
+
+	require.Equal(t, 1, masks.withheld)
+	require.Equal(t, withheldContentPlaceholder, masks.content[messageID])
+}
+
+// Two policies flagging the same region mask it once, never a withhold.
+func TestMaskFindingSpansCollapsesIdenticalDuplicateSpans(t *testing.T) {
+	t.Parallel()
+
+	messageID := uuid.New()
+	content := "aaaaSECRETbbbb"
+	finding := recallFinding(messageID, "content", "SECRET", 4)
+
+	masks := maskFindingSpans(
+		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]chrepo.RiskFindingUnmaskRow{finding, finding},
+	)
+
+	require.Equal(t, 0, masks.withheld)
+	require.Equal(t, 2, masks.neutralized)
+	require.Equal(t, "aaaa"+maskdisplay.Display("gitleaks", "secret.generic", "SECRET")+"bbbb", masks.content[messageID])
+}
+
+func TestMaskFindingSpansKeepsMultibyteContentIntact(t *testing.T) {
+	t.Parallel()
+
+	messageID := uuid.New()
+	prefix := "héllo wörld — "
+	secret := "SECRETVALUE123"
+	content := prefix + secret + " — döne"
+
+	masks := maskFindingSpans(
+		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]chrepo.RiskFindingUnmaskRow{recallFinding(messageID, "content", secret, strings.Index(content, secret))},
+	)
+
+	require.Equal(t, 0, masks.withheld)
+	require.Equal(t, prefix+maskdisplay.Display("gitleaks", "secret.generic", secret)+" — döne", masks.content[messageID])
+}
+
+// Tool payloads are redacted unconditionally, and derived findings anchor no
+// prose, so neither masks nor withholds the message.
+func TestMaskFindingSpansSkipsToolAndDerivedSurfaces(t *testing.T) {
+	t.Parallel()
+
+	for _, surface := range []string{"tool_args", "derived", "none"} {
+		t.Run(surface, func(t *testing.T) {
+			t.Parallel()
+
+			messageID := uuid.New()
+			masks := maskFindingSpans(
+				[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "assistant", "prose the finding does not anchor into")},
+				[]chrepo.RiskFindingUnmaskRow{recallFinding(messageID, surface, "prose", 0)},
+			)
+
+			require.Equal(t, 0, masks.neutralized)
+			require.Equal(t, 0, masks.withheld)
+			require.Empty(t, masks.content)
+		})
+	}
 }

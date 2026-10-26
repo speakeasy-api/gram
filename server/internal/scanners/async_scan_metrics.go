@@ -12,7 +12,6 @@ import (
 
 const (
 	AsyncScanEngineReal = "real"
-	AsyncScanEngineStub = "stub"
 
 	AsyncScanOutcomeOK           = "ok"
 	AsyncScanOutcomeScanError    = "scan_error"
@@ -33,19 +32,8 @@ const (
 type AsyncScanEngineSelectionReason string
 
 const (
-	AsyncScanEngineSelectionRequestReal      AsyncScanEngineSelectionReason = "request_real"
-	AsyncScanEngineSelectionRequestStub      AsyncScanEngineSelectionReason = "request_stub"
 	AsyncScanEngineSelectionUpstreamSelected AsyncScanEngineSelectionReason = "upstream_selected"
 )
-
-func (r AsyncScanEngineSelectionReason) Engine() string {
-	switch r {
-	case AsyncScanEngineSelectionRequestReal, AsyncScanEngineSelectionUpstreamSelected:
-		return AsyncScanEngineReal
-	default:
-		return AsyncScanEngineStub
-	}
-}
 
 type AsyncScanHandlerMetrics struct {
 	handledMessages metric.Int64Counter

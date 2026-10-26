@@ -66,13 +66,14 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	uniqueMatch, nonAssistant bool,
 	assistantID uuid.NullUUID,
 	from, to *time.Time,
-	enabledPoliciesOnly bool,
 ) (*gen.ListRiskResultsResult, error) {
 	projectID := *authCtx.ProjectID
 
 	var policyIDs []string
 	var err error
-	if enabledPoliciesOnly {
+	// A chat-scoped listing shows only findings under enabled policies, the
+	// same set the chat page counts and highlights.
+	if chatID != "" {
 		policyIDs, err = s.enabledPolicyIDs(ctx, authCtx.ActiveOrganizationID, projectID, policyID)
 	} else {
 		policyIDs, err = s.visiblePolicyIDs(ctx, projectID, policyID)
