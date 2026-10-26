@@ -71,7 +71,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// demo visitor and would grant programmatic access that survives the
 		// reseed. (SQL: IF stray > 0; a count is never negative, so == 0.)
 		{byOrg(s.q.PostflightIDAPIKeys), 0, "demo seed postflight: %d api keys survived the reseed"},
-		{byOrg(s.q.PostflightIDAgentGrants), 7, "demo seed postflight: expected 7 scoped agent grants, found %d"},
+		// Existing scoped grants plus device sync and project-specific hooks.
+		{byOrg(s.q.PostflightIDAgentGrants), 9, "demo seed postflight: expected 9 scoped agent grants, found %d"},
+		{byOrg(s.q.PostflightIDDeviceJoinTokens), 4, "demo seed postflight: expected 4 bootstrap tokens, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDScopedAgentGrants(ctx, repo.PostflightIDScopedAgentGrantsParams{
 				OrgID:         org,

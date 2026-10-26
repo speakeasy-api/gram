@@ -9,12 +9,13 @@ import {
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { ChevronRight, KeyRound, Waypoints } from "lucide-react";
+import { ChevronRight, KeyRound, Server, Waypoints } from "lucide-react";
 import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import { hasPlatformSetup } from "./platformSetups";
 import type { CatalogEntry } from "./workloadCatalog";
+import { HEADLESS_DEVICE_KEY } from "../devices/device-enrollment";
 
 const API_KEY_VALUE = "api-key";
 // Prefixed so a catalog key can never be mistaken for the API key option.
@@ -235,6 +236,21 @@ export function CredentialPicker({
             Minted by Speakeasy · long-lived · revocable
           </CredentialMeta>
         </RadioCard>
+        {(canFederate || platformKey === HEADLESS_DEVICE_KEY) && (
+          <RadioCard
+            value={PLATFORM_PREFIX + HEADLESS_DEVICE_KEY}
+            title="Headless device"
+            leading={<Server aria-hidden="true" className="size-5" />}
+            disabled={!canFederate}
+            className="p-3"
+          >
+            <Text muted small>
+              Enroll a VPS or sandbox with a single-use bootstrap token. The
+              device service signs in as this agent.
+            </Text>
+            <CredentialMeta>One-time token · Linux</CredentialMeta>
+          </RadioCard>
+        )}
         <PlatformPresets
           entries={entries}
           isPending={isPending}

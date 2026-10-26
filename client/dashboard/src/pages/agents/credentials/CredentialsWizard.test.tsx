@@ -58,6 +58,10 @@ vi.mock("@/contexts/Auth", () => ({
     user: { id: "user_owner", displayName: "Example Owner", email: "o@e.test" },
   }),
 }));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => "https://app.getgram.ai",
+}));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     agents: {
@@ -165,6 +169,28 @@ vi.mock("@gram/client/react-query/listToolsetsForOrg.js", () => ({
       queryFn: () => mocks.toolsets(),
       ...options,
     }),
+}));
+// A headless device's setup creates its bootstrap token on the provision
+// step, and its verify step polls the agent's tokens.
+vi.mock("@gram/client/react-query/createWorkloadDeviceJoinToken.js", () => ({
+  useCreateWorkloadDeviceJoinTokenMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: "disabled" }),
+}));
+vi.mock(
+  "@gram/client/react-query/createWorkloadDeviceInstallCommand.js",
+  () => ({
+    useCreateWorkloadDeviceInstallCommandMutation: () => ({
+      mutateAsync: vi.fn(),
+    }),
+  }),
+);
+vi.mock("@gram/client/react-query/workloadDeviceJoinTokens.js", () => ({
+  useWorkloadDeviceJoinTokens: () => ({ data: undefined, isPending: true }),
 }));
 vi.mock("../agent-policy-grants", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../agent-policy-grants")>()),
@@ -1728,5 +1754,118 @@ describe("Editing an agent that already exists", () => {
 
     expect(await screen.findByText("Grant is locked")).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
+describe("Enrolling a headless device", () => {
+  async function reachDeviceChoice() {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Build Box" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("radio", { name: /Headless device/ }),
+    );
+  }
+
+  it("grants device sync and hooks for the chosen project with the agent", async () => {
+    await reachDeviceChoice();
+    expect(screen.getByLabelText("Hooks project")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+
+    await screen.findByRole("heading", { name: "Enroll the box" });
+    expect(mocks.createKey).not.toHaveBeenCalled();
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toEqual([
+      grant,
+      {
+        effect: "allow",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "org_example" },
+      },
+      {
+        effect: "allow",
+        scope: "org:hooks_ingest",
+        selector: {
+          resourceKind: "org",
+          resourceId: "org_example",
+          projectId: "project_one",
+        },
+      },
+    ]);
+    // With the install command switched off, setting up by hand is open.
+    expect(screen.getByText("Set up manually")).toBeTruthy();
+  });
+
+  it("locks hooks choices after creating the device agent", async () => {
+    await reachDeviceChoice();
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+    await screen.findByRole("heading", { name: "Enroll the box" });
+    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+    expect(
+      screen.getByLabelText("Hooks project").getAttribute("data-disabled"),
+    ).not.toBeNull();
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: "Accept hooks from this project",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("shows existing hooks permissions and a continuation label", () => {
+    render(
+      <MemoryRouter initialEntries={["/?step=2"]}>
+        <QueryClientProvider client={new QueryClient()}>
+          <CredentialsWizard
+            agent={
+              {
+                id: "agent_one",
+                name: "Existing device",
+                lifecycle: "active",
+                permissions: { write: true, authorize: true },
+              } as never
+            }
+            initialPlatformKey="headless-device"
+            grants={[]}
+            onDone={vi.fn<(agentID?: string) => void>()}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Accept hooks from this project" })
+        .getAttribute("data-state"),
+    ).toBe("unchecked");
+    expect(screen.getByText(/hook events are refused/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Create agent" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeTruthy();
+  });
+
+  it("enrolls without hooks when they are not wanted, and says what that means", async () => {
+    await reachDeviceChoice();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Accept hooks from this project" }),
+    );
+    expect(screen.getByText(/hook events are refused/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
+
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    const policy: { scope: string }[] =
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants ?? [];
+    const scopes = policy.map((entry) => entry.scope);
+    expect(scopes).toEqual(["mcp:connect", "org:device_agent_sync"]);
+  });
+
+  it("is not offered without permission to manage workloads", async () => {
+    mocks.canFederate = false;
+    await reachCredentialStep();
+    expect(screen.queryByRole("radio", { name: /Headless device/ })).toBeNull();
   });
 });

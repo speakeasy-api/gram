@@ -608,3 +608,9 @@ WHERE i.organization_id = @org_id::text AND i.id = @issuer_id::uuid
   AND agent_grant.selectors = jsonb_build_object(
     'resource_kind', 'inference', 'resource_id', '*', 'project_id', ag.project_id::text)
   AND owner_grant.selectors = agent_grant.selectors;
+
+-- Counts all bootstrap tokens in the organization, including soft-deleted
+-- revoked rows. This asserts the total, not the distribution of statuses.
+-- name: PostflightIDDeviceJoinTokens :one
+SELECT count(*) FROM workload_device_join_tokens
+WHERE organization_id = @org_id::text;

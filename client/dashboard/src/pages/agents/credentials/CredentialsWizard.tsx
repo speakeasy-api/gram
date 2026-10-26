@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -69,6 +70,21 @@ import {
   WizardStepper,
   WizardSummary,
 } from "./WizardChrome";
+import {
+  DEFAULT_TOKEN_LIFETIME_SECONDS,
+  acceptsHooks,
+  DEVICE_SYNC_SCOPE,
+  HEADLESS_DEVICE_KEY,
+  HOOKS_INGEST_SCOPE,
+  deviceEnrollmentPolicyGrants,
+  isDeviceAdmission,
+  tokenLifetimeLabel,
+  type WatchedToken,
+} from "../devices/device-enrollment";
+import { DeviceEnrollmentFields } from "../devices/DeviceEnrollmentFields";
+import { useHooksProjects } from "../devices/useHooksProjects";
+import { DeviceSetupPanel } from "../devices/DeviceSetupPanel";
+import { DeviceVerify } from "../devices/DeviceVerify";
 
 /**
  * Creating an agent identity here is only ever a means to provisioning one
@@ -254,6 +270,34 @@ export function CredentialsWizard({
   const [platformKey, setPlatformKey] = useState<string | null>(
     initialPlatformKey ?? null,
   );
+  // A headless device enrolls with a bootstrap token rather than a platform's
+  // tokens, so it has no setup steps of its own: the wizard's own Provision
+  // and Verify steps hand over the token and watch for it to be redeemed.
+  const device =
+    credential === "workload" && platformKey === HEADLESS_DEVICE_KEY;
+  const hooksProjects = useHooksProjects();
+  const [chosenHooksProjectId, setHooksProjectId] = useState<string | null>(
+    null,
+  );
+  // Follows the browsed project until the reader picks one, for the same
+  // reason the scope does: the project resolves after the first render.
+  const hooksProjectId = chosenHooksProjectId ?? project.id ?? "";
+  const hooksProject = hooksProjects.find(
+    (candidate) => candidate.id === hooksProjectId,
+  );
+  const [chosenAcceptHooks, setAcceptHooks] = useState(true);
+  const acceptHooks = agent
+    ? acceptsHooks(grants ?? [], organization.id, hooksProjectId)
+    : chosenAcceptHooks;
+  const [tokenLifetime, setTokenLifetime] = useState(
+    DEFAULT_TOKEN_LIFETIME_SECONDS,
+  );
+  // The bootstrap tokens this flow created, which Verify waits on.
+  const [watched, setWatched] = useState<WatchedToken[]>([]);
+  const watchToken = useCallback(
+    (token: WatchedToken) => setWatched((current) => [...current, token]),
+    [],
+  );
   // Applied once the catalog and the admission have both arrived, and only
   // while the reader has not chosen something else.
   const adopted = useRef(false);
@@ -265,7 +309,11 @@ export function CredentialsWizard({
     if (catalog.isPending) return;
     adopted.current = true;
     setCredential("workload");
-    setPlatformKey(admittedEntry?.key ?? CUSTOM_PLATFORM_KEY);
+    setPlatformKey(
+      isDeviceAdmission(admitted)
+        ? HEADLESS_DEVICE_KEY
+        : (admittedEntry?.key ?? CUSTOM_PLATFORM_KEY),
+    );
   }, [editing, admitted, admittedEntry, catalog.isPending]);
   // The catalog loads after the first render, so the preset name is filled
   // in when it arrives rather than in a state initializer that has nothing
@@ -579,7 +627,7 @@ export function CredentialsWizard({
   // The verify step reads the key itself: a key with an access time is a
   // runtime that reached the gateway and was admitted.
   useEffect(() => {
-    if (step !== 4 || !agentID || verify === "connected") return;
+    if (step !== 4 || !agentID || verify === "connected" || device) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -603,7 +651,7 @@ export function CredentialsWizard({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [step, agentID, verify, sdk, verifyPollMs]);
+  }, [step, agentID, verify, sdk, verifyPollMs, device]);
 
   const regenerate = (key: string, url: string) => {
     // Minting authenticates with the key, so a plaintext endpoint would hand
@@ -672,7 +720,18 @@ export function CredentialsWizard({
       createAgentForm: {
         name: name.trim(),
         projectId: projectID,
-        policyGrants: agentPolicyGrantsFromDraft(draft),
+        policyGrants: [
+          ...agentPolicyGrantsFromDraft(draft),
+          // A device polls its policy with device sync, so the token is
+          // refused without it. Hooks only for the project chosen, and only
+          // when asked for.
+          ...(device
+            ? deviceEnrollmentPolicyGrants({
+                organizationId: organization.id,
+                hooksProjectId: acceptHooks ? hooksProjectId : undefined,
+              })
+            : []),
+        ],
       },
     });
     setAgentID(created.id);
@@ -857,7 +916,7 @@ export function CredentialsWizard({
 
   const workload = useWorkloadSetup({
     entry: credential === "workload" ? platform : undefined,
-    platformKey: credential === "workload" ? platformKey : null,
+    platformKey: credential === "workload" && !device ? platformKey : null,
     agentName: name.trim(),
     ensureAgent,
     onConnected: setAgentID,
@@ -1042,6 +1101,38 @@ export function CredentialsWizard({
     }
   };
 
+  /**
+   * Create the agent a headless device will enroll as. Its bootstrap token is
+   * created on the next step, where it is shown, so nothing secret exists
+   * until the reader is looking at it.
+   */
+  const deviceSubmitLabel = existing ? "Continue" : "Create agent";
+
+  const provisionDevice = async () => {
+    if (!canFederate) return;
+    if (provisioning) return;
+    setProvisioning(true);
+    setError(null);
+    try {
+      await ensureAgent();
+      setStep(3);
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not create this agent. Try again.",
+      );
+    } finally {
+      setProvisioning(false);
+    }
+  };
+
+  const grantScopes = [
+    "mcp:connect",
+    ...(device ? [DEVICE_SYNC_SCOPE] : []),
+    ...(device && acceptHooks ? [HOOKS_INGEST_SCOPE] : []),
+  ];
+
   const summary = (
     <WizardSummary
       step={step + 1}
@@ -1055,7 +1146,15 @@ export function CredentialsWizard({
         },
         {
           label: "Grants",
-          value: <code className="text-xs">mcp:connect</code>,
+          value: (
+            <span className="flex flex-col">
+              {grantScopes.map((scope) => (
+                <code key={scope} className="text-xs break-all">
+                  {scope}
+                </code>
+              ))}
+            </span>
+          ),
         },
         {
           label: "Credential",
@@ -1068,10 +1167,23 @@ export function CredentialsWizard({
           ? [
               {
                 label: "Platform",
-                value:
-                  platformKey === CUSTOM_PLATFORM_KEY
+                value: device
+                  ? "Headless device"
+                  : platformKey === CUSTOM_PLATFORM_KEY
                     ? (workload.values["name"]?.trim() ?? "") || "Custom"
                     : (platform?.displayName ?? "Custom"),
+              },
+            ]
+          : []),
+        ...(device
+          ? [
+              {
+                label: "Hooks project",
+                value: hooksProject?.name ?? "None chosen",
+              },
+              {
+                label: "Bootstrap token",
+                value: `Expires after ${tokenLifetimeLabel(tokenLifetime)}`,
               },
             ]
           : []),
@@ -1270,9 +1382,71 @@ export function CredentialsWizard({
                 setHighlight("Platform");
               }}
             />
+            {device && (
+              <DeviceEnrollmentFields
+                disabled={agentID !== null}
+                projectId={hooksProjectId}
+                onProjectChange={(next) => {
+                  setHooksProjectId(next);
+                  setHighlight("Hooks project");
+                }}
+                lifetimeSeconds={tokenLifetime}
+                onLifetimeChange={(next) => {
+                  setTokenLifetime(next);
+                  setHighlight("Bootstrap token");
+                }}
+                hooksNote={
+                  <div className="space-y-2 pt-1">
+                    <label className="flex items-start gap-2 text-sm">
+                      <Checkbox
+                        checked={acceptHooks}
+                        disabled={agentID !== null}
+                        onCheckedChange={(next) => {
+                          setAcceptHooks(next === true);
+                          setHighlight("Grants");
+                        }}
+                        aria-label="Accept hooks from this project"
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Allow this agent to send hooks to{" "}
+                        {hooksProject?.name ?? "this project"}
+                      </span>
+                    </label>
+                    {!acceptHooks && (
+                      <Text muted small>
+                        The box still enrolls, but its hook events are refused
+                        until the agent is allowed to send them.
+                      </Text>
+                    )}
+                  </div>
+                }
+              />
+            )}
           </div>
         );
       case 3:
+        if (device) {
+          if (!agentID || !hooksProject) {
+            return (
+              <Text muted>Create the agent on the credential step first.</Text>
+            );
+          }
+          return (
+            <div className="space-y-5">
+              <WizardStepHeader
+                title="Enroll the box"
+                description="Install the Speakeasy device service on the box. It enrolls as this agent."
+              />
+              <DeviceSetupPanel
+                agentId={agentID}
+                hooksProject={hooksProject}
+                lifetimeSeconds={tokenLifetime}
+                onTokenCreated={watchToken}
+              />
+            </div>
+          );
+        }
         return (
           <StepInstall
             command={command}
@@ -1289,6 +1463,20 @@ export function CredentialsWizard({
           />
         );
       default:
+        if (device) {
+          if (!agentID) {
+            return (
+              <Text muted>Create the agent on the credential step first.</Text>
+            );
+          }
+          return (
+            <DeviceVerify
+              agentId={agentID}
+              watched={watched}
+              pollMs={verifyPollMs}
+            />
+          );
+        }
         return (
           <StepVerify
             state={verify}
@@ -1409,6 +1597,28 @@ export function CredentialsWizard({
     }
     switch (step) {
       case 2:
+        if (device) {
+          return (
+            <WizardFooter
+              note={
+                hooksProject === undefined
+                  ? "Choose the project this box sends hooks to."
+                  : "Creating the agent is recorded in the organization audit log."
+              }
+              onBack={() => setStep(1)}
+              primary={
+                <Button
+                  disabled={
+                    provisioning || hooksProject === undefined || !canFederate
+                  }
+                  onClick={() => void provisionDevice()}
+                >
+                  {provisioning ? "Preparing…" : deviceSubmitLabel}
+                </Button>
+              }
+            />
+          );
+        }
         if (credential === "workload") {
           let note =
             "Choose the platform whose tokens this agent will present.";
@@ -1471,7 +1681,11 @@ export function CredentialsWizard({
       case 3:
         return (
           <WizardFooter
-            note="The API key can be rotated or revoked from the agent page."
+            note={
+              device
+                ? "Bootstrap tokens can be revoked from the agent page."
+                : "The API key can be rotated or revoked from the agent page."
+            }
             primary={
               <Button onClick={() => setStep(4)}>
                 Continue to verification
@@ -1483,14 +1697,16 @@ export function CredentialsWizard({
         return (
           <WizardFooter
             note={
-              verify === "connected"
-                ? "The agent has called the gateway."
-                : "Run the setup from the previous step, then wait for the first call."
+              device
+                ? "Enrolled devices are listed on the agent page."
+                : verify === "connected"
+                  ? "The agent has called the gateway."
+                  : "Run the setup from the previous step, then wait for the first call."
             }
             onBack={() => setStep(3)}
             primary={
               <Button onClick={() => onDone(agentID ?? undefined)}>
-                {verify === "connected" ? "Done" : "Skip for now"}
+                {verify === "connected" || device ? "Done" : "Skip for now"}
               </Button>
             }
           />

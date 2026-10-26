@@ -10,6 +10,7 @@ import {
   RenameAgentButton,
 } from "@/pages/agents/agent-admin";
 import { AgentFederatedAccess } from "@/pages/agents/AgentFederatedAccess";
+import { AgentBootstrapTokens } from "@/pages/agents/devices/AgentBootstrapTokens";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
@@ -151,9 +152,6 @@ export function AgentIdentityProfile({
           </IdentitySection>
         );
       }
-      // An agent holds keys, not provider logins and not machines. The
-      // managed-device panel that sat here could only ever say so.
-      //
       // The gateway endpoint is not repeated here: the wizard hands it over
       // while connecting the runtime, and a second copy under the keys read
       // as a second thing to configure.
@@ -164,8 +162,8 @@ export function AgentIdentityProfile({
             !credentialKnown
               ? "How this agent signs in"
               : federated
-                ? "The platforms that sign in as this agent, and the keys it holds"
-                : "The keys this agent holds, and the platforms that sign in as it"
+                ? "The platforms, devices, and keys that sign in as this agent"
+                : "The keys, devices, and platforms that sign in as this agent"
           }
         >
           {/* Issuing is a flow of its own, so the button puts this section
@@ -199,6 +197,9 @@ export function AgentIdentityProfile({
           ) : (
             !federated && <AgentFederatedAccess agent={agent} />
           )}
+          {/* Headless boxes, beside the keys: both are runtimes becoming
+              this agent. */}
+          <AgentBootstrapTokens agent={agent} />
         </IdentitySection>
       );
     default:

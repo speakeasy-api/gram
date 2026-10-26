@@ -2,6 +2,8 @@ export const FEATURE_FLAGS = {
   // UI-only visibility; saved runtime selection and backend authorization are independent.
   assistantKitRuntime: "assistant-kit-runtime",
   budgets: "gram-budgets",
+  // Temporary UI rollout; the server also enforces organization eligibility.
+  deviceBootstrapInstall: "device-bootstrap-install",
   // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
   emaProviders: "ema-providers",
   explore: "gram-explore",

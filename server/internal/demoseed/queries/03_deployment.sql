@@ -288,3 +288,23 @@ SELECT @id::uuid, @organization_id::text,
        twb.workload_issuer_id, twb.subject, 'exact', @agent_id::uuid
 FROM trigger_workload_bindings twb
 WHERE twb.organization_id = @organization_id::text AND twb.project_id = @project_id::uuid;
+
+-- A bootstrap token (a "device join token") an administrator issued to enroll
+-- a headless box as an agent. Display-only: the hash is not the SHA-256 of
+-- any token, so nothing can redeem it. Status is derived from the timestamps,
+-- so one row per state is written by varying them. The agent's delete cascade
+-- cleans these on every reseed.
+-- name: DeployInsertDeviceJoinToken :exec
+INSERT INTO workload_device_join_tokens
+  (id, organization_id, token_hash, agent_id, created_by_user_id, expires_at,
+   consumed_at, consumed_by_subject, created_at, deleted_at)
+VALUES
+  (@id::uuid, @organization_id::text, @token_hash::text, @agent_id::uuid,
+   @created_by_user_id::text,
+   now() + (@expires_in::text)::interval,
+   CASE WHEN @consumed_ago::text = '' THEN NULL
+        ELSE now() - (@consumed_ago::text)::interval END,
+   sqlc.narg(consumed_by_subject)::text,
+   now() - (@created_ago::text)::interval,
+   CASE WHEN @revoked_ago::text = '' THEN NULL
+        ELSE now() - (@revoked_ago::text)::interval END);
