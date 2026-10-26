@@ -1046,6 +1046,10 @@ describe("Hook events on a key", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Continue without servers" }),
     );
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue without servers" }),
+    );
     fireEvent.change(screen.getByLabelText("Key name"), {
       target: { value: "Replacement hooks key" },
     });

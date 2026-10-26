@@ -395,7 +395,7 @@ function AgentAPIKeysContent({
   }, [step, agent.name, takenNames, keys.isPending]);
   const returnToStep = (next: number) => {
     if (next < 2) setHooksOnly(false);
-    setStep(next);
+    setStep(hooksOnly && next === 1 ? 0 : next);
     setNarrowings({});
     setReviewGrants([]);
     setReviewAccounts([]);
