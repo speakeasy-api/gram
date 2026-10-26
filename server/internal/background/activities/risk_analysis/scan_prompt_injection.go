@@ -14,7 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
-func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, contents []string, judgeInHandlers bool) ([][]scanners.Finding, error) {
+func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, contents []string) ([][]scanners.Finding, error) {
 	out := make([]scanners.Result, len(messages))
 	judgeMessages := make([]judgemessage.Message, len(messages))
 	judgeTrajectories := make([]judgemessage.Trajectory, len(messages))
@@ -24,11 +24,8 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 		judgeTrajectories[i] = batchJudgeTrajectory(messages[i])
 		judgeUserIDs[i] = messages[i].UserID
 	}
-	if err := a.publishPromptInjectionScanRequests(ctx, args, messages, judgeInHandlers); err != nil {
+	if err := a.publishPromptInjectionScanRequests(ctx, args, messages, false); err != nil {
 		return nil, err
-	}
-	if judgeInHandlers {
-		return findingsFromResults(out), nil
 	}
 	startedAt := time.Now().UTC()
 	results, verdicts, err := a.promptInjectionScanner.ScanBatchWithVerdicts(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeUserIDs, judgeMessages, judgeTrajectories)
@@ -49,13 +46,11 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 		}
 		scanners.SetEventMatch(results[i].Findings, judgemessage.Render(judgeMessages[i]))
 	}
-	requestID := batchScanRequestID(args, "standard").String()
-
 	for i := range min(len(messages), len(results), len(verdicts)) {
 		if !results[i].Completed {
 			continue
 		}
-		provenance := batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, requestID)
+		provenance := batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, messageScanRequestID(args, "standard", messages[i]))
 		provenance.Model = verdicts[i].Model
 		provenance.Provider = verdicts[i].Provider
 		if err := a.riskRecorder.Record(ctx, metering.RiskPromptInjection(), provenance, results[i].STokens, startedAt); err != nil {
@@ -65,16 +60,19 @@ func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatc
 	return findingsFromResults(results), nil
 }
 
-func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, judgeInHandlers bool) error {
+// publishPromptInjectionScanRequests publishes one request per message.
+// runJudge has the handler run the judge and publish its findings; without it
+// the handler only records the comparison while the inline cascade enforces.
+func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, runJudge bool) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
-	requestID := batchScanRequestID(args, "standard")
 	executionPath := shadowStreamExecutionPath
-	if judgeInHandlers {
+	if runJudge {
 		executionPath = judgeHandlerStreamExecutionPath
 	}
 	for _, msg := range messages {
-		provenance := batchRiskProvenance(args, msg, executionPath, requestID.String())
+		requestID := messageScanRequestID(args, "standard", msg)
+		provenance := batchRiskProvenance(args, msg, executionPath, requestID)
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptInjectionAnalysis_ToolCall, 0, len(jm.ToolCalls))
@@ -86,7 +84,7 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 		}
 
 		publishResults = append(publishResults, a.promptInjectionPub.Publish(ctx, riskv1.PromptInjectionAnalysis_builder{
-			RequestId:               new(requestID.String()),
+			RequestId:               &requestID,
 			ChatMessageId:           chatMessageID,
 			ContentPartId:           contentPartID,
 			ProjectId:               new(args.ProjectID.String()),
@@ -112,7 +110,7 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 			ToolCalls:              toolCalls,
 			PriorUserRequest:       &msg.PriorUserRequest,
 			RecentUntrustedContent: &msg.RecentUntrustedContent,
-			RunJudge:               &judgeInHandlers,
+			RunJudge:               &runJudge,
 		}.Build()))
 	}
 	return drainPublishAcks(ctx, "publish prompt injection scan requests", publishResults)

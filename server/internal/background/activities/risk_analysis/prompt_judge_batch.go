@@ -89,7 +89,7 @@ func judgeFanout(
 	}
 }
 
-func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks, judgeInHandlers bool) ([][]scanners.Finding, error) {
+func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
 	out := make([]scanners.Result, len(messages))
 	models := make([]string, len(messages))
 	providers := make([]string, len(messages))
@@ -98,18 +98,12 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		return findingsFromResults(out), nil
 	}
 
-	indices := make([]int, 0, len(messages))
-	for i := range messages {
-		if !masks.InScope(i, categories.CategoryPromptPolicy) {
-			continue
-		}
-		indices = append(indices, i)
-	}
+	indices := promptPolicyIndices(messages, masks)
 	if len(indices) == 0 {
 		return findingsFromResults(out), nil
 	}
 
-	if !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" || (!judgeInHandlers && a.judge == nil) {
+	if !hasPrompt(policy) || a.judge == nil {
 		// Fresh slice per index (not one shared slice) so setEventMatch below
 		// stamps each finding with its own message rather than aliasing.
 		for _, idx := range indices {
@@ -119,11 +113,8 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		return findingsFromResults(out), nil
 	}
 
-	if err := a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices, judgeInHandlers); err != nil {
+	if err := a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices, false); err != nil {
 		return nil, err
-	}
-	if judgeInHandlers {
-		return findingsFromResults(out), nil
 	}
 
 	startedAt := time.Now().UTC()
@@ -143,13 +134,11 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		},
 		func(end int) { activity.RecordHeartbeat(ctx, promptpolicy.Source, end) },
 	)
-	requestID := batchScanRequestID(args, "prompt_policy").String()
-
 	for i := range out {
 		if !out[i].Completed {
 			continue
 		}
-		provenance := batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, requestID)
+		provenance := batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, messageScanRequestID(args, "prompt_policy", messages[i]))
 		provenance.Model = models[i]
 		provenance.Provider = providers[i]
 		if err := a.riskRecorder.Record(ctx, metering.RiskPromptPolicy(), provenance, out[i].STokens, startedAt); err != nil {
@@ -163,18 +152,35 @@ func (a *AnalyzeBatch) projectFlagEnabled(ctx context.Context, orgID string, pro
 	return policyflags.ProjectFlagEnabled(ctx, a.logger, repo.New(a.db), a.flags, orgID, projectID, flag)
 }
 
-func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int, judgeInHandlers bool) error {
+// promptPolicyIndices lists the messages the prompt-policy detection scope admits.
+func promptPolicyIndices(messages []batchMessage, masks CategoryScopeMasks) []int {
+	indices := make([]int, 0, len(messages))
+	for i := range messages {
+		if masks.InScope(i, categories.CategoryPromptPolicy) {
+			indices = append(indices, i)
+		}
+	}
+	return indices
+}
 
+func hasPrompt(policy repo.RiskPolicy) bool {
+	return policy.Prompt.Valid && strings.TrimSpace(policy.Prompt.String) != ""
+}
+
+// publishPromptPolicyScanRequests publishes one request per indexed message.
+// runJudge has the handler run the judge and publish its findings; without it
+// the handler only records the comparison while the inline judge enforces.
+func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int, runJudge bool) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(indices))
-	requestID := batchScanRequestID(args, "prompt_policy")
 	executionPath := shadowStreamExecutionPath
-	if judgeInHandlers {
+	if runJudge {
 		executionPath = judgeHandlerStreamExecutionPath
 	}
 	for _, idx := range indices {
 		msg := messages[idx]
-		provenance := batchRiskProvenance(args, msg, executionPath, requestID.String())
+		requestID := messageScanRequestID(args, "prompt_policy", msg)
+		provenance := batchRiskProvenance(args, msg, executionPath, requestID)
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptPolicyAnalysis_ToolCall, 0, len(jm.ToolCalls))
@@ -186,7 +192,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 		}
 
 		publishResults = append(publishResults, a.promptPolicyPub.Publish(ctx, riskv1.PromptPolicyAnalysis_builder{
-			RequestId:               new(requestID.String()),
+			RequestId:               &requestID,
 			ChatMessageId:           chatMessageID,
 			ContentPartId:           contentPartID,
 			ProjectId:               new(args.ProjectID.String()),
@@ -211,7 +217,7 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 			Body:        &jm.Body,
 			ToolName:    &jm.ToolName,
 			ToolCalls:   toolCalls,
-			RunJudge:    &judgeInHandlers,
+			RunJudge:    &runJudge,
 		}.Build()))
 	}
 	return drainPublishAcks(ctx, "publish prompt policy scan requests", publishResults)

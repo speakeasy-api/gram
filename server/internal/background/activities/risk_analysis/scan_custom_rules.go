@@ -60,9 +60,9 @@ func (a *AnalyzeBatch) scanCustomRules(ctx context.Context, args AnalyzeBatchArg
 func (a *AnalyzeBatch) publishCustomRulesScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
-	requestID := batchScanRequestID(args, "standard")
 	for _, msg := range messages {
-		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID.String())
+		requestID := messageScanRequestID(args, "standard", msg)
+		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID)
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		view := batchMessageView(msg)
 		toolCalls := make([]*riskv1.CustomRulesAnalysis_ToolCall, 0, len(view.Tools))
@@ -74,7 +74,7 @@ func (a *AnalyzeBatch) publishCustomRulesScanRequests(ctx context.Context, args 
 		}
 
 		publishResults = append(publishResults, a.customRulesPub.Publish(ctx, riskv1.CustomRulesAnalysis_builder{
-			RequestId:               new(requestID.String()),
+			RequestId:               &requestID,
 			ChatMessageId:           chatMessageID,
 			ContentPartId:           contentPartID,
 			ProjectId:               new(args.ProjectID.String()),

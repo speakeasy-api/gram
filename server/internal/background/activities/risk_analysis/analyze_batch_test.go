@@ -2303,7 +2303,73 @@ func TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents(t *testing.T) {
 	require.Len(t, allOutbox, len(firstOutbox), "a redrive must not re-emit webhook events for already-announced findings")
 }
 
-func TestAnalyzeBatch_ClickHouseCutoverDisablesBatchEmitter(t *testing.T) {
+func capturingGitleaksPub(t *testing.T) (*gcp.MockPublisher[*riskv1.GitleaksAnalysis], *[]*riskv1.GitleaksAnalysis) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
+	var published []*riskv1.GitleaksAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*riskv1.GitleaksAnalysis)
+			require.True(t, ok)
+			published = append(published, msg)
+		})
+	return pub, &published
+}
+
+// publishOnlyAnalyzer builds an analyzer for an organization on the ClickHouse
+// findings path whose inline engines fail the test if they run.
+func publishOnlyAnalyzer(t *testing.T, conn *pgxpool.Pool, td testData, gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis], meterPub gcp.Publisher[*meteringv1.MeterReading]) *risk_analysis.AnalyzeBatch {
+	t.Helper()
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, td.orgID, true)
+	inlineScanner := promptinjection.NewScanner(testenv.NewLogger(t), func(context.Context, promptinjection.Request) ([]promptinjection.Result, error) {
+		t.Fatal("inline prompt injection cascade must not run on the publish-only path")
+		return nil, nil
+	})
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		nil,
+		&risk_analysis.StubPIIScanner{},
+		inlineScanner,
+		shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, nil),
+		stubProvenanceLookup{},
+		nil,
+		flags,
+		newPresidioPub(),
+		gitleaksPub,
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
+		newCustomRulesPub(), newLLMPub(),
+		newToolCallPub(),
+		newAccountIdentityPub(),
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+		nil,
+		metering.NewRiskRecorder(meterPub),
+		false,
+	)
+	require.NoError(t, err)
+	return ab
+}
+
+func runAnalyzeBatch(t *testing.T, ab *risk_analysis.AnalyzeBatch, args risk_analysis.AnalyzeBatchArgs) risk_analysis.AnalyzeBatchResult {
+	t.Helper()
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+	val, err := env.ExecuteActivity(ab.Do, args)
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	return result
+}
+
+func TestAnalyzeBatch_ClickHouseCutoverOnlyPublishes(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
@@ -2315,14 +2381,66 @@ func TestAnalyzeBatch_ClickHouseCutoverDisablesBatchEmitter(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, td.orgID, true)
-	result := executeAnalyzeBatchForIDs(t, conn, nil, td, []uuid.UUID{msgID}, nil, []string{"gitleaks"}, newToolCallPub(), flags)
-	require.Positive(t, result.Findings)
+	gitleaksPub, published := capturingGitleaksPub(t)
+	meterPub, readings := capturingMeterPub(t)
+	ab := publishOnlyAnalyzer(t, conn, td, gitleaksPub, meterPub)
+	result := runAnalyzeBatch(t, ab, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{msgID},
+		Sources:          []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePromptInjection, risk_analysis.SourceCLIDestructive, risk_analysis.SourceAccountIdentity},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.Equal(t, 1, result.Processed)
+	require.Zero(t, result.Findings)
+	require.Len(t, *published, 1)
+	require.Equal(t, msgID.String(), (*published)[0].GetChatMessageId())
+	require.Empty(t, *readings, "usage is metered by the analysis handlers alone")
+
+	rows, err := testrepo.New(conn).ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows, "the publish-only path writes no Postgres results")
 
 	count, err := testrepo.New(conn).CountOutboxEntriesByEventType(t.Context(), string(events.RiskFindingCreatedV1.EventType()))
 	require.NoError(t, err)
-	require.Zero(t, count, "the batch emitter stays off after the ClickHouse emitter is enabled")
+	require.Zero(t, count, "the ClickHouse writer owns finding webhooks")
+}
+
+func TestAnalyzeBatch_ClickHouseCutoverRequestIDsIgnoreBatchComposition(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgIDs := seedMessages(t, conn, td, 2)
+
+	gitleaksPub, published := capturingGitleaksPub(t)
+	ab := publishOnlyAnalyzer(t, conn, td, gitleaksPub, gcp.NewNoopPublisher[*meteringv1.MeterReading]())
+	args := risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       msgIDs[:1],
+		Sources:          []string{risk_analysis.SourceGitleaks},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	}
+	runAnalyzeBatch(t, ab, args)
+	args.MessageIDs = msgIDs
+	runAnalyzeBatch(t, ab, args)
+
+	requestIDs := map[string][]string{}
+	for _, req := range *published {
+		requestIDs[req.GetChatMessageId()] = append(requestIDs[req.GetChatMessageId()], req.GetRequestId())
+	}
+	require.Len(t, requestIDs[msgIDs[0].String()], 2)
+	require.Equal(t, requestIDs[msgIDs[0].String()][0], requestIDs[msgIDs[0].String()][1], "a rebatched anchor keeps its request id, so handler finding ids converge")
+	require.NotEqual(t, requestIDs[msgIDs[0].String()][0], requestIDs[msgIDs[1].String()][0])
 }
 
 func riskResultIDs(rows []testrepo.RiskResult) []uuid.UUID {

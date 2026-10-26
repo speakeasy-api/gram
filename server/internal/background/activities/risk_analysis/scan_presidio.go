@@ -39,9 +39,9 @@ func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args Ana
 	createdAt := time.Now().UTC()
 	createdAtText := createdAt.Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
-	requestID := batchScanRequestID(args, "standard")
 	for _, msg := range messages {
-		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID.String())
+		requestID := messageScanRequestID(args, "standard", msg)
+		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID)
 		content := msg.scanSurface()
 		findingSurface := scanners.SurfaceContent
 		if content != msg.Content {
@@ -65,7 +65,7 @@ func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args Ana
 
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		publishResults = append(publishResults, a.presidioPub.Publish(ctx, riskv1.PresidioAnalysis_builder{
-			RequestId:               new(requestID.String()),
+			RequestId:               &requestID,
 			ChatMessageId:           chatMessageID,
 			ContentPartId:           contentPartID,
 			ProjectId:               new(args.ProjectID.String()),

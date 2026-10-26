@@ -19,11 +19,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
-	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
@@ -308,7 +306,9 @@ func groupFindings(findings []scanners.Finding) []findingGroup {
 	return out
 }
 
-// writeResults commits the batch's rows. The bool reports whether a commit
+// writeResults commits the batch's rows and announces new findings through the
+// webhook outbox. It runs only for organizations off the ClickHouse findings
+// path, whose ClickHouse writer does not emit webhooks. The bool reports whether a commit
 // actually happened: false when the policy was deleted mid-analysis and the
 // results were dropped, so callers gating side effects (e.g. the batch-only
 // finding publish) on a durable write can tell the two nil-error outcomes
@@ -316,14 +316,6 @@ func groupFindings(findings []scanners.Finding) []findingGroup {
 func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, rows []repo.InsertRiskResultsParams) (bool, error) {
 	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
 	defer writeSpan.End()
-
-	// The flag is checked on both producers so one organization has one emitter.
-	// A failed lookup retries the write rather than guessing which emitter owns it.
-	clickHouseEmitsWebhooks, err := policyflags.ProjectFlagChecked(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagRiskFindingsClickHouseCutover)
-	if err != nil {
-		writeSpan.SetStatus(codes.Error, err.Error())
-		return false, fmt.Errorf("check finding webhook emitter flag: %w", err)
-	}
 
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
@@ -397,13 +389,11 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		}
 	}
 
-	if !clickHouseEmitsWebhooks {
-		webhookEvents := findingCreatedEvents(rows, prior, time.Now())
-		if len(webhookEvents) > 0 {
-			if _, err := outbox.PublishIdentifiedWebhookEvents(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, webhookEvents); err != nil {
-				writeSpan.SetStatus(codes.Error, err.Error())
-				return false, fmt.Errorf("append risk findings to outbox: %w", err)
-			}
+	webhookEvents := findingCreatedEvents(rows, prior, time.Now())
+	if len(webhookEvents) > 0 {
+		if _, err := outbox.PublishIdentifiedWebhookEvents(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, webhookEvents); err != nil {
+			writeSpan.SetStatus(codes.Error, err.Error())
+			return false, fmt.Errorf("append risk findings to outbox: %w", err)
 		}
 	}
 

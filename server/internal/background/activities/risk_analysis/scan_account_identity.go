@@ -42,38 +42,12 @@ type sessionFinding struct {
 // concurrently analyzed batches can rarely double-emit; that is accepted as
 // cosmetic.
 func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatchArgs) ([]sessionFinding, error) {
-	r := repo.New(a.db)
-	rows, err := r.GetBatchChatIdentities(ctx, repo.GetBatchChatIdentitiesParams{
-		Ids:               args.MessageIDs,
-		ProjectID:         args.ProjectID,
-		RiskPolicyID:      args.RiskPolicyID,
-		RiskPolicyVersion: args.PolicyVersion,
-	})
+	rows, err := a.publishAccountIdentityScanRequests(ctx, args)
 	if err != nil {
-		return nil, fmt.Errorf("get batch chat identities: %w", err)
-	}
-	createdAt := time.Now().UTC().Format(time.RFC3339)
-	requestID := batchScanRequestID(args, "standard")
-	publishResults := make([]gcp.PublishResult, 0, len(rows))
-	for _, row := range rows {
-		publishResults = append(publishResults, a.accountIdentityPub.Publish(ctx, riskv1.AccountIdentityAnalysis_builder{
-			RequestId:         new(requestID.String()),
-			ChatMessageId:     new(row.EarliestMessageID.String()),
-			ChatId:            new(row.ChatID.String()),
-			ProjectId:         new(args.ProjectID.String()),
-			OrganizationId:    &args.OrganizationID,
-			RiskPolicyId:      new(args.RiskPolicyID.String()),
-			RiskPolicyVersion: &args.PolicyVersion,
-			CreatedAt:         &createdAt,
-			AccountType:       new(conv.FromPGTextOrEmpty[string](row.AccountType)),
-			Email:             new(conv.FromPGTextOrEmpty[string](row.Email)),
-			ApprovedDomains:   args.ApprovedEmailDomains,
-		}.Build()))
-	}
-	if err := drainPublishAcks(ctx, "publish account identity scan requests", publishResults); err != nil {
 		return nil, err
 	}
 
+	r := repo.New(a.db)
 	scanner := accountidentity.NewScanner()
 	var out []sessionFinding
 	for _, row := range rows {
@@ -117,4 +91,40 @@ func (a *AnalyzeBatch) scanAccountIdentity(ctx context.Context, args AnalyzeBatc
 		out = append(out, sessionFinding{messageID: row.EarliestMessageID, findings: findings})
 	}
 	return out, nil
+}
+
+// publishAccountIdentityScanRequests publishes one request per chat in the
+// batch, anchored on the chat's earliest in-batch message, and returns the
+// chats' identity rows once every request is acknowledged.
+func (a *AnalyzeBatch) publishAccountIdentityScanRequests(ctx context.Context, args AnalyzeBatchArgs) ([]repo.GetBatchChatIdentitiesRow, error) {
+	rows, err := repo.New(a.db).GetBatchChatIdentities(ctx, repo.GetBatchChatIdentitiesParams{
+		Ids:               args.MessageIDs,
+		ProjectID:         args.ProjectID,
+		RiskPolicyID:      args.RiskPolicyID,
+		RiskPolicyVersion: args.PolicyVersion,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get batch chat identities: %w", err)
+	}
+	createdAt := time.Now().UTC().Format(time.RFC3339)
+	publishResults := make([]gcp.PublishResult, 0, len(rows))
+	for _, row := range rows {
+		publishResults = append(publishResults, a.accountIdentityPub.Publish(ctx, riskv1.AccountIdentityAnalysis_builder{
+			RequestId:         new(batchScanRequestID(args, "standard", false, row.EarliestMessageID).String()),
+			ChatMessageId:     new(row.EarliestMessageID.String()),
+			ChatId:            new(row.ChatID.String()),
+			ProjectId:         new(args.ProjectID.String()),
+			OrganizationId:    &args.OrganizationID,
+			RiskPolicyId:      new(args.RiskPolicyID.String()),
+			RiskPolicyVersion: &args.PolicyVersion,
+			CreatedAt:         &createdAt,
+			AccountType:       new(conv.FromPGTextOrEmpty[string](row.AccountType)),
+			Email:             new(conv.FromPGTextOrEmpty[string](row.Email)),
+			ApprovedDomains:   args.ApprovedEmailDomains,
+		}.Build()))
+	}
+	if err := drainPublishAcks(ctx, "publish account identity scan requests", publishResults); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }

@@ -95,18 +95,18 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 	}
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
-	requestID := batchScanRequestID(args, "standard")
 	for i, msg := range messages {
 		sources := llmMessageSources(masks, i, coveredSources)
 		if len(sources) == 0 {
 			continue
 		}
 		chatMessageID, contentPartID := msg.anchorIDStrings()
-		provenance := batchRiskProvenance(args, msg, executionPath, requestID.String())
+		requestID := messageScanRequestID(args, "standard", msg)
+		provenance := batchRiskProvenance(args, msg, executionPath, requestID)
 		body, toolCalls := llmMessageInput(msg)
 
 		publishResults = append(publishResults, a.llmPub.Publish(ctx, riskv1.LLMAnalysis_builder{
-			RequestId:               new(requestID.String()),
+			RequestId:               &requestID,
 			ChatMessageId:           chatMessageID,
 			ContentPartId:           contentPartID,
 			ProjectId:               new(args.ProjectID.String()),

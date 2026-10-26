@@ -114,7 +114,7 @@ func TestMessageContentsUsesScanSurface(t *testing.T) {
 	require.Equal(t, []string{"content", `{"command":"rm -rf /tmp/data"}`}, contents)
 }
 
-func TestBatchScanRequestIDPreservesLegacyBatchCorrelation(t *testing.T) {
+func TestBatchScanRequestIDIgnoresBatchComposition(t *testing.T) {
 	t.Parallel()
 
 	policyID := uuid.MustParse("00000000-0000-0000-0000-000000000101")
@@ -140,10 +140,14 @@ func TestBatchScanRequestIDPreservesLegacyBatchCorrelation(t *testing.T) {
 	}
 	rebatched := first
 	rebatched.MessageIDs = []uuid.UUID{otherID, anchorID}
+	bumped := first
+	bumped.PolicyVersion = 8
 
-	require.Equal(t, uuid.MustParse("6b619ca7-c2cd-54d9-b921-59e8765bc41a"), batchScanRequestID(first, "standard"))
-	require.NotEqual(t, batchScanRequestID(first, "standard"), batchScanRequestID(rebatched, "standard"))
-	require.NotEqual(t, batchScanRequestID(first, "standard"), batchScanRequestID(first, "prompt_policy"))
+	require.Equal(t, messageScanRequestID(first, "standard", message), messageScanRequestID(rebatched, "standard", message))
+	require.NotEqual(t, messageScanRequestID(first, "standard", message), messageScanRequestID(first, "prompt_policy", message))
+	require.NotEqual(t, messageScanRequestID(first, "standard", message), messageScanRequestID(bumped, "standard", message))
+	require.NotEqual(t, batchScanRequestID(first, "standard", false, anchorID), batchScanRequestID(first, "standard", true, anchorID))
+	require.NotEqual(t, batchScanRequestID(first, "standard", false, anchorID), batchScanRequestID(first, "standard", false, otherID))
 	require.Equal(t, batchOperationID(first, message, inlineBatchExecutionPath), batchOperationID(rebatched, message, inlineBatchExecutionPath))
 	require.NotEqual(t, batchOperationID(first, message, inlineBatchExecutionPath), batchOperationID(first, message, shadowStreamExecutionPath))
 }
@@ -293,7 +297,7 @@ func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
 	require.NotNil(t, request)
 	require.Equal(t, messages[1].scanSurface(), request.GetContent())
 	require.Equal(t, "scan_surface", request.GetFindingSurface())
-	require.Equal(t, batchScanRequestID(args, "standard").String(), request.GetRequestId())
+	require.Equal(t, messageScanRequestID(args, "standard", messages[1]), request.GetRequestId())
 	require.Equal(t, messages[1].ChatID.String(), request.GetChatId())
 	require.Equal(t, messages[1].UserID, request.GetUserId())
 	require.Equal(t, shadowStreamExecutionPath, request.GetExecutionPath())

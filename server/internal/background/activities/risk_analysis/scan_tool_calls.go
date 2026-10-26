@@ -88,7 +88,6 @@ func (a *AnalyzeBatch) publishToolCallScanRequests(
 	legacyCLI bool,
 ) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
-	requestID := batchScanRequestID(args, "standard")
 	results := make([]gcp.PublishResult, 0, len(messages))
 	for i, msg := range messages {
 		if len(msg.ToolCalls) == 0 {
@@ -121,10 +120,11 @@ func (a *AnalyzeBatch) publishToolCallScanRequests(
 			}.Build())
 		}
 
-		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID.String())
+		requestID := messageScanRequestID(args, "standard", msg)
+		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID)
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		results = append(results, a.toolCallPub.Publish(ctx, riskv1.ToolCallAnalysis_builder{
-			RequestId:               new(requestID.String()),
+			RequestId:               &requestID,
 			ChatMessageId:           chatMessageID,
 			ContentPartId:           contentPartID,
 			ProjectId:               new(args.ProjectID.String()),

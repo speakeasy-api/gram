@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sync"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -41,8 +41,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
-// AnalyzeBatch scans a batch of messages against one risk policy and replaces
-// that policy's stored results for the fetched message IDs.
+// AnalyzeBatch runs one risk policy over a batch of messages. For an
+// organization on the ClickHouse findings path it only publishes scan
+// requests to the analysis handlers; otherwise it scans inline and replaces
+// the policy's Postgres results for the fetched message IDs.
 type AnalyzeBatch struct {
 	logger                 *slog.Logger
 	tracer                 trace.Tracer
@@ -248,9 +250,22 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	args.ApprovedEmailDomains = ApprovedEmailDomainsFromConfig(policy.AnalyzerConfig)
 	args.BuiltinPresetsEnabled = BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig)
 	args.DetectionScopes = DetectionScopesFromConfig(policy.AnalyzerConfig)
-	judgeInHandlers := false
-	if policy.PolicyType == PolicyTypePromptBased || slices.Contains(args.Sources, SourcePromptInjection) {
-		judgeInHandlers = a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagRiskFindingsClickHouseCutover)
+
+	// An organization on the ClickHouse findings path gets every finding and
+	// usage reading from the analysis handlers, so the batch only publishes. A
+	// failed lookup retries the batch rather than guessing which path owns it.
+	publishOnly, err := policyflags.ProjectFlagChecked(ctx, a.logger, repo.New(a.db), a.flags, args.OrganizationID, args.ProjectID, feature.FlagRiskFindingsClickHouseCutover)
+	if err != nil {
+		return nil, fmt.Errorf("check clickhouse findings cutover flag: %w", err)
+	}
+	span.SetAttributes(attribute.Bool("risk.publish_only", publishOnly))
+	if publishOnly {
+		processed, err := a.publishBatch(ctx, args, policy)
+		scannedCount = processed
+		if err != nil {
+			return nil, err
+		}
+		return &AnalyzeBatchResult{Processed: processed, Findings: 0}, nil
 	}
 
 	messages, err := a.fetchContent(ctx, args)
@@ -291,21 +306,19 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 
 	findings := make([][]scanners.Finding, len(messages))
 	if len(messages) > 0 {
-		specified, err := CompileDetectionScopes(a.celEng, args.DetectionScopes)
+		masks, err := a.categoryScopeMasks(ctx, args, messages)
 		if err != nil {
-			return nil, fmt.Errorf("compile detection scopes: %w", err)
+			return nil, err
 		}
-		categoryScopes := NewCategoryScopes(a.recommended, specified, a.metrics)
-		masks := categoryScopes.Masks(ctx, messages)
 
 		switch policy.PolicyType {
 		case PolicyTypePromptBased:
-			findings, err = a.scanPromptPolicy(ctx, args, policy, messages, masks, judgeInHandlers)
+			findings, err = a.scanPromptPolicy(ctx, args, policy, messages, masks)
 			if err != nil {
 				return nil, err
 			}
 		default:
-			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, masks, judgeInHandlers)
+			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, masks)
 			if err != nil {
 				return nil, err
 			}
