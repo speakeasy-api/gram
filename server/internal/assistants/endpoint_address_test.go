@@ -74,7 +74,7 @@ func TestAssistantHostedServerOnCustomDomainUsesEndpointURL(t *testing.T) {
 	}}, f.runtime(t))
 
 	record, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", "Second", "openai/gpt-4o-mini", "", nil,
-		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, 300, 1, StatusActive, false, allowAllMCPEnable)
+		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, 300, 1, StatusActive, false, allowAllMCPEnable, nil)
 	require.NoError(t, err, "a custom-domain endpoint is a Speakeasy-hosted endpoint")
 	f.assistant = record.ID
 	require.Equal(t, "https://mcp.example.test/mcp/org-test-billing-x1", f.runtime(t)[0].URL)
@@ -92,7 +92,7 @@ func TestAssistantHostedServerOnInactiveDomainKeepsLegacyAlias(t *testing.T) {
 	require.Equal(t, "https://gram.test/mcp/org-test-billing-x1", servers[0].URL)
 
 	_, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", "Second", "openai/gpt-4o-mini", "", nil,
-		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, 300, 1, StatusActive, false, allowAllMCPEnable)
+		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, 300, 1, StatusActive, false, allowAllMCPEnable, nil)
 	require.ErrorContains(t, err, "has no Speakeasy-hosted MCP endpoint")
 }
 
@@ -121,7 +121,7 @@ func TestAssistantServerDomainGate(t *testing.T) {
 			}
 
 			_, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", "Second", "openai/gpt-4o-mini", "", nil,
-				[]*types.AssistantMCPServerRef{{McpServerSlug: "remote"}}, 300, 1, StatusActive, false, allowAllMCPEnable)
+				[]*types.AssistantMCPServerRef{{McpServerSlug: "remote"}}, 300, 1, StatusActive, false, allowAllMCPEnable, nil)
 			if tc.wantURL == "" {
 				require.ErrorContains(t, err, "has no Speakeasy-hosted MCP endpoint")
 				f.addServerRow(t, f.remote.ID, uuid.NullUUID{})

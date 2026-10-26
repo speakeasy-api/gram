@@ -62,7 +62,7 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	project := newProvisioningProject(t, db, "identity-create")
 	core := newProvisioningCore(t, db)
 
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Identity assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Identity assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, string(assistantidentity.Active), record.IdentityState)
 	require.NotNil(t, record.AgentID)
@@ -177,7 +177,7 @@ func TestUserAgentEditsDoNotBlockAssistantManagement(t *testing.T) {
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "identity-agent-edits")
 	core := newProvisioningCore(t, db)
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Edited agent", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Edited agent", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
 	agents := agentrepo.New(db)
 	agentID := uuid.MustParse(*record.AgentID)
@@ -197,7 +197,7 @@ func TestUserAgentEditsDoNotBlockAssistantManagement(t *testing.T) {
 	require.Equal(t, string(assistantidentity.Unavailable), got.IdentityState)
 
 	paused := StatusPaused
-	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &paused, nil)
+	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &paused, nil, nil)
 	require.NoError(t, err)
 	_, err = core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: record.ID, ActorUserID: "user-1", AgentID: uuid.Nil, AgentName: ""})
 	require.NoError(t, err)

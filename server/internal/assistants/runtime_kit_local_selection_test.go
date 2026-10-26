@@ -34,7 +34,7 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 		},
 	}
 	require.NoError(t, core.InstallKitLocalRuntime(config))
-	created, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Local Kit", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false, nil)
+	created, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Local Kit", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false, nil, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, created.RuntimeVersion)
 	q := assistantrepo.New(db)

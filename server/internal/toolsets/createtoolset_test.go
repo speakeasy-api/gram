@@ -292,7 +292,7 @@ func TestCreateToolsetInTransaction_FailsClosedWhenTheEnabledCountCannotBeRead(t
 	require.True(t, ok)
 	input := toolsets.ToolsetCreateInput{
 		OrganizationID: authCtx.ActiveOrganizationID, OrganizationSlug: authCtx.OrganizationSlug, ProjectID: *authCtx.ProjectID,
-		ActorUserID: authCtx.UserID, Name: "First Server",
+		Authz: ti.authz, ActorUserID: authCtx.UserID, Name: "First Server",
 	}
 
 	// Rolled back whatever the outcome, so a failed assertion cannot leave a
@@ -348,8 +348,9 @@ func TestToolsetsService_CreateToolset_InvalidEnvironment(t *testing.T) {
 		DefaultEnvironmentSlug: (*types.Slug)(new("non-existent-env")),
 		ProjectSlugInput:       nil,
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "error finding environment")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
 	require.NoError(t, err)

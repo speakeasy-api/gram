@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -52,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
@@ -184,6 +186,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 	if err := requireStaffForUnproxiedBackend(ctx, authCtx, ids.UnproxiedMcpServerID, logger); err != nil {
+		return nil, err
+	}
+	if err := s.requireReadableEnvironment(ctx, *authCtx.ProjectID, ids.EnvironmentID); err != nil {
 		return nil, err
 	}
 
@@ -777,6 +782,11 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// attached to an unproxied backend.
 	if ids.UnproxiedMcpServerID != existing.UnproxiedMcpServerID {
 		if err := requireStaffForUnproxiedBackend(ctx, authCtx, ids.UnproxiedMcpServerID, logger); err != nil {
+			return nil, err
+		}
+	}
+	if ids.EnvironmentID != existing.EnvironmentID {
+		if err := s.requireReadableEnvironment(ctx, *authCtx.ProjectID, ids.EnvironmentID); err != nil {
 			return nil, err
 		}
 	}
@@ -1410,6 +1420,16 @@ func requireStaffForUnproxiedBackend(ctx context.Context, authCtx *contextvalues
 	}
 
 	return access.RequireStaffForUnproxiedMcp(ctx, authCtx, "attached", logger)
+}
+
+// requireReadableEnvironment requires environment:read on the environment a
+// server is bound to, since its values reach every tool the server runs.
+func (s *Service) requireReadableEnvironment(ctx context.Context, projectID uuid.UUID, environmentID uuid.NullUUID) error {
+	if !environmentID.Valid {
+		return nil
+	}
+	_, err := environments.ResolveReadableEnvironment(ctx, s.logger, s.authz, s.db, projectID, toolconfig.ID(environmentID.UUID))
+	return err
 }
 
 // verifyServerReferenceOwnership checks that every non-null referenced

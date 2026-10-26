@@ -452,7 +452,7 @@ func TestServiceDisableBetweenAuthorizationAndWriteIsRejected(t *testing.T) {
 	require.NoError(t, err)
 	f.disable(t, f.enabled.ID)
 
-	_, err = f.svc.core.CreateAssistant(connectCtx, "org-test", f.projectID, "user-test", "Raced", "openai/gpt-4o-mini", "", toolsetRefs(f.enabled), nil, 300, 1, StatusActive, false, canEnableMCP)
+	_, err = f.svc.core.CreateAssistant(connectCtx, "org-test", f.projectID, "user-test", "Raced", "openai/gpt-4o-mini", "", toolsetRefs(f.enabled), nil, 300, 1, StatusActive, false, canEnableMCP, nil)
 	require.ErrorIs(t, err, errMCPEnableForbidden)
 	f.requireMCPEnabled(t, f.enabled.ID, false)
 }

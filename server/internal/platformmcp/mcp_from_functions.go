@@ -241,7 +241,7 @@ func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context
 	// audit entry; the platform principal carries no display email.
 	var email *string
 	created, err := toolsets.CreateToolsetInTransaction(ctx, tx, s.logger, s.audit, toolsets.ToolsetCreateInput{
-		OrganizationID: principal.OrganizationID, OrganizationSlug: organizationSlug, ProjectID: project.ID,
+		OrganizationID: principal.OrganizationID, OrganizationSlug: organizationSlug, ProjectID: project.ID, Authz: s.engine,
 		ActorUserID: principal.UserID, ActorEmail: email, Name: name, Description: nil,
 		DefaultEnvironmentSlug: nil, OriginRegistrySpecifier: nil,
 		ToolURNs: values, ResourceURNs: nil,
