@@ -166,10 +166,11 @@ func workloadAssertionReuseToolResult(err error) (*mcp.CallToolResult, bool) {
 		return result, true
 	}
 	result := featureUnavailableResult{Code: unavailableCode, Feature: "workload_assertion_reuse", Message: "Workload assertion reuse policy is temporarily unavailable."}
+	var shareable *oops.ShareableError
 	if errors.Is(err, ErrForbidden) {
 		result.Code, result.Message = "not_found", "That project or issuer is not available to you."
 	}
-	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+	if errors.As(err, &shareable) {
 		switch shareable.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
 			result.Code, result.Message = "invalid_request", "Provide exact project and issuer UUIDs and explicitly confirm an issuer-wide policy change."
