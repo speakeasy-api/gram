@@ -85,19 +85,12 @@ func validateWakeRuntimeAuthority(ctx context.Context, tx pgx.Tx, params CreateW
 	if _, err := q.LockAssistant(ctx, identityrepo.LockAssistantParams{ProjectID: params.ProjectID, AssistantID: params.AssistantID}); err != nil {
 		return wakeAuthorityReadError("lock assistant identity", err)
 	}
-	root, err := triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{ID: identity.TriggerID, ProjectID: params.ProjectID})
+	binding, err := q.GetAssistantBinding(ctx, identityrepo.GetAssistantBindingParams{ProjectID: params.ProjectID, AssistantID: params.AssistantID})
 	if err != nil {
-		return wakeAuthorityReadError("lock wake root", err)
+		return wakeAuthorityReadError("read wake assistant binding", err)
 	}
-	if root.OrganizationID != params.OrganizationID || root.Status != "active" || root.TargetKind != TargetKindAssistant || root.TargetRef != params.AssistantID.String() || root.DefinitionSlug == DefinitionSlugWake {
-		return fmt.Errorf("%w: wake root is no longer active", ErrBadRequest)
-	}
-	binding, err := q.GetAssistantTriggerBinding(ctx, identityrepo.GetAssistantTriggerBindingParams{ProjectID: params.ProjectID, AssistantID: params.AssistantID, TriggerID: identity.TriggerID})
-	if err != nil {
-		return wakeAuthorityReadError("read wake root binding", err)
-	}
-	if binding.OrganizationID != params.OrganizationID || binding.WorkloadIssuerID != identity.IssuerID || binding.Subject != identity.Subject {
-		return fmt.Errorf("%w: wake root identity changed", ErrBadRequest)
+	if binding.OrganizationID != params.OrganizationID || binding.ID != identity.BindingID || binding.Generation != identity.BindingGeneration || binding.OriginalAgentID != identity.AgentID {
+		return fmt.Errorf("%w: wake assistant identity changed", ErrBadRequest)
 	}
 	states, err := q.ListAssistantAgentStates(ctx, identityrepo.ListAssistantAgentStatesParams{ProjectID: params.ProjectID, AssistantIds: []uuid.UUID{params.AssistantID}})
 	if err != nil {
@@ -106,21 +99,15 @@ func validateWakeRuntimeAuthority(ctx context.Context, tx pgx.Tx, params CreateW
 	if len(states) != 1 || !states[0].AgentActive || states[0].AgentID != identity.AgentID {
 		return fmt.Errorf("%w: wake assistant identity changed", ErrBadRequest)
 	}
-	// Fence both the root and generation-specific workload admissions/assignments.
-	// Match provisioning's lock order: root issuer, then projected-token issuer.
-	issuers := []uuid.UUID{identity.IssuerID}
-	if identity.IssuerID != issuer {
-		issuers = append(issuers, issuer)
-	}
-	for _, id := range issuers {
-		if _, err := workloadrepo.New(tx).LockWorkloadIssuerForWrite(ctx, workloadrepo.LockWorkloadIssuerForWriteParams{OrganizationID: params.OrganizationID, ID: id}); err != nil {
-			return wakeAuthorityReadError("lock wake workload issuer", err)
-		}
+	// Fence the generation-specific workload admission and assignment. Event
+	// roots are authorized at delivery, never borrowed by the runtime itself.
+	if _, err := workloadrepo.New(tx).LockWorkloadIssuerForWrite(ctx, workloadrepo.LockWorkloadIssuerForWriteParams{OrganizationID: params.OrganizationID, ID: issuer}); err != nil {
+		return wakeAuthorityReadError("lock wake workload issuer", err)
 	}
 	for _, workload := range []struct {
 		issuer  uuid.UUID
 		subject string
-	}{{issuer, subject}, {identity.IssuerID, identity.Subject}} {
+	}{{issuer, subject}} {
 		admitted, err := workloadidentity.IsAdmitted(ctx, tx, workloadidentity.AdmissionParams{OrganizationID: params.OrganizationID, ProjectID: uuid.NullUUID{UUID: params.ProjectID, Valid: true}, WorkloadIssuerID: workload.issuer, Subject: workload.subject})
 		if err != nil {
 			return fmt.Errorf("read wake workload admission: %w", err)
@@ -143,16 +130,15 @@ func wakeAuthorityReadError(operation string, err error) error {
 	return fmt.Errorf("%s: %w", operation, err)
 }
 
-// This is a JSON projection of persisted assistantidentity.Identity, not another
+// This is a JSON projection of persisted assistantidentity.RuntimeIdentity, not another
 // identity registry. Its authority is rechecked with the canonical binding queries.
 type wakeIdentitySnapshot struct {
-	OrganizationID string    `json:"organization_id"`
-	ProjectID      uuid.UUID `json:"project_id"`
-	AssistantID    uuid.UUID `json:"assistant_id"`
-	AgentID        uuid.UUID `json:"agent_id"`
-	TriggerID      uuid.UUID `json:"trigger_id"`
-	IssuerID       uuid.UUID `json:"issuer_id"`
-	Subject        string    `json:"subject"`
+	OrganizationID    string    `json:"organization_id"`
+	ProjectID         uuid.UUID `json:"project_id"`
+	AssistantID       uuid.UUID `json:"assistant_id"`
+	AgentID           uuid.UUID `json:"agent_id"`
+	BindingID         uuid.UUID `json:"binding_id"`
+	BindingGeneration int64     `json:"binding_generation"`
 }
 
 func wakeRuntimeIdentity(ctx context.Context, row tokenrepo.ListKitWorkloadBindingsRow, params CreateWakeInstanceParams, issuer uuid.UUID, subject string) (wakeIdentitySnapshot, error) {
@@ -179,7 +165,7 @@ func wakeRuntimeIdentity(ctx context.Context, row tokenrepo.ListKitWorkloadBindi
 	if row.AssistantID != params.AssistantID || metadata.RuntimeID != row.RuntimeID || row.RuntimeID == uuid.Nil ||
 		metadata.AssistantID != row.AssistantID || metadata.ProjectID != params.ProjectID || metadata.RuntimeVersion != 3 ||
 		metadata.Workload.IssuerID != issuer || metadata.Workload.Subject != subject ||
-		identity.TriggerID == uuid.Nil || identity.IssuerID == uuid.Nil || identity.Subject == "" || identity.AgentID == uuid.Nil ||
+		identity.BindingID == uuid.Nil || identity.BindingGeneration <= 0 || identity.AgentID == uuid.Nil ||
 		identity.OrganizationID != params.OrganizationID || identity.ProjectID != params.ProjectID || identity.AssistantID != params.AssistantID ||
 		!hasAgent || agent != urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String()) {
 		return zero, fmt.Errorf("%w: wake runtime authority mismatch", ErrBadRequest)

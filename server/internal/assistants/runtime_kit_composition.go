@@ -13,12 +13,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // KitLocalCompositionConfig is an explicit local-only opt-in. This first
@@ -32,7 +30,7 @@ type KitLocalCompositionConfig struct {
 	Origin                                                    *url.URL
 	AllowInsecureInference                                    bool
 	MCPResource, MCPIssuer                                    *url.URL
-	MCPUserSessionIssuerID, RootTriggerID                     uuid.UUID
+	MCPUserSessionIssuerID                                    uuid.UUID
 	WorkloadIssuerURL, WorkloadSubject, WorkloadAssertionFile string
 	WorkloadJWKSURL                                           string
 	WorkloadNamespace, WorkloadIssuerBaseURL                  string
@@ -234,37 +232,15 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	if !kitResourceAttached(assistant, s.serverURL, c.MCPResource) {
 		return zero, errors.New("configured Kit MCP resource is not an enabled attachment of this assistant")
 	}
-	trigger := c.RootTriggerID
-	if c.PersistedMCP {
-		trigger = uuid.Nil // Production selects only this assistant's persisted root.
-	}
-	if trigger == uuid.Nil {
-		roots, err := usersessionsrepo.New(db).ListAssistantWorkloadRuntimeRoots(ctx, usersessionsrepo.ListAssistantWorkloadRuntimeRootsParams{ProjectID: r.ProjectID, OrganizationID: assistant.OrganizationID, AssistantID: r.AssistantID})
-		if err != nil {
-			return zero, fmt.Errorf("compose local kit runtime: %w", err)
-		}
-		if len(roots) != 1 {
-			return zero, errors.New("kit startup requires an explicit root trigger when multiple roots exist")
-		}
-		trigger = roots[0]
-	}
-	var resolved assistantidentity.Resolution
-	if r.LifecycleTx != nil {
-		resolved, err = s.identities.ResolveLocked(ctx, r.LifecycleTx, assistant.OrganizationID, r.ProjectID, r.AssistantID, trigger)
-	} else {
-		resolved, err = s.identities.Resolve(ctx, s.db, assistant.OrganizationID, r.ProjectID, r.AssistantID, trigger)
-	}
-	if err != nil {
-		return zero, fmt.Errorf("compose local kit runtime: %w", err)
-	}
-	if resolved.State != assistantidentity.Active || resolved.Identity == nil {
-		return zero, assistantidentity.ErrInvalidIdentity
-	}
-	// GKE commits cleanup evidence even when startup fails. Keep trust provisioning
-	// atomic so a failed bootstrap cannot leave an admission without metadata.
 	if r.LifecycleTx == nil {
 		return zero, errors.New("kit bootstrap requires the runtime admission lock")
 	}
+	identity, err := s.identities.ResolveRuntimeLocked(ctx, r.LifecycleTx, assistant.OrganizationID, r.ProjectID, r.AssistantID)
+	if err != nil {
+		return zero, fmt.Errorf("compose kit runtime: %w", err)
+	}
+	// GKE commits cleanup evidence even when startup fails. Keep trust provisioning
+	// atomic so a failed bootstrap cannot leave an admission without metadata.
 	tx, err := r.LifecycleTx.Begin(ctx)
 	if err != nil {
 		return zero, fmt.Errorf("begin kit bootstrap savepoint: %w", err)
@@ -275,7 +251,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	if err != nil {
 		return zero, err
 	}
-	workload, err := s.provisionKitWorkload(ctx, r, c, *resolved.Identity, gateway)
+	workload, err := s.provisionKitWorkload(ctx, r, c, identity, gateway)
 	if err != nil {
 		return zero, err
 	}

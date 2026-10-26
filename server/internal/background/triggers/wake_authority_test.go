@@ -195,7 +195,7 @@ func TestWakeRuntimeIdentity(t *testing.T) {
 			t.Parallel()
 			runtimeID, projectID, assistantID, agentID, issuerID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 			subject := "system:serviceaccount:example:kit-" + runtimeID.String()
-			identity := wakeIdentitySnapshot{OrganizationID: "test-org", ProjectID: projectID, AssistantID: assistantID, AgentID: agentID, TriggerID: uuid.New(), IssuerID: uuid.New(), Subject: "assistant-trigger:root"}
+			identity := wakeIdentitySnapshot{OrganizationID: "test-org", ProjectID: projectID, AssistantID: assistantID, AgentID: agentID, BindingID: uuid.New(), BindingGeneration: 1}
 			root := map[string]any{"runtime_id": runtimeID, "assistant_id": assistantID, "project_id": projectID, "runtime_version": 3}
 			workload := map[string]any{"issuer_id": issuerID, "subject": subject}
 			switch change {
