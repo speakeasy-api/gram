@@ -50,12 +50,13 @@ func NotHosted() Hosting {
 }
 
 // LegacyAlias is the legacy /mcp/<slug> address a toolset created before hosted servers owned their endpoints still
-// answers on (AIM-670). It is the only reader of the toolset's address columns.
+// answers on (AIM-670). Hosting readers use it instead of reading the toolset's address columns directly.
 func LegacyAlias(toolset toolsetsrepo.Toolset) Address {
 	return Address{Slug: toolset.McpSlug, CustomDomainID: toolset.CustomDomainID}
 }
 
-// Columns are a toolset's own hosting columns, which stand only for a toolset without a canonical wrapper.
+// Columns are a toolset's own hosting columns. Hosting stands only without a canonical wrapper; Address also stands
+// when the wrapper has no servable endpoint.
 type Columns struct {
 	Hosting
 	Address

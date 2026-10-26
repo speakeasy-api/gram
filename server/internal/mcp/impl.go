@@ -1214,9 +1214,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// Legacy toolset-by-slug path: hosting configuration comes from the
-	// toolset columns; the canonical wrapper, when present, keys kill switches
-	// and attribution.
+	// Legacy toolset-by-slug path: hosting comes from the canonical wrapper when
+	// present, which also keys kill switches and attribution, else the toolset
+	// columns.
 	return s.serveToolsetResolved(w, r, toolset, mcpSlug, mcproute.MCP, hostedServingFromToolset(toolset, hosting, wrapperID), nil, nil, nil, nil)
 }
 
